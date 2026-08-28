@@ -1,0 +1,34 @@
+{
+  "name": "@zudo-composer/component-contract",
+  "version": "1.0.0",
+  "description": "Versioned component-pack contract for zudo-composer providers and consumers.",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./fixtures": {
+      "types": "./dist/fixtures.d.ts",
+      "import": "./dist/fixtures.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "prepare": "pnpm run build",
+    "clean": "tsc -b --clean",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.type-tests.json --pretty false",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "engines": {
+    "node": "^22.13.0 || >=24.0.0"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

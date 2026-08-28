@@ -1,0 +1,38 @@
+{
+  "name": "zudo-composer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.2",
+  "engines": {
+    "node": "^22.13.0 || >=24.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
+    "test": "vitest run",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "contract:conformance": "node scripts/check-package-conformance.mjs",
+    "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
+    "contract:external-install": "node scripts/verify-contract-install.mjs"
+  },
+  "dependencies": {
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@preact/preset-vite": "^2.10.6",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/preact": "^3.2.4",
+    "@types/node": "^26.4.0",
+    "eslint": "^10.9.1",
+    "jsdom": "^29.1.1",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.68.0",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,2 @@
+# Git consumers prepare this package without depending on the repository root.
+packages: []
