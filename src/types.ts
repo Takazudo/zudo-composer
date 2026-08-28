@@ -4,140 +4,193 @@ export const CONTRACT_VERSION = 1 as const;
 export const DOCUMENT_VERSION = 1 as const;
 
 export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export type JsonValue = JsonPrimitive | JsonObject | readonly JsonValue[];
 export interface JsonObject {
   readonly [key: string]: JsonValue;
 }
 
-export type ScalarPropValue = JsonPrimitive;
-export type ScalarProps = Readonly<Record<string, ScalarPropValue>>;
-export type ScalarPropKey<TProps extends object> = Extract<{
-  [TKey in keyof TProps]-?: Exclude<TProps[TKey], undefined> extends ScalarPropValue ? TKey : never;
-}[keyof TProps], string>;
+export type PropKey<TProps extends object> = Extract<keyof TProps, string>;
+export type ComponentDefaults<TProps extends object> = {
+  readonly [TKey in PropKey<TProps>]?: Extract<TProps[TKey], JsonValue>;
+};
 
-export type ScalarPropKind = 'string' | 'number' | 'boolean' | 'null';
+type SelectOption<TValue> = Extract<NonNullable<TValue>, string> extends never
+  ? string
+  : Extract<NonNullable<TValue>, string>;
 
-export interface PropDefinition<TProp extends string = string> {
+export interface AuthorInlineEditMetadata {
+  readonly multiline?: boolean;
+  readonly mode?: 'plain' | 'markdown-source';
+}
+
+export interface InlineEditMetadata {
+  readonly multiline: boolean;
+  readonly mode: 'plain' | 'markdown-source';
+}
+
+type FieldBase<TProp extends string> = {
   readonly prop: TProp;
-  readonly kind: ScalarPropKind;
+  readonly label: string;
+  /** Required editable fields must have a valid default. */
   readonly required?: boolean;
+};
+
+export type AuthorFieldDefinition<TProps extends object = Record<string, unknown>> = {
+  [TKey in PropKey<TProps>]:
+    | (FieldBase<TKey> & {
+        readonly kind: 'text';
+        readonly inlineEdit?: AuthorInlineEditMetadata;
+      })
+    | (FieldBase<TKey> & {
+        readonly kind: 'select';
+        readonly options: readonly SelectOption<TProps[TKey]>[];
+      })
+    | (FieldBase<TKey> & { readonly kind: 'boolean' })
+    | (FieldBase<TKey> & {
+        readonly kind: 'number';
+        readonly min?: number;
+        readonly max?: number;
+        readonly step?: number;
+      })
+    | (FieldBase<TKey> & { readonly kind: 'color' });
+}[PropKey<TProps>];
+
+export type FieldDefinition<TProp extends string = string> =
+  | (FieldBase<TProp> & { readonly kind: 'text'; readonly inlineEdit?: InlineEditMetadata })
+  | (FieldBase<TProp> & { readonly kind: 'select'; readonly options: readonly string[] })
+  | (FieldBase<TProp> & { readonly kind: 'boolean' })
+  | (FieldBase<TProp> & {
+      readonly kind: 'number';
+      readonly min?: number;
+      readonly max?: number;
+      readonly step?: number;
+    })
+  | (FieldBase<TProp> & { readonly kind: 'color' });
+
+export type SlotCardinality = 'single' | 'many';
+
+export interface AuthorSlotDefinition<TProps extends object = Record<string, unknown>, TComponentId extends string = string> {
+  readonly id: string;
+  readonly prop: PropKey<TProps>;
+  readonly label: string;
+  /** Omitted means any component in the pack is accepted. */
+  readonly accepts?: readonly TComponentId[];
+  readonly cardinality: SlotCardinality;
 }
 
-export interface FieldDefinition<TField extends string = string> {
-  readonly id: TField;
+export interface SlotDefinition<TComponentId extends string = string, TProp extends string = string> {
+  readonly id: string;
+  readonly prop: TProp;
+  readonly label: string;
+  readonly accepts?: readonly TComponentId[];
+  readonly cardinality: SlotCardinality;
 }
 
-export interface SlotDefinition<TComponentId extends string = string, TSlot extends string = string> {
-  readonly id: TSlot;
-  readonly accepts: readonly TComponentId[];
-}
-
-export type AuthorSlotDefinition<TComponentId extends string = string, TSlot extends string = string> =
-  Omit<SlotDefinition<TComponentId, TSlot>, 'accepts'> & {
-    readonly accepts?: readonly TComponentId[];
-  };
-
-/** A source that generated consumer code may import without reaching into private files. */
-export interface PublicSourceDefinition<TSource extends string = string> {
-  readonly id: TSource;
+/** Public import metadata for deterministic generated source. */
+export interface PublicSourceDefinition {
   readonly module: string;
-  readonly export: string;
+  readonly exportKind: 'named' | 'default';
+  readonly exportName: string;
+  readonly localName?: string;
 }
 
-export interface ComponentManifest<
-  TComponentId extends string = string,
-  TProp extends string = string,
-  TField extends string = string,
-  TSlot extends string = string,
-  TSource extends string = string,
-> {
+export interface ComponentManifest<TComponentId extends string = string> {
   readonly id: TComponentId;
-  /** Persisted schema identity for this component. Increment when persisted keys change. */
   readonly schemaVersion: number;
-  readonly displayName: string;
-  readonly props: readonly PropDefinition<TProp>[];
-  readonly defaults: Partial<Readonly<Record<TProp, ScalarPropValue>>>;
-  readonly fields: readonly FieldDefinition<TField>[];
-  readonly slots: readonly SlotDefinition<TComponentId, TSlot>[];
-  readonly sources: readonly PublicSourceDefinition<TSource>[];
+  readonly title: string;
+  readonly category: string;
+  readonly description: string;
+  readonly source: PublicSourceDefinition;
+  readonly defaults: JsonObject;
+  readonly fields: readonly FieldDefinition[];
+  readonly slots: readonly SlotDefinition<TComponentId>[];
 }
 
 export interface ComponentPackManifest<TComponentId extends string = string> {
   readonly kind: typeof COMPONENT_PACK_KIND;
-  /** Major version of this package envelope, independent of every other version. */
   readonly contractVersion: typeof CONTRACT_VERSION;
   readonly packId: string;
-  /** Provider release identity; intentionally opaque to the contract. */
   readonly packVersion: string;
   readonly components: readonly ComponentManifest<TComponentId>[];
 }
 
+export interface InlineEditorAdapter<TProps extends object = Record<string, unknown>, TElement = unknown> {
+  readonly field: PropKey<TProps>;
+  readonly resolveElement: (root: TElement) => TElement | null;
+}
+
+export interface RuntimeAdapters<
+  TProps extends object = Record<string, unknown>,
+  TRenderOutput = unknown,
+  TElement = unknown,
+> {
+  readonly render?: (props: Partial<TProps>) => TRenderOutput;
+  readonly inlineEditor?: InlineEditorAdapter<TProps, TElement>;
+}
+
 export interface AuthorComponentDefinition<
-  TProps extends object,
-  TRuntime,
+  TProps extends object = Record<string, unknown>,
+  TComponent = unknown,
+  TRenderOutput = unknown,
+  TElement = unknown,
   TComponentId extends string = string,
-  TField extends string = string,
-  TSlot extends string = string,
-  TSource extends string = string,
 > {
   readonly id: TComponentId;
   readonly schemaVersion: number;
-  readonly displayName: string;
-  /** `prop` names are persisted and therefore constrained to actual scalar component props. */
-  readonly props: readonly PropDefinition<ScalarPropKey<TProps>>[];
-  readonly defaults?: Partial<Readonly<Record<ScalarPropKey<TProps>, ScalarPropValue>>>;
-  readonly fields?: readonly FieldDefinition<TField>[];
-  readonly slots?: readonly AuthorSlotDefinition<string, TSlot>[];
-  readonly sources?: readonly PublicSourceDefinition<TSource>[];
-  /** Trusted runtime value. It is never copied into or accepted from JSON. */
-  readonly runtime: TRuntime;
+  readonly title: string;
+  readonly category: string;
+  readonly description: string;
+  readonly source: PublicSourceDefinition;
+  readonly defaults?: ComponentDefaults<TProps>;
+  readonly fields?: readonly AuthorFieldDefinition<TProps>[];
+  readonly slots?: readonly AuthorSlotDefinition<TProps, string>[];
+  /** Trusted runtime values; neither member enters the manifest. */
+  readonly component: TComponent;
+  readonly adapters?: RuntimeAdapters<TProps, TRenderOutput, TElement>;
 }
 
-export interface RuntimeComponentEntry<TRuntime = unknown> {
+export interface RuntimeComponentEntry<TComponent = unknown, TRenderOutput = unknown, TElement = unknown> {
   readonly schemaVersion: number;
-  readonly runtime: TRuntime;
+  readonly component: TComponent;
+  readonly adapters?: RuntimeAdapters<Record<string, unknown>, TRenderOutput, TElement>;
 }
 
-export interface ComponentRuntimeRegistry<TRuntime = unknown> {
+export interface ComponentRuntimeRegistry<TComponent = unknown, TRenderOutput = unknown, TElement = unknown> {
   readonly packId: string;
   readonly packVersion: string;
-  readonly components: Readonly<Record<string, RuntimeComponentEntry<TRuntime>>>;
+  readonly components: Readonly<Record<string, RuntimeComponentEntry<TComponent, TRenderOutput, TElement>>>;
 }
 
-export interface TrustedComponentPack<TRuntime = unknown> {
+export interface TrustedComponentPack<TComponent = unknown, TRenderOutput = unknown, TElement = unknown> {
   readonly manifest: ComponentPackManifest;
-  readonly runtime: ComponentRuntimeRegistry<TRuntime>;
+  readonly runtime: ComponentRuntimeRegistry<TComponent, TRenderOutput, TElement>;
 }
 
 export interface PersistedComponentNode {
   readonly id: string;
   readonly componentId: string;
   readonly componentVersion: number;
-  readonly props: ScalarProps;
-  readonly fields: JsonObject;
+  readonly props: JsonObject;
   readonly slots: Readonly<Record<string, readonly PersistedComponentNode[]>>;
 }
 
+/** Minimal versioned tree boundary; composition naming/reuse belongs to the application. */
 export interface ComponentDocument {
   readonly kind: typeof COMPONENT_DOCUMENT_KIND;
-  /** Version of persisted composition documents, independent of the pack contract. */
   readonly documentVersion: typeof DOCUMENT_VERSION;
-  readonly packId: string;
-  readonly packVersion: string;
-  readonly roots: readonly PersistedComponentNode[];
+  readonly root: readonly PersistedComponentNode[];
 }
 
-export type ComponentResolution<TRuntime> =
+export type ComponentResolution<TComponent, TRenderOutput = unknown, TElement = unknown> =
   | {
       readonly status: 'resolved';
       readonly node: PersistedComponentNode;
-      readonly component: ComponentManifest;
-      readonly runtime: TRuntime;
+      readonly definition: ComponentManifest;
+      readonly runtime: RuntimeComponentEntry<TComponent, TRenderOutput, TElement>;
     }
   | {
       readonly status: 'opaque';
       readonly reason: 'unknown-component' | 'component-version-mismatch';
-      /** The original value is retained exactly for current-document-format recovery. */
       readonly node: PersistedComponentNode;
     };
 
@@ -149,21 +202,28 @@ export interface RuntimeSchema<T> {
 }
 
 export type ContractIssueCode =
-  | 'DUPLICATE_COMPONENT_ID'
-  | 'DUPLICATE_FIELD_ID'
-  | 'DUPLICATE_PROP'
-  | 'DUPLICATE_SLOT_ID'
-  | 'DUPLICATE_SOURCE_ID'
   | 'DUPLICATE_ACCEPTS'
-  | 'INLINE_ADAPTER_NOT_ALLOWED'
+  | 'DUPLICATE_COMPONENT_ID'
+  | 'DUPLICATE_FIELD_PROP'
+  | 'DUPLICATE_SELECT_OPTION'
+  | 'DUPLICATE_SLOT_ID'
+  | 'DUPLICATE_SLOT_PROP'
+  | 'DUPLICATE_SOURCE'
+  | 'FIELD_SLOT_PROP_COLLISION'
+  | 'INLINE_EDITOR_MISMATCH'
+  | 'INVALID_FIELD_DOMAIN'
   | 'INVALID_JSON_VALUE'
   | 'INVALID_PUBLIC_EXPORT'
   | 'INVALID_PUBLIC_IMPORT'
   | 'INVALID_VALUE'
   | 'MISSING_RUNTIME_ENTRY'
+  | 'MULTIPLE_INLINE_EDIT_FIELDS'
+  | 'REQUIRED_DEFAULT_MISSING'
   | 'RESERVED_KEY'
   | 'RUNTIME_COMPONENT_VERSION_MISMATCH'
   | 'RUNTIME_MANIFEST_MISMATCH'
+  | 'SOURCE_ADAPTER_NOT_ALLOWED'
+  | 'TRUSTED_VALUE_IN_MANIFEST'
   | 'UNRESOLVED_ACCEPTS'
   | 'UNKNOWN_KEY'
   | 'UNSUPPORTED_CONTRACT_VERSION'
