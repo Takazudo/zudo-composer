@@ -14,7 +14,7 @@ export type ComponentDefaults<TProps extends object> = {
   readonly [TKey in PropKey<TProps>]?: Extract<TProps[TKey], JsonValue>;
 };
 
-type SelectOption<TValue> = Extract<NonNullable<TValue>, string> extends never
+type SelectOption<TValue> = unknown extends TValue
   ? string
   : Extract<NonNullable<TValue>, string>;
 
@@ -35,24 +35,65 @@ type FieldBase<TProp extends string> = {
   readonly required?: boolean;
 };
 
-export type AuthorFieldDefinition<TProps extends object = Record<string, unknown>> = {
-  [TKey in PropKey<TProps>]:
-    | (FieldBase<TKey> & {
+type UntypedFieldDefinition<TProp extends string> =
+  | (FieldBase<TProp> & {
+      readonly kind: 'text';
+      readonly inlineEdit?: AuthorInlineEditMetadata;
+    })
+  | (FieldBase<TProp> & { readonly kind: 'select'; readonly options: readonly string[] })
+  | (FieldBase<TProp> & { readonly kind: 'boolean' })
+  | (FieldBase<TProp> & {
+      readonly kind: 'number';
+      readonly min?: number;
+      readonly max?: number;
+      readonly step?: number;
+    })
+  | (FieldBase<TProp> & { readonly kind: 'color' });
+
+type StringFieldDefinition<TProp extends string, TValue> = Extract<NonNullable<TValue>, string> extends never
+  ? never
+  :
+    | (FieldBase<TProp> & {
         readonly kind: 'text';
         readonly inlineEdit?: AuthorInlineEditMetadata;
       })
-    | (FieldBase<TKey> & {
+    | (FieldBase<TProp> & { readonly kind: 'color' });
+
+type SelectFieldDefinition<TProp extends string, TValue> = [NonNullable<TValue>] extends [never]
+  ? never
+  : NonNullable<TValue> extends string
+    ? FieldBase<TProp> & {
         readonly kind: 'select';
-        readonly options: readonly SelectOption<TProps[TKey]>[];
-      })
-    | (FieldBase<TKey> & { readonly kind: 'boolean' })
-    | (FieldBase<TKey> & {
+        readonly options: readonly SelectOption<TValue>[];
+      }
+    : never;
+
+type BooleanFieldDefinition<TProp extends string, TValue> = [NonNullable<TValue>] extends [never]
+  ? never
+  : NonNullable<TValue> extends boolean
+    ? FieldBase<TProp> & { readonly kind: 'boolean' }
+    : never;
+
+type NumberFieldDefinition<TProp extends string, TValue> = [NonNullable<TValue>] extends [never]
+  ? never
+  : NonNullable<TValue> extends number
+    ? FieldBase<TProp> & {
         readonly kind: 'number';
         readonly min?: number;
         readonly max?: number;
         readonly step?: number;
-      })
-    | (FieldBase<TKey> & { readonly kind: 'color' });
+      }
+    : never;
+
+type FieldDefinitionForProp<TProp extends string, TValue> = unknown extends TValue
+  ? UntypedFieldDefinition<TProp>
+  : StringFieldDefinition<TProp, TValue>
+    | SelectFieldDefinition<TProp, TValue>
+    | BooleanFieldDefinition<TProp, TValue>
+    | NumberFieldDefinition<TProp, TValue>;
+
+export type AuthorFieldDefinition<TProps extends object = Record<string, unknown>> = {
+  [TKey in PropKey<TProps>]: FieldDefinitionForProp<TKey, TProps[TKey]>;
 }[PropKey<TProps>];
 
 export type FieldDefinition<TProp extends string = string> =
