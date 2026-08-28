@@ -5,6 +5,7 @@ import {
   ContractValidationError,
   DOCUMENT_VERSION,
   type AuthorComponentDefinition,
+  type AuthorSlotDefinition,
   type ComponentDocument,
   type ComponentManifest,
   type ComponentPackManifest,
@@ -17,7 +18,6 @@ import {
   type PublicSourceDefinition,
   type RuntimeSchema,
   type ScalarPropValue,
-  type SlotDefinition,
   type TrustedComponentPack,
 } from './types.js';
 
@@ -46,7 +46,7 @@ type PackComponentInput<TRuntime> = {
   readonly props: readonly PropDefinition<string>[];
   readonly defaults?: Readonly<Record<string, ScalarPropValue>>;
   readonly fields?: readonly FieldDefinition<string>[];
-  readonly slots?: readonly SlotDefinition<string, string>[];
+  readonly slots?: readonly AuthorSlotDefinition<string, string>[];
   readonly sources?: readonly PublicSourceDefinition<string>[];
   readonly runtime: TRuntime;
 };
@@ -85,7 +85,10 @@ function positiveIntegerAt(input: unknown, path: string): number {
 
 function exactKeys(value: Record<string, unknown>, allowed: readonly string[], path: string): void {
   const allow = new Set(allowed);
-  for (const key of Object.keys(value)) {
+  if (Object.getOwnPropertySymbols(value).length > 0) {
+    fail('UNKNOWN_KEY', path, 'symbol keys are not part of the contract');
+  }
+  for (const key of Object.getOwnPropertyNames(value)) {
     if (!allow.has(key)) fail('UNKNOWN_KEY', `${path}.${key}`, `unknown key ${JSON.stringify(key)}`);
   }
 }
@@ -123,7 +126,10 @@ function assertJsonValue(value: unknown, path: string, ancestors = new Set<objec
   if (ancestors.has(object)) fail('INVALID_JSON_VALUE', path, 'cyclic values are not JSON-serializable');
   ancestors.add(object);
   if (Array.isArray(value)) {
-    value.forEach((item, index) => assertJsonValue(item, `${path}[${index}]`, ancestors));
+    for (let index = 0; index < value.length; index += 1) {
+      if (!Object.hasOwn(value, index)) fail('INVALID_JSON_VALUE', `${path}[${index}]`, 'sparse arrays do not round-trip through JSON exactly');
+      assertJsonValue(value[index], `${path}[${index}]`, ancestors);
+    }
   } else {
     const record = value as Record<string, unknown>;
     const prototype = Object.getPrototypeOf(record) as object | null;
@@ -132,6 +138,9 @@ function assertJsonValue(value: unknown, path: string, ancestors = new Set<objec
     }
     if (Object.getOwnPropertySymbols(record).length > 0) {
       fail('INVALID_JSON_VALUE', path, 'symbol-keyed data is not JSON-serializable');
+    }
+    if (Reflect.ownKeys(record).length !== Object.keys(record).length) {
+      fail('INVALID_JSON_VALUE', path, 'non-enumerable data is not JSON-serializable');
     }
     for (const [key, item] of Object.entries(record)) assertJsonValue(item, `${path}.${key}`, ancestors);
   }
@@ -236,7 +245,7 @@ function parsePack(input: unknown): ComponentPackManifest {
   const componentIds = new Set(components.map((component) => component.id));
   for (const [componentIndex, component] of components.entries()) {
     for (const [slotIndex, slot] of component.slots.entries()) {
-      for (const [acceptsIndex, accepted] of (slot.accepts ?? []).entries()) {
+      for (const [acceptsIndex, accepted] of slot.accepts.entries()) {
         if (!componentIds.has(accepted)) {
           fail('UNRESOLVED_ACCEPTS', `$.components[${componentIndex}].slots[${slotIndex}].accepts[${acceptsIndex}]`, `unknown component id ${JSON.stringify(accepted)}`);
         }
@@ -292,6 +301,41 @@ function parseDocument(input: unknown): ComponentDocument {
   };
 }
 
+function parseRuntimeRegistry(input: unknown): ComponentRuntimeRegistry<unknown> {
+  const value = objectAt(input, '$runtime');
+  exactKeys(value, ['packId', 'packVersion', 'components'], '$runtime');
+  const runtimeComponents = objectAt(value.components, '$runtime.components');
+  const componentsPrototype = Object.getPrototypeOf(runtimeComponents) as object | null;
+  if (componentsPrototype !== Object.prototype && componentsPrototype !== null) {
+    fail('INVALID_VALUE', '$runtime.components', 'expected a plain runtime registry record');
+  }
+  if (Object.getOwnPropertySymbols(runtimeComponents).length > 0) {
+    fail('RUNTIME_MANIFEST_MISMATCH', '$runtime.components', 'runtime component IDs must be strings');
+  }
+  if (Object.getOwnPropertyNames(runtimeComponents).length !== Object.keys(runtimeComponents).length) {
+    fail('RUNTIME_MANIFEST_MISMATCH', '$runtime.components', 'runtime component entries must be enumerable string keys');
+  }
+  const components: Record<string, { schemaVersion: number; runtime: unknown }> = Object.create(null) as Record<string, { schemaVersion: number; runtime: unknown }>;
+  for (const [id, inputEntry] of Object.entries(runtimeComponents)) {
+    stringAt(id, `$runtime.components.${id}`);
+    const entry = objectAt(inputEntry, `$runtime.components.${id}`);
+    noInlineAdapter(entry, `$runtime.components.${id}`);
+    exactKeys(entry, ['schemaVersion', 'runtime'], `$runtime.components.${id}`);
+    if (!Object.hasOwn(entry, 'runtime')) {
+      fail('INVALID_VALUE', `$runtime.components.${id}.runtime`, 'trusted runtime value is required');
+    }
+    components[id] = {
+      schemaVersion: positiveIntegerAt(entry.schemaVersion, `$runtime.components.${id}.schemaVersion`),
+      runtime: entry.runtime,
+    };
+  }
+  return {
+    packId: stringAt(value.packId, '$runtime.packId'),
+    packVersion: stringAt(value.packVersion, '$runtime.packVersion'),
+    components,
+  };
+}
+
 function schema<T>(parser: (input: unknown) => T): RuntimeSchema<T> {
   return Object.freeze({
     parse: parser,
@@ -308,18 +352,21 @@ function schema<T>(parser: (input: unknown) => T): RuntimeSchema<T> {
 
 export const componentPackManifestSchema = schema(parsePack);
 export const componentDocumentSchema = schema(parseDocument);
+/** Validates registry metadata while deliberately treating each runtime value as trusted opaque code. */
+export const componentRuntimeRegistrySchema = schema(parseRuntimeRegistry);
 
 export function validateRuntimeParity<TRuntime>(
   manifestInput: unknown,
   runtime: ComponentRuntimeRegistry<TRuntime>,
 ): TrustedComponentPack<TRuntime> {
   const manifest = componentPackManifestSchema.parse(manifestInput);
-  if (runtime.packId !== manifest.packId || runtime.packVersion !== manifest.packVersion) {
+  const normalizedRuntime = componentRuntimeRegistrySchema.parse(runtime) as ComponentRuntimeRegistry<TRuntime>;
+  if (normalizedRuntime.packId !== manifest.packId || normalizedRuntime.packVersion !== manifest.packVersion) {
     fail('RUNTIME_MANIFEST_MISMATCH', '$runtime', 'runtime pack identity must exactly match the serializable manifest');
   }
   const manifestIds = new Set(manifest.components.map((component) => component.id));
   for (const component of manifest.components) {
-    const entry = Object.hasOwn(runtime.components, component.id) ? runtime.components[component.id] : undefined;
+    const entry = Object.hasOwn(normalizedRuntime.components, component.id) ? normalizedRuntime.components[component.id] : undefined;
     if (entry === undefined) {
       fail('MISSING_RUNTIME_ENTRY', `$runtime.components.${component.id}`, `missing trusted runtime entry for ${JSON.stringify(component.id)}`);
     }
@@ -327,12 +374,12 @@ export function validateRuntimeParity<TRuntime>(
       fail('RUNTIME_COMPONENT_VERSION_MISMATCH', `$runtime.components.${component.id}.schemaVersion`, `runtime version ${entry.schemaVersion} does not match manifest version ${component.schemaVersion}`);
     }
   }
-  for (const id of Object.keys(runtime.components)) {
+  for (const id of Object.keys(normalizedRuntime.components)) {
     if (!manifestIds.has(id)) {
       fail('RUNTIME_MANIFEST_MISMATCH', `$runtime.components.${id}`, `runtime entry ${JSON.stringify(id)} has no serializable manifest component`);
     }
   }
-  return { manifest, runtime };
+  return { manifest, runtime: normalizedRuntime };
 }
 
 export function defineComponentPack<TRuntime>(input: {
@@ -345,16 +392,14 @@ export function defineComponentPack<TRuntime>(input: {
     contractVersion: CONTRACT_VERSION,
     packId: input.packId,
     packVersion: input.packVersion,
-    components: input.components.map((component) => ({
-      id: component.id,
-      schemaVersion: component.schemaVersion,
-      displayName: component.displayName,
-      props: component.props,
-      defaults: component.defaults,
-      fields: component.fields,
-      slots: component.slots,
-      sources: component.sources,
-    })),
+    components: input.components.map((component, index) => {
+      const authorValue = component as unknown as Record<string, unknown>;
+      noInlineAdapter(authorValue, `$.components[${index}]`);
+      exactKeys(authorValue, ['id', 'schemaVersion', 'displayName', 'props', 'defaults', 'fields', 'slots', 'sources', 'runtime'], `$.components[${index}]`);
+      const projected = { ...authorValue };
+      delete projected.runtime;
+      return projected;
+    }),
   };
   const runtimeComponents: Record<string, { schemaVersion: number; runtime: TRuntime }> = Object.create(null) as Record<string, { schemaVersion: number; runtime: TRuntime }>;
   for (const component of input.components) {

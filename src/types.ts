@@ -29,8 +29,13 @@ export interface FieldDefinition<TField extends string = string> {
 
 export interface SlotDefinition<TComponentId extends string = string, TSlot extends string = string> {
   readonly id: TSlot;
-  readonly accepts?: readonly TComponentId[];
+  readonly accepts: readonly TComponentId[];
 }
+
+export type AuthorSlotDefinition<TComponentId extends string = string, TSlot extends string = string> =
+  Omit<SlotDefinition<TComponentId, TSlot>, 'accepts'> & {
+    readonly accepts?: readonly TComponentId[];
+  };
 
 /** A source that generated consumer code may import without reaching into private files. */
 export interface PublicSourceDefinition<TSource extends string = string> {
@@ -51,7 +56,7 @@ export interface ComponentManifest<
   readonly schemaVersion: number;
   readonly displayName: string;
   readonly props: readonly PropDefinition<TProp>[];
-  readonly defaults: Readonly<Record<TProp, ScalarPropValue>>;
+  readonly defaults: Partial<Readonly<Record<TProp, ScalarPropValue>>>;
   readonly fields: readonly FieldDefinition<TField>[];
   readonly slots: readonly SlotDefinition<TComponentId, TSlot>[];
   readonly sources: readonly PublicSourceDefinition<TSource>[];
@@ -82,7 +87,7 @@ export interface AuthorComponentDefinition<
   readonly props: readonly PropDefinition<ScalarPropKey<TProps>>[];
   readonly defaults?: Partial<Readonly<Record<ScalarPropKey<TProps>, ScalarPropValue>>>;
   readonly fields?: readonly FieldDefinition<TField>[];
-  readonly slots?: readonly SlotDefinition<string, TSlot>[];
+  readonly slots?: readonly AuthorSlotDefinition<string, TSlot>[];
   readonly sources?: readonly PublicSourceDefinition<TSource>[];
   /** Trusted runtime value. It is never copied into or accepted from JSON. */
   readonly runtime: TRuntime;

@@ -7,6 +7,7 @@ export {
 } from './types.js';
 export type {
   AuthorComponentDefinition,
+  AuthorSlotDefinition,
   ComponentDocument,
   ComponentManifest,
   ComponentPackManifest,
@@ -35,6 +36,7 @@ export {
   RESERVED_PERSISTED_KEYS,
   componentDocumentSchema,
   componentPackManifestSchema,
+  componentRuntimeRegistrySchema,
   defineComponent,
   defineComponentPack,
   validateRuntimeParity,
