@@ -1,0 +1,51 @@
+export type {
+  ReuseCatalogEntry,
+  ReuseCatalogOutcome,
+  ReuseSelectionOutcome,
+  ReuseDependent,
+  ReuseDependentsOutcome,
+  GlobalTemplateResolutionFailureReason,
+  GlobalTemplateResolutionOutcome,
+  ReuseReadProvider,
+  CompositionReuseResolver,
+  CompositionReuseService,
+  ReuseLifecycleProvider,
+  ReuseDeleteOutcome,
+  ReuseUnpublishOutcome,
+  ReuseConsumerLifecycleOutcome,
+  CompositionReuseLifecycleService,
+  ComposerReuseResolutionOptions,
+  ResolveGlobalTemplateOptions,
+} from "./types";
+export { resolveGlobalTemplate, resolveGlobalTemplateLoad } from "./resolver";
+export { catalogEntryFromSummary, createCompositionReuseService } from "./service";
+export { createCompositionReuseLifecycleService } from "./lifecycle";
+export type {
+  MaterializedRuntimeOwner,
+  MaterializedViewNode,
+  MaterializedLocalRootTarget,
+  MaterializedViewOutput,
+  BlockedMaterializedViewOutput,
+  MaterializedViewAffordances,
+  BrokenBindingAffordances,
+  GlobalTemplateViewDiagnosticCode,
+  GlobalTemplateViewDiagnostic,
+  UnboundMaterializedView,
+  ResolvedGlobalTemplateView,
+  BlockedGlobalTemplateView,
+  GlobalTemplateMaterializedView,
+  StandaloneSnapshotBlockReason,
+  StandaloneSnapshotMaterialization,
+  BrokenBindingRemovalMaterialization,
+  LinkedEditorPresentation,
+  LinkedEditorLifecycleActions,
+} from "./materialize";
+export {
+  createLocalRuntimeOwner,
+  createGlobalTemplateRuntimeOwner,
+  materializedRuntimeKey,
+  materializeGlobalTemplateView,
+  materializeStandaloneSnapshot,
+  materializeBrokenBindingRemoval,
+  linkedEditorPresentation,
+} from "./materialize";
