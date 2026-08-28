@@ -32,7 +32,11 @@ editable key. Slots have a stable persisted `id` distinct from their real
 component `prop`; changing either persisted meaning requires incrementing the
 component's `schemaVersion`.
 
-The package is self-contained for Git subdirectory consumers. Its `prepare`
-script builds from this package directory, and the package-local workspace
-boundary prevents preparation from depending on the repository root. CI proves
-the quoted full-SHA handoff with a fresh temporary consumer.
+The package is self-contained on the permanent package-only branch
+`package/component-contract-v1`. Its `prepare` script builds from the package
+root, and the package-local workspace boundary prevents preparation from
+depending on the repository root. Consumers should use the exact `rootGitSpec`
+in the repository's `contract-handoff.json`; the handoff deliberately avoids a
+Git subdirectory `path:` selector because pnpm may install the repository root
+for that form. CI proves the full-SHA package-root handoff with a fresh
+temporary consumer.
