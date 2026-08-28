@@ -19,6 +19,7 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "prepare": "pnpm run build",
     "clean": "tsc -b --clean",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --config vitest.config.ts"
