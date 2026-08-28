@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": ".",
+    "paths": {
+      "@zudo-composer/component-contract": ["./src/index.ts"]
+    }
+  },
+  "include": ["type-tests"]
+}
