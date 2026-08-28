@@ -7,6 +7,7 @@ import {
   DOCUMENT_VERSION,
   componentDocumentSchema,
   componentPackManifestSchema,
+  componentRuntimeRegistrySchema,
   defineComponent,
   defineComponentPack,
   resolveComponentNode,
@@ -139,6 +140,20 @@ describe('component pack v1', () => {
     expectCode(() => componentDocumentSchema.parse(value), 'INVALID_JSON_VALUE');
   });
 
+  it('rejects JSON structures that serialization would silently change', () => {
+    const sparse = Array.from({ length: 1 }) as unknown[];
+    delete sparse[0];
+    const sparseDocument = structuredClone(fixtureComponentDocument) as unknown as Record<string, unknown>;
+    const sparseRoot = (sparseDocument.roots as Record<string, unknown>[])[0];
+    (sparseRoot.fields as Record<string, unknown>).sparse = sparse;
+    expectCode(() => componentDocumentSchema.parse(sparseDocument), 'INVALID_JSON_VALUE');
+
+    const hiddenDocument = structuredClone(fixtureComponentDocument) as unknown as Record<string, unknown>;
+    const hiddenRoot = (hiddenDocument.roots as Record<string, unknown>[])[0];
+    Object.defineProperty(hiddenRoot.fields, 'hidden', { value: 'lost', enumerable: false });
+    expectCode(() => componentDocumentSchema.parse(hiddenDocument), 'INVALID_JSON_VALUE');
+  });
+
   it('enforces scalar persisted props', () => {
     const value = structuredClone(fixtureComponentDocument) as unknown as Record<string, unknown>;
     const root = (value.roots as Record<string, unknown>[])[0];
@@ -151,9 +166,42 @@ describe('component pack v1', () => {
     components(value)[0].allowedParents = ['container'];
     expectCode(() => componentPackManifestSchema.parse(value), 'UNKNOWN_KEY');
   });
+
+  it('does not silently discard excluded author APIs during manifest projection', () => {
+    const definition = {
+      id: 'legacy',
+      schemaVersion: 1,
+      displayName: 'Legacy',
+      props: [],
+      runtime: {},
+      allowedParents: ['container'],
+    };
+    expectCode(
+      () => defineComponentPack({ packId: 'test-pack', packVersion: '1', components: [definition] }),
+      'UNKNOWN_KEY',
+    );
+  });
 });
 
 describe('trusted runtime projection', () => {
+  it('strictly validates runtime registry metadata without inspecting trusted code', () => {
+    const runtime = () => 'trusted';
+    const parsed = componentRuntimeRegistrySchema.parse({
+      packId: 'pack',
+      packVersion: '1',
+      components: { card: { schemaVersion: 1, runtime } },
+    });
+    expect(parsed.components.card?.runtime).toBe(runtime);
+    expectCode(
+      () => componentRuntimeRegistrySchema.parse({
+        packId: 'pack',
+        packVersion: '1',
+        components: { card: { schemaVersion: 1, runtime, adapter: () => null } },
+      }),
+      'INLINE_ADAPTER_NOT_ALLOWED',
+    );
+  });
+
   it('keeps the runtime and serializable manifest in exact 1:1 parity', () => {
     expect(Object.keys(fixtureComponentPack.runtime.components).sort()).toEqual(
       fixtureComponentPack.manifest.components.map((component) => component.id).sort(),
