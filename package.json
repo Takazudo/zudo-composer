@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.25.0",
+  "packageManager": "pnpm@11.5.2",
   "engines": {
     "node": "^22.13.0 || >=24.0.0"
   },
@@ -13,7 +13,10 @@
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "contract:conformance": "node scripts/check-package-conformance.mjs",
+    "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
+    "contract:external-install": "node scripts/verify-contract-install.mjs"
   },
   "dependencies": {
     "preact": "^10.29.8"

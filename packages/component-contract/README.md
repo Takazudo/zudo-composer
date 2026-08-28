@@ -21,3 +21,8 @@ Contract version, provider pack version, per-component schema version, and
 document version are separate identities. Changing a declared scalar `prop`,
 field ID, or slot ID is a persisted-schema change and requires incrementing the
 component's `schemaVersion`.
+
+The package is self-contained for Git subdirectory consumers. Its `prepare`
+script builds from this package directory, and the package-local workspace
+boundary prevents preparation from depending on the repository root. CI proves
+the quoted full-SHA handoff with a fresh temporary consumer.

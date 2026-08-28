@@ -15,5 +15,11 @@ publishing identities must not be copied or reused.
 
 - Install dependencies with `corepack pnpm install`.
 - Run bounded checks with `corepack pnpm check`.
+- Validate the standalone contract handoff with `corepack pnpm
+  contract:conformance`, `corepack pnpm contract:negative-scan`, and `corepack
+  pnpm contract:external-install`.
+- Pull request CI verifies the pushed head SHA; post-merge main CI verifies the
+  permanent consumer-reachable SHA. The manager must record that SHA and the
+  green CI URL on the epic before closing the handoff.
 - Do not add deployment or production hostname configuration without explicit
   project-specific design and review.
