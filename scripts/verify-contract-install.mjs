@@ -9,8 +9,8 @@ const execFile = promisify(execFileCallback);
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
 const packageRoot = path.join(repositoryRoot, 'packages', 'component-contract');
 const repositoryUrl = 'https://github.com/Takazudo/zudo-composer.git';
-const packageSubdirectory = 'packages/component-contract';
 const packageName = '@zudo-composer/component-contract';
+const handoffPath = path.join(repositoryRoot, 'contract-handoff.json');
 const pnpmExecutable = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const npmExecutable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const forceExact = process.argv.slice(2).includes('--exact');
@@ -24,6 +24,23 @@ function fail(message) {
 function assert(condition, message) {
   if (!condition) fail(message);
 }
+
+function assertNoDependencyProtocols(content, description) {
+  for (const [label, pattern] of [
+    ['workspace:', /(?:^|[^A-Za-z0-9_-])workspace:/u],
+    ['file:', /(?:^|[^A-Za-z0-9_-])file:/u],
+    ['link:', /(?:^|[^A-Za-z0-9_-])link:/u],
+  ]) {
+    assert(!pattern.test(content), `${description} must not contain ${label}`);
+  }
+}
+
+const handoff = JSON.parse(await readFile(handoffPath, 'utf8'));
+assert(handoff.packageName === packageName, 'contract handoff package name changed');
+assert(handoff.sourcePath === 'packages/component-contract', 'contract handoff source path changed');
+assert(typeof handoff.packageBranch === 'string' && handoff.packageBranch.length > 0, 'contract handoff package branch is missing');
+assert(/^[0-9a-f]{40}$/u.test(handoff.packageCommit), 'contract handoff must contain a full 40-character lowercase package commit');
+assert(handoff.rootGitSpec === `git+${repositoryUrl}#${handoff.packageCommit}`, 'contract handoff root Git spec must exactly identify the package commit');
 
 async function run(command, args, cwd, { allowFailure = false } = {}) {
   try {
@@ -46,27 +63,31 @@ async function run(command, args, cwd, { allowFailure = false } = {}) {
   }
 }
 
-function validateSha(value, source) {
-  assert(/^[0-9a-f]{40}$/u.test(value), `${source} must be a full 40-character lowercase commit SHA`);
-  return value;
-}
-
-async function currentSha() {
-  const result = await run('git', ['rev-parse', 'HEAD'], repositoryRoot);
-  return validateSha(result.stdout.trim(), 'current commit');
-}
-
-function configuredSha() {
-  return process.env.CONTRACT_GIT_SHA ?? process.env.GITHUB_HEAD_SHA ?? process.env.GITHUB_SHA;
-}
-
-async function remoteContainsSha(sha) {
-  const result = await run('git', ['ls-remote', '--exit-code', repositoryUrl, sha], repositoryRoot, { allowFailure: true });
-  if (result.exitCode === 0 && result.stdout.split(/\r?\n/u).some((line) => line.startsWith(`${sha}\t`))) {
-    return { reachable: true, reason: '' };
+async function packageBranchStatus() {
+  const ref = `refs/heads/${handoff.packageBranch}`;
+  const result = await run('git', ['ls-remote', '--exit-code', repositoryUrl, ref], repositoryRoot, { allowFailure: true });
+  const match = result.stdout.split(/\r?\n/u).map((line) => line.trim().split(/\s+/u)).find((parts) => parts[1] === ref);
+  if (match === undefined) {
+    const reason = result.stderr.trim().replace(/\s+/gu, ' ');
+    return { status: 'unavailable', reason: reason || `${ref} is not advertised by the public repository` };
   }
-  const reason = result.stderr.trim().replace(/\s+/gu, ' ');
-  return { reachable: false, reason: reason || 'the commit is not advertised by the public repository' };
+  if (match[0] !== handoff.packageCommit) {
+    return { status: 'mismatch', reason: `${ref} points at ${match[0]}, expected ${handoff.packageCommit}` };
+  }
+  return { status: 'reachable', reason: '' };
+}
+
+async function assertPackageTree() {
+  const localTree = (await run('git', ['rev-parse', `HEAD:${handoff.sourcePath}`], repositoryRoot)).stdout.trim();
+  const temporaryGitDirectory = await mkdtemp(path.join(os.tmpdir(), 'zudo-composer-contract-git-'));
+  try {
+    await run('git', ['init', '--bare', '--quiet', temporaryGitDirectory], repositoryRoot);
+    await run('git', ['fetch', '--no-tags', '--depth=1', repositoryUrl, handoff.packageCommit], temporaryGitDirectory);
+    const remoteTree = (await run('git', ['rev-parse', `${handoff.packageCommit}^{tree}`], temporaryGitDirectory)).stdout.trim();
+    assert(remoteTree === localTree, `package branch tree ${remoteTree} does not equal HEAD:${handoff.sourcePath} tree ${localTree}`);
+  } finally {
+    await rm(temporaryGitDirectory, { recursive: true, force: true });
+  }
 }
 
 async function writeFixture(directory, gitSpec) {
@@ -95,32 +116,31 @@ async function assertInstalledModule(directory) {
 
 async function assertExactLock(directory, sha, gitSpec) {
   const manifest = JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'));
-  assert(manifest.dependencies?.[packageName] === gitSpec, 'fixture package.json must retain the quoted exact Git subdirectory spec');
+  assert(manifest.dependencies?.[packageName] === gitSpec, 'fixture package.json must retain the quoted exact root Git spec');
+  assert(!gitSpec.includes('&path:'), 'fixture dependency must not use a Git subdirectory selector');
+  assertNoDependencyProtocols(gitSpec, 'fixture dependency spec');
   const workspaceConfig = await readFile(path.join(directory, 'pnpm-workspace.yaml'), 'utf8');
   assert(workspaceConfig.startsWith('packages: []\n'), 'external fixture must not prepare repository-root workspace projects');
   assert(workspaceConfig.includes(`'${packageName}': true`), 'external fixture must explicitly allow only the contract build');
-  for (const forbidden of ['workspace:', 'file:', 'link:', '../', '..\\']) {
-    assert(!workspaceConfig.includes(forbidden), `external fixture workspace config must not contain ${forbidden}`);
-  }
+  assertNoDependencyProtocols(workspaceConfig, 'external fixture workspace config');
+  assert(!workspaceConfig.includes('../') && !workspaceConfig.includes('..\\'), 'external fixture workspace config must not contain sibling paths');
   const lock = await readFile(path.join(directory, 'pnpm-lock.yaml'), 'utf8');
   assert(lock.includes(sha), 'fixture lockfile must contain the full 40-character commit SHA');
-  assert(new RegExp(`commit:\\s*${sha}\\b`, 'u').test(lock), 'fixture lockfile must record the full Git commit resolution');
-  assert(new RegExp(`path:\\s*${packageSubdirectory}\\b`, 'u').test(lock), 'fixture lockfile must record the component-contract subdirectory');
-  for (const forbidden of ['workspace:', 'file:', 'link:']) {
-    assert(!lock.includes(forbidden), `fixture lockfile must not contain ${forbidden}`);
-  }
+  assert(!lock.includes('path:'), 'fixture lockfile must not record a Git subdirectory selector');
+  assertNoDependencyProtocols(lock, 'fixture lockfile');
 }
 
 async function runExactInstall(sha) {
-  const gitSpec = `git+${repositoryUrl}#${sha}&path:${packageSubdirectory}`;
+  const gitSpec = handoff.rootGitSpec;
+  assert(sha === handoff.packageCommit, 'exact install SHA must match the committed package handoff');
   const fixture = await mkdtemp(path.join(os.tmpdir(), 'zudo-composer-contract-install-'));
   try {
     await writeFixture(fixture, gitSpec);
-    await run(pnpmExecutable, ['install', '--lockfile-only', '--ignore-scripts'], fixture);
+    await run(pnpmExecutable, ['install', '--lockfile-only'], fixture);
     await assertExactLock(fixture, sha, gitSpec);
     await run(pnpmExecutable, ['install', '--frozen-lockfile'], fixture);
     await assertInstalledModule(fixture);
-    console.log(`External exact-SHA install passed: ${repositoryUrl}#${sha}&path:${packageSubdirectory}`);
+    console.log(`External exact package-root install passed: ${gitSpec}`);
   } finally {
     await rm(fixture, { recursive: true, force: true });
   }
@@ -151,19 +171,23 @@ async function runPackageProof() {
   }
 }
 
-const sha = validateSha(configuredSha() ?? await currentSha(), configuredSha() ? 'configured commit' : 'current commit');
-
 try {
   if (forceLocal) {
     await runPackageProof();
-  } else if (isCi || forceExact) {
-    await runExactInstall(sha);
   } else {
-    const reachability = await remoteContainsSha(sha);
-    if (reachability.reachable) {
-      await runExactInstall(sha);
+    const branch = await packageBranchStatus();
+    if (branch.status === 'mismatch') {
+      fail(`advertised package branch is stale: ${branch.reason}`);
+    }
+    if (isCi || forceExact) {
+      assert(branch.status === 'reachable', `advertised package branch is unavailable: ${branch.reason}`);
+      await assertPackageTree();
+      await runExactInstall(handoff.packageCommit);
+    } else if (branch.status === 'reachable') {
+      await assertPackageTree();
+      await runExactInstall(handoff.packageCommit);
     } else {
-      console.log(`Local exact-SHA install skipped: ${sha} is not externally reachable (${reachability.reason}).`);
+      console.log(`Local exact package-ref install skipped: ${branch.reason}`);
       await runPackageProof();
     }
   }
