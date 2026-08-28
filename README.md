@@ -29,5 +29,26 @@ corepack pnpm test
 corepack pnpm build
 ```
 
+The package handoff checks are also available locally:
+
+```sh
+corepack pnpm contract:conformance
+corepack pnpm contract:negative-scan
+corepack pnpm contract:external-install
+```
+
+The external-install check writes a fresh temporary consumer, resolves the
+contract from the full Git commit SHA and `packages/component-contract`
+subdirectory, runs a frozen install, and imports both public entrypoints. If a
+local commit has not been pushed to this repository yet, it reports that fact
+and runs an explicit packed-artifact proof instead; it never presents an
+unreachable local SHA as an external install result. Pass `-- --exact` when a
+local run must require the remote Git proof, or `-- --local` to force only the
+packed-artifact proof.
+
+Pull request CI selects the pushed PR head SHA. Main CI selects
+`github.sha`, so the final handoff is complete only after the manager records
+the permanent post-merge main SHA and the green CI run URL on the epic.
+
 Deployment and production hostname configuration are intentionally outside the
 scope of this foundation.
