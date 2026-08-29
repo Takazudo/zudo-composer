@@ -14,7 +14,6 @@ export function isValidSitemapTimestamp(value: unknown): value is string {
   const parsed = new Date(value);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
 }
-
 function issue(
   code: SitemapRecordValidationIssue["code"],
   message: string,
@@ -81,4 +80,3 @@ export function loadSitemapRecord(value: unknown): SitemapRecordLoadOutcome {
   }
   return { status: "invalid", issue: validation.issue, raw: value };
 }
-

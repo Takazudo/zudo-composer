@@ -13,7 +13,6 @@ export interface SitemapNodeLocation {
   index: number;
   depth: number;
 }
-
 /** Fast lookup plus canonical pre-order node ids. */
 export interface SitemapDocumentIndex {
   byId: Map<string, SitemapNodeLocation>;
@@ -67,4 +66,3 @@ export function findLocation(
 ): SitemapNodeLocation | undefined {
   return indexDocument(document).byId.get(nodeId);
 }
-

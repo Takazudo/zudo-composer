@@ -77,4 +77,3 @@ describe("isStructurallyValidDocument", () => {
     expect(code(value)).toBe("invalid-composition-ref");
   });
 });
-

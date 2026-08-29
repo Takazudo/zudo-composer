@@ -6,7 +6,6 @@ function countPages(nodes: readonly SitemapNode[]): number {
   for (const node of nodes) count += 1 + countPages(node.children);
   return count;
 }
-
 export function countSitemapPages(record: Pick<SitemapRecord, "document">): number {
   return countPages(record.document.root);
 }
@@ -31,4 +30,3 @@ export function compareSitemapSummariesNewestFirst(
   if (a.id === b.id) return 0;
   return a.id < b.id ? -1 : 1;
 }
-

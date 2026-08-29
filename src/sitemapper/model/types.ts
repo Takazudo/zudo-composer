@@ -16,7 +16,6 @@ export interface CompositionRef {
   providerId: string;
   recordId: RecordId;
 }
-
 /** One persisted page in the sitemap tree. */
 export interface SitemapNode {
   id: string;
@@ -35,4 +34,3 @@ export interface SitemapDocument {
   /** Virtual insertion slot. The array itself is never a page node. */
   root: SitemapNode[];
 }
-

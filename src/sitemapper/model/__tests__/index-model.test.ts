@@ -30,4 +30,3 @@ describe("Sitemap index model", () => {
     expect(() => indexDocument(document([node("home", [node("same"), node("same")])]))).toThrow(/duplicate/i);
   });
 });
-

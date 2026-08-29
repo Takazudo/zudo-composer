@@ -45,7 +45,6 @@ function hasExactKeys(
   return required.every((key) => Object.hasOwn(value, key))
     && Object.keys(value).every((key) => allowed.has(key));
 }
-
 function failure(code: SitemapValidationFailureCode, path: string): SitemapValidationResult {
   return { ok: false, code, path };
 }
@@ -134,4 +133,3 @@ export function isStructurallyValidDocument(value: unknown): SitemapValidationRe
   if (!isJsonSafe(value)) return failure("not-json-safe", "$");
   return { ok: true, document: value as unknown as SitemapDocument };
 }
-

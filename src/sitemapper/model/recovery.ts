@@ -64,4 +64,3 @@ export function loadSitemapDocument(
   }
   return { status: "ok", document: validation.document };
 }
-

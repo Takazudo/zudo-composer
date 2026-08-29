@@ -48,4 +48,3 @@ describe("loadSitemapDocument", () => {
     expect(outcome.document).not.toBe(sample);
   });
 });
-

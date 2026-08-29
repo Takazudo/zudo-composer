@@ -31,4 +31,3 @@ describe("Sitemap codec", () => {
     expect(decodeSitemapDocument(null)).toEqual({ status: "malformed" });
   });
 });
-

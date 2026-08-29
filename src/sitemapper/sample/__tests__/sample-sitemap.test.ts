@@ -22,4 +22,3 @@ describe("sample sitemap", () => {
     expect(createSampleSitemap().root[0]).not.toBe(createSampleSitemap().root[0]);
   });
 });
-
