@@ -27,4 +27,13 @@ describe("Mapping assignment catalog", () => {
       expect(await catalog.routes.resolveContentSnapshot(record)).toMatchObject({ status });
     }
   });
+
+  it("injects Mapping definition readiness and blocks safely when root wiring omits it", async () => {
+    const resolveReadiness = vi.fn(async () => ({ status: "blocked" as const, diagnostics: [{ code: "duplicate-target", message: "Target is duplicated." }] }));
+    const injected = createMappingAssignmentCatalog([mappingProvider()], [], resolveReadiness);
+    expect(await injected.routes.resolveDefinitionReadiness(record)).toEqual({ status: "blocked", diagnostics: [{ code: "duplicate-target", message: "Target is duplicated." }] });
+    expect(resolveReadiness).toHaveBeenCalledWith(record);
+    const unavailable = createMappingAssignmentCatalog([mappingProvider()], []);
+    expect(await unavailable.routes.resolveDefinitionReadiness(record)).toMatchObject({ status: "blocked", diagnostics: [{ code: "readiness-unavailable" }] });
+  });
 });

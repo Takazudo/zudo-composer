@@ -7,7 +7,7 @@ export type SitemapRouteDiagnosticCode =
   | "content-model-not-found" | "content-model-invalid" | "content-provider-failure"
   | "wrong-route-mode" | "route-field-missing" | "route-field-not-slug"
   | "entry-slug-missing" | "entry-slug-invalid" | "incompatible-mapping"
-  | "route-collision" | "unsupported-external-base";
+  | "route-fragment-invalid" | "route-collision" | "unsupported-external-base";
 
 export interface SitemapRouteDiagnostic {
   code: SitemapRouteDiagnosticCode;
@@ -29,12 +29,21 @@ export interface SitemapRouteExpansion {
   derivedRouteCount: number;
   samplePath?: string;
   diagnostics: readonly SitemapRouteDiagnostic[];
+  nodes: ReadonlyMap<string, SitemapNodeRouteInfo>;
 }
 
 export interface SitemapNodeRouteInfo {
   derivedRouteCount: number;
+  samplePath?: string;
   status: "ready" | "blocked";
+  diagnostics: readonly SitemapRouteDiagnostic[];
 }
+
+export type MappingDefinitionReadiness =
+  | { status: "ready" }
+  | { status: "blocked"; diagnostics: readonly { code: string; message: string }[] };
+
+export type MappingDefinitionReadinessResolver = (mapping: MappingRecord) => Promise<MappingDefinitionReadiness>;
 
 export interface MappingRouteCatalog {
   list(): ReturnType<MappingCatalog["list"]>;
@@ -44,6 +53,7 @@ export interface MappingRouteCatalog {
     | { status: "invalid"; reason: string }
     | { status: "provider-error"; reason: string }
   >;
+  resolveDefinitionReadiness(mapping: MappingRecord): Promise<MappingDefinitionReadiness>;
   resolveContentSnapshot(mapping: MappingRecord): Promise<
     | { status: "resolved"; model: ContentModelRecord; snapshot: ContentEntrySnapshot }
     | { status: "not-found" }
@@ -59,5 +69,5 @@ export interface MappingAssignmentCatalog {
 
 export interface ExpandSitemapRoutesOptions {
   document: SitemapDocument;
-  catalog: Pick<MappingRouteCatalog, "resolveMapping" | "resolveContentSnapshot">;
+  catalog: Pick<MappingRouteCatalog, "resolveMapping" | "resolveDefinitionReadiness" | "resolveContentSnapshot">;
 }

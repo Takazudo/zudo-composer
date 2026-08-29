@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import {
   SitemapperWorkspace,
 } from "../sitemapper-workspace";
@@ -25,6 +25,25 @@ describe("SitemapperWorkspace", () => {
     expect(screen.getAllByRole("separator")).toHaveLength(2);
     expect(screen.getByRole("tablist", { name: "Sitemapper panels" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Canvas" })).toHaveAttribute("aria-selected", "true");
+    for (const name of ["Outline", "Canvas", "Inspector"]) {
+      const tab = screen.getByRole("tab", { name });
+      const panel = screen.getByRole("tabpanel", { name });
+      expect(tab).toHaveAttribute("id");
+      expect(panel).toHaveAttribute("aria-labelledby", tab.id);
+    }
+  });
+
+  it("moves selection, focus, and active-panel visibility state with arrow keys", () => {
+    render(<SitemapperWorkspace />);
+    const canvasTab = screen.getByRole("tab", { name: "Canvas" });
+    const inspectorTab = screen.getByRole("tab", { name: "Inspector" });
+    canvasTab.focus();
+    fireEvent.keyDown(canvasTab, { key: "ArrowRight" });
+    expect(inspectorTab).toHaveFocus();
+    expect(inspectorTab).toHaveAttribute("aria-selected", "true");
+    expect(canvasTab).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("tabpanel", { name: "Inspector" })).toHaveAttribute("data-active", "true");
+    expect(screen.getByRole("tabpanel", { name: "Canvas" })).toHaveAttribute("data-active", "false");
   });
 
   it("keeps all rails and resizers in the DOM and specifies accessible defaults", () => {
