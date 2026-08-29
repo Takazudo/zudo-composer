@@ -14,7 +14,7 @@ describe("isStructurallyValidDocument", () => {
         ...node("home", [node("about")]),
         slug: "home",
         notes: "Landing page",
-        composition: { providerId: "indexeddb", recordId: "home-page" },
+        source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "home-page" } },
       },
     ]);
     const result = isStructurallyValidDocument(value);
@@ -24,7 +24,7 @@ describe("isStructurallyValidDocument", () => {
   it.each([
     ["not-an-object", null],
     ["invalid-document-keys", { ...document(), extra: true }],
-    ["unsupported-schema-version", { ...document(), schemaVersion: 2 }],
+    ["unsupported-schema-version", { ...document(), schemaVersion: 1 }],
     ["invalid-document-id", { ...document(), id: "" }],
     ["invalid-document-name", { ...document(), name: 1 }],
     ["root-cardinality", { ...document(), root: [] }],
@@ -35,12 +35,12 @@ describe("isStructurallyValidDocument", () => {
     ["invalid-node-title", document([{ ...node("home"), title: 1 } as never])],
     ["invalid-node-slug", document([{ ...node("home"), slug: 1 } as never])],
     [
-      "invalid-composition-ref",
-      document([{ ...node("home"), composition: { providerId: "", recordId: "valid" } }]),
+      "invalid-source",
+      document([{ ...node("home"), source: { kind: "composition", ref: { providerId: "", recordId: "valid" } } }]),
     ],
     [
-      "invalid-composition-ref",
-      document([{ ...node("home"), composition: { providerId: "indexeddb", recordId: "../bad" } }]),
+      "invalid-source",
+      document([{ ...node("home"), source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "../bad" } } }]),
     ],
     ["invalid-node-notes", document([{ ...node("home"), notes: 1 } as never])],
     ["invalid-children", document([{ ...node("home"), children: {} } as never])],
@@ -71,9 +71,16 @@ describe("isStructurallyValidDocument", () => {
     const value = document([
       {
         ...node("home"),
-        composition: { providerId: "indexeddb", recordId: "home", extra: true },
+        source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "home", extra: true } },
       } as never,
     ]);
-    expect(code(value)).toBe("invalid-composition-ref");
+    expect(code(value)).toBe("invalid-source");
+  });
+
+  it("accepts the exact source union and rejects Mapping nodes with authored children", () => {
+    const mapping = { kind: "mapping" as const, ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field" as const, fieldId: "slug" } };
+    expect(code(document([{ ...node("articles"), source: mapping }]))).toBe("ok");
+    expect(code(document([{ ...node("articles", [node("synthetic")]), source: mapping }]))).toBe("mapping-children");
+    expect(code(document([{ ...node("articles"), source: { ...mapping, route: { kind: "single", fieldId: "slug" } } } as never]))).toBe("invalid-source");
   });
 });

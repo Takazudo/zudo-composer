@@ -4,11 +4,12 @@
 /** @jsxImportSource preact */
 
 import type { JSX } from "preact";
-import { useCallback, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import type { IdFactory } from "../../../shared";
 import type { CompositionCatalog } from "../../../sitemapper/catalog";
 import type { SitemapRecord, SitemapStore } from "../../../sitemapper/library";
 import type { SitemapNode } from "../../../sitemapper/model";
+import { expandSitemapRoutes, type MappingAssignmentCatalog, type SitemapRouteExpansion } from "../../../sitemapper/routes";
 import { SitemapperToolbar } from "../chrome/sitemapper-toolbar";
 import { SitemapperWorkspace } from "../chrome/sitemapper-workspace";
 import { SitemapCanvas } from "../ui/canvas/sitemap-canvas";
@@ -21,6 +22,7 @@ export interface SitemapperIntegrationProps {
   record: SitemapRecord;
   store: Pick<SitemapStore, "put">;
   catalog: Pick<CompositionCatalog, "listCompositions" | "resolveComposition">;
+  mappingCatalog?: MappingAssignmentCatalog;
   onBack: (record: SitemapRecord) => void | Promise<void>;
   idFactory?: IdFactory;
   now?: () => string;
@@ -36,13 +38,24 @@ function findNode(nodes: readonly SitemapNode[], id: string | null): SitemapNode
   return null;
 }
 
-export function SitemapperIntegration({ record, store, catalog, onBack, idFactory, now }: SitemapperIntegrationProps): JSX.Element {
+export function SitemapperIntegration({ record, store, catalog, mappingCatalog, onBack, idFactory, now }: SitemapperIntegrationProps): JSX.Element {
   const controller = useSitemapperController({ record, store, idFactory, now });
   const [transitionError, setTransitionError] = useState<string | null>(null);
   const document = controller.state.document;
+  const [routeExpansionState, setRouteExpansionState] = useState<{ document: typeof document; expansion: SitemapRouteExpansion } | null>(null);
   const selectedId = controller.state.selectedId;
   const dispatch = controller.dispatch;
   const selectedNode = useMemo(() => findNode(document.root, selectedId), [document, selectedId]);
+  const routeExpansion = routeExpansionState?.document === document ? routeExpansionState.expansion : null;
+  useEffect(() => {
+    if (!mappingCatalog) { setRouteExpansionState(null); return; }
+    let active = true;
+    void expandSitemapRoutes({ document, catalog: mappingCatalog.routes }).then((expansion) => {
+      if (!active) return;
+      setRouteExpansionState({ document, expansion });
+    });
+    return () => { active = false; };
+  }, [document, mappingCatalog]);
 
   const addChild = useCallback((parentId: string) => { dispatch({ type: "addChild", parentId, title: "Untitled page" }); }, [dispatch]);
   const addSibling = useCallback((pageId: string) => { dispatch({ type: "addSibling", pageId, title: "Untitled page" }); }, [dispatch]);
@@ -69,9 +82,9 @@ export function SitemapperIntegration({ record, store, catalog, onBack, idFactor
     <SitemapperWorkspace
       banner={transitionError || controller.lastError ? <p role="alert">{transitionError ?? controller.lastError}</p> : null}
       toolbar={<><button type="button" class="sg-sitemapper-toolbar-button" onClick={() => void back()}>All sitemaps</button><SitemapperToolbar documentName={document.name} saveStatus={controller.state.saveStatus} onRetrySave={controller.retrySave} /></>}
-      tree={<SitemapTree document={document} selectedId={selectedId} expandedIds={controller.state.expandedIds} onSelect={select} onToggleExpanded={(pageId) => dispatch({ type: "toggleExpanded", pageId })} onAddChild={addChild} onAddSibling={addSibling} onRename={(pageId, title) => dispatch({ type: "updateProps", pageId, patch: { title } })} onDuplicate={duplicate} onDelete={remove} onReorder={(pageId, direction) => dispatch({ type: "reorder", pageId, direction })} />}
-      canvas={<SitemapCanvas document={document} selectedId={selectedId} onSelect={select} onAddChild={addChild} onAddSibling={addSibling} onDuplicate={duplicate} onDelete={remove} onCreateRoot={() => undefined} />}
-      inspector={<InspectorPanel selectedId={selectedId} node={selectedNode} catalog={catalog} onUpdatePropsDebounced={controller.updatePropsDebounced} onFlushPropUpdates={controller.flushPropUpdates} onUpdateComposition={(pageId, composition) => dispatch({ type: "updateProps", pageId, patch: { composition } })} />}
+      tree={<SitemapTree document={document} routeInfo={routeExpansion?.nodes ?? new Map()} selectedId={selectedId} expandedIds={controller.state.expandedIds} onSelect={select} onToggleExpanded={(pageId) => dispatch({ type: "toggleExpanded", pageId })} onAddChild={addChild} onAddSibling={addSibling} onRename={(pageId, title) => dispatch({ type: "updateProps", pageId, patch: { title } })} onDuplicate={duplicate} onDelete={remove} onReorder={(pageId, direction) => dispatch({ type: "reorder", pageId, direction })} />}
+      canvas={<SitemapCanvas document={document} routeInfo={routeExpansion?.nodes ?? new Map()} selectedId={selectedId} onSelect={select} onAddChild={addChild} onAddSibling={addSibling} onDuplicate={duplicate} onDelete={remove} onCreateRoot={() => undefined} />}
+      inspector={<InspectorPanel selectedId={selectedId} node={selectedNode} catalog={catalog} mappingCatalog={mappingCatalog} routeInfo={selectedId ? routeExpansion?.nodes.get(selectedId) : undefined} onUpdatePropsDebounced={controller.updatePropsDebounced} onFlushPropUpdates={controller.flushPropUpdates} onUpdateComposition={(pageId, composition) => dispatch({ type: "updateProps", pageId, patch: { source: composition ? { kind: "composition", ref: composition } : { kind: "unassigned" } } })} onUpdateSource={(pageId, source) => dispatch({ type: "updateProps", pageId, patch: { source } })} />}
     />
   );
 }

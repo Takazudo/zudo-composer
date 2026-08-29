@@ -11,10 +11,13 @@ import {
   type CompositionProvider,
 } from "../../composer/browser";
 import { activeComponentProvider } from "../../features/composer/active-pack";
+import { resolveMappingDefinition } from "../../mapping";
 import {
   createInitializedCompositionCatalog,
   createProductionProviderIntegration,
   createProductionSampleDocument,
+  PRODUCTION_SEED_IDS,
+  PRODUCTION_SEED_TIMESTAMP,
 } from "../provider-integration";
 
 describe("production provider integration", () => {
@@ -29,7 +32,7 @@ describe("production provider integration", () => {
       expect(listed).toMatchObject({
         failures: [],
         entries: [{
-          ref: { providerId: "indexeddb", recordId: expect.stringMatching(/^composition-/) },
+          ref: { providerId: "indexeddb", recordId: PRODUCTION_SEED_IDS.composition },
           name: "Product overview",
         }],
       });
@@ -46,6 +49,70 @@ describe("production provider integration", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("stages deterministic Content and Mapping seeds and recreates resolvable refs after every startFresh", async () => {
+    const factory = new FDBFactory();
+    const integration = createProductionProviderIntegration({ compositionIdbFactory: factory, contentIdbFactory: factory, mappingIdbFactory: factory });
+
+    const [mappingInitialization, concurrentContent] = await Promise.all([integration.mappingProvider.initialization.initialize(), integration.contentCatalog.listModels()]);
+    expect(mappingInitialization).toMatchObject({ status: "ready", summaries: [{ id: PRODUCTION_SEED_IDS.mapping }] });
+    expect(concurrentContent).toMatchObject({ entries: [{ ref: { recordId: PRODUCTION_SEED_IDS.contentModel } }], failures: [] });
+    const contentSnapshot = await integration.contentProvider.store.scanEntries(PRODUCTION_SEED_IDS.contentModel);
+    expect(contentSnapshot.model).toMatchObject({ id: PRODUCTION_SEED_IDS.contentModel, createdAt: PRODUCTION_SEED_TIMESTAMP });
+    expect(contentSnapshot.entries.map(({ id }) => id).sort()).toEqual([...PRODUCTION_SEED_IDS.entries].sort());
+    expect(await integration.mappingContentEntries.scan({ providerId: "content-indexeddb", recordId: PRODUCTION_SEED_IDS.contentModel })).toMatchObject({ status: "resolved", snapshot: { count: 2 } });
+    expect(await integration.mappingContentEntries.scan({ providerId: "missing-provider", recordId: PRODUCTION_SEED_IDS.contentModel })).toMatchObject({ status: "provider-error" });
+    const sitemapperMappings = await integration.sitemapperMappingCatalog.list();
+    expect(sitemapperMappings).toMatchObject({
+      failures: [],
+      entries: [{ ref: { providerId: "mapping-indexeddb", recordId: PRODUCTION_SEED_IDS.mapping } }],
+    });
+    const sitemapperMapping = await integration.sitemapperMappingCatalog.routes.resolveMapping({ providerId: "mapping-indexeddb", recordId: PRODUCTION_SEED_IDS.mapping });
+    expect(sitemapperMapping).toMatchObject({ status: "resolved", record: { id: PRODUCTION_SEED_IDS.mapping } });
+    if (sitemapperMapping.status === "resolved") {
+      expect(await integration.sitemapperMappingCatalog.routes.resolveDefinitionReadiness(sitemapperMapping.record)).toEqual({ status: "ready" });
+      const snapshot = await integration.sitemapperMappingCatalog.routes.resolveContentSnapshot(sitemapperMapping.record);
+      expect(snapshot).toMatchObject({ status: "resolved", model: { id: PRODUCTION_SEED_IDS.contentModel } });
+      if (snapshot.status === "resolved") expect(snapshot.snapshot.entries).toHaveLength(PRODUCTION_SEED_IDS.entries.length);
+    }
+    const assertResolved = async () => {
+      const mapping = await integration.mappingCatalog.resolve({ providerId: "mapping-indexeddb", recordId: PRODUCTION_SEED_IDS.mapping });
+      expect(mapping).toMatchObject({ status: "resolved", record: { createdAt: PRODUCTION_SEED_TIMESTAMP, document: {
+        contentModel: { providerId: "content-indexeddb", recordId: PRODUCTION_SEED_IDS.contentModel },
+        composition: { providerId: "indexeddb", recordId: PRODUCTION_SEED_IDS.composition },
+        bindings: [
+          { sourceFieldId: PRODUCTION_SEED_IDS.titleField, target: { nodeId: "sample-heading", prop: "heading" } },
+          { sourceFieldId: PRODUCTION_SEED_IDS.bodyField, target: { nodeId: "sample-prose", prop: "markdown" } },
+        ],
+      } } });
+      expect(await integration.contentCatalog.resolveModel({ providerId: "content-indexeddb", recordId: PRODUCTION_SEED_IDS.contentModel })).toMatchObject({ status: "resolved" });
+      expect(await integration.mappingCompositionCatalog.resolve({ providerId: "indexeddb", recordId: PRODUCTION_SEED_IDS.composition })).toMatchObject({ status: "resolved" });
+      if (mapping.status === "resolved") expect(await resolveMappingDefinition(mapping.record, { content: integration.contentCatalog, compositions: integration.mappingCompositionCatalog }, activeComponentProvider.catalog)).toMatchObject({ status: "ready", diagnostics: [] });
+    };
+    await assertResolved();
+    expect(await integration.compositionProviders[0]!.initialization.startFresh()).toMatchObject({ status: "ready", summaries: [{ id: PRODUCTION_SEED_IDS.composition }] });
+    await assertResolved();
+    expect(await integration.contentProvider.initialization.startFresh()).toMatchObject({ status: "ready", models: [{ id: PRODUCTION_SEED_IDS.contentModel }] });
+    await assertResolved();
+    expect(await integration.mappingProvider.initialization.startFresh()).toMatchObject({ status: "ready", summaries: [{ id: PRODUCTION_SEED_IDS.mapping }] });
+    await assertResolved();
+  });
+
+  it("leaves Mapping unseeded after a prerequisite failure and seeds it on retry", async () => {
+    const backing = new FDBFactory();
+    let failOpen = true;
+    const flaky = new Proxy(backing, { get(target, property) {
+      if (property === "open") return (...args: Parameters<IDBFactory["open"]>) => { if (failOpen) { failOpen = false; throw new Error("composition unavailable"); } return target.open(...args); };
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    } }) as IDBFactory;
+    const integration = createProductionProviderIntegration({ compositionIdbFactory: flaky, contentIdbFactory: backing, mappingIdbFactory: backing });
+
+    expect(await integration.mappingProvider.initialization.initialize()).toMatchObject({ status: "error", error: { retryable: true } });
+    expect(await integration.mappingProvider.store.get(PRODUCTION_SEED_IDS.mapping)).toMatchObject({ status: "not-found" });
+    expect(await integration.mappingProvider.initialization.retry()).toMatchObject({ status: "ready", summaries: [{ id: PRODUCTION_SEED_IDS.mapping }] });
+    expect(await integration.mappingProvider.store.get(PRODUCTION_SEED_IDS.mapping)).toMatchObject({ status: "loaded" });
   });
 
   it("builds one valid real-provider sample and deterministic public JSX", () => {

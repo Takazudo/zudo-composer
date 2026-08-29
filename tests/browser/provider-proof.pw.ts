@@ -154,7 +154,10 @@ test("clean Sitemapper assigns and resolves the seeded Product overview catalog 
 
   for (const theme of ["light", "dark"] as const) await useTheme(page, theme);
   await page.setViewportSize({ width: 375, height: 812 });
-  await expect(page.getByText("Canvas-only view")).toBeVisible();
+  const canvasTab = page.getByRole("tab", { name: "Canvas" });
+  await canvasTab.click();
+  await expect(canvasTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tabpanel", { name: "Canvas" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Sitemap canvas" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   expect(failures).toEqual([]);

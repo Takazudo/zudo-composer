@@ -12,3 +12,5 @@ export type {
 export {
   createCompositionCatalog,
 } from "./catalog";
+export type { SitemapperContentProvider, SitemapperMappingStore } from "./mapping-catalog";
+export { createMappingAssignmentCatalog } from "./mapping-catalog";

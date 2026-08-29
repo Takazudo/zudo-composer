@@ -10,7 +10,7 @@ import {
 } from "../layout";
 
 function node(id: string, slug?: string, children: SitemapNode[] = []): SitemapNode {
-  return { id, title: id, ...(slug === undefined ? {} : { slug }), children };
+  return { id, title: id, source: { kind: "unassigned" }, ...(slug === undefined ? {} : { slug }), children };
 }
 
 function document(root: SitemapNode): SitemapDocument {

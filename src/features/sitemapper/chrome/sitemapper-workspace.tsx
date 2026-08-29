@@ -8,14 +8,15 @@
 // `inspector` slots. Keeping the shell free of controller state means those
 // surfaces can be assembled without changing the workspace geometry.
 //
-// Geometry lives in styles/shell.css: below 64rem this keeps one canvas-only
-// column while the tree/inspector rails and both resizers remain in the DOM
-// (CSS hides them rather than omitting them). The resizer init script is
+// Geometry lives in styles/shell.css: below 64rem this keeps one active panel
+// column selected by the labelled roving tablist. All rails and both resizers
+// remain in the DOM. The resizer init script is
 // installed independently from the controlled product state; unconditional DOM
 // presence plus its MutationObserver lets it wire replaced elements. At >=64rem the grid is
 // tree rail | resizer | canvas (minmax(0, 1fr)) | resizer | inspector rail.
 
 import type { ComponentChildren, JSX } from "preact";
+import { useRef, useState } from "preact/hooks";
 import {
   ATTR_INSPECTOR_RESIZER,
   ATTR_TREE_RESIZER,
@@ -74,6 +75,19 @@ export function SitemapperWorkspace({
   treeWidthPx = DEFAULT_TREE_W,
   inspectorWidthPx = DEFAULT_INSPECTOR_W,
 }: SitemapperWorkspaceProps): JSX.Element {
+  const panes = ["outline", "canvas", "inspector"] as const;
+  const panelIds = [ID_TREE_RAIL, "sg-sitemapper-canvas-panel", ID_INSPECTOR_RAIL] as const;
+  const tabIds = ["sg-sitemapper-tab-outline", "sg-sitemapper-tab-canvas", "sg-sitemapper-tab-inspector"] as const;
+  const [activePane, setActivePane] = useState<(typeof panes)[number]>("canvas");
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activateFromKey = (event: JSX.TargetedKeyboardEvent<HTMLButtonElement>, index: number): void => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowRight" ? 1 : -1;
+    const next = (index + delta + panes.length) % panes.length;
+    setActivePane(panes[next]!);
+    tabRefs.current[next]?.focus();
+  };
   return (
     <div class="sg-sitemapper-shell">
       <div class="sg-sitemapper-toolbar" role="toolbar" aria-label="Sitemapper toolbar">
@@ -92,11 +106,17 @@ export function SitemapperWorkspace({
       ) : (
         banner
       )}
-      <div class="sg-sitemapper-grid" data-sg-sitemapper-grid>
+      <div class="sg-sitemapper-tabs" role="tablist" aria-label="Sitemapper panels">
+        {panes.map((pane, index) => <button key={pane} id={tabIds[index]} ref={(element) => { tabRefs.current[index] = element; }} type="button" role="tab" aria-selected={activePane === pane} aria-controls={panelIds[index]} tabindex={activePane === pane ? 0 : -1} onClick={() => setActivePane(pane)} onKeyDown={(event) => activateFromKey(event, index)}>{pane[0]!.toUpperCase()}{pane.slice(1)}</button>)}
+      </div>
+      <div class="sg-sitemapper-grid" data-sg-sitemapper-grid data-active-pane={activePane}>
         <div
           class="sg-sitemapper-tree-rail sg-sitemapper-tree"
           id={ID_TREE_RAIL}
           aria-label="Outline"
+          aria-labelledby={tabIds[0]}
+          role="tabpanel"
+          data-active={activePane === "outline"}
         >
           {tree ?? (
             <SitemapperWorkspacePlaceholderPane
@@ -117,7 +137,7 @@ export function SitemapperWorkspace({
           aria-valuenow={treeWidthPx}
           tabindex={0}
         />
-        <div class="sg-sitemapper-canvas" data-sg-sitemapper-canvas>
+        <div class="sg-sitemapper-canvas" data-sg-sitemapper-canvas id="sg-sitemapper-canvas-panel" role="tabpanel" aria-label="Canvas" aria-labelledby={tabIds[1]} data-active={activePane === "canvas"}>
           {canvas ?? (
             <SitemapperWorkspacePlaceholderPane
               label="Canvas"
@@ -137,7 +157,7 @@ export function SitemapperWorkspace({
           aria-valuenow={inspectorWidthPx}
           tabindex={0}
         />
-        <div class="sg-sitemapper-inspector" id={ID_INSPECTOR_RAIL} aria-label="Inspector">
+        <div class="sg-sitemapper-inspector" id={ID_INSPECTOR_RAIL} aria-label="Inspector" aria-labelledby={tabIds[2]} role="tabpanel" data-active={activePane === "inspector"}>
           {inspector ?? (
             <SitemapperWorkspacePlaceholderPane
               label="Inspector"
@@ -145,10 +165,6 @@ export function SitemapperWorkspace({
             />
           )}
         </div>
-      </div>
-      <div class="sg-sitemapper-narrow-note" data-sg-sitemapper-narrow-note>
-        <strong>Canvas-only view</strong>
-        <span>Use a wider window to edit the tree and properties.</span>
       </div>
     </div>
   );

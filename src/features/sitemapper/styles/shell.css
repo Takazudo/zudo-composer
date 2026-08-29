@@ -2,7 +2,7 @@
  * Sitemapper workspace shell — issue Takazudo/zudo-sg#409
  *
  * The route owns a full-width document below the shared header. The narrow
- * layout starts as one canvas column; at the content-driven 64rem seam it
+ * layout starts as one tab-selected panel column; at the exact 64rem seam it
  * becomes the five-track workspace: outline rail | resizer | canvas
  * (minmax(0, 1fr)) | resizer | inspector rail.
  *
@@ -33,7 +33,7 @@ html[data-sg-sitemapper-doc] body {
   position: relative;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--sg-header-h));
+  height: calc(100vh - var(--sg-header-h, 3.5rem));
   min-height: 0;
   overflow-x: clip;
 }
@@ -58,9 +58,31 @@ html[data-sg-sitemapper-doc] body {
   min-width: 0;
   min-height: 0;
   display: grid;
-  /* Narrow (< 64rem): canvas-only. Rails and resizers remain in the DOM. */
+  /* Narrow (< 64rem): one tab-selected panel. Rails and resizers remain in the DOM. */
   grid-template-columns: minmax(0, 1fr);
 }
+
+.sg-sitemapper-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sg-sitemapper-tabs button {
+  min-height: 2.75rem;
+  border: 0;
+  border-inline-end: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  background: var(--color-surface);
+  color: var(--color-muted);
+}
+
+.sg-sitemapper-tabs button[aria-selected="true"] {
+  border-block-end: 2px solid var(--color-accent);
+  color: var(--color-fg);
+}
+
+.sg-sitemapper-tabs button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
 
 .sg-sitemapper-tree-rail,
 .sg-sitemapper-inspector {
@@ -71,6 +93,10 @@ html[data-sg-sitemapper-doc] body {
   overscroll-behavior: contain;
   background: var(--color-bg);
 }
+
+.sg-sitemapper-grid[data-active-pane="outline"] .sg-sitemapper-tree-rail,
+.sg-sitemapper-grid[data-active-pane="inspector"] .sg-sitemapper-inspector { display: block; grid-column: 1; }
+.sg-sitemapper-grid:not([data-active-pane="canvas"]) .sg-sitemapper-canvas { display: none; }
 
 .sg-sitemapper-tree-rail {
   border-inline-end: 1px solid var(--color-border);
@@ -93,27 +119,9 @@ html[data-sg-sitemapper-doc] body {
   display: none;
 }
 
-.sg-sitemapper-narrow-note {
-  position: absolute;
-  z-index: var(--z-index-sidebar);
-  inset-inline-end: var(--spacing-hsp-md);
-  inset-block-end: var(--spacing-vsp-md);
-  max-width: 16rem;
-  padding: var(--spacing-vsp-2xs) var(--spacing-hsp-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
-  color: var(--color-muted);
-  font-size: var(--text-micro);
-  box-shadow: var(--shadow-lg);
-}
-
-.sg-sitemapper-narrow-note strong {
-  display: block;
-  color: var(--color-fg);
-}
 
 @media (min-width: 64rem) {
+  .sg-sitemapper-tabs { display: none; }
   .sg-sitemapper-grid {
     position: relative;
     grid-template-columns:
@@ -128,6 +136,8 @@ html[data-sg-sitemapper-doc] body {
   .sg-sitemapper-inspector {
     display: block;
   }
+
+  .sg-sitemapper-grid:not([data-active-pane="canvas"]) .sg-sitemapper-canvas { display: block; }
 
   .sg-sitemapper-canvas {
     grid-column: 3;
@@ -166,9 +176,18 @@ html[data-sg-sitemapper-doc] body {
     outline-offset: -2px;
   }
 
-  .sg-sitemapper-narrow-note {
-    display: none;
-  }
+}
+
+@media (hover: hover) {
+  .sg-sitemapper-tabs button:hover { background: var(--color-surface-2); color: var(--color-fg); }
+}
+
+@media (pointer: coarse) {
+  .sg-sitemapper-tabs button { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sg-sitemapper-shell *, .sg-sitemapper-shell *::before, .sg-sitemapper-shell *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 
 /* Generous hit area for the resizer without widening its visible track. The

@@ -40,7 +40,7 @@ function newRecord(id: string, name: string, timestamp: string): SitemapRecord {
       schemaVersion: SITEMAP_SCHEMA_VERSION,
       id,
       name,
-      root: [{ id: `${id}-home`, title: "Home", children: [] }],
+      root: [{ id: `${id}-home`, title: "Home", source: { kind: "unassigned" }, children: [] }],
     },
   };
 }

@@ -57,4 +57,17 @@ describe("provider CSS graph", () => {
     expect(sitemapperTokens).not.toMatch(/--spacing-(?:hsp|vsp)-[^:]+:/);
     expect(sitemapperTokens).toContain("--sg-header-h:");
   });
+
+  it("shares a responsive header height and accessible neutral navigation states", () => {
+    const tokens = readFileSync(resolve("src/styles/app-tokens.css"), "utf8");
+    const app = readFileSync(resolve("src/style.css"), "utf8");
+    expect(tokens).toContain("--zudo-composer-header-height: 3.5rem");
+    expect(tokens).toContain("--sg-header-h: var(--zudo-composer-header-height)");
+    expect(tokens).toMatch(/@media \(max-width: 42rem\)[\s\S]*--zudo-composer-header-height: 7rem/);
+    expect(app).toMatch(/@media \(hover: hover\)[\s\S]*\.app-header nav a:hover/);
+    expect(app).toMatch(/focus-visible \{ outline: 2px solid var\(--color-focus\)/);
+    expect(app).toMatch(/@media \(pointer: coarse\)[\s\S]*min-height: 44px/);
+    expect(app).toContain("overflow-x: clip");
+    expect(app).toContain("@media (prefers-reduced-motion: reduce)");
+  });
 });
