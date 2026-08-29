@@ -26,7 +26,7 @@
     "deploy:dry-run": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
     "smoke:local": "node scripts/smoke-deployment.mjs --local",
-    "smoke:live": "node scripts/smoke-deployment.mjs --base-url https://zudo-composer.takazudomodular.com",
+    "smoke:live": "node scripts/smoke-deployment.mjs --base-url https://zudo-composer.zudolab.dev",
     "test:browser": "pnpm build && pnpm test:browser:dist",
     "test:browser:dist": "playwright test"
   },
