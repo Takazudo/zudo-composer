@@ -1,5 +1,5 @@
 /**
- * Composer/styleguide icon set — renderer-safe: plain `.ts` + Preact `h()`,
+ * Composer/Sitemapper app-chrome icon set — renderer-safe: plain `.ts` + Preact `h()`,
  * NO JSX. The composer preview iframe bundle is deliberately JSX-free (see the
  * header of `src/features/composer/preview/preview-app.ts`: root-`src` `.tsx`
  * modules cannot be imported under the shared vitest config), and this module

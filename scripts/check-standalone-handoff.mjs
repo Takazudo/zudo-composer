@@ -178,6 +178,8 @@ for (const path of [
   "src/features/composer/preview/preview.css",
 ]) assert.doesNotMatch(read(path), /src\/styles\/global\.css|src\/config\/z-index-tokens\.ts|_temp-resource|gen:z-index/, `${path} retained a broken copied-source reference`);
 
+assert.doesNotMatch(read("src/components/icons/index.ts"), /Composer\/styleguide/i, "icon ownership must remain standalone Composer/Sitemapper app chrome");
+
 for (const forbidden of ["workspace:", "file:", "link:", "path:", "packages/ui", "../zudo-sg"]) {
   assert.ok(!packageJson.dependencies["@zudo-sg/ui"].includes(forbidden), `provider spec uses forbidden resolution: ${forbidden}`);
 }
