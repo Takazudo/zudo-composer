@@ -9,10 +9,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
@@ -26,8 +30,74 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+      - run: pnpm headless:negative-scan
       - run: pnpm contract:conformance
       - run: pnpm contract:negative-scan
       - run: pnpm contract:external-install
+      - run: pnpm deployment:boundary
+      - run: pnpm handoff:boundary
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm provider:boundary
+      - run: pnpm deployment:manifest
+      - run: pnpm deployment:manifest:check
+      - run: pnpm deploy:dry-run
+        env:
+          CLOUDFLARE_API_TOKEN: ""
+          CLOUDFLARE_ACCOUNT_ID: ""
+      - run: pnpm smoke:local
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:browser:dist
+      - run: pnpm deployment:manifest:check
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deployment-artifact
+          path: |
+            dist
+            .artifacts/deployment-manifest.json
+          if-no-files-found: error
+          include-hidden-files: true
+
+  deploy:
+    name: Production deploy or credential handoff
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: deployment-artifact
+      - run: pnpm deployment:manifest:check
+      - id: credentials
+        run: node scripts/check-deploy-credentials.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - if: steps.credentials.outputs.state == 'absent'
+        run: |
+          {
+            echo '## Production deployment handoff'
+            echo 'Deployment was skipped because both required Cloudflare credentials are absent.'
+            echo '1. Create a dedicated **Edit Cloudflare Workers** API token, scoped with least privilege to the intended account and `takazudomodular.com` zone.'
+            echo '2. Confirm the account, active zone, and `zudo-composer.takazudomodular.com` custom-domain state are ready.'
+            echo '3. Add both `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets, then rerun this workflow.'
+            echo 'Do not copy local Wrangler OAuth files or OAuth tokens into GitHub.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - if: steps.credentials.outputs.state == 'complete'
+        run: pnpm deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - if: steps.credentials.outputs.state == 'complete'
+        run: pnpm smoke:live

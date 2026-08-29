@@ -1,0 +1,45 @@
+.sg-sitemapper-root {
+  --sg-header-h: var(--zudo-composer-header-height, 0px);
+  color: var(--color-fg);
+  background: var(--color-bg);
+}
+
+.sg-sitemapper-root,
+.sg-sitemapper-root * {
+  box-sizing: border-box;
+}
+
+.sg-sitemapper-root > main {
+  width: min(64rem, 100%);
+  min-height: 100vh;
+  margin-inline: auto;
+  padding: 1.5rem;
+}
+
+.sg-sitemapper-root > main h1,
+.sg-sitemapper-root > main h2,
+.sg-sitemapper-root > main p {
+  max-width: none;
+  margin-block: 0 1rem;
+  font-size: inherit;
+  letter-spacing: normal;
+  line-height: 1.5;
+}
+
+.sg-sitemapper-root > main h1 {
+  font-size: 2rem;
+}
+
+.sg-sitemapper-root > main button {
+  min-height: 2rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  cursor: pointer;
+}
+
+.sg-sitemapper-root > main li + li {
+  margin-block-start: 0.5rem;
+}

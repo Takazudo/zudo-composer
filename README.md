@@ -1,59 +1,178 @@
 # zudo-composer
 
-`zudo-composer` is a standalone component-composition workspace built with
-Preact, Vite, TypeScript, and pnpm. It is independent of zudo-doc and does not
-share deployment infrastructure with other zudo projects.
+`zudo-composer` is the permanent standalone home of two Preact authoring
+products:
 
-## Provenance
+- Composer owns its document model, source generation, reuse rules, storage,
+  chrome, preview renderer, and same-origin iframe protocol.
+- Sitemapper owns its page-tree model, storage, library, authoring UI, and the
+  catalog integration that resolves saved Composer records.
 
-This repository was initialized from design and implementation knowledge in
-`Takazudo/zudo-sg@f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2`. It intentionally
-does not inherit that repository's deployment workflows, Worker identities,
-domains, or package publishing identity.
+The products do not depend on zudo-doc, a zfb application runtime/configuration,
+or a styleguide registry. `zudo-sg` has a narrower permanent role: its installed
+`@zudo-sg/ui` package supplies typed component sidecars, the runtime component
+pack, and canonical Composer CSS. That provider transitively owns the focused
+`@takazudo/zfb-md-wasm` renderer used by `ProseMd`; this is not a zfb application
+dependency.
 
-## Development
+## Routes and assets
 
-Use Node.js 22.13.0+ or 24.0.0+ and enable Corepack, then run:
+The Vite application has base `/` and these exact SPA routes:
+
+- `/` — standalone product landing page
+- `/composer` — Composer library and editor
+- `/composer/preview` — isolated same-origin Composer preview document
+- `/sitemapper` — Sitemapper library and editor
+- `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
+
+The preview route is an implementation boundary, not an independent public
+product. Cloudflare serves route fallbacks from the same immutable `dist` tree;
+all emitted assets remain rooted at `/assets/`.
+
+## Development and validation
+
+Use Node.js 22.13.0+ or 24.0.0+ and pnpm 11.5.2 through Corepack:
 
 ```sh
-corepack pnpm install
+corepack pnpm install --frozen-lockfile
 corepack pnpm dev
 ```
 
-The bounded validation commands used by CI are:
+The main repository gate includes lint, typecheck, headless/deployment/handoff
+boundaries, unit tests, one production build, the provider artifact boundary,
+and an unauthenticated Wrangler dry-run:
 
 ```sh
-corepack pnpm lint
-corepack pnpm typecheck
-corepack pnpm test
-corepack pnpm build
+corepack pnpm check
 ```
 
-The package handoff checks are also available locally:
+CI additionally verifies the component-contract handoff, writes and rechecks
+the deployment manifest, runs local Worker smoke, and serves that same built
+`dist` directory to Chromium:
 
 ```sh
 corepack pnpm contract:conformance
 corepack pnpm contract:negative-scan
-corepack pnpm contract:external-install
+corepack pnpm contract:external-install -- --exact
+corepack pnpm deployment:manifest
+corepack pnpm deployment:manifest:check
+corepack pnpm smoke:local
+corepack pnpm test:browser:dist
 ```
 
-The external-install check reads [`contract-handoff.json`](./contract-handoff.json),
-verifies that the advertised package branch points to its full commit and that
-its root Git tree equals `HEAD:packages/component-contract`, then writes a fresh
-temporary consumer using the exact root Git spec, generates its lockfile, runs a
-frozen install, and imports both public entrypoints. The handoff intentionally
-does not use pnpm's Git `path:` selector: pnpm can install the repository root
-even when that selector names a subdirectory.
+`test:browser` is the convenience command when no build exists; it builds and
+then delegates to `test:browser:dist`. CI deliberately builds exactly once.
 
-If a local run cannot reach the advertised package branch, it reports that fact
-and runs an explicit packed-artifact proof instead; it never presents an
-unreachable local SHA as an external install result. Pass `-- --exact` when a
-local run must require the remote Git proof, or `-- --local` to force only the
-packed-artifact proof.
+## Immutable UI-provider handoff
 
-Pull request and main CI both verify the permanent package branch mapping. The
-final handoff is complete only after the manager records the package commit,
-permanent main SHA, and green CI run URL on the epic.
+The current UI provider identity has four distinct version/provenance domains:
 
-Deployment and production hostname configuration are intentionally outside the
-scope of this foundation.
+| Domain | Current value |
+|---|---|
+| Provider Git spec | `git+https://github.com/Takazudo/zudo-sg.git#fe3fc62d3f677f321f5eb7814240d4a55dc92cd0` |
+| Provider commit / root tree | `fe3fc62d3f677f321f5eb7814240d4a55dc92cd0` / `96a42a59cf4d05078ba85e7a0ccdb7d7765d29cc` |
+| Installed package metadata | `@zudo-sg/ui@0.1.0` |
+| Component-pack protocol identity | `@zudo-sg/ui@1.0.0` |
+
+The package version and pack protocol version are intentionally different.
+Neither is a substitute for the immutable Git commit/tree.
+
+To update the provider:
+
+1. Obtain the permanent package-only zudo-sg commit and independently verify
+   its root tree and advertised 12-component pack.
+2. Set `dependencies["@zudo-sg/ui"]` to the exact full Git SHA. Never use a
+   branch name, moving tag, sibling checkout, `workspace:`, `file:`, `link:`,
+   `path:`, copied provider source, or a pnpm Git subdirectory selector.
+3. Regenerate `pnpm-lock.yaml`, then prove a clean
+   `corepack pnpm install --frozen-lockfile` resolves the same codeload SHA.
+4. Run `corepack pnpm check`, all three contract commands above,
+   `corepack pnpm deployment:manifest`, `corepack pnpm smoke:local`, and
+   `corepack pnpm test:browser:dist`. The provider boundary must still prove
+   the exact 12 IDs/runtime exports, canonical CSS, and one focused WASM/glue.
+
+Do not copy provider components into this repository or add a fallback registry.
+
+## Component-contract handoff
+
+The component contract is a separate handoff from the UI provider. This
+repository owns its source at `packages/component-contract`; external package
+consumers use the package-only commit recorded by
+[`contract-handoff.json`](./contract-handoff.json):
+
+- API/package version: `@zudo-composer/component-contract@1.0.0`
+- package commit: `51f1c64a7639134254866458ff72b497da9c2f36`
+- exact external Git spec:
+  `git+https://github.com/Takazudo/zudo-composer.git#51f1c64a7639134254866458ff72b497da9c2f36`
+
+The monorepo itself intentionally resolves this contract with `workspace:*`.
+That local workspace relationship must not be confused with, or used in place
+of, the immutable external UI-provider Git dependency.
+
+## Deployment and credential handoff
+
+The configured target is Worker `zudo-composer` with the Custom Domain
+`zudo-composer.takazudomodular.com` (`custom_domain: true`). `workers.dev` and
+preview URLs are disabled. This identity, domain, and its credentials are
+project-specific and must never be copied from or shared with zudo-sg.
+
+Build and prove the exact artifact without deployment credentials:
+
+```sh
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+corepack pnpm provider:boundary
+corepack pnpm deployment:manifest
+corepack pnpm deploy:dry-run
+corepack pnpm smoke:local
+corepack pnpm test:browser:dist
+corepack pnpm deployment:manifest:check
+```
+
+For a local authenticated deployment, the integration owner runs:
+
+```sh
+corepack pnpm exec wrangler login
+corepack pnpm exec wrangler whoami
+corepack pnpm deployment:manifest:check
+corepack pnpm deploy
+corepack pnpm smoke:live
+```
+
+The local flow uses Wrangler OAuth. Never copy OAuth files/tokens into GitHub.
+Automated deployment instead requires both `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets. The token must come from
+Cloudflare's **Edit Cloudflare Workers** template and be least-privilege scoped
+to the intended account and active `takazudomodular.com` zone. One secret
+without the other is a hard configuration error; when both are absent, CI
+prints the exact credential-only handoff and leaves all noncredential gates
+enabled.
+
+The hostname above is the configured target, not a claim that this branch is
+deployed. Permanent `main` SHA, root-PR CI, post-merge CI, deployment success,
+and live four-route/all-asset smoke evidence are recorded only after merge.
+
+## Destructive current-only policy
+
+There are no users and no persisted production data. Provisional routes,
+schemas, storage identities, source layouts, and file-provider layouts may be
+destructively replaced with the clearest current contract. Do not add
+migrations, redirects, aliases, legacy fallbacks, compatibility shims, or
+compatibility fixtures.
+
+This authorization is limited to this project's current application state. It
+does not authorize deleting or replacing unrelated repositories, Cloudflare
+resources, domains, credentials, user files, or other infrastructure.
+
+## Provenance and final evidence
+
+The initial implementation was ported with provenance from
+`Takazudo/zudo-sg@f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2`, without grafting
+history or inheriting zudo-sg deployment identity. That frozen source reference
+is provenance only; zudo-sg no longer owns these applications.
+
+After the Phase 3 root reaches `main`, the integration owner records one
+canonical evidence block on both Phase 3 and Phase 4 epics: root PR URL; full
+permanent `main` SHA; provider Git spec/SHA/tree and all version domains; green
+root-PR and post-merge CI URLs; and either the deployed URL with successful
+four-route/all-asset smoke or the exact credential-only handoff.

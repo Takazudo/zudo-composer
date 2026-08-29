@@ -1,0 +1,17 @@
+@import "@zudo-sg/ui/styles/composer.css";
+@import "./styles/app-tokens.css";
+
+@source "./";
+
+* { box-sizing: border-box; }
+html, body, #app { min-width: 20rem; min-height: 100%; margin: 0; }
+body {
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--color-fg);
+  background: var(--color-bg);
+}
+button, input, select, textarea { font: inherit; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }

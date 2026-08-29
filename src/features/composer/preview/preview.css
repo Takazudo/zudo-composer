@@ -1,0 +1,577 @@
+/* ── Preview-only structural tokens ───────────────────────────────────────── */
+html[data-composer-preview-doc] {
+  --sg-composer-panel-bg: var(--color-surface);
+}
+
+/* ── Canvas ───────────────────────────────────────────────────────────────── */
+.zc-canvas {
+  min-height: 100vh;
+  padding: 1.5rem;
+  /* The page sheet (Takazudo/zudo-sg#266): the composition floats on this tonally-distinct panel
+     surface; the quiet gray backdrop it sits over is painted host-side on
+     .sg-composer-canvas-host (src/features/composer/styles.css). panel-bg is
+     ~ΔL 0.045 lighter than the backdrop in both modes — the prototype grammar
+     (S1 Takazudo/zudo-sg#263). Light: near-white sheet on gray; dark: subtly lighter sheet. */
+  background: var(--sg-composer-panel-bg);
+  color: var(--color-fg);
+}
+.zc-canvas[data-mode="edit"] { padding-top: 2.25rem; }
+
+/* Edit mode swallows activation in the capture phase (renderer.ts); the cursor
+   must not promise a navigation that will not happen. */
+.zc-canvas[data-mode="edit"] a,
+.zc-canvas[data-mode="edit"] button:not([data-zc-affordance]) {
+  cursor: default;
+}
+
+/* ── Node wrapper ─────────────────────────────────────────────────────────── */
+.zc-node {
+  position: relative;
+  /* Contains the out-of-flow chrome without joining the parent's stacking
+     contest — the affordances only ever rise above their OWN node. */
+  isolation: isolate;
+}
+.zc-canvas[data-mode="edit"] .zc-node:hover {
+  outline: 1px dashed var(--color-border);
+  outline-offset: 2px;
+}
+.zc-canvas[data-mode="edit"] .zc-node[data-zc-selected] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ── Linked Global-template ownership ────────────────────────────────────── */
+.zc-linked-frame {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin-block-end: 1rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-info));
+  color: var(--color-fg);
+  font-size: var(--text-micro);
+}
+.zc-linked-frame-title { font-weight: 700; }
+.zc-linked-frame-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zc-linked-frame-outlet,
+.zc-linked-frame-lock { color: var(--color-muted); }
+.zc-linked-frame-open {
+  margin-inline-start: auto;
+  min-height: 1.75rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  cursor: pointer;
+  font: inherit;
+}
+@media (hover: hover) {
+  .zc-linked-frame-open:hover { background: color-mix(in srgb, var(--color-fg) 8%, var(--color-surface)); }
+}
+.zc-linked-frame-open:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+.zc-linked-shell {
+  position: relative;
+  padding: 0.375rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 0.375rem;
+}
+.zc-node--source { outline: 1px dashed color-mix(in srgb, var(--color-muted) 55%, transparent); outline-offset: 2px; }
+.zc-source-lock {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: 0;
+  z-index: var(--z-index-local-2);
+  padding: 0.0625rem 0.25rem;
+  border-radius: 0 0 0 0.1875rem;
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  pointer-events: none;
+}
+
+/* ── Inline text editing (issue Takazudo/zudo-sg#257) ─────────────────────────────────────── */
+/* The active contentEditable region: a clear editing affordance and a text
+   caret. The outline is out-of-flow, so making a text node editable neither
+   reflows nor remounts the component (see the caret-survival note in
+   renderer.ts). */
+[data-composer-preview-doc] [data-zc-inline-editing] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+  cursor: text;
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+[data-composer-preview-doc] [data-zc-inline-editing]:focus {
+  outline-color: var(--color-focus);
+}
+
+/* ── Chrome: floats ABOVE the node's box, never over it ───────────────────── */
+.zc-chrome {
+  position: absolute;
+  inset-inline-start: 0;
+  /* bottom:100% puts it entirely above the node's top edge, so a shrink-wrapped
+     component (a button, a heading) is never covered by its own label. */
+  bottom: 100%;
+  margin-block-end: 2px;
+  z-index: var(--z-index-local-2);
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 0.375rem;
+  border-radius: 3px;
+  /* Accent budget (Takazudo/zudo-sg#266): the HOVER label is a QUIET neutral chip. Accent is
+     reserved for the SELECTED node — the loud, whitelisted role (below). The old
+     hardcoded 0.6875rem (11px) label is replaced by --text-micro (12px floor). */
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  font-size: var(--text-micro);
+  line-height: 1.4rem;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.zc-node:hover > .zc-chrome,
+.zc-node[data-zc-selected] > .zc-chrome {
+  opacity: 1;
+}
+/* Selection is THE loud element (whitelisted): the selected node's label carries
+   the accent so it reads as active; a plain hover stays neutral (above). Only a
+   selected node ever shows the grip/menu buttons, so their inherited color and
+   on-accent hover wash always resolve against this accent fill. */
+.zc-node[data-zc-selected] > .zc-chrome {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* The SELECTED node's "⋯" menu trigger (issue Takazudo/zudo-sg#256) — chrome itself keeps
+   pointer-events:none (it is a label), so the button re-enables them on
+   itself. It must stay reachable even before hover, since it is the ONLY
+   way to reach the node menu when the node has no pointer nearby. */
+.zc-chrome-menu {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-inline-start: 0.25rem;
+  padding: 0 0.25rem;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+.zc-chrome-menu:hover,
+.zc-chrome-menu:focus-visible {
+  background: color-mix(in srgb, var(--color-on-accent) 25%, transparent);
+}
+.zc-chrome-menu:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+
+/* ── Drag grip (issue Takazudo/zudo-sg#258) ───────────────────────────────────────────────── */
+/* Shown only on the SELECTED, non-opaque node's chrome. The chrome itself is a
+   pointer-events:none label, so the grip re-enables them on itself (it must be
+   grabbable). Opaque nodes get no grip — the tree's up/down buttons stay their
+   only movement. */
+.zc-chrome-grip {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-inline-end: 0.25rem;
+  padding: 0 0.25rem;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: grab;
+}
+.zc-chrome-grip:active { cursor: grabbing; }
+.zc-chrome-grip:hover,
+.zc-chrome-grip:focus-visible {
+  background: color-mix(in srgb, var(--color-on-accent) 25%, transparent);
+}
+.zc-chrome-grip:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+
+/* ── Insert points: one at EVERY addable index of every declared slot ─────── */
+/* The wrapper pairs the direct "+" add button with its "⋯" insert-menu
+   companion (issue Takazudo/zudo-sg#256) — two SIBLING buttons, never nested. It owns the
+   positioning/isolation .zc-insert used to own by itself. */
+.zc-insert-group {
+  position: relative;
+  z-index: var(--z-index-local-1);
+  display: flex;
+  gap: 2px;
+}
+.zc-insert-group--vertical { width: 100%; flex-direction: row; align-items: stretch; }
+.zc-insert-group--horizontal { align-self: stretch; flex-direction: column; align-items: stretch; min-width: 0.75rem; }
+
+.zc-insert {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  /* Accent budget (Takazudo/zudo-sg#266): insert markers RECEDE until reached for — a muted,
+     guide-toned dashed bar at reduced opacity, NOT accent, at rest. This is the
+     single biggest at-rest orange source (6+ markers in the seeded composition). Accent
+     appears only on hover/focus (below) and on the active drop target. */
+  border: 1px dashed var(--sg-composer-guide);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--sg-composer-guide);
+  opacity: 0.5;
+  cursor: copy;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out,
+    color 120ms ease-out, opacity 120ms ease-out;
+}
+.zc-insert:hover,
+.zc-insert:focus-visible {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+  opacity: 1;
+}
+.zc-insert:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+
+/* Between stacked children: a full-width rule. */
+.zc-insert--vertical { width: 100%; min-height: 0.75rem; }
+/* Between side-by-side children: a full-height bar. */
+.zc-insert--horizontal { align-self: stretch; min-width: 0.75rem; min-height: 2rem; }
+
+/* An empty slot's only insert point doubles as its placeholder, so a container
+   with no children is still a visible, addressable drop target. */
+.zc-insert--empty {
+  min-height: 3rem;
+  border-color: var(--color-border);
+  color: var(--color-muted);
+  /* The SOLE affordance for an empty container — stays fully visible (neutral),
+     never muted like the between-child bars. */
+  opacity: 1;
+}
+
+/* ── End-of-slot add affordance (ported from Takazudo/zudo-sg#283) ─────────
+   The slot's LAST insert point (index === children.length) renders as this
+   enlarged, LABELED button instead of the slim between-children bar above —
+   retains the frozen source's `.insert-end` / `.add-btn` geometry. Toning
+   is INHERITED from the shared .zc-insert rules above (neutral guide-dashed
+   at rest, accent only on hover/focus-visible) — every rule below is
+   geometry, never a color; the prototype's accent-at-rest styling is
+   deliberately not retained from that source's accent-at-rest variant. */
+.zc-insert-end--vertical { width: 100%; }
+.zc-insert-end--horizontal { width: auto; }
+
+.zc-insert-end-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-hsp-xs);
+  width: 100%;
+  font-size: var(--text-caption);
+  white-space: nowrap;
+}
+.zc-insert-end-btn:not(.zc-insert--empty) {
+  min-height: 2rem;
+  padding-block: var(--spacing-vsp-2xs);
+  padding-inline: var(--spacing-hsp-md);
+}
+.zc-insert-end--horizontal .zc-insert-end-btn { width: auto; flex: 0 0 auto; }
+/* Compact (row-flow) variant reserves trailing clearance for the dots
+   companion, which overlaps this button's edge (.zc-insert-menu--end
+   below) rather than sitting inline beside it — inset (--spacing-hsp-sm) +
+   the dots' own width (1.375rem) + a breathing gap (--spacing-hsp-xs). */
+.zc-insert-end--horizontal .zc-insert-end-btn:not(.zc-insert--empty) {
+  padding-inline-end: calc(var(--spacing-hsp-sm) + 1.375rem + var(--spacing-hsp-xs));
+}
+/* Empty-slot variant: KEEPS the existing min-height:3rem / neutral-muted
+   toning from .zc-insert--empty above (unchanged) — this only adds the
+   symmetric breathing padding the prototype's .add-btn.add-empty uses. */
+.zc-insert-end-btn.zc-insert--empty { padding: var(--spacing-vsp-xs); }
+
+.zc-insert-plus { flex-shrink: 0; }
+
+/* The insert point's "⋯" companion — opens the insert MENU (Add
+   component…/Paste here) alongside the direct "+" add shortcut. */
+.zc-insert-menu {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.125rem;
+  padding: 0 0.125rem;
+  /* Muted at rest, accent on interaction — same budget as the "+" bar above. */
+  border: 1px dashed transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--sg-composer-guide);
+  opacity: 0.5;
+  cursor: pointer;
+  font-size: var(--text-micro);
+  line-height: 1;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out,
+    color 120ms ease-out, opacity 120ms ease-out;
+}
+.zc-insert-menu:hover,
+.zc-insert-menu:focus-visible {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+  opacity: 1;
+}
+.zc-insert-menu:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+
+/* The end-affordance's dots OVERLAP the add button's trailing edge (prototype
+   .insert-end .ip-dots) instead of sitting inline beside it like the
+   between-bar's companion above — anchored to the group, which (as a
+   .zc-insert-group) is already position: relative. Locked size/inset
+   (Takazudo/zudo-sg#283): 1.375rem x 1.25rem, inset-inline-end --spacing-hsp-sm. */
+.zc-insert-menu--end {
+  position: absolute;
+  inset-inline-end: var(--spacing-hsp-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.375rem;
+  height: 1.25rem;
+}
+
+/* ── Drag & drop: insert points as drop zones (issue Takazudo/zudo-sg#258) ────────────────── */
+/* While a drag is active, the insert GROUP is the drop target, so its CHILDREN
+   go inert — a child-crossing dragleave has a null relatedTarget in Chromium
+   DnD and would otherwise wipe the hovered-target highlight (verified). */
+.zc-canvas[data-zc-dragging] .zc-insert-group > * { pointer-events: none; }
+
+/* Every VALID insert point highlights during a drag; the hovered one gets a
+   stronger state. Invalid targets (inside the dragged subtree) get neither.
+   Accent budget (Takazudo/zudo-sg#266): a valid CANDIDATE is a NEUTRAL guide dash — the accent
+   is spent only on the ONE active drop target below. */
+.zc-canvas[data-zc-dragging] .zc-insert-group[data-zc-drop-valid] {
+  outline: 1px dashed var(--sg-composer-guide);
+  outline-offset: 2px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--sg-composer-guide) 12%, transparent);
+}
+.zc-canvas[data-zc-dragging] .zc-insert-group[data-zc-drop-valid].zc-insert-group--vertical {
+  min-height: 1.25rem;
+}
+.zc-canvas[data-zc-dragging] .zc-insert-group[data-zc-drop-active] {
+  outline: 2px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+/* ── Opaque node: preserved, selectable, never silently dropped ───────────── */
+.zc-opaque {
+  border: 1px dashed var(--color-warning);
+  border-radius: 4px;
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  font-size: var(--text-caption);
+}
+.zc-opaque-title { margin: 0; font-weight: 600; }
+.zc-opaque-reasons { margin: 0.375rem 0 0; padding-inline-start: 1.25rem; color: var(--color-muted); }
+.zc-opaque-payload { margin-block-start: 0.5rem; }
+.zc-opaque-payload summary { cursor: pointer; color: var(--color-muted); }
+.zc-opaque-payload pre {
+  margin: 0.375rem 0 0;
+  max-height: 14rem;
+  overflow: auto;
+  padding: 0.5rem;
+  border-radius: 3px;
+  background: var(--color-surface-2);
+  font-size: var(--text-micro);
+}
+
+/* ── Recoverable failures ─────────────────────────────────────────────────── */
+.zc-node-error,
+.zc-error {
+  border: 1px solid var(--color-danger);
+  border-radius: 4px;
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  font-size: var(--text-caption);
+}
+.zc-node-error-title, .zc-error-title { margin: 0; font-weight: 600; }
+.zc-node-error-detail, .zc-error-detail { margin: 0.375rem 0 0; color: var(--color-muted); }
+.zc-node-error-retry, .zc-error-dismiss {
+  margin-block-start: 0.5rem;
+  padding: 0.125rem 0.625rem;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  cursor: pointer;
+}
+.zc-error { margin: 0 0 1rem; }
+
+/* ── Explicit-save markdown source editing (issue Takazudo/zudo-sg#375, epic Takazudo/zudo-sg#368) ────────── */
+/* The raw-source editable that REPLACES the component's body while a prose
+   session is open. The editing affordance itself (accent outline + wash) comes
+   from the shared [data-zc-inline-editing] rule above — higher specificity, and
+   deliberately the same signal both sessions use. Everything here is the
+   source-editor presentation: monospace, preserved newlines, no reflow surprise
+   when a long unbroken URL is pasted. */
+.zc-prose-source {
+  display: block;
+  min-height: 3rem;
+  margin: 0;
+  padding: var(--spacing-vsp-3xs) var(--spacing-hsp-sm);
+  border-radius: 4px;
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  /* 14px functional-text floor. */
+  font-size: var(--text-caption);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  cursor: text;
+}
+
+/* The floating Save affordance: bottom-right of the IFRAME viewport, which IS
+   the canvas area, and outside the editable region by construction. Only ever
+   present while a prose session is open. */
+.zc-prose-savebar {
+  position: fixed;
+  inset-block-end: var(--spacing-vsp-sm);
+  inset-inline-end: var(--spacing-hsp-lg);
+  z-index: var(--z-index-popover);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-hsp-sm);
+  padding: var(--spacing-vsp-3xs) var(--spacing-hsp-sm);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: 0 2px 10px light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.4));
+}
+.zc-prose-savebar-status {
+  color: var(--color-muted);
+  font-size: var(--text-caption);
+  white-space: nowrap;
+}
+
+/* Accent budget: this is the ONE primary CTA of the editing viewport, and it
+   only turns loud once there is something to save — a clean session's button is
+   a neutral "Done". Hover stays neutral in both states (a brightness wash on
+   the accent fill, never a second accent hue). */
+.zc-prose-save {
+  min-height: 2rem;
+  padding: 0 var(--spacing-hsp-md);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+.zc-prose-save[data-zc-dirty] {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+@media (hover: hover) {
+  .zc-prose-save:hover {
+    background: color-mix(in srgb, var(--color-fg) 8%, var(--color-surface-2));
+  }
+  .zc-prose-save[data-zc-dirty]:hover {
+    background: color-mix(in srgb, var(--color-fg) 12%, var(--color-accent));
+  }
+}
+.zc-prose-save:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+/* ── Confirmation dialogs (ESC / leave) ───────────────────────────────────── */
+/* Iframe-side, plain elements — the preview document has no Tailwind chrome
+   styles and no host dialog to borrow. The backdrop is what makes the dialog
+   genuinely modal for the POINTER (Tab containment is handled in
+   prose-inline-session.ts): it also covers the Save bar, which is why the bar
+   is not rendered at all while a dialog is open. */
+.zc-prose-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-index-modal-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-hsp-lg);
+  background: light-dark(rgb(0 0 0 / 0.32), rgb(0 0 0 / 0.55));
+}
+.zc-prose-dialog {
+  z-index: var(--z-index-modal);
+  width: min(24rem, 100%);
+  padding: var(--spacing-vsp-xs) var(--spacing-hsp-lg) var(--spacing-hsp-lg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  box-shadow: 0 8px 32px light-dark(rgb(0 0 0 / 0.18), rgb(0 0 0 / 0.5));
+}
+.zc-prose-dialog-title {
+  margin: 0;
+  font-size: var(--text-small);
+  font-weight: 600;
+}
+.zc-prose-dialog-text {
+  margin: var(--spacing-vsp-3xs) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-caption);
+}
+.zc-prose-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--spacing-hsp-sm);
+  margin-block-start: var(--spacing-vsp-xs);
+}
+.zc-prose-dialog-action {
+  min-height: 2rem;
+  padding: 0 var(--spacing-hsp-md);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+/* Destructive, but not loud: danger tone on the LABEL and the border only —
+   a filled danger button next to a filled accent button would read as two
+   competing primaries. */
+.zc-prose-dialog-action--danger {
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-danger);
+}
+.zc-prose-dialog-action--primary {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+@media (hover: hover) {
+  .zc-prose-dialog-action:hover {
+    background: color-mix(in srgb, var(--color-fg) 8%, var(--color-surface));
+  }
+  .zc-prose-dialog-action--primary:hover {
+    background: color-mix(in srgb, var(--color-fg) 12%, var(--color-accent));
+  }
+}
+.zc-prose-dialog-action:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+/* ── Boot / empty states ──────────────────────────────────────────────────── */
+.zc-empty {
+  padding: 2rem;
+  color: var(--color-muted);
+  font-size: var(--text-caption);
+  text-align: center;
+}

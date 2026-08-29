@@ -4,12 +4,13 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   { ignores: ['dist', '**/dist', 'coverage'] },
   {
-    files: ['scripts/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'plugins/**/*.mjs'],
     languageOptions: {
       globals: {
         URL: 'readonly',
         console: 'readonly',
         process: 'readonly',
+        Buffer: 'readonly',
       },
     },
   },

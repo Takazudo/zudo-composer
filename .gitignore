@@ -1,7 +1,11 @@
 node_modules/
 dist/
 coverage/
+/test-results/
+/playwright-report/
 .vite/
+.artifacts/
+.wrangler/
 *.local
 *.log
 .DS_Store
