@@ -64,6 +64,12 @@ for (const step of [credentialStep, deployStep]) {
   assert.match(step, /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/, "credential/deploy step is missing its scoped token");
   assert.match(step, /CLOUDFLARE_ACCOUNT_ID: \$\{\{ secrets\.CLOUDFLARE_ACCOUNT_ID \}\}/, "credential/deploy step is missing its scoped account ID");
 }
+for (const expression of [
+  "${{ secrets.CLOUDFLARE_API_TOKEN }}",
+  "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+]) {
+  assert.equal(workflow.split(expression).length - 1, 2, `${expression} must appear only on credential classification and deployment`);
+}
 assert.doesNotMatch(liveSmokeStep, /CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)/, "live smoke must not receive deployment credentials");
 assert.match(workflow, /- run: pnpm deployment:manifest:check\n {6}- uses: actions\/upload-artifact@/, "artifact integrity must be rechecked immediately before upload");
 
