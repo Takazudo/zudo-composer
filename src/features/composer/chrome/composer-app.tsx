@@ -10,11 +10,17 @@
 // unchanged.
 
 import type { JSX } from "preact";
+import type { CompositionProvider } from "../../../composer/browser";
 import { ProductionComposerApp } from "../app";
-import { activeComponentProvider } from "../active-pack";
+import type { ComposerComponentProvider } from "../active-pack";
 
-export default function ComposerApp(): JSX.Element {
-  return <ProductionComposerApp componentProvider={activeComponentProvider} />;
+export interface ComposerAppProps {
+  componentProvider: ComposerComponentProvider;
+  providers: readonly CompositionProvider[];
+}
+
+export default function ComposerApp({ componentProvider, providers }: ComposerAppProps): JSX.Element {
+  return <ProductionComposerApp componentProvider={componentProvider} providers={providers} />;
 }
 
 ComposerApp.displayName = "ComposerApp";

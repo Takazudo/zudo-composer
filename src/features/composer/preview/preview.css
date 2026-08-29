@@ -1,31 +1,6 @@
-/* ── Palette restoration (see header) ─────────────────────────────────────── */
+/* ── Preview-only structural tokens ───────────────────────────────────────── */
 html[data-composer-preview-doc] {
-  color-scheme: light dark;
-  --color-bg:           light-dark(#f7f7f5, #171717);
-  --color-surface:      light-dark(#ffffff, #222222);
-  --color-surface-2:    light-dark(#ecebe7, #30302e);
-  --color-fg:           light-dark(#20201f, #f5f5f2);
-  --color-muted:        light-dark(#6c6b67, #aaa8a2);
-  --color-accent:       light-dark(#6750a4, #c9b8ff);
-  --color-accent-hover: light-dark(#513b8d, #dfd5ff);
-  /* Composer Polish S1 (#263). --color-border: the host now re-asserts it to a
-     doc-ramp literal, so restore the ui value the previewed components expect
-     (they bind border-border). --sg-composer-guide: the composer's quiet-chrome
-     tone — the insert markers below rebind onto it in a later wave. Both are kept
-     IDENTICAL to src/styles/preview.css (the drift-guard test derives from it). */
-  --color-border:      light-dark(#deddd8, #41403d);
-  --sg-composer-guide: light-dark(oklch(.680 .008 65), oklch(.560 .008 65));
-  --color-success: light-dark(#18794e, #70d7a5);
-  --color-danger: light-dark(#b3261e, #ffb4ab);
-  --color-warning: light-dark(#8a4f00, #ffb95c);
-  --color-info: light-dark(#075985, #7dd3fc);
-  --color-focus: light-dark(#3b67d8, #9eb8ff);
   --sg-composer-panel-bg: var(--color-surface);
-  --spacing-hsp-xs: .5rem; --spacing-hsp-sm: .75rem; --spacing-hsp-md: 1rem; --spacing-hsp-lg: 1.25rem;
-  --spacing-vsp-3xs: .2rem; --spacing-vsp-2xs: .25rem; --spacing-vsp-xs: .5rem; --spacing-vsp-sm: .75rem;
-  --text-micro: .6875rem; --text-caption: .75rem; --text-small: .875rem;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --z-index-local-1: 1; --z-index-local-2: 2; --z-index-popover: 40; --z-index-modal-backdrop: 50; --z-index-modal: 60;
 }
 
 /* ── Canvas ───────────────────────────────────────────────────────────────── */

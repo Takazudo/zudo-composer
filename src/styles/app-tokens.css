@@ -1,0 +1,19 @@
+:root {
+  --sg-composer-panel-bg: var(--color-surface);
+  --sg-composer-canvas-backdrop: light-dark(#ecebe7, #111);
+  --sg-composer-guide: light-dark(oklch(.680 .008 65), oklch(.560 .008 65));
+  --sg-header-h: 3.5rem;
+}
+
+@theme {
+  --color-overlay: rgb(0 0 0 / 0.45);
+  --color-border-strong: color-mix(in oklch, var(--color-border) 55%, var(--color-fg));
+  --shadow-lg: var(--shadow-overlay);
+  --z-index-local-1: 1;
+  --z-index-local-2: 2;
+  --z-index-sidebar: 20;
+  --z-index-toolbar: 30;
+  --z-index-popover: 40;
+  --z-index-modal-backdrop: 50;
+  --z-index-modal: 60;
+}

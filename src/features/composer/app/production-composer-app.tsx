@@ -4,24 +4,20 @@
 /** @jsxImportSource preact */
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
-import type { ComponentPackManifest } from "@zudo-composer/component-contract";
 import {
   COMPOSITION_PROVIDERS,
   COMPOSITION_SCHEMA_VERSION,
-  CompositionPersistenceError,
   createCompositionRecord,
   createCompositionReuseLifecycleService,
   createSaveQueue,
-  createFileProviderCompositionStore,
-  createIndexedDbCompositionProvider,
   createCompositionReuseService,
   createComponentCatalog,
   createUuidIdFactory,
   duplicateCompositionRecord,
   isCompositionLifecycleStore,
   summarizeComposition,
-  type CompositionInitializationOutcome,
   type CompositionDocument,
+  type CompositionInitializationOutcome,
   type CompositionLoadOutcome,
   type CompositionProvider,
   type CompositionProviderId,
@@ -30,11 +26,10 @@ import {
   type CompositionRecoveryOutcome,
   type CompositionSaveOutcome,
   type SaveQueue,
-  type CompositionStore,
   type IdFactory,
   type ReuseConsumerLifecycleOutcome,
 } from "../../../composer/browser";
-import { createActiveSampleDocument, type ComposerComponentProvider } from "../active-pack";
+import type { ComposerComponentProvider } from "../active-pack";
 import { CompositionLibrary } from "../library";
 import type { CompositionLibraryIntents } from "../library";
 import {
@@ -65,7 +60,7 @@ export interface ProductionComposerAppProps {
   /** One validated pack view used by every controller and preview session. */
   componentProvider: ComposerComponentProvider;
   /** Provider injection is a production-integration test seam. */
-  providers?: readonly CompositionProvider[];
+  providers: readonly CompositionProvider[];
   navigation?: ComposerBrowserNavigation;
   idFactory?: IdFactory;
   nodeIdFactory?: IdFactory;
@@ -145,47 +140,6 @@ function browserNavigation(): ComposerBrowserNavigation {
   };
 }
 
-function initializationError(reason: unknown): CompositionInitializationOutcome {
-  return {
-    status: "error",
-    error:
-      reason instanceof CompositionPersistenceError
-        ? reason
-        : new CompositionPersistenceError(
-            "initialize",
-            "unknown",
-            reason instanceof Error ? reason.message : "Composition storage initialization failed.",
-            true,
-            { cause: reason },
-          ),
-  };
-}
-
-/** File storage has no migration state; successful listing is its initialization. */
-function providerFromStore(store: CompositionStore): CompositionProvider {
-  const initialize = async (): Promise<CompositionInitializationOutcome> => {
-    try {
-      return { status: "ready", summaries: await store.list() };
-    } catch (reason) {
-      return initializationError(reason);
-    }
-  };
-  return {
-    descriptor: store.provider,
-    store,
-    initialization: { initialize, retry: initialize, startFresh: initialize },
-  };
-}
-
-/** Build-gated providers: production gets IndexedDB only; dev gains file storage. */
-export function createProductionComposerProviders(manifest: ComponentPackManifest): readonly CompositionProvider[] {
-  const catalog = createComponentCatalog(manifest);
-  const providers: CompositionProvider[] = [createIndexedDbCompositionProvider({ initialDocument: createActiveSampleDocument })];
-  const fileStore = createFileProviderCompositionStore({ catalog });
-  if (fileStore) providers.push(providerFromStore(fileStore));
-  return providers;
-}
-
 function failedLoadMessage(outcome: Exclude<CompositionLoadOutcome, { status: "loaded" }>): string {
   switch (outcome.status) {
     case "not-found":
@@ -234,7 +188,7 @@ function errorText(error: ComposerTransitionError): string {
 
 export function ProductionComposerApp({
   componentProvider,
-  providers: injectedProviders,
+  providers,
   navigation: injectedNavigation,
   idFactory: injectedIdFactory,
   nodeIdFactory: injectedNodeIdFactory,
@@ -243,10 +197,6 @@ export function ProductionComposerApp({
 }: ProductionComposerAppProps): JSX.Element {
   const componentPackManifest = componentProvider.manifest;
   const reuseManifest = useMemo(() => createComponentCatalog(componentPackManifest), [componentPackManifest]);
-  const providers = useMemo(
-    () => injectedProviders ?? createProductionComposerProviders(componentPackManifest),
-    [componentPackManifest, injectedProviders],
-  );
   const navigation = useMemo(
     () => injectedNavigation ?? browserNavigation(),
     [injectedNavigation],

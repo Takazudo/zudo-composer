@@ -2,13 +2,14 @@ import { render, screen, waitFor } from "@testing-library/preact";
 import { describe, expect, it, vi } from "vitest";
 import { defineComponentPack } from "@zudo-composer/component-contract";
 import { CompositionCanvas } from "../renderer";
-import { activeComponentProvider, createActiveSampleDocument, createComposerComponentProvider } from "../../active-pack";
+import { fixtureComponentProvider, createFixtureSampleDocument } from "../../test-support/fixture-pack";
+import { createComposerComponentProvider } from "../../component-provider";
 import { ComposerCanvasHost } from "../../app/composer-canvas-host";
 import { createComposerPreviewBridge } from "../bridge";
 
 describe("CompositionCanvas provider view", () => {
   it("renders both named Split slots from the injected provider", () => {
-    const document = createActiveSampleDocument();
+    const document = createFixtureSampleDocument();
     document.root = [{
       id: "split", componentId: "fixture.split", componentVersion: 1, props: {},
       slots: {
@@ -16,7 +17,7 @@ describe("CompositionCanvas provider view", () => {
         right: [{ id: "right", componentId: "fixture.button", componentVersion: 1, props: { children: "Right action" }, slots: {} }],
       },
     }];
-    const { container } = render(<CompositionCanvas document={document} localRecordId={document.id} provider={activeComponentProvider} session={{ mode: "preview", theme: "light", selectedId: null }} onSelect={vi.fn()} onRequestAdd={vi.fn()} onRequestNodeMenu={vi.fn()} onRequestInsertMenu={vi.fn()} />);
+    const { container } = render(<CompositionCanvas document={document} localRecordId={document.id} provider={fixtureComponentProvider} session={{ mode: "preview", theme: "light", selectedId: null }} onSelect={vi.fn()} onRequestAdd={vi.fn()} onRequestNodeMenu={vi.fn()} onRequestInsertMenu={vi.fn()} />);
     expect(screen.getByText("Left content")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Right action" })).toBeInTheDocument();
     expect(container.querySelectorAll(".composer-fixture-split-column")).toHaveLength(2);
@@ -52,7 +53,7 @@ describe("CompositionCanvas provider view", () => {
         dispose: () => undefined,
       };
     };
-    const document = createActiveSampleDocument();
+    const document = createFixtureSampleDocument();
     const common = {
       document,
       session: { mode: "edit", theme: "light", selectedId: null } as const,
@@ -62,13 +63,13 @@ describe("CompositionCanvas provider view", () => {
       createBridge,
       location: { src: "/composer/preview", targetOrigin: "https://composer.test" },
     };
-    const first = render(<ComposerCanvasHost {...common} componentProvider={activeComponentProvider} />);
+    const first = render(<ComposerCanvasHost {...common} componentProvider={fixtureComponentProvider} />);
     await waitFor(() => expect(captured).toHaveLength(1));
     first.unmount();
     render(<ComposerCanvasHost {...common} componentProvider={alternate} />);
     await waitFor(() => expect(captured).toHaveLength(2));
     expect(captured).toEqual([
-      { packId: activeComponentProvider.manifest.packId, packVersion: activeComponentProvider.manifest.packVersion },
+      { packId: fixtureComponentProvider.manifest.packId, packVersion: fixtureComponentProvider.manifest.packVersion },
       { packId: alternate.manifest.packId, packVersion: alternate.manifest.packVersion },
     ]);
   });

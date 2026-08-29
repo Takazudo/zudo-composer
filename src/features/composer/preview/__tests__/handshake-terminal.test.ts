@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { activeComponentManifest, createActiveSampleDocument } from "../../active-pack";
+import { fixtureComponentManifest, createFixtureSampleDocument } from "../../test-support/fixture-pack";
 import { createComposerPreviewBridge } from "../bridge";
 import { createPreviewClient } from "../client";
 import {
@@ -22,8 +22,8 @@ import {
 } from "../protocol";
 
 const pack: PreviewPackIdentity = {
-  packId: activeComponentManifest.packId,
-  packVersion: activeComponentManifest.packVersion,
+  packId: fixtureComponentManifest.packId,
+  packVersion: fixtureComponentManifest.packVersion,
 };
 const wrongPack: PreviewPackIdentity = { packId: "@test/wrong", packVersion: "9.0.0" };
 const origin = "https://composer.test";
@@ -32,7 +32,7 @@ const target = { parentId: null, slotId: "$root", index: 0 } as const;
 const rect = { x: 1, y: 2, width: 3, height: 4 };
 
 function snapshot() {
-  const document = createActiveSampleDocument();
+  const document = createFixtureSampleDocument();
   return { document, localRecordId: document.id };
 }
 

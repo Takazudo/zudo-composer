@@ -10,7 +10,7 @@ import "../../test-support/cleanup";
 import { describe, expect, it, vi } from "vitest";
 import { act } from "preact/test-utils";
 import { fireEvent, render, screen } from "@testing-library/preact";
-import { activeComponentProvider, createActiveSampleDocument } from "../../active-pack";
+import { fixtureComponentProvider, createFixtureSampleDocument } from "../../test-support/fixture-pack";
 import {
   commitInlineEditMessage as protocolCommitInlineEditMessage,
   dropNodeMessage as protocolDropNodeMessage,
@@ -28,7 +28,7 @@ import { makeTestBridge } from "../test-support/preview-harness";
 
 const EDIT: PreviewSession = { mode: "edit", theme: "light", selectedId: null };
 const RECT: SerializedRect = { x: 10, y: 20, width: 100, height: 24 };
-const PREVIEW_PACK = activeComponentProvider.manifest;
+const PREVIEW_PACK = fixtureComponentProvider.manifest;
 
 const readyMessage = () => protocolReadyMessage(PREVIEW_PACK);
 const selectMessage = (revision: number, nodeId: string) => protocolSelectMessage(PREVIEW_PACK, revision, nodeId);
@@ -69,11 +69,11 @@ function mount(overrides: Partial<Parameters<typeof ComposerCanvasHost>[0]> = {}
   const onRequestInsertMenu = vi.fn();
   const onCommitInlineEdit = vi.fn();
   const onDropNode = vi.fn();
-  const doc = createActiveSampleDocument();
+  const doc = createFixtureSampleDocument();
   doc.name = "first";
   const utils = render(
     <ComposerCanvasHost
-      componentProvider={activeComponentProvider}
+      componentProvider={fixtureComponentProvider}
       document={doc}
       session={EDIT}
       viewport="fluid"
@@ -121,11 +121,11 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
     act(() => bridge.deliver(readyMessage()));
     bridge.posts.length = 0;
 
-    const doc2 = createActiveSampleDocument();
+    const doc2 = createFixtureSampleDocument();
     doc2.name = "second";
     rerender(
       <ComposerCanvasHost
-        componentProvider={activeComponentProvider}
+        componentProvider={fixtureComponentProvider}
         document={doc2}
         session={EDIT}
         viewport="fluid"
@@ -145,7 +145,7 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
     // Same document reference, new session object → updateSession (mode msg).
     rerender(
       <ComposerCanvasHost
-        componentProvider={activeComponentProvider}
+        componentProvider={fixtureComponentProvider}
         document={doc2}
         session={{ mode: "preview", theme: "light", selectedId: null }}
         viewport="fluid"
@@ -216,7 +216,7 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
     expect(frame().style.width).toBe("");
     rerender(
       <ComposerCanvasHost
-        componentProvider={activeComponentProvider}
+        componentProvider={fixtureComponentProvider}
         document={doc}
         session={EDIT}
         viewport="tablet"
@@ -245,11 +245,11 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
 describe("ComposerCanvasHost — inline-edit revision validation (issue #257)", () => {
   /** Advance to a NEWER document so an old commit becomes stale, and return the current revision. */
   function advanceDocument(bridge: ReturnType<typeof makeTestBridge>, base: ReturnType<typeof mount>) {
-    const doc2 = createActiveSampleDocument();
+    const doc2 = createFixtureSampleDocument();
     doc2.name = "second";
     base.rerender(
       <ComposerCanvasHost
-        componentProvider={activeComponentProvider}
+        componentProvider={fixtureComponentProvider}
         document={doc2}
         session={EDIT}
         viewport="fluid"
@@ -403,11 +403,11 @@ describe("ComposerCanvasHost — drop-node revision validation (issue #258)", ()
 
   /** Advance to a NEWER document so an old drop becomes stale; return the current revision. */
   function advanceDocument(bridge: ReturnType<typeof makeTestBridge>, base: ReturnType<typeof mount>) {
-    const doc2 = createActiveSampleDocument();
+    const doc2 = createFixtureSampleDocument();
     doc2.name = "second";
     base.rerender(
       <ComposerCanvasHost
-        componentProvider={activeComponentProvider}
+        componentProvider={fixtureComponentProvider}
         document={doc2}
         session={EDIT}
         viewport="fluid"

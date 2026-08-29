@@ -4,7 +4,7 @@ import { h, type FunctionComponent } from "preact";
 import { defineComponentPack, type ComponentManifest } from "@zudo-composer/component-contract";
 import type { CompositionDocument, CompositionNode } from "../../../../../composer/browser";
 import { COMPOSITION_SCHEMA_VERSION, createSequentialIdFactory } from "../../../../../composer/browser";
-import { createComposerComponentProvider } from "../../../active-pack";
+import { createComposerComponentProvider } from "../../../component-provider";
 
 function src(exportName: string): ComponentManifest["source"] {
   return { module: `@fixtures/${exportName.toLowerCase()}`, exportKind: "named", exportName };
