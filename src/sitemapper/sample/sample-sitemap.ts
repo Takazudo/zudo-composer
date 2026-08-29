@@ -11,7 +11,7 @@ export function createSampleSitemap(): SitemapDocument {
   const id = createSequentialIdFactory("page");
   const page = (title: string, buildChildren: () => SitemapNode[] = () => []): SitemapNode => {
     const nodeId = id(title);
-    return { id: nodeId, title, children: buildChildren() };
+    return { id: nodeId, title, source: { kind: "unassigned" }, children: buildChildren() };
   };
 
   return {

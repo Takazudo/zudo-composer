@@ -9,6 +9,7 @@ import type {
   SitemapDocumentIndex,
   SitemapNode,
 } from "../../../../sitemapper/model";
+import type { SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
 import { ChevronDownIcon, ChevronRightIcon, PageIcon } from "../icons";
 import { countDescendants, siblingBounds } from "./tree-helpers";
 import { TreeRowActions } from "./tree-row-actions";
@@ -28,6 +29,7 @@ export interface TreeNodeCallbacks {
 export interface TreeNodeProps extends TreeNodeCallbacks {
   node: SitemapNode;
   document: SitemapDocument;
+  routeInfo?: ReadonlyMap<string, SitemapNodeRouteInfo>;
   index: SitemapDocumentIndex;
   selectedId: string | null;
   expandedIds: ReadonlySet<string>;
@@ -42,6 +44,7 @@ function childListId(nodeId: string): string {
 export function TreeNode({
   node,
   document,
+  routeInfo,
   index,
   selectedId,
   expandedIds,
@@ -184,11 +187,12 @@ export function TreeNode({
             <PageIcon size="xs" class="sg-sitemapper-tree-node-icon" />
             <span class="sg-sitemapper-tree-select-title">{node.title}</span>
             {node.slug && <span class="sg-sitemapper-tree-select-slug">/{node.slug}</span>}
-            {node.composition && (
-              <span class="sg-sitemapper-tree-composition-badge" title="Composition assigned">
-                Composition
+            {node.source.kind !== "unassigned" && (
+              <span class="sg-sitemapper-tree-composition-badge" title={node.source.kind === "mapping" ? "Content Mapping route family assigned" : "Static Composition assigned"}>
+                {node.source.kind === "mapping" ? "Mapping" : "Composition"}
               </span>
             )}
+            {node.source.kind === "mapping" && routeInfo?.has(node.id) && <span class="sg-sitemapper-tree-count" title={routeInfo.get(node.id)?.status === "blocked" ? "Mapping routes blocked" : "Derived routes"}>{routeInfo.get(node.id)?.derivedRouteCount}</span>}
             {descendants > 0 && (
               <span class="sg-sitemapper-tree-count" aria-hidden="true">
                 {descendants}
@@ -236,6 +240,7 @@ export function TreeNode({
               key={child.id}
               node={child}
               document={document}
+              routeInfo={routeInfo}
               index={index}
               selectedId={selectedId}
               expandedIds={expandedIds}

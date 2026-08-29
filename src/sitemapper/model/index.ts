@@ -6,6 +6,9 @@
 
 export type {
   CompositionRef,
+  MappingRef,
+  MappingRoute,
+  SitemapPageSource,
   SitemapDocument,
   SitemapNode,
   SitemapSchemaVersion,

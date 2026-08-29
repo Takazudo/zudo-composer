@@ -5,7 +5,7 @@ export function node(
   id: string,
   children: SitemapNode[] = [],
 ): SitemapNode {
-  return { id, title: id, children };
+  return { id, title: id, source: { kind: "unassigned" }, children };
 }
 
 export function document(root: SitemapNode[] = [node("home")]): SitemapDocument {

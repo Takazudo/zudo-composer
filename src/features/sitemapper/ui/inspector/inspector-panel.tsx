@@ -3,8 +3,10 @@
 
 import type { JSX } from "preact";
 import type { CompositionCatalog } from "../../../../sitemapper/catalog";
-import type { CompositionRef, SitemapNode } from "../../../../sitemapper/model";
+import type { MappingAssignmentCatalog } from "../../../../sitemapper/routes";
+import type { CompositionRef, SitemapNode, SitemapPageSource } from "../../../../sitemapper/model";
 import { CompositionField } from "./composition-field";
+import { MappingField } from "./mapping-field";
 import { InspectorField, type InspectorTextProperty } from "./inspector-field";
 
 export interface InspectorPanelProps {
@@ -14,6 +16,8 @@ export interface InspectorPanelProps {
   onUpdatePropsDebounced: (nodeId: string, patch: Partial<Pick<SitemapNode, "title" | "slug" | "notes">>) => void;
   onFlushPropUpdates?: () => void;
   onUpdateComposition: (nodeId: string, composition: CompositionRef | null) => void;
+  mappingCatalog?: MappingAssignmentCatalog;
+  onUpdateSource?: (nodeId: string, source: SitemapPageSource) => void;
 }
 
 const TEXT_FIELDS: ReadonlyArray<{ prop: InspectorTextProperty; label: string; multiline?: boolean }> = [
@@ -29,6 +33,8 @@ export function InspectorPanel({
   onUpdatePropsDebounced,
   onFlushPropUpdates,
   onUpdateComposition,
+  mappingCatalog,
+  onUpdateSource,
 }: InspectorPanelProps): JSX.Element {
   if (!selectedId || !node || node.id !== selectedId) {
     return (
@@ -57,11 +63,16 @@ export function InspectorPanel({
           />
         ))}
       </div>
-      <CompositionField
-        value={node.composition}
-        catalog={catalog}
-        onChange={(composition) => onUpdateComposition(selectedId, composition)}
-      />
+      <section class="sg-sitemapper-composition" aria-labelledby="sg-sitemapper-source-label">
+        <h3 id="sg-sitemapper-source-label">Page source</h3>
+        <p>Current: {node.source.kind === "unassigned" ? "Unassigned" : node.source.kind === "composition" ? "Static Composition" : "Content Mapping"}</p>
+      </section>
+      {node.source.kind !== "mapping" && <CompositionField
+          value={node.source.kind === "composition" ? node.source.ref : undefined}
+          catalog={catalog}
+          onChange={(composition) => onUpdateComposition(selectedId, composition)}
+        />}
+      {mappingCatalog && <MappingField value={node.source.kind === "mapping" ? node.source : undefined} slug={node.slug} catalog={mappingCatalog} onChange={(source) => onUpdateSource?.(selectedId, source)} />}
     </aside>
   );
 }

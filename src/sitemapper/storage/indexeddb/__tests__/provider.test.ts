@@ -21,7 +21,7 @@ function record(id: string, updatedAt = "2026-01-01T00:00:00.000Z"): SitemapReco
       schemaVersion: SITEMAP_SCHEMA_VERSION,
       id,
       name: id,
-      root: [{ id: `${id}-home`, title: "Home", children: [] }],
+      root: [{ id: `${id}-home`, title: "Home", source: { kind: "unassigned" }, children: [] }],
     },
   };
 }

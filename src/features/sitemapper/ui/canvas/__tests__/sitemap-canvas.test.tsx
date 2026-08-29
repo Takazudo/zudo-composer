@@ -21,7 +21,7 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-const page = (id: string, children: SitemapNode[] = []): SitemapNode => ({ id, title: id, children });
+const page = (id: string, children: SitemapNode[] = []): SitemapNode => ({ id, title: id, source: { kind: "unassigned" }, children });
 const doc = (root: SitemapNode[] = [page("Home", [page("Child")])]): SitemapDocument => ({
   schemaVersion: SITEMAP_SCHEMA_VERSION,
   id: "canvas-test",

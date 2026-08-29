@@ -27,7 +27,7 @@ const SECOND: CatalogEntry = {
 };
 
 function node(id = "home", title = "Home", composition?: CompositionRef): SitemapNode {
-  return { id, title, slug: "/", notes: "Start here", children: [], ...(composition ? { composition } : {}) };
+  return { id, title, slug: "/", notes: "Start here", source: composition ? { kind: "composition", ref: composition } : { kind: "unassigned" }, children: [] };
 }
 
 function resolvedRecord(entry: CatalogEntry) {
@@ -147,12 +147,7 @@ describe("Sitemapper InspectorPanel", () => {
           onUpdateComposition={(_id, composition) => {
             changes.push(composition);
             setSelected((current) => {
-              if (!composition) {
-                const next = { ...current };
-                delete next.composition;
-                return next;
-              }
-              return { ...current, composition };
+              return { ...current, source: composition ? { kind: "composition", ref: composition } : { kind: "unassigned" } };
             });
           }}
         />

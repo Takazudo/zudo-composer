@@ -16,7 +16,7 @@ import type { SitemapDocument, SitemapNode } from "../../model";
 import { SITEMAP_SCHEMA_VERSION } from "../../model";
 
 function node(id: string, children: SitemapNode[] = []): SitemapNode {
-  return { id, title: id.toUpperCase(), children };
+  return { id, title: id.toUpperCase(), source: { kind: "unassigned" }, children };
 }
 
 function fixture(): SitemapDocument {
@@ -79,17 +79,17 @@ describe("updatePageProps / renamePage", () => {
     const before = fixture();
     const ref = { providerId: "indexeddb", recordId: "product-page" };
     const updated = success(updatePageProps(before, "b", {
-      title: "Basket", slug: "basket", notes: "Shop", composition: ref,
+      title: "Basket", slug: "basket", notes: "Shop", source: { kind: "composition", ref },
     }));
     expect(updated.document.root[0]!.children[1]).toMatchObject({
-      title: "Basket", slug: "basket", notes: "Shop", composition: ref,
+      title: "Basket", slug: "basket", notes: "Shop", source: { kind: "composition", ref },
     });
-    expect(updated.document.root[0]!.children[1]!.composition).not.toBe(ref);
+    expect(updated.document.root[0]!.children[1]!.source).not.toBe(ref);
 
     const cleared = success(updatePageProps(updated.document, "b", {
-      slug: null, notes: null, composition: null,
+      slug: null, notes: null, source: { kind: "unassigned" },
     }));
-    expect(cleared.document.root[0]!.children[1]).toEqual({ id: "b", title: "Basket", children: [] });
+    expect(cleared.document.root[0]!.children[1]).toEqual({ id: "b", title: "Basket", source: { kind: "unassigned" }, children: [] });
   });
 
   it("returns the original document for identical renames and empty/equivalent patches", () => {
@@ -100,10 +100,10 @@ describe("updatePageProps / renamePage", () => {
     expect(empty).toEqual({ ok: true, document: before, selectedId: "b", changed: false });
 
     const withRef = success(updatePageProps(before, "b", {
-      composition: { providerId: "indexeddb", recordId: "same" },
+      source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "same" } },
     })).document;
     const equivalentRef = updatePageProps(withRef, "b", {
-      composition: { recordId: "same", providerId: "indexeddb" },
+      source: { kind: "composition", ref: { recordId: "same", providerId: "indexeddb" } },
     });
     expect(equivalentRef).toEqual({ ok: true, document: withRef, selectedId: "b", changed: false });
   });
@@ -118,6 +118,14 @@ describe("updatePageProps / renamePage", () => {
     expect(updatePageProps(fixture(), "b", { notes: undefined } as never)).toMatchObject({
       ok: false, code: "invalid-patch",
     });
+  });
+
+  it("rejects authored children below Mapping sources and Mapping conversion of nonempty pages", () => {
+    const mappingSource = { kind: "mapping" as const, ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field" as const, fieldId: "slug" } };
+    expect(updatePageProps(fixture(), "root", { source: mappingSource })).toMatchObject({ ok: false, code: "mapping-children" });
+    const converted = success(updatePageProps(fixture(), "b", { source: mappingSource })).document;
+    expect(addChildPage(converted, "b", "Synthetic", () => "synthetic")).toMatchObject({ ok: false, code: "mapping-children" });
+    expect(movePage(converted, "a", "b", 0)).toMatchObject({ ok: false, code: "mapping-children" });
   });
 });
 
@@ -143,7 +151,7 @@ describe("duplicatePage / cloneSubtreeWithNewIds", () => {
     const source: SitemapNode = {
       id: "product",
       title: "Product",
-      composition: { providerId: "indexeddb", recordId: "product-composition" },
+      source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "product-composition" } },
       children: [node("details", [node("reviews")])],
     };
     const cloned = cloneSubtreeWithNewIds(source, createSequentialIdFactory("copy"));
@@ -152,8 +160,8 @@ describe("duplicatePage / cloneSubtreeWithNewIds", () => {
       ["details", "details-2"],
       ["reviews", "reviews-3"],
     ]);
-    expect(cloned.node.composition).toEqual(source.composition);
-    expect(cloned.node.composition).not.toBe(source.composition);
+    expect(cloned.node.source).toEqual(source.source);
+    expect(cloned.node.source).not.toBe(source.source);
     expect(cloned.node.children[0]!.children[0]!.id).toBe("reviews-3");
     expect(source.children[0]!.id).toBe("details");
   });

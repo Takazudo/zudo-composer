@@ -91,10 +91,10 @@ describe("production Sitemapper walkthrough", () => {
         "untitled-page-3",
         "untitled-page-1",
       ]);
-      expect(loaded.record.document.root[0]?.children[0]?.composition).toEqual({
+      expect(loaded.record.document.root[0]?.children[0]?.source).toEqual({ kind: "composition", ref: {
         providerId: "indexeddb",
         recordId: "hero-composition",
-      });
+      } });
     });
   });
 
@@ -104,10 +104,10 @@ describe("production Sitemapper walkthrough", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       document: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         id: "failure-map",
         name: "Failure map",
-        root: [{ id: "home", title: "Home", children: [] }],
+        root: [{ id: "home", title: "Home", source: { kind: "unassigned" }, children: [] }],
       },
     };
     const onBack = vi.fn();

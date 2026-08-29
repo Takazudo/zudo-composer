@@ -6,7 +6,7 @@ export function page(
   title = id,
   children: SitemapNode[] = [],
 ): SitemapNode {
-  return { id, title, children };
+  return { id, title, source: { kind: "unassigned" }, children };
 }
 
 export function fixtureDocument(): SitemapDocument {
