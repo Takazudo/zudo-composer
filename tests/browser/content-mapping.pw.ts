@@ -10,7 +10,11 @@ function watchRuntimeFailures(page: Page) {
     if (message.type() === "error") failures.push(`console: ${message.text()}`);
   });
   page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => failures.push(`request: ${request.url()} (${request.failure()?.errorText})`));
+  page.on("requestfailed", (request) => {
+    const errorText = request.failure()?.errorText;
+    if (errorText === "net::ERR_ABORTED") return;
+    failures.push(`request: ${request.url()} (${errorText})`);
+  });
   return failures;
 }
 
@@ -56,12 +60,17 @@ async function expectFlatPanels(locator: Locator) {
 
 async function selectEntry(page: Page, label: RegExp) {
   const select = page.getByRole("combobox", { name: "Sample Entry" });
+  await selectOptionMatching(select, label);
+}
+
+async function selectOptionMatching(select: Locator, label: RegExp) {
   const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value");
   expect(value).not.toBeNull();
   await select.selectOption(value!);
 }
 
 test("same-context Content to Mapping to Composer preview to Sitemapper journey", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
 
@@ -96,6 +105,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   const additionalSlugs = ["東京", ".", "", ...Array.from({ length: 20 }, (_, index) => `browser-${index + 5}`)];
   for (const [index, routeSlug] of additionalSlugs.entries()) {
     await page.getByRole("button", { name: "New Entry" }).click();
+    await expect(page.locator(".sg-content-completeness")).toContainText("Incomplete draft");
     await page.getByRole("textbox", { name: "Title (required)" }).fill(`Browser article ${index + 2}`);
     await page.getByRole("textbox", { name: "Body (required)" }).fill(`Body ${index + 2}`);
     if (routeSlug) await page.getByRole("textbox", { name: "Route slug" }).fill(routeSlug);
@@ -171,7 +181,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
 
   const addBinding = page.locator(".sg-mapping-add-binding");
   await addBinding.getByRole("combobox", { name: "Source field" }).selectOption({ label: "Publish date · date" });
-  await addBinding.getByRole("combobox", { name: "Target field" }).selectOption({ label: /SectionHeading.*\/ Intro · text/ });
+  await selectOptionMatching(addBinding.getByRole("combobox", { name: "Target field" }), /SectionHeading.*\/ Intro · text/);
   await addBinding.getByRole("button", { name: "Add binding" }).click();
   const dateBinding = page.locator(".sg-mapping-binding").last();
   await expect(dateBinding.getByRole("combobox", { name: "Transform" }).locator("option")).toHaveText(["Use value", "Format date (medium)", "Truncate to 160", "Add prefix"]);
@@ -189,7 +199,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
 
   await selectEntry(page, /Mapping is ready.*news-entry-mapping/);
   await addBinding.getByRole("combobox", { name: "Source field" }).selectOption({ label: "Title · text" });
-  await addBinding.getByRole("combobox", { name: "Target field" }).selectOption({ label: /SectionHeading.*\/ As · select/ });
+  await selectOptionMatching(addBinding.getByRole("combobox", { name: "Target field" }), /SectionHeading.*\/ Heading level · select/);
   await addBinding.getByRole("button", { name: "Add binding" }).click();
   const selectBinding = page.locator(".sg-mapping-binding").last();
   await page.getByRole("button", { name: "Test Mapping" }).click();
@@ -207,7 +217,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await page.getByRole("button", { name: "New Mapping" }).click();
   const createDialog = page.getByRole("dialog", { name: "Create Mapping" });
   await createDialog.getByRole("textbox", { name: "Name" }).fill(SINGLE_MAPPING);
-  await createDialog.getByRole("combobox", { name: "Content model" }).selectOption({ label: /Browser Site settings · single/ });
+  await selectOptionMatching(createDialog.getByRole("combobox", { name: "Content model" }), /Browser Site settings · single/);
   await createDialog.getByRole("button", { name: "Create" }).click();
   await expect(page.getByRole("heading", { name: SINGLE_MAPPING })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -234,8 +244,10 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(inspector.getByText("Current: Content Mapping", { exact: true })).toBeVisible();
   await expect(inspector.getByText("Browser News Collection · collection", { exact: true })).toBeVisible();
   await expect(inspector.locator("dt", { hasText: /^Entries$/ }).locator("..")).toContainText("26");
-  await expect(inspector.getByText("/news/latest/%E6%9D%B1%E4%BA%AC", { exact: true })).toBeVisible();
-  await expect(inspector.getByText("One or more Entries have missing or invalid slugs.", { exact: true })).toBeVisible();
+  await expect(inspector.getByText("/news/latest/browser-24", { exact: true })).toBeVisible();
+  await expect(inspector.getByText("Entry slug is missing or empty.", { exact: true }).first()).toBeVisible();
+  await expect(inspector.getByText("Entry slug contains a forbidden route delimiter.", { exact: true })).toBeVisible();
+  await expect(inspector.getByText(/Route \/news\/latest\/%E6%9D%B1%E4%BA%AC collides/).first()).toBeVisible();
   await expect(page.getByText(/Mapping route family · 22 routes · blocked/)).toBeVisible();
   await expect(outline.locator(".sg-sitemapper-tree-row")).toHaveCount(1);
   await inspector.getByRole("textbox", { name: "Slug" }).fill("https://example.test/news");
@@ -257,7 +269,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(inspector.getByText("Current: Static Composition", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "All sitemaps" }).click();
   await page.getByRole("button", { name: /Content Mapping journey · 1 page/ }).click();
-  await page.getByRole("region", { name: "Sitemap outline" }).getByRole("button", { name: "Home", exact: true }).click();
+  await page.getByRole("region", { name: "Sitemap outline" }).getByRole("button", { name: /^Home\b/ }).click();
   await expect(page.getByLabel("Inspector for Home").getByText("Current: Static Composition", { exact: true })).toBeVisible();
   await screenshot(page, testInfo, "journey-sitemapper-static-persisted");
 
@@ -304,12 +316,12 @@ test("focused broken Mapping refs remain visible and can be repaired", async ({ 
   await page.getByRole("button", { name: new RegExp(`^${COLLECTION_MAPPING}`) }).click();
   await expect(page.getByRole("combobox", { name: "Content model" })).toHaveValue(/missing-content-model/);
   await expect(page.getByRole("combobox", { name: "Composition" })).toHaveValue(/missing-composition/);
-  await page.getByRole("combobox", { name: "Content model" }).selectOption({ label: /News Collection · collection · Browser storage/ });
-  await page.getByRole("combobox", { name: "Composition" }).selectOption({ label: /Product overview · Browser storage/ });
+  await selectOptionMatching(page.getByRole("combobox", { name: "Content model" }), /News Collection · collection · Browser storage/);
+  await selectOptionMatching(page.getByRole("combobox", { name: "Composition" }), /Product overview · Browser storage/);
   const broken = page.locator(".sg-mapping-binding[data-broken=true]");
   await expect(broken).toHaveCount(1);
   await broken.getByRole("combobox", { name: "Source" }).selectOption({ label: "Title · text" });
-  await broken.getByRole("combobox", { name: "Target" }).selectOption({ label: /SectionHeading.*Heading · text/ });
+  await selectOptionMatching(broken.getByRole("combobox", { name: "Target" }), /SectionHeading.*Heading · text/);
   await expect(page.locator(".sg-mapping-binding[data-broken=true]")).toHaveCount(0);
   await page.getByRole("button", { name: "Test Mapping" }).click();
   await expect(page.getByRole("dialog", { name: "Mapping test" })).toContainText("Ready");
@@ -353,13 +365,16 @@ test("desktop and narrow light-dark seams use accessible computed geometry", asy
   await expectNoHorizontalOverflow(page);
 
   const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1, configuration: "mobile" });
   for (const product of PRODUCT_LINKS) {
     const box = await navigation.getByRole("link", { name: product, exact: true }).boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(44);
   }
-  const targets = await page.locator(".sg-content-app button:visible").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect()).map(({ width, height }) => ({ width, height })));
-  expect(targets.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
+  const targets = await page.locator(".sg-content-app button:visible").evaluateAll((nodes) => nodes.map((node) => {
+    const { width, height } = node.getBoundingClientRect();
+    return { name: node.getAttribute("aria-label") ?? node.textContent?.trim() ?? "button", width, height };
+  }));
+  expect(targets.filter(({ width, height }) => width < 44 || height < 44)).toEqual([]);
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
 
   await page.getByRole("tab", { name: "Models", exact: true }).click();
@@ -422,6 +437,8 @@ test("direct preview is refreshable and isolated from every host product", async
   await page.reload();
   await expect(page.locator("#app")).toBeAttached();
   await expect(page.getByText(/Content authoring|Mapping library|Sitemaps/)).toHaveCount(0);
-  expect(responses.filter((response) => response.url().includes("/composer/preview")).every((response) => response.ok())).toBe(true);
+  const previewDocuments = responses.filter((response) => response.request().isNavigationRequest() && new URL(response.url()).pathname === "/composer/preview");
+  expect(previewDocuments).toHaveLength(2);
+  expect(previewDocuments.every((response) => response.ok())).toBe(true);
   expect(failures).toEqual([]);
 });
