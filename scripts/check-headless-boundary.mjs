@@ -30,7 +30,13 @@ const forbidden = [
 for (const file of files) {
   const content = await readFile(file, 'utf8');
   for (const [rule, pattern] of forbidden) {
-    if (pattern.test(content)) violations.push(`${path.relative(repositoryRoot, file)}: ${rule}`);
+    const isRootConfig = file === path.join(repositoryRoot, 'package.json') || file === path.join(repositoryRoot, 'vite.config.ts');
+    const applicablePattern = rule === 'provider application coupling' && isRootConfig
+      // The standalone application intentionally installs its injected UI pack;
+      // headless isolation is enforced against src/composer, src/shared, and plugins.
+      ? /zudo-doc|@takazudo\/zfb|\bzfb\b/i
+      : pattern;
+    if (applicablePattern.test(content)) violations.push(`${path.relative(repositoryRoot, file)}: ${rule}`);
   }
 }
 

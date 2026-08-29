@@ -5,6 +5,7 @@ import { SitemapperRouteContent } from "../../features/sitemapper";
 
 const repositoryRoot = resolve(process.cwd());
 const roots = [resolve(repositoryRoot, "src/sitemapper"), resolve(repositoryRoot, "src/features/sitemapper")];
+const composerDomainImport = /(?:from\s+|import\s*\(\s*)["'][^"']*\/composer(?:\/[^"']*)?["']/;
 
 function files(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -26,12 +27,18 @@ describe("standalone Sitemapper boundary", () => {
       if (/\b(?:legacy|migrat(?:e|ion)|compatibility|alias|adapter|SITEMAP_SCHEMA_V0|ready-with-recovery)\b/i.test(source)) {
         violations.push(`${name}: compatibility branch`);
       }
-      if (/from\s+["'][^"']*\/composer(?:\/index)?["']/.test(source)
+      if (composerDomainImport.test(source)
         && !name.startsWith("src/sitemapper/catalog/")) {
         violations.push(`${name}: Composer domain import outside catalog`);
       }
     }
     expect(violations).toEqual([]);
+  });
+
+  it("recognizes root, static subpath, and dynamic Composer imports", () => {
+    expect(composerDomainImport.test('import type { X } from "../../composer"')).toBe(true);
+    expect(composerDomainImport.test('import { X } from "../../composer/browser"')).toBe(true);
+    expect(composerDomainImport.test('const store = import("../../composer/storage/indexeddb")')).toBe(true);
   });
 
   it("requires host catalog injection and owns a fresh database identity", () => {

@@ -5,6 +5,23 @@ import { describe, expect, it } from "vitest";
 const SHA = "fe3fc62d3f677f321f5eb7814240d4a55dc92cd0";
 const TREE = "96a42a59cf4d05078ba85e7a0ccdb7d7765d29cc";
 const SPEC = `git+https://github.com/Takazudo/zudo-sg.git#${SHA}`;
+const TARBALL = `https://codeload.github.com/Takazudo/zudo-sg/tar.gz/${SHA}`;
+
+function section(source: string, heading: string, nextHeading?: string): string {
+  const start = source.indexOf(`${heading}:\n`);
+  if (start < 0) throw new Error(`Missing lockfile section: ${heading}`);
+  const end = nextHeading ? source.indexOf(`\n${nextHeading}:\n`, start) : source.length;
+  return source.slice(start, end < 0 ? source.length : end);
+}
+
+function indentedBlock(source: string, key: string, indent: number): string {
+  const prefix = `${" ".repeat(indent)}${key}:\n`;
+  const start = source.indexOf(prefix);
+  if (start < 0) throw new Error(`Missing lockfile block: ${key}`);
+  const tail = source.slice(start + prefix.length);
+  const next = tail.search(new RegExp(`^ {${indent}}\\S.*:\\n`, "m"));
+  return source.slice(start, next < 0 ? source.length : start + prefix.length + next);
+}
 
 describe("immutable UI provider dependency", () => {
   it("pins the advertised Git spec and one workspace component contract", () => {
@@ -18,13 +35,23 @@ describe("immutable UI provider dependency", () => {
 
   it("normalizes the lock to the exact full commit without local path leakage", () => {
     const lock = readFileSync(resolve("pnpm-lock.yaml"), "utf8");
-    const escaped = SHA.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    expect(lock).toMatch(new RegExp(`specifier: git\\+https://github\\.com/Takazudo/zudo-sg\\.git#${escaped}`));
-    const tarballMatches = [...lock.matchAll(/https:\/\/codeload\.github\.com\/Takazudo\/zudo-sg\/tar\.gz\/([a-f0-9]{40})/g)];
-    expect(new Set(tarballMatches.map((match) => match[1]))).toEqual(new Set([SHA]));
-    expect(lock).toContain("version: 0.1.0");
-    expect(lock).not.toMatch(/@zudo-sg\/ui[^\n]*(?:file:|link:|path:|\.\.\/)/);
-    expect(lock).toContain("@zudo-composer/component-contract@packages+component-contract");
+    const rootImporter = indentedBlock(section(lock, "importers", "packages"), ".", 2);
+    const importer = indentedBlock(rootImporter, "'@zudo-sg/ui'", 6);
+    const packageBlock = indentedBlock(section(lock, "packages", "snapshots"), `'@zudo-sg/ui@${TARBALL}'`, 2);
+    const snapshotSection = section(lock, "snapshots");
+    const snapshotKey = snapshotSection.match(new RegExp(`^  ('@zudo-sg/ui@${TARBALL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^']*'):\\n`, "m"))?.[1];
+    expect(snapshotKey).toBeTruthy();
+    const snapshot = indentedBlock(snapshotSection, snapshotKey!, 2);
+
+    expect(importer).toContain(`specifier: ${SPEC}`);
+    expect(importer).toContain(`version: ${TARBALL}(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)`);
+    expect(packageBlock).toContain(`resolution: {gitHosted: true, tarball: ${TARBALL}}`);
+    expect(packageBlock).toContain("version: 0.1.0");
+    expect(snapshot).toContain("'@zudo-composer/component-contract': link:packages/component-contract");
+    for (const block of [importer, packageBlock, snapshot]) {
+      expect(block).not.toMatch(/(?:workspace|file|path|sibling):|\.\.\/|packages\/ui/);
+    }
+    expect(snapshot.match(/link:packages\/component-contract/g)).toHaveLength(1);
   });
 
   it("records the independently verified immutable provider tree", () => {

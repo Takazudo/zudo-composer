@@ -120,11 +120,17 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
     await useTheme(page, theme);
     await expect(canvas.locator("html")).toHaveAttribute("data-theme", theme);
   }
+  await page.getByRole("button", { name: "Add component to document root" }).click();
   await page.setViewportSize({ width: 375, height: 812 });
   await expect(page.getByRole("toolbar", { name: "Composer toolbar" })).toBeVisible();
+  const narrowChooser = page.getByRole("dialog", { name: /Add to Document root/i });
+  await expect(narrowChooser.getByText("12 of 12 components", { exact: true })).toBeVisible();
+  await narrowChooser.getByRole("button", { name: "Cancel" }).click();
   await expectNoHorizontalOverflow(page);
-  await useTheme(page, "light");
-  await useTheme(page, "dark");
+  for (const theme of ["light", "dark"] as const) {
+    await useTheme(page, theme);
+    await expect(canvas.locator("html")).toHaveAttribute("data-theme", theme);
+  }
   expect(failures).toEqual([]);
 });
 

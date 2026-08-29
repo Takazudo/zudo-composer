@@ -38,14 +38,41 @@ function count(haystack, needle) {
   return haystack.split(needle).length - 1;
 }
 
+function section(source, heading, nextHeading) {
+  const start = source.indexOf(`${heading}:\n`);
+  assert.notEqual(start, -1, `missing lockfile section: ${heading}`);
+  const end = nextHeading ? source.indexOf(`\n${nextHeading}:\n`, start) : source.length;
+  return source.slice(start, end < 0 ? source.length : end);
+}
+
+function indentedBlock(source, key, indent) {
+  const prefix = `${" ".repeat(indent)}${key}:\n`;
+  const start = source.indexOf(prefix);
+  assert.notEqual(start, -1, `missing lockfile block: ${key}`);
+  const tail = source.slice(start + prefix.length);
+  const next = tail.search(new RegExp(`^ {${indent}}\\S.*:\\n`, "m"));
+  return source.slice(start, next < 0 ? source.length : start + prefix.length + next);
+}
+
 assert.equal(packageJson.dependencies["@zudo-sg/ui"], providerSpec, "provider dependency must use the exact Git SHA");
-assert.match(lock, new RegExp(`@zudo-sg/ui@[^\\n]*${providerSha}`), "lockfile must retain the exact provider SHA");
-const providerLockLines = lock.split("\n").filter((line) => /@zudo-sg\/ui|codeload\.github\.com\/Takazudo\/zudo-sg/.test(line)).join("\n");
-assert.doesNotMatch(
-  `${packageJson.dependencies["@zudo-sg/ui"]}\n${providerLockLines}`,
-  /(?:file|link|path):|packages\/ui|\/Users\/|[A-Za-z]:\\\\/,
-  "provider provenance must not use a local/sibling path",
-);
+const tarball = `https://codeload.github.com/Takazudo/zudo-sg/tar.gz/${providerSha}`;
+const rootImporter = indentedBlock(section(lock, "importers", "packages"), ".", 2);
+const importer = indentedBlock(rootImporter, "'@zudo-sg/ui'", 6);
+const packageBlock = indentedBlock(section(lock, "packages", "snapshots"), `'@zudo-sg/ui@${tarball}'`, 2);
+const snapshotSection = section(lock, "snapshots");
+const escapedTarball = tarball.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const snapshotKey = snapshotSection.match(new RegExp(`^  ('@zudo-sg/ui@${escapedTarball}[^']*'):\\n`, "m"))?.[1];
+assert.ok(snapshotKey, "missing exact provider snapshot");
+const snapshot = indentedBlock(snapshotSection, snapshotKey, 2);
+assert.ok(importer.includes(`specifier: ${providerSpec}`), "importer spec must retain exact provider Git SHA");
+assert.ok(importer.includes(`version: ${tarball}(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)`), "importer resolution drifted");
+assert.ok(packageBlock.includes(`resolution: {gitHosted: true, tarball: ${tarball}}`), "provider codeload package resolution drifted");
+assert.ok(packageBlock.includes("version: 0.1.0"), "provider lock metadata version drifted");
+assert.ok(snapshot.includes("'@zudo-composer/component-contract': link:packages/component-contract"), "provider must use the intentional local contract peer");
+assert.equal(count(snapshot, "link:packages/component-contract"), 1, "only the intentional component-contract peer may link locally");
+for (const block of [importer, packageBlock, snapshot]) {
+  assert.doesNotMatch(block, /(?:workspace|file|path|sibling):|\.\.\/|packages\/ui|\/Users\/|[A-Za-z]:\\\\/, "provider provenance must not use a local/sibling resolution");
+}
 assert.equal(providerPackage.version, "0.1.0", "installed package metadata version drifted");
 assert.match(packSource, /packId:\s*["']@zudo-sg\/ui["']/);
 assert.match(packSource, /packVersion:\s*["']1\.0\.0["']/);
@@ -78,6 +105,7 @@ for (const forbidden of [
   "zudo-doc",
   "zfb app",
   "@/",
+  "/src/",
   "/Users/",
   "sourceMappingURL",
 ]) {
@@ -87,6 +115,10 @@ for (const forbidden of [
   "virtual:composer-file-provider",
   "createComposerFileProviderMiddleware",
   "COMPOSER_FILE_PROVIDER_ENDPOINT",
+  "/__zudo_composer_file_provider",
+  "x-zudo-composer-capability",
+  "dev-server-entry",
+  "storage/filesystem",
   "node:fs",
   "node:path",
   "zudo-composer-file-provider",
@@ -96,9 +128,20 @@ for (const forbidden of [
 
 const previewJs = jsFiles.filter((path) => basename(path).startsWith("preview-entry-"));
 assert.equal(previewJs.length, 1, "exactly one preview entry chunk must be emitted");
-const previewText = readFileSync(previewJs[0], "utf8");
+const previewGraph = new Set();
+function collectJsGraph(path) {
+  if (previewGraph.has(path)) return;
+  previewGraph.add(path);
+  const source = readFileSync(path, "utf8");
+  for (const match of source.matchAll(/(?:from\s*|import\s*(?:\(\s*)?)["']\.\/([^"']+)["']/g)) {
+    const dependency = join(assetsDir, match[1]);
+    if (jsFiles.includes(dependency)) collectJsGraph(dependency);
+  }
+}
+collectJsGraph(previewJs[0]);
+const previewText = [...previewGraph].map((path) => readFileSync(path, "utf8")).join("\n");
 for (const forbidden of ["Build structures, not documents.", "Composition library", "Add component…", "file-provider"]) {
-  assert.ok(!previewText.includes(forbidden), `preview entry leaked host marker: ${forbidden}`);
+  assert.ok(!previewText.includes(forbidden), `preview graph leaked host marker: ${forbidden}`);
 }
 
 const indexHtml = readFileSync(join(dist, "index.html"), "utf8");
@@ -115,12 +158,21 @@ assert.equal(wasm.length, 1, "exactly one focused render WASM must be emitted");
 assert.match(basename(wasm[0]), /^zfb_md_wasm_render_bg-.*\.wasm$/);
 assert.equal(glue.length, 1, "exactly one focused render glue module must be emitted");
 assert.ok(!assetFiles.some((path) => /compiler|full|parse|highlight-only/i.test(basename(path))), "non-focused markdown assets leaked");
+assert.ok(!assetFiles.some((path) => extname(path) === ".map"), "production source maps must not be emitted");
+
+for (const source of jsFiles.map((path) => readFileSync(path, "utf8"))) {
+  for (const match of source.matchAll(/["'](\/[^"']+\.(?:js|mjs|css|wasm))(?:\?[^"']*)?["']/g)) {
+    assert.ok(match[1].startsWith("/assets/"), `runtime asset URL is not rooted under /assets: ${match[1]}`);
+  }
+}
 
 const cssFiles = assetFiles.filter((path) => extname(path) === ".css");
 const css = cssFiles.map((path) => readFileSync(path, "utf8"));
 assert.ok(css.some((source) => source.includes(".app-header{")), "local app CSS was not emitted");
-assert.ok(css.some((source) => source.includes(".min-w-0{")), "local Tailwind utility was not emitted");
-assert.ok(css.some((source) => source.includes(".px-hsp-lg{")), "installed provider Tailwind utility was not emitted");
+assert.ok(readFileSync(join(root, "src/features/composer/library/new-composition-dialog.tsx"), "utf8").includes("pr-[3.5rem]"), "local Tailwind source proof drifted");
+assert.ok(css.some((source) => source.includes(".pr-\\[3\\.5rem\\]{")), "local-source Tailwind utility was not emitted");
+assert.ok(readFileSync(join(root, "node_modules/@zudo-sg/ui/src/cards/callout/callout.tsx"), "utf8").includes("border-l-4"), "provider Tailwind source proof drifted");
+assert.ok(css.some((source) => source.includes(".border-l-4{")), "installed-provider Tailwind utility was not emitted");
 assert.equal(css.reduce((total, source) => total + count(source, ".hi-kw{"), 0), 2, "canonical provider CSS must occur once in each host/preview graph");
 assert.equal(css.filter((source) => source.includes(".hi-kw{")).length, 2, "host and preview must each own one canonical CSS asset");
 
