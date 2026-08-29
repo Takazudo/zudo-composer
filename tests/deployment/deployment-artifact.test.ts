@@ -6,6 +6,7 @@ import {
   createArtifactManifest,
   deploymentCredentialState,
   HTTP_TIMEOUT_MS,
+  SPA_ROUTES,
   sha256,
   verifyDeployment,
   verifyLiveDeployment,
@@ -54,7 +55,7 @@ describe("deployment artifact contract", () => {
       return new Response(bytes, { headers: { "content-type": `${file.mime}; charset=utf-8` } });
     };
     const proof = await verifyDeployment({ baseUrl: "https://example.test", distDirectory: dist, fetchImpl });
-    expect(proof.results).toHaveLength(manifest.files.length + 3);
+    expect(proof.results).toHaveLength(manifest.files.length - 1 + SPA_ROUTES.length);
     expect(proof.results.every(({ sha256: digest }) => /^[a-f0-9]{64}$/.test(digest))).toBe(true);
     expect(requestSignals).toHaveLength(proof.results.length);
     expect(requestSignals.every((signal) => signal instanceof AbortSignal && !signal.aborted)).toBe(true);
@@ -124,7 +125,7 @@ describe("deployment artifact contract", () => {
       delayImpl: async (milliseconds) => { delays.push(milliseconds); },
       onRetry: ({ attempt }) => { retries.push(attempt); },
     });
-    expect(proof.results).toHaveLength(manifest.files.length + 3);
+    expect(proof.results).toHaveLength(manifest.files.length - 1 + SPA_ROUTES.length);
     expect(delays).toEqual([5]);
     expect(retries).toEqual([1]);
 

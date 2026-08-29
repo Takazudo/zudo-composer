@@ -2,7 +2,12 @@
   --sg-composer-panel-bg: var(--color-surface);
   --sg-composer-canvas-backdrop: light-dark(#ecebe7, #111);
   --sg-composer-guide: light-dark(oklch(.680 .008 65), oklch(.560 .008 65));
-  --sg-header-h: 3.5rem;
+  --zudo-composer-header-height: 3.5rem;
+  --sg-header-h: var(--zudo-composer-header-height);
+}
+
+@media (max-width: 42rem) {
+  :root { --zudo-composer-header-height: 7rem; }
 }
 
 @theme {

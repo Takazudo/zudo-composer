@@ -1,10 +1,13 @@
 # zudo-composer
 
-`zudo-composer` is the permanent standalone home of two Preact authoring
+`zudo-composer` is the permanent standalone home of four Preact authoring
 products:
 
 - Composer owns its document model, source generation, reuse rules, storage,
   chrome, preview renderer, and same-origin iframe protocol.
+- Content owns its model, Entry library, browser storage, and authoring UI.
+- Mapping owns its binding model, resolver, browser storage, preview handoff,
+  and authoring UI.
 - Sitemapper owns its page-tree model, storage, library, authoring UI, and the
   catalog integration that resolves saved Composer records.
 
@@ -22,6 +25,8 @@ The Vite application has base `/` and these exact SPA routes:
 - `/` — standalone product landing page
 - `/composer` — Composer library and editor
 - `/composer/preview` — isolated same-origin Composer preview document
+- `/content` — Content model and Entry authoring
+- `/mapping` — Content-to-Composition Mapping authoring
 - `/sitemapper` — Sitemapper library and editor
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
 
@@ -150,7 +155,7 @@ enabled.
 
 The hostname above is the configured target, not a claim that this branch is
 deployed. Permanent `main` SHA, root-PR CI, post-merge CI, deployment success,
-and live four-route/all-asset smoke evidence are recorded only after merge.
+and live six-route/all-asset smoke evidence are recorded only after merge.
 
 ## Destructive current-only policy
 
@@ -175,4 +180,4 @@ After the Phase 3 root reaches `main`, the integration owner records one
 canonical evidence block on both Phase 3 and Phase 4 epics: root PR URL; full
 permanent `main` SHA; provider Git spec/SHA/tree and all version domains; green
 root-PR and post-merge CI URLs; and either the deployed URL with successful
-four-route/all-asset smoke or the exact credential-only handoff.
+six-route/all-asset smoke or the exact credential-only handoff.

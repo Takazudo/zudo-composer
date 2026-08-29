@@ -3,8 +3,9 @@
 ## Permanent ownership
 
 This repository is the standalone owner of Composer model/source/reuse/storage,
-chrome, preview rendering, and iframe protocol, plus Sitemapper model/storage,
-library, UI, and Composer-catalog integration.
+chrome, preview rendering, and iframe protocol; Content model/storage/library/UI;
+Mapping model/storage/resolver/UI; and Sitemapper model/storage/library, UI, and
+Composer-catalog integration.
 
 zudo-sg owns only the installed `@zudo-sg/ui` provider: typed component
 sidecars, runtime pack, and canonical Composer CSS. Its transitive focused
@@ -12,8 +13,8 @@ sidecars, runtime pack, and canonical Composer CSS. Its transitive focused
 application runtime/config, virtual-zfb, or styleguide registry may enter this
 application. Never copy provider components or add a fallback registry.
 
-Exact routes are `/`, `/composer`, same-origin `/composer/preview`, and
-`/sitemapper`; emitted files live under `/assets/`. Keep Vite base `/` and the
+Exact routes are `/`, `/composer`, same-origin `/composer/preview`, `/content`,
+`/mapping`, and `/sitemapper`; emitted files live under `/assets/`. Keep Vite base `/` and the
 preview graph isolated from the host application and filesystem provider.
 
 ## Clean-break authority
@@ -66,7 +67,7 @@ relationship for the external UI-provider dependency.
   test:browser:dist` after the one production build.
 
 Do not weaken frozen install, negative dependency scans, exact provider pin,
-12-component runtime/CSS/WASM proof, Wrangler dry-run, or four-route/all-asset
+12-component runtime/CSS/WASM proof, Wrangler dry-run, or six-route/all-asset
 smoke to make a gate pass.
 
 ## Deployment and credentials
