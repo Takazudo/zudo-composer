@@ -19,7 +19,11 @@ export function ContentApp({ provider, controller: supplied }: ContentRouteConte
   const [state, setState] = useState<ContentAuthoringState>(controller.state); const [confirm, setConfirm] = useState<Confirm | null>(null); const [error, setError] = useState<string | null>(null);
   useEffect(() => controller.subscribe(setState), [controller]);
   useEffect(() => { if (controller.state.phase === "idle") void controller.initialize(); }, [controller]);
-  const run = (action: () => void | Promise<void>) => { setError(null); void Promise.resolve().then(action).catch((reason) => setError(reason instanceof Error ? reason.message : "Content action failed.")); };
+  const run = (action: () => void | Promise<void>) => {
+    const fail = (reason: unknown) => setError(reason instanceof Error ? reason.message : "Content action failed.");
+    setError(null);
+    try { void Promise.resolve(action()).catch(fail); } catch (reason) { fail(reason); }
+  };
   return <main class="sg-content-app" aria-busy={state.phase === "loading"}>
     <header class="sg-content-app__header"><div><p class="sg-content-eyebrow">Content</p><h1>Content authoring</h1></div><div class="sg-content-save" aria-live="polite" aria-atomic="true">{state.message}</div></header>
     {(error || state.saveStatus === "error") && <div class="sg-content-notice sg-content-notice--error" role="alert"><span>{error ?? state.message}</span>{state.saveStatus === "error" && <button type="button" onClick={() => controller.retrySave()}>Retry save</button>}</div>}

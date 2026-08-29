@@ -55,7 +55,10 @@ async function expectFlatPanels(locator: Locator) {
 }
 
 async function selectEntry(page: Page, label: RegExp) {
-  await page.getByRole("combobox", { name: "Sample Entry" }).selectOption({ label });
+  const select = page.getByRole("combobox", { name: "Sample Entry" });
+  const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value");
+  expect(value).not.toBeNull();
+  await select.selectOption(value!);
 }
 
 test("same-context Content to Mapping to Composer preview to Sitemapper journey", async ({ page }, testInfo) => {
@@ -96,6 +99,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
     await page.getByRole("textbox", { name: "Title (required)" }).fill(`Browser article ${index + 2}`);
     await page.getByRole("textbox", { name: "Body (required)" }).fill(`Body ${index + 2}`);
     if (routeSlug) await page.getByRole("textbox", { name: "Route slug" }).fill(routeSlug);
+    await expect(page.locator(".sg-content-save")).toContainText("All changes saved.");
   }
   await expect(page.getByText("Browser News Collection · 26 total", { exact: true })).toBeVisible();
   await page.reload();

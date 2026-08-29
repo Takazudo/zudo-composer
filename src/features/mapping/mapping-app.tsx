@@ -31,7 +31,11 @@ export function MappingApp(props: MappingRouteContentProps): JSX.Element {
   const dialogOpener = useRef<HTMLElement | null>(null);
   useEffect(() => controller.subscribe(setState), [controller]);
   useEffect(() => { if (controller.state.phase === "idle") void controller.initialize(); }, [controller]);
-  const run = (action: () => void | Promise<void>) => { setError(null); void Promise.resolve().then(action).catch((reason) => setError(reason instanceof Error ? reason.message : "Mapping action failed.")); };
+  const run = (action: () => void | Promise<void>) => {
+    const fail = (reason: unknown) => setError(reason instanceof Error ? reason.message : "Mapping action failed.");
+    setError(null);
+    try { void Promise.resolve(action()).catch(fail); } catch (reason) { fail(reason); }
+  };
   const openDialog = (setter: (value: boolean) => void, opener: HTMLElement) => { dialogOpener.current = opener; setter(true); };
   const closeDialog = (setter: (value: boolean) => void) => { setter(false); queueMicrotask(() => dialogOpener.current?.focus()); };
   const onPreviewCurrent = useCallback(() => controller.setPreviewCurrent(), [controller]);
