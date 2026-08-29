@@ -4,6 +4,8 @@ coverage/
 /test-results/
 /playwright-report/
 .vite/
+.artifacts/
+.wrangler/
 *.local
 *.log
 .DS_Store

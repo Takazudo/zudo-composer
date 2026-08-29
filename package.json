@@ -13,13 +13,21 @@
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
     "test": "vitest run",
-    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm test && pnpm build && pnpm provider:boundary",
+    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm deployment:boundary && pnpm test && pnpm build && pnpm provider:boundary && pnpm deploy:dry-run",
     "headless:negative-scan": "node scripts/check-headless-boundary.mjs",
     "contract:conformance": "node scripts/check-package-conformance.mjs",
     "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
     "contract:external-install": "node scripts/verify-contract-install.mjs",
     "provider:boundary": "node scripts/check-provider-boundary.mjs",
-    "test:browser": "pnpm build && playwright test"
+    "deployment:boundary": "node scripts/check-deployment-boundary.mjs",
+    "deployment:manifest": "node scripts/deployment-artifact.mjs write",
+    "deployment:manifest:check": "node scripts/deployment-artifact.mjs check",
+    "deploy:dry-run": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy",
+    "smoke:local": "node scripts/smoke-deployment.mjs --local",
+    "smoke:live": "node scripts/smoke-deployment.mjs --base-url https://zudo-composer.takazudomodular.com",
+    "test:browser": "pnpm build && pnpm test:browser:dist",
+    "test:browser:dist": "playwright test"
   },
   "dependencies": {
     "@zudo-composer/component-contract": "workspace:*",
@@ -44,6 +52,7 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.68.0",
     "vite": "^8.2.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "wrangler": "4.127.1"
   }
 }
