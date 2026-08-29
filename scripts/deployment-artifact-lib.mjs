@@ -63,7 +63,7 @@ export function responseMime(response) {
   return response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() ?? "";
 }
 
-export async function verifyDeployment({ baseUrl, distDirectory, fetchImpl = fetch }) {
+export async function verifyDeployment({ baseUrl, distDirectory, fetchImpl = globalThis.fetch }) {
   const manifest = await createArtifactManifest(distDirectory);
   const origin = new URL(baseUrl);
   const index = manifest.files.find(({ path }) => path === "index.html");

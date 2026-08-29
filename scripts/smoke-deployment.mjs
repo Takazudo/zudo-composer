@@ -18,30 +18,30 @@ let output = "";
 
 async function stopServer() {
   if (!server || server.exitCode !== null) return;
+  const exited = new Promise((resolveExit) => server.once("exit", () => resolveExit(true)));
   if (process.platform === "win32") server.kill("SIGTERM");
   else {
     try { process.kill(-server.pid, "SIGTERM"); } catch { server.kill("SIGTERM"); }
   }
-  await Promise.race([
-    new Promise((resolveExit) => server.once("exit", resolveExit)),
-    delay(5_000).then(() => {
-      if (server.exitCode === null) {
-        if (process.platform === "win32") server.kill("SIGKILL");
-        else {
-          try { process.kill(-server.pid, "SIGKILL"); } catch { server.kill("SIGKILL"); }
-        }
-      }
-    }),
-  ]);
+  const stopped = await Promise.race([exited, delay(5_000).then(() => false)]);
+  if (stopped || server.exitCode !== null) return;
+  if (process.platform === "win32") server.kill("SIGKILL");
+  else {
+    try { process.kill(-server.pid, "SIGKILL"); } catch { server.kill("SIGKILL"); }
+  }
+  const killed = await Promise.race([exited, delay(2_000).then(() => false)]);
+  if (!killed && server.exitCode === null) throw new Error(`Wrangler dev did not stop cleanly (pid ${server.pid})`);
 }
 
 async function waitForServer() {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (server.exitCode !== null) throw new Error(`Wrangler dev exited before smoke testing:\n${output}`);
     try {
-      const response = await fetch(baseUrl);
+      const response = await globalThis.fetch(baseUrl);
       if (response.ok) return;
-    } catch {}
+    } catch {
+      // The local socket is expected to reject connections while Wrangler boots.
+    }
     await delay(100);
   }
   throw new Error(`Timed out waiting for ${baseUrl}\n${output}`);
