@@ -65,14 +65,14 @@ export interface CompositionDerivedOutputOutcome {
 /**
  * Successful persistence has two independent truths. Canonical JSON can be
  * durably saved while a generated development artifact is blocked. Providers
- * without derived artifacts may keep returning `void` for compatibility.
+ * without derived artifacts return an empty current derived-output set.
  */
 export interface CompositionSaveOutcome {
   canonical: { status: "saved" };
   derived: CompositionDerivedOutputOutcome;
 }
 
-export type CompositionPutResult = void | CompositionSaveOutcome;
+export type CompositionPutResult = CompositionSaveOutcome;
 
 /**
  * A current canonical consumer reported by a dependency-safe source mutation.
@@ -222,7 +222,7 @@ export interface CompositionStore {
  * scan and source mutation one provider-owned operation. Do not emulate this
  * from `list`/`get`/`put`: that check-then-write sequence races new consumers.
  *
- * `CompositionStore.delete` remains the legacy CRUD method for non-template
+ * `CompositionStore.delete` is the ordinary CRUD method for non-template
  * callers. Reuse UI must use this capability so a Global template never has a
  * blind deletion path.
  */
@@ -248,44 +248,25 @@ export function isCompositionLifecycleStore(store: CompositionStore): store is C
   );
 }
 
-export type CompositionRecoveryOutcome =
-  | {
-      kind: "recovered";
-      reason: "malformed" | "unsafe-id";
-      record: CompositionRecord;
-      sourcePreserved: true;
-      message: string;
-    }
-  | {
-      kind: "quarantined";
-      reason: "future-schema";
-      foundSchemaVersion: number;
-      sourcePreserved: true;
-      message: string;
-    }
-  | {
-      kind: "cleanup-pending" | "source-changed";
-      sourcePreserved: true;
-      message: string;
-    };
+export type CompositionRecoveryOutcome = {
+  kind: "quarantined";
+  reason: "malformed" | "unsafe-id" | "future-schema";
+  foundSchemaVersion?: number;
+  sourcePreserved: true;
+  message: string;
+};
 
 export type CompositionInitializationOutcome =
   | { status: "ready"; summaries: readonly CompositionSummary[] }
   | {
-      status: "ready-with-recovery";
-      summaries: readonly CompositionSummary[];
-      recovery: Extract<CompositionRecoveryOutcome, { kind: "recovered" | "cleanup-pending" | "source-changed" }>;
-    }
-  | {
       status: "recovery-required";
-      recovery: Extract<CompositionRecoveryOutcome, { kind: "quarantined" }>;
+      recovery: CompositionRecoveryOutcome;
     }
   | { status: "error"; error: CompositionPersistenceError };
 
 /**
  * Explicit provider-level recovery actions. `startFresh` is intentionally
- * separate from `initialize`/`retry`; implementations must preserve the source
- * or its exact backup before creating replacement data.
+ * separate from `initialize`/`retry` because it destroys quarantined data.
  */
 export interface CompositionProviderInitializer {
   initialize(): Promise<CompositionInitializationOutcome>;

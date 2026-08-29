@@ -90,7 +90,10 @@ function lifecycleProvider(
     provider: COMPOSITION_PROVIDERS.indexeddb,
     list: async () => [...records.values()].map(summarizeComposition),
     get: async (id) => load(id),
-    put: async (value) => void records.set(value.id, structuredClone(value)),
+    put: async (value) => {
+      records.set(value.id, structuredClone(value));
+      return { canonical: { status: "saved" }, derived: { status: "current", records: [] } };
+    },
     delete: async (id) => records.delete(id),
     clear: async () => void records.clear(),
     deleteWithDependencyCheck: async (id): Promise<CompositionDeleteOutcome> => {

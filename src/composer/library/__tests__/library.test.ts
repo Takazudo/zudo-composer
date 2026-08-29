@@ -332,7 +332,7 @@ describe("provider and store contract", () => {
           : ({ status: "not-found", id } as const);
       }
 
-      async put(value: CompositionRecord): Promise<void> {
+      async put(value: CompositionRecord) {
         const validation = validateCompositionRecord(value);
         if (!validation.ok) {
           throw new CompositionPersistenceError(
@@ -343,6 +343,7 @@ describe("provider and store contract", () => {
           );
         }
         this.records.set(value.id, value);
+        return { canonical: { status: "saved" as const }, derived: { status: "current" as const, records: [] } };
       }
 
       async delete(id: string): Promise<boolean> {

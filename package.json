@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
     "test": "vitest run",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm test && pnpm build",
+    "headless:negative-scan": "node scripts/check-headless-boundary.mjs",
     "contract:conformance": "node scripts/check-package-conformance.mjs",
     "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
     "contract:external-install": "node scripts/verify-contract-install.mjs"

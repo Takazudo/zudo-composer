@@ -131,3 +131,9 @@ export type {
   GenerateBrowserJsxExportOptions,
 } from "./source/plan-linked-jsx";
 export { planLinkedJsxModules, generateBrowserJsxExport } from "./source/plan-linked-jsx";
+
+// ── Persistence providers ────────────────────────────────────────────────────
+export * from "./storage";
+
+// ── Shared persistence coordination ─────────────────────────────────────────
+export * from "../shared/persistence";
