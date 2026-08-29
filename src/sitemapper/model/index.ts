@@ -1,4 +1,4 @@
-// Public Sitemapper model contract — the sole import surface for downstream waves.
+// Public Sitemapper model contract — the sole import surface for consumers.
 //
 // Keeping schema, validation, codec, recovery, and ephemeral indexing behind one
 // barrel prevents storage, commands, catalog, and UI from forming reverse domain

@@ -5,11 +5,11 @@
 // live session, document, selection, clipboard, menus, and shared chooser.
 //
 // Provider reconciliation (the one non-obvious wiring detail):
-//   - the tree (#250) and chooser (#250) want BOTH the RICHER
+//   - the tree (Takazudo/zudo-sg#250) and chooser (Takazudo/zudo-sg#250) want BOTH the RICHER
 //     `ComponentDefinition[]` array (title/category/description) AND the
 //     model-side `ComponentCatalog` (for slot/traversal/diagnostic helpers);
-//   - the inspector (#249), the export generator (#245), and the controller
-//     model (#245/#247) want only the model-side `ComponentCatalog` lookup.
+//   - the inspector (Takazudo/zudo-sg#249), the export generator (Takazudo/zudo-sg#245), and the controller
+//     model (Takazudo/zudo-sg#245/#247) want only the model-side `ComponentCatalog` lookup.
 //   The validated provider view owns both projections. The controller receives
 //   that exact catalog object, and `composer-
 //   integration.tsx` passes that identical `controller.manifest` down to the
@@ -90,17 +90,17 @@ export interface ComposerIntegrationApi {
   /** Keyboard Escape → close any open menu/dialog. */
   handleEscape: () => void;
 
-  // ── Clipboard/duplicate seam (issue #255; wave 7's #256 menus call these) ──
+  // ── Clipboard/duplicate seam used by the host menus ───────────────────────
   /** Copy: session clipboard = a snapshot of the node. Refused (via `controller.lastError`) for opaque nodes. */
   handleCopy: (nodeId: string) => void;
-  /** Cut: copy + remove, with #245's selection repair. Refused for opaque nodes. */
+  /** Cut: copy + remove, with Takazudo/zudo-sg#245's selection repair. Refused for opaque nodes. */
   handleCut: (nodeId: string) => void;
   /** Paste: clone-with-new-ids + insert-subtree at `target`, then select + reveal it. An incompatible target surfaces via `controller.lastError`, never a silent no-op. */
   handlePaste: (target: InsertionTarget) => void;
   /** Duplicate: clone-with-new-ids + insert immediately after the source, then select + reveal it. Refused for opaque nodes. */
   handleDuplicate: (nodeId: string) => void;
 
-  // ── Inline canvas editing (issue #257) ────────────────────────────────────
+  // ── Inline canvas editing (issue Takazudo/zudo-sg#257) ────────────────────────────────────
   /**
    * A canvas inline edit that PASSED the host's revision check → route the value
    * through the controller's EXISTING `updateProps` (no second mutation path).
@@ -109,7 +109,7 @@ export interface ComposerIntegrationApi {
    */
   handleCommitInlineEdit: (nodeId: string, fieldKey: string, value: string) => void;
 
-  // ── Canvas drag & drop (issue #258) ───────────────────────────────────────
+  // ── Canvas drag & drop (issue Takazudo/zudo-sg#258) ───────────────────────────────────────
   /**
    * A canvas drag & drop that PASSED the host's revision check → route the
    * move (or Alt-copy) through the controller's `drop` action, which atomically
@@ -206,7 +206,7 @@ export function useComposerIntegration(
   const closeChooser = useCallback(() => setChooser({ open: false, target: null }), []);
 
   // The export hook takes a document RESOLVER, and it's the controller's
-  // `flushPropUpdates` (issue #291): a debounce-pending inspector edit lands —
+  // `flushPropUpdates` (issue Takazudo/zudo-sg#291): a debounce-pending inspector edit lands —
   // and the post-flush document is read back in the same tick — before any
   // JSX generation, so an export can never miss the tail of a typing burst.
   const exportState = useComposerExport(controller.flushPropUpdates, manifest);
@@ -265,7 +265,7 @@ export function useComposerIntegration(
   // changes, so the keyboard hook does not re-bind on every controller update.
   // Depend on `closeExport` itself (not the whole `exportState` object) so a
   // stray re-render doesn't destabilize this callback even if `exportState`'s
-  // own memoization were ever loosened (issue #286).
+  // own memoization were ever loosened (issue Takazudo/zudo-sg#286).
   const { closeExport } = exportState;
   const openStateRef = useRef({ chooserOpen: chooser.open, exportOpen: exportState.open });
   openStateRef.current = { chooserOpen: chooser.open, exportOpen: exportState.open };

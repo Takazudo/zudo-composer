@@ -1,7 +1,7 @@
 // The Composer preview postMessage protocol — the ONLY thing that crosses the
 // `/composer` ⇄ `/composer/preview` trust boundary.
 //
-// ── Trust model (locked by epic #243) ────────────────────────────────────────
+// ── Trust model (locked by epic Takazudo/zudo-sg#243) ────────────────────────────────────────
 // The preview runs in an isolated same-origin iframe. Only JSON DATA crosses
 // the bridge: never a component function, never a VNode, never source text.
 // The iframe receives the trusted local provider and maps the
@@ -23,15 +23,14 @@
 // (both of which share this `window`); `v` lets a future breaking change be
 // rejected rather than misread.
 //
-// Waves 7-9 (#256 request-node-menu / request-insert-menu / restore-focus,
-// #257 inline-edit commit, #258 move/copy) ADD message types to this module.
+// Menu/focus, inline-edit, and move/copy message types all live in this module.
 // To add one:
 //   1. declare its `.strict()` schema next to its peers below;
 //   2. append it to `PARENT_TO_PREVIEW_MEMBERS` / `PREVIEW_TO_PARENT_MEMBERS`;
 //   3. add a handler to the corresponding options interface.
 // Nothing else changes — the guards, the union types, and the exhaustive
 // switches all derive from those two member tuples. The one exception is
-// `restore-focus` (#256): it carries no revision (it is a one-shot focus
+// `restore-focus` (Takazudo/zudo-sg#256): it carries no revision (it is a one-shot focus
 // command, not a document/session snapshot), so `snapshot-store.ts`'s
 // `applyInbound` is typed to only the revision-gated members
 // (`RenderMessage | ModeMessage`) and `client.ts` intercepts `restore-focus`
@@ -129,7 +128,7 @@ const nodePropsSchema = z
   .pipe(z.record(z.string(), jsonValueSchema));
 
 /**
- * Wire-level zod schema for #245's `CompositionNode`. `.strict()` so a payload
+ * Wire-level zod schema for Takazudo/zudo-sg#245's `CompositionNode`. `.strict()` so a payload
  * carrying an extra key (a smuggled `component`, a stray `adapters` object, a
  * future-schema property) is REJECTED rather than silently forwarded into the
  * renderer. The type annotation pins it to the model's own type, so the schema
@@ -180,7 +179,7 @@ export const compositionBindingSchema: z.ZodType<CompositionBinding> = z
   })
   .strict();
 
-/** Wire-level zod schema for #245's `CompositionDocument`. */
+/** Wire-level zod schema for Takazudo/zudo-sg#245's `CompositionDocument`. */
 export const compositionDocumentSchema: z.ZodType<CompositionDocument> = z
   .object({
     schemaVersion: z.literal(COMPOSITION_SCHEMA_VERSION),
@@ -234,7 +233,7 @@ export function localPreviewSnapshot(
 }
 
 /**
- * Wire-level schema for #245's shared `InsertionTarget`. The preview emits this
+ * Wire-level schema for Takazudo/zudo-sg#245's shared `InsertionTarget`. The preview emits this
  * verbatim on `request-add` — an insert-at-INDEX target, never an append-only
  * slot reference (the round-2 contract).
  */
@@ -248,7 +247,7 @@ export const insertionTargetSchema: z.ZodType<InsertionTarget> = z
 
 /**
  * A `getBoundingClientRect()` snapshot, serialized to plain JSON-safe fields
- * (issue #256). `DOMRect`'s own fields are accessor properties on its
+ * (issue Takazudo/zudo-sg#256). `DOMRect`'s own fields are accessor properties on its
  * PROTOTYPE, not own-enumerable properties of an instance, so a bare
  * `JSON.stringify(rect)` yields `{}` — callers must build this explicitly (see
  * `serializeRect` below) rather than spread a live `DOMRect`. `.finite()`
@@ -315,7 +314,7 @@ export const modeMessageSchema = z
   .strict();
 
 /**
- * Host → preview focus-restore response (issue #256). Sent once a context menu
+ * Host → preview focus-restore response (issue Takazudo/zudo-sg#256). Sent once a context menu
  * the preview requested (`request-node-menu` / `request-insert-menu`) has
  * closed, so the iframe can restore focus to the EXACT control that opened it
  * — the host never reaches into the iframe's DOM itself; it only echoes back
@@ -368,7 +367,7 @@ export const selectMessageSchema = z
   })
   .strict();
 
-/** An insert point was activated. Carries #245's insert-at-index target. */
+/** An insert point was activated. Carries Takazudo/zudo-sg#245's insert-at-index target. */
 export const requestAddMessageSchema = z
   .object({
     ...envelope,
@@ -391,7 +390,7 @@ export const openSourceMessageSchema = z
   .strict();
 
 /**
- * The selected node's chrome "⋯" was activated in Edit mode (issue #256).
+ * The selected node's chrome "⋯" was activated in Edit mode (issue Takazudo/zudo-sg#256).
  * `rect` is the trigger control's own `getBoundingClientRect()`, serialized —
  * IFRAME-LOCAL coordinates; the host translates by the iframe's own offset
  * before positioning the menu (see `composer-canvas-host.tsx`). `focusToken`
@@ -411,7 +410,7 @@ export const requestNodeMenuMessageSchema = z
   .strict();
 
 /**
- * An insert point's "⋯" was activated. Carries #245's insert-at-index target
+ * An insert point's "⋯" was activated. Carries Takazudo/zudo-sg#245's insert-at-index target
  * (the round-2 contract) plus the same rect/focusToken pair as
  * `request-node-menu` — see that schema's comment.
  */
@@ -441,7 +440,7 @@ export const errorMessageSchema = z
 
 /**
  * An inline-editing session on the canvas committed a new value for a flagged
- * text field (issue #257). Carries the exact `{ nodeId, fieldKey, value }` the
+ * text field (issue Takazudo/zudo-sg#257). Carries the exact `{ nodeId, fieldKey, value }` the
  * host routes through the controller's EXISTING `updateProps` action — no
  * second mutation path — plus `documentRevision`: the revision the preview was
  * showing when the user committed.
@@ -466,11 +465,11 @@ export const commitInlineEditMessageSchema = z
   .strict();
 
 /**
- * A cross-slot drag & drop completed on the canvas (issue #258). Carries the
- * drag SOURCE's node id, #245's insert-at-index `target`, and `copy` (Alt held
+ * A cross-slot drag & drop completed on the canvas (issue Takazudo/zudo-sg#258). Carries the
+ * drag SOURCE's node id, Takazudo/zudo-sg#245's insert-at-index `target`, and `copy` (Alt held
  * at drop → a copy instead of a move). `documentRevision` is the revision the
  * preview was showing when the user dropped — the host uses it exactly like
- * #257's inline-edit `documentRevision` to DROP a stale drop authored against a
+ * Takazudo/zudo-sg#257's inline-edit `documentRevision` to DROP a stale drop authored against a
  * document it has since superseded (see `composer-canvas-host.tsx`), never
  * silently applying it. The host revalidates the whole operation ATOMICALLY
  * (slot acceptance, cardinality, cycle guard, root semantics, opaque-node

@@ -6,6 +6,11 @@
 }
 
 @theme {
+  /* Local app-chrome icon ladder; the external UI provider does not own it. */
+  --spacing-icon-xs: 0.75rem;
+  --spacing-icon-sm: 1rem;
+  --spacing-icon-md: 1.25rem;
+  --spacing-icon-lg: 1.5rem;
   --color-overlay: rgb(0 0 0 / 0.45);
   --color-border-strong: color-mix(in oklch, var(--color-border) 55%, var(--color-fg));
   --shadow-lg: var(--shadow-overlay);

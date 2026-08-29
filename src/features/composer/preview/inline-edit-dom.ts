@@ -1,7 +1,7 @@
 // DOM/document helpers shared by the canvas's TWO inline-editing sessions.
 //
 // These were private to `renderer.ts` while it held the only session. Epic
-// #368 adds a second, parallel one (`prose-inline-session.ts`, #375) whose
+// Takazudo/zudo-sg#368 adds a second, parallel one (`prose-inline-session.ts`, Takazudo/zudo-sg#375) whose
 // contract is explicit-save rather than auto-commit — but which still has to
 // answer the same three questions the same way:
 //
@@ -10,7 +10,7 @@
 //   - "where does the caret go?"              (`placeCaretAtEnd`)
 //   - "what is this field's on-screen value?" (`effectiveFieldValue`)
 //
-// A second, subtly different copy of any of those would break the #288
+// A second, subtly different copy of any of those would break the Takazudo/zudo-sg#288
 // ground-check invariant (which is only sound because entry and the
 // ground-check derive the value IDENTICALLY), so they live here, once.
 //
@@ -27,7 +27,7 @@ import type { ComposerRuntimeEntry } from "../active-pack";
  */
 export const INLINE_EDITING_ATTR = "data-zc-inline-editing";
 
-/** Which session a field's inline editing routes through (#372). */
+/** Which session a field's inline editing routes through (Takazudo/zudo-sg#372). */
 export type InlineEditMode = "plain" | "markdown-source";
 
 /** The editable text region of a node, resolved from its runtime definition. */
@@ -36,8 +36,8 @@ export interface InlineEditable {
   multiline: boolean;
   /**
    * `"plain"` (the default) is the auto-commit session in `renderer.ts`
-   * (#257 / #288); `"markdown-source"` is the explicit-save prose session
-   * (`prose-inline-session.ts`, epic #368). The two never share state.
+   * (Takazudo/zudo-sg#257 / Takazudo/zudo-sg#288); `"markdown-source"` is the explicit-save prose session
+   * (`prose-inline-session.ts`, epic Takazudo/zudo-sg#368). The two never share state.
    */
   mode: InlineEditMode;
   resolveElement: (root: HTMLElement) => HTMLElement | null;
@@ -79,7 +79,7 @@ export function findNodeById(nodes: readonly CompositionNode[], id: string): Com
 /**
  * The on-screen value of an inline-editable field: the component's declared
  * defaults overlaid with the node's own props, coerced to a string. Shared by
- * session ENTRY and the #288 ground-check so both read the field IDENTICALLY —
+ * session ENTRY and the Takazudo/zudo-sg#288 ground-check so both read the field IDENTICALLY —
  * the ground-check compares this against the session's captured `initialValue`,
  * so it is only sound if the two derive the value the same way.
  */
@@ -93,7 +93,7 @@ export function effectiveFieldValue(
 }
 
 /**
- * Inline-level element tags (issue #288). None of these start a new line on
+ * Inline-level element tags (issue Takazudo/zudo-sg#288). None of these start a new line on
  * their own — `<strong>Loud</strong> word` reads as one continuous line, not
  * two — so `readEditableValue` must not prepend a `\n` before one of these
  * just because it is an element child. Only a BLOCK-level child (e.g. a
@@ -181,7 +181,7 @@ function isEmptyEditablePlaceholder(el: HTMLElement, raw: string): boolean {
  * The deterministic seed-minus-one repair has one known ambiguity: raw `a`
  * with seed `a\n` is indistinguishable from intentionally deleting that final
  * newline. Supporting that exact gesture would require beforeinput/selection
- * history, not UA branching; #444's cross-engine round-trip loss chooses to
+ * history, not UA branching; Takazudo/zudo-sg#444's cross-engine round-trip loss chooses to
  * preserve the seed here.
  *
  * `baselineValue` is the exact value seeded into the current editor. The plain
@@ -248,7 +248,7 @@ function lastEditableTextNode(el: HTMLElement): Text | null {
  * `contenteditable="false"` decoration (e.g. `CtaButton`'s trailing arrow),
  * collapsing to the raw end lands the caret after the non-editable node and the
  * browser bounces it to offset 0, so typed text prepends instead of appends
- * (issue #257 follow-up). Selection APIs missing (or a detached el) never throw.
+ * (issue Takazudo/zudo-sg#257 follow-up). Selection APIs missing (or a detached el) never throw.
  */
 export function placeCaretAtEnd(el: HTMLElement): void {
   try {

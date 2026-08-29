@@ -1,4 +1,4 @@
-// Pure traversal helpers for the Sitemapper outline rail (issue #410).
+// Pure traversal helpers for the Sitemapper outline rail (issue Takazudo/zudo-sg#410).
 //
 // The persisted sitemap is intentionally a small recursive page tree. These
 // helpers keep DOM rendering independent from command/controller state and

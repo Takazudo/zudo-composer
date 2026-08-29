@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Thin JSX wrappers for the Sitemapper's inline resizer scripts (issue #409).
+// Thin JSX wrappers for the Sitemapper's inline resizer scripts (issue Takazudo/zudo-sg#409).
 // The source strings live in resizer-scripts-source.ts so their interpolated
 // contract values can be unit-tested without a DOM or runtime imports.
 

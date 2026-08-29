@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Controlled Sitemapper outline rail (issue #410).
+// Controlled Sitemapper outline rail (issue Takazudo/zudo-sg#410).
 //
 // The caller owns document, selection, and expansion state. This component
 // only derives rows from the persisted document, sends all mutations upward,

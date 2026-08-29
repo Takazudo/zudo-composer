@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Dismissible load/recovery notice for the Sitemapper workspace (issue #409).
+// Dismissible load/recovery notice for the Sitemapper workspace (issue Takazudo/zudo-sg#409).
 //
 // Recovery is intentionally visible and separate from the live save pill: a
 // malformed record may have produced a writable sample, while a future-schema

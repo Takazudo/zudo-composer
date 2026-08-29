@@ -52,7 +52,7 @@ export const INITIAL_PREVIEW_STATE: PreviewState = {
  * must then drop it entirely, not merge any part of it.
  *
  * Typed to `RenderMessage | ModeMessage` ONLY — the two revision-gated
- * snapshot members — not the full `ParentToPreviewMessage` union. `#256`'s
+ * snapshot members — not the full `ParentToPreviewMessage` union. `Takazudo/zudo-sg#256`'s
  * `restore-focus` is a one-shot focus command with no `revision` and no
  * document/session payload, so it does not belong in this fold at all;
  * `client.ts`'s `onMessage` narrows it away (an early `if (type ===

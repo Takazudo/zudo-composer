@@ -2,12 +2,12 @@
 
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// The chooser's live preview pane (issue #254).
+// The chooser's live preview pane (issue Takazudo/zudo-sg#254).
 //
-// Mounts a SECOND, dedicated preview iframe with its OWN instance-scoped #248
+// Mounts a SECOND, dedicated preview iframe with its OWN instance-scoped Takazudo/zudo-sg#248
 // bridge — created when this component mounts (the dialog's content is gated
 // on `capturedTarget`, so that is effectively "dialog open") and disposed when
-// it unmounts (dialog close). This is a PEER of #251's `ComposerCanvasHost`,
+// it unmounts (dialog close). This is a PEER of Takazudo/zudo-sg#251's `ComposerCanvasHost`,
 // not a variant of it: it never touches the main canvas iframe or its
 // revision stream (separate bridge instance, separate `hostWindow` listener),
 // sends single-node documents built from a manifest entry's defaults, and
@@ -144,7 +144,7 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
   latestPreviewDocumentRef.current = previewDocument;
 
   // Created on mount, disposed on unmount — this pane's whole lifetime is the
-  // dialog being open, which is exactly the "ephemeral" contract (#254): no
+  // dialog being open, which is exactly the "ephemeral" contract (Takazudo/zudo-sg#254): no
   // singleton, no persistence, isolated readiness/revision state per pane.
   useEffect(() => {
     const frame = frameRef.current;

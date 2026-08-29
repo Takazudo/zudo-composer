@@ -1,13 +1,13 @@
-// Convenience hook wiring #245's `generateJsx` to open/close state for the
-// export dialog (issue #249). Deliberately tiny and fully owned by this
+// Convenience hook wiring Takazudo/zudo-sg#245's `generateJsx` to open/close state for the
+// export dialog (issue Takazudo/zudo-sg#249). Deliberately tiny and fully owned by this
 // feature: it's the one place `generateJsx` is called from the
-// presentational layer, so wave-5 integration (#251) can either use this
-// hook directly or call `generateJsx` itself and pass the result straight
+// presentational layer. The integration can either use this hook directly or
+// call `generateJsx` itself and pass the result straight
 // into `ComposerExportDialog` — both paths render the exact same generator
 // output, never a second render/source mapping. `result` is never copied
 // into further local state anywhere downstream — it's held once, here.
 //
-// The document arrives as a GETTER, not a captured value (issue #291): the
+// The document arrives as a GETTER, not a captured value (issue Takazudo/zudo-sg#291): the
 // integration passes the controller's `flushPropUpdates`, so a
 // debounce-pending inspector edit is landed synchronously — and its result
 // read back in the same tick — before JSX generation. A captured `document`
@@ -83,7 +83,7 @@ export function useComposerExport(
   // Memoized so the returned object is referentially stable across renders
   // that don't touch `open`/`result` — callers (e.g. the integration hook's
   // `handleEscape`) can safely depend on this object without re-binding on
-  // every unrelated parent render (issue #286).
+  // every unrelated parent render (issue Takazudo/zudo-sg#286).
   return useMemo(
     () => ({ open, result, exportDocument, copyOutcome, openExport, closeExport }),
     [open, result, exportDocument, copyOutcome, openExport, closeExport],

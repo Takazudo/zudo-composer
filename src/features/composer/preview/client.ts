@@ -50,7 +50,7 @@ export interface PreviewClientOptions {
   onState: (state: PreviewState) => void;
   /**
    * The host answered a `request-node-menu` / `request-insert-menu` with a
-   * `restore-focus` (issue #256). NOT revision-gated and never touches
+   * `restore-focus` (issue Takazudo/zudo-sg#256). NOT revision-gated and never touches
    * `PreviewState` — see `snapshot-store.ts`'s `applyInbound` comment.
    */
   onRestoreFocus?: (focusToken: string) => void;
@@ -65,13 +65,13 @@ export interface PreviewClient {
   emitRequestAdd(target: InsertionTarget): void;
   /** Navigate to the linked source; this never selects or mutates source nodes. */
   emitOpenSource(sourceRecordId: string): void;
-  /** The selected node's chrome "⋯" was activated (issue #256). */
+  /** The selected node's chrome "⋯" was activated (issue Takazudo/zudo-sg#256). */
   emitRequestNodeMenu(nodeId: string, rect: SerializedRect, focusToken: string): void;
-  /** An insert point's "⋯" was activated (issue #256). */
+  /** An insert point's "⋯" was activated (issue Takazudo/zudo-sg#256). */
   emitRequestInsertMenu(target: InsertionTarget, rect: SerializedRect, focusToken: string): void;
   /**
-   * An inline-editing session committed a new value (issue #257). `documentRevision`
-   * is supplied by the CALLER, not computed here (issue #288): the renderer
+   * An inline-editing session committed a new value (issue Takazudo/zudo-sg#257). `documentRevision`
+   * is supplied by the CALLER, not computed here (issue Takazudo/zudo-sg#288): the renderer
    * captures its inline session's SESSION-START revision and threads it down
    * through `preview-app.ts`, so the host can drop a commit authored during a
    * session a later render has since superseded — reading `state.revision` at
@@ -81,7 +81,7 @@ export interface PreviewClient {
    */
   emitCommitInlineEdit(nodeId: string, fieldKey: string, value: string, documentRevision: number): void;
   /**
-   * A cross-slot drag & drop committed (issue #258). Stamped with the revision
+   * A cross-slot drag & drop committed (issue Takazudo/zudo-sg#258). Stamped with the revision
    * on screen (`documentRevision`) so the host can drop a stale drop — exactly
    * like `emitCommitInlineEdit` stamps its own.
    */
@@ -127,7 +127,7 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
       return;
     }
     const message = result.message;
-    // `restore-focus` (#256) is not a document/session snapshot — it never
+    // `restore-focus` (Takazudo/zudo-sg#256) is not a document/session snapshot — it never
     // reaches the revision-gated fold below. See `applyInbound`'s comment.
     if (message.type === "restore-focus") {
       options.onRestoreFocus?.(message.focusToken);

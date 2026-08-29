@@ -1,8 +1,8 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Structural actions for one structure-rail row (issue #250): sibling
+// Structural actions for one structure-rail row (issue Takazudo/zudo-sg#250): sibling
 // move-up/move-down (within the node's current slot only — cross-slot
-// reparenting/drag-drop are explicitly out of scope, see #245's command
+// reparenting/drag-drop are explicitly out of scope, see Takazudo/zudo-sg#245's command
 // comments) and subtree removal. Removing a node with at least one descendant
 // requires an explicit inline confirmation step before `onRemove` fires;
 // removing an empty node (leaf, or a container with no children) fires
@@ -23,12 +23,12 @@ export interface SubtreeRemovalConfirmProps {
 
 /**
  * The inline "Remove X and its N nested components?" confirmation shown
- * before removing a populated subtree. Extracted so issue #256's node
+ * before removing a populated subtree. Extracted so issue Takazudo/zudo-sg#256's node
  * context menu can reuse the EXACT same copy/behavior for its Delete item
  * (rendered as the menu's `children`, in place of its item list) instead of
  * re-deriving a second confirmation flow — see `use-composer-menus.ts`.
  *
- * A thin wrapper around the generic `InlineConfirm` (issue #269/#260, which
+ * A thin wrapper around the generic `InlineConfirm` (issue Takazudo/zudo-sg#269/#260, which
  * also unified this component's initial focus to land on Cancel — the SAFE
  * action — for both entry points, where before the menu path and this
  * component's own default disagreed).

@@ -1,6 +1,6 @@
 // Sitemapper workspace resizer contract — the single source of truth for the
 // outline/inspector rail localStorage keys, CSS custom-property names, and
-// data-attributes (issue #409).
+// data-attributes (issue Takazudo/zudo-sg#409).
 //
 // This intentionally mirrors the Composer workspace contract without sharing
 // its identifiers. Sitemapper and Composer can be mounted during the same SPA

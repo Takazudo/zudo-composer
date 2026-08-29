@@ -5,6 +5,8 @@
 
 import { describe, expect, it } from "vitest";
 import { h, render } from "preact";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -52,6 +54,14 @@ function renderIcon(Icon: IconComponent, props: IconProps = {}): HTMLElement {
 }
 
 describe("icons module", () => {
+  it("owns the exact local app-chrome icon spacing ladder", () => {
+    const css = readFileSync(resolve("src/styles/app-tokens.css"), "utf8");
+    expect(css).toMatch(/--spacing-icon-xs:\s*0\.75rem;/);
+    expect(css).toMatch(/--spacing-icon-sm:\s*1rem;/);
+    expect(css).toMatch(/--spacing-icon-md:\s*1\.25rem;/);
+    expect(css).toMatch(/--spacing-icon-lg:\s*1\.5rem;/);
+  });
+
   for (const [name, Icon] of Object.entries(ALL_ICONS)) {
     describe(name, () => {
       it("renders an <svg> with aria-hidden=\"true\"", () => {

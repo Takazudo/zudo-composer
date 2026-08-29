@@ -73,7 +73,7 @@ export interface ComposerChooserProps {
   /** The target to capture on open. Ignored for the rest of the dialog's lifetime once captured. */
   target: InsertionTarget | null;
   document: CompositionDocument;
-  /** The single app-layer `createComponentCatalog(entries)` derivation (issue #290) — never re-derived here. */
+  /** The single app-layer `createComponentCatalog(entries)` derivation (issue Takazudo/zudo-sg#290) — never re-derived here. */
   manifest: ComponentCatalog;
   /** The richer catalog backing search/filter/display (title/category/description) — same array `manifest` was derived from. */
   entries: readonly ComponentDefinition[];

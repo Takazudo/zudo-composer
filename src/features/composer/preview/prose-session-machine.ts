@@ -1,12 +1,12 @@
-// ── Explicit-commit prose editing session (issue #374, epic #368) ───────────
+// ── Explicit-commit prose editing session (issue Takazudo/zudo-sg#374, epic Takazudo/zudo-sg#368) ───────────
 //
 // A PURE, DOM-free state machine for canvas inline edits of a field whose
-// contract declares `inlineEdit.mode: "markdown-source"` (#372). The renderer
-// integration (#375) owns every DOM concern: it feeds stimuli in and executes
+// contract declares `inlineEdit.mode: "markdown-source"` (Takazudo/zudo-sg#372). The renderer
+// integration (Takazudo/zudo-sg#375) owns every DOM concern: it feeds stimuli in and executes
 // the returned effects. Nothing here reads the DOM, the bridge, or a clock.
 //
 // This is a PARALLEL session path. The auto-commit inline session in
-// `renderer.ts` (#257 / #288) — Enter commits, blur commits, Edit→Preview
+// `renderer.ts` (Takazudo/zudo-sg#257 / Takazudo/zudo-sg#288) — Enter commits, blur commits, Edit→Preview
 // commits — stays exactly as it is and drives `inlineEdit.mode: "plain"`
 // (the default). The two never share state.
 //
@@ -20,7 +20,7 @@
 //   2. `dialog-choice { dialog: "leave", choice: "save" }` — the explicit Save
 //                       option in the leave dialog.
 // Both route through the SAME single `commit` output, so the integration has
-// one commit function, not two. (Epic #368 records the interpretation: "saving
+// one commit function, not two. (Epic Takazudo/zudo-sg#368 records the interpretation: "saving
 // only via that button" bans *implicit* commits; the leave dialog's explicit
 // Save is per the user's own spec. Dropping it is a one-line change here plus
 // its tests.)
@@ -44,7 +44,7 @@
 // session just ends). That is not merely an optimisation: a no-op commit still
 // advances the document revision host-side, which would make a later REAL
 // commit fail the session-start staleness gate and silently drop the user's
-// edit. Same reasoning as `commitInline` in `renderer.ts` (#288).
+// edit. Same reasoning as `commitInline` in `renderer.ts` (Takazudo/zudo-sg#288).
 //
 // ── The session-start revision ─────────────────────────────────────────────
 //
@@ -53,7 +53,7 @@
 // draft after a mode switch. It is never re-read or refreshed, so a render that
 // lands mid-edit makes the eventual commit STALE by construction and the host's
 // revision gate rejects it. Re-stamping a commit as fresh merely because it was
-// sent after that render is exactly the bug #288 fixed.
+// sent after that render is exactly the bug Takazudo/zudo-sg#288 fixed.
 //
 // ── A doomed commit is never sent (the STALE dialog) ────────────────────────
 //
@@ -71,7 +71,7 @@
 //
 // ── Two accepted limitations (documented, deliberate silent discards) ───────
 //
-// 1. EXTERNAL VALUE CHANGE on the field being edited (the #288 "ground moves
+// 1. EXTERNAL VALUE CHANGE on the field being edited (the Takazudo/zudo-sg#288 "ground moves
 //    under you" case) discards a dirty draft SILENTLY, with no prompt. The
 //    draft is unsaveable anyway — its session-start revision is now stale, so
 //    the host's gate would reject a commit — and prompting would offer a Save
@@ -101,7 +101,7 @@ export interface ProseDraft {
   readonly startRevision: number;
   /**
    * A render has landed since session start, so the host's revision gate would
-   * reject a commit stamped with `startRevision` (#288) — see the header. Set
+   * reject a commit stamped with `startRevision` (Takazudo/zudo-sg#288) — see the header. Set
    * once and never cleared: nothing can make a superseded revision current
    * again.
    */
@@ -281,7 +281,7 @@ function targetsDraft(
 }
 
 /**
- * The ground-moved check (#288): an incoming render only ends the session when
+ * The ground-moved check (Takazudo/zudo-sg#288): an incoming render only ends the session when
  * it changed the value of the field being edited. An edit elsewhere in the
  * document leaves the session alone.
  */

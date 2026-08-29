@@ -1,9 +1,9 @@
-// Canvas viewport widths + persistence for the central Composer app (#251).
+// Canvas viewport widths + persistence for the central Composer app (Takazudo/zudo-sg#251).
 //
 // The Composer owns a Desktop/Tablet/Mobile/Fluid canvas viewport control. The
 // choice sizes ONLY the preview iframe's width (which reflows the preview
 // document) — it never changes the surrounding Composer responsive breakpoint
-// (issue #251 scope item 5). The preview session protocol (#248) carries no
+// (issue Takazudo/zudo-sg#251 scope item 5). The preview session protocol (Takazudo/zudo-sg#248) carries no
 // viewport field, so the width is applied to the parent-side iframe host here,
 // not sent as a message.
 //

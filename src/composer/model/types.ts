@@ -145,9 +145,9 @@ export interface CompositionDocument {
 export const VIRTUAL_ROOT_SLOT_ID = "root" as const;
 
 /**
- * A shared, discriminated insertion position reused by every downstream wave
- * (#247 controller, #248 request-add, #250 chooser capture, #251 wiring, and
- * the round-2 interaction waves). Discriminated on `parentId === null`.
+ * A shared, discriminated insertion position used by the controller, preview
+ * protocol, chooser, integration layer, and canvas interactions. Discriminated
+ * on `parentId === null`.
  *
  * - `parentId: null` addresses the VIRTUAL ROOT; `slotId` must be
  *   `VIRTUAL_ROOT_SLOT_ID`.

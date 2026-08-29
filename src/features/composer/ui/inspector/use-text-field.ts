@@ -1,4 +1,4 @@
-// Controlled-text-field hook for the inspector (issue #249).
+// Controlled-text-field hook for the inspector (issue Takazudo/zudo-sg#249).
 //
 // A naive `<input value={node.props[prop]} onInput={...}>` re-derives its
 // `value` from the incoming document on every render. Editing a DIFFERENT
@@ -14,7 +14,7 @@
 // remounts cleanly instead of reusing stale focus/draft state left over from
 // a different node.
 //
-// This hook still calls `onCommit` on EVERY keystroke — since issue #291 the
+// This hook still calls `onCommit` on EVERY keystroke — since issue Takazudo/zudo-sg#291 the
 // wired callback is the controller's DEBOUNCED channel
 // (`updatePropsDebounced`), so the expensive dispatch (whole-document
 // stringify + localStorage + preview render) coalesces per typing pause

@@ -1,16 +1,16 @@
-// ── Explicit-save prose editing: the DOM integration (issue #375, epic #368) ─
+// ── Explicit-save prose editing: the DOM integration (issue Takazudo/zudo-sg#375, epic Takazudo/zudo-sg#368) ─
 //
-// Binds the PURE state machine in `prose-session-machine.ts` (#374) to real
+// Binds the PURE state machine in `prose-session-machine.ts` (Takazudo/zudo-sg#374) to real
 // iframe DOM: entry gesture, the raw-markdown editable surface, the stimuli
 // (typing, ESC, click-away, host-chrome focus loss, mode switch, incoming
 // renders), and the iframe-side Save button + confirmation dialogs.
 //
 // ── This is a PARALLEL path, not a modification ─────────────────────────────
 //
-// The auto-commit session in `renderer.ts` (#257 / #288) — Enter commits, blur
+// The auto-commit session in `renderer.ts` (Takazudo/zudo-sg#257 / Takazudo/zudo-sg#288) — Enter commits, blur
 // commits, Edit→Preview commits — is untouched and still drives every field
 // whose contract says `inlineEdit.mode: "plain"` (the default). A field only
-// reaches THIS module by declaring `inlineEdit.mode: "markdown-source"` (#372).
+// reaches THIS module by declaring `inlineEdit.mode: "markdown-source"` (Takazudo/zudo-sg#372).
 // Nothing here is shared with `commitInline` / `cancelInline`; the only common
 // code is the DOM-reading helpers in `inline-edit-dom.ts`, which are pure.
 //
@@ -100,14 +100,14 @@ export interface ProseInlineSessionOptions {
   document: CompositionDocument;
   /** Registry lookup, keyed by `componentId`. */
   entryById: ReadonlyMap<string, ComposerRuntimeEntry>;
-  /** The revision on screen; captured at session START and never refreshed (#288). */
+  /** The revision on screen; captured at session START and never refreshed (Takazudo/zudo-sg#288). */
   revision: number;
   /** The HOST's mode. A local Edit override may sit on top of it — see the header. */
   mode: PreviewMode;
   /** The canvas root, used to locate the mounted editable. */
   canvasRef: RefObject<HTMLElement | null>;
   /**
-   * Whether the canvas renders this node as OPAQUE (#245) — an unknown
+   * Whether the canvas renders this node as OPAQUE (Takazudo/zudo-sg#245) — an unknown
    * component, an unsupported version, a structurally invalid payload. Such a
    * node shows its preserved payload read-only and its props are not
    * updatable, so a session there could only ever produce a commit the model
@@ -236,7 +236,7 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
   const editableRef = useRef<HTMLElement | null>(null);
   /** Set by `refocus`; consumed after the render that (re)mounted the editable. */
   const pendingFocusRef = useRef(false);
-  /** A click-away that opened a dialog is CONSUMED, never replayed (#374's header). */
+  /** A click-away that opened a dialog is CONSUMED, never replayed (Takazudo/zudo-sg#374's header). */
   const swallowClickRef = useRef(false);
 
   const setMount = useCallback((next: ProseMount | null) => {
@@ -266,7 +266,7 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
           case "commit":
             // The ONE commit path. Stamped with the SESSION-START revision the
             // draft has carried since `start` — never the revision on screen
-            // now (issue #288's invariant).
+            // now (issue Takazudo/zudo-sg#288's invariant).
             optionsRef.current.onCommit?.(
               effect.draft.nodeId,
               effect.draft.fieldKey,
@@ -602,7 +602,7 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
     dispatch({ type: "mode-switch", mode: options.mode });
   }, [options.mode]);
 
-  // ── Incoming renders (#288's ground-check, prose edition) ─────────────────
+  // ── Incoming renders (Takazudo/zudo-sg#288's ground-check, prose edition) ─────────────────
   // Keyed on document IDENTITY: a session-only message (mode, theme, selection)
   // keeps the same document reference, so this only fires for a real render.
   const prevDocumentRef = useRef(options.document);

@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// The Composer structure rail (issue #250) — a recursive, fully controlled
+// The Composer structure rail (issue Takazudo/zudo-sg#250) — a recursive, fully controlled
 // tree over a `CompositionDocument` + the derived Composer catalog. Every row
 // is DERIVED from `document` + `manifest`; there is no separate row model to
 // drift out of sync (see `TreeNode`'s per-row derivation via `tree-helpers.ts`).
@@ -11,7 +11,7 @@
 // VIRTUAL_ROOT_SLOT_ID }`) — it is never a `CompositionNode`, is never itself
 // a nested hierarchy level, movable/removable, or collapsible (there is no id
 // to track in `expandedIds`). Selecting it calls `onSelect(null)` — the same "clear to
-// virtual-root context" state `removeNode`'s selection repair (#245) falls
+// virtual-root context" state `removeNode`'s selection repair (Takazudo/zudo-sg#245) falls
 // back to when nothing remains selected.
 //
 // ── The reveal contract ─────────────────────────────────────────────────────
@@ -19,7 +19,7 @@
 // it never owns selection or expansion state itself. That is what lets a
 // FUTURE caller (e.g. the edit-canvas wave) "reveal" a node with no API of its
 // own: expand that node's ancestors (`ancestorChainIds` in `tree-helpers.ts`,
-// exactly what `controller.reveal()` already does — see #247's
+// exactly what `controller.reveal()` already does — see Takazudo/zudo-sg#247's
 // `controller-model.ts`) and set `selectedId`. Whenever `selectedId` changes to
 // an id that is now rendered (its ancestors are in `expandedIds`), this
 // component scrolls that row into view — see the `useEffect` below. No ref /
@@ -50,7 +50,7 @@ import type { ReuseAuthoringActionResult } from "../shared/reuse-authoring-contr
 
 export interface ComposerTreeProps {
   document: CompositionDocument;
-  /** The single app-layer `createComponentCatalog(entries)` derivation (issue #290) — never re-derived here. */
+  /** The single app-layer `createComponentCatalog(entries)` derivation (issue Takazudo/zudo-sg#290) — never re-derived here. */
   manifest: ComponentCatalog;
   /** The richer catalog backing display metadata (title/category/description) — same array `manifest` was derived from. */
   entries: readonly ComponentDefinition[];
@@ -64,9 +64,9 @@ export interface ComposerTreeProps {
   onOpenChooser: (target: InsertionTarget) => void;
   onReorder: (nodeId: string, direction: "up" | "down") => void;
   onRemove: (nodeId: string) => void;
-  /** Opens the node context menu (Copy/Cut/Duplicate/Delete — issue #256). */
+  /** Opens the node context menu (Copy/Cut/Duplicate/Delete — issue Takazudo/zudo-sg#256). */
   onOpenNodeMenu: (nodeId: string, trigger: HTMLElement) => void;
-  /** Opens the insert menu (Add component…/Paste here — issue #256), alongside the direct "+Add". */
+  /** Opens the insert menu (Add component…/Paste here — issue Takazudo/zudo-sg#256), alongside the direct "+Add". */
   onOpenInsertMenu: (target: InsertionTarget, trigger: HTMLElement) => void;
   /** Hides every mutating affordance (Add/move/remove) — e.g. while in Preview mode. */
   readOnly?: boolean;
@@ -245,7 +245,7 @@ export function ComposerTree({
   );
 }
 
-// Re-exported so #251/other waves can compose the same row-action affordance
+// Re-exported so Takazudo/zudo-sg#251/other waves can compose the same row-action affordance
 // elsewhere (e.g. a future canvas selection toolbar) without reaching into
 // this module's internals.
 export { TreeRowActions, SubtreeRemovalConfirm } from "./tree-row-actions";

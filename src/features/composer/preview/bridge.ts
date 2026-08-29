@@ -2,8 +2,8 @@
 // the exact target origin, and an INSTANCE-SCOPED connection handle.
 //
 // ── Why instance-scoped, not a module singleton ──────────────────────────────
-// Wave 6 (#254) mounts a SECOND, ephemeral preview iframe for the chooser's
-// live per-entry preview, alive at the same time as the canvas preview. Every
+// The chooser mounts a second, ephemeral preview iframe for live per-entry
+// preview, alive at the same time as the canvas preview. Every
 // piece of connection state (readiness, the revision counter, the newest
 // snapshot, the listener) therefore lives in a closure per `createComposerPreviewBridge`
 // call. Two bridges never see each other's `ready`, and neither can be
@@ -83,7 +83,7 @@ export function buildComposerPreviewUrl(documentOrigin?: string): ComposerPrevie
   return { src: resolved.pathname, targetOrigin: resolved.origin };
 }
 
-/** The iframe attributes the HOST seam (#247 shell / #251 canvas) must apply. */
+/** The iframe attributes the HOST seam (Takazudo/zudo-sg#247 shell / Takazudo/zudo-sg#251 canvas) must apply. */
 export interface ComposerPreviewFrameProps {
   src: string;
   /** Accessible name — an iframe without one is an unlabelled landmark. */
@@ -131,19 +131,19 @@ export interface ComposerPreviewBridgeOptions {
   onRequestAdd?: (target: InsertionTarget, revision: number) => void;
   /** Linked-source navigation request; source nodes never route through local selection. */
   onOpenSource?: (sourceRecordId: string) => void;
-  /** The selected node's chrome "⋯" was activated inside the iframe (issue #256). */
+  /** The selected node's chrome "⋯" was activated inside the iframe (issue Takazudo/zudo-sg#256). */
   onRequestNodeMenu?: (nodeId: string, rect: SerializedRect, focusToken: string, revision: number) => void;
-  /** An insert point's "⋯" was activated inside the iframe (issue #256). */
+  /** An insert point's "⋯" was activated inside the iframe (issue Takazudo/zudo-sg#256). */
   onRequestInsertMenu?: (target: InsertionTarget, rect: SerializedRect, focusToken: string, revision: number) => void;
   /**
-   * An inline-editing session committed a value (issue #257). `documentRevision`
+   * An inline-editing session committed a value (issue Takazudo/zudo-sg#257). `documentRevision`
    * is the revision the preview was showing at commit time — the host validates
    * it against the newest DOCUMENT snapshot it sent before routing the value
    * through `updateProps`, dropping a stale edit rather than applying it.
    */
   onCommitInlineEdit?: (nodeId: string, fieldKey: string, value: string, documentRevision: number) => void;
   /**
-   * A cross-slot drag & drop completed inside the iframe (issue #258). `copy` is
+   * A cross-slot drag & drop completed inside the iframe (issue Takazudo/zudo-sg#258). `copy` is
    * true when Alt was held at drop. `documentRevision` is the revision the
    * preview was showing at drop time — the host validates it against the newest
    * DOCUMENT snapshot it sent before applying the move/copy through the
@@ -163,7 +163,7 @@ export interface ComposerPreviewBridge {
   /**
    * Answer a `request-node-menu` / `request-insert-menu` once its menu has
    * closed: echoes the `focusToken` back so the iframe can restore focus to
-   * the exact control that opened it (issue #256). Not revision-gated — a
+   * the exact control that opened it (issue Takazudo/zudo-sg#256). Not revision-gated — a
    * no-op (silently dropped by the iframe's own guard) if not yet ready.
    */
   restoreFocus(focusToken: string): void;
@@ -274,7 +274,7 @@ export function createComposerPreviewBridge(
         return;
       default: {
         // Compile-time exhaustiveness: appending a member to
-        // PREVIEW_TO_PARENT_MEMBERS (waves 7-9) without adding a case here is a
+        // PREVIEW_TO_PARENT_MEMBERS without adding a case here is a
         // TYPE ERROR, not a silently dropped message. At runtime this is
         // unreachable — zod already rejected anything not in the union.
         const unhandled: never = message;

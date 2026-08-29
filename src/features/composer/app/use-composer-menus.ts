@@ -1,16 +1,16 @@
 "use client";
 
-// The Composer's context-menu orchestration hook (issue #256) — the ONE place
+// The Composer's context-menu orchestration hook (issue Takazudo/zudo-sg#256) — the ONE place
 // that turns a "⋯" activation (from a tree row, a tree insert affordance, or
 // the canvas relay) into a positioned `<ComposerMenu>` with the right items,
-// wired EXCLUSIVELY through #255's wave-6 controller actions (copy/cut/
+// wired EXCLUSIVELY through Takazudo/zudo-sg#255's wave-6 controller actions (copy/cut/
 // paste/duplicate/remove) — no second mutation path.
 //
 // ── Menu content is DERIVED, not stored ─────────────────────────────────────
 // Only WHICH menu is open (node vs insert, its subject, its anchor, and how
 // to restore focus on close) is state. The item list itself is recomputed
 // from the live `controller.state` on every render, so an action elsewhere
-// (e.g. #251's guarded Delete/Backspace) can never leave a menu showing
+// (e.g. Takazudo/zudo-sg#251's guarded Delete/Backspace) can never leave a menu showing
 // stale Copy/Cut/Duplicate affordances for a node that already changed.
 //
 // ── Two distinct "close" paths ──────────────────────────────────────────────
@@ -19,15 +19,15 @@
 // just calls `.focus()` on itself; the canvas relay's thunk calls
 // `bridge.restoreFocus(focusToken)` (see `composer-canvas-host.tsx`), which
 // round-trips over the bridge so the IFRAME can restore focus to its own
-// control (issue #256's cross-frame focus contract).
+// control (issue Takazudo/zudo-sg#256's cross-frame focus contract).
 //
 // "Add component…" is the one exception: it hands off to the EXISTING
-// #251 add flow (open the shared chooser, which owns its own focus capture/
+// Takazudo/zudo-sg#251 add flow (open the shared chooser, which owns its own focus capture/
 // restore), so it closes SILENTLY — no `restoreFocus`, which would otherwise
 // race the chooser's synchronous `document.activeElement` capture with an
 // asynchronous cross-frame focus round-trip.
 //
-// ── Delete confirmation reuses #250's exact copy/behavior ───────────────────
+// ── Delete confirmation reuses Takazudo/zudo-sg#250's exact copy/behavior ───────────────────
 // Selecting Delete on a node with descendants swaps the menu's `items` for
 // `SubtreeRemovalConfirm`'s `children` (same component the tree row's own
 // inline confirmation uses) instead of removing immediately.

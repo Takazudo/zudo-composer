@@ -27,7 +27,7 @@
 //
 // This file is deliberately thin: state lives in the controller, callback
 // composition lives in `useComposerIntegration`, layout lives in
-// `ComposerWorkspace`. It is the surface waves 6-9 extend.
+// `ComposerWorkspace`; all editor features compose through these stable seams.
 
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";

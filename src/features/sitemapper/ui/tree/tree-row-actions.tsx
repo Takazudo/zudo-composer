@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Actions attached to one Sitemapper outline row (issue #410).
+// Actions attached to one Sitemapper outline row (issue Takazudo/zudo-sg#410).
 //
 // Deleting a populated page never jumps to a modal. The inline confirmation is
 // rendered in the row's action area, preserving the page title and its place

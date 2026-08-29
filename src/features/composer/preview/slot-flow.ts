@@ -2,7 +2,7 @@
 // to pick an insert point's shape (a full-width horizontal RULE between stacked
 // children, or a full-height vertical BAR between side-by-side ones).
 //
-// This is a PRESENTATION heuristic, deliberately not persisted state. The #244
+// This is a PRESENTATION heuristic, deliberately not persisted state. The Takazudo/zudo-sg#244
 // authoring contract carries no flow metadata (`ComposerSlot` is id / prop /
 // label / accepts / cardinality), and inventing one just to orient a UI
 // affordance would put a rendering detail into a persisted document key. So the

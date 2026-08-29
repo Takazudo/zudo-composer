@@ -1,4 +1,4 @@
-// Pure positioning math for the Composer's context menus (issue #256): where
+// Pure positioning math for the Composer's context menus (issue Takazudo/zudo-sg#256): where
 // a menu should sit relative to the control that opened it, and how it
 // clamps to the viewport once its own size is known. DOM-free so the clamp
 // contract (the acceptance-critical "position clamps to viewport" behavior)
@@ -20,7 +20,7 @@ export interface MenuPoint {
 
 /**
  * The menu's un-clamped anchor point: just below the trigger's own rect,
- * left-aligned to it, with a small gap — the same convention the #242
+ * left-aligned to it, with a small gap — the same convention the Takazudo/zudo-sg#242
  * interaction prototype used (`x: rect.left, y: rect.bottom + gap`).
  */
 export function anchorBelowRect(rect: RectLike, gap = 4): MenuPoint {

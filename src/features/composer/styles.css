@@ -1,5 +1,5 @@
 /* ============================================================================
- * Composer — feature CSS (issue #247)
+ * Composer — feature CSS (issue Takazudo/zudo-sg#247)
  *
  * The `/composer` route owns a dedicated standalone document shell. This file
  * contains its host-only selectors; the iframe imports preview.css instead.
@@ -23,7 +23,7 @@
   /* 20rem (320px) matches DEFAULT_TREE_W in resizer-contract.ts so the first
      paint and the restore-script's fresh-session default agree — wide enough
      that common component names fit untruncated even with the leading
-     node-type glyph and on CI's wider fonts (#265 / #270 / parity #282). */
+     node-type glyph and on CI's wider fonts (Takazudo/zudo-sg#265 / Takazudo/zudo-sg#270 / parity Takazudo/zudo-sg#282). */
   --sg-composer-tree-w: 20rem;
   --sg-composer-inspector-w: 20rem;
   /* Visual (not hit-area) width of each resizer track. */
@@ -158,7 +158,7 @@
     grid-column: 4;
   }
 
-  /* Accent budget (#267): hover/drag were both the same accent-30% flash —
+  /* Accent budget (Takazudo/zudo-sg#267): hover/drag were both the same accent-30% flash —
      neither is a whitelisted accent role (drag is interaction feedback, not a
      pressed/selected control), so both move to a neutral fg tint, same idiom
      as the tree row/action hover below. Dragging reads as the "committed"
@@ -257,7 +257,7 @@
   opacity: 0.5;
 }
 
-/* Reset's inline confirm (#269) restyled for the toolbar row (#267) — the
+/* Reset's inline confirm (Takazudo/zudo-sg#269) restyled for the toolbar row (Takazudo/zudo-sg#267) — the
    generic `InlineConfirm` also renders inside the tree/menu with the
    `.sg-composer-tree-confirm*` classes (that pairing stays as S3/S6 left it);
    this is the toolbar-only variant, sized to sit inline with the other
@@ -314,7 +314,7 @@
   color: var(--color-fg);
 }
 
-/* ── Inspector (issue #249) ──────────────────────────────────────────────── */
+/* ── Inspector (issue Takazudo/zudo-sg#249) ──────────────────────────────────────────────── */
 /* Component-first: most inspector/toolbar/export markup uses Tailwind
  * utilities directly. These handful of classes cover what utilities can't
  * express cleanly here: a shared touch-target-sizing wrapper (mirrors
@@ -346,7 +346,7 @@
   border-color: var(--color-danger);
 }
 
-/* Section separators (#267): breadcrumb / identity / move-remove actions /
+/* Section separators (Takazudo/zudo-sg#267): breadcrumb / identity / move-remove actions /
    fields / slots each become their own `.sg-composer-inspector-section`, with
    the border + padding supplying the BETWEEN-section gap. That gap (2x
    padding-block + 1px border, ~1.75rem total) clearly exceeds the small
@@ -366,7 +366,7 @@
   border-bottom: none;
 }
 
-/* 'Slots' section heading (#267): normal-case (was 12px uppercase+tracked) —
+/* 'Slots' section heading (Takazudo/zudo-sg#267): normal-case (was 12px uppercase+tracked) —
    a short rule under the label replaces letter-spacing as the emphasis cue. */
 .sg-composer-inspector-slots-heading {
   padding-bottom: var(--spacing-vsp-3xs);
@@ -375,7 +375,7 @@
 
 /* Shared "this node/export can't be used as-is" diagnostics box — reused by
  * both the inspector's opaque-node state and the export dialog's blocked
- * state (issue #249). */
+ * state (issue Takazudo/zudo-sg#249). */
 .sg-composer-inspector-diagnostics {
   border: 1px solid var(--color-warning);
   border-radius: var(--radius-md);
@@ -419,7 +419,7 @@
 }
 .sg-composer-linked-open { width: auto; padding-inline: var(--spacing-hsp-2xs); }
 /* ============================================================================
- * Structure rail + component chooser (issue #250)
+ * Structure rail + component chooser (issue Takazudo/zudo-sg#250)
  *
  * `sg-composer-tree-*` / `sg-composer-chooser-*` follow the same family as the
  * rest of this file. The tree is plain nested <ul>/<li> + real <button>s —
@@ -442,7 +442,7 @@
   --sg-tree-guide: var(--spacing-hsp-md);
 
   padding: var(--spacing-vsp-10) var(--spacing-hsp-xs);
-  /* 14px functional-text floor (#265): labels inherit this; subtitles/counts/
+  /* 14px functional-text floor (Takazudo/zudo-sg#265): labels inherit this; subtitles/counts/
      badges/slot-headers step down to --text-micro (12px) individually. Was
      --text-small (16px), which truncated common names like "SectionHeading". */
   font-size: var(--text-caption);
@@ -473,7 +473,7 @@
   background: color-mix(in oklch, var(--color-accent) 12%, transparent);
 }
 
-/* Hover = NEUTRAL tint, not accent (#265; accent-budget rule — hover is not a
+/* Hover = NEUTRAL tint, not accent (Takazudo/zudo-sg#265; accent-budget rule — hover is not a
    whitelisted accent role). Selected rows are excluded so their accent tint is
    never overpainted by the neutral hover. */
 @media (hover: hover) {
@@ -499,7 +499,7 @@
   align-items: center;
   justify-content: center;
   width: 1.5rem;
-  /* Compact ~28px rows (#265, densified further #277). The ≥44px WCAG 2.5.5
+  /* Compact ~28px rows (Takazudo/zudo-sg#265, densified further Takazudo/zudo-sg#277). The ≥44px WCAG 2.5.5
      hit target is restored for coarse pointers only, in the
      @media (pointer: coarse) block below. */
   min-height: 1.75rem;
@@ -538,7 +538,7 @@
   cursor: pointer;
 }
 /* Hover feedback lives on the whole row (neutral tint, above) so the select
-   button itself stays transparent — no accent hover wash (#265). */
+   button itself stays transparent — no accent hover wash (Takazudo/zudo-sg#265). */
 .sg-composer-tree-select:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
@@ -548,7 +548,7 @@
   font-style: italic;
 }
 
-/* Node-type glyph (Page/Root, Slot, Container, Leaf — issue #282): NEUTRAL
+/* Node-type glyph (Page/Root, Slot, Container, Leaf — issue Takazudo/zudo-sg#282): NEUTRAL
    only, `currentColor`-inherited from the row's own text color, never accent
    (the tree's one accent role is already spent on row selection — see the
    accent-budget note on `.sg-composer-tree-row[data-sg-selected]` above). */
@@ -573,7 +573,7 @@
   /* The component NAME (title) outranks the prop-derived subtitle: yield space
      to the title first so common names like "SectionHeading" stay untruncated
      at the default rail. Without this the two share the flex row equally and a
-     long subtitle squeezes the title to an ellipsis (S7 #270). */
+     long subtitle squeezes the title to an ellipsis (S7 Takazudo/zudo-sg#270). */
   flex-shrink: 9999;
   min-width: 0;
 }
@@ -606,7 +606,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* Compact glyph controls (#265): 24px meets WCAG 2.5.8 (AA) for fine
+  /* Compact glyph controls (Takazudo/zudo-sg#265): 24px meets WCAG 2.5.8 (AA) for fine
      pointers and keeps the action cluster from crowding the label. The ≥44px
      WCAG 2.5.5 target is restored for coarse pointers in the block below. */
   min-width: 1.5rem;
@@ -649,7 +649,7 @@
   font-size: var(--text-micro);
 }
 
-/* Node context-menu trigger (issue #256): visible on row hover/focus-within,
+/* Node context-menu trigger (issue Takazudo/zudo-sg#256): visible on row hover/focus-within,
    but NEVER removed from the DOM/tab order — a plain opacity toggle keeps it
    reachable by keyboard even before the pointer ever touches the row. */
 .sg-composer-tree-menu-trigger {
@@ -665,7 +665,7 @@
   opacity: 1;
 }
 
-/* Insert-menu companion beside a slot's "+Add" (issue #256) — always visible,
+/* Insert-menu companion beside a slot's "+Add" (issue Takazudo/zudo-sg#256) — always visible,
    matching "+Add" itself; opens Add/Paste instead of jumping straight to the
    chooser. */
 .sg-composer-tree-slot-add-group {
@@ -870,7 +870,7 @@
 
   /* Restores the WCAG 2.5.5 44px touch target for the toolbar/inspector/
      chooser controls that were densified to 2rem on fine pointers above
-     (#277). */
+     (Takazudo/zudo-sg#277). */
   .sg-composer-mode-toggle button,
   .sg-composer-toolbar-button,
   .sg-composer-toolbar-confirm,
@@ -903,7 +903,7 @@
   overflow: hidden;
 }
 
-/* Layout is gated on [open] (S2, #264): the UA stylesheet already hides a
+/* Layout is gated on [open] (S2, Takazudo/zudo-sg#264): the UA stylesheet already hides a
    closed <dialog> (`dialog:not([open]) { display: none }`), but that's a
    UA-origin rule — an unconditional author `display: flex` here would win
    regardless of [open] (author always beats UA, irrespective of
@@ -978,7 +978,7 @@
   /* `order: 1` (default is 0 on every other header child) sinks this behind
      the grip/title/Cancel row regardless of its DOM position — its own
      `flex: 1 1 100%` basis then forces it onto its own line below them,
-     keeping the controls together on row one without wrapping (#264). */
+     keeping the controls together on row one without wrapping (Takazudo/zudo-sg#264). */
   order: 1;
   margin: 0;
   flex: 1 1 100%;
@@ -1198,7 +1198,7 @@
   gap: var(--spacing-hsp-2xs);
 }
 
-/* Neutralized (S7 dialog-open census #270 → A4 #280): this badge accounted
+/* Neutralized (S7 dialog-open census Takazudo/zudo-sg#270 → A4 Takazudo/zudo-sg#280): this badge accounted
    for 11 of the 15 dialog-open accent hits — it is not a whitelisted accent
    role (not selected/pressed/hovered), so it recedes to the same neutral
    fg-mix wash idiom the file already uses for subtle surfaces (e.g. the tree
@@ -1286,7 +1286,7 @@
   background: var(--color-surface);
 }
 
-/* ── Context menu (issue #256) ──────────────────────────────────────────────
+/* ── Context menu (issue Takazudo/zudo-sg#256) ──────────────────────────────────────────────
    ONE host-side popover (`ComposerMenu`) reused for the node menu (Copy/Cut/
    Duplicate/Delete), the insert menu (Add component…/Paste here), and the
    Delete subtree-removal confirmation (`SubtreeRemovalConfirm`, styled by the
@@ -1328,7 +1328,7 @@
   cursor: pointer;
 }
 
-/* Item glyph (Copy/Cut/Duplicate/Trash/Plus — issue #282): sits inline before
+/* Item glyph (Copy/Cut/Duplicate/Trash/Plus — issue Takazudo/zudo-sg#282): sits inline before
    the label text (the item button is `display: block`, not flex), so this is
    a spacing + optical-alignment fix rather than a flex `gap`. Inherits
    `currentColor` — danger items (Delete) tint red via the same `color`
@@ -1337,7 +1337,7 @@
   margin-inline-end: var(--spacing-hsp-2xs);
   vertical-align: -0.15em;
 }
-/* Accent budget (#267): hover is not a whitelisted accent role — neutral fg
+/* Accent budget (Takazudo/zudo-sg#267): hover is not a whitelisted accent role — neutral fg
    tint, same idiom as the tree row/action hover. Delete keeps its own
    danger-tinted hover (functional-state color, outside the accent budget —
    same "danger" precedent as .sg-composer-tree-action-danger's hover). */
@@ -1361,19 +1361,19 @@
   color: var(--color-danger);
 }
 
-/* ── Canvas preview host (issue #251 central integration) ──────────────────
-   The parent-side host for #248's isolated preview iframe. The viewport choice
+/* ── Canvas preview host (issue Takazudo/zudo-sg#251 central integration) ──────────────────
+   The parent-side host for Takazudo/zudo-sg#248's isolated preview iframe. The viewport choice
    (fluid/desktop/tablet/mobile) sets an inline width on the frame wrapper — it
    reflows the preview document, NOT the surrounding Composer breakpoint (issue
-   #251 scope item 5). */
+   Takazudo/zudo-sg#251 scope item 5). */
 .sg-composer-canvas-host {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  /* Page-sheet backdrop (#266): the composition renders on a bordered sheet (the
+  /* Page-sheet backdrop (Takazudo/zudo-sg#266): the composition renders on a bordered sheet (the
    * iframe below) that floats over this quiet gray desk
-   * (--sg-composer-canvas-backdrop, S1 #263). The gutter is VERTICAL ONLY — a
+   * (--sg-composer-canvas-backdrop, S1 Takazudo/zudo-sg#263). The gutter is VERTICAL ONLY — a
    * horizontal gutter would shrink the Fluid frame's width and change content
    * widths; instead a constrained viewport (Desktop/Tablet/Mobile) reveals the
    * backdrop on its sides purely by CENTERING (margin-inline:auto on the frame),
@@ -1417,9 +1417,9 @@
 }
 
 /* ============================================================================
- * chooser preview (issue #254)
+ * chooser preview (issue Takazudo/zudo-sg#254)
  *
- * Live preview pane appended to #250's chooser dialog. The shell's fixed
+ * Live preview pane appended to Takazudo/zudo-sg#250's chooser dialog. The shell's fixed
  * viewport geometry and `[open]` flex layout live in the shared tool-dialog
  * rule above; this block owns only the chooser's information-heavy body.
  *
@@ -1429,14 +1429,14 @@
  * a wrapping flex container sizes its single line to the tallest child's
  * CONTENT, not to the body's capped height, so the catalog's flex column never
  * got a bounded height and the card list's `overflow-y:auto` never engaged: the
- * dialog silently clipped every component past the fold (S7 #270 — see
+ * dialog silently clipped every component past the fold (S7 Takazudo/zudo-sg#270 — see
  * `.sg-composer-chooser-list`). `nowrap` keeps that height chain intact so the
  * list scrolls; the explicit column media query restores the narrow-dialog
  * stack the wrap used to give for free. Applies at both the default ~48rem
  * near-viewport dialog width.
  *
  * Horizontal padding moved from this element onto `-catalog` / `-preview`
- * individually (S2, #264) so a 1px ladder divider can sit flush between
+ * individually (S2, Takazudo/zudo-sg#264) so a 1px ladder divider can sit flush between
  * them, prototype two-pane style — `-controls`/`-count`/`-list` still take
  * it for free from their `-catalog` parent, just one level lower than
  * before.
@@ -1452,7 +1452,7 @@
      tallest item's CONTENT (the 1300px+ catalog) rather than to the body's
      capped height, which left the catalog overflowing and the card list's
      own `overflow-y:auto` never engaging — the dialog silently clipped every
-     component past the fold (S7 #270). nowrap keeps the height chain intact so
+     component past the fold (S7 Takazudo/zudo-sg#270). nowrap keeps the height chain intact so
      the list scrolls; narrow dialogs stack the two panes as a column instead. */
   flex-wrap: nowrap;
   overflow: hidden;
@@ -1487,7 +1487,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-vsp-3xs);
-  /* 1px ladder divider (S2, #264, prototype two-pane grammar) — own inline
+  /* 1px ladder divider (S2, Takazudo/zudo-sg#264, prototype two-pane grammar) — own inline
      padding plus `-catalog`'s matching end padding gives it clearance on
      both sides instead of sitting flush against either column's content. */
   padding-inline: var(--spacing-hsp-lg);
@@ -1511,7 +1511,7 @@
   border-radius: var(--radius-md);
   background: var(--color-surface);
   overflow: hidden;
-  /* Non-interactive catalog preview (issue #254 scope item 1) — the stage is
+  /* Non-interactive catalog preview (issue Takazudo/zudo-sg#254 scope item 1) — the stage is
      look-only, so it is taken out of both the pointer and (via the iframe's
      own lack of any interactive affordance in "preview" session mode) the
      effective interaction surface. */
@@ -1535,7 +1535,7 @@
   background: var(--color-surface);
 }
 
-/* ── Composition library (issue #301) ──────────────────────────────────────
+/* ── Composition library (issue Takazudo/zudo-sg#301) ──────────────────────────────────────
  * Presentational index chrome only. Provider implementations and route
  * composition intentionally live outside this selector family.
  * Mobile-first: groups stack until their content has room to share a row. */

@@ -1,4 +1,4 @@
-// Pure helpers for the component chooser dialog (issue #250).
+// Pure helpers for the component chooser dialog (issue Takazudo/zudo-sg#250).
 //
 // Kept DOM-free so eligibility/search/filter logic is unit-testable directly,
 // independent of the dialog's focus/capture mechanics — see
