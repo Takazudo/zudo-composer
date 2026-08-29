@@ -11,9 +11,8 @@
 // Geometry lives in styles/shell.css: below 64rem this keeps one canvas-only
 // column while the tree/inspector rails and both resizers remain in the DOM
 // (CSS hides them rather than omitting them). The resizer init script is
-// mounted at the end of the document and may therefore run before a
-// when="load" island hydrates; unconditional DOM presence plus its
-// MutationObserver lets it wire the late elements. At >=64rem the grid is
+// installed independently from the controlled product state; unconditional DOM
+// presence plus its MutationObserver lets it wire replaced elements. At >=64rem the grid is
 // tree rail | resizer | canvas (minmax(0, 1fr)) | resizer | inspector rail.
 
 import type { ComponentChildren, JSX } from "preact";
@@ -33,7 +32,7 @@ export interface SitemapperWorkspacePlaceholderPaneProps {
   note?: string;
 }
 
-/** Small, rail-safe fallback used until a typed surface is assembled. */
+/** Small, rail-safe fallback when a caller omits a typed surface. */
 export function SitemapperWorkspacePlaceholderPane({
   label,
   note,
@@ -81,7 +80,7 @@ export function SitemapperWorkspace({
         {toolbar ?? (
           <SitemapperWorkspacePlaceholderPane
             label="Toolbar"
-            note="Sitemapper controls mount here once the authoring controller is assembled."
+            note="No toolbar surface was supplied."
           />
         )}
       </div>
@@ -102,7 +101,7 @@ export function SitemapperWorkspace({
           {tree ?? (
             <SitemapperWorkspacePlaceholderPane
               label="Tree"
-              note="The outline tree mounts here in a later Sitemapper wave."
+              note="No outline surface was supplied."
             />
           )}
         </div>
@@ -122,7 +121,7 @@ export function SitemapperWorkspace({
           {canvas ?? (
             <SitemapperWorkspacePlaceholderPane
               label="Canvas"
-              note="The sitemap canvas mounts here once the Sitemapper controller is assembled."
+              note="No canvas surface was supplied."
             />
           )}
         </div>
@@ -142,7 +141,7 @@ export function SitemapperWorkspace({
           {inspector ?? (
             <SitemapperWorkspacePlaceholderPane
               label="Inspector"
-              note="Page properties mount here in a later Sitemapper wave."
+              note="No inspector surface was supplied."
             />
           )}
         </div>

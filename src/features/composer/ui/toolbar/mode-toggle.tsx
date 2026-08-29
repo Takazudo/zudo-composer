@@ -1,10 +1,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Reusable Edit/Preview segmented control (issue #249). Same accessible
-// `aria-pressed` pattern the #247 toolbar already established
-// (`sg-composer-mode-toggle`), extracted into its own component so wave-5
-// integration (#251) can compose a richer toolbar from it without touching
-// this component or #247's central app entry.
+// Reusable Edit/Preview segmented control. The `aria-pressed` state keeps both
+// modes explicit to assistive technology and keyboard users.
 
 import type { JSX } from "preact";
 import type { ComposerMode } from "../../chrome/controller-model";

@@ -1,4 +1,4 @@
-// Pure helpers backing the structure rail (issue #250).
+// Pure helpers backing the structure rail (issue Takazudo/zudo-sg#250).
 //
 // The tree/chooser consume BOTH the provider's richer component entries
 // (title + category + description on top of slot/field metadata) AND the
@@ -10,7 +10,7 @@
 // entries. `ComponentDefinition` is a structural SUPERSET of
 // `ComponentManifestEntry`, so the exact same array is assignable to
 // `createComponentCatalog()` — one array, two projections. `createComponentCatalog` itself
-// runs exactly ONCE, at the app layer (issue #290) — see `buildManifestIndex`
+// runs exactly ONCE, at the app layer (issue Takazudo/zudo-sg#290) — see `buildManifestIndex`
 // below for why it is NOT called again here.
 //
 // Everything here is pure and DOM-free so it can be unit-tested directly,
@@ -33,7 +33,7 @@ import type { ComponentDefinition } from "../../active-pack";
  * (`use-composer-integration.ts`), and that single `ComponentCatalog` is
  * passed down as a prop so per-render/per-component re-derivation (and its
  * per-entry zod validation cost) doesn't happen 3x for identical input
- * (issue #290).
+ * (issue Takazudo/zudo-sg#290).
  */
 export function buildManifestIndex(pack: import("@zudo-composer/component-contract").ComponentPackManifest): ComponentCatalog {
   return createComponentCatalog(pack);
@@ -118,9 +118,8 @@ export function siblingBounds(document: CompositionDocument, index: DocumentInde
 /**
  * The ancestor chain of `nodeId`, NEAREST FIRST, inclusive of `nodeId` itself.
  * `parentId: null` (virtual root) yields `[]`. Shared by the chooser's
- * post-add "expand ancestors" step and available to future callers (e.g. a
- * later canvas-selection wave) that need the same ancestor math the
- * controller's own `reveal` action performs — see this module's header.
+ * post-add "expand ancestors" step and any caller that needs the same ancestor
+ * math as the controller's own `reveal` action — see this module's header.
  */
 export function ancestorChainIds(
   document: CompositionDocument,

@@ -1,13 +1,13 @@
-// Pure Composer controller state + reducer (issue #247).
+// Pure Composer controller state + reducer (issue Takazudo/zudo-sg#247).
 //
 // The parent `/composer` route owns two independent pieces of state:
-//   - the #245 `CompositionDocument` (the persisted, versioned document tree)
+//   - the Takazudo/zudo-sg#245 `CompositionDocument` (the persisted, versioned document tree)
 //   - session state that never round-trips through the document itself:
 //     selection, expansion, edit/preview mode, canvas viewport choice, rail
 //     widths, and an honest save/load status.
 //
 // This module is 100% pure — no DOM, no localStorage, no Preact. It only
-// applies #245's commands (addNode/updateProps/reorderNode/removeNode) and
+// applies Takazudo/zudo-sg#245's commands (addNode/updateProps/reorderNode/removeNode) and
 // folds their `CommandResult` into a new `ComposerControllerState`. Side
 // effects (queue persistence, resizer DOM wiring, and the native navigation
 // guard) live in sibling modules. Keeping this reducer pure makes its command
@@ -55,7 +55,7 @@ import {
 export type ComposerMode = "edit" | "preview";
 
 /**
- * Canvas viewport choice. Session state only — the preview iframe (#248) owns
+ * Canvas viewport choice. Session state only — the preview iframe (Takazudo/zudo-sg#248) owns
  * actually scaling/framing its document to match.
  */
 export type ComposerCanvasViewport = "fluid" | "desktop" | "tablet" | "mobile";
@@ -93,7 +93,7 @@ export interface ComposerControllerState {
    * Session-only clipboard: a deep-cloned JSON subtree payload, NEVER a live
    * node reference — it is a snapshot that survives later edits to the
    * document (including edits to the very node it was copied from). Never
-   * persisted to storage (issue #255).
+   * persisted to storage (issue Takazudo/zudo-sg#255).
    */
   clipboard: CompositionNode | null;
   /**
@@ -105,8 +105,8 @@ export interface ComposerControllerState {
 
 /**
  * The typed action union the controller dispatches. `add` deliberately uses
- * #245's shared `InsertionTarget` (`{ parentId, slotId, index }`) — the same
- * shape #248/#250/#251 and the round-2 interaction waves address inserts
+ * Takazudo/zudo-sg#245's shared `InsertionTarget` (`{ parentId, slotId, index }`) — the same
+ * shape Takazudo/zudo-sg#248/#250/#251 and the round-2 interaction waves address inserts
  * with, per the epic's locked architecture.
  */
 export type ComposerAction =
@@ -239,7 +239,7 @@ export function createInitialControllerState(options: {
 
 /**
  * Apply one action to `state`, returning the next state plus a command error
- * (if any) and whether `document` changed. Never throws: a rejected #245
+ * (if any) and whether `document` changed. Never throws: a rejected Takazudo/zudo-sg#245
  * command (e.g. "slot does not accept X") is reported via `error` and leaves
  * `state` untouched, matching the model's own `CommandResult` contract.
  */
@@ -424,7 +424,7 @@ export function applyComposerAction(
       };
     }
     case "drop": {
-      // The ATOMIC host revalidation for a canvas drag & drop (issue #258): the
+      // The ATOMIC host revalidation for a canvas drag & drop (issue Takazudo/zudo-sg#258): the
       // iframe's highlight was advisory only, so the WHOLE operation is
       // re-checked here and applied through the single model mutation path, or
       // rejected with an honest `error` and NO document change.
@@ -447,9 +447,9 @@ export function applyComposerAction(
         };
       }
 
-      // COPY composes #255's clone-with-new-ids + insert-subtree (a fresh,
+      // COPY composes Takazudo/zudo-sg#255's clone-with-new-ids + insert-subtree (a fresh,
       // independent clone needs no cycle guard); MOVE relocates the same node ids
-      // via #258's moveSubtree (cycle guard + same-slot index adjustment).
+      // via Takazudo/zudo-sg#258's moveSubtree (cycle guard + same-slot index adjustment).
       let result: CommandResult;
       if (action.copy) {
         const clone = cloneSubtreeWithNewIds(location.node, ctx.idFactory);

@@ -2,23 +2,23 @@
 
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// The production Composer app (issue #251). Fills #247's `ComposerWorkspace`
-// slots with the real surfaces and drives them all from ONE controller via
+// The production Composer app fills `ComposerWorkspace` slots with the real
+// surfaces and drives them all from one controller via
 // `useComposerIntegration` — no second renderer/source mapping, one document
 // snapshot everywhere:
 //
-//   toolbar   → #249 pieces (composed in ComposerToolbarBar) + viewport control
+//   toolbar   → ComposerToolbarBar + viewport control
 //   banner    → current provider/navigation recovery status
-//   tree      → #250 structure rail (read-only in Preview)
-//   canvas    → the #248 preview iframe host (ComposerCanvasHost)
-//   inspector → #249 schema-driven inspector
+//   tree      → structure rail (read-only in Preview)
+//   canvas    → preview iframe host (ComposerCanvasHost)
+//   inspector → schema-driven inspector
 //
-// The shared component chooser (#250) is mounted ONCE here, at app level —
+// The shared component chooser is mounted once here, at app level —
 // opened by BOTH tree slot Adds and canvas insert-point `request-add`s, capturing
 // its target on open so a later selection change cannot redirect an in-flight
-// add. The export dialog (#249) reads the SAME document/manifest the canvas does.
+// add. The export dialog reads the same document/manifest the canvas does.
 //
-// The context menu (#256) is likewise mounted ONCE here: `useComposerMenus`
+// The context menu is likewise mounted once here: `useComposerMenus`
 // owns which menu is open and its derived items, `ComposerTree` opens it via
 // its `onOpenNodeMenu`/`onOpenInsertMenu` callbacks, and `ComposerCanvasHost`
 // opens it via the SAME two callbacks after translating the iframe-relayed
@@ -27,7 +27,7 @@
 //
 // This file is deliberately thin: state lives in the controller, callback
 // composition lives in `useComposerIntegration`, layout lives in
-// `ComposerWorkspace`. It is the surface waves 6-9 extend.
+// `ComposerWorkspace`; all editor features compose through these stable seams.
 
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";

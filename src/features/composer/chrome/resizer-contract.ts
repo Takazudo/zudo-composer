@@ -19,7 +19,7 @@ export const CSS_VAR_INSPECTOR_W = "--sg-composer-inspector-w";
 export const MIN_RAIL_W = 220;
 export const MAX_RAIL_W = 480;
 /**
- * Fresh-session default width for the tree rail (Composer Polish S3, #265) —
+ * Fresh-session default width for the tree rail (Composer Polish S3, Takazudo/zudo-sg#265) —
  * distinct from MIN_RAIL_W, which stays the drag/keyboard floor. 220px truncated
  * common component names ('SectionHeading') at depth; this default lets them fit
  * untruncated while long names still ellipsize. Only the tree defaults to this;
@@ -29,8 +29,8 @@ export const MAX_RAIL_W = 480;
  * Sized against the WIDEST font-rendering environment, not local: 'SectionHeading'
  * at depth-2 measures ~96px on local (WSL) fonts but ~110px on the CI Linux
  * runner's fonts. 280px left only ~101px for the title area there, so the
- * #270 untruncation contract failed CI-only. 300px gave ~121px (≈11px CI margin)
- * — but the Composer UI Parity epic (#282) then added a leading node-type glyph
+ * Takazudo/zudo-sg#270 untruncation contract failed CI-only. 300px gave ~121px (≈11px CI margin)
+ * — but the Composer UI Parity epic (Takazudo/zudo-sg#282) then added a leading node-type glyph
  * (12px + gap) to every tree row, consuming ~14px of the title column and
  * re-truncating 'SectionHeading' on CI. 320px restores a comfortable CI margin
  * (~17px) with the glyph present; keep it in sync with `--sg-composer-tree-w`.

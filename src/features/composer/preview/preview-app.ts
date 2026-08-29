@@ -14,7 +14,7 @@
 //
 // Written with `h()` rather than JSX for the same reason as `renderer.ts`: a
 // root-`src` `.tsx` module cannot be imported by the current vitest config
-// (owned by #247), and keeping this JSX-free keeps it testable.
+// (owned by the Composer host), and keeping this JSX-free keeps it testable.
 
 import { h } from "preact";
 import type { JSX } from "preact";
@@ -73,7 +73,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
         setError(null);
       },
       // Host answered a request-node-menu / request-insert-menu once its menu
-      // closed (issue #256) — restore focus to the exact control that opened
+      // closed (issue Takazudo/zudo-sg#256) — restore focus to the exact control that opened
       // it. Not a state transition, so it never touches `setState`.
       onRestoreFocus: (focusToken) => focusByToken(focusToken),
       onRejected: (reason: GuardFailure, detail) => {
@@ -138,7 +138,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
   const onCommitInlineEdit = useCallback(
     (nodeId: string, fieldKey: string, value: string, documentRevision: number) => {
       // The renderer supplies its inline session's SESSION-START revision
-      // (issue #288); the client forwards it verbatim as `documentRevision`
+      // (issue Takazudo/zudo-sg#288); the client forwards it verbatim as `documentRevision`
       // and the host validates it before routing through `updateProps`.
       clientRef.current?.emitCommitInlineEdit(nodeId, fieldKey, value, documentRevision);
     },

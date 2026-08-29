@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// One recursive Sitemapper page row (issue #410).
+// One recursive Sitemapper page row (issue Takazudo/zudo-sg#410).
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";

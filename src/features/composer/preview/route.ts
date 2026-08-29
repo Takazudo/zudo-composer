@@ -6,8 +6,8 @@
 export const COMPOSER_PREVIEW_ROUTE_PATH = "/composer/preview";
 
 /**
- * Accessible name for the preview iframe at the HOST seam. The host (#247 shell
- * / #251 integration) owns the `<iframe>` element, but the accessible name is
+ * Accessible name for the preview iframe at the HOST seam. The host (Takazudo/zudo-sg#247 shell
+ * / Takazudo/zudo-sg#251 integration) owns the `<iframe>` element, but the accessible name is
  * part of this runtime's contract, so it is exported from here rather than
  * retyped at the mount site. See `composerPreviewFrameProps` in `./bridge`.
  */

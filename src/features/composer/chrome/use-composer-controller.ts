@@ -1,8 +1,8 @@
 "use client";
 
 // The Composer's record-scoped client controller. It keeps the synchronous
-// reducer/preview/export ordering established by #247 while handing immutable
-// record revisions to #300's async save queue:
+// reducer/preview/export ordering established by Takazudo/zudo-sg#247 while handing immutable
+// record revisions to Takazudo/zudo-sg#300's async save queue:
 //
 //   controller-model.ts  — the document + session-state reducer
 //   persistence/save-queue.ts — serialized, revision-aware record writes
@@ -65,8 +65,8 @@ type CompositionSaveQueue = SaveQueue<CompositionRecord, CompositionRecordRef, C
 type CompositionSaveQueueState = SaveQueueState<CompositionRecord, CompositionRecordRef, CompositionSaveOutcome>;
 
 /**
- * The typed reducer/controller API surface. Downstream waves (#248-#251)
- * should depend on THIS type, not on `controller-model.ts`'s action union —
+ * The typed reducer/controller API surface. UI consumers depend on this type,
+ * not on `controller-model.ts`'s action union —
  * the action union is an implementation detail; this is the seam.
  */
 export interface ComposerController {
@@ -81,7 +81,7 @@ export interface ComposerController {
   updateProps: (nodeId: string, patch: JsonObject) => void;
   /**
    * Debounced sibling of `updateProps` for PER-KEYSTROKE sources (the
-   * inspector's text/color/number streams, issue #291/#259). Patches are
+   * inspector's text/color/number streams, issue Takazudo/zudo-sg#291/#259). Patches are
    * coalesced per node and dispatched once per typing pause, so the whole
    * expensive commit path (reducer → immutable record snapshot + save queue
    * → preview-iframe re-render) runs once per pause instead of once per
@@ -109,7 +109,7 @@ export interface ComposerController {
   remove: (nodeId: string) => void;
   /** Session clipboard = a deep-cloned snapshot of the node. Refused for opaque nodes. */
   copy: (nodeId: string) => void;
-  /** Copy + remove (with #245's selection repair). Refused for opaque nodes. */
+  /** Copy + remove (with Takazudo/zudo-sg#245's selection repair). Refused for opaque nodes. */
   cut: (nodeId: string) => void;
   /** Clone-with-new-ids + insert-subtree at `target`, then select + reveal it. Errors (e.g. an incompatible slot) surface via `lastError`, never a silent no-op. */
   paste: (target: InsertionTarget) => void;
@@ -118,7 +118,7 @@ export interface ComposerController {
   /** Clone-with-new-ids + insert immediately after the source, then select + reveal it. Refused for opaque nodes. */
   duplicate: (nodeId: string) => void;
   /**
-   * Canvas drag & drop (issue #258): move (or, when `copy`, clone) `sourceNodeId`
+   * Canvas drag & drop (issue Takazudo/zudo-sg#258): move (or, when `copy`, clone) `sourceNodeId`
    * to `target`, then select + reveal it. Atomically revalidated (slot/
    * cardinality/cycle/root/opaque-policy); an invalid drop surfaces via
    * `lastError`, never a silent partial change.
@@ -167,7 +167,7 @@ export interface UseComposerControllerOptions {
   now?: () => string;
 }
 
-/** 200ms — just above a fast typist's ~100-180ms inter-key gap (so steady typing coalesces into one trailing commit) yet keeps the trailing persist+preview inside the ~300ms "feels instant" budget; the UX trade is documented in #259. */
+/** 200ms — just above a fast typist's ~100-180ms inter-key gap (so steady typing coalesces into one trailing commit) yet keeps the trailing persist+preview inside the ~300ms "feels instant" budget; the UX trade is documented in Takazudo/zudo-sg#259. */
 export const INSPECTOR_COMMIT_DEBOUNCE_MS = 200;
 
 function saveStatusFromQueue(state: CompositionSaveQueueState): ComposerSaveStatus {
@@ -270,7 +270,7 @@ export function useComposerController(options: UseComposerControllerOptions): Co
     [manifest, idFactory],
   );
 
-  // ── Debounced updateProps channel (issue #291) ─────────────────────────────
+  // ── Debounced updateProps channel (issue Takazudo/zudo-sg#291) ─────────────────────────────
   // Per-keystroke inspector commits are coalesced here: the pending patch map
   // holds the latest merged patch per node, and only the trailing edge of a
   // typing burst dispatches (→ record snapshot + save queue + preview render).

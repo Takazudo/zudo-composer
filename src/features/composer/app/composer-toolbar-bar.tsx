@@ -1,14 +1,14 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// The central Composer app's toolbar (issue #251). Reconciles the two toolbar
-// assemblies: rather than reuse #247's monolithic `chrome/ComposerToolbar`
+// The central Composer app's toolbar (issue Takazudo/zudo-sg#251). Reconciles the two toolbar
+// assemblies: rather than reuse Takazudo/zudo-sg#247's monolithic `chrome/ComposerToolbar`
 // (which predates the Export action and inlines its own mode toggle), this
-// COMPOSES #249's presentational pieces — `ComposerStatusIndicator`,
+// COMPOSES Takazudo/zudo-sg#249's presentational pieces — `ComposerStatusIndicator`,
 // `ComposerModeToggle`, `ComposerToolbarActions` (Export) — plus the
 // canvas-viewport `<select>` this issue owns. Purely presentational; every
 // action is a typed callback the integration composes against the one
 // controller. The status indicator keeps its `children` seam open for wave-6's
-// clipboard chip (#255).
+// clipboard chip (Takazudo/zudo-sg#255).
 
 import type { JSX } from "preact";
 import type { CompositionDerivedOutputOutcome, CompositionNode, CompositionPublication } from "../../../composer/browser";
@@ -36,7 +36,7 @@ export interface ComposerToolbarBarProps {
   onRetrySave?: () => void;
   onExport: () => void;
   exportDisabled?: boolean;
-  /** The session clipboard (issue #255) — renders as a chip beside the save status when non-empty. */
+  /** The session clipboard (issue Takazudo/zudo-sg#255) — renders as a chip beside the save status when non-empty. */
   clipboard?: CompositionNode | null;
   /** Friendly display name for a component id — required only when `clipboard` is passed. */
   titleFor?: (componentId: string) => string | undefined;

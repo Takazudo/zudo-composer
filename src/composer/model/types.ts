@@ -1,4 +1,4 @@
-// Composer document model — JSON-safe types (wave 2, epic #243 / issue #245).
+// Composer document model — current-schema JSON-safe types.
 //
 // The persisted `CompositionDocument` is one recursive, versioned, JSON-safe
 // tree. `document.root` is a VIRTUAL insertion slot (a pseudo-row), never a
@@ -6,8 +6,8 @@
 // JSX import. Nodes carry stable ids, a component id + schema version, JSON
 // props, and a map of stable named-slot ids to child arrays.
 //
-// The model is pure and parameterised by a serializable manifest so it can be
-// built and tested independently of the real component cohort (owned by #246).
+// The model is pure and parameterised by a serializable component catalog so
+// headless behavior remains independent of any installed UI provider.
 
 import type {
   ComponentManifest as ContractComponentManifest,
@@ -145,9 +145,9 @@ export interface CompositionDocument {
 export const VIRTUAL_ROOT_SLOT_ID = "root" as const;
 
 /**
- * A shared, discriminated insertion position reused by every downstream wave
- * (#247 controller, #248 request-add, #250 chooser capture, #251 wiring, and
- * the round-2 interaction waves). Discriminated on `parentId === null`.
+ * A shared, discriminated insertion position used by the controller, preview
+ * protocol, chooser, integration layer, and canvas interactions. Discriminated
+ * on `parentId === null`.
  *
  * - `parentId: null` addresses the VIRTUAL ROOT; `slotId` must be
  *   `VIRTUAL_ROOT_SLOT_ID`.

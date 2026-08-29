@@ -1,4 +1,4 @@
-// Controlled-numeric-field hook for the inspector (issue #249).
+// Controlled-numeric-field hook for the inspector (issue Takazudo/zudo-sg#249).
 //
 // Numeric drafts must never commit `NaN` or flip the prop's JS type. While
 // the user is mid-edit ("-", "", "12.") the draft is free text and is NOT
@@ -42,7 +42,7 @@ export function useNumericField({ value, min, max, onCommit }: UseNumericFieldOp
   const [error, setError] = useState<string | null>(null);
   const focusedRef = useRef(false);
   // The last value handed to `onCommit` that the `value` prop has not yet
-  // caught up with. With a DEBOUNCED commit channel (issue #291) the incoming
+  // caught up with. With a DEBOUNCED commit channel (issue Takazudo/zudo-sg#291) the incoming
   // `value` lags the keystream, so deduping against `value` alone would
   // swallow a correction typed inside the debounce window (e.g. "55" then
   // backspace to "5" — 5 equals the stale prop, but 55 is what's pending).

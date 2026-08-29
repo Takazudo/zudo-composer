@@ -1,6 +1,6 @@
 "use client";
 
-// Guarded global keyboard handling for the central Composer app (issue #251).
+// Guarded global keyboard handling for the central Composer app (issue Takazudo/zudo-sg#251).
 //
 //   - Delete / Backspace removes the currently selected node.
 //   - Escape closes any open menu/dialog.
@@ -12,10 +12,9 @@
 // only closes transient UI, it does not mutate the document.
 //
 // Kept as a tiny, pure-ish hook so the whole guard matrix is unit-testable
-// without a full app render (waves 6-9 extend this baseline — #256 menus reuse
-// the Escape path).
+// without a full app render; menus reuse the Escape path.
 //
-// ── `menuOpen` (issue #256) ──────────────────────────────────────────────────
+// ── `menuOpen` (issue Takazudo/zudo-sg#256) ──────────────────────────────────────────────────
 // A `ComposerMenu` owns its OWN Escape/outside/scroll/resize dismissal (see
 // that component) — it must, to stay a self-contained, independently testable
 // unit. It does NOT intercept Delete/Backspace, which would otherwise still
@@ -44,7 +43,7 @@ export interface ComposerKeyboardOptions {
   onRemoveSelected: (nodeId: string) => void;
   /** Close open menus/dialogs (chooser, export). */
   onEscape: () => void;
-  /** A `ComposerMenu` (issue #256) is currently open — suppresses the global Delete/Backspace shortcut. */
+  /** A `ComposerMenu` (issue Takazudo/zudo-sg#256) is currently open — suppresses the global Delete/Backspace shortcut. */
   menuOpen?: boolean;
   /** Test seam — defaults to `document`. */
   host?: KeyboardHost;

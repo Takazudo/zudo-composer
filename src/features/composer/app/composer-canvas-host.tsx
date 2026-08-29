@@ -3,11 +3,11 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 // The parent-side canvas: the preview `<iframe>` host + its bridge lifecycle
-// (issue #251). This is the ONE place #248's secure bridge is driven for the
-// main canvas — instance-scoped, so wave 6 (#254) can mount a SECOND host for
+// This is the one place the secure bridge is driven for the main canvas —
+// instance-scoped so the chooser can mount a second host for
 // the chooser's live per-entry preview without any shared singleton.
 //
-// Lifecycle contract (all delegated to #248's `createComposerPreviewBridge`):
+// Lifecycle contract (all delegated to Takazudo/zudo-sg#248's `createComposerPreviewBridge`):
 //   - build the canonical URL + exact origin once; spread the sandboxed,
 //     titled iframe props;
 //   - the bridge retains the newest snapshot and, on ready/late-ready/reload,
@@ -19,12 +19,12 @@
 //
 // Inbound: a canvas node click arrives as `select` (Edit mode only — the
 // renderer never selects in Preview); an insert point arrives as `request-add`
-// carrying #245's index-bearing `InsertionTarget`. Before opening the shared
+// carrying Takazudo/zudo-sg#245's index-bearing `InsertionTarget`. Before opening the shared
 // chooser we FOCUS the iframe, so it is captured as the chooser's trigger and
-// focus returns to it on close (issue #251 scope item 3). Recoverable renderer
+// focus returns to it on close (issue Takazudo/zudo-sg#251 scope item 3). Recoverable renderer
 // errors surface as a dismissible banner above the canvas.
 //
-// ── Menu relay (issue #256) ──────────────────────────────────────────────────
+// ── Menu relay (issue Takazudo/zudo-sg#256) ──────────────────────────────────────────────────
 // `request-node-menu` / `request-insert-menu` carry a rect in the IFRAME's
 // own coordinates plus an opaque `focusToken`. This is the ONE place that
 // TRANSLATES that rect by the iframe element's own offset within this host
@@ -60,7 +60,7 @@ import {
 } from "../preview";
 import { COMPOSER_VIEWPORT_WIDTHS } from "./viewport";
 
-/** Translate an iframe-local rect into HOST viewport coordinates (issue #256). */
+/** Translate an iframe-local rect into HOST viewport coordinates (issue Takazudo/zudo-sg#256). */
 function translateRect(rect: SerializedRect, frame: HTMLIFrameElement | null): SerializedRect {
   const frameBox = frame?.getBoundingClientRect();
   return {
@@ -80,13 +80,13 @@ export interface ComposerCanvasHostProps {
   viewport: ComposerCanvasViewport;
   /** A canvas node (or the empty canvas, `null`) was selected in Edit mode. */
   onSelect: (nodeId: string | null) => void;
-  /** An insert point was activated — carries #245's index-bearing target. */
+  /** An insert point was activated — carries Takazudo/zudo-sg#245's index-bearing target. */
   onRequestAdd: (target: InsertionTarget) => void;
   /** Explicit navigation for the linked source affordance. */
   onOpenSource?: (sourceRecordId: string) => void;
-  /** The selected node's chrome "⋯" was activated — rect already translated to host coordinates (issue #256). */
+  /** The selected node's chrome "⋯" was activated — rect already translated to host coordinates (issue Takazudo/zudo-sg#256). */
   onRequestNodeMenu: (nodeId: string, rect: SerializedRect, restoreFocus: () => void) => void;
-  /** An insert point's "⋯" was activated — rect already translated to host coordinates (issue #256). */
+  /** An insert point's "⋯" was activated — rect already translated to host coordinates (issue Takazudo/zudo-sg#256). */
   onRequestInsertMenu: (
     target: InsertionTarget,
     rect: SerializedRect,
@@ -94,13 +94,13 @@ export interface ComposerCanvasHostProps {
     addComponent: () => void,
   ) => void;
   /**
-   * A canvas inline edit committed and PASSED the revision check (issue #257).
+   * A canvas inline edit committed and PASSED the revision check (issue Takazudo/zudo-sg#257).
    * The host has already dropped any stale edit, so this only ever fires for a
    * fresh one — route it straight through `updateProps` (the one mutation path).
    */
   onCommitInlineEdit: (nodeId: string, fieldKey: string, value: string) => void;
   /**
-   * A canvas drag & drop completed and PASSED the revision check (issue #258).
+   * A canvas drag & drop completed and PASSED the revision check (issue Takazudo/zudo-sg#258).
    * The host has already dropped any stale drop, so this only fires for a fresh
    * one — route it through the controller's `drop` action (the one mutation
    * path), which atomically revalidates and applies the move/copy.
@@ -108,7 +108,7 @@ export interface ComposerCanvasHostProps {
   onDropNode: (sourceNodeId: string, target: InsertionTarget, copy: boolean) => void;
 
   // ── Test seams (production defaults) ──────────────────────────────────────
-  /** Override the bridge factory. Defaults to #248's real bridge. */
+  /** Override the bridge factory. Defaults to Takazudo/zudo-sg#248's real bridge. */
   createBridge?: typeof createComposerPreviewBridge;
   /** Override the resolved iframe location. Defaults to the canonical route. */
   location?: ComposerPreviewLocation;
@@ -219,7 +219,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
         );
       },
       onCommitInlineEdit: (nodeId, fieldKey, value, documentRevision) => {
-        // The host VALIDATES the revision here (issue #257): a commit authored
+        // The host VALIDATES the revision here (issue Takazudo/zudo-sg#257): a commit authored
         // against a document snapshot the host has already superseded is
         // DROPPED with an honest status, never silently applied. Only a fresh
         // commit reaches `updateProps` — the single mutation path.
@@ -233,7 +233,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
         handlersRef.current.onCommitInlineEdit(nodeId, fieldKey, value);
       },
       onDropNode: (sourceNodeId, target, copy, documentRevision) => {
-        // Same revision gate as an inline-edit commit (issue #258): a drop
+        // Same revision gate as an inline-edit commit (issue Takazudo/zudo-sg#258): a drop
         // authored against a document snapshot the host has already superseded
         // is DROPPED with an honest status. The controller then does the ATOMIC
         // model revalidation (slot/cardinality/cycle/root/opaque-policy) — this

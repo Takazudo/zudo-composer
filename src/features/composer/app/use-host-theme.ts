@@ -1,7 +1,7 @@
 "use client";
 
 // Mirrors the host document's light/dark scheme into the preview session
-// (issue #251). The doc chrome sets `data-theme` on `<html>` (the color-scheme
+// (issue Takazudo/zudo-sg#251). The doc chrome sets `data-theme` on `<html>` (the color-scheme
 // bootstrap; same attribute the design-token panel reads, see
 // src/lib/design-token-panel-bootstrap.ts). The preview iframe renders the real
 // component library, so it must follow the same scheme — that theme is one

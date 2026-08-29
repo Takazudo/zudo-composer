@@ -5,10 +5,10 @@
 // return a discriminated `CommandResult` so callers get either the next
 // document + repaired selection, or an actionable error string.
 //
-// MVP movement is sibling up/down WITHIN one parent slot only. Cross-slot
-// reparenting and drag-and-drop are deferred (later waves). Opaque nodes are
-// preserved: they may be reordered/removed within their current slot, but their
-// props are read-only and nothing may be added into them.
+// Commands cover sibling movement, cross-slot drop/reparenting, and clipboard
+// insertion. Opaque nodes are preserved: they may be reordered/removed within
+// their current slot, but their props are read-only and nothing may be added
+// into them.
 
 import {
   RESERVED_PERSISTED_KEYS,
@@ -221,7 +221,7 @@ function validateFieldValue(field: FieldDefinition, value: JsonValue): string | 
 /**
  * Merge a JSON-safe prop patch into a node's props. Rejects opaque nodes
  * (their props are read-only), non-JSON-safe values, values that violate a
- * declared field's kind/domain, any key in `RESERVED_PROP_KEYS` (issue #287 —
+ * declared field's kind/domain, any key in `RESERVED_PROP_KEYS` (issue Takazudo/zudo-sg#287 —
  * this is the model-layer counterpart of the preview protocol's wire-level
  * rejection; a direct model caller bypasses that boundary, so the model must
  * refuse it too), and any key that names a declared STRUCTURAL slot's `prop`
@@ -732,9 +732,9 @@ export function removeBinding(document: CompositionDocument): CommandResult {
   return { ok: true, document: withoutBinding(cloneJson(document)), selectedId: null, changed: true };
 }
 
-// ── clipboard/duplicate foundation (wave 6, issue #255) ──────────────────────
+// ── clipboard/duplicate commands ──────────────────────
 //
-// Two pure primitives the #247 controller composes into copy/cut/paste/
+// Two pure primitives the Takazudo/zudo-sg#247 controller composes into copy/cut/paste/
 // duplicate: `cloneSubtreeWithNewIds` never touches a document (it only
 // re-issues ids on a detached node tree), and `insertSubtree` inserts an
 // already-built subtree — as opposed to `addNode`, which builds a fresh node
@@ -969,20 +969,20 @@ export function insertSubtree(
   return { ok: true, document: next, selectedId: clone.id, insertedId: clone.id, changed: true };
 }
 
-// ── move (cross-slot drag & drop, wave 9, issue #258) ────────────────────────
+// ── move (cross-slot drag & drop) ────────────────────────
 //
 // Relocate an EXISTING node (with its whole subtree) from wherever it currently
 // sits to an `InsertionTarget`. This is the MOVE half of drag & drop; the COPY
 // half composes `cloneSubtreeWithNewIds` + `insertSubtree` instead (a fresh
 // clone needs no cycle guard and no index adjustment because the source is not
-// removed). The controller (#247) picks between them from the drop's Alt flag,
+// removed). The controller (Takazudo/zudo-sg#247) picks between them from the drop's Alt flag,
 // and layers the opaque-node policy on top — this function is purely mechanical.
 
 /**
  * Move `sourceNodeId` (and its subtree) to `target`, removing it from its
  * current slot first. Pure — returns a NEW document, never mutates the input.
  *
- * Two subtleties this function owns, both verified by the #242 interaction
+ * Two subtleties this function owns, both verified by the Takazudo/zudo-sg#242 interaction
  * prototype (see its README):
  *
  *  1. **Same-slot index adjustment.** The adjustment applies ONLY when the

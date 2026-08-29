@@ -1,8 +1,8 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Schema-driven Composer inspector panel (issue #249) — the presentational
-// component that plugs into #247's `ComposerWorkspace` `inspector` slot.
-// Purely presentational over the shared #245 document model + #247
+// Schema-driven Composer inspector panel (issue Takazudo/zudo-sg#249) — the presentational
+// component that plugs into Takazudo/zudo-sg#247's `ComposerWorkspace` `inspector` slot.
+// Purely presentational over the shared Takazudo/zudo-sg#245 document model + Takazudo/zudo-sg#247
 // controller contracts: it reads `document`/`manifest`/`selectedId`/`mode`
 // and reports every mutation through typed callbacks, never touching
 // commands/storage itself.
@@ -45,14 +45,14 @@ export interface InspectorPanelProps {
   onUpdateProps: (nodeId: string, patch: JsonObject) => void;
   /**
    * Debounced commit channel for PER-KEYSTREAM fields — text/color/number
-   * (issue #291). When absent, those fields fall back to `onUpdateProps`
+   * (issue Takazudo/zudo-sg#291). When absent, those fields fall back to `onUpdateProps`
    * (immediate), so presentational usage/tests need no extra wiring. Discrete
    * controls (checkbox/select) always commit through `onUpdateProps` — they
    * are single commit points with nothing to coalesce, per the resizer's
    * live-vs-commit philosophy.
    */
   onUpdatePropsDebounced?: (nodeId: string, patch: JsonObject) => void;
-  /** Synchronously land any debounce-pending commit (issue #291) — fields call it on blur. */
+  /** Synchronously land any debounce-pending commit (issue Takazudo/zudo-sg#291) — fields call it on blur. */
   onFlushPendingProps?: () => void;
   onReorder: (nodeId: string, direction: "up" | "down") => void;
   onRemove: (nodeId: string) => void;

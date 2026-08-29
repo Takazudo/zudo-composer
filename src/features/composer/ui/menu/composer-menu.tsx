@@ -1,12 +1,12 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// The Composer's host-side context menu (issue #256) — one labelled,
+// The Composer's host-side context menu (issue Takazudo/zudo-sg#256) — one labelled,
 // keyboard-operable, positioned popover reused for BOTH the node menu
 // (Copy/Cut/Duplicate/Delete) and the insert menu (Add component…/Paste
 // here), and for the Delete confirmation sub-view (which swaps `items` for
 // `children` — see `use-composer-menus.ts`).
 //
-// Deliberately NOT a native `<dialog>` (unlike #250's `ComposerChooser`): a
+// Deliberately NOT a native `<dialog>` (unlike Takazudo/zudo-sg#250's `ComposerChooser`): a
 // context menu is lightweight, positioned freely next to its trigger, and
 // must re-clamp on resize — `showModal()`'s top-layer + centered defaults
 // fight that. Instead this is a `position: fixed` panel, layered via the
@@ -28,9 +28,9 @@ export interface ComposerMenuItemSpec {
   label: string;
   onSelect: () => void;
   disabled?: boolean;
-  /** Danger-styled (issue #256: Delete). */
+  /** Danger-styled (issue Takazudo/zudo-sg#256: Delete). */
   danger?: boolean;
-  /** Optional leading glyph (issue #282) — `aria-hidden` internally, purely decorative. */
+  /** Optional leading glyph (issue Takazudo/zudo-sg#282) — `aria-hidden` internally, purely decorative. */
   icon?: IconComponent;
 }
 

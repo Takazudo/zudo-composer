@@ -1,11 +1,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Reusable Reset/Export toolbar actions (issue #249) — pure callbacks, no
-// persistence or bridge logic in here. `onExport` just signals "the user
-// wants to export"; the caller (#251) decides what that means (e.g. open the
-// JSX preview dialog with a freshly generated #245 result) — see
-// ui/export/use-composer-export.ts for a ready-made hook that does exactly
-// that.
+// Reusable Export toolbar action — a pure callback with no persistence or
+// preview-bridge logic. The integration layer generates JSX and owns the dialog.
 
 import type { JSX } from "preact";
 

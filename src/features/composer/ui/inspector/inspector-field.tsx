@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// One inspector field row (issue #249) — renders the control for a single
+// One inspector field row (issue Takazudo/zudo-sg#249) — renders the control for a single
 // definition-declared field (text/textarea, boolean, number, select, color).
 // Purely presentational plus the two controlled-draft hooks; never talks to
 // the document/commands directly — `onCommit` is the only way a value
@@ -10,8 +10,8 @@
 //
 // "text" fields render as a `<textarea>` when the field's `inlineEdit.multiline`
 // hint is set. The authoring contract has no separate multiline flag for the
-// INSPECTOR specifically — `inlineEdit` (wave-8's on-canvas editing signal) is
-// the only multiline hint the schema carries, so it doubles as one here too.
+// INSPECTOR specifically — `inlineEdit` is the contract's only multiline hint,
+// so it intentionally drives the inspector control as well as canvas editing.
 //
 // Styling: Tailwind utilities directly on markup (component-first, per
 // the standalone design system), plus two small `sg-composer-inspector-*` classes
@@ -31,11 +31,11 @@ export interface InspectorFieldProps {
   onCommit: (value: JsonValue) => void;
   /**
    * Debounced commit channel for keystream fields (text/color/number, issue
-   * #291); falls back to `onCommit` when absent. Checkbox/select stay on the
+   * Takazudo/zudo-sg#291); falls back to `onCommit` when absent. Checkbox/select stay on the
    * immediate `onCommit` — a click is already a discrete commit point.
    */
   onCommitDebounced?: (value: JsonValue) => void;
-  /** Land any debounce-pending commit now (issue #291) — called on field blur. */
+  /** Land any debounce-pending commit now (issue Takazudo/zudo-sg#291) — called on field blur. */
   onFlushPending?: () => void;
 }
 
@@ -43,7 +43,7 @@ function assertNever(field: never): never {
   throw new Error(`Unhandled Composer field kind: ${JSON.stringify(field)}`);
 }
 
-// 14px floor for functional text (#267) — was text-xs (12px, --text-micro).
+// 14px floor for functional text (Takazudo/zudo-sg#267) — was text-xs (12px, --text-micro).
 const FIELD_LABEL_CLASS = "block text-caption font-medium text-muted";
 const FIELD_INPUT_CLASS =
   "sg-composer-inspector-control w-full rounded-md border border-border bg-surface px-hsp-sm text-small text-fg disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger";
@@ -177,7 +177,7 @@ function TextField({
 }: TextFieldProps): JSX.Element {
   const { draft, onInput, onFocus, onBlur } = useTextField({ value, onCommit });
 
-  // Blur is a deterministic commit point (issue #291): release the hook's
+  // Blur is a deterministic commit point (issue Takazudo/zudo-sg#291): release the hook's
   // focused guard first, then land any debounce-pending commit.
   const handleBlur = () => {
     onBlur();
@@ -255,7 +255,7 @@ function NumberField({
     onCommit,
   });
 
-  // Blur is a deterministic commit point (issue #291): run the hook's own
+  // Blur is a deterministic commit point (issue Takazudo/zudo-sg#291): run the hook's own
   // blur behavior (invalid-draft revert) first, then land any pending commit.
   const handleBlur = () => {
     onBlur();

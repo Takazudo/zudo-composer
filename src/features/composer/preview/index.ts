@@ -1,6 +1,6 @@
-// Public surface of the Composer preview runtime (issue #248).
+// Public surface of the Composer preview runtime (issue Takazudo/zudo-sg#248).
 //
-// PARENT-SIDE consumers (#251 central integration, #254 chooser live preview)
+// PARENT-SIDE consumers (Takazudo/zudo-sg#251 central integration, Takazudo/zudo-sg#254 chooser live preview)
 // need only this module. The typical mount is:
 //
 //   const location = buildComposerPreviewUrl();              // canonical URL + exact origin

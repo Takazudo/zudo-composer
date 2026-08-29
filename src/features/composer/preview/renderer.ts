@@ -6,7 +6,7 @@
 // `tsconfig.json` (`jsx: "preserve"`), so a `.tsx` module under `src/` cannot be
 // imported from a unit test. Keeping the renderer JSX-free makes the DOM
 // identity, slot-projection, and edit/preview behaviour directly testable
-// without touching the shared vitest config (owned by the parallel #247).
+// without touching the shared vitest config.
 //
 // ── Trust boundary ───────────────────────────────────────────────────────────
 // The document that arrives over the bridge is DATA. The component FUNCTIONS
@@ -26,7 +26,7 @@
 //      `zc-body`. Preact's UNKEYED children diff matches by position and falls
 //      back to type, and can cross-match a chrome `<span>` against a
 //      component's own `<span>` — destroying and recreating the component's DOM
-//      node (a verified failure mode in the #242 prototype). Keyed children
+//      node (a verified failure mode in the Takazudo/zudo-sg#242 prototype). Keyed children
 //      match by key, so adding/removing the chrome (Edit ⇄ Preview) touches only
 //      the chrome.
 //
@@ -65,7 +65,7 @@ import {
 } from "./protocol";
 import { slotFlow, type SlotFlow } from "./slot-flow";
 
-// ── Menu focus tokens (issue #256) ──────────────────────────────────────────
+// ── Menu focus tokens (issue Takazudo/zudo-sg#256) ──────────────────────────────────────────
 //
 // The attribute a menu trigger control carries so a later `restore-focus`
 // message (see `preview-app.ts`) can find and refocus the EXACT control that
@@ -90,7 +90,7 @@ export function focusByToken(token: string): void {
   document.querySelector<HTMLElement>(`[${FOCUS_TOKEN_ATTR}="${escapeAttrValue(token)}"]`)?.focus();
 }
 
-// ── Inline text editing (issue #257) ────────────────────────────────────────
+// ── Inline text editing (issue Takazudo/zudo-sg#257) ────────────────────────────────────────
 //
 // A flag alone can't target the right text node: real components render
 // decorations (`CtaButton` an arrow, `SectionHeading` an eyebrow/heading/intro).
@@ -107,10 +107,10 @@ export function focusByToken(token: string): void {
 //     bubble to the canvas and restart the session, reverting the typing).
 //
 // The DOM helpers this session uses (`readEditableValue`, `placeCaretAtEnd`,
-// `effectiveFieldValue`, …) live in `inline-edit-dom.ts` — epic #368 added a
+// `effectiveFieldValue`, …) live in `inline-edit-dom.ts` — epic Takazudo/zudo-sg#368 added a
 // SECOND, explicit-save session (`prose-inline-session.ts`) that has to derive
 // those answers identically, and one shared implementation is what keeps the
-// #288 ground-check sound. This session's own behaviour is unchanged by that
+// Takazudo/zudo-sg#288 ground-check sound. This session's own behaviour is unchanged by that
 // move, and the two sessions never share state.
 
 /** An active on-canvas editing session — LOCAL renderer state, never persisted. */
@@ -121,7 +121,7 @@ interface InlineSessionState {
   /** The value the field held when the session opened. Set imperatively. */
   initialValue: string;
   /**
-   * The document revision on screen when the session was ENTERED (issue #288).
+   * The document revision on screen when the session was ENTERED (issue Takazudo/zudo-sg#288).
    * Carried on the session and stamped on the eventual commit INSTEAD OF the
    * revision on screen at commit time — a mid-edit render that bumps the
    * revision must make a later commit fail the host's staleness gate, not
@@ -159,7 +159,7 @@ export interface CompositionCanvasProps {
   provider: ComposerComponentProvider;
   session: PreviewSession;
   /**
-   * The document revision on screen (issue #288). An inline-edit session
+   * The document revision on screen (issue Takazudo/zudo-sg#288). An inline-edit session
    * captures this at the moment it is ENTERED and carries it forward as its
    * `startRevision`, stamping it on the eventual commit instead of whatever
    * revision happens to be on screen when the user finishes typing — see
@@ -169,17 +169,17 @@ export interface CompositionCanvasProps {
   revision?: number;
   /** A node (or the empty canvas, `null`) was activated in Edit mode. */
   onSelect: (nodeId: string | null) => void;
-  /** An insert point was activated. Carries #245's insert-at-index target. */
+  /** An insert point was activated. Carries Takazudo/zudo-sg#245's insert-at-index target. */
   onRequestAdd: (target: InsertionTarget) => void;
   /** Explicit linked-source navigation — never a source-node selection. */
   onOpenSource?: (sourceRecordId: string) => void;
-  /** The SELECTED node's chrome "⋯" was activated (issue #256). */
+  /** The SELECTED node's chrome "⋯" was activated (issue Takazudo/zudo-sg#256). */
   onRequestNodeMenu: (nodeId: string, rect: SerializedRect, focusToken: string) => void;
-  /** An insert point's "⋯" was activated (issue #256). */
+  /** An insert point's "⋯" was activated (issue Takazudo/zudo-sg#256). */
   onRequestInsertMenu: (target: InsertionTarget, rect: SerializedRect, focusToken: string) => void;
   /**
-   * An inline-editing session committed a value (issue #257). `documentRevision`
-   * is the SESSION-START revision (issue #288) — the `revision` prop's value
+   * An inline-editing session committed a value (issue Takazudo/zudo-sg#257). `documentRevision`
+   * is the SESSION-START revision (issue Takazudo/zudo-sg#288) — the `revision` prop's value
    * when the session was entered, not the revision on screen at commit time —
    * so a commit authored during a session a mid-edit render has since
    * superseded correctly fails the host's `documentRevision <
@@ -190,7 +190,7 @@ export interface CompositionCanvasProps {
    */
   onCommitInlineEdit?: (nodeId: string, fieldKey: string, value: string, documentRevision: number) => void;
   /**
-   * A cross-slot drag & drop completed on the canvas (issue #258). `copy` is
+   * A cross-slot drag & drop completed on the canvas (issue Takazudo/zudo-sg#258). `copy` is
    * true when Alt was held at drop. The renderer reports the raw
    * `{ sourceNodeId, target, copy }`; the host stamps the revision, revalidates
    * ATOMICALLY (slot/cardinality/cycle/root/opaque-policy), and applies through
@@ -273,7 +273,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
   );
   const manifest = provider.catalog;
 
-  // ── Inline editing session (issue #257) ───────────────────────────────────
+  // ── Inline editing session (issue Takazudo/zudo-sg#257) ───────────────────────────────────
   // LOCAL renderer state; never travels over the bridge and never mutates the
   // document until a commit routes through the host's `updateProps`.
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -305,10 +305,10 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
     // instant the session opened, before any typing, which then re-enters a
     // fresh session) would bump `lastDocRevisionRef` and make the user's real
     // follow-up commit fail the host's SESSION-START staleness gate (issue
-    // #288), silently dropping the edit. Skipping unchanged values keeps the
+    // Takazudo/zudo-sg#288), silently dropping the edit. Skipping unchanged values keeps the
     // session-start revision contract sound across a re-entered session.
     if (value !== active.initialValue) {
-      // Stamped with the SESSION-START revision (issue #288) — see `InlineSessionState`.
+      // Stamped with the SESSION-START revision (issue Takazudo/zudo-sg#288) — see `InlineSessionState`.
       commitCbRef.current?.(active.nodeId, active.fieldKey, value, active.startRevision);
     }
     setSession(null);
@@ -329,7 +329,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
       const editable = inlineEditableForEntry(entry);
       if (!editable || !entry) return false;
       // A `markdown-source` field belongs to the explicit-save prose session
-      // (#375), which is entered FIRST by `enterAnyInlineSession` below. This
+      // (Takazudo/zudo-sg#375), which is entered FIRST by `enterAnyInlineSession` below. This
       // guard is what keeps the auto-commit path from ever claiming one.
       if (editable.mode !== "plain") return false;
       const initialValue = effectiveFieldValue(targetNode, entry, editable.field);
@@ -345,7 +345,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
     [document, entryById, revision, setSession],
   );
 
-  // ── Explicit-save prose session (issue #375, epic #368) ───────────────────
+  // ── Explicit-save prose session (issue Takazudo/zudo-sg#375, epic Takazudo/zudo-sg#368) ───────────────────
   // The PARALLEL path for `inlineEdit.mode: "markdown-source"` fields. It owns
   // its own state machine, its own editable surface, and its own iframe-side
   // chrome; the auto-commit session above is untouched by it.
@@ -484,7 +484,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
     }
   }, [session.mode]);
 
-  // Cancel the session outright when the GROUND MOVES under it (issue #288):
+  // Cancel the session outright when the GROUND MOVES under it (issue Takazudo/zudo-sg#288):
   // an incoming render mid-edit that changes the value of the field actually
   // being edited means a concurrent change landed while the user was typing —
   // the session is abandoned rather than let the user keep typing into a
@@ -509,7 +509,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
     if (!targetNode || currentValue !== active.initialValue) cancelInline();
   }, [document]);
 
-  // ── Drag & drop (issue #258) ──────────────────────────────────────────────
+  // ── Drag & drop (issue Takazudo/zudo-sg#258) ──────────────────────────────────────────────
   // LOCAL renderer state; only the resulting `{ sourceNodeId, target, copy }`
   // ever crosses the bridge (the host revalidates + applies). The three verified
   // Chromium footguns the code below fixes EXACTLY (see the prototype README):
@@ -654,11 +654,11 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
 
   /**
    * One insert point: the direct "+" add button PLUS a companion "⋯" that
-   * opens the richer insert MENU (issue #256's "Add component…" AND "Paste
+   * opens the richer insert MENU (issue Takazudo/zudo-sg#256's "Add component…" AND "Paste
    * here", both always present). Two SIBLING `<button>`s inside a
    * non-interactive wrapper — never nested buttons.
    *
-   * `isEnd` (issue #283) is true for the LAST insert point of a slot
+   * `isEnd` (issue Takazudo/zudo-sg#283) is true for the LAST insert point of a slot
    * (`index === children.length`) — the one this issue enlarges into a
    * labeled button (min-height 2rem, ≥3rem empty) with the dots companion
    * overlapping its trailing edge, porting the prototype's `.insert-end`
@@ -676,7 +676,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
   ): JSX.Element {
     const position = empty ? `empty ${label}` : `${label}, position ${target.index + 1}`;
     const focusToken = insertMenuFocusToken(target);
-    // Drop-target wiring (issue #258). The GROUP is the drop zone; its children
+    // Drop-target wiring (issue Takazudo/zudo-sg#258). The GROUP is the drop zone; its children
     // go inert during a drag (CSS, keyed off the canvas's `data-zc-dragging`),
     // so a child-crossing `dragleave` (null `relatedTarget`) can't wipe the
     // highlight. `dragover.preventDefault()` is what tells the browser this is a
@@ -711,7 +711,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
           },
         }
       : null;
-    // The END point (#283) gets the enlarged `.zc-insert-end-btn` geometry —
+    // The END point (Takazudo/zudo-sg#283) gets the enlarged `.zc-insert-end-btn` geometry —
     // full-width in column flow, compact/auto-width in row flow — with the
     // dots companion absolutely overlapping its trailing edge
     // (`.zc-insert-menu--end`). Every other insert point keeps the ORIGINAL
@@ -752,7 +752,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
           onClick: () => onRequestAdd(target),
         },
         h(PlusIcon, { class: "zc-insert-plus", width: 12, height: 12 }),
-        // The visible "Add component" label is END-only (issue #283) — the
+        // The visible "Add component" label is END-only (issue Takazudo/zudo-sg#283) — the
         // between-children bar stays icon-only, same as before.
         isEnd ? h("span", null, "Add component") : null,
       ),
@@ -802,7 +802,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
     for (let index = 0; index <= children.length; index += 1) {
       if (addable) {
         // The LAST addable index (index === children.length) is the slot's
-        // END point (issue #283) — an empty slot's only index (0) is always
+        // END point (issue Takazudo/zudo-sg#283) — an empty slot's only index (0) is always
         // also its end, so `empty` never disagrees with `isEnd`.
         out.push(
           insertPoint(
@@ -867,7 +867,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
   /**
    * An unknown / unsupported-version / structurally-invalid node. It stays
    * SELECTABLE and its payload is shown verbatim, never dropped — the document
-   * keeps it and #245's recovery contract keeps it round-trippable.
+   * keeps it and Takazudo/zudo-sg#245's recovery contract keeps it round-trippable.
    */
   function renderOpaque(node: CompositionNode, diagnostic: NodeDiagnostic): ComponentChildren {
     return h(
@@ -914,14 +914,14 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
         ? renderOpaque(node, diagnostic)
         : renderComponent(node, entry);
 
-    // The SELECTED node's chrome gains a "⋯" trigger (issue #256) — every
+    // The SELECTED node's chrome gains a "⋯" trigger (issue Takazudo/zudo-sg#256) — every
     // other node's chrome stays exactly the bare label it always was (see
     // "the chrome is a keyed sibling" test: an unselected node's `.zc-chrome`
     // has no other class and no child elements). The label itself moves into
     // its own `aria-hidden` span only in the selected branch, so the trigger
     // button — the only focusable thing here — is never inside an
     // `aria-hidden` ancestor.
-    // The drag grip (issue #258): shown ONLY on the SELECTED, non-opaque node
+    // The drag grip (issue Takazudo/zudo-sg#258): shown ONLY on the SELECTED, non-opaque node
     // (opaque nodes are not draggable — same-slot reorder via the tree stays
     // their only movement), and only when a drop sink is wired. `dragstart`
     // sets the transfer data SYNCHRONOUSLY and DEFERS the drag-state mutation.
@@ -1043,7 +1043,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
       // The EFFECTIVE mode, so a restored prose draft keeps the Edit-mode
       // styling that goes with the Edit-mode handlers wired below.
       "data-mode": edit ? "edit" : "preview",
-      // The CSS hook for the drag lifecycle (issue #258): while set, insert-point
+      // The CSS hook for the drag lifecycle (issue Takazudo/zudo-sg#258): while set, insert-point
       // children are `pointer-events: none` so a child-crossing `dragleave`
       // (null `relatedTarget` in Chromium) can't wipe the drop highlight.
       "data-zc-dragging": dragActive ? "" : undefined,

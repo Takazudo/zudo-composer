@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// The Composer JSX export/preview dialog (issue #249). Presentational only:
-// renders exactly the `JsxGenerationResult` #245's `generateJsx` produced —
+// The Composer JSX export/preview dialog (issue Takazudo/zudo-sg#249). Presentational only:
+// renders exactly the `JsxGenerationResult` Takazudo/zudo-sg#245's `generateJsx` produced —
 // no local copy of `code`, no second render/source mapping — so the display
 // can never drift from the generator. See use-composer-export.ts for the
 // convenience hook that calls `generateJsx` and feeds this component.

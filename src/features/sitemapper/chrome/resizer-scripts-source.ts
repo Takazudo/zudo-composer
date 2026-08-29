@@ -1,5 +1,5 @@
 // Source text for the inline blocking scripts rendered by
-// resizer-scripts.tsx (issue #409).
+// resizer-scripts.tsx (issue Takazudo/zudo-sg#409).
 //
 // The script tags cannot import TypeScript at runtime. This plain module is
 // therefore the build-time bridge: it interpolates the single-source

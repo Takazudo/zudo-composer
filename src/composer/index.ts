@@ -1,9 +1,6 @@
-// Public surface of the Composer document model + source generator (issue #245).
-//
-// Downstream waves (controller #247, preview #248, tree/chooser #250, inspector
-// / export #249, integration #251, and the round-2 interaction issues) import
-// from here. Everything below is pure and JSON-safe except where a type comes
-// from the independent component contract.
+// Public surface of the standalone Composer document model, storage, reuse,
+// and source generator. Browser-facing application code should prefer
+// `composer/browser`; this root also exposes the Node filesystem implementation.
 
 // ── Document model ───────────────────────────────────────────────────────────
 export type {

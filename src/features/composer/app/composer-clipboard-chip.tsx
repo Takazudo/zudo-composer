@@ -1,11 +1,10 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// The toolbar clipboard chip (issue #255). Purely presentational: renders
+// The toolbar clipboard chip is purely presentational: it renders
 // nothing when the clipboard is empty, otherwise shows the clipboard
-// component's display name. Mounted inside #249's `ComposerStatusIndicator`
-// via its `children` composability seam (see that component's file header) —
-// this is the ONE new UI surface this wave adds; the copy/cut/paste/duplicate
-// actions themselves are exposed menu-free for wave 7 (#256) to wire up.
+// component's display name. It is mounted inside `ComposerStatusIndicator`
+// through its `children` composability seam; copy/cut/paste/duplicate actions
+// remain owned by the controller and menus.
 
 import type { JSX } from "preact";
 import type { CompositionNode } from "../../../composer/browser";

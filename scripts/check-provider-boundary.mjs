@@ -168,11 +168,17 @@ for (const source of jsFiles.map((path) => readFileSync(path, "utf8"))) {
 
 const cssFiles = assetFiles.filter((path) => extname(path) === ".css");
 const css = cssFiles.map((path) => readFileSync(path, "utf8"));
+const combinedCss = css.join("\n");
 assert.ok(css.some((source) => source.includes(".app-header{")), "local app CSS was not emitted");
 assert.ok(readFileSync(join(root, "src/features/composer/library/new-composition-dialog.tsx"), "utf8").includes("pr-[3.5rem]"), "local Tailwind source proof drifted");
 assert.ok(css.some((source) => source.includes(".pr-\\[3\\.5rem\\]{")), "local-source Tailwind utility was not emitted");
 assert.ok(readFileSync(join(root, "node_modules/@zudo-sg/ui/src/cards/callout/callout.tsx"), "utf8").includes("border-l-4"), "provider Tailwind source proof drifted");
 assert.ok(css.some((source) => source.includes(".border-l-4{")), "installed-provider Tailwind utility was not emitted");
+for (const [size, value] of Object.entries({ xs: ".75rem", sm: "1rem", md: "1.25rem", lg: "1.5rem" })) {
+  assert.ok(combinedCss.includes(`--spacing-icon-${size}:${value}`), `built CSS is missing local icon token ${size}`);
+  assert.ok(combinedCss.includes(`.w-icon-${size}{width:var(--spacing-icon-${size})}`), `built CSS is missing w-icon-${size}`);
+  assert.ok(combinedCss.includes(`.h-icon-${size}{height:var(--spacing-icon-${size})}`), `built CSS is missing h-icon-${size}`);
+}
 assert.equal(css.reduce((total, source) => total + count(source, ".hi-kw{"), 0), 2, "canonical provider CSS must occur once in each host/preview graph");
 assert.equal(css.filter((source) => source.includes(".hi-kw{")).length, 2, "host and preview must each own one canonical CSS asset");
 

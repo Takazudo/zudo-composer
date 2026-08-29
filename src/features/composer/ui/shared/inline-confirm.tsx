@@ -1,22 +1,14 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Generic inline confirm bar: a message plus Cancel/Confirm pair, extracted
-// from #250's tree-row `SubtreeRemovalConfirm` (issue #269, folding in #260)
-// so any destructive action in the composer can reuse the SAME confirm
-// mechanism instead of inventing a second one. Initial focus always lands on
-// Cancel — the SAFE action — unifying every entry point that renders this
-// (tree row inline, node context-menu Delete, toolbar Reset); Escape cancels.
+// Generic inline confirm bar: a message plus Cancel/Confirm pair shared by tree,
+// menu, and library destructive actions. Initial focus always lands on Cancel —
+// the safe action — and Escape cancels.
 //
 // Reuses `SubtreeRemovalConfirm`'s original `.sg-composer-tree-confirm*`
-// classes verbatim (same precedent as the context menu's Delete confirmation
-// in styles.css) rather than adding a parallel style block — visual polish
-// for non-tree call sites lands in a later wave.
+// classes for compact call sites rather than adding a parallel style block.
 //
-// `tone` (issue #267) is the one exception: the toolbar's Reset confirm
-// (composer-toolbar-bar.tsx) sits inline in a row of full-size toolbar
-// controls, not a compact tree row, so it opts into the
-// `.sg-composer-toolbar-confirm*` classes instead of the tree's. The tree/menu
-// call sites are unaffected (they don't pass `tone`, so they keep the default).
+// `tone="toolbar"` serves full-size library action rows; compact tree/menu call
+// sites keep the default tree class family.
 
 import { useEffect, useRef } from "preact/hooks";
 import type { JSX } from "preact";
