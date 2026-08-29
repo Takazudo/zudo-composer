@@ -1,0 +1,303 @@
+/* ============================================================================
+ * Sitemapper workspace shell — issue #409
+ *
+ * The route owns a full-width document below the shared header. The narrow
+ * layout starts as one canvas column; at the content-driven 64rem seam it
+ * becomes the five-track workspace: outline rail | resizer | canvas
+ * (minmax(0, 1fr)) | resizer | inspector rail.
+ *
+ * All values are semantic tokens or Sitemapper custom properties. In
+ * particular, no Composer key/var/event is reused: both authoring apps may
+ * be alive across a soft navigation in the same browser session.
+ * ========================================================================== */
+
+:root {
+  /* First-paint values agree with the resizer-contract defaults. The restore
+   * script replaces these with px values before the page paints when a user
+   * has a persisted layout. */
+  --sg-sitemapper-tree-w: 20rem;
+  --sg-sitemapper-inspector-w: 20rem;
+  /* Visual track width; the pseudo-element below expands the hit area. */
+  --sg-sitemapper-resizer-w: 0.75rem;
+}
+
+/* `overflow-x` on body is a visual fallback only: root-overflow propagation
+ * leaves body computing to visible. Effective containment belongs to the
+ * non-root shell below, where `overflow-x: clip` prevents narrow rails or
+ * hit-area affordances from extending documentElement.scrollWidth. */
+html[data-sg-sitemapper-doc] body {
+  overflow-x: hidden;
+}
+
+.sg-sitemapper-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--sg-header-h));
+  min-height: 0;
+  overflow-x: clip;
+}
+
+.sg-sitemapper-toolbar {
+  flex-shrink: 0;
+  position: relative;
+  z-index: var(--z-index-toolbar);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-hsp-md);
+  padding-inline: var(--spacing-hsp-lg);
+  padding-block: var(--spacing-vsp-10);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.sg-sitemapper-grid {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  /* Narrow (< 64rem): canvas-only. Rails and resizers remain in the DOM. */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sg-sitemapper-tree-rail,
+.sg-sitemapper-inspector {
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--color-bg);
+}
+
+.sg-sitemapper-tree-rail {
+  border-inline-end: 1px solid var(--color-border);
+}
+
+.sg-sitemapper-inspector {
+  border-inline-start: 1px solid var(--color-border);
+}
+
+.sg-sitemapper-canvas {
+  grid-column: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--color-bg);
+}
+
+.sg-sitemapper-resizer {
+  display: none;
+}
+
+.sg-sitemapper-narrow-note {
+  position: absolute;
+  z-index: var(--z-index-sidebar);
+  inset-inline-end: var(--spacing-hsp-md);
+  inset-block-end: var(--spacing-vsp-md);
+  max-width: 16rem;
+  padding: var(--spacing-vsp-2xs) var(--spacing-hsp-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  box-shadow: var(--shadow-lg);
+}
+
+.sg-sitemapper-narrow-note strong {
+  display: block;
+  color: var(--color-fg);
+}
+
+@media (min-width: 64rem) {
+  .sg-sitemapper-grid {
+    position: relative;
+    grid-template-columns:
+      var(--sg-sitemapper-tree-w)
+      var(--sg-sitemapper-resizer-w)
+      minmax(0, 1fr)
+      var(--sg-sitemapper-resizer-w)
+      var(--sg-sitemapper-inspector-w);
+  }
+
+  .sg-sitemapper-tree-rail,
+  .sg-sitemapper-inspector {
+    display: block;
+  }
+
+  .sg-sitemapper-canvas {
+    grid-column: 3;
+  }
+
+  .sg-sitemapper-resizer {
+    position: relative;
+    z-index: var(--z-index-sidebar);
+    display: block;
+    grid-row: 1;
+    cursor: col-resize;
+    background: transparent;
+    touch-action: none;
+  }
+
+  [data-sg-sitemapper-tree-resizer] {
+    grid-column: 2;
+  }
+
+  [data-sg-sitemapper-inspector-resizer] {
+    grid-column: 4;
+  }
+
+  @media (hover: hover) {
+    .sg-sitemapper-resizer:hover {
+      background: color-mix(in oklch, var(--color-fg) 8%, transparent);
+    }
+  }
+
+  .sg-sitemapper-resizer[data-sg-dragging] {
+    background: color-mix(in oklch, var(--color-fg) 14%, transparent);
+  }
+
+  .sg-sitemapper-resizer:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: -2px;
+  }
+
+  .sg-sitemapper-narrow-note {
+    display: none;
+  }
+}
+
+/* Generous hit area for the resizer without widening its visible track. The
+ * expanded pseudo-element is deliberately present even when the rail is
+ * hidden; it does not alter narrow layout because the parent stays display:none.
+ * The 44px strip follows the touch-safe interaction guidance. */
+.sg-sitemapper-resizer::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline: calc(-1 * var(--spacing-hsp-lg));
+}
+
+/* ── Toolbar controls ────────────────────────────────────────────────────── */
+
+.sg-sitemapper-toolbar-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-hsp-md);
+  min-width: 0;
+}
+
+.sg-sitemapper-toolbar-name {
+  display: grid;
+  min-width: 0;
+}
+
+.sg-sitemapper-toolbar-kicker {
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sg-sitemapper-toolbar-name strong {
+  overflow: hidden;
+  color: var(--color-fg);
+  font-size: var(--text-small);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sg-sitemapper-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-hsp-2xs);
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+}
+
+.sg-sitemapper-save-status[data-sg-status="error"],
+.sg-sitemapper-save-status[data-sg-status="quarantined"] {
+  color: var(--color-warning);
+}
+
+.sg-sitemapper-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding-inline: var(--spacing-hsp-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .sg-sitemapper-toolbar-button:hover {
+    color: var(--color-fg);
+    border-color: var(--color-border-strong);
+  }
+}
+
+.sg-sitemapper-toolbar-button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.sg-sitemapper-toolbar-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (pointer: coarse) {
+  .sg-sitemapper-toolbar-button {
+    min-height: 2.75rem;
+  }
+}
+
+/* ── Shared slot/banner fallbacks ───────────────────────────────────────── */
+
+.sg-sitemapper-load-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-hsp-sm);
+  padding-inline: var(--spacing-hsp-lg);
+  padding-block: var(--spacing-vsp-2xs);
+  border-bottom: 1px solid var(--color-warning);
+  background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+  color: var(--color-fg);
+  font-size: var(--text-micro);
+}
+
+.sg-sitemapper-load-notice > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sg-sitemapper-workspace-placeholder {
+  display: flex;
+  height: 100%;
+  min-height: 8rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-vsp-3xs);
+  padding: var(--spacing-vsp-lg) var(--spacing-hsp-md);
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  text-align: center;
+}
+
+.sg-sitemapper-workspace-placeholder strong {
+  color: var(--color-fg);
+}

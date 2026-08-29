@@ -1,0 +1,85 @@
+.sg-sitemapper-root {
+  color-scheme: light dark;
+  --sg-header-h: var(--zudo-composer-header-height, 0px);
+  --color-bg: light-dark(#fbfaf8, #171716);
+  --color-surface: light-dark(#fff, #222220);
+  --color-surface-2: light-dark(#f3f1ed, #2b2a27);
+  --color-fg: light-dark(#25231f, #f4f1eb);
+  --color-muted: light-dark(#69645c, #b9b3a9);
+  --color-border: light-dark(#d9d5ce, #55514b);
+  --color-border-strong: light-dark(#aaa39a, #8c857a);
+  --color-accent: light-dark(#6748c9, #a88df0);
+  --color-accent-hover: light-dark(#5336ad, #beaaf5);
+  --color-on-accent: #fff;
+  --color-focus: light-dark(#3d66d4, #8badff);
+  --color-danger: light-dark(#b42318, #ff8f84);
+  --color-warning: light-dark(#8a5700, #f4c267);
+  --spacing-hsp-2xs: 0.25rem;
+  --spacing-hsp-xs: 0.375rem;
+  --spacing-hsp-sm: 0.5rem;
+  --spacing-hsp-md: 0.75rem;
+  --spacing-hsp-lg: 1rem;
+  --spacing-vsp-3xs: 0.125rem;
+  --spacing-vsp-2xs: 0.25rem;
+  --spacing-vsp-sm: 0.5rem;
+  --spacing-vsp-md: 0.75rem;
+  --spacing-vsp-lg: 1rem;
+  --spacing-vsp-10: 0.625rem;
+  --text-micro: 0.75rem;
+  --text-caption: 0.8125rem;
+  --text-small: 0.875rem;
+  --font-weight-semibold: 600;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-full: 9999px;
+  --shadow-lg: 0 10px 24px rgb(0 0 0 / 0.14);
+  --shadow-overlay: 0 20px 48px rgb(0 0 0 / 0.24);
+  --z-index-local-1: 1;
+  --z-index-sidebar: 10;
+  --z-index-toolbar: 20;
+  --z-index-popover: 40;
+  --z-index-modal-backdrop: 50;
+  --z-index-modal: 60;
+  color: var(--color-fg);
+  background: var(--color-bg);
+}
+
+.sg-sitemapper-root,
+.sg-sitemapper-root * {
+  box-sizing: border-box;
+}
+
+.sg-sitemapper-root > main {
+  width: min(64rem, 100%);
+  min-height: 100vh;
+  margin-inline: auto;
+  padding: 1.5rem;
+}
+
+.sg-sitemapper-root > main h1,
+.sg-sitemapper-root > main h2,
+.sg-sitemapper-root > main p {
+  max-width: none;
+  margin-block: 0 1rem;
+  font-size: inherit;
+  letter-spacing: normal;
+  line-height: 1.5;
+}
+
+.sg-sitemapper-root > main h1 {
+  font-size: 2rem;
+}
+
+.sg-sitemapper-root > main button {
+  min-height: 2rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  cursor: pointer;
+}
+
+.sg-sitemapper-root > main li + li {
+  margin-block-start: 0.5rem;
+}
