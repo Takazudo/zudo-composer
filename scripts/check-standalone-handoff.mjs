@@ -20,7 +20,7 @@ const contractPackageSha = "51f1c64a7639134254866458ff72b497da9c2f36";
 const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}`;
 const contractSpec = `git+https://github.com/Takazudo/zudo-composer.git#${contractPackageSha}`;
 
-assert.deepEqual(SPA_ROUTES, ["/", "/composer", "/composer/preview", "/sitemapper"]);
+assert.deepEqual(SPA_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"]);
 assert.equal(LIVE_ORIGIN, "https://zudo-composer.takazudomodular.com");
 assert.equal(wrangler.name, "zudo-composer");
 assert.deepEqual(wrangler.routes, [{ pattern: "zudo-composer.takazudomodular.com", custom_domain: true }]);
@@ -86,8 +86,12 @@ const provisionalHashes = [...`${readme}\n${guidance}`.matchAll(/(?<![a-f0-9])[a
 assert.deepEqual(provisionalHashes, [], "README/CLAUDE must not publish abbreviated or provisional checkpoint hashes");
 
 assert.match(readme, /Composer owns[\s\S]{0,120}document model[\s\S]{0,80}source generation/i);
+assert.match(readme, /Content owns[\s\S]{0,120}model[\s\S]{0,80}storage/i);
+assert.match(readme, /Mapping owns[\s\S]{0,120}binding[\s\S]{0,80}storage/i);
 assert.match(readme, /Sitemapper owns[\s\S]{0,120}page-tree model[\s\S]{0,80}storage/i);
 assert.match(guidance, /owner of Composer model\/source/i);
+assert.match(guidance, /Content model\/storage/i);
+assert.match(guidance, /Mapping model\/storage/i);
 assert.match(guidance, /Sitemapper model\/storage/i);
 
 for (const document of [readme, guidance]) {

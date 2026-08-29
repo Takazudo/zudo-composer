@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
-const roots = ['src/shared', 'src/composer', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
+const roots = ['src/shared', 'src/composer', 'src/content', 'src/mapping', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
 const files = [];
 const violations = [];
 
@@ -25,6 +25,7 @@ const forbidden = [
   ['removed source adapter', /sourceAdapters?|JsxSourceAdapter/],
   ['removed schema compatibility', /COMPOSITION_SCHEMA_V1|decodedFromSchemaVersion|MigrationMeta|CleanupMeta|localStorage/i],
   ['headless Preact dependency', /(?:^|\n)\s*import\s+(?:type\s+)?(?:[^;\n]+?\s+from\s+)?["']preact(?:\/|["'])/],
+  ['application-layer dependency', /(?:from|import\()\s*["'][^"']*(?:features|src\/app|\/app\/)[^"']*["']/],
 ];
 
 for (const file of files) {
@@ -46,6 +47,22 @@ if (!indexedDbTypes.includes('COMPOSER_DATABASE_NAME = "zudo-composer"')) {
 }
 if (!indexedDbTypes.includes('COMPOSER_DATABASE_VERSION = 1')) {
   violations.push('src/composer/storage/indexeddb/types.ts: clean physical database version');
+}
+
+// Mapping is allowed to consume only the pure catalog/model seams required to
+// resolve provider-qualified Content and Composition references.
+const mappingImports = files.filter((file) => file.includes(`${path.sep}src${path.sep}mapping${path.sep}`));
+const contentAndMapping = files.filter((file) => file.includes(`${path.sep}src${path.sep}content${path.sep}`) || file.includes(`${path.sep}src${path.sep}mapping${path.sep}`));
+for (const file of contentAndMapping) {
+  const content = await readFile(file, 'utf8');
+  if (/\b(?:window|localStorage)\b|globalThis\.document|\bHTMLElement\b/.test(content)) violations.push(`${path.relative(repositoryRoot, file)}: headless DOM dependency`);
+  if (/\b(?:legacy|migration|migrate|compatibility shim|fallback registry)\b/i.test(content)) violations.push(`${path.relative(repositoryRoot, file)}: legacy or migration compatibility`);
+}
+for (const file of mappingImports) {
+  const content = await readFile(file, 'utf8');
+  for (const match of content.matchAll(/from\s+["'](\.\.\/\.\.\/(?:content|composer)\/[^"']+)["']/g)) {
+    if (!/(?:content\/(?:catalog|model)|composer\/(?:library|model))/.test(match[1])) violations.push(`${path.relative(repositoryRoot, file)}: undocumented cross-domain seam ${match[1]}`);
+  }
 }
 
 if (violations.length > 0) {
