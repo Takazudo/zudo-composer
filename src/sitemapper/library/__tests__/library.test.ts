@@ -17,7 +17,8 @@ function record(id = "site-map"): SitemapRecord {
     root: [{
       id: "home",
       title: "Home",
-      children: [{ id: "about", title: "About", children: [] }],
+      source: { kind: "unassigned" },
+      children: [{ id: "about", title: "About", source: { kind: "unassigned" }, children: [] }],
     }],
   };
   return {

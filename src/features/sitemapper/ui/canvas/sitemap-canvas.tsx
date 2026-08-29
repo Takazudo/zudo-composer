@@ -6,6 +6,7 @@
 import type { JSX } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { SitemapDocument, SitemapNode as SitemapNodeModel } from "../../../../sitemapper/model";
+import type { SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
 import SitemapConnectors from "./connectors";
 import {
   buildLogicalTree,
@@ -19,6 +20,7 @@ import SitemapNode from "./sitemap-node";
 
 export interface SitemapCanvasProps {
   document: SitemapDocument;
+  routeInfo?: ReadonlyMap<string, SitemapNodeRouteInfo>;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onAddChild: (id: string) => void;
@@ -58,6 +60,7 @@ function nodeMap(document: SitemapDocument): ReadonlyMap<string, SitemapNodeMode
 
 export function SitemapCanvas({
   document,
+  routeInfo,
   selectedId,
   onSelect,
   onAddChild,
@@ -172,6 +175,7 @@ export function SitemapCanvas({
             <SitemapNode
               key={node.id}
               node={node}
+              routeInfo={routeInfo?.get(node.id)}
               rectangle={rectangle}
               selected={selectedId === node.id}
               menuOpen={openMenuId === node.id}

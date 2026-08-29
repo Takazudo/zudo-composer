@@ -21,7 +21,8 @@ export type SitemapValidationFailureCode =
   | "duplicate-node-id"
   | "invalid-node-title"
   | "invalid-node-slug"
-  | "invalid-composition-ref"
+  | "invalid-source"
+  | "mapping-children"
   | "invalid-node-notes"
   | "invalid-children"
   | "cycle"
@@ -32,9 +33,9 @@ export type SitemapValidationResult =
   | { ok: false; code: SitemapValidationFailureCode; path: string };
 
 const DOCUMENT_KEYS = ["schemaVersion", "id", "name", "root"] as const;
-const NODE_REQUIRED_KEYS = ["id", "title", "children"] as const;
-const NODE_OPTIONAL_KEYS = ["slug", "composition", "notes"] as const;
-const COMPOSITION_REF_KEYS = ["providerId", "recordId"] as const;
+const NODE_REQUIRED_KEYS = ["id", "title", "source", "children"] as const;
+const NODE_OPTIONAL_KEYS = ["slug", "notes"] as const;
+const REF_KEYS = ["providerId", "recordId"] as const;
 
 function hasExactKeys(
   value: Record<string, unknown>,
@@ -48,6 +49,27 @@ function hasExactKeys(
 
 function failure(code: SitemapValidationFailureCode, path: string): SitemapValidationResult {
   return { ok: false, code, path };
+}
+
+function validRef(value: unknown): boolean {
+  return isPlainObject(value) && hasExactKeys(value, REF_KEYS)
+    && typeof value.providerId === "string" && value.providerId.length > 0
+    && isSafeRecordId(value.recordId);
+}
+
+function validSource(value: unknown): boolean {
+  if (!isPlainObject(value) || typeof value.kind !== "string") return false;
+  if (value.kind === "unassigned") return hasExactKeys(value, ["kind"]);
+  if (value.kind === "composition") {
+    return hasExactKeys(value, ["kind", "ref"]) && validRef(value.ref);
+  }
+  if (value.kind !== "mapping" || !hasExactKeys(value, ["kind", "ref", "route"]) || !validRef(value.ref)) return false;
+  const route = value.route;
+  if (!isPlainObject(route) || typeof route.kind !== "string") return false;
+  return route.kind === "single"
+    ? hasExactKeys(route, ["kind"])
+    : route.kind === "entry-field" && hasExactKeys(route, ["kind", "fieldId"])
+      && isSafeRecordId(route.fieldId);
 }
 
 function validateNode(
@@ -77,19 +99,11 @@ function validateNode(
     if (Object.hasOwn(value, "notes") && typeof value.notes !== "string") {
       return failure("invalid-node-notes", `${path}.notes`);
     }
-    if (Object.hasOwn(value, "composition")) {
-      const ref = value.composition;
-      if (
-        !isPlainObject(ref)
-        || !hasExactKeys(ref, COMPOSITION_REF_KEYS)
-        || typeof ref.providerId !== "string"
-        || ref.providerId.length === 0
-        || !isSafeRecordId(ref.recordId)
-      ) {
-        return failure("invalid-composition-ref", `${path}.composition`);
-      }
-    }
+    if (!validSource(value.source)) return failure("invalid-source", `${path}.source`);
     if (!Array.isArray(value.children)) return failure("invalid-children", `${path}.children`);
+    if ((value.source as { kind?: string }).kind === "mapping" && value.children.length > 0) {
+      return failure("mapping-children", `${path}.children`);
+    }
 
     for (let index = 0; index < value.children.length; index += 1) {
       const childFailure = validateNode(

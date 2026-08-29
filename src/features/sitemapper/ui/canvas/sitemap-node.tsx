@@ -3,10 +3,12 @@
 
 import type { JSX, Ref } from "preact";
 import type { SitemapNode as SitemapNodeModel } from "../../../../sitemapper/model";
+import type { SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
 import type { NodeRectangle } from "./layout";
 
 export interface SitemapNodeProps {
   node: SitemapNodeModel;
+  routeInfo?: SitemapNodeRouteInfo;
   rectangle: NodeRectangle;
   selected: boolean;
   menuOpen: boolean;
@@ -21,6 +23,7 @@ export interface SitemapNodeProps {
 
 export function SitemapNode({
   node,
+  routeInfo,
   rectangle,
   selected,
   menuOpen,
@@ -65,6 +68,7 @@ export function SitemapNode({
         <span class="sg-sitemapper-node__title">{node.title}</span>
         {rectangle.depth > 4 && <span class="sg-sitemapper-node__meta">Depth {rectangle.depth}</span>}
         {node.slug && <span class="sg-sitemapper-node__meta">{node.slug}</span>}
+        {node.source.kind === "mapping" && <span class="sg-sitemapper-node__meta">Mapping route family{routeInfo ? ` · ${routeInfo.derivedRouteCount} routes · ${routeInfo.status}` : ""}</span>}
       </button>
       <button
         type="button"

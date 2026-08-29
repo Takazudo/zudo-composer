@@ -12,10 +12,10 @@ function record(): SitemapRecord {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     document: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: "map",
       name: "Map",
-      root: [{ id: "home", title: "Home", children: [{ id: "child", title: "Child", children: [] }] }],
+      root: [{ id: "home", title: "Home", source: { kind: "unassigned" }, children: [{ id: "child", title: "Child", source: { kind: "unassigned" }, children: [] }] }],
     },
   };
 }

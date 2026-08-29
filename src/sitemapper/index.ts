@@ -6,4 +6,5 @@
 export * from "./model";
 export * from "./commands";
 export * from "./catalog";
+export * from "./routes";
 export * from "./library";

@@ -10,11 +10,13 @@
 import { useEffect, useMemo, useRef } from "preact/hooks";
 import type { JSX } from "preact";
 import type { SitemapDocument } from "../../../../sitemapper/model";
+import type { SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
 import { buildDocumentIndex } from "./tree-helpers";
 import { TreeNode } from "./tree-node";
 
 export interface SitemapTreeProps {
   document: SitemapDocument;
+  routeInfo?: ReadonlyMap<string, SitemapNodeRouteInfo>;
   selectedId: string | null;
   expandedIds: ReadonlySet<string>;
   onSelect: (nodeId: string) => void;
@@ -30,6 +32,7 @@ export interface SitemapTreeProps {
 
 export function SitemapTree({
   document,
+  routeInfo,
   selectedId,
   expandedIds,
   onSelect,
@@ -68,6 +71,7 @@ export function SitemapTree({
               key={node.id}
               node={node}
               document={document}
+              routeInfo={routeInfo}
               index={index}
               selectedId={selectedId}
               expandedIds={expandedIds}

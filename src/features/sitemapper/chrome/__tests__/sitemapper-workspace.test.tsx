@@ -19,11 +19,12 @@ import {
 } from "../resizer-contract";
 
 describe("SitemapperWorkspace", () => {
-  it("renders the toolbar, two separators, and the narrow canvas note", () => {
+  it("renders the toolbar, two separators, and the narrow panel tabs", () => {
     render(<SitemapperWorkspace toolbar={<span>Toolbar</span>} />);
     expect(screen.getByText("Toolbar")).toBeInTheDocument();
     expect(screen.getAllByRole("separator")).toHaveLength(2);
-    expect(screen.getByText("Canvas-only view")).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Sitemapper panels" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Canvas" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("keeps all rails and resizers in the DOM and specifies accessible defaults", () => {
@@ -47,7 +48,7 @@ describe("SitemapperWorkspace", () => {
   it("falls back to a labeled pane for every visual surface", () => {
     render(<SitemapperWorkspace />);
     for (const label of ["Toolbar", "Banner", "Tree", "Canvas", "Inspector"]) {
-      expect(screen.getByText(label, { exact: true })).toBeInTheDocument();
+      expect(screen.getAllByText(label, { exact: true }).length).toBeGreaterThan(0);
     }
   });
 

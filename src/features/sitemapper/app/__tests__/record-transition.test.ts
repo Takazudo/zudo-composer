@@ -8,10 +8,10 @@ function record(id: string, title = id): SitemapRecord {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     document: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id,
       name: title,
-      root: [{ id: `${id}-home`, title: "Home", children: [] }],
+      root: [{ id: `${id}-home`, title: "Home", source: { kind: "unassigned" }, children: [] }],
     },
   };
 }
@@ -90,7 +90,7 @@ describe("record transitions", () => {
     const session = sessions.get("one")! as SitemapperRecordSession & { draft: SitemapRecord };
     session.draft = {
       ...record("one", "Original"),
-      document: { ...record("one", "Original").document, root: [{ id: "one-home", title: "Pending", children: [] }] },
+      document: { ...record("one", "Original").document, root: [{ id: "one-home", title: "Pending", source: { kind: "unassigned" }, children: [] }] },
     };
     const result = await transitions.duplicateCurrent();
     expect(result).toMatchObject({ status: "committed", state: { view: "record", record: { id: "copy" } } });
