@@ -1,6 +1,6 @@
 import type { ContentEntryRecord } from "../../content";
 import type { SitemapNode } from "../model";
-import type { DerivedSitemapRoute, ExpandSitemapRoutesOptions, SitemapNodeRouteInfo, SitemapRouteDiagnostic, SitemapRouteExpansion } from "./types";
+import type { DerivedSitemapRoute, ExpandSitemapRoutesOptions, SitemapMappingRouteMetadata, SitemapNodeRouteInfo, SitemapRouteDiagnostic, SitemapRouteExpansion } from "./types";
 
 function encodedParts(fragment: string): { ok: true; parts: string[] } | { ok: false } {
   try {
@@ -46,6 +46,7 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
   const routes: DerivedSitemapRoute[] = [];
   const diagnostics: SitemapRouteDiagnostic[] = [];
   const seen = new Map<string, DerivedSitemapRoute>();
+  const mappingMetadataByNode = new Map<string, SitemapMappingRouteMetadata>();
 
   const emit = (route: DerivedSitemapRoute): void => {
     const previous = seen.get(route.pathname);
@@ -89,8 +90,6 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
         catch (error) { readiness = { status: "blocked" as const, diagnostics: [{ code: "readiness-provider-error", message: error instanceof Error ? error.message : "Mapping readiness provider failed." }] }; }
         if (readiness.status === "blocked") {
           diagnose(node, "incompatible-mapping", readiness.diagnostics.map((item) => item.message).join(" ") || "The Mapping definition is not ready.");
-          for (const child of node.children) await visit(child, fragments);
-          return;
         }
         let content;
         try { content = await catalog.resolveContentSnapshot(resolved.record); }
@@ -98,22 +97,35 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
         if (content.status !== "resolved") {
           const code = content.status === "not-found" ? "content-model-not-found" : content.status === "invalid" ? "content-model-invalid" : "content-provider-failure";
           diagnose(node, code, content.status === "not-found" ? "The Mapping Content model was not found." : content.reason);
-        } else if (mappingSource.route.kind === "single") {
-          if (content.model.document.kind !== "single") diagnose(node, "wrong-route-mode", "Collection mappings require an Entry slug field route.");
-          else emit({ pathname: base, nodeId: node.id, sourceKind: "mapping" });
-        } else if (content.model.document.kind !== "collection") {
-          diagnose(node, "wrong-route-mode", "Single Content mappings require the single route mode.");
         } else {
-          const fieldId = mappingSource.route.fieldId;
-          const field = content.model.document.fields.find((candidate) => candidate.id === fieldId);
-          if (!field) diagnose(node, "route-field-missing", "The selected Entry route field no longer exists.");
-          else if (field.kind !== "slug") diagnose(node, "route-field-not-slug", "The selected Entry route field is not a slug field.");
-          else {
-            for (const entry of content.snapshot.entries) {
-              const segment = entrySegment((entry as ContentEntryRecord).values[field.id]);
-              if (!segment.ok) {
-                diagnose(node, segment.missing ? "entry-slug-missing" : "entry-slug-invalid", segment.missing ? "Entry slug is missing or empty." : "Entry slug contains a forbidden route delimiter.", { entryId: entry.id });
-              } else emit({ pathname: append(base, segment.segment), nodeId: node.id, sourceKind: "mapping", entryId: entry.id });
+          mappingMetadataByNode.set(node.id, {
+            name: resolved.record.document.name,
+            model: content.model.document.name,
+            kind: content.model.document.kind,
+            entryCount: content.snapshot.count,
+            slugFields: content.model.document.fields
+              .filter((field) => field.kind === "slug")
+              .map((field) => ({ id: field.id, label: field.label })),
+          });
+        }
+        if (readiness.status === "ready" && content.status === "resolved") {
+          if (mappingSource.route.kind === "single") {
+            if (content.model.document.kind !== "single") diagnose(node, "wrong-route-mode", "Collection mappings require an Entry slug field route.");
+            else emit({ pathname: base, nodeId: node.id, sourceKind: "mapping" });
+          } else if (content.model.document.kind !== "collection") {
+            diagnose(node, "wrong-route-mode", "Single Content mappings require the single route mode.");
+          } else {
+            const fieldId = mappingSource.route.fieldId;
+            const field = content.model.document.fields.find((candidate) => candidate.id === fieldId);
+            if (!field) diagnose(node, "route-field-missing", "The selected Entry route field no longer exists.");
+            else if (field.kind !== "slug") diagnose(node, "route-field-not-slug", "The selected Entry route field is not a slug field.");
+            else {
+              for (const entry of content.snapshot.entries) {
+                const segment = entrySegment((entry as ContentEntryRecord).values[field.id]);
+                if (!segment.ok) {
+                  diagnose(node, segment.missing ? "entry-slug-missing" : "entry-slug-invalid", segment.missing ? "Entry slug is missing or empty." : "Entry slug contains a forbidden route delimiter.", { entryId: entry.id });
+                } else emit({ pathname: append(base, segment.segment), nodeId: node.id, sourceKind: "mapping", entryId: entry.id });
+              }
             }
           }
         }
@@ -138,6 +150,7 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
       ...(nodeRoutes[0] ? { samplePath: nodeRoutes[0].pathname } : {}),
       status: nodeDiagnostics.length === 0 ? "ready" : "blocked",
       diagnostics: nodeDiagnostics,
+      ...(mappingMetadataByNode.get(nodeId) ? { mapping: mappingMetadataByNode.get(nodeId) } : {}),
     });
   }
   return { routes, derivedRouteCount: routes.length, samplePath: routes[0]?.pathname, diagnostics, nodes };

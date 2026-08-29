@@ -31,7 +31,13 @@ describe("Sitemapper route expansion", () => {
   it("retains ancestor-aware canonical output for every node", async () => {
     const child = page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }));
     const result = await expandSitemapRoutes({ document: document(page("docs", "docs", undefined, [child])), catalog: catalog({ values: ["first"] }) });
-    expect(result.nodes.get("articles")).toEqual({ derivedRouteCount: 1, samplePath: "/docs/articles/first", status: "ready", diagnostics: [] });
+    expect(result.nodes.get("articles")).toEqual({
+      derivedRouteCount: 1,
+      samplePath: "/docs/articles/first",
+      status: "ready",
+      diagnostics: [],
+      mapping: { name: "Articles", model: "Articles", kind: "collection", entryCount: 1, slugFields: [{ id: "slug", label: "Slug" }] },
+    });
   });
 
   it.each([
@@ -46,8 +52,8 @@ describe("Sitemapper route expansion", () => {
     const result = await expandSitemapRoutes({ document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: injected });
     expect(result.routes).toEqual([]);
     expect(result.diagnostics).toEqual([expect.objectContaining({ code: "incompatible-mapping", nodeId: "articles", message })]);
-    expect(result.nodes.get("articles")).toMatchObject({ derivedRouteCount: 0, status: "blocked" });
-    expect(injected.resolveContentSnapshot).not.toHaveBeenCalled();
+    expect(result.nodes.get("articles")).toMatchObject({ derivedRouteCount: 0, status: "blocked", mapping: { entryCount: 2 } });
+    expect(injected.resolveContentSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it.each(["", " ", "a/b", "a?b", "a#b", ".", ".."])("diagnoses forbidden Entry slug %j", async (value) => {
@@ -104,5 +110,6 @@ describe("Sitemapper route expansion", () => {
     expect(injected.resolveContentSnapshot).toHaveBeenCalledTimes(1);
     expect(result.derivedRouteCount).toBe(result.routes.length);
     expect(result.samplePath).toBe(result.routes[0]?.pathname);
+    expect(result.nodes.get("p")?.mapping?.entryCount).toBe(result.routes.length);
   });
 });

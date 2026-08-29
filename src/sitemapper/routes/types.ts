@@ -37,6 +37,15 @@ export interface SitemapNodeRouteInfo {
   samplePath?: string;
   status: "ready" | "blocked";
   diagnostics: readonly SitemapRouteDiagnostic[];
+  mapping?: SitemapMappingRouteMetadata;
+}
+
+export interface SitemapMappingRouteMetadata {
+  name: string;
+  model: string;
+  kind: "single" | "collection";
+  entryCount: number;
+  slugFields: readonly { id: string; label: string }[];
 }
 
 export type MappingDefinitionReadiness =
