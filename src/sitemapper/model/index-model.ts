@@ -13,6 +13,7 @@ export interface SitemapNodeLocation {
   index: number;
   depth: number;
 }
+
 /** Fast lookup plus canonical pre-order node ids. */
 export interface SitemapDocumentIndex {
   byId: Map<string, SitemapNodeLocation>;

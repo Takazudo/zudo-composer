@@ -73,6 +73,7 @@ describe("addChildPage / addSiblingPage", () => {
     });
   });
 });
+
 describe("updatePageProps / renamePage", () => {
   it("merges allowed JSON-safe values, copies refs, and removes optional values with null", () => {
     const before = fixture();

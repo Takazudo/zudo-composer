@@ -6,6 +6,7 @@ function countPages(nodes: readonly SitemapNode[]): number {
   for (const node of nodes) count += 1 + countPages(node.children);
   return count;
 }
+
 export function countSitemapPages(record: Pick<SitemapRecord, "document">): number {
   return countPages(record.document.root);
 }

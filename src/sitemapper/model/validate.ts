@@ -45,6 +45,7 @@ function hasExactKeys(
   return required.every((key) => Object.hasOwn(value, key))
     && Object.keys(value).every((key) => allowed.has(key));
 }
+
 function failure(code: SitemapValidationFailureCode, path: string): SitemapValidationResult {
   return { ok: false, code, path };
 }

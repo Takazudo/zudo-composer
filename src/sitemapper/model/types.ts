@@ -16,6 +16,7 @@ export interface CompositionRef {
   providerId: string;
   recordId: RecordId;
 }
+
 /** One persisted page in the sitemap tree. */
 export interface SitemapNode {
   id: string;

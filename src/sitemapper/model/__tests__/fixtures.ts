@@ -7,6 +7,7 @@ export function node(
 ): SitemapNode {
   return { id, title: id, children };
 }
+
 export function document(root: SitemapNode[] = [node("home")]): SitemapDocument {
   return {
     schemaVersion: SITEMAP_SCHEMA_VERSION,
