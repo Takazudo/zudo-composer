@@ -9,7 +9,7 @@ import "../../test-support/cleanup";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/preact";
 import { VIRTUAL_ROOT_SLOT_ID } from "../../../../composer/browser";
-import { fixturePackManifest, FIXTURE_IDS, makeAbcDocument, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
+import { fixtureComponentProvider, FIXTURE_IDS, makeAbcDocument, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
 import { useComposerIntegration } from "../use-composer-integration";
 import { useComposerMenus } from "../use-composer-menus";
 import { controllerOptions } from "../test-support/controller-fixtures";
@@ -21,7 +21,7 @@ function setup(sample = makeAbcDocument()) {
   const options = controllerOptions(sample);
   return renderHook(() => {
     const api = useComposerIntegration({
-      manifest: fixturePackManifest,
+      componentProvider: fixtureComponentProvider,
       controllerOptions: options,
     });
     const menus = useComposerMenus(api);

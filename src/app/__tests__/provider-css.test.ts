@@ -43,5 +43,18 @@ describe("provider CSS graph", () => {
     const vite = readFileSync(resolve("vite.config.ts"), "utf8");
     expect(vite).toContain("import tailwindcss from '@tailwindcss/vite'");
     expect(vite).toContain("tailwindcss()");
+    const sitemapperTokens = readFileSync(resolve("src/features/sitemapper/styles/tokens.css"), "utf8");
+    expect(sitemapperTokens).not.toContain("color-scheme:");
+    for (const providerToken of [
+      "--color-bg", "--color-surface", "--color-surface-2", "--color-fg", "--color-muted",
+      "--color-border", "--color-accent", "--color-accent-hover", "--color-on-accent",
+      "--color-focus", "--color-danger", "--color-warning",
+      "--text-micro", "--text-caption", "--text-small", "--font-weight-semibold",
+      "--radius-sm", "--radius-md", "--radius-full", "--shadow-overlay",
+    ]) {
+      expect(sitemapperTokens).not.toContain(`${providerToken}:`);
+    }
+    expect(sitemapperTokens).not.toMatch(/--spacing-(?:hsp|vsp)-[^:]+:/);
+    expect(sitemapperTokens).toContain("--sg-header-h:");
   });
 });

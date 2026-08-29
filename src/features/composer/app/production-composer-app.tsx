@@ -11,12 +11,12 @@ import {
   createCompositionReuseLifecycleService,
   createSaveQueue,
   createCompositionReuseService,
-  createComponentCatalog,
   createUuidIdFactory,
   duplicateCompositionRecord,
   isCompositionLifecycleStore,
   summarizeComposition,
   type CompositionDocument,
+  type ComponentCatalog,
   type CompositionInitializationOutcome,
   type CompositionLoadOutcome,
   type CompositionProvider,
@@ -94,7 +94,7 @@ function emptyCompositionDocument(
 async function publicationDependencies(
   provider: CompositionProvider | undefined,
   sourceRecordId: string,
-  manifest: ReturnType<typeof createComponentCatalog>,
+  manifest: ComponentCatalog,
 ): Promise<ReuseDependencyCheck> {
   if (!provider) {
     return {
@@ -195,8 +195,7 @@ export function ProductionComposerApp({
   now: injectedNow,
   preview,
 }: ProductionComposerAppProps): JSX.Element {
-  const componentPackManifest = componentProvider.manifest;
-  const reuseManifest = useMemo(() => createComponentCatalog(componentPackManifest), [componentPackManifest]);
+  const reuseManifest = componentProvider.catalog;
   const navigation = useMemo(
     () => injectedNavigation ?? browserNavigation(),
     [injectedNavigation],
