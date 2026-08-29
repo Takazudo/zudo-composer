@@ -23,7 +23,7 @@ import {
   buildChooserPreviewDocument,
 } from "../chooser-preview-host";
 import { makeChooserPreviewBridgeHarness } from "./preview-bridge-test-harness";
-import { createComposerComponentProvider } from "../../../active-pack";
+import { createComposerComponentProvider } from "../../../component-provider";
 
 function src(exportName: string): ComponentManifest["source"] {
   return { module: `@fixtures/${exportName.toLowerCase()}`, exportKind: "named", exportName };

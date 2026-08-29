@@ -9,7 +9,7 @@ import { h } from "preact";
 import { defineComponentPack, type ComponentManifest } from "@zudo-composer/component-contract";
 import { VIRTUAL_ROOT_SLOT_ID } from "../../../../../composer/browser";
 import type { CompositionDocument, InsertionTarget, ReuseCatalogOutcome } from "../../../../../composer/browser";
-import { createComposerComponentProvider } from "../../../active-pack";
+import { createComposerComponentProvider } from "../../../component-provider";
 import type { ComposerPreviewLocation } from "../../../preview";
 import { ComposerChooser } from "../composer-chooser";
 import { CHOOSER_PREVIEW_PLACEHOLDER_ID } from "../chooser-preview-host";

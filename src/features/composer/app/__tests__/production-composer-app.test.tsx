@@ -12,10 +12,10 @@ import {
   type CompositionProvider,
   type CompositionRecord,
 } from "../../../../composer/browser";
-import { activeComponentManifest, activeComponentProvider, createActiveSampleDocument } from "../../active-pack";
+import { fixtureComponentProvider, createFixtureSampleDocument } from "../../test-support/fixture-pack";
+import { createProductionComposerProviders } from "../../../../app/provider-integration";
 import {
   ProductionComposerApp,
-  createProductionComposerProviders,
   type ComposerBrowserNavigation,
 } from "../production-composer-app";
 
@@ -40,7 +40,7 @@ function deferred<T>(): Deferred<T> {
 }
 
 function record(id: string, name: string): CompositionRecord {
-  const document = createActiveSampleDocument();
+  const document = createFixtureSampleDocument();
   document.id = id;
   document.name = name;
   return { id, createdAt: TIMESTAMP, updatedAt: TIMESTAMP, document };
@@ -146,7 +146,7 @@ afterEach(() => {
 
 describe("ProductionComposerApp", () => {
   it("registers only IndexedDB when the dev file capability is absent", () => {
-    expect(createProductionComposerProviders(activeComponentManifest).map(({ descriptor }) => descriptor.id)).toEqual([
+    expect(createProductionComposerProviders().map(({ descriptor }) => descriptor.id)).toEqual([
       "indexeddb",
     ]);
   });
@@ -156,7 +156,7 @@ describe("ProductionComposerApp", () => {
     const files = memoryProvider("files", [record("same", "File copy")]);
     const navigation = new FakeNavigation("/composer");
     const view = render(
-      <ProductionComposerApp componentProvider={activeComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />,
+      <ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />,
     );
 
     expect(await screen.findByRole("heading", { name: "Compositions" })).toBeInTheDocument();
@@ -165,7 +165,7 @@ describe("ProductionComposerApp", () => {
 
     view.unmount();
     navigation.visit("/composer#/composition/files/same");
-    render(<ProductionComposerApp componentProvider={activeComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
+    render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
 
     expect(await screen.findByRole("button", { name: "Library" })).toBeInTheDocument();
     expect(screen.getAllByText("File copy").length).toBeGreaterThan(0);
@@ -177,7 +177,7 @@ describe("ProductionComposerApp", () => {
     const indexeddb = memoryProvider("indexeddb", []);
     const navigation = new FakeNavigation();
     render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb]}
         navigation={navigation}
         idFactory={() => "ordinary"}
@@ -217,7 +217,7 @@ describe("ProductionComposerApp", () => {
     const indexeddb = memoryProvider("indexeddb", [template]);
     const navigation = new FakeNavigation();
     render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb]}
         navigation={navigation}
         idFactory={() => "bound-page"}
@@ -260,7 +260,7 @@ describe("ProductionComposerApp", () => {
     const navigation = new FakeNavigation("/composer#/composition/indexeddb/bound-page");
     let nodeId = 0;
     const view = render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb]}
         navigation={navigation}
         nodeIdFactory={() => `detached-${++nodeId}`}
@@ -300,7 +300,7 @@ describe("ProductionComposerApp", () => {
     };
     const indexeddb = memoryProvider("indexeddb", [template]);
     render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb]}
         navigation={new FakeNavigation()}
         idFactory={() => "never-saved"}
@@ -337,7 +337,7 @@ describe("ProductionComposerApp", () => {
     const files = memoryProvider("files", [record("unrelated", "Unrelated file")]);
     const navigation = new FakeNavigation("/composer#/composition/indexeddb/site-shell");
     render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb, files]}
         navigation={navigation}
         preview={PREVIEW}
@@ -366,13 +366,13 @@ describe("ProductionComposerApp", () => {
   it("persists index-to-detail edits across a fresh mount with the real IndexedDB provider", async () => {
     const provider = createIndexedDbCompositionProvider({
       idbFactory: new FDBFactory(),
-      initialDocument: createActiveSampleDocument,
+      initialDocument: createFixtureSampleDocument,
       idFactory: () => "real-composition",
       now: () => TIMESTAMP,
     });
     const navigation = new FakeNavigation();
     const first = render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[provider]}
         navigation={navigation}
         now={() => TIMESTAMP}
@@ -395,7 +395,7 @@ describe("ProductionComposerApp", () => {
 
     navigation.visit("/composer#/composition/indexeddb/real-composition");
     const refreshed = render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[provider]}
         navigation={navigation}
         now={() => TIMESTAMP}
@@ -420,7 +420,7 @@ describe("ProductionComposerApp", () => {
     const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
     const navigation = new FakeNavigation("/composer#/composition/indexeddb/alpha");
     const view = render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb]}
         navigation={navigation}
         preview={PREVIEW}
@@ -451,7 +451,7 @@ describe("ProductionComposerApp", () => {
     const navigation = new FakeNavigation();
     let nodeId = 0;
     render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb, files]}
         navigation={navigation}
         idFactory={() => "file-copy"}
@@ -480,7 +480,7 @@ describe("ProductionComposerApp", () => {
     const navigation = new FakeNavigation("/composer#/composition/files/same");
     let nodeId = 0;
     const view = render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb, files]}
         navigation={navigation}
         idFactory={() => "detail-copy"}
@@ -521,7 +521,7 @@ describe("ProductionComposerApp", () => {
     const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
     const files = memoryProvider("files", [record("alpha", "File Alpha")]);
     const navigation = new FakeNavigation();
-    render(<ProductionComposerApp componentProvider={activeComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
+    render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
     await screen.findByRole("heading", { name: "Compositions" });
 
     navigation.visit("/composer#/composition/files/alpha");
@@ -556,7 +556,7 @@ describe("ProductionComposerApp", () => {
       return ready(indexeddb.records);
     });
     const navigation = new FakeNavigation("/composer#/composition/indexeddb/future");
-    render(<ProductionComposerApp componentProvider={activeComponentProvider} providers={[indexeddb]} navigation={navigation} preview={PREVIEW} />);
+    render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb]} navigation={navigation} preview={PREVIEW} />);
 
     expect(await screen.findByRole("heading", { name: "Recovery required" })).toBeInTheDocument();
     expect(screen.getByText("Future source is quarantined unchanged.")).toBeInTheDocument();
@@ -577,7 +577,7 @@ describe("ProductionComposerApp", () => {
     });
     const navigation = new FakeNavigation("/composer#/composition/indexeddb/alpha");
     render(
-      <ProductionComposerApp componentProvider={activeComponentProvider}
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb]}
         navigation={navigation}
         preview={PREVIEW}

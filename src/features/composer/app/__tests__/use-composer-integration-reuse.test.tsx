@@ -7,7 +7,7 @@ import {
   type ComposerReuseResolutionOptions,
   type GlobalTemplateResolutionOutcome,
 } from "../../../../composer/browser";
-import { fixturePackManifest, makeAbcDocument, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
+import { fixtureComponentProvider, makeAbcDocument, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
 import { useComposerIntegration } from "../use-composer-integration";
 import { controllerOptions } from "../test-support/controller-fixtures";
 
@@ -68,7 +68,7 @@ describe("useComposerIntegration — provider-scoped reuse resolution", () => {
     });
     const { result, rerender } = renderHook(
       ({ reuseResolution }) => useComposerIntegration({
-        manifest: fixturePackManifest,
+        componentProvider: fixtureComponentProvider,
         controllerOptions: controllerOptions(document),
         reuseResolution,
       }),
