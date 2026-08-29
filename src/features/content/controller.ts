@@ -62,9 +62,9 @@ export class ContentAuthoringController {
     this.listeners.add(listener); listener(this.current); return () => this.listeners.delete(listener);
   }
 
-  async initialize(): Promise<void> { await this.runInitialization(this.provider.initialization.initialize()); }
-  async retryInitialization(): Promise<void> { await this.runInitialization(this.provider.initialization.retry()); }
-  async startFresh(): Promise<void> { await this.runInitialization(this.provider.initialization.startFresh()); }
+  async initialize(): Promise<void> { await this.runInitialization(() => this.provider.initialization.initialize()); }
+  async retryInitialization(): Promise<void> { await this.runInitialization(() => this.provider.initialization.retry()); }
+  async startFresh(): Promise<void> { await this.runInitialization(() => this.provider.initialization.startFresh()); }
 
   async createModel(name: string, kind: ContentModelKind): Promise<void> {
     const trimmed = name.trim();
@@ -174,6 +174,12 @@ export class ContentAuthoringController {
     this.set({ ...this.current, entry: outcome.record, activePane: "inspector" });
   }
 
+  async inspectSchema(): Promise<void> {
+    if (this.entryQueue) { await this.entryQueue.flush(); await this.entryQueue.close(); this.unsubscribeEntry?.(); }
+    this.entryQueue = null; this.unsubscribeEntry = null;
+    this.set({ ...this.current, entry: null, activePane: "inspector", message: "Model schema ready." });
+  }
+
   updateEntryValue(fieldId: string, value: ContentEntryRecord["values"][string] | undefined): void {
     const entry = this.current.entry; if (!entry || !this.entryQueue) throw new Error("No Entry is open.");
     const values = { ...entry.values }; if (value === undefined || value === "") delete values[fieldId]; else values[fieldId] = value;
@@ -203,15 +209,19 @@ export class ContentAuthoringController {
 
   completeness(entry = this.current.entry) { return entry && this.current.model ? diagnoseContentEntryCompleteness(this.current.model, entry) : []; }
 
-  private async runInitialization(promise: Promise<ContentInitializationOutcome>): Promise<void> {
+  private async runInitialization(load: () => Promise<ContentInitializationOutcome>): Promise<void> {
     this.set({ ...this.current, phase: "loading", message: "Loading Content library…" });
-    const outcome = await promise;
-    if (outcome.status === "ready") {
-      const counts = await Promise.all(outcome.models.map(async (model) => [model.id, await this.provider.store.countEntries(model.id)] as const));
-      this.set({ ...initialState, phase: "ready", models: outcome.models, entryCounts: Object.fromEntries(counts), message: "Content library ready." });
+    try {
+      const outcome = await load();
+      if (outcome.status === "ready") {
+        const counts = await Promise.all(outcome.models.map(async (model) => [model.id, await this.provider.store.countEntries(model.id)] as const));
+        this.set({ ...initialState, phase: "ready", models: outcome.models, entryCounts: Object.fromEntries(counts), message: "Content library ready." });
+      }
+      else if (outcome.status === "recovery-required") this.set({ ...initialState, phase: "recovery", models: outcome.models, recoveryMessage: outcome.recovery.message, message: "Recovery required. Source data was preserved." });
+      else this.set({ ...initialState, phase: "error", message: outcome.error.message });
+    } catch (reason) {
+      this.set({ ...initialState, phase: "error", message: reason instanceof Error ? reason.message : "Content library initialization failed." });
     }
-    else if (outcome.status === "recovery-required") this.set({ ...initialState, phase: "recovery", models: outcome.models, recoveryMessage: outcome.recovery.message, message: "Recovery required. Source data was preserved." });
-    else this.set({ ...initialState, phase: "error", message: outcome.error.message });
   }
   private installModelQueue(record: ContentModelRecord): void {
     this.unsubscribeModel?.(); void this.modelQueue?.close();

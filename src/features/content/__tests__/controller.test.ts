@@ -59,4 +59,18 @@ describe("ContentAuthoringController", () => {
     expect(controller.state.phase).toBe("recovery"); expect(controller.state.recoveryMessage).toContain("preserved");
     await controller.startFresh(); expect(controller.state.phase).toBe("ready");
   });
+
+  it("returns from an Entry to schema inspection after flushing", async () => {
+    const provider = createMemoryContentProvider(); const controller = createContentAuthoringController(provider);
+    await controller.initialize(); await controller.openModel("articles"); await controller.openEntry("entry-1");
+    controller.updateEntryValue("title", "Saved before schema"); await controller.inspectSchema();
+    expect(controller.state.entry).toBeNull(); expect(controller.state.activePane).toBe("inspector");
+    const saved = await provider.store.getEntry("entry-1"); expect(saved.status === "loaded" && saved.record.values.title).toBe("Saved before schema");
+  });
+
+  it("transitions count-loading failures into the recoverable error UI state", async () => {
+    const provider = createMemoryContentProvider(); vi.spyOn(provider.store, "countEntries").mockRejectedValue(new Error("count failed"));
+    const controller = createContentAuthoringController(provider); await controller.initialize();
+    expect(controller.state.phase).toBe("error"); expect(controller.state.message).toBe("count failed");
+  });
 });

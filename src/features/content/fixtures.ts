@@ -1,17 +1,11 @@
-import { createContentEntryRecord, createContentModelRecord, type ContentInitializationOutcome, type ContentProvider } from "../../content";
+import { createContentEntryRecord, createContentModelRecord, type ContentEntryRecord, type ContentInitializationOutcome, type ContentModelRecord, type ContentProvider } from "../../content";
 
-export const contentRenderFixtures = Object.freeze({
-  populated: { modelCount: 2, entryCount: 3 },
-  empty: { modelCount: 0, entryCount: 0 },
-  single: { modelKind: "single", entryCount: 1 },
-  longText: { name: "Editorial/content/with/a/very/long/delimiter-aware/model/path" },
-  broken: { initialization: "recovery-required", sourcePreserved: true },
-});
+export type ContentRenderFixtureName = "populated" | "empty" | "single" | "long-text" | "broken";
 
-export function createMemoryContentProvider(options: { initialization?: ContentInitializationOutcome; failWrites?: boolean } = {}): ContentProvider {
+export function createMemoryContentProvider(options: { initialization?: ContentInitializationOutcome; failWrites?: boolean; models?: readonly ContentModelRecord[]; entries?: readonly ContentEntryRecord[] } = {}): ContentProvider {
   const model = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "title", key: "title", label: "Title", required: true, kind: "text" }] }, { id: "articles", timestamp: "2026-01-01T00:00:00.000Z" });
   const entry = createContentEntryRecord(model.id, { title: "Hello" }, { id: "entry-1", timestamp: "2026-01-01T00:00:00.000Z" });
-  let models = [model]; let entries = [entry];
+  let models = structuredClone(options.models ?? [model]); let entries = structuredClone(options.entries ?? [entry]);
   const ready = (): ContentInitializationOutcome => options.initialization ?? { status: "ready", models: models.map((record) => ({ id: record.id, name: record.document.name, kind: record.document.kind, fieldCount: record.document.fields.length, createdAt: record.createdAt, updatedAt: record.updatedAt })) };
   return { descriptor: { id: "content-indexeddb", label: "Browser storage" }, initialization: { initialize: async () => ready(), retry: async () => ready(), startFresh: async () => { models = []; entries = []; return { status: "ready", models: [] }; } }, store: {
     provider: { id: "content-indexeddb", label: "Browser storage" }, listModels: async () => { const outcome = ready(); return outcome.status === "ready" ? outcome.models : []; },
@@ -28,3 +22,19 @@ export function createMemoryContentProvider(options: { initialization?: ContentI
     seed: async () => undefined, clear: async () => { models = []; entries = []; },
   } };
 }
+
+/** Stable route-prop factories used by later browser confirmation without hard-coding UI labels. */
+export const contentRenderFixtures: Readonly<Record<ContentRenderFixtureName, () => { provider: ContentProvider }>> = Object.freeze({
+  populated: () => ({ provider: createMemoryContentProvider() }),
+  empty: () => ({ provider: createMemoryContentProvider({ models: [], entries: [] }) }),
+  single: () => {
+    const model = createContentModelRecord({ name: "Site settings", kind: "single", fields: [{ id: "site-name", key: "siteName", label: "Site name", required: true, kind: "text" }] }, { id: "site-settings", timestamp: "2026-01-01T00:00:00.000Z" });
+    const entry = createContentEntryRecord(model.id, { "site-name": "Zudo Composer" }, { id: "site-settings-entry", timestamp: "2026-01-01T00:00:00.000Z" });
+    return { provider: createMemoryContentProvider({ models: [model], entries: [entry] }) };
+  },
+  "long-text": () => {
+    const model = createContentModelRecord({ name: "Editorial/content/with/a/very/long/delimiter-aware/model/path", kind: "collection", fields: [{ id: "long-title", key: "longTitle", label: "A long field label that must remain contained inside the Inspector", required: true, kind: "long-text" }] }, { id: "long-text-model", timestamp: "2026-01-01T00:00:00.000Z" });
+    return { provider: createMemoryContentProvider({ models: [model], entries: [] }) };
+  },
+  broken: () => ({ provider: createMemoryContentProvider({ initialization: { status: "recovery-required", models: [], recovery: { kind: "quarantined", reason: "future-schema", sourcePreserved: true, affectedRecordIds: ["future-record"], foundSchemaVersion: 2, message: "A future-schema record was preserved." } } }) }),
+});
