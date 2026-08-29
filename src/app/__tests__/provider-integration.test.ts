@@ -61,6 +61,8 @@ describe("production provider integration", () => {
     const contentSnapshot = await integration.contentProvider.store.scanEntries(PRODUCTION_SEED_IDS.contentModel);
     expect(contentSnapshot.model).toMatchObject({ id: PRODUCTION_SEED_IDS.contentModel, createdAt: PRODUCTION_SEED_TIMESTAMP });
     expect(contentSnapshot.entries.map(({ id }) => id).sort()).toEqual([...PRODUCTION_SEED_IDS.entries].sort());
+    expect(await integration.mappingContentEntries.scan({ providerId: "content-indexeddb", recordId: PRODUCTION_SEED_IDS.contentModel })).toMatchObject({ status: "resolved", snapshot: { count: 2 } });
+    expect(await integration.mappingContentEntries.scan({ providerId: "missing-provider", recordId: PRODUCTION_SEED_IDS.contentModel })).toMatchObject({ status: "provider-error" });
     const sitemapperMappings = await integration.sitemapperMappingCatalog.list();
     expect(sitemapperMappings).toMatchObject({
       failures: [],
@@ -69,6 +71,7 @@ describe("production provider integration", () => {
     const sitemapperMapping = await integration.sitemapperMappingCatalog.routes.resolveMapping({ providerId: "mapping-indexeddb", recordId: PRODUCTION_SEED_IDS.mapping });
     expect(sitemapperMapping).toMatchObject({ status: "resolved", record: { id: PRODUCTION_SEED_IDS.mapping } });
     if (sitemapperMapping.status === "resolved") {
+      expect(await integration.sitemapperMappingCatalog.routes.resolveDefinitionReadiness(sitemapperMapping.record)).toEqual({ status: "ready" });
       const snapshot = await integration.sitemapperMappingCatalog.routes.resolveContentSnapshot(sitemapperMapping.record);
       expect(snapshot).toMatchObject({ status: "resolved", model: { id: PRODUCTION_SEED_IDS.contentModel } });
       if (snapshot.status === "resolved") expect(snapshot.snapshot.entries).toHaveLength(PRODUCTION_SEED_IDS.entries.length);

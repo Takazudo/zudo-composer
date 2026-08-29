@@ -1,5 +1,5 @@
 import type { ComponentCatalog, CompositionDocument } from "../../composer/model/types";
-import type { ContentCatalog, ContentCatalogEntry, ContentEntryRecord, ContentModelRecord, ContentStore } from "../../content";
+import type { ContentCatalog, ContentCatalogEntry, ContentEntryRecord, ContentEntrySnapshot, ContentModelRecord } from "../../content";
 import {
   createMappingRecord,
   evaluateMapping,
@@ -24,6 +24,20 @@ export type MappingSaveStatus = "saved" | "dirty" | "saving" | "error";
 
 export interface MappingUsage { mappingId: string; sitemapNames: readonly string[] }
 export interface MappingLibraryDetail { record: MappingRecord; definition: MappingDefinitionResolution }
+export type MappingContentSnapshotOutcome =
+  | { status: "resolved"; snapshot: ContentEntrySnapshot }
+  | { status: "not-found" }
+  | { status: "invalid"; reason: string }
+  | { status: "provider-error"; reason: string };
+export type MappingContentEntryOutcome =
+  | { status: "resolved"; entry: ContentEntryRecord }
+  | { status: "not-found" }
+  | { status: "invalid"; reason: string }
+  | { status: "provider-error"; reason: string };
+export interface MappingContentEntryCatalog {
+  scan(ref: ContentCatalogEntry["ref"]): Promise<MappingContentSnapshotOutcome>;
+  get(ref: ContentCatalogEntry["ref"], entryId: string): Promise<MappingContentEntryOutcome>;
+}
 
 export interface MappingEditorState {
   phase: "idle" | "loading" | "ready" | "recovery" | "error";
@@ -74,7 +88,7 @@ export class MappingEditorController {
   constructor(
     readonly provider: MappingProvider,
     readonly catalogs: { content: ContentCatalog; compositions: CompositionCatalog },
-    readonly contentStore: Pick<ContentStore, "scanEntries" | "getEntry">,
+    readonly contentEntries: MappingContentEntryCatalog,
     readonly manifest: ComponentCatalog,
     options: MappingEditorControllerOptions = {},
   ) {
@@ -203,8 +217,9 @@ export class MappingEditorController {
     if (revision !== this.refreshRevision) return;
     let entries: readonly ContentEntryRecord[] = []; let entryFailure: string | null = null;
     if (definition.contentModel) {
-      try { entries = (await this.contentStore.scanEntries(definition.contentModel.id)).entries; }
-      catch (reason) { entryFailure = reason instanceof Error ? reason.message : "Sample Entries could not be loaded."; }
+      const outcome = await this.contentEntries.scan(mapping.document.contentModel);
+      if (outcome.status === "resolved") entries = outcome.snapshot.entries;
+      else entryFailure = outcome.status === "not-found" ? "The selected Content model was not found." : outcome.reason;
     }
     if (revision !== this.refreshRevision) return;
     const selected = entries.find((entry) => entry.id === this.current.entry?.id) ?? entries[0] ?? null;
@@ -218,7 +233,11 @@ export class MappingEditorController {
     this.set({ ...this.current, evaluation, previewDocument: evaluation.document ?? null, previewStatus: evaluation.document ? "loading" : "empty", message: evaluation.status === "ready" ? `Entry test passed. ${evaluation.appliedBindingCount} binding${evaluation.appliedBindingCount === 1 ? "" : "s"} applied.` : "Entry test found blocking diagnostics." });
   }
 
-  private async loadEntry(id: string): Promise<ContentEntryRecord> { const outcome = await this.contentStore.getEntry(id); if (outcome.status !== "loaded") throw new Error("Sample Entry could not be loaded."); return outcome.record; }
+  private async loadEntry(id: string): Promise<ContentEntryRecord> {
+    const outcome = await this.contentEntries.get(this.requireMapping().document.contentModel, id);
+    if (outcome.status === "resolved") return outcome.entry;
+    throw new Error(outcome.status === "not-found" ? "Sample Entry could not be found in the selected Content provider." : outcome.reason);
+  }
   private async refreshLibrary(): Promise<void> { this.set({ ...this.current, mappings: await this.provider.store.list() }); await this.refreshLibraryDetails(); }
   private async refreshLibraryDetails(): Promise<void> {
     const details: Record<string, MappingLibraryDetail> = {};
@@ -235,7 +254,7 @@ export class MappingEditorController {
 export function createMappingEditorController(
   provider: MappingProvider,
   catalogs: { content: ContentCatalog; compositions: CompositionCatalog },
-  contentStore: Pick<ContentStore, "scanEntries" | "getEntry">,
+  contentEntries: MappingContentEntryCatalog,
   manifest: ComponentCatalog,
   options?: MappingEditorControllerOptions,
-): MappingEditorController { return new MappingEditorController(provider, catalogs, contentStore, manifest, options); }
+): MappingEditorController { return new MappingEditorController(provider, catalogs, contentEntries, manifest, options); }

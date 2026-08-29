@@ -13,7 +13,7 @@ const base: MappingEditorState = { phase: "ready", mappings: [], libraryDetails:
 function renderState(initial: MappingEditorState) {
   let listener: ((state: MappingEditorState) => void) | undefined; const setActivePane = vi.fn((activePane) => listener?.({ ...initial, activePane }));
   const controller = { state: initial, subscribe(next: (state: MappingEditorState) => void) { listener = next; next(initial); return () => { listener = undefined; }; }, setActivePane, initialize: vi.fn(), close: vi.fn(), flush: vi.fn(), setPreviewCurrent: vi.fn(), setPreviewError: vi.fn() } as unknown as MappingEditorController;
-  render(<MappingApp provider={{} as never} contentCatalog={{} as never} compositionCatalog={{} as never} contentStore={{} as never} componentProvider={activeComponentProvider} controller={controller} />);
+  render(<MappingApp provider={{} as never} contentCatalog={{} as never} compositionCatalog={{} as never} contentEntries={{} as never} componentProvider={activeComponentProvider} controller={controller} />);
   return { setActivePane };
 }
 

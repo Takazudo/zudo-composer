@@ -106,7 +106,7 @@
 }
 
 @media (pointer: coarse) {
-  .sg-mapping-app :where(button, input, select), .sg-mapping-dialog :where(button, input, select) { min-height: 44px; }
+  .sg-mapping-app :is(button, input, select), .sg-mapping-dialog :is(button, input, select) { min-height: 44px; }
   .sg-mapping-app button, .sg-mapping-dialog button { min-width: 44px; }
 }
 

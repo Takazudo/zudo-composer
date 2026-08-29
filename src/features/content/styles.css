@@ -89,7 +89,7 @@
 }
 
 @media (pointer: coarse) {
-  .sg-content-app :where(button, input, select, textarea, .sg-content-check), .sg-content-dialog button { min-height: 44px; }
+  .sg-content-app :is(button, input, select, textarea, .sg-content-check), .sg-content-dialog button { min-height: 44px; }
   .sg-content-app button { min-width: 44px; }
 }
 

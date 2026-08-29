@@ -25,6 +25,7 @@ export interface ContentAuthoringState {
   entryCounts: Readonly<Record<string, number>>;
   model: ContentModelRecord | null;
   entries: readonly ContentEntryRecord[];
+  usedFieldIds: readonly string[];
   entry: ContentEntryRecord | null;
   nextCursor?: string;
   activePane: ContentPane;
@@ -34,7 +35,7 @@ export interface ContentAuthoringState {
 }
 
 const initialState: ContentAuthoringState = {
-  phase: "idle", models: [], entryCounts: {}, model: null, entries: [], entry: null,
+  phase: "idle", models: [], entryCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
   activePane: "models", saveStatus: "saved", message: "", recoveryMessage: null,
 };
 
@@ -82,10 +83,13 @@ export class ContentAuthoringController {
     const outcome = await this.provider.store.getModel(id);
     if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Content model was not found." : "This model is unreadable and has been preserved.");
     await this.closeQueues();
-    const page = await this.provider.store.pageEntries(id, { limit: CONTENT_ENTRY_PAGE_SIZE });
+    const [page, snapshot] = await Promise.all([
+      this.provider.store.pageEntries(id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
+      this.provider.store.scanEntries(id),
+    ]);
     this.installModelQueue(outcome.record);
     this.set({ ...this.current, phase: "ready", model: outcome.record, entries: page.entries, entry: null,
-      nextCursor: page.nextCursor, activePane: "entries", message: "Model loaded." });
+      usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, activePane: "entries", message: "Model loaded." });
     if (outcome.record.document.kind === "single" && page.entries[0]) await this.openEntry(page.entries[0].id);
   }
 
@@ -100,8 +104,11 @@ export class ContentAuthoringController {
     const model = this.requireModel(); const selectedId = this.current.entry?.id;
     await this.flushSessions();
     if (this.entryQueue) { await this.entryQueue.close(); this.unsubscribeEntry?.(); this.entryQueue = null; this.unsubscribeEntry = null; }
-    const page = await this.provider.store.pageEntries(model.id, { limit: CONTENT_ENTRY_PAGE_SIZE });
-    this.set({ ...this.current, entries: page.entries, entry: null, nextCursor: page.nextCursor, entryCounts: { ...this.current.entryCounts, [model.id]: await this.provider.store.countEntries(model.id) }, message: "Entries reloaded." });
+    const [page, snapshot] = await Promise.all([
+      this.provider.store.pageEntries(model.id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
+      this.provider.store.scanEntries(model.id),
+    ]);
+    this.set({ ...this.current, entries: page.entries, usedFieldIds: usedFields(snapshot.entries), entry: null, nextCursor: page.nextCursor, entryCounts: { ...this.current.entryCounts, [model.id]: snapshot.count }, message: "Entries reloaded." });
     if (selectedId && page.entries.some((entry) => entry.id === selectedId)) await this.openEntry(selectedId);
   }
 
@@ -127,7 +134,7 @@ export class ContentAuthoringController {
     const model = this.requireModel();
     const old = model.document.fields.find((field) => field.id === fieldId);
     if (!old) throw new Error("Content field was not found.");
-    if (patch.kind && patch.kind !== old.kind && this.current.entries.some((entry) => Object.hasOwn(entry.values, fieldId))) {
+    if (patch.kind && patch.kind !== old.kind && this.current.usedFieldIds.includes(fieldId)) {
       throw new Error("Field kind cannot change while stored Entries use this field.");
     }
     this.updateModel((record) => ({ ...record, document: { ...record.document, fields: record.document.fields.map((field) => field.id === fieldId ? { ...field, ...patch } : field) } }));
@@ -148,8 +155,11 @@ export class ContentAuthoringController {
     if (outcome.status !== "loaded") throw new Error("The updated model could not be reloaded.");
     await this.entryQueue?.close(); this.entryQueue = null; this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
     this.installModelQueue(outcome.record);
-    const page = await this.provider.store.pageEntries(model.id, { limit: CONTENT_ENTRY_PAGE_SIZE });
-    this.set({ ...this.current, model: outcome.record, entries: page.entries, entry: null, nextCursor: page.nextCursor, message: "Field removed and stored values scrubbed." });
+    const [page, snapshot] = await Promise.all([
+      this.provider.store.pageEntries(model.id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
+      this.provider.store.scanEntries(model.id),
+    ]);
+    this.set({ ...this.current, model: outcome.record, entries: page.entries, usedFieldIds: usedFields(snapshot.entries), entry: null, nextCursor: page.nextCursor, message: "Field removed and stored values scrubbed." });
   }
 
   async createEntry(): Promise<void> {
@@ -185,22 +195,24 @@ export class ContentAuthoringController {
     const values = { ...entry.values }; if (value === undefined || value === "") delete values[fieldId]; else values[fieldId] = value;
     const updated = { ...entry, updatedAt: this.now(), values };
     this.entryQueue.edit(this.entryQueue.ref, updated);
-    this.set({ ...this.current, entry: updated, entries: this.current.entries.map((item) => item.id === updated.id ? updated : item) });
+    this.set({ ...this.current, entry: updated, entries: this.current.entries.map((item) => item.id === updated.id ? updated : item),
+      usedFieldIds: value === undefined || value === "" ? this.current.usedFieldIds : [...new Set([...this.current.usedFieldIds, fieldId])] });
   }
 
   async deleteEntry(id: string): Promise<void> {
     if (this.current.entry?.id === id && this.entryQueue) { await this.entryQueue.flush(); await this.entryQueue.close(); this.entryQueue = null; this.unsubscribeEntry?.(); }
     await this.provider.store.deleteEntry(id);
     const modelId = this.current.model?.id;
+    const usedFieldIds = modelId ? usedFields((await this.provider.store.scanEntries(modelId)).entries) : this.current.usedFieldIds;
     this.set({ ...this.current, entries: this.current.entries.filter((entry) => entry.id !== id), entry: this.current.entry?.id === id ? null : this.current.entry,
-      entryCounts: modelId ? { ...this.current.entryCounts, [modelId]: Math.max(0, (this.current.entryCounts[modelId] ?? 1) - 1) } : this.current.entryCounts, message: "Entry deleted." });
+      usedFieldIds, entryCounts: modelId ? { ...this.current.entryCounts, [modelId]: Math.max(0, (this.current.entryCounts[modelId] ?? 1) - 1) } : this.current.entryCounts, message: "Entry deleted." });
   }
 
   async deleteModel(id: string): Promise<void> {
     if (this.current.model?.id === id) { await this.flushSessions(); await this.closeQueues(); }
     await this.provider.store.deleteModel(id); await this.refreshModels();
     const entryCounts = { ...this.current.entryCounts }; delete entryCounts[id];
-    this.set({ ...this.current, entryCounts, model: this.current.model?.id === id ? null : this.current.model, entries: this.current.model?.id === id ? [] : this.current.entries, entry: null, activePane: "models", message: "Model and its Entries deleted." });
+    this.set({ ...this.current, entryCounts, model: this.current.model?.id === id ? null : this.current.model, entries: this.current.model?.id === id ? [] : this.current.entries, usedFieldIds: this.current.model?.id === id ? [] : this.current.usedFieldIds, entry: null, activePane: "models", message: "Model and its Entries deleted." });
   }
 
   setActivePane(activePane: ContentPane): void { this.set({ ...this.current, activePane }); }
@@ -238,6 +250,10 @@ export class ContentAuthoringController {
   private uniqueFieldKey(base: string): string { const keys = new Set(this.requireModel().document.fields.map((field) => field.key)); let key = base; let i = 2; while (keys.has(key)) key = `${base}${i++}`; return key; }
   private async refreshModels(): Promise<void> { const models = await this.provider.store.listModels(); const counts = await Promise.all(models.map(async (model) => [model.id, await this.provider.store.countEntries(model.id)] as const)); this.set({ ...this.current, models, entryCounts: Object.fromEntries(counts) }); }
   private set(state: ContentAuthoringState): void { this.current = state; for (const listener of [...this.listeners]) listener(state); }
+}
+
+function usedFields(entries: readonly ContentEntryRecord[]): string[] {
+  return [...new Set(entries.flatMap((entry) => Object.keys(entry.values)))].sort();
 }
 
 export function createContentAuthoringController(provider: ContentProvider, options?: { idFactory?: IdFactory; now?: () => string }): ContentAuthoringController {

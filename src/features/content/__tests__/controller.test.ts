@@ -31,6 +31,17 @@ describe("ContentAuthoringController", () => {
     expect(reloaded.status === "loaded" && reloaded.record.values.title).toBeUndefined();
   });
 
+  it("locks a field used outside the bounded Entry page", async () => {
+    const provider = createMemoryContentProvider();
+    vi.spyOn(provider.store, "pageEntries").mockResolvedValue({ entries: [] });
+    const controller = createContentAuthoringController(provider);
+    await controller.initialize();
+    await controller.openModel("articles");
+    expect(controller.state.entries).toEqual([]);
+    expect(controller.state.usedFieldIds).toContain("title");
+    expect(() => controller.updateField("title", { kind: "number" })).toThrow("cannot change");
+  });
+
   it("requests bounded pages, loads the next page, deletes, and reloads", async () => {
     const provider = createMemoryContentProvider(); const original = provider.store.pageEntries;
     const pageEntries = vi.spyOn(provider.store, "pageEntries").mockImplementation(async (id, options) => {

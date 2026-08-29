@@ -4,12 +4,13 @@ import {
   type CompositionDocument, type CompositionInitializationOutcome, type CompositionProvider, type CompositionStore,
 } from "../composer/browser";
 import { createContentCatalog, type ContentCatalog } from "../content/catalog";
-import { createContentEntryRecord, createContentModelRecord, type ContentInitializationOutcome, type ContentProvider } from "../content/library";
+import { ContentPersistenceError, createContentEntryRecord, createContentModelRecord, type ContentInitializationOutcome, type ContentProvider } from "../content/library";
 import { createIndexedDbContentProvider } from "../content/storage/indexeddb";
 import { activeComponentProvider } from "../features/composer/active-pack";
+import type { MappingContentEntryCatalog } from "../features/mapping";
 import {
   createCompositionCatalog as createMappingCompositionCatalog, createIndexedDbMappingProvider,
-  createMappingCatalog, createMappingRecord, MappingPersistenceError, type CompositionCatalog as MappingCompositionCatalog,
+  createMappingCatalog, createMappingRecord, MappingPersistenceError, resolveMappingDefinition, type CompositionCatalog as MappingCompositionCatalog,
   type MappingCatalog, type MappingInitializationOutcome, type MappingProvider,
 } from "../mapping";
 import { createCompositionCatalog, createMappingAssignmentCatalog, type CompositionCatalog } from "../sitemapper/catalog";
@@ -127,6 +128,7 @@ export interface ProductionProviderIntegration {
   componentProvider: typeof activeComponentProvider;
   compositionProviders: readonly CompositionProvider[]; compositionCatalog: CompositionCatalog; mappingCompositionCatalog: MappingCompositionCatalog;
   contentProviders: readonly ContentProvider[]; contentProvider: ContentProvider; contentCatalog: ContentCatalog;
+  mappingContentEntries: MappingContentEntryCatalog;
   mappingProviders: readonly MappingProvider[]; mappingProvider: MappingProvider; mappingCatalog: MappingCatalog;
   sitemapperMappingCatalog: MappingAssignmentCatalog;
 }
@@ -146,6 +148,30 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   const contentCatalog: ContentCatalog = {
     listModels: async () => { await initializeContent(); return baseContentCatalog.listModels(); },
     resolveModel: async (ref) => { await initializeContent(); return baseContentCatalog.resolveModel(ref); },
+  };
+  const mappingContentEntries: MappingContentEntryCatalog = {
+    async scan(ref) {
+      if (ref.providerId !== contentProvider.descriptor.id) return { status: "provider-error", reason: `Content provider "${ref.providerId}" is unavailable.` };
+      const initialization = await initializeContent();
+      if (initialization.status !== "ready") return { status: "provider-error", reason: initialization.status === "error" ? initialization.error.message : initialization.recovery.message };
+      try { return { status: "resolved", snapshot: await contentProvider.store.scanEntries(ref.recordId) }; }
+      catch (error) {
+        if (error instanceof ContentPersistenceError && error.code === "not-found") return { status: "not-found" };
+        if (error instanceof ContentPersistenceError && (error.code === "validation" || error.code === "unsupported-version")) return { status: "invalid", reason: error.message };
+        return { status: "provider-error", reason: error instanceof Error ? error.message : "Content snapshot could not be loaded." };
+      }
+    },
+    async get(ref, entryId) {
+      if (ref.providerId !== contentProvider.descriptor.id) return { status: "provider-error", reason: `Content provider "${ref.providerId}" is unavailable.` };
+      const initialization = await initializeContent();
+      if (initialization.status !== "ready") return { status: "provider-error", reason: initialization.status === "error" ? initialization.error.message : initialization.recovery.message };
+      try {
+        const outcome = await contentProvider.store.getEntry(entryId);
+        if (outcome.status === "loaded") return outcome.record.modelId === ref.recordId ? { status: "resolved", entry: outcome.record } : { status: "not-found" };
+        if (outcome.status === "not-found") return { status: "not-found" };
+        return { status: "invalid", reason: outcome.status === "invalid" ? outcome.issue.message : `Entry uses unsupported schema version ${outcome.foundSchemaVersion}.` };
+      } catch (error) { return { status: "provider-error", reason: error instanceof Error ? error.message : "Content Entry could not be loaded." }; }
+    },
   };
   const baseMappingCompositionCatalog = createMappingCompositionCatalog(compositionProviders);
   const initializeCompositions = () => Promise.allSettled(compositionInitializers.map((initializer) => initializer()));
@@ -176,12 +202,17 @@ export function createProductionProviderIntegration(options: ProductionProviderI
         return contentProvider.store.scanEntries(modelId);
       },
     },
-  }]);
+  }], async (mapping) => {
+    const definition = await resolveMappingDefinition(mapping, { content: contentCatalog, compositions: mappingCompositionCatalog }, activeComponentProvider.catalog);
+    return definition.status === "ready"
+      ? { status: "ready" }
+      : { status: "blocked", diagnostics: definition.diagnostics.map(({ code, message }) => ({ code, message })) };
+  });
   return Object.freeze({
     componentProvider: activeComponentProvider, compositionProviders,
     compositionCatalog: createInitializedCompositionCatalog(compositionProviders, compositionInitializers),
     mappingCompositionCatalog,
-    contentProviders, contentProvider, contentCatalog,
+    contentProviders, contentProvider, contentCatalog, mappingContentEntries,
     mappingProviders, mappingProvider, mappingCatalog: createMappingCatalog(mappingProviders), sitemapperMappingCatalog,
   });
 }

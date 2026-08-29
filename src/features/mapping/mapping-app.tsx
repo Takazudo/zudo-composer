@@ -1,16 +1,16 @@
 import type { ComponentChildren, JSX } from "preact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { ContentCatalog, ContentModelRecord, ContentStore } from "../../content";
+import type { ContentCatalog, ContentModelRecord } from "../../content";
 import type { CompositionCatalog, MappingBinding, MappingDefinitionDiagnostic, MappingEntryDiagnostic, MappingProvider, MappingTarget, MappingTransform } from "../../mapping";
 import type { ComposerComponentProvider } from "../composer/component-provider";
 import { MappingPreviewHost } from "./preview-host";
-import { compatibleTransforms, createMappingEditorController, type MappingEditorController, type MappingEditorState, type MappingPane, type MappingUsage } from "./controller";
+import { compatibleTransforms, createMappingEditorController, type MappingContentEntryCatalog, type MappingEditorController, type MappingEditorState, type MappingPane, type MappingUsage } from "./controller";
 
 export interface MappingRouteContentProps {
   provider: MappingProvider;
   contentCatalog: ContentCatalog;
   compositionCatalog: CompositionCatalog;
-  contentStore: Pick<ContentStore, "scanEntries" | "getEntry">;
+  contentEntries: MappingContentEntryCatalog;
   componentProvider: ComposerComponentProvider;
   usages?: readonly MappingUsage[];
   controller?: MappingEditorController;
@@ -22,7 +22,7 @@ const targetKey = (target: MappingTarget): string => `${target.nodeId}\u0000${ta
 const parseTarget = (value: string): MappingTarget => { const [nodeId, prop] = value.split("\u0000"); return { nodeId: nodeId!, prop: prop! }; };
 
 export function MappingApp(props: MappingRouteContentProps): JSX.Element {
-  const controller = useMemo(() => props.controller ?? createMappingEditorController(props.provider, { content: props.contentCatalog, compositions: props.compositionCatalog }, props.contentStore, props.componentProvider.catalog), [props.controller, props.provider, props.contentCatalog, props.compositionCatalog, props.contentStore, props.componentProvider.catalog]);
+  const controller = useMemo(() => props.controller ?? createMappingEditorController(props.provider, { content: props.contentCatalog, compositions: props.compositionCatalog }, props.contentEntries, props.componentProvider.catalog), [props.controller, props.provider, props.contentCatalog, props.compositionCatalog, props.contentEntries, props.componentProvider.catalog]);
   const [state, setState] = useState<MappingEditorState>(controller.state);
   const [error, setError] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
