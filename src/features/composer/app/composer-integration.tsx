@@ -119,7 +119,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
     };
   }, [linkedRetryEpoch, props.reuseResolution]);
   const api = useComposerIntegration({
-    manifest: props.componentProvider.manifest,
+    componentProvider: props.componentProvider,
     controllerOptions: props.controllerOptions,
     reuseResolution: effectiveReuseResolution,
   });

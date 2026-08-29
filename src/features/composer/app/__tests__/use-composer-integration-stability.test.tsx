@@ -14,7 +14,7 @@ import "../../test-support/cleanup";
 import { beforeEach, describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/preact";
 import { VIRTUAL_ROOT_SLOT_ID } from "../../../../composer/browser";
-import { fixturePackManifest, makeAbcDocument, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
+import { fixtureComponentProvider, makeAbcDocument, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
 import { useComposerIntegration } from "../use-composer-integration";
 import { controllerOptions } from "../test-support/controller-fixtures";
 
@@ -26,7 +26,7 @@ function setup() {
   const options = controllerOptions(makeAbcDocument());
   return renderHook(() =>
     useComposerIntegration({
-      manifest: fixturePackManifest,
+      componentProvider: fixtureComponentProvider,
       controllerOptions: options,
     }),
   );
@@ -35,6 +35,11 @@ function setup() {
 beforeEach(() => localStorage.clear());
 
 describe("useComposerIntegration — referential stability (#286)", () => {
+  it("passes the authoritative provider catalog to the controller by identity", () => {
+    const { result } = setup();
+    expect(result.current.controller.manifest).toBe(fixtureComponentProvider.catalog);
+  });
+
   it("exportState and handleEscape keep identity across an unrelated rerender (canvas selection change)", () => {
     const { result } = setup();
     const exportStateBefore = result.current.exportState;

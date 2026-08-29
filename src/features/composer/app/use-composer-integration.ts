@@ -7,21 +7,17 @@
 // the live session/document/selection and the shared chooser + callback set
 // without re-deriving any of it.
 //
-// Manifest reconciliation (the one non-obvious wiring detail):
+// Provider reconciliation (the one non-obvious wiring detail):
 //   - the tree (#250) and chooser (#250) want BOTH the RICHER
 //     `ComponentDefinition[]` array (title/category/description) AND the
 //     model-side `ComponentCatalog` (for slot/traversal/diagnostic helpers);
 //   - the inspector (#249), the export generator (#245), and the controller
 //     model (#245/#247) want only the model-side `ComponentCatalog` lookup.
-//   `ComponentDefinition` is a structural superset of the model's
-//   `ComponentManifestEntry`, so ONE richer array is the source of truth and the
-//   `ComponentCatalog` is DERIVED from it (`createComponentCatalog`) exactly ONCE,
-//   here — never a second, drift-prone (or redundantly re-validated) manifest.
-//   The controller is handed that same derived `manifest`, and `composer-
+//   The validated provider view owns both projections. The controller receives
+//   that exact catalog object, and `composer-
 //   integration.tsx` passes that identical `controller.manifest` down to the
 //   tree/chooser too (alongside the raw `manifestEntries` array), so
-//   `createComponentCatalog` never runs more than once per `manifestEntries` change
-//   (issue #290) and `controller.manifest` is identical to what the
+//   `controller.manifest` is identical to what the
 //   inspector/export/tree/chooser all receive.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
@@ -31,9 +27,8 @@ import type {
   GlobalTemplateResolutionOutcome,
   InsertionTarget,
 } from "../../../composer/browser";
-import { compositionRecordRefKey, createComponentCatalog } from "../../../composer/browser";
-import type { ComponentPackManifest } from "@zudo-composer/component-contract";
-import type { ComponentDefinition } from "../active-pack";
+import { compositionRecordRefKey } from "../../../composer/browser";
+import type { ComponentDefinition, ComposerComponentProvider } from "../active-pack";
 import type { ComposerCanvasViewport } from "../chrome/controller-model";
 import {
   useComposerController,
@@ -49,8 +44,8 @@ import { useHostTheme } from "./use-host-theme";
 import { getPersistedViewport, setPersistedViewport } from "./viewport";
 
 export interface UseComposerIntegrationOptions {
-  /** Explicit serializable component pack shared with the controller and preview. */
-  manifest: ComponentPackManifest;
+  /** Exact validated provider shared with the controller and preview. */
+  componentProvider: ComposerComponentProvider;
   /** Forwarded to `useComposerController` (including deterministic test seams). */
   controllerOptions: Omit<UseComposerControllerOptions, "manifest">;
   /**
@@ -129,8 +124,8 @@ export interface ComposerIntegrationApi {
 export function useComposerIntegration(
   options: UseComposerIntegrationOptions,
 ): ComposerIntegrationApi {
-  const manifestEntries = options.manifest.components;
-  const manifest = useMemo(() => createComponentCatalog(options.manifest), [options.manifest]);
+  const manifestEntries = options.componentProvider.manifest.components;
+  const manifest = options.componentProvider.catalog;
   const controller = useComposerController({ manifest, ...options.controllerOptions });
   const { state } = controller;
   const [reuseResolution, setReuseResolution] = useState<GlobalTemplateResolutionOutcome | null>(null);
