@@ -9,14 +9,11 @@
  * "five-track" grid the issue describes: tree rail | resizer | canvas
  * (minmax(0,1fr)) | resizer | inspector rail. Below 64rem the rails and
  * resizers are hidden and the canvas fills the width — this is the
- * content-driven narrow seam originally verified by the epic's now-retired
- * prototype (`@media (max-width: 1023px)`), reproduced here from the copy
- * only (no code import — see repo-root `_temp-resource/README.md`).
+ * content-driven narrow seam retained from the frozen source provenance.
  *
- * Overlay z-index: the resizer handles reuse the existing `sidebar` tier
- * (`z-index-sidebar`, src/config/z-index-tokens.ts — its documented purpose
- * is literally "…resizer handle") and the toolbar reuses `toolbar`. No new
- * z-index tier was needed, so `pnpm gen:z-index` was not run.
+ * Overlay z-index tiers are project-local tokens in
+ * `src/styles/app-tokens.css`: sidebar for resizer-adjacent guidance and toolbar
+ * for the fixed control row.
  * ========================================================================== */
 
 :root {
@@ -325,8 +322,8 @@
  * 2.75rem under `@media (pointer: coarse)`), the color swatch box, and two
  * spots that must override `.sg-composer-toolbar-button`'s
  * own (unlayered) color/border — a Tailwind utility on the same element can't
- * win that fight, since `@import "tailwindcss/utilities"` in global.css is
- * layered while this file is not, and unlayered rules always beat layered
+ * win that fight, since generated Tailwind utilities are layered while this
+ * file is not, and unlayered rules always beat layered
  * ones regardless of source order or specificity. */
 
 .sg-composer-inspector-control {
@@ -434,9 +431,8 @@
  * glyph is small — see css-wisdom's touch-target-sizing article.
  *
  * Overlay z-index: the chooser `<dialog>` and its `::backdrop` reuse the
- * EXISTING `--z-index-modal` / `--z-index-modal-backdrop` tiers (already
- * defined for exactly this purpose) — no new tier needed, so `pnpm
- * gen:z-index` was not run.
+ * project-local `--z-index-modal` / `--z-index-modal-backdrop` tiers from
+ * `src/styles/app-tokens.css`.
  * ========================================================================== */
 
 /* ── Structure rail ─────────────────────────────────────────────────────── */
@@ -1298,9 +1294,8 @@
    `position: fixed`, positioned/clamped in JS (`menu-position.ts`) — this
    file only supplies appearance.
 
-   Overlay z-index: adopts the EXISTING `popover` tier (`--z-index-popover`,
-   src/config/z-index-tokens.ts) — reserved for exactly this ("inline
-   popovers") and unused until now, so `pnpm gen:z-index` was not run. It
+   Overlay z-index adopts the project-local `--z-index-popover` tier from
+   `src/styles/app-tokens.css`. It
    sits above ordinary content/toolbar/sidebar chrome and below the modal
    chooser/backdrop tiers, which the menu is never open at the same time as
    (selecting "Add component…" closes the menu before the chooser opens). */
@@ -1446,8 +1441,7 @@
  * it for free from their `-catalog` parent, just one level lower than
  * before.
  *
- * No new z-index tier: the preview stage sits INSIDE the existing
- * `--z-index-modal` dialog, so `pnpm gen:z-index` was not run.
+ * The preview stage sits inside the existing `--z-index-modal` dialog.
  * ========================================================================== */
 
 .sg-composer-chooser-body {

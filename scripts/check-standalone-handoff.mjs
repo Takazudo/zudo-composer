@@ -103,8 +103,18 @@ for (const [path, stale] of [
   ["src/features/composer/ui/toolbar/toolbar-actions.tsx", /Reset\/Export/],
   ["src/features/composer/ui/toolbar/mode-toggle.tsx", /wave-5 integration/],
   ["src/features/composer/ui/toolbar/status-indicator.tsx", /later status chip/],
+  ["src/features/composer/chrome/composer-workspace.tsx", /later Composer wave|once the isolated preview runtime|now-retired prototype/],
+  ["src/features/composer/chrome/composer-placeholder-pane.tsx", /does NOT implement|exclusive-ownership table/],
+  ["src/features/composer/ui/chooser/composer-chooser.tsx", /canvas insert points \(a later wave\)/],
+  ["src/features/composer/ui/shared/inline-confirm.tsx", /lands in a later wave|toolbar Reset/],
   ["src/features/sitemapper/chrome/sitemapper-workspace.tsx", /later Sitemapper wave|once the Sitemapper controller is assembled|once the authoring controller is assembled/],
 ]) assert.doesNotMatch(read(path), stale, `${path} retained a provisional copied/wave claim`);
+
+for (const path of [
+  "src/components/icons/index.ts",
+  "src/features/composer/styles.css",
+  "src/features/composer/preview/preview.css",
+]) assert.doesNotMatch(read(path), /src\/styles\/global\.css|src\/config\/z-index-tokens\.ts|_temp-resource|gen:z-index/, `${path} retained a broken copied-source reference`);
 
 for (const forbidden of ["workspace:", "file:", "link:", "path:", "packages/ui", "../zudo-sg"]) {
   assert.ok(!packageJson.dependencies["@zudo-sg/ui"].includes(forbidden), `provider spec uses forbidden resolution: ${forbidden}`);

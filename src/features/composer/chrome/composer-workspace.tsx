@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// The Composer document shell's toolbar + five-track workspace (issue #247).
+// The Composer document shell's toolbar + five-track workspace.
 //
 // Purely presentational — no state of its own. `tree`, `canvas`, `inspector`,
 // `toolbar`, and `banner` are typed content seams driven by the app root.
@@ -33,11 +33,11 @@ export interface ComposerWorkspaceProps {
   toolbar: ComponentChildren;
   /** Optional current provider/navigation status above the grid. */
   banner?: ComponentChildren;
-  /** Structure tree region (#250). Defaults to a placeholder. */
+  /** Structure tree region. Defaults to an explicit omitted-surface fallback. */
   tree?: ComponentChildren;
-  /** Canvas / preview region (#248). Defaults to a placeholder. */
+  /** Canvas / preview region. Defaults to an explicit omitted-surface fallback. */
   canvas?: ComponentChildren;
-  /** Inspector region (#249). Defaults to a placeholder. */
+  /** Inspector region. Defaults to an explicit omitted-surface fallback. */
   inspector?: ComponentChildren;
   /** SSR-default aria-valuenow for the tree resizer, in px. */
   treeWidthPx?: number;
@@ -62,7 +62,7 @@ export function ComposerWorkspace({
       {banner}
       <div class="sg-composer-grid" data-sg-composer-grid>
         <div class="sg-composer-tree-rail" id={ID_TREE_RAIL} aria-label="Structure">
-          {tree ?? <ComposerPlaceholderPane label="Structure" note="The tree rail mounts here in a later Composer wave." />}
+          {tree ?? <ComposerPlaceholderPane label="Structure" note="No structure surface was supplied." />}
         </div>
         <div
           class="sg-composer-resizer"
@@ -80,7 +80,7 @@ export function ComposerWorkspace({
           {canvas ?? (
             <ComposerPlaceholderPane
               label="Canvas"
-              note="The preview surface mounts here once the isolated preview runtime (#248) is wired in."
+              note="No preview surface was supplied."
             />
           )}
         </div>
@@ -97,12 +97,10 @@ export function ComposerWorkspace({
           tabindex={0}
         />
         <div class="sg-composer-inspector" id={ID_INSPECTOR_RAIL} aria-label="Inspector">
-          {inspector ?? <ComposerPlaceholderPane label="Inspector" note="The prop inspector mounts here in a later Composer wave." />}
+          {inspector ?? <ComposerPlaceholderPane label="Inspector" note="No inspector surface was supplied." />}
         </div>
       </div>
-      {/* The canvas-only narrow-seam copy, matching the epic's now-retired
-          prototype text verbatim (no code import). CSS-only visible below
-          the 64rem seam. */}
+      {/* CSS-only narrow-layout guidance, visible below the 64rem seam. */}
       <div class="sg-composer-narrow-note" data-sg-composer-narrow-note>
         <strong>Canvas-only view</strong>
         <span>Use a wider window to edit the tree and properties.</span>

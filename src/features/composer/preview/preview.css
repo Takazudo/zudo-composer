@@ -261,15 +261,14 @@ html[data-composer-preview-doc] {
   opacity: 1;
 }
 
-/* ── End-of-slot add affordance (issue #283) ───────────────────────────────
+/* ── End-of-slot add affordance (ported from Takazudo/zudo-sg#283) ─────────
    The slot's LAST insert point (index === children.length) renders as this
    enlarged, LABELED button instead of the slim between-children bar above —
-   ported from the prototype's .insert-end/.add-btn geometry
-   (_temp-resource/275-composer-ui-parity/composition1/styles.css). Toning
+   retains the frozen source's `.insert-end` / `.add-btn` geometry. Toning
    is INHERITED from the shared .zc-insert rules above (neutral guide-dashed
    at rest, accent only on hover/focus-visible) — every rule below is
    geometry, never a color; the prototype's accent-at-rest styling is
-   deliberately NOT ported (#283's locked toning contract). */
+   deliberately not retained from that source's accent-at-rest variant. */
 .zc-insert-end--vertical { width: 100%; }
 .zc-insert-end--horizontal { width: auto; }
 

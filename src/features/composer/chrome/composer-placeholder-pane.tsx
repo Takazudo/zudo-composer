@@ -1,11 +1,8 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// A typed placeholder for the tree/canvas/inspector regions this issue does
-// NOT implement (structure tree #250, canvas/preview iframe #248, inspector
-// #249 — see the epic's exclusive-ownership table). Rendered by
-// ComposerWorkspace's default slot content, and replaceable by any consumer
-// simply passing `tree` / `canvas` / `inspector` props — see that file's
-// header for the full seam contract.
+// A typed omitted-surface fallback for `ComposerWorkspace`. Production supplies
+// all three regions; isolated shell consumers get an explicit accessible state
+// instead of an empty rail.
 
 import type { JSX } from "preact";
 

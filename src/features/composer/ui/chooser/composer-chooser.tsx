@@ -1,12 +1,10 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// The Composer's component chooser dialog (issue #250).
+// The Composer's component chooser dialog.
 //
-// A single, reusable dialog ANY Add affordance can open by supplying #245's
-// shared `InsertionTarget` (`{ parentId, slotId, index }`) — the same shape
-// canvas insert points (a later wave) and this issue's tree slot Adds both
-// use, so "one code path" (epic #243's synthesis note) holds without this
-// dialog needing to know who opened it.
+// A single, reusable dialog any tree or canvas Add affordance can open by
+// supplying the shared `InsertionTarget` (`{ parentId, slotId, index }`). The
+// chooser therefore has one insertion path and does not need to know its origin.
 //
 // ── Target capture (the acceptance-critical bit) ────────────────────────────
 // Opening the dialog (the `open` prop's false → true transition) CAPTURES
@@ -31,14 +29,14 @@
 //
 // ── Live preview + movable tool shell ───────────────────────────────────────
 // Search/filter/list rendering stayed in this one component (no internal
-// sub-dialog abstraction, per #250's own header note) so this extension could
+// sub-dialog abstraction) so live preview could
 // wrap the existing target-capture/focus/keyboard machinery without
 // re-deriving it. Hovering OR keyboard-focusing a catalog card sets the
 // STICKY `previewedComponentId` (never cleared by mouseleave/blur — only
 // replaced by the next hover/focus); `ChooserPreviewHost` owns the actual
 // second bridge + iframe (see that module's header for the ephemeral
 // create/dispose contract). The shared geometry hook makes the shell movable
-// for this open session only; it does not touch #250's focus-containment,
+// for this open session only; it does not touch focus containment,
 // Escape, or target-capture effects.
 
 import { useEffect, useId, useMemo, useRef, useState } from "preact/hooks";
