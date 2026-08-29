@@ -13,11 +13,13 @@
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
     "test": "vitest run",
-    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm test && pnpm build",
+    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm test && pnpm build && pnpm provider:boundary",
     "headless:negative-scan": "node scripts/check-headless-boundary.mjs",
     "contract:conformance": "node scripts/check-package-conformance.mjs",
     "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
-    "contract:external-install": "node scripts/verify-contract-install.mjs"
+    "contract:external-install": "node scripts/verify-contract-install.mjs",
+    "provider:boundary": "node scripts/check-provider-boundary.mjs",
+    "test:browser": "pnpm build && playwright test"
   },
   "dependencies": {
     "@zudo-composer/component-contract": "workspace:*",
@@ -27,6 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@preact/preset-vite": "^2.10.6",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/dom": "^10.4.1",
