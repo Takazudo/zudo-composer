@@ -9,8 +9,6 @@
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
-import { createFilesystemCompositionStore } from "../src/composer/storage/filesystem/index.ts";
-import { validateCompositionRecord } from "../src/composer/library/validate.ts";
 
 /** @typedef {import("../src/composer/library/types.ts").CompositionRecord} CompositionRecord */
 /** @typedef {{url?: string, method?: string, headers: Record<string, string | undefined>, body?: string}} DevRequest */
@@ -415,9 +413,13 @@ export default function composerFileProviderPlugin() {
         maxBodyBytes: COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES,
       })};\n`;
     },
-    configureServer(server) {
+    async configureServer(server) {
       const activeCapability = capability;
       if (activeCapability === undefined || projectRoot === undefined) return;
+      const {
+        createFilesystemCompositionStore,
+        validateCompositionRecord,
+      } = await server.ssrLoadModule("/src/composer/storage/file-provider/dev-server-entry.ts");
       const handler = createComposerFileProviderMiddleware({
         capability: activeCapability,
         validateRecord: validateCompositionRecord,

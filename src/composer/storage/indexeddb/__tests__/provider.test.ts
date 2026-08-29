@@ -94,6 +94,23 @@ describe("IndexedDB composition provider", () => {
     expect((await inspect(factory)).records).not.toContainEqual(future);
   });
 
+  it("quarantines malformed current data without rewriting it", async () => {
+    const factory = new FDBFactory();
+    const currentProvider = provider(factory);
+    const initialized = await currentProvider.initialization.initialize();
+    if (initialized.status !== "ready") throw new Error("provider did not initialize");
+    const malformed = { id: "broken", createdAt: T1, updatedAt: T1, document: { schemaVersion: 2 } };
+    const db = await requestResult(factory.open(COMPOSER_DATABASE_NAME));
+    await requestResult(db.transaction(COMPOSITIONS_STORE_NAME, "readwrite").objectStore(COMPOSITIONS_STORE_NAME).put(malformed));
+    db.close();
+
+    await expect(currentProvider.initialization.retry()).resolves.toMatchObject({
+      status: "recovery-required",
+      recovery: { kind: "quarantined", reason: "malformed", sourcePreserved: true },
+    });
+    expect((await inspect(factory)).records).toContainEqual(malformed);
+  });
+
   it("keeps dependency scans and source mutations provider-atomic", async () => {
     const factory = new FDBFactory();
     const currentProvider = provider(factory);

@@ -300,9 +300,15 @@ describe("dev/build registration boundary", () => {
     const { instance, source } = setupSource("serve");
     const config = JSON.parse(source.match(/= (.*);/)?.[1] ?? "null");
     let middleware: ((request: Readable & { url?: string; method?: string; headers: Record<string, string> }, response: unknown, next: () => void) => Promise<void>) | undefined;
-    instance.configureServer?.({
+    const ssrLoadModule = vi.fn().mockResolvedValue({
+      createFilesystemCompositionStore,
+      validateCompositionRecord,
+    });
+    await instance.configureServer?.({
       middlewares: { use(value: typeof middleware) { middleware = value; } },
+      ssrLoadModule,
     } as never);
+    expect(ssrLoadModule).toHaveBeenCalledWith("/src/composer/storage/file-provider/dev-server-entry.ts");
     if (!middleware) throw new Error("Vite middleware was not registered");
 
     const requestStream = Readable.from([
@@ -322,5 +328,14 @@ describe("dev/build registration boundary", () => {
     expect(response.statusCode).toBe(413);
     expect(response.end).toHaveBeenCalledTimes(1);
     expect(response.end.mock.calls[0]![0]).toContain("body-too-large");
+  });
+
+  it("never loads the Node filesystem entry for production configuration", async () => {
+    const { instance } = setupSource("build");
+    const ssrLoadModule = vi.fn();
+    const use = vi.fn();
+    await instance.configureServer?.({ ssrLoadModule, middlewares: { use } } as never);
+    expect(ssrLoadModule).not.toHaveBeenCalled();
+    expect(use).not.toHaveBeenCalled();
   });
 });
