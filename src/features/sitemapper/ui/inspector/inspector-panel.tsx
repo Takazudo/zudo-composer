@@ -3,7 +3,7 @@
 
 import type { JSX } from "preact";
 import type { CompositionCatalog } from "../../../../sitemapper/catalog";
-import type { MappingAssignmentCatalog } from "../../../../sitemapper/routes";
+import type { MappingAssignmentCatalog, SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
 import type { CompositionRef, SitemapNode, SitemapPageSource } from "../../../../sitemapper/model";
 import { CompositionField } from "./composition-field";
 import { MappingField } from "./mapping-field";
@@ -17,6 +17,7 @@ export interface InspectorPanelProps {
   onFlushPropUpdates?: () => void;
   onUpdateComposition: (nodeId: string, composition: CompositionRef | null) => void;
   mappingCatalog?: MappingAssignmentCatalog;
+  routeInfo?: SitemapNodeRouteInfo;
   onUpdateSource?: (nodeId: string, source: SitemapPageSource) => void;
 }
 
@@ -34,6 +35,7 @@ export function InspectorPanel({
   onFlushPropUpdates,
   onUpdateComposition,
   mappingCatalog,
+  routeInfo,
   onUpdateSource,
 }: InspectorPanelProps): JSX.Element {
   if (!selectedId || !node || node.id !== selectedId) {
@@ -72,7 +74,7 @@ export function InspectorPanel({
           catalog={catalog}
           onChange={(composition) => onUpdateComposition(selectedId, composition)}
         />}
-      {mappingCatalog && <MappingField value={node.source.kind === "mapping" ? node.source : undefined} slug={node.slug} catalog={mappingCatalog} onChange={(source) => onUpdateSource?.(selectedId, source)} />}
+      {mappingCatalog && <MappingField value={node.source.kind === "mapping" ? node.source : undefined} routeInfo={routeInfo} catalog={mappingCatalog} onChange={(source) => onUpdateSource?.(selectedId, source)} />}
     </aside>
   );
 }

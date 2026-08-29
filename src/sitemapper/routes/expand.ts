@@ -1,14 +1,25 @@
 import type { ContentEntryRecord } from "../../content";
 import type { SitemapNode } from "../model";
-import type { DerivedSitemapRoute, ExpandSitemapRoutesOptions, SitemapRouteDiagnostic, SitemapRouteExpansion } from "./types";
+import type { DerivedSitemapRoute, ExpandSitemapRoutesOptions, SitemapNodeRouteInfo, SitemapRouteDiagnostic, SitemapRouteExpansion } from "./types";
 
-function encodedParts(fragment: string): string[] {
-  return fragment.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean)
-    .map((part) => encodeURIComponent(part.normalize("NFC")));
+function encodedParts(fragment: string): { ok: true; parts: string[] } | { ok: false } {
+  try {
+    return {
+      ok: true,
+      parts: fragment.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean)
+        .map((part) => encodeURIComponent(part.normalize("NFC"))),
+    };
+  } catch (error) {
+    if (error instanceof URIError) return { ok: false };
+    throw error;
+  }
 }
 
 export function authoredPath(fragments: readonly string[]): string {
-  const parts = fragments.flatMap(encodedParts);
+  const parts = fragments.flatMap((fragment) => {
+    const encoded = encodedParts(fragment);
+    return encoded.ok ? encoded.parts : [encodeURIComponent("\uFFFD")];
+  });
   return parts.length === 0 ? "/" : `/${parts.join("/")}`;
 }
 
@@ -19,7 +30,12 @@ function entrySegment(value: unknown): { ok: true; segment: string } | { ok: fal
   if (normalized.includes("/") || normalized.includes("?") || normalized.includes("#") || normalized === "." || normalized === "..") {
     return { ok: false, missing: false };
   }
-  return { ok: true, segment: encodeURIComponent(normalized) };
+  try {
+    return { ok: true, segment: encodeURIComponent(normalized) };
+  } catch (error) {
+    if (error instanceof URIError) return { ok: false, missing: false };
+    throw error;
+  }
 }
 
 function append(base: string, segment: string): string {
@@ -34,6 +50,7 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
   const emit = (route: DerivedSitemapRoute): void => {
     const previous = seen.get(route.pathname);
     if (previous) {
+      diagnostics.push({ code: "route-collision", nodeId: previous.nodeId, entryId: previous.entryId, path: previous.pathname, message: `Route ${route.pathname} collides with page "${route.nodeId}".` });
       diagnostics.push({ code: "route-collision", nodeId: route.nodeId, entryId: route.entryId, path: route.pathname, message: `Route ${route.pathname} collides with page "${previous.nodeId}".` });
       routes.push(route);
       return;
@@ -47,6 +64,12 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
 
   const visit = async (node: SitemapNode, ancestors: readonly string[]): Promise<void> => {
     const fragments = [...ancestors, node.slug ?? ""];
+    const malformedFragment = fragments.find((fragment) => !encodedParts(fragment).ok);
+    if (malformedFragment !== undefined) {
+      diagnose(node, "route-fragment-invalid", "A route fragment contains malformed Unicode and cannot be encoded.");
+      for (const child of node.children) await visit(child, fragments);
+      return;
+    }
     const base = authoredPath(fragments);
     if (node.source.kind !== "mapping") {
       emit({ pathname: base, nodeId: node.id, sourceKind: node.source.kind });
@@ -61,6 +84,14 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
         const code = resolved.status === "not-found" ? "mapping-not-found" : resolved.status === "invalid" ? "mapping-invalid" : "mapping-provider-failure";
         diagnose(node, code, resolved.status === "not-found" ? "The assigned Mapping was not found." : resolved.reason);
       } else {
+        let readiness;
+        try { readiness = await catalog.resolveDefinitionReadiness(resolved.record); }
+        catch (error) { readiness = { status: "blocked" as const, diagnostics: [{ code: "readiness-provider-error", message: error instanceof Error ? error.message : "Mapping readiness provider failed." }] }; }
+        if (readiness.status === "blocked") {
+          diagnose(node, "incompatible-mapping", readiness.diagnostics.map((item) => item.message).join(" ") || "The Mapping definition is not ready.");
+          for (const child of node.children) await visit(child, fragments);
+          return;
+        }
         let content;
         try { content = await catalog.resolveContentSnapshot(resolved.record); }
         catch (error) { content = { status: "provider-error" as const, reason: error instanceof Error ? error.message : "Content snapshot provider failed." }; }
@@ -91,5 +122,23 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
     for (const child of node.children) await visit(child, fragments);
   };
   for (const root of document.root) await visit(root, []);
-  return { routes, derivedRouteCount: routes.length, samplePath: routes[0]?.pathname, diagnostics };
+  const routesByNode = new Map<string, DerivedSitemapRoute[]>();
+  for (const route of routes) routesByNode.set(route.nodeId, [...(routesByNode.get(route.nodeId) ?? []), route]);
+  const diagnosticsByNode = new Map<string, SitemapRouteDiagnostic[]>();
+  for (const diagnostic of diagnostics) diagnosticsByNode.set(diagnostic.nodeId, [...(diagnosticsByNode.get(diagnostic.nodeId) ?? []), diagnostic]);
+  const nodeIds = new Set<string>();
+  const collect = (nodes: readonly SitemapNode[]): void => { for (const node of nodes) { nodeIds.add(node.id); collect(node.children); } };
+  collect(document.root);
+  const nodes = new Map<string, SitemapNodeRouteInfo>();
+  for (const nodeId of nodeIds) {
+    const nodeRoutes = routesByNode.get(nodeId) ?? [];
+    const nodeDiagnostics = diagnosticsByNode.get(nodeId) ?? [];
+    nodes.set(nodeId, {
+      derivedRouteCount: nodeRoutes.length,
+      ...(nodeRoutes[0] ? { samplePath: nodeRoutes[0].pathname } : {}),
+      status: nodeDiagnostics.length === 0 ? "ready" : "blocked",
+      diagnostics: nodeDiagnostics,
+    });
+  }
+  return { routes, derivedRouteCount: routes.length, samplePath: routes[0]?.pathname, diagnostics, nodes };
 }

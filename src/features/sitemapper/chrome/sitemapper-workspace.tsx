@@ -77,6 +77,7 @@ export function SitemapperWorkspace({
 }: SitemapperWorkspaceProps): JSX.Element {
   const panes = ["outline", "canvas", "inspector"] as const;
   const panelIds = [ID_TREE_RAIL, "sg-sitemapper-canvas-panel", ID_INSPECTOR_RAIL] as const;
+  const tabIds = ["sg-sitemapper-tab-outline", "sg-sitemapper-tab-canvas", "sg-sitemapper-tab-inspector"] as const;
   const [activePane, setActivePane] = useState<(typeof panes)[number]>("canvas");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const activateFromKey = (event: JSX.TargetedKeyboardEvent<HTMLButtonElement>, index: number): void => {
@@ -106,14 +107,16 @@ export function SitemapperWorkspace({
         banner
       )}
       <div class="sg-sitemapper-tabs" role="tablist" aria-label="Sitemapper panels">
-        {panes.map((pane, index) => <button key={pane} ref={(element) => { tabRefs.current[index] = element; }} type="button" role="tab" aria-selected={activePane === pane} aria-controls={panelIds[index]} tabindex={activePane === pane ? 0 : -1} onClick={() => setActivePane(pane)} onKeyDown={(event) => activateFromKey(event, index)}>{pane[0]!.toUpperCase()}{pane.slice(1)}</button>)}
+        {panes.map((pane, index) => <button key={pane} id={tabIds[index]} ref={(element) => { tabRefs.current[index] = element; }} type="button" role="tab" aria-selected={activePane === pane} aria-controls={panelIds[index]} tabindex={activePane === pane ? 0 : -1} onClick={() => setActivePane(pane)} onKeyDown={(event) => activateFromKey(event, index)}>{pane[0]!.toUpperCase()}{pane.slice(1)}</button>)}
       </div>
       <div class="sg-sitemapper-grid" data-sg-sitemapper-grid data-active-pane={activePane}>
         <div
           class="sg-sitemapper-tree-rail sg-sitemapper-tree"
           id={ID_TREE_RAIL}
           aria-label="Outline"
+          aria-labelledby={tabIds[0]}
           role="tabpanel"
+          data-active={activePane === "outline"}
         >
           {tree ?? (
             <SitemapperWorkspacePlaceholderPane
@@ -134,7 +137,7 @@ export function SitemapperWorkspace({
           aria-valuenow={treeWidthPx}
           tabindex={0}
         />
-        <div class="sg-sitemapper-canvas" data-sg-sitemapper-canvas id="sg-sitemapper-canvas-panel" role="tabpanel">
+        <div class="sg-sitemapper-canvas" data-sg-sitemapper-canvas id="sg-sitemapper-canvas-panel" role="tabpanel" aria-label="Canvas" aria-labelledby={tabIds[1]} data-active={activePane === "canvas"}>
           {canvas ?? (
             <SitemapperWorkspacePlaceholderPane
               label="Canvas"
@@ -154,7 +157,7 @@ export function SitemapperWorkspace({
           aria-valuenow={inspectorWidthPx}
           tabindex={0}
         />
-        <div class="sg-sitemapper-inspector" id={ID_INSPECTOR_RAIL} aria-label="Inspector" role="tabpanel">
+        <div class="sg-sitemapper-inspector" id={ID_INSPECTOR_RAIL} aria-label="Inspector" aria-labelledby={tabIds[2]} role="tabpanel" data-active={activePane === "inspector"}>
           {inspector ?? (
             <SitemapperWorkspacePlaceholderPane
               label="Inspector"

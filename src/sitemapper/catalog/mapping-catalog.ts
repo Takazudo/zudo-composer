@@ -1,7 +1,7 @@
 import type { ContentStore } from "../../content";
 import type { MappingCatalogProvider, MappingLoadOutcome, MappingRecord, MappingStore } from "../../mapping";
 import type { MappingRef } from "../model";
-import type { MappingAssignmentCatalog, MappingRouteCatalog } from "../routes";
+import type { MappingAssignmentCatalog, MappingDefinitionReadinessResolver, MappingRouteCatalog } from "../routes";
 
 export interface SitemapperContentProvider {
   descriptor: { id: string; label: string };
@@ -20,6 +20,7 @@ function mappingFailure(outcome: Exclude<MappingLoadOutcome, { status: "loaded" 
 export function createMappingAssignmentCatalog(
   mappingProviders: readonly MappingCatalogProvider[],
   contentProviders: readonly SitemapperContentProvider[],
+  resolveDefinitionReadiness?: MappingDefinitionReadinessResolver,
 ): MappingAssignmentCatalog {
   const mappings = new Map(mappingProviders.map((provider) => [provider.descriptor.id, provider]));
   const contents = new Map(contentProviders.map((provider) => [provider.descriptor.id, provider]));
@@ -45,6 +46,15 @@ export function createMappingAssignmentCatalog(
       if (outcome.status === "loaded") return { status: "resolved" as const, record: outcome.record };
       if (outcome.status === "not-found") return { status: "not-found" as const };
       return { status: "invalid" as const, reason: mappingFailure(outcome) };
+    },
+    async resolveDefinitionReadiness(mapping: MappingRecord) {
+      if (!resolveDefinitionReadiness) {
+        return {
+          status: "blocked" as const,
+          diagnostics: [{ code: "readiness-unavailable", message: "Mapping definition readiness is unavailable." }],
+        };
+      }
+      return resolveDefinitionReadiness(mapping);
     },
     async resolveContentSnapshot(mapping: MappingRecord) {
       const ref = mapping.document.contentModel;
