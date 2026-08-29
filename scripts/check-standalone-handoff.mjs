@@ -48,12 +48,20 @@ for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]])
     "compatibility shims",
     "compatibility fixtures",
     "unrelated",
+    "--frozen-lockfile",
+    "workspace:",
+    "file:",
+    "link:",
+    "path:",
   ]) assert.ok(normalized.includes(phrase.toLowerCase()), `${name} is missing permanent handoff phrase: ${phrase}`);
   for (const route of SPA_ROUTES) assert.ok(document.includes(`\`${route}\``), `${name} is missing route ${route}`);
   assert.ok(document.includes("`/assets/`"), `${name} is missing the asset root`);
   assert.ok(document.includes("pnpm deploy:dry-run"), `${name} is missing dry-run guidance`);
   assert.ok(document.includes("pnpm smoke:local"), `${name} is missing local smoke guidance`);
   assert.ok(document.includes("pnpm smoke:live"), `${name} is missing live smoke guidance`);
+  assert.ok(document.includes("pnpm deploy"), `${name} is missing deploy guidance`);
+  assert.match(document, /wrangler login/i, `${name} is missing Wrangler login guidance`);
+  assert.match(document, /wrangler whoami/i, `${name} is missing Wrangler identity guidance`);
   assert.doesNotMatch(document, /e127c8a66a223472732e0cb1098296d07b1658ec|3070424cc8b55e63e8d44ee81b238b6777341bc3/, `${name} must not publish a provisional target SHA`);
 }
 
@@ -69,6 +77,7 @@ for (const document of [readme, guidance]) {
   assert.match(document, /focused[\s\S]{0,80}@takazudo\/zfb-md-wasm/i);
   assert.match(document, /component-contract handoff[\s\S]{0,500}(?:separate|distinct)/i);
   assert.match(document, /UI-provider|UI provider|provider updates?/i);
+  assert.match(document, /(?:never|do not)[\s\S]{0,120}cop(?:y|ied)[\s\S]{0,80}provider|copied provider source/i);
   assert.match(document, /only after (?:the )?(?:Phase 3 root )?merge|only after merge|before the Phase 3 root merges/i);
 }
 
@@ -87,9 +96,14 @@ const directDependencies = Object.keys({ ...packageJson.dependencies, ...package
 assert.deepEqual(directDependencies.filter((name) => /zudo-doc|^@takazudo\/zfb|virtual-zfb/i.test(name)), []);
 
 const forbiddenImports = [];
-for (const path of files(join(root, "src"))) {
+const productionFiles = [
+  ...files(join(root, "src")),
+  ...files(join(root, "plugins")),
+  join(root, "vite.config.ts"),
+];
+for (const path of productionFiles) {
   const source = readFileSync(path, "utf8");
-  for (const match of source.matchAll(/(?:from\s+|import\s*\(\s*|@import\s+)["']([^"']+)["']/g)) {
+  for (const match of source.matchAll(/(?:from\s+|import\s*(?:\(\s*)?|@import\s+)["']([^"']+)["']/g)) {
     if (/zudo-doc|^@takazudo\/zfb|virtual-zfb|styleguide.*registry/i.test(match[1])) {
       forbiddenImports.push(`${relative(root, path)} -> ${match[1]}`);
     }
