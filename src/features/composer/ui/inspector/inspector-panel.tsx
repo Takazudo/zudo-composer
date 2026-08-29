@@ -29,8 +29,8 @@ import type {
   JsonObject,
   LinkedEditorLifecycleActions,
   LinkedEditorPresentation,
-} from "../../../../composer";
-import { classifyNode, findLocation, orderedSlotIds } from "../../../../composer";
+} from "../../../../composer/browser";
+import { classifyNode, findLocation, orderedSlotIds } from "../../../../composer/browser";
 import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from "../../../../components/icons";
 import type { ComposerMode } from "../../chrome/controller-model";
 import { InspectorField } from "./inspector-field";

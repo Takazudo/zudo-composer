@@ -46,10 +46,9 @@ import type {
   GlobalTemplateOutlet,
   GlobalTemplateOutletTarget,
   InsertionTarget,
-} from "../../../composer";
-import { COMPOSITION_RECORD_ID_PATTERN, COMPOSITION_SCHEMA_VERSION } from "../../../composer";
+} from "../headless-api";
+import { COMPOSITION_RECORD_ID_PATTERN, COMPOSITION_SCHEMA_VERSION } from "../headless-api";
 import { RESERVED_PERSISTED_KEYS } from "@zudo-composer/component-contract";
-import { activeComponentManifest } from "../active-pack";
 
 export const RESERVED_PROP_KEYS = new Set<string>(RESERVED_PERSISTED_KEYS);
 
@@ -65,8 +64,11 @@ export const COMPOSER_PREVIEW_CHANNEL = "composer-preview" as const;
 
 /** Protocol version. Bump only on a BREAKING envelope change. */
 export const COMPOSER_PREVIEW_PROTOCOL_VERSION = 2 as const;
-export const COMPOSER_PREVIEW_PACK_ID = activeComponentManifest.packId;
-export const COMPOSER_PREVIEW_PACK_VERSION = activeComponentManifest.packVersion;
+
+export interface PreviewPackIdentity {
+  readonly packId: string;
+  readonly packVersion: string;
+}
 
 // ── Session ─────────────────────────────────────────────────────────────────
 
@@ -217,19 +219,18 @@ export const previewLinkedSourceContextSchema: z.ZodType<PreviewLinkedSourceCont
 
 /**
  * Parent-side render input. `localRecordId` names the canonical consumer for
- * owner-qualified runtime keys; older local-only callers may omit it and the
- * iframe falls back to the document id. `linked` is present only after the
+ * owner-qualified runtime keys. `linked` is present only after the
  * provider-owning app has resolved and validated a Global template.
  */
 export interface ComposerPreviewSnapshot {
   document: CompositionDocument;
-  localRecordId?: string;
+  localRecordId: string;
   linked?: PreviewLinkedSourceContext;
 }
 
 export function localPreviewSnapshot(
   document: CompositionDocument,
-  localRecordId: string = document.id,
+  localRecordId: string,
 ): ComposerPreviewSnapshot {
   return { document, localRecordId };
 }
@@ -276,8 +277,8 @@ export function serializeRect(rect: { x: number; y: number; width: number; heigh
 const envelope = {
   channel: z.literal(COMPOSER_PREVIEW_CHANNEL),
   v: z.literal(COMPOSER_PREVIEW_PROTOCOL_VERSION),
-  packId: z.literal(COMPOSER_PREVIEW_PACK_ID),
-  packVersion: z.literal(COMPOSER_PREVIEW_PACK_VERSION),
+  packId: z.string().min(1),
+  packVersion: z.string().min(1),
 } as const;
 
 /** A monotonically increasing snapshot revision. Stale ones are ignored. */
@@ -293,8 +294,8 @@ export const renderMessageSchema = z
     revision: revisionSchema,
     /** Canonical local consumer document — source nodes never enter controller state. */
     document: compositionDocumentSchema,
-    /** Owner namespace for local runtime/DOM keys; optional for legacy local-only snapshots. */
-    localRecordId: z.string().regex(COMPOSITION_RECORD_ID_PATTERN).optional(),
+    /** Owner namespace for local runtime/DOM keys. */
+    localRecordId: z.string().regex(COMPOSITION_RECORD_ID_PATTERN),
     /** Optional already-resolved source/outlet context for a linked Global template. */
     linked: previewLinkedSourceContextSchema.optional(),
     session: previewSessionSchema,
@@ -540,7 +541,7 @@ export interface MessageTarget {
 
 // ── The guard ───────────────────────────────────────────────────────────────
 
-export type GuardFailure = "wrong-source" | "wrong-origin" | "invalid-payload";
+export type GuardFailure = "wrong-source" | "wrong-origin" | "invalid-payload" | "pack-mismatch";
 
 export type GuardResult<T> =
   | { ok: true; message: T }
@@ -554,7 +555,7 @@ export type GuardResult<T> =
 function guard<T>(
   schema: z.ZodType<T>,
   event: MessageEventLike,
-  expected: { source: unknown; origin: string },
+  expected: { source: unknown; origin: string; pack: PreviewPackIdentity },
 ): GuardResult<T> {
   // A null/undefined expected source would make `===` match a message whose
   // `source` is also null (e.g. one posted from a detached context), so an
@@ -569,13 +570,24 @@ function guard<T>(
   if (!parsed.success) {
     return { ok: false, reason: "invalid-payload", detail: parsed.error.message };
   }
+  const message = parsed.data as T & PreviewPackIdentity;
+  if (
+    message.packId !== expected.pack.packId
+    || message.packVersion !== expected.pack.packVersion
+  ) {
+    return {
+      ok: false,
+      reason: "pack-mismatch",
+      detail: `Expected ${expected.pack.packId}@${expected.pack.packVersion}, received ${message.packId}@${message.packVersion}.`,
+    };
+  }
   return { ok: true, message: parsed.data };
 }
 
 /** Validate a message arriving AT the preview iframe FROM the parent. */
 export function readParentToPreview(
   event: MessageEventLike,
-  expected: { source: unknown; origin: string },
+  expected: { source: unknown; origin: string; pack: PreviewPackIdentity },
 ): GuardResult<ParentToPreviewMessage> {
   return guard(parentToPreviewSchema, event, expected);
 }
@@ -583,7 +595,7 @@ export function readParentToPreview(
 /** Validate a message arriving AT the parent FROM the preview iframe. */
 export function readPreviewToParent(
   event: MessageEventLike,
-  expected: { source: unknown; origin: string },
+  expected: { source: unknown; origin: string; pack: PreviewPackIdentity },
 ): GuardResult<PreviewToParentMessage> {
   return guard(previewToParentSchema, event, expected);
 }
@@ -593,97 +605,100 @@ export function readPreviewToParent(
 // Every outbound message is built here, so the envelope can never be forgotten.
 
 export function renderMessage(
+  pack: PreviewPackIdentity,
   revision: number,
-  snapshot: ComposerPreviewSnapshot | CompositionDocument,
+  snapshot: ComposerPreviewSnapshot,
   session: PreviewSession,
 ): RenderMessage {
-  const normalized: ComposerPreviewSnapshot = "document" in snapshot
-    ? snapshot
-    : localPreviewSnapshot(snapshot);
   return {
-    ...envelopeValue(),
+    ...envelopeValue(pack),
     type: "render",
     revision,
-    document: normalized.document,
-    ...(normalized.localRecordId ? { localRecordId: normalized.localRecordId } : {}),
-    ...(normalized.linked ? { linked: normalized.linked } : {}),
+    document: snapshot.document,
+    localRecordId: snapshot.localRecordId,
+    ...(snapshot.linked ? { linked: snapshot.linked } : {}),
     session,
   };
 }
 
-export function modeMessage(revision: number, session: PreviewSession): ModeMessage {
-  return { ...envelopeValue(), type: "mode", revision, session };
+export function modeMessage(pack: PreviewPackIdentity, revision: number, session: PreviewSession): ModeMessage {
+  return { ...envelopeValue(pack), type: "mode", revision, session };
 }
 
-export function readyMessage(): ReadyMessage {
-  return { ...envelopeValue(), type: "ready" };
+export function readyMessage(pack: PreviewPackIdentity): ReadyMessage {
+  return { ...envelopeValue(pack), type: "ready" };
 }
 
-export function selectMessage(revision: number, nodeId: string | null): SelectMessage {
-  return { ...envelopeValue(), type: "select", revision, nodeId };
+export function selectMessage(pack: PreviewPackIdentity, revision: number, nodeId: string | null): SelectMessage {
+  return { ...envelopeValue(pack), type: "select", revision, nodeId };
 }
 
-export function requestAddMessage(revision: number, target: InsertionTarget): RequestAddMessage {
-  return { ...envelopeValue(), type: "request-add", revision, target };
+export function requestAddMessage(pack: PreviewPackIdentity, revision: number, target: InsertionTarget): RequestAddMessage {
+  return { ...envelopeValue(pack), type: "request-add", revision, target };
 }
 
-export function openSourceMessage(sourceRecordId: string): OpenSourceMessage {
-  return { ...envelopeValue(), type: "open-source", sourceRecordId };
+export function openSourceMessage(pack: PreviewPackIdentity, sourceRecordId: string): OpenSourceMessage {
+  return { ...envelopeValue(pack), type: "open-source", sourceRecordId };
 }
 
 export function requestNodeMenuMessage(
+  pack: PreviewPackIdentity,
   revision: number,
   nodeId: string,
   rect: SerializedRect,
   focusToken: string,
 ): RequestNodeMenuMessage {
-  return { ...envelopeValue(), type: "request-node-menu", revision, nodeId, rect, focusToken };
+  return { ...envelopeValue(pack), type: "request-node-menu", revision, nodeId, rect, focusToken };
 }
 
 export function requestInsertMenuMessage(
+  pack: PreviewPackIdentity,
   revision: number,
   target: InsertionTarget,
   rect: SerializedRect,
   focusToken: string,
 ): RequestInsertMenuMessage {
-  return { ...envelopeValue(), type: "request-insert-menu", revision, target, rect, focusToken };
+  return { ...envelopeValue(pack), type: "request-insert-menu", revision, target, rect, focusToken };
 }
 
-export function restoreFocusMessage(focusToken: string): RestoreFocusMessage {
-  return { ...envelopeValue(), type: "restore-focus", focusToken };
+export function restoreFocusMessage(pack: PreviewPackIdentity, focusToken: string): RestoreFocusMessage {
+  return { ...envelopeValue(pack), type: "restore-focus", focusToken };
 }
 
 export function commitInlineEditMessage(
+  pack: PreviewPackIdentity,
   nodeId: string,
   fieldKey: string,
   value: string,
   documentRevision: number,
 ): CommitInlineEditMessage {
-  return { ...envelopeValue(), type: "commit-inline-edit", nodeId, fieldKey, value, documentRevision };
+  return { ...envelopeValue(pack), type: "commit-inline-edit", nodeId, fieldKey, value, documentRevision };
 }
 
 export function dropNodeMessage(
+  pack: PreviewPackIdentity,
   sourceNodeId: string,
   target: InsertionTarget,
   copy: boolean,
   documentRevision: number,
 ): DropNodeMessage {
-  return { ...envelopeValue(), type: "drop-node", sourceNodeId, target, copy, documentRevision };
+  return { ...envelopeValue(pack), type: "drop-node", sourceNodeId, target, copy, documentRevision };
 }
 
 export function errorMessage(
+  pack: PreviewPackIdentity,
   revision: number | null,
   message: string,
   recoverable = true,
 ): ErrorMessage {
-  return { ...envelopeValue(), type: "error", revision, message, recoverable };
+  return { ...envelopeValue(pack), type: "error", revision, message, recoverable };
 }
 
-function envelopeValue() {
+function envelopeValue(pack: PreviewPackIdentity) {
   return {
     channel: COMPOSER_PREVIEW_CHANNEL,
     v: COMPOSER_PREVIEW_PROTOCOL_VERSION,
-    packId: COMPOSER_PREVIEW_PACK_ID,
-    packVersion: COMPOSER_PREVIEW_PACK_VERSION,
+    packId: pack.packId,
+    packVersion: pack.packVersion,
   } as const;
 }

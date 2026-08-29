@@ -1,8 +1,7 @@
 // Pure helpers backing the structure rail (issue #250).
 //
-// The tree/chooser consume BOTH the derived host registry's RICHER entries
-// (`ComponentDefinition` — src/styleguide/data/composer-registry.ts, title +
-// category + description on top of the model's slot/field metadata) AND the
+// The tree/chooser consume BOTH the provider's richer component entries
+// (title + category + description on top of slot/field metadata) AND the
 // model's `ComponentCatalog`, because rows and chooser cards need
 // human-readable titles the model-only `ComponentManifestEntry`
 // (src/composer/model/types.ts) doesn't carry, while model traversal/
@@ -22,8 +21,8 @@ import type {
   CompositionDocument,
   CompositionNode,
   DocumentIndex,
-} from "../../../../composer";
-import { classifyNode, createComponentCatalog, findLocation, indexDocument } from "../../../../composer";
+} from "../../../../composer/browser";
+import { classifyNode, createComponentCatalog, findLocation, indexDocument } from "../../../../composer/browser";
 import type { ComponentDefinition } from "../../active-pack";
 
 /**

@@ -29,7 +29,7 @@ import type {
   PublicationDependencyGuard,
   ResolvedGlobalTemplateOutletContract,
   RootPolicy,
-} from "../../../composer";
+} from "../../../composer/browser";
 import {
   addNode,
   bindConsumer,
@@ -52,7 +52,7 @@ import {
   renameGlobalTemplateOutlet,
   setGlobalTemplateOutlet,
   updateProps,
-} from "../../../composer";
+} from "../../../composer/browser";
 
 /** Edit vs. read-only preview rendering of the canvas. */
 export type ComposerMode = "edit" | "preview";
@@ -65,29 +65,18 @@ export type ComposerCanvasViewport = "fluid" | "desktop" | "tablet" | "mobile";
 
 /**
  * Honest persistence status. Only `"saved"` means the mounted record matches
- * the provider. `dirty` and `saving` mirror the async record queue; the older
- * `unsaved`/`quarantined` variants remain for the temporary localStorage mount.
+ * the provider. `dirty` and `saving` mirror the async record queue.
  *
  *  - `"saved"` — the last mutation persisted successfully.
- *  - `"unsaved"` — a mutation is pending a persistence attempt.
- *  - `"error"` — the last localStorage write threw (quota / disabled storage
- *    / private mode). The document still works in memory.
- *  - `"quarantined"` — storage holds a newer, unrecognized schema (#245).
- *    Edits apply to the in-memory sample only; nothing is written back until
- *    the user explicitly Resets — see storage.ts / recovery.ts.
+ *  - `"dirty"` — a mutation is waiting for the record save queue.
+ *  - `"saving"` — the queue is persisting the newest snapshot.
+ *  - `"error"` — the provider rejected the latest save.
  */
 export type ComposerSaveStatus =
   | { kind: "saved" }
   | { kind: "dirty" }
   | { kind: "saving" }
-  | { kind: "unsaved" }
-  | { kind: "error"; reason: string }
-  | { kind: "quarantined"; foundSchemaVersion: number };
-
-/** Non-fatal notice surfaced once, right after the initial load. */
-export type ComposerLoadNotice =
-  | { kind: "recovered"; reason: string }
-  | { kind: "quarantined"; foundSchemaVersion: number };
+  | { kind: "error"; reason: string };
 
 export interface ComposerControllerState {
   document: CompositionDocument;
@@ -103,7 +92,6 @@ export interface ComposerControllerState {
    * A blocked outcome therefore sits beside Saved rather than replacing it.
    */
   derivedOutput: CompositionDerivedOutputOutcome | null;
-  loadNotice: ComposerLoadNotice | null;
   /**
    * Session-only clipboard: a deep-cloned JSON subtree payload, NEVER a live
    * node reference — it is a snapshot that survives later edits to the
@@ -154,9 +142,6 @@ export type ComposerAction =
   | { type: "setViewport"; viewport: ComposerCanvasViewport }
   | { type: "setLeftWidth"; width: number }
   | { type: "setRightWidth"; width: number }
-  | { type: "resetToSample"; document: CompositionDocument }
-  | { type: "loadDocument"; document: CompositionDocument; notice: ComposerLoadNotice | null; rootPolicy?: RootPolicy }
-  | { type: "dismissLoadNotice" }
   | { type: "setSaveStatus"; status: ComposerSaveStatus };
 
 export interface ComposerReducerContext {
@@ -191,7 +176,6 @@ const DOCUMENT_MUTATION_TYPES = new Set<ComposerAction["type"]>([
   "clearPublication",
   "bindConsumer",
   "removeBinding",
-  "resetToSample",
 ]);
 
 /** True for actions that mutate `document` (used by the hook to gate autosave). */
@@ -236,13 +220,12 @@ export function createInitialControllerState(options: {
   manifest: ComponentCatalog;
   /** A resolver may supply this when mounting an already-bound consumer. */
   rootPolicy?: RootPolicy;
-  loadNotice: ComposerLoadNotice | null;
   saveStatus: ComposerSaveStatus;
   derivedOutput?: CompositionDerivedOutputOutcome | null;
   leftWidth: number;
   rightWidth: number;
 }): ComposerControllerState {
-  const { document, manifest, rootPolicy, loadNotice, saveStatus, derivedOutput = null, leftWidth, rightWidth } = options;
+  const { document, manifest, rootPolicy, saveStatus, derivedOutput = null, leftWidth, rightWidth } = options;
   return {
     document,
     selectedId: repairSelection(document, manifest, null),
@@ -253,7 +236,6 @@ export function createInitialControllerState(options: {
     rightWidth,
     saveStatus,
     derivedOutput,
-    loadNotice,
     clipboard: null,
     rootPolicy: effectiveRootPolicy(document, rootPolicy),
   };
@@ -592,33 +574,6 @@ export function applyComposerAction(
         error: null,
         documentChanged: false,
       };
-    case "resetToSample": {
-      return {
-        state: {
-          ...state,
-          document: action.document,
-          selectedId: repairSelection(action.document, ctx.manifest, null),
-          expandedIds: new Set<string>(),
-          loadNotice: null,
-          rootPolicy: effectiveRootPolicy(action.document),
-        },
-        error: null,
-        documentChanged: true,
-      };
-    }
-    case "loadDocument": {
-      return {
-        state: {
-          ...state,
-          document: action.document,
-          selectedId: repairSelection(action.document, ctx.manifest, state.selectedId),
-          loadNotice: action.notice,
-          rootPolicy: effectiveRootPolicy(action.document, action.rootPolicy),
-        },
-        error: null,
-        documentChanged: false,
-      };
-    }
     case "select":
       return { state: { ...state, selectedId: action.nodeId }, error: null, documentChanged: false };
     case "reveal": {
@@ -655,8 +610,6 @@ export function applyComposerAction(
       return { state: { ...state, leftWidth: action.width }, error: null, documentChanged: false };
     case "setRightWidth":
       return { state: { ...state, rightWidth: action.width }, error: null, documentChanged: false };
-    case "dismissLoadNotice":
-      return { state: { ...state, loadNotice: null }, error: null, documentChanged: false };
     case "setSaveStatus":
       return { state: { ...state, saveStatus: action.status }, error: null, documentChanged: false };
   }
@@ -679,11 +632,7 @@ export function describeSaveStatus(status: ComposerSaveStatus): string {
       return "Unsaved changes";
     case "saving":
       return "Saving…";
-    case "unsaved":
-      return "Unsaved changes";
     case "error":
       return "Save failed";
-    case "quarantined":
-      return "Not saved — a newer Composition is in storage; editing the sample until you Reset";
   }
 }

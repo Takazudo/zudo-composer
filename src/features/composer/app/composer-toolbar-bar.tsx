@@ -4,28 +4,19 @@
 // assemblies: rather than reuse #247's monolithic `chrome/ComposerToolbar`
 // (which predates the Export action and inlines its own mode toggle), this
 // COMPOSES #249's presentational pieces — `ComposerStatusIndicator`,
-// `ComposerModeToggle`, `ComposerToolbarActions` (Reset + Export) — plus the
+// `ComposerModeToggle`, `ComposerToolbarActions` (Export) — plus the
 // canvas-viewport `<select>` this issue owns. Purely presentational; every
 // action is a typed callback the integration composes against the one
 // controller. The status indicator keeps its `children` seam open for wave-6's
 // clipboard chip (#255).
-//
-// Reset requires an explicit confirm (issue #269, folding in #260 — Reset
-// used to wipe the whole document on a single click). The confirm state lives
-// HERE rather than inside `ComposerToolbarActions`, which is deliberately kept
-// a pure-callback component with no internal state (see its own header
-// comment) — `onReset` passed down just flips `confirmingReset`, and the real
-// `onReset` prop only fires once the reused `InlineConfirm` bar is confirmed.
 
-import { useState } from "preact/hooks";
 import type { JSX } from "preact";
-import type { CompositionDerivedOutputOutcome, CompositionNode, CompositionPublication } from "../../../composer";
+import type { CompositionDerivedOutputOutcome, CompositionNode, CompositionPublication } from "../../../composer/browser";
 import type {
   ComposerCanvasViewport,
   ComposerMode,
   ComposerSaveStatus,
 } from "../chrome/controller-model";
-import { InlineConfirm } from "../ui/shared/inline-confirm";
 import { ComposerModeToggle } from "../ui/toolbar/mode-toggle";
 import { ComposerStatusIndicator } from "../ui/toolbar/status-indicator";
 import { ComposerToolbarActions } from "../ui/toolbar/toolbar-actions";
@@ -42,7 +33,6 @@ export interface ComposerToolbarBarProps {
   viewport: ComposerCanvasViewport;
   onSetMode: (mode: ComposerMode) => void;
   onSetViewport: (viewport: ComposerCanvasViewport) => void;
-  onReset: () => void;
   onRetrySave?: () => void;
   onExport: () => void;
   exportDisabled?: boolean;
@@ -66,7 +56,6 @@ export function ComposerToolbarBar({
   viewport,
   onSetMode,
   onSetViewport,
-  onReset,
   onRetrySave,
   onExport,
   exportDisabled = false,
@@ -76,8 +65,6 @@ export function ComposerToolbarBar({
   onDuplicateComposition,
   duplicatingComposition = false,
 }: ComposerToolbarBarProps): JSX.Element {
-  const [confirmingReset, setConfirmingReset] = useState(false);
-
   return (
     <>
       <div class="flex items-center gap-hsp-md min-w-0">
@@ -134,25 +121,7 @@ export function ComposerToolbarBar({
 
         <ComposerModeToggle mode={mode} onSetMode={onSetMode} />
 
-        {confirmingReset ? (
-          <InlineConfirm
-            tone="toolbar"
-            ariaLabel="Confirm resetting the sample"
-            message="Reset the sample? This discards the current document and can't be undone."
-            confirmLabel="Confirm reset"
-            onCancel={() => setConfirmingReset(false)}
-            onConfirm={() => {
-              setConfirmingReset(false);
-              onReset();
-            }}
-          />
-        ) : (
-          <ComposerToolbarActions
-            onReset={() => setConfirmingReset(true)}
-            onExport={onExport}
-            exportDisabled={exportDisabled}
-          />
-        )}
+        <ComposerToolbarActions onExport={onExport} exportDisabled={exportDisabled} />
       </div>
     </>
   );

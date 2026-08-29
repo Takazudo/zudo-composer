@@ -6,7 +6,7 @@ export type {
   ComposerRouteLocation,
   ComposerRouteResolution,
 } from "./route";
-export { composerDocumentPath, formatComposerRoute, parseComposerRoute } from "./route";
+export { COMPOSER_DOCUMENT_PATH, formatComposerRoute, parseComposerRoute } from "./route";
 
 export type {
   ComposerPreferenceStorage,

@@ -40,8 +40,8 @@ import type {
   InsertionTarget,
   LinkedEditorLifecycleActions,
   LinkedEditorPresentation,
-} from "../../../../composer";
-import { VIRTUAL_ROOT_SLOT_ID } from "../../../../composer";
+} from "../../../../composer/browser";
+import { VIRTUAL_ROOT_SLOT_ID } from "../../../../composer/browser";
 import { EllipsisIcon, PageIcon } from "../../../../components/icons";
 import type { ComponentDefinition } from "../../active-pack";
 import { buildCatalogById, buildDocumentIndex, countDescendants } from "./tree-helpers";

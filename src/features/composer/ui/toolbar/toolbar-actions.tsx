@@ -10,25 +10,18 @@
 import type { JSX } from "preact";
 
 export interface ComposerToolbarActionsProps {
-  onReset: () => void;
   onExport: () => void;
-  resetLabel?: string;
   exportLabel?: string;
   exportDisabled?: boolean;
 }
 
 export function ComposerToolbarActions({
-  onReset,
   onExport,
-  resetLabel = "Reset sample",
   exportLabel = "Export JSX",
   exportDisabled = false,
 }: ComposerToolbarActionsProps): JSX.Element {
   return (
     <div class="flex items-center gap-hsp-sm">
-      <button type="button" class="sg-composer-toolbar-button" onClick={onReset}>
-        {resetLabel}
-      </button>
       <button
         type="button"
         class="sg-composer-toolbar-button"

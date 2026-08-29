@@ -1,11 +1,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Composer copy-to-clipboard button (issue #249). Reuses the styleguide
-// CodePanel's `copyText` utility (Clipboard API with an `execCommand`
-// fallback for insecure contexts) — that helper carries no styleguide-only
-// state, so importing it doesn't couple this feature to the styleguide.
-// Unlike the styleguide's own `CopyButton`, this one surfaces FAILURE
-// feedback too (the export dialog's copy action must never silently no-op).
+// Composer copy-to-clipboard button. The shared helper uses the Clipboard API
+// with an `execCommand` fallback; failure is surfaced rather than silently ignored.
 
 import type { JSX } from "preact";
 import { useState } from "preact/hooks";

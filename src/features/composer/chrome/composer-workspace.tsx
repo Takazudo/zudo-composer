@@ -21,7 +21,7 @@
 // The resizer `<div role="separator">` elements are inert markup here —
 // pointer/keyboard dragging and the ARIA `aria-valuenow`/`aria-valuemax`
 // live-updates are wired by the vanilla-JS ComposerResizerInitScript
-// (resizer-scripts.tsx), matching the code-panel resizer precedent
+// (resizer-dom.ts), matching the code-panel resizer precedent
 // (src/features/styleguide/chrome/panel-scripts.tsx). The SSR `aria-value*`
 // defaults below match this file's CSS `:root` rail-width defaults.
 
@@ -39,7 +39,7 @@ import { ComposerPlaceholderPane } from "./composer-placeholder-pane";
 export interface ComposerWorkspaceProps {
   /** The Composer toolbar (document name, save status, mode, viewport, reset). */
   toolbar: ComponentChildren;
-  /** Optional banner above the grid — e.g. a recovered/quarantined load notice. */
+  /** Optional current provider/navigation status above the grid. */
   banner?: ComponentChildren;
   /** Structure tree region (#250). Defaults to a placeholder. */
   tree?: ComponentChildren;

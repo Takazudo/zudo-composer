@@ -8,7 +8,7 @@
 // actions themselves are exposed menu-free for wave 7 (#256) to wire up.
 
 import type { JSX } from "preact";
-import type { CompositionNode } from "../../../composer";
+import type { CompositionNode } from "../../../composer/browser";
 import { CopyIcon } from "../../../components/icons";
 
 export interface ComposerClipboardChipProps {

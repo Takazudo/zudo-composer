@@ -6,9 +6,7 @@ describe('App', () => {
   it('identifies the standalone composer shell', () => {
     render(<App />);
 
-    expect(
-      screen.getByRole('heading', { name: 'zudo-composer' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/standalone foundation/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /build structures/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Composer' })).toHaveAttribute('href', '/composer');
   });
 });

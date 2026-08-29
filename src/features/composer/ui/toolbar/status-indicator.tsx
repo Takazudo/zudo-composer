@@ -7,7 +7,7 @@
 // the "keep the status seam composable" synthesis note on this issue.
 
 import type { ComponentChildren, JSX } from "preact";
-import type { CompositionDerivedOutputOutcome } from "../../../../composer";
+import type { CompositionDerivedOutputOutcome } from "../../../../composer/browser";
 import type { ComposerSaveStatus } from "../../chrome/controller-model";
 import { describeSaveStatus } from "../../chrome/controller-model";
 

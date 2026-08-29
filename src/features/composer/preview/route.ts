@@ -1,13 +1,8 @@
 // Route path of the chrome-free Composer preview document, served by
-// `pages/composer/preview.tsx`.
+// `preview-entry.ts`.
 //
-// One shared constant so the parent-side URL builder (`bridge.ts`) and the
-// page that answers it can never drift — the same discipline the styleguide's
-// `src/features/styleguide/preview/route.ts` applies to `/components/preview`
-// (a drifting literal there was a real regression, #48/#105).
-//
-// It is a BARE path: `withBase()` adds the configured base prefix and the
-// trailing slash. Never hand-concatenate it.
+// One shared constant keeps the parent URL builder and route dispatcher from
+// drifting. The standalone route is exact and has no trailing-slash variant.
 export const COMPOSER_PREVIEW_ROUTE_PATH = "/composer/preview";
 
 /**

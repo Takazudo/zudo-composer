@@ -6,7 +6,7 @@
 //
 //   controller-model.ts  — the document + session-state reducer
 //   persistence/save-queue.ts — serialized, revision-aware record writes
-//   navigation-guard.ts   — the SPA-router "unsaved edits" guard
+//   navigation-guard.ts   — the native beforeunload dirty-record guard
 //   resizer-contract.ts   — the vanilla-JS resizer script's width bridge
 //
 // A supported CompositionRecord is loaded before this hook is mounted; the
@@ -37,11 +37,11 @@ import type {
   RootPolicy,
   SaveQueue,
   SaveQueueState,
-} from "../../../composer";
+} from "../../../composer/browser";
 import {
   cloneJson,
   createUuidIdFactory,
-} from "../../../composer";
+} from "../../../composer/browser";
 import {
   applyComposerAction,
   createInitialControllerState,
@@ -49,7 +49,6 @@ import {
   type ComposerAction,
   type ComposerCanvasViewport,
   type ComposerControllerState,
-  type ComposerLoadNotice,
   type ComposerMode,
   type ComposerSaveStatus,
 } from "./controller-model";
@@ -89,7 +88,7 @@ export interface ComposerController {
    * expensive commit path (reducer → immutable record snapshot + save queue
    * → preview-iframe re-render) runs once per pause instead of once per
    * keystroke — the same cheap-live-path / expensive-commit-point split the
-   * rail resizer documents (resizer-scripts-source.ts). Deterministic flush
+   * rail resizer documents (resizer-dom.ts). Deterministic flush
    * guarantees (a pending patch can never be lost or reordered):
    *   - any OTHER controller action (select, remove, setMode, …) flushes the
    *     pending patch FIRST, so the reducer always sees events in user order;
@@ -151,11 +150,6 @@ export interface ComposerController {
   setViewport: (viewport: ComposerCanvasViewport) => void;
   setLeftWidth: (width: number) => void;
   setRightWidth: (width: number) => void;
-  /** Legacy localStorage reload. Record-scoped controllers leave loading to the route coordinator. */
-  reload: () => void;
-  /** Restore the sample body while preserving a record-scoped controller's identity. */
-  reset: () => void;
-  dismissLoadNotice: () => void;
 }
 
 /** The chooser needs a synchronous command outcome so it never closes after a rejected atomic mutation. */
@@ -216,7 +210,6 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       document,
       manifest,
       rootPolicy: options.rootPolicy,
-      loadNotice: null,
       saveStatus: saveStatusFromQueue(options.saveQueue.state),
       derivedOutput: derivedOutputFromQueue(options.saveQueue.state),
       leftWidth: getPersistedWidth(LS_TREE_WIDTH, MIN_RAIL_W),
@@ -408,7 +401,7 @@ export function useComposerController(options: UseComposerControllerOptions): Co
 
   // Mirror the vanilla resizer script's committed widths into typed state
   // (the drag/keyboard mechanics themselves run outside Preact for
-  // per-pixel performance — see resizer-scripts-source.ts).
+  // per-pixel performance — see resizer-dom.ts).
   useEffect(() => {
     function onWidthChange(event: Event): void {
       const detail = (event as CustomEvent<ComposerWidthChangeDetail>).detail;
@@ -470,14 +463,6 @@ export function useComposerController(options: UseComposerControllerOptions): Co
         setPersistedWidth(LS_INSPECTOR_WIDTH, width);
         dispatch({ type: "setRightWidth", width });
       },
-      reload: () => {
-        flushPropUpdates();
-      },
-      reset: () => {
-        const document = cloneJson(options.record.document);
-        dispatch({ type: "resetToSample", document });
-      },
-      dismissLoadNotice: () => dispatch({ type: "dismissLoadNotice" }),
     }),
     [
       state,
@@ -488,7 +473,6 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       flushPropUpdates,
       flushPersistence,
       retrySave,
-      options.record.document,
     ],
   );
 }

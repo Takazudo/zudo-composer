@@ -43,8 +43,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
-import type { CompositionDocument, InsertionTarget } from "../../../composer";
+import type { CompositionDocument, InsertionTarget } from "../../../composer/browser";
 import type { ComposerCanvasViewport } from "../chrome/controller-model";
+import type { ComposerComponentProvider } from "../active-pack";
 import {
   buildComposerPreviewUrl,
   composerPreviewFrameProps,
@@ -71,6 +72,7 @@ function translateRect(rect: SerializedRect, frame: HTMLIFrameElement | null): S
 }
 
 export interface ComposerCanvasHostProps {
+  componentProvider: ComposerComponentProvider;
   document: CompositionDocument;
   /** Separate render-only linked source context; the controller remains local. */
   snapshot?: ComposerPreviewSnapshot;
@@ -117,6 +119,7 @@ export interface ComposerCanvasHostProps {
 export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element {
   const {
     document: doc,
+    componentProvider,
     snapshot: snapshotProp,
     session,
     viewport,
@@ -133,7 +136,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
   } = props;
 
   const snapshot = useMemo(
-    () => snapshotProp ?? localPreviewSnapshot(doc),
+    () => snapshotProp ?? localPreviewSnapshot(doc, doc.id),
     [doc, snapshotProp],
   );
 
@@ -167,6 +170,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
   };
 
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [fatalError, setFatalError] = useState<string | null>(null);
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
   const [, setReady] = useState(false);
 
@@ -183,6 +187,10 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
       frame,
       location,
       hostWindow: hostWindow ?? window,
+      pack: {
+        packId: componentProvider.manifest.packId,
+        packVersion: componentProvider.manifest.packVersion,
+      },
       onReady: () => setReady(true),
       onSelect: (nodeId) => handlersRef.current.onSelect(nodeId),
       onRequestAdd: (target) => {
@@ -242,6 +250,11 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
       onError: (message, recoverable) => {
         if (recoverable) setRenderError(message);
       },
+      onRejected: (reason, detail) => {
+        if (reason === "pack-mismatch") {
+          setFatalError(`Component pack mismatch. ${detail ?? "The host and preview loaded different packs."}`);
+        }
+      },
     });
     bridgeRef.current = bridge;
     return () => {
@@ -250,7 +263,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
     };
     // Production: these are all stable. If a test swaps the factory/location the
     // snapshot effect below re-sends on the next document/session change.
-  }, [createBridge, location, hostWindow]);
+  }, [componentProvider.manifest.packId, componentProvider.manifest.packVersion, createBridge, location, hostWindow]);
 
   useEffect(() => {
     const bridge = bridgeRef.current;
@@ -272,6 +285,11 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
 
   return (
     <div class="sg-composer-canvas-host" data-sg-viewport={viewport}>
+      {fatalError !== null && (
+        <div class="sg-composer-canvas-error" role="alert" data-composer-preview-fatal="pack-mismatch">
+          <span>Preview cannot start: {fatalError}</span>
+        </div>
+      )}
       {renderError !== null && (
         <div class="sg-composer-canvas-error" role="status">
           <span>Preview error: {renderError}</span>

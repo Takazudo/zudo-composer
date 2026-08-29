@@ -58,7 +58,7 @@
 import { Fragment, h } from "preact";
 import type { ComponentChildren, RefObject } from "preact";
 import { useCallback, useLayoutEffect, useRef, useState } from "preact/hooks";
-import type { CompositionDocument, CompositionNode } from "../../../composer";
+import type { CompositionDocument, CompositionNode } from "../headless-api";
 import type { ComposerRuntimeEntry } from "../active-pack";
 import {
   INLINE_EDITING_ATTR,
@@ -201,9 +201,7 @@ function leftTheBrowser(ownerDoc: Document, editable: HTMLElement): boolean {
   try {
     const top = ownerDoc.defaultView?.top ?? null;
     topDoc = top ? top.document : null;
-  } catch {
-    topDoc = null; // cross-origin top — unreadable, so fall through
-  }
+  } catch { /* cross-origin top — unreadable, so fall through */ }
   if (topDoc && topDoc !== ownerDoc) return !topDoc.hasFocus();
   return ownerDoc.activeElement === editable;
 }
@@ -556,7 +554,6 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
       swallowClickRef.current = false;
       if (editableRef.current === el) editableRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the mount identity
   }, [mount?.nodeId, mount?.fieldKey, mount?.epoch]);
 
   // An incoming render can MOVE the edited node to a different parent slot
@@ -603,7 +600,6 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
     // still live here and its text can be captured before the stash.
     syncValueFromDom();
     dispatch({ type: "mode-switch", mode: options.mode });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires only on a mode transition
   }, [options.mode]);
 
   // ── Incoming renders (#288's ground-check, prose edition) ─────────────────
@@ -630,7 +626,6 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
         draft.fieldKey,
       ),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a document IDENTITY change gates this check
   }, [options.document]);
 
   // Put initial focus on the SAFE action whenever a dialog opens.

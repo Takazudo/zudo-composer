@@ -1,7 +1,7 @@
 // Public surface of the central Composer app (issue #251).
 //
 // `ComposerIntegration` is the production app entry (mounted by
-// `chrome/composer-app.tsx` → `pages/composer/index.tsx`'s island).
+// `chrome/composer-app.tsx` mounts from the standalone route dispatcher).
 // `useComposerIntegration` is the callback/state composition seam waves 6-9
 // (#254-#258) extend. The shared chooser instance is mounted inside
 // `ComposerIntegration`; the main canvas bridge lives in `ComposerCanvasHost`

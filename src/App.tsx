@@ -14,9 +14,14 @@ function SitemapperPlaceholder() {
   return <main class="route-placeholder"><h1>Sitemapper</h1><p>The standalone Sitemapper is being connected here.</p></main>;
 }
 
+function NotFound() {
+  return <main class="route-placeholder"><h1>Not found</h1><p>This standalone route does not exist.</p><a href="/">Return home</a></main>;
+}
+
 export function App() {
-  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  const path = window.location.pathname;
   if (path === "/composer") return <Shell><ComposerApp /></Shell>;
   if (path === "/sitemapper") return <Shell><SitemapperPlaceholder /></Shell>;
-  return <Shell><Home /></Shell>;
+  if (path === "/") return <Shell><Home /></Shell>;
+  return <Shell><NotFound /></Shell>;
 }

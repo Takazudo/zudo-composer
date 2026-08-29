@@ -11,7 +11,7 @@
 // can never win — including the replay the parent sends after the iframe
 // reloads and re-announces `ready`.
 
-import type { CompositionDocument } from "../../../composer";
+import type { CompositionDocument } from "../headless-api";
 import type {
   ModeMessage,
   PreviewLinkedSourceContext,
@@ -71,7 +71,7 @@ export function applyInbound(
       return {
         revision: message.revision,
         document: message.document,
-        localRecordId: message.localRecordId ?? message.document.id,
+        localRecordId: message.localRecordId,
         linked: message.linked ?? null,
         session: message.session,
       };
