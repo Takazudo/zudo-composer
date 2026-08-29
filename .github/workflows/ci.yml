@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -43,6 +47,7 @@ jobs:
       - run: pnpm smoke:local
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:browser:dist
+      - run: pnpm deployment:manifest:check
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: deployment-artifact
@@ -53,13 +58,11 @@ jobs:
           include-hidden-files: true
 
   deploy:
+    name: Production deploy or credential handoff
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
@@ -77,9 +80,23 @@ jobs:
       - run: pnpm deployment:manifest:check
       - id: credentials
         run: node scripts/check-deploy-credentials.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - if: steps.credentials.outputs.state == 'absent'
-        run: echo 'Deployment handoff required; both CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are absent.'
+        run: |
+          {
+            echo '## Production deployment handoff'
+            echo 'Deployment was skipped because both required Cloudflare credentials are absent.'
+            echo '1. Create a dedicated **Edit Cloudflare Workers** API token, scoped with least privilege to the intended account and `takazudomodular.com` zone.'
+            echo '2. Confirm the account, active zone, and `zudo-composer.takazudomodular.com` custom-domain state are ready.'
+            echo '3. Add both `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets, then rerun this workflow.'
+            echo 'Do not copy local Wrangler OAuth files or OAuth tokens into GitHub.'
+          } >> "$GITHUB_STEP_SUMMARY"
       - if: steps.credentials.outputs.state == 'complete'
         run: pnpm deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - if: steps.credentials.outputs.state == 'complete'
         run: pnpm smoke:live

@@ -4,6 +4,8 @@ import { extname, join, relative, resolve, sep } from "node:path";
 
 export const SPA_ROUTES = ["/", "/composer", "/composer/preview", "/sitemapper"];
 export const LIVE_ORIGIN = "https://zudo-composer.takazudomodular.com";
+export const HTTP_TIMEOUT_MS = 10_000;
+export const LIVE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];
 
 const MIME_BY_EXTENSION = new Map([
   [".css", "text/css"],
@@ -63,7 +65,19 @@ export function responseMime(response) {
   return response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() ?? "";
 }
 
-export async function verifyDeployment({ baseUrl, distDirectory, fetchImpl = globalThis.fetch }) {
+async function fetchWithTimeout(fetchImpl, url, timeoutMs) {
+  return fetchImpl(url, {
+    redirect: "error",
+    signal: globalThis.AbortSignal.timeout(timeoutMs),
+  });
+}
+
+export async function verifyDeployment({
+  baseUrl,
+  distDirectory,
+  fetchImpl = globalThis.fetch,
+  requestTimeoutMs = HTTP_TIMEOUT_MS,
+}) {
   const manifest = await createArtifactManifest(distDirectory);
   const origin = new URL(baseUrl);
   const index = manifest.files.find(({ path }) => path === "index.html");
@@ -71,7 +85,7 @@ export async function verifyDeployment({ baseUrl, distDirectory, fetchImpl = glo
 
   for (const route of SPA_ROUTES) {
     const url = new URL(route, origin);
-    const response = await fetchImpl(url, { redirect: "error" });
+    const response = await fetchWithTimeout(fetchImpl, url, requestTimeoutMs);
     if (!response.ok) throw new Error(`${route}: expected HTTP 2xx, received ${response.status}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     if (sha256(bytes) !== index.sha256) throw new Error(`${route}: response does not match index.html SHA-256`);
@@ -86,7 +100,7 @@ export async function verifyDeployment({ baseUrl, distDirectory, fetchImpl = glo
     // MIME are already checked through every public SPA route above.
     if (file.path === "index.html") continue;
     const path = `/${file.path}`;
-    const response = await fetchImpl(new URL(path, origin), { redirect: "error" });
+    const response = await fetchWithTimeout(fetchImpl, new URL(path, origin), requestTimeoutMs);
     if (!response.ok) throw new Error(`${path}: expected HTTP 2xx, received ${response.status}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     if (sha256(bytes) !== file.sha256) throw new Error(`${path}: response SHA-256 does not match the built artifact`);
@@ -97,4 +111,25 @@ export async function verifyDeployment({ baseUrl, distDirectory, fetchImpl = glo
   }
 
   return { manifest, results };
+}
+
+export async function verifyLiveDeployment({
+  retryDelaysMs = LIVE_RETRY_DELAYS_MS,
+  delayImpl = (milliseconds) => new Promise((resolveDelay) => globalThis.setTimeout(resolveDelay, milliseconds)),
+  onRetry = () => {},
+  ...options
+}) {
+  let lastError;
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+    try {
+      return await verifyDeployment(options);
+    } catch (error) {
+      lastError = error;
+      if (attempt === retryDelaysMs.length) break;
+      const delayMs = retryDelaysMs[attempt];
+      onRetry({ attempt: attempt + 1, delayMs, error });
+      await delayImpl(delayMs);
+    }
+  }
+  throw lastError;
 }

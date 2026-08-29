@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 import {
   createArtifactManifest,
   deploymentCredentialState,
+  HTTP_TIMEOUT_MS,
   sha256,
   verifyDeployment,
+  verifyLiveDeployment,
 } from "../../scripts/deployment-artifact-lib.mjs";
 
 async function fixture() {
@@ -41,7 +43,9 @@ describe("deployment artifact contract", () => {
     const dist = await fixture();
     const manifest = await createArtifactManifest(dist);
     const byPath = new Map(manifest.files.map((file) => [`/${file.path}`, file]));
-    const fetchImpl = async (input: URL | RequestInfo) => {
+    const requestSignals: AbortSignal[] = [];
+    const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
+      requestSignals.push(init?.signal as AbortSignal);
       const path = new URL(String(input)).pathname;
       const file = byPath.get(path) ?? byPath.get("/index.html")!;
       const bytes = path.startsWith("/assets/")
@@ -52,6 +56,9 @@ describe("deployment artifact contract", () => {
     const proof = await verifyDeployment({ baseUrl: "https://example.test", distDirectory: dist, fetchImpl });
     expect(proof.results).toHaveLength(manifest.files.length + 3);
     expect(proof.results.every(({ sha256: digest }) => /^[a-f0-9]{64}$/.test(digest))).toBe(true);
+    expect(requestSignals).toHaveLength(proof.results.length);
+    expect(requestSignals.every((signal) => signal instanceof AbortSignal && !signal.aborted)).toBe(true);
+    expect(HTTP_TIMEOUT_MS).toBe(10_000);
   });
 
   it("rejects changed bytes and wrong MIME", async () => {
@@ -71,11 +78,62 @@ describe("deployment artifact contract", () => {
     expect(sha256(index)).toHaveLength(64);
   });
 
+  it("aborts a stalled HTTP request at the configured bound", async () => {
+    const dist = await fixture();
+    const fetchImpl = (_input: URL | RequestInfo, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    });
+    await expect(verifyDeployment({
+      baseUrl: "https://example.test",
+      distDirectory: dist,
+      fetchImpl,
+      requestTimeoutMs: 5,
+    })).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+
   it("distinguishes absent, partial, and complete credentials", () => {
     expect(deploymentCredentialState({})).toBe("absent");
     expect(deploymentCredentialState({ CLOUDFLARE_API_TOKEN: "token" })).toBe("partial");
     expect(deploymentCredentialState({ CLOUDFLARE_ACCOUNT_ID: "account" })).toBe("partial");
     expect(deploymentCredentialState({ CLOUDFLARE_API_TOKEN: "token", CLOUDFLARE_ACCOUNT_ID: "account" })).toBe("complete");
     expect(deploymentCredentialState({ CLOUDFLARE_API_TOKEN: " ", CLOUDFLARE_ACCOUNT_ID: " " })).toBe("absent");
+  });
+
+  it("retries live propagation with bounded backoff and keeps the final proof strict", async () => {
+    const dist = await fixture();
+    const manifest = await createArtifactManifest(dist);
+    const byPath = new Map(manifest.files.map((file) => [`/${file.path}`, file]));
+    let requests = 0;
+    const delays: number[] = [];
+    const retries: number[] = [];
+    const fetchImpl = async (input: URL | RequestInfo) => {
+      requests += 1;
+      if (requests === 1) throw new Error("DNS is not ready");
+      const path = new URL(String(input)).pathname;
+      const file = byPath.get(path) ?? byPath.get("/index.html")!;
+      const bytes = path.startsWith("/assets/")
+        ? await readFile(join(dist, file.path))
+        : Buffer.from("<main>app</main>");
+      return new Response(bytes, { headers: { "content-type": file.mime } });
+    };
+    const proof = await verifyLiveDeployment({
+      baseUrl: "https://example.test",
+      distDirectory: dist,
+      fetchImpl,
+      retryDelaysMs: [5],
+      delayImpl: async (milliseconds) => { delays.push(milliseconds); },
+      onRetry: ({ attempt }) => { retries.push(attempt); },
+    });
+    expect(proof.results).toHaveLength(manifest.files.length + 3);
+    expect(delays).toEqual([5]);
+    expect(retries).toEqual([1]);
+
+    await expect(verifyLiveDeployment({
+      baseUrl: "https://example.test",
+      distDirectory: dist,
+      fetchImpl: async () => new Response("stale", { headers: { "content-type": "text/html" } }),
+      retryDelaysMs: [1, 2],
+      delayImpl: async (milliseconds) => { delays.push(milliseconds); },
+    })).rejects.toThrow(/SHA-256/);
   });
 });

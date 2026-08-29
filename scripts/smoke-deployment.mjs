@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { LIVE_ORIGIN, verifyDeployment } from "./deployment-artifact-lib.mjs";
+import { LIVE_ORIGIN, verifyDeployment, verifyLiveDeployment } from "./deployment-artifact-lib.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const dist = join(root, "dist");
@@ -37,7 +37,9 @@ async function waitForServer() {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (server.exitCode !== null) throw new Error(`Wrangler dev exited before smoke testing:\n${output}`);
     try {
-      const response = await globalThis.fetch(baseUrl);
+      const response = await globalThis.fetch(baseUrl, {
+        signal: globalThis.AbortSignal.timeout(1_000),
+      });
       if (response.ok) return;
     } catch {
       // The local socket is expected to reject connections while Wrangler boots.
@@ -59,7 +61,15 @@ try {
     server.stderr.on("data", (chunk) => { output += chunk; });
     await waitForServer();
   }
-  const proof = await verifyDeployment({ baseUrl, distDirectory: dist });
+  const proof = local
+    ? await verifyDeployment({ baseUrl, distDirectory: dist })
+    : await verifyLiveDeployment({
+        baseUrl,
+        distDirectory: dist,
+        onRetry: ({ attempt, delayMs, error }) => {
+          console.warn(`Live smoke attempt ${attempt} failed (${error.message}); retrying in ${delayMs}ms.`);
+        },
+      });
   console.log(`Deployment smoke passed at ${baseUrl}: ${proof.manifest.files.length} files and ${proof.results.length} route/file responses matched SHA-256 and MIME.`);
 } finally {
   await stopServer();

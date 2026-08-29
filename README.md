@@ -57,10 +57,11 @@ permanent main SHA, and green CI run URL on the epic.
 
 ## Deployment
 
-The standalone static application deploys as the `zudo-composer` Worker at
-`https://zudo-composer.takazudomodular.com`. Wrangler serves the committed Vite
-route set as an SPA from `dist`; it does not enable a workers.dev hostname or
-preview URLs.
+The configured production target is the `zudo-composer` Worker at
+`https://zudo-composer.takazudomodular.com`. Treat that hostname as a target,
+not evidence of a deployment, until the live smoke check succeeds. Wrangler
+serves the Vite route set as an SPA from `dist`; it does not enable a
+workers.dev hostname or preview URLs.
 
 Build and validate the exact artifact locally with:
 
@@ -80,3 +81,31 @@ browser suite, and deployment artifact. On `main`, both
 live smoke. If both are absent, CI emits a credential-only handoff; providing
 only one is a hard configuration error. Never place credential values in this
 repository.
+
+Before the first deployment, confirm that the Cloudflare account owns the
+active `takazudomodular.com` zone and that the
+`zudo-composer.takazudomodular.com` custom domain can be created for this
+Worker. CI requires a dedicated token made from Cloudflare's **Edit Cloudflare
+Workers** template, restricted with least privilege to that account and zone,
+plus the matching account ID. Store them only as `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` GitHub Actions secrets.
+
+The first deployment may instead be performed locally by the integration owner:
+
+```sh
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+corepack pnpm deployment:manifest
+corepack pnpm deploy:dry-run
+corepack pnpm exec wrangler login
+corepack pnpm exec wrangler whoami
+corepack pnpm deployment:manifest:check
+corepack pnpm deploy
+corepack pnpm smoke:live
+```
+
+The local flow uses Wrangler's interactive OAuth login. Never copy Wrangler
+OAuth files or OAuth tokens into GitHub, and never substitute them for the
+dedicated least-privilege CI token. A deployment is complete only when the live
+smoke verifies the exact local index across every SPA route and verifies every
+emitted asset's SHA-256 and MIME.
