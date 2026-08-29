@@ -12,7 +12,8 @@ import {
   createMappingCatalog, createMappingRecord, MappingPersistenceError, type CompositionCatalog as MappingCompositionCatalog,
   type MappingCatalog, type MappingInitializationOutcome, type MappingProvider,
 } from "../mapping";
-import { createCompositionCatalog, type CompositionCatalog } from "../sitemapper/catalog";
+import { createCompositionCatalog, createMappingAssignmentCatalog, type CompositionCatalog } from "../sitemapper/catalog";
+import type { MappingAssignmentCatalog } from "../sitemapper/routes";
 
 export const PRODUCTION_SEED_IDS = {
   composition: "product-overview", contentModel: "news-collection",
@@ -127,6 +128,7 @@ export interface ProductionProviderIntegration {
   compositionProviders: readonly CompositionProvider[]; compositionCatalog: CompositionCatalog; mappingCompositionCatalog: MappingCompositionCatalog;
   contentProviders: readonly ContentProvider[]; contentProvider: ContentProvider; contentCatalog: ContentCatalog;
   mappingProviders: readonly MappingProvider[]; mappingProvider: MappingProvider; mappingCatalog: MappingCatalog;
+  sitemapperMappingCatalog: MappingAssignmentCatalog;
 }
 export interface ProductionProviderIntegrationOptions { compositionIdbFactory?: IDBFactory | null; contentIdbFactory?: IDBFactory | null; mappingIdbFactory?: IDBFactory | null }
 export function createProductionProviderIntegration(options: ProductionProviderIntegrationOptions = {}): ProductionProviderIntegration {
@@ -139,6 +141,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   const initializeContent = initializeUntilReady(() => contentProvider.initialization.initialize());
   const mappingProvider = createStagedMappingProvider(createIndexedDbMappingProvider(options.mappingIdbFactory === undefined ? {} : { idbFactory: options.mappingIdbFactory }), contentProvider, browserComposition, { content: initializeContent, composition: compositionInitializers[browserCompositionIndex] });
   const mappingProviders = [mappingProvider] as const;
+  const initializeMapping = initializeUntilReady(() => mappingProvider.initialization.initialize());
   const baseContentCatalog = createContentCatalog(contentProviders);
   const contentCatalog: ContentCatalog = {
     listModels: async () => { await initializeContent(); return baseContentCatalog.listModels(); },
@@ -150,11 +153,35 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     list: async () => { await initializeCompositions(); return baseMappingCompositionCatalog.list(); },
     resolve: async (ref) => { await initializeCompositions(); return baseMappingCompositionCatalog.resolve(ref); },
   };
+  const sitemapperMappingCatalog = createMappingAssignmentCatalog([{
+    descriptor: mappingProvider.descriptor,
+    store: {
+      list: async () => {
+        const outcome = await initializeMapping();
+        if (outcome.status !== "ready") throw outcome.status === "error" ? outcome.error : new Error("Mapping storage requires recovery.");
+        return mappingProvider.store.list();
+      },
+      get: async (id) => {
+        const outcome = await initializeMapping();
+        if (outcome.status !== "ready") throw outcome.status === "error" ? outcome.error : new Error("Mapping storage requires recovery.");
+        return mappingProvider.store.get(id);
+      },
+    },
+  }], [{
+    descriptor: contentProvider.descriptor,
+    store: {
+      scanEntries: async (modelId) => {
+        const outcome = await initializeContent();
+        if (outcome.status !== "ready") throw outcome.status === "error" ? outcome.error : new Error("Content storage requires recovery.");
+        return contentProvider.store.scanEntries(modelId);
+      },
+    },
+  }]);
   return Object.freeze({
     componentProvider: activeComponentProvider, compositionProviders,
     compositionCatalog: createInitializedCompositionCatalog(compositionProviders, compositionInitializers),
     mappingCompositionCatalog,
     contentProviders, contentProvider, contentCatalog,
-    mappingProviders, mappingProvider, mappingCatalog: createMappingCatalog(mappingProviders),
+    mappingProviders, mappingProvider, mappingCatalog: createMappingCatalog(mappingProviders), sitemapperMappingCatalog,
   });
 }

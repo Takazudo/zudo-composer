@@ -61,6 +61,18 @@ describe("production provider integration", () => {
     const contentSnapshot = await integration.contentProvider.store.scanEntries(PRODUCTION_SEED_IDS.contentModel);
     expect(contentSnapshot.model).toMatchObject({ id: PRODUCTION_SEED_IDS.contentModel, createdAt: PRODUCTION_SEED_TIMESTAMP });
     expect(contentSnapshot.entries.map(({ id }) => id).sort()).toEqual([...PRODUCTION_SEED_IDS.entries].sort());
+    const sitemapperMappings = await integration.sitemapperMappingCatalog.list();
+    expect(sitemapperMappings).toMatchObject({
+      failures: [],
+      entries: [{ ref: { providerId: "mapping-indexeddb", recordId: PRODUCTION_SEED_IDS.mapping } }],
+    });
+    const sitemapperMapping = await integration.sitemapperMappingCatalog.routes.resolveMapping({ providerId: "mapping-indexeddb", recordId: PRODUCTION_SEED_IDS.mapping });
+    expect(sitemapperMapping).toMatchObject({ status: "resolved", record: { id: PRODUCTION_SEED_IDS.mapping } });
+    if (sitemapperMapping.status === "resolved") {
+      const snapshot = await integration.sitemapperMappingCatalog.routes.resolveContentSnapshot(sitemapperMapping.record);
+      expect(snapshot).toMatchObject({ status: "resolved", model: { id: PRODUCTION_SEED_IDS.contentModel } });
+      if (snapshot.status === "resolved") expect(snapshot.snapshot.entries).toHaveLength(PRODUCTION_SEED_IDS.entries.length);
+    }
     const assertResolved = async () => {
       const mapping = await integration.mappingCatalog.resolve({ providerId: "mapping-indexeddb", recordId: PRODUCTION_SEED_IDS.mapping });
       expect(mapping).toMatchObject({ status: "resolved", record: { createdAt: PRODUCTION_SEED_TIMESTAMP, document: {

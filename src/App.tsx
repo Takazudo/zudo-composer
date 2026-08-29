@@ -22,7 +22,7 @@ export function App() {
   if (path === "/composer") content = <ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} />;
   else if (path === "/content") content = <ContentRouteContent provider={providers.contentProvider} />;
   else if (path === "/mapping") content = <MappingRouteContent provider={providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentStore={providers.contentProvider.store} componentProvider={providers.componentProvider} />;
-  else if (path === "/sitemapper") content = <SitemapperRouteContent catalog={providers.compositionCatalog} />;
+  else if (path === "/sitemapper") content = <SitemapperRouteContent catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
   else if (path === "/") content = <Home />;
   else content = <NotFound />;
   return <Shell path={path}>{content}</Shell>;
