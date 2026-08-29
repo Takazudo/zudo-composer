@@ -5,7 +5,7 @@
 // for the shared setup pattern this mirrors.
 
 import { describe, expect, it } from "vitest";
-import { createSequentialIdFactory } from "../../../../composer";
+import { createSequentialIdFactory } from "../../../../composer/browser";
 import {
   COMPONENT_IDS as C,
   SLOT_IDS as S,
@@ -33,7 +33,6 @@ function stateFrom(document: ReturnType<typeof makeAbcDocument>): ComposerContro
   return createInitialControllerState({
     document,
     manifest: fixtureManifest,
-    loadNotice: null,
     saveStatus: { kind: "saved" },
     leftWidth: 260,
     rightWidth: 320,

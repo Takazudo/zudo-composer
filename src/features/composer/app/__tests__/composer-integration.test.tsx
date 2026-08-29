@@ -18,23 +18,23 @@ import type {
   InsertionTarget,
   ReuseCatalogOutcome,
   ReuseSelectionOutcome,
-} from "../../../../composer";
-import { COMPOSITION_SCHEMA_VERSION, VIRTUAL_ROOT_SLOT_ID } from "../../../../composer";
+} from "../../../../composer/browser";
+import { COMPOSITION_SCHEMA_VERSION, VIRTUAL_ROOT_SLOT_ID } from "../../../../composer/browser";
 import {
-  commitInlineEditMessage,
-  dropNodeMessage,
-  readyMessage,
-  requestAddMessage,
-  requestInsertMenuMessage,
-  requestNodeMenuMessage,
-  selectMessage,
+  commitInlineEditMessage as protocolCommitInlineEditMessage,
+  dropNodeMessage as protocolDropNodeMessage,
+  readyMessage as protocolReadyMessage,
+  requestAddMessage as protocolRequestAddMessage,
+  requestInsertMenuMessage as protocolRequestInsertMenuMessage,
+  requestNodeMenuMessage as protocolRequestNodeMenuMessage,
+  selectMessage as protocolSelectMessage,
 } from "../../preview/protocol";
 import { INSPECTOR_COMMIT_DEBOUNCE_MS } from "../../chrome/use-composer-controller";
 import { ComposerIntegration } from "../composer-integration";
 import { makeTestBridge } from "../test-support/preview-harness";
 import { LS_COMPOSER_VIEWPORT } from "../viewport";
 import {
-  fixturePackManifest,
+  fixtureComponentProvider,
   fixtureDocument,
   fixtureNode,
   FIXTURE_IDS,
@@ -49,6 +49,28 @@ function emptyDoc(): CompositionDocument {
 
 const ROOT: InsertionTarget = { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 };
 const RECT = { x: 10, y: 20, width: 80, height: 24 };
+const PREVIEW_PACK = fixtureComponentProvider.manifest;
+
+const readyMessage = () => protocolReadyMessage(PREVIEW_PACK);
+const requestAddMessage = (revision: number, target: InsertionTarget) =>
+  protocolRequestAddMessage(PREVIEW_PACK, revision, target);
+const selectMessage = (revision: number, nodeId: string) => protocolSelectMessage(PREVIEW_PACK, revision, nodeId);
+const commitInlineEditMessage = (nodeId: string, fieldKey: string, value: string, revision: number) =>
+  protocolCommitInlineEditMessage(PREVIEW_PACK, nodeId, fieldKey, value, revision);
+const requestNodeMenuMessage = (
+  revision: number,
+  nodeId: string,
+  rect: typeof RECT,
+  token: string,
+) => protocolRequestNodeMenuMessage(PREVIEW_PACK, revision, nodeId, rect, token);
+const requestInsertMenuMessage = (
+  revision: number,
+  target: InsertionTarget,
+  rect: typeof RECT,
+  token: string,
+) => protocolRequestInsertMenuMessage(PREVIEW_PACK, revision, target, rect, token);
+const dropNodeMessage = (sourceId: string, target: InsertionTarget, copy: boolean, revision: number) =>
+  protocolDropNodeMessage(PREVIEW_PACK, sourceId, target, copy, revision);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const asAny = (v: unknown) => v as any;
@@ -68,7 +90,7 @@ function setup(
   const bridge = makeTestBridge();
   const utils = render(
     <ComposerIntegration
-      manifest={fixturePackManifest}
+      componentProvider={fixtureComponentProvider}
       controllerOptions={controllerOptions(sample)}
       createBridge={bridge.createBridge}
       previewLocation={bridge.location}
@@ -282,7 +304,7 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     const bridge = makeTestBridge();
     const view = render(
       <ComposerIntegration
-        manifest={fixturePackManifest}
+        componentProvider={fixtureComponentProvider}
         controllerOptions={controllerOptions(consumer)}
         reuseResolution={{ ref: { providerId: "indexeddb", recordId: "bound-page" }, resolver }}
         linkedActions={{ onOpenSource, onDetach: vi.fn() }}

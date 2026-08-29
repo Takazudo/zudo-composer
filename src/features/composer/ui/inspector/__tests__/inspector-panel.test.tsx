@@ -4,7 +4,7 @@ import "../../../test-support/cleanup";
 import { useState } from "preact/hooks";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import type { CompositionDocument } from "../../../../../composer";
+import type { CompositionDocument } from "../../../../../composer/browser";
 import {
   TEST_COMPONENT_IDS,
   makeDocument,

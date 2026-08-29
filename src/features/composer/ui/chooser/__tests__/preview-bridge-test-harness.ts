@@ -10,14 +10,13 @@
 
 import {
   COMPOSER_PREVIEW_CHANNEL,
-  COMPOSER_PREVIEW_PACK_ID,
-  COMPOSER_PREVIEW_PACK_VERSION,
   COMPOSER_PREVIEW_PROTOCOL_VERSION,
   createComposerPreviewBridge,
   type ComposerPreviewLocation,
   type MessageEventLike,
   type MessageTarget,
   type PreviewFrameLike,
+  type PreviewPackIdentity,
 } from "../../../preview";
 
 export interface RecordingFrame {
@@ -55,12 +54,12 @@ export function deliverableHost(): DeliverableHost {
 }
 
 /** The bare `ready` envelope — the only inbound message the (non-interactive) chooser preview reacts to. */
-export function chooserPreviewReadyPayload(): unknown {
+export function chooserPreviewReadyPayload(pack: PreviewPackIdentity): unknown {
   return {
     channel: COMPOSER_PREVIEW_CHANNEL,
     v: COMPOSER_PREVIEW_PROTOCOL_VERSION,
-    packId: COMPOSER_PREVIEW_PACK_ID,
-    packVersion: COMPOSER_PREVIEW_PACK_VERSION,
+    packId: pack.packId,
+    packVersion: pack.packVersion,
     type: "ready",
   };
 }
@@ -82,6 +81,7 @@ export interface ChooserPreviewBridgeHarness {
  * seams.
  */
 export function makeChooserPreviewBridgeHarness(
+  pack: PreviewPackIdentity,
   // `about:blank` keeps happy-dom from trying to FETCH the preview route (the
   // bridge talks to the recording frame, not this element); the origin is
   // still an exact, non-wildcard value delivered messages must match.
@@ -99,7 +99,7 @@ export function makeChooserPreviewBridgeHarness(
     posts: frame.posts,
     deliverReady: () =>
       host.deliver({
-        data: chooserPreviewReadyPayload(),
+        data: chooserPreviewReadyPayload(pack),
         origin: location.targetOrigin,
         source: frame.contentWindow,
       }),

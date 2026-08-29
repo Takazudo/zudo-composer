@@ -5,7 +5,7 @@
 // underlying model-primitive tests.
 
 import { describe, expect, it } from "vitest";
-import { createSequentialIdFactory } from "../../../../composer";
+import { createSequentialIdFactory } from "../../../../composer/browser";
 import {
   FIXTURE_COMPONENT_IDS as F,
   fixtureManifest,
@@ -28,7 +28,6 @@ function initial(): ComposerControllerState {
   return createInitialControllerState({
     document: makeAbcDocument(),
     manifest: fixtureManifest,
-    loadNotice: null,
     saveStatus: { kind: "saved" },
     leftWidth: 260,
     rightWidth: 320,

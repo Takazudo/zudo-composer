@@ -4,7 +4,7 @@ import "../../test-support/cleanup";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { useState } from "preact/hooks";
 import { describe, expect, it, vi } from "vitest";
-import type { ReuseCatalogEntry } from "../../../../composer";
+import type { ReuseCatalogEntry } from "../../../../composer/browser";
 import { NewCompositionDialog } from "../new-composition-dialog";
 
 const TEMPLATE: ReuseCatalogEntry = {

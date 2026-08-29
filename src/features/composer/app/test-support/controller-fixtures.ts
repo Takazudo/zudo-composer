@@ -7,7 +7,7 @@ import {
   type CompositionRecordRef,
   type CompositionSaveOutcome,
   type IdFactory,
-} from "../../../../composer";
+} from "../../../../composer/browser";
 
 const NOW = "2026-07-14T00:00:00.000Z";
 const SAVED: CompositionSaveOutcome = {

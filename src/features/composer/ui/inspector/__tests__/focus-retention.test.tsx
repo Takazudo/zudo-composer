@@ -17,7 +17,7 @@ import "../../../test-support/cleanup";
 import { useState } from "preact/hooks";
 import { beforeEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/preact";
-import type { CompositionDocument, JsonObject } from "../../../../../composer";
+import type { CompositionDocument, JsonObject } from "../../../../../composer/browser";
 import { TEST_COMPONENT_IDS, makeDocument, makeNode, resetTestIds, testManifest } from "../../test-support/composer-fixtures";
 import { InspectorPanel } from "../inspector-panel";
 

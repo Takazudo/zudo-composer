@@ -11,7 +11,7 @@ import {
   type ReuseCatalogEntry,
   type CompositionInitializationOutcome,
   type CompositionSummary,
-} from "../../../../composer";
+} from "../../../../composer/browser";
 import { CompositionLibrary } from "../composition-library";
 import type {
   CompositionLibraryIntents,

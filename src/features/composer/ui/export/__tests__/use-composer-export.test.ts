@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { renderHook, act } from "@testing-library/preact";
-import { generateJsx, type CompositionRecord } from "../../../../../composer";
+import { generateJsx, type CompositionRecord } from "../../../../../composer/browser";
 import { TEST_COMPONENT_IDS, makeDocument, makeNode, resetTestIds, testManifest } from "../../test-support/composer-fixtures";
 import { useComposerExport } from "../use-composer-export";
 

@@ -7,7 +7,7 @@ import "../../test-support/cleanup";
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/preact";
-import type { CompositionNode } from "../../../../composer";
+import type { CompositionNode } from "../../../../composer/browser";
 import { ComposerToolbarBar } from "../composer-toolbar-bar";
 
 function noop() {

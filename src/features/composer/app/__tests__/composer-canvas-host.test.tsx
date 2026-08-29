@@ -10,17 +10,17 @@ import "../../test-support/cleanup";
 import { describe, expect, it, vi } from "vitest";
 import { act } from "preact/test-utils";
 import { fireEvent, render, screen } from "@testing-library/preact";
-import { createActiveSampleDocument } from "../../active-pack";
+import { activeComponentProvider, createActiveSampleDocument } from "../../active-pack";
 import {
-  commitInlineEditMessage,
-  dropNodeMessage,
-  errorMessage,
-  openSourceMessage,
-  readyMessage,
-  requestAddMessage,
-  requestInsertMenuMessage,
-  requestNodeMenuMessage,
-  selectMessage,
+  commitInlineEditMessage as protocolCommitInlineEditMessage,
+  dropNodeMessage as protocolDropNodeMessage,
+  errorMessage as protocolErrorMessage,
+  openSourceMessage as protocolOpenSourceMessage,
+  readyMessage as protocolReadyMessage,
+  requestAddMessage as protocolRequestAddMessage,
+  requestInsertMenuMessage as protocolRequestInsertMenuMessage,
+  requestNodeMenuMessage as protocolRequestNodeMenuMessage,
+  selectMessage as protocolSelectMessage,
 } from "../../preview/protocol";
 import type { PreviewSession, SerializedRect } from "../../preview";
 import { ComposerCanvasHost } from "../composer-canvas-host";
@@ -28,6 +28,35 @@ import { makeTestBridge } from "../test-support/preview-harness";
 
 const EDIT: PreviewSession = { mode: "edit", theme: "light", selectedId: null };
 const RECT: SerializedRect = { x: 10, y: 20, width: 100, height: 24 };
+const PREVIEW_PACK = activeComponentProvider.manifest;
+
+const readyMessage = () => protocolReadyMessage(PREVIEW_PACK);
+const selectMessage = (revision: number, nodeId: string) => protocolSelectMessage(PREVIEW_PACK, revision, nodeId);
+const openSourceMessage = (sourceRecordId: string) => protocolOpenSourceMessage(PREVIEW_PACK, sourceRecordId);
+const requestAddMessage = (revision: number, target: Parameters<typeof protocolRequestAddMessage>[2]) =>
+  protocolRequestAddMessage(PREVIEW_PACK, revision, target);
+const errorMessage = (revision: number, message: string, recoverable: boolean) =>
+  protocolErrorMessage(PREVIEW_PACK, revision, message, recoverable);
+const commitInlineEditMessage = (nodeId: string, fieldKey: string, value: string, revision: number) =>
+  protocolCommitInlineEditMessage(PREVIEW_PACK, nodeId, fieldKey, value, revision);
+const requestNodeMenuMessage = (
+  revision: number,
+  nodeId: string,
+  rect: SerializedRect,
+  token: string,
+) => protocolRequestNodeMenuMessage(PREVIEW_PACK, revision, nodeId, rect, token);
+const requestInsertMenuMessage = (
+  revision: number,
+  target: Parameters<typeof protocolRequestInsertMenuMessage>[2],
+  rect: SerializedRect,
+  token: string,
+) => protocolRequestInsertMenuMessage(PREVIEW_PACK, revision, target, rect, token);
+const dropNodeMessage = (
+  sourceId: string,
+  target: Parameters<typeof protocolDropNodeMessage>[2],
+  copy: boolean,
+  revision: number,
+) => protocolDropNodeMessage(PREVIEW_PACK, sourceId, target, copy, revision);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const asAny = (v: unknown) => v as any;
@@ -44,6 +73,7 @@ function mount(overrides: Partial<Parameters<typeof ComposerCanvasHost>[0]> = {}
   doc.name = "first";
   const utils = render(
     <ComposerCanvasHost
+      componentProvider={activeComponentProvider}
       document={doc}
       session={EDIT}
       viewport="fluid"
@@ -73,7 +103,7 @@ function mount(overrides: Partial<Parameters<typeof ComposerCanvasHost>[0]> = {}
 
 describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
   it("holds the initial snapshot until ready, then replays it to the exact origin", () => {
-    const { bridge } = mount();
+    const { bridge, doc } = mount();
     expect(bridge.posts).toHaveLength(0);
 
     act(() => bridge.deliver(readyMessage()));
@@ -81,6 +111,7 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
     expect(bridge.posts).toHaveLength(1);
     expect(asAny(bridge.posts[0].message).type).toBe("render");
     expect(asAny(bridge.posts[0].message).document.name).toBe("first");
+    expect(asAny(bridge.posts[0].message).localRecordId).toBe(doc.id);
     expect(bridge.posts[0].targetOrigin).toBe(bridge.location.targetOrigin);
   });
 
@@ -94,6 +125,7 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
     doc2.name = "second";
     rerender(
       <ComposerCanvasHost
+        componentProvider={activeComponentProvider}
         document={doc2}
         session={EDIT}
         viewport="fluid"
@@ -113,6 +145,7 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
     // Same document reference, new session object → updateSession (mode msg).
     rerender(
       <ComposerCanvasHost
+        componentProvider={activeComponentProvider}
         document={doc2}
         session={{ mode: "preview", theme: "light", selectedId: null }}
         viewport="fluid"
@@ -183,6 +216,7 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
     expect(frame().style.width).toBe("");
     rerender(
       <ComposerCanvasHost
+        componentProvider={activeComponentProvider}
         document={doc}
         session={EDIT}
         viewport="tablet"
@@ -215,6 +249,7 @@ describe("ComposerCanvasHost — inline-edit revision validation (issue #257)", 
     doc2.name = "second";
     base.rerender(
       <ComposerCanvasHost
+        componentProvider={activeComponentProvider}
         document={doc2}
         session={EDIT}
         viewport="fluid"
@@ -372,6 +407,7 @@ describe("ComposerCanvasHost — drop-node revision validation (issue #258)", ()
     doc2.name = "second";
     base.rerender(
       <ComposerCanvasHost
+        componentProvider={activeComponentProvider}
         document={doc2}
         session={EDIT}
         viewport="fluid"

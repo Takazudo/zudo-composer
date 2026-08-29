@@ -4,7 +4,7 @@ import "../../../test-support/cleanup";
 import { useState } from "preact/hooks";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/preact";
-import { generateJsx, type BrowserJsxExportOutcome } from "../../../../../composer";
+import { generateJsx, type BrowserJsxExportOutcome } from "../../../../../composer/browser";
 import { TEST_COMPONENT_IDS, makeDocument, makeNode, resetTestIds, testManifest } from "../../test-support/composer-fixtures";
 import { ComposerExportDialog } from "../export-dialog";
 

@@ -10,7 +10,7 @@ import {
   type CompositionRecordRef,
   type SaveQueue,
   type SaveQueueSnapshot,
-} from "../../../../composer";
+} from "../../../../composer/browser";
 import {
   FIXTURE_COMPONENT_IDS as F,
   fixtureManifest,

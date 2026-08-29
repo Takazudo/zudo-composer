@@ -13,11 +13,6 @@ describe("ComposerStatusIndicator", () => {
     expect(status).toHaveAttribute("data-sg-status", "saved");
   });
 
-  it("surfaces the unsaved status distinctly", () => {
-    render(<ComposerStatusIndicator saveStatus={{ kind: "unsaved" }} />);
-    expect(screen.getByText("Unsaved changes")).toHaveAttribute("data-sg-status", "unsaved");
-  });
-
   it("surfaces a provider-neutral error with Retry", () => {
     const onRetry = vi.fn();
     render(

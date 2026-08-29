@@ -5,17 +5,18 @@ import { describe, expect, it, vi } from "vitest";
 import { act } from "preact/test-utils";
 import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { useState } from "preact/hooks";
-import type { ComponentManifest } from "@zudo-composer/component-contract";
-import { VIRTUAL_ROOT_SLOT_ID, createComponentCatalog } from "../../../../../composer";
-import type { CompositionDocument, InsertionTarget, ReuseCatalogOutcome } from "../../../../../composer";
-import { createFixturePackManifest } from "../../../../../composer/__tests__/fixtures";
+import { h } from "preact";
+import { defineComponentPack, type ComponentManifest } from "@zudo-composer/component-contract";
+import { VIRTUAL_ROOT_SLOT_ID } from "../../../../../composer/browser";
+import type { CompositionDocument, InsertionTarget, ReuseCatalogOutcome } from "../../../../../composer/browser";
+import { createComposerComponentProvider } from "../../../active-pack";
 import type { ComposerPreviewLocation } from "../../../preview";
 import { ComposerChooser } from "../composer-chooser";
 import { CHOOSER_PREVIEW_PLACEHOLDER_ID } from "../chooser-preview-host";
 import {
   FIXTURE_IDS,
   fixtureCatalog,
-  fixturePackManifest,
+  fixtureComponentProvider,
   fixtureDocument,
   fixtureNode,
   makeAbcDocument,
@@ -57,8 +58,17 @@ const catalogWithPlaceholder: ComponentManifest[] = [...fixtureCatalog, placehol
 // One shared catalog derivation per pack variant — tests pass this pre-derived catalog
 // alongside the raw entries array, rather than re-deriving inside
 // `ComposerChooser` itself.
-const fixtureManifest = createComponentCatalog(fixturePackManifest);
-const manifestWithPlaceholder = createComponentCatalog(createFixturePackManifest(catalogWithPlaceholder));
+const fixtureManifest = fixtureComponentProvider.catalog;
+const placeholderComponentPack = defineComponentPack({
+  packId: "@zudo-composer/test-chooser-placeholder",
+  packVersion: "1.0.0",
+  components: catalogWithPlaceholder.map((entry) => ({
+    ...entry,
+    component: (props: Record<string, unknown>) => h("div", props),
+  })),
+});
+const placeholderComponentProvider = createComposerComponentProvider(placeholderComponentPack);
+const manifestWithPlaceholder = placeholderComponentProvider.catalog;
 
 function baseProps(overrides: Partial<Parameters<typeof ComposerChooser>[0]> = {}) {
   resetFixtureIds();
@@ -66,6 +76,7 @@ function baseProps(overrides: Partial<Parameters<typeof ComposerChooser>[0]> = {
     open: true,
     target: rightTarget,
     document: makeAbcDocument(),
+    componentProvider: fixtureComponentProvider,
     manifest: fixtureManifest,
     entries: fixtureCatalog,
     onAdd: vi.fn(),
@@ -184,6 +195,7 @@ describe("ComposerChooser — target capture survives a selection change", () =>
             Simulate selection change
           </button>
           <ComposerChooser
+            componentProvider={fixtureComponentProvider}
             open
             target={target}
             document={document}
@@ -379,7 +391,7 @@ describe("ComposerChooser — published Pattern insertion", () => {
 
 describe("ComposerChooser — live preview pane (issue #254)", () => {
   it("shows an empty-state hint before the first hover/focus", () => {
-    const harness = makeChooserPreviewBridgeHarness();
+    const harness = makeChooserPreviewBridgeHarness(fixtureComponentProvider.manifest);
     const props = baseProps({ previewCreateBridge: harness.createBridge, previewLocation: harness.location });
     render(<ComposerChooser {...props} />);
     expect(screen.getByText(/Hover or focus a component to preview it here/)).toBeInTheDocument();
@@ -388,7 +400,7 @@ describe("ComposerChooser — live preview pane (issue #254)", () => {
   });
 
   it("hovering a catalog card renders it (defaults) in the SECOND, dedicated preview iframe", () => {
-    const harness = makeChooserPreviewBridgeHarness();
+    const harness = makeChooserPreviewBridgeHarness(fixtureComponentProvider.manifest);
     const props = baseProps({ previewCreateBridge: harness.createBridge, previewLocation: harness.location });
     render(<ComposerChooser {...props} />);
     act(() => harness.deliverReady());
@@ -408,7 +420,7 @@ describe("ComposerChooser — live preview pane (issue #254)", () => {
   });
 
   it("keyboard-focusing a catalog card ALSO updates the preview target", () => {
-    const harness = makeChooserPreviewBridgeHarness();
+    const harness = makeChooserPreviewBridgeHarness(fixtureComponentProvider.manifest);
     const props = baseProps({
       target: rootTarget,
       previewCreateBridge: harness.createBridge,
@@ -424,7 +436,7 @@ describe("ComposerChooser — live preview pane (issue #254)", () => {
   });
 
   it("is sticky: the previewed entry survives mouseleave, and is only replaced by the NEXT hover/focus", () => {
-    const harness = makeChooserPreviewBridgeHarness();
+    const harness = makeChooserPreviewBridgeHarness(fixtureComponentProvider.manifest);
     const props = baseProps({
       target: rootTarget,
       previewCreateBridge: harness.createBridge,
@@ -447,10 +459,11 @@ describe("ComposerChooser — live preview pane (issue #254)", () => {
   });
 
   it("a hovered CONTAINER entry's preview includes a PlaceholderBox child in every declared slot", () => {
-    const harness = makeChooserPreviewBridgeHarness();
+    const harness = makeChooserPreviewBridgeHarness(placeholderComponentProvider.manifest);
     const props = baseProps({
       target: rootTarget,
       manifest: manifestWithPlaceholder,
+      componentProvider: placeholderComponentProvider,
       entries: catalogWithPlaceholder,
       previewCreateBridge: harness.createBridge,
       previewLocation: harness.location,
@@ -472,7 +485,7 @@ describe("ComposerChooser — live preview pane (issue #254)", () => {
   });
 
   it("a leaf entry's preview carries no slot children", () => {
-    const harness = makeChooserPreviewBridgeHarness();
+    const harness = makeChooserPreviewBridgeHarness(fixtureComponentProvider.manifest);
     const props = baseProps({ previewCreateBridge: harness.createBridge, previewLocation: harness.location });
     render(<ComposerChooser {...props} />);
     act(() => harness.deliverReady());
@@ -532,6 +545,7 @@ describe("ComposerChooser — movable tool-dialog geometry (issue #315)", () => 
             open
           </button>
           <ComposerChooser
+            componentProvider={fixtureComponentProvider}
             open={open}
             target={rootTarget}
             document={makeAbcDocument()}

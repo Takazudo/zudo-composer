@@ -8,7 +8,7 @@ import "../../test-support/cleanup";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/preact";
-import { VIRTUAL_ROOT_SLOT_ID } from "../../../../composer";
+import { VIRTUAL_ROOT_SLOT_ID } from "../../../../composer/browser";
 import { fixturePackManifest, FIXTURE_IDS, makeAbcDocument, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
 import { useComposerIntegration } from "../use-composer-integration";
 import { useComposerMenus } from "../use-composer-menus";

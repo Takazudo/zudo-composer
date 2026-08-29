@@ -14,7 +14,7 @@ import "../../../test-support/cleanup";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/preact";
-import type { CompositionDocument } from "../../../../../composer";
+import type { CompositionDocument } from "../../../../../composer/browser";
 import { TEST_COMPONENT_IDS, makeDocument, makeNode, resetTestIds, testManifest } from "../../test-support/composer-fixtures";
 import { InspectorPanel } from "../inspector-panel";
 

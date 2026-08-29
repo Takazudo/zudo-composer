@@ -11,8 +11,8 @@ import {
   type CompositionInitializationOutcome,
   type CompositionProvider,
   type CompositionRecord,
-} from "../../../../composer";
-import { activeComponentManifest, createActiveSampleDocument } from "../../active-pack";
+} from "../../../../composer/browser";
+import { activeComponentManifest, activeComponentProvider, createActiveSampleDocument } from "../../active-pack";
 import {
   ProductionComposerApp,
   createProductionComposerProviders,
@@ -106,7 +106,7 @@ class FakeNavigation implements ComposerBrowserNavigation {
   readonly pushes: string[] = [];
   readonly replacements: string[] = [];
 
-  constructor(url = "/composer/#/") {
+  constructor(url = "/composer#/") {
     this.location = this.parse(url);
   }
 
@@ -156,16 +156,16 @@ describe("ProductionComposerApp", () => {
     const files = memoryProvider("files", [record("same", "File copy")]);
     const navigation = new FakeNavigation("/composer");
     const view = render(
-      <ProductionComposerApp manifest={activeComponentManifest} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />,
+      <ProductionComposerApp componentProvider={activeComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />,
     );
 
     expect(await screen.findByRole("heading", { name: "Compositions" })).toBeInTheDocument();
-    expect(navigation.replacements).toContain("/composer/#/");
+    expect(navigation.replacements).toContain("/composer#/");
     expect(screen.getByRole("option", { name: "Local files" })).toBeInTheDocument();
 
     view.unmount();
-    navigation.visit("/composer/#/composition/files/same");
-    render(<ProductionComposerApp manifest={activeComponentManifest} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
+    navigation.visit("/composer#/composition/files/same");
+    render(<ProductionComposerApp componentProvider={activeComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
 
     expect(await screen.findByRole("button", { name: "Library" })).toBeInTheDocument();
     expect(screen.getAllByText("File copy").length).toBeGreaterThan(0);
@@ -177,7 +177,7 @@ describe("ProductionComposerApp", () => {
     const indexeddb = memoryProvider("indexeddb", []);
     const navigation = new FakeNavigation();
     render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[indexeddb]}
         navigation={navigation}
         idFactory={() => "ordinary"}
@@ -201,7 +201,7 @@ describe("ProductionComposerApp", () => {
       root: [],
     });
     expect(indexeddb.records.get("ordinary")?.document.binding).toBeUndefined();
-    expect(navigation.pushes.at(-1)).toBe("/composer/#/composition/indexeddb/ordinary");
+    expect(navigation.pushes.at(-1)).toBe("/composer#/composition/indexeddb/ordinary");
   });
 
   it("re-resolves a selected same-provider Global template, then persists only its source and outlet binding", async () => {
@@ -217,7 +217,7 @@ describe("ProductionComposerApp", () => {
     const indexeddb = memoryProvider("indexeddb", [template]);
     const navigation = new FakeNavigation();
     render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[indexeddb]}
         navigation={navigation}
         idFactory={() => "bound-page"}
@@ -257,10 +257,10 @@ describe("ProductionComposerApp", () => {
     consumer.document.root = [consumer.document.root[0]!.slots.content![1]!];
     consumer.document.binding = { sourceRecordId: source.id, outletId: "main" };
     const indexeddb = memoryProvider("indexeddb", [source, consumer], { lifecycle: true });
-    const navigation = new FakeNavigation("/composer/#/composition/indexeddb/bound-page");
+    const navigation = new FakeNavigation("/composer#/composition/indexeddb/bound-page");
     let nodeId = 0;
     const view = render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[indexeddb]}
         navigation={navigation}
         nodeIdFactory={() => `detached-${++nodeId}`}
@@ -281,7 +281,7 @@ describe("ProductionComposerApp", () => {
     expect((indexeddb.store as unknown as { saveLifecycleRecord: ReturnType<typeof vi.fn> }).saveLifecycleRecord).toHaveBeenCalledOnce();
     await waitFor(() =>
       expect(navigation.read()).toEqual({
-        pathname: "/composer/",
+        pathname: "/composer",
         hash: "#/composition/indexeddb/bound-page",
       }),
     );
@@ -300,7 +300,7 @@ describe("ProductionComposerApp", () => {
     };
     const indexeddb = memoryProvider("indexeddb", [template]);
     render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[indexeddb]}
         navigation={new FakeNavigation()}
         idFactory={() => "never-saved"}
@@ -335,9 +335,9 @@ describe("ProductionComposerApp", () => {
     consumer.document.binding = { sourceRecordId: "site-shell", outletId: "main" };
     const indexeddb = memoryProvider("indexeddb", [source, consumer]);
     const files = memoryProvider("files", [record("unrelated", "Unrelated file")]);
-    const navigation = new FakeNavigation("/composer/#/composition/indexeddb/site-shell");
+    const navigation = new FakeNavigation("/composer#/composition/indexeddb/site-shell");
     render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[indexeddb, files]}
         navigation={navigation}
         preview={PREVIEW}
@@ -372,7 +372,7 @@ describe("ProductionComposerApp", () => {
     });
     const navigation = new FakeNavigation();
     const first = render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[provider]}
         navigation={navigation}
         now={() => TIMESTAMP}
@@ -393,9 +393,9 @@ describe("ProductionComposerApp", () => {
     await screen.findByRole("heading", { name: "Compositions" });
     first.unmount();
 
-    navigation.visit("/composer/#/composition/indexeddb/real-composition");
+    navigation.visit("/composer#/composition/indexeddb/real-composition");
     const refreshed = render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[provider]}
         navigation={navigation}
         now={() => TIMESTAMP}
@@ -418,9 +418,9 @@ describe("ProductionComposerApp", () => {
 
   it("lands a debounce-pending inspector value before the save queue is flushed", async () => {
     const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
-    const navigation = new FakeNavigation("/composer/#/composition/indexeddb/alpha");
+    const navigation = new FakeNavigation("/composer#/composition/indexeddb/alpha");
     const view = render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[indexeddb]}
         navigation={navigation}
         preview={PREVIEW}
@@ -451,7 +451,7 @@ describe("ProductionComposerApp", () => {
     const navigation = new FakeNavigation();
     let nodeId = 0;
     render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[indexeddb, files]}
         navigation={navigation}
         idFactory={() => "file-copy"}
@@ -469,7 +469,7 @@ describe("ProductionComposerApp", () => {
     expect(await screen.findByRole("button", { name: "Library" })).toBeInTheDocument();
     expect(files.records.get("file-copy")?.document.name).toBe("File copy copy");
     expect(indexeddb.records.has("file-copy")).toBe(false);
-    expect(navigation.pushes.at(-1)).toBe("/composer/#/composition/files/file-copy");
+    expect(navigation.pushes.at(-1)).toBe("/composer#/composition/files/file-copy");
   });
 
 
@@ -477,10 +477,10 @@ describe("ProductionComposerApp", () => {
   it("duplicates the mounted composition into its active provider and opens its route", async () => {
     const indexeddb = memoryProvider("indexeddb", [record("same", "Browser copy")]);
     const files = memoryProvider("files", [record("same", "File copy")]);
-    const navigation = new FakeNavigation("/composer/#/composition/files/same");
+    const navigation = new FakeNavigation("/composer#/composition/files/same");
     let nodeId = 0;
     const view = render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[indexeddb, files]}
         navigation={navigation}
         idFactory={() => "detail-copy"}
@@ -501,7 +501,7 @@ describe("ProductionComposerApp", () => {
 
     await waitFor(() =>
       expect(navigation.read()).toEqual({
-        pathname: "/composer/",
+        pathname: "/composer",
         hash: "#/composition/files/detail-copy",
       }),
     );
@@ -521,10 +521,10 @@ describe("ProductionComposerApp", () => {
     const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
     const files = memoryProvider("files", [record("alpha", "File Alpha")]);
     const navigation = new FakeNavigation();
-    render(<ProductionComposerApp manifest={activeComponentManifest} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
+    render(<ProductionComposerApp componentProvider={activeComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
     await screen.findByRole("heading", { name: "Compositions" });
 
-    navigation.visit("/composer/#/composition/files/alpha");
+    navigation.visit("/composer#/composition/files/alpha");
 
     expect(await screen.findByRole("button", { name: "Library" })).toBeInTheDocument();
     expect(screen.getAllByText("File Alpha").length).toBeGreaterThan(0);
@@ -555,8 +555,8 @@ describe("ProductionComposerApp", () => {
       indexeddb.records.set(recovered.id, recovered);
       return ready(indexeddb.records);
     });
-    const navigation = new FakeNavigation("/composer/#/composition/indexeddb/future");
-    render(<ProductionComposerApp manifest={activeComponentManifest} providers={[indexeddb]} navigation={navigation} preview={PREVIEW} />);
+    const navigation = new FakeNavigation("/composer#/composition/indexeddb/future");
+    render(<ProductionComposerApp componentProvider={activeComponentProvider} providers={[indexeddb]} navigation={navigation} preview={PREVIEW} />);
 
     expect(await screen.findByRole("heading", { name: "Recovery required" })).toBeInTheDocument();
     expect(screen.getByText("Future source is quarantined unchanged.")).toBeInTheDocument();
@@ -566,7 +566,7 @@ describe("ProductionComposerApp", () => {
 
     expect(await screen.findByRole("heading", { name: "Compositions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Fresh sample" })).toBeInTheDocument();
-    expect(navigation.replacements.at(-1)).toBe("/composer/#/");
+    expect(navigation.replacements.at(-1)).toBe("/composer#/");
   });
 
   it("does not let slow direct-detail initialization override newer history", async () => {
@@ -575,22 +575,22 @@ describe("ProductionComposerApp", () => {
     const indexeddb = memoryProvider("indexeddb", [alpha], {
       initialize: () => initialization.promise,
     });
-    const navigation = new FakeNavigation("/composer/#/composition/indexeddb/alpha");
+    const navigation = new FakeNavigation("/composer#/composition/indexeddb/alpha");
     render(
-      <ProductionComposerApp manifest={activeComponentManifest}
+      <ProductionComposerApp componentProvider={activeComponentProvider}
         providers={[indexeddb]}
         navigation={navigation}
         preview={PREVIEW}
       />,
     );
 
-    navigation.visit("/composer/#/");
+    navigation.visit("/composer#/");
     expect(await screen.findByRole("heading", { name: "Loading compositions…" })).toBeInTheDocument();
     initialization.resolve(ready(indexeddb.records));
 
     expect(await screen.findByRole("heading", { name: "Compositions" })).toBeInTheDocument();
     await Promise.resolve();
-    expect(navigation.read()).toEqual({ pathname: "/composer/", hash: "#/" });
+    expect(navigation.read()).toEqual({ pathname: "/composer", hash: "#/" });
     expect(indexeddb.store.get).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Library" })).not.toBeInTheDocument();
   });

@@ -12,7 +12,7 @@ import "../../../test-support/cleanup";
 import { useMemo, useState } from "preact/hooks";
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, within } from "@testing-library/preact";
-import type { CompositionDocument, InsertionTarget } from "../../../../../composer";
+import type { CompositionDocument, InsertionTarget } from "../../../../../composer/browser";
 import {
   addNode,
   COMPOSITION_SCHEMA_VERSION,
@@ -20,11 +20,11 @@ import {
   createSequentialIdFactory,
   removeNode,
   reorderNode,
-} from "../../../../../composer";
+} from "../../../../../composer/browser";
 import { ComposerTree } from "../composer-tree";
 import { ComposerChooser } from "../../chooser/composer-chooser";
 import { ancestorChainIds } from "../tree-helpers";
-import { fixtureCatalog, fixturePackManifest } from "./fixtures";
+import { fixtureCatalog, fixtureComponentProvider, fixturePackManifest } from "./fixtures";
 
 function emptyDocument(): CompositionDocument {
   return { schemaVersion: COMPOSITION_SCHEMA_VERSION, id: "walkthrough", name: "Walkthrough", root: [] };
@@ -88,6 +88,7 @@ function Harness() {
         onOpenInsertMenu={() => undefined}
       />
       <ComposerChooser
+        componentProvider={fixtureComponentProvider}
         open={chooser.open}
         target={chooser.target}
         document={document}

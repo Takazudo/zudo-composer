@@ -3,7 +3,7 @@
 import "../../../test-support/cleanup";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { createComponentCatalog } from "../../../../../composer";
+import { createComponentCatalog } from "../../../../../composer/browser";
 import { ComposerTree } from "../composer-tree";
 import { fixtureCatalog, fixtureDocument, fixtureNode, fixturePackManifest, makeAbcDocument, resetFixtureIds, FIXTURE_IDS } from "./fixtures";
 

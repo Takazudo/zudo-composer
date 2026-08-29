@@ -1,9 +1,10 @@
 // Shared current-contract fixtures for the structure rail and chooser.
 
-import type { ComponentManifest } from "@zudo-composer/component-contract";
-import type { CompositionDocument, CompositionNode } from "../../../../../composer";
-import { COMPOSITION_SCHEMA_VERSION, createSequentialIdFactory } from "../../../../../composer";
-import { createFixturePackManifest } from "../../../../../composer/__tests__/fixtures";
+import { h, type FunctionComponent } from "preact";
+import { defineComponentPack, type ComponentManifest } from "@zudo-composer/component-contract";
+import type { CompositionDocument, CompositionNode } from "../../../../../composer/browser";
+import { COMPOSITION_SCHEMA_VERSION, createSequentialIdFactory } from "../../../../../composer/browser";
+import { createComposerComponentProvider } from "../../../active-pack";
 
 function src(exportName: string): ComponentManifest["source"] {
   return { module: `@fixtures/${exportName.toLowerCase()}`, exportKind: "named", exportName };
@@ -95,7 +96,16 @@ export const fixtureCatalog: ComponentManifest[] = [
   },
 ];
 
-export const fixturePackManifest = createFixturePackManifest(fixtureCatalog);
+const FixtureComponent: FunctionComponent<Record<string, unknown>> = (props) =>
+  h("div", props);
+
+export const fixtureComponentPack = defineComponentPack({
+  packId: "@zudo-composer/test-fixtures",
+  packVersion: "1.0.0",
+  components: fixtureCatalog.map((entry) => ({ ...entry, component: FixtureComponent })),
+});
+export const fixturePackManifest = fixtureComponentPack.manifest;
+export const fixtureComponentProvider = createComposerComponentProvider(fixtureComponentPack);
 
 let counter = 0;
 /** Reset the fixture node-id counter so a test gets deterministic ids. */

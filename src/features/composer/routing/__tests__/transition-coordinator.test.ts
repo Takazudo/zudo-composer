@@ -8,8 +8,8 @@ import type {
   CompositionSaveOutcome,
   CompositionSummary,
   SaveQueueState,
-} from "../../../../composer";
-import { COMPOSITION_SCHEMA_VERSION } from "../../../../composer";
+} from "../../../../composer/browser";
+import { COMPOSITION_SCHEMA_VERSION } from "../../../../composer/browser";
 
 import type { ComposerRoute, ComposerRouteResolution } from "../route";
 import {
@@ -116,7 +116,7 @@ function detailIntent(
 ): ComposerTransitionIntent {
   return {
     resolution: matched({ kind: "detail", providerId, recordId }),
-    url: `/composer/#/composition/${providerId}/${encodeURIComponent(recordId)}`,
+    url: `/composer#/composition/${providerId}/${encodeURIComponent(recordId)}`,
     history,
   };
 }
@@ -127,7 +127,7 @@ function indexIntent(
 ): ComposerTransitionIntent {
   return {
     resolution: matched({ kind: "index" }),
-    url: "/composer/#/",
+    url: "/composer#/",
     history,
     indexProviderId,
   };
@@ -202,7 +202,7 @@ describe("latest-intent Composer transition coordinator", () => {
       status: "committed",
     });
     expect(h.coordinator.state).toMatchObject({ view: "index", providerId: "indexeddb" });
-    expect(h.history.push).toHaveBeenCalledWith("/composer/#/");
+    expect(h.history.push).toHaveBeenCalledWith("/composer#/");
   });
 
   it("treats a detail provider as authoritative despite another preference", async () => {
@@ -237,7 +237,7 @@ describe("latest-intent Composer transition coordinator", () => {
 
     await h.coordinator.transition({
       resolution: invalid,
-      url: "/composer/#/composition/files/%",
+      url: "/composer#/composition/files/%",
       history: "already-applied",
     });
     expect(h.coordinator.state).toMatchObject({
@@ -474,7 +474,7 @@ describe("latest-intent Composer transition coordinator", () => {
       draft: { document: { name: "Mounted draft" } },
     });
     expect(h.preference.write).not.toHaveBeenCalledWith("files");
-    expect(h.history.replace).toHaveBeenCalledWith("/composer/#/composition/indexeddb/old");
+    expect(h.history.replace).toHaveBeenCalledWith("/composer#/composition/indexeddb/old");
   });
 
   it("restores URL and preserves provider, collection, and latest draft when flush fails", async () => {
@@ -510,7 +510,7 @@ describe("latest-intent Composer transition coordinator", () => {
       draft: { document: { name: "Typed draft" } },
     });
     expect(h.files.list).not.toHaveBeenCalled();
-    expect(h.history.replace).toHaveBeenCalledWith("/composer/#/composition/indexeddb/old");
+    expect(h.history.replace).toHaveBeenCalledWith("/composer#/composition/indexeddb/old");
   });
 
   it("makes a stale flush failure inert", async () => {
@@ -570,7 +570,7 @@ describe("latest-intent Composer transition coordinator", () => {
       draft: { document: { name: "Draft stays" } },
     });
     expect(h.preference.write).not.toHaveBeenCalled();
-    expect(h.history.replace).toHaveBeenCalledWith("/composer/#/composition/indexeddb/old");
+    expect(h.history.replace).toHaveBeenCalledWith("/composer#/composition/indexeddb/old");
   });
 
   it("supports direct load, refresh reconstruction, and back/forward history", async () => {

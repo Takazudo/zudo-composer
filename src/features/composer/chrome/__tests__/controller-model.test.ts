@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSequentialIdFactory } from "../../../../composer";
+import { createSequentialIdFactory } from "../../../../composer/browser";
 import {
   FIXTURE_COMPONENT_IDS as F,
   doc,
@@ -29,7 +29,6 @@ function initial() {
   return createInitialControllerState({
     document: makeAbcDocument(),
     manifest: fixtureManifest,
-    loadNotice: null,
     saveStatus: { kind: "saved" },
     leftWidth: 260,
     rightWidth: 320,
@@ -163,7 +162,6 @@ describe("applyComposerAction — Composition reuse commands", () => {
     const empty = createInitialControllerState({
       document: doc([]),
       manifest: fixtureManifest,
-      loadNotice: null,
       saveStatus: { kind: "saved" },
       leftWidth: 260,
       rightWidth: 320,
@@ -211,48 +209,6 @@ describe("applyComposerAction — Composition reuse commands", () => {
   });
 });
 
-describe("applyComposerAction — reset / load", () => {
-  it("resetToSample replaces the document, clears selection/expansion/notice, and reports a change", () => {
-    const state = { ...initial(), expandedIds: new Set(["split"]), loadNotice: { kind: "recovered" as const, reason: "x" } };
-    const sample = makeAbcDocument();
-    const { state: next, documentChanged } = applyComposerAction(
-      state,
-      { type: "resetToSample", document: sample },
-      ctx(),
-    );
-    expect(documentChanged).toBe(true);
-    expect(next.document).toBe(sample);
-    expect(next.expandedIds.size).toBe(0);
-    expect(next.loadNotice).toBeNull();
-    expect(next.selectedId).toBe("split");
-  });
-
-  it("loadDocument swaps the document without marking it as a change (it already matches storage)", () => {
-    const state = initial();
-    const sample = makeAbcDocument();
-    const notice = { kind: "quarantined" as const, foundSchemaVersion: 99 };
-    const { state: next, documentChanged } = applyComposerAction(
-      state,
-      { type: "loadDocument", document: sample, notice },
-      ctx(),
-    );
-    expect(documentChanged).toBe(false);
-    expect(next.document).toBe(sample);
-    expect(next.loadNotice).toEqual(notice);
-  });
-
-  it("loadDocument keeps the current selection when it still resolves in the new document", () => {
-    const state = { ...initial(), selectedId: "B" };
-    const sameShapeDoc = makeAbcDocument();
-    const { state: next } = applyComposerAction(
-      state,
-      { type: "loadDocument", document: sameShapeDoc, notice: null },
-      ctx(),
-    );
-    expect(next.selectedId).toBe("B");
-  });
-});
-
 describe("applyComposerAction — selection, reveal, expansion", () => {
   it("select sets selectedId verbatim, including null", () => {
     const state = initial();
@@ -292,13 +248,6 @@ describe("applyComposerAction — mode, viewport, widths, save status", () => {
     expect(widthResult.state.document).toBe(state.document);
   });
 
-  it("dismissLoadNotice clears the notice without touching anything else", () => {
-    const state = { ...initial(), loadNotice: { kind: "recovered" as const, reason: "x" } };
-    const next = applyComposerAction(state, { type: "dismissLoadNotice" }, ctx()).state;
-    expect(next.loadNotice).toBeNull();
-    expect(next.document).toBe(state.document);
-  });
-
   it("setSaveStatus updates verbatim", () => {
     const state = initial();
     const next = applyComposerAction(
@@ -326,10 +275,8 @@ describe("isDocumentMutation / hasUnsavedChanges", () => {
       rootPolicy: { kind: "resolved", cardinality: "many" },
     } })).toBe(true);
     expect(isDocumentMutation({ type: "setRootPolicy", rootPolicy: { kind: "unresolved" } })).toBe(false);
-    expect(isDocumentMutation({ type: "resetToSample", document: makeAbcDocument() })).toBe(true);
     expect(isDocumentMutation({ type: "select", nodeId: null })).toBe(false);
     expect(isDocumentMutation({ type: "setMode", mode: "edit" })).toBe(false);
-    expect(isDocumentMutation({ type: "loadDocument", document: makeAbcDocument(), notice: null })).toBe(false);
   });
 
   it("hasUnsavedChanges is false only when saveStatus is saved", () => {
@@ -337,9 +284,7 @@ describe("isDocumentMutation / hasUnsavedChanges", () => {
     expect(hasUnsavedChanges(state)).toBe(false);
     expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "dirty" } })).toBe(true);
     expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "saving" } })).toBe(true);
-    expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "unsaved" } })).toBe(true);
     expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "error", reason: "x" } })).toBe(true);
-    expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "quarantined", foundSchemaVersion: 2 } })).toBe(true);
   });
 });
 

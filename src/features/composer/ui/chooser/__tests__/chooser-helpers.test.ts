@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { VIRTUAL_ROOT_SLOT_ID } from "../../../../../composer";
+import { VIRTUAL_ROOT_SLOT_ID } from "../../../../../composer/browser";
 import {
   assessPatternForestInsertion,
   describeInsertionTarget,

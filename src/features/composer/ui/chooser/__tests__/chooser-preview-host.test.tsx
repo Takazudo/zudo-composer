@@ -14,14 +14,16 @@ import "../../../test-support/cleanup";
 import { describe, expect, it, vi } from "vitest";
 import { act } from "preact/test-utils";
 import { render, screen } from "@testing-library/preact";
-import type { ComponentManifest } from "@zudo-composer/component-contract";
-import { COMPOSITION_SCHEMA_VERSION } from "../../../../../composer";
+import { h } from "preact";
+import { defineComponentPack, type ComponentManifest } from "@zudo-composer/component-contract";
+import { COMPOSITION_SCHEMA_VERSION } from "../../../../../composer/browser";
 import {
   ChooserPreviewHost,
   CHOOSER_PREVIEW_PLACEHOLDER_ID,
   buildChooserPreviewDocument,
 } from "../chooser-preview-host";
 import { makeChooserPreviewBridgeHarness } from "./preview-bridge-test-harness";
+import { createComposerComponentProvider } from "../../../active-pack";
 
 function src(exportName: string): ComponentManifest["source"] {
   return { module: `@fixtures/${exportName.toLowerCase()}`, exportKind: "named", exportName };
@@ -69,6 +71,14 @@ const containerEntry: ComponentManifest = {
 const catalogById = new Map<string, ComponentManifest>(
   [placeholderEntry, leafEntry, containerEntry].map((entry) => [entry.id, entry]),
 );
+const componentProvider = createComposerComponentProvider(defineComponentPack({
+  packId: "@zudo-composer/test-chooser-preview-host",
+  packVersion: "1.0.0",
+  components: [...catalogById.values()].map((entry) => ({
+    ...entry,
+    component: (props: Record<string, unknown>) => h("div", props),
+  })),
+}));
 
 describe("buildChooserPreviewDocument — pure document builder", () => {
   it("a leaf entry (no declared slots) renders bare: its componentId/defaults, no slot children", () => {
@@ -109,9 +119,10 @@ describe("buildChooserPreviewDocument — pure document builder", () => {
 });
 
 function mount(entry: ComponentManifest | null) {
-  const harness = makeChooserPreviewBridgeHarness();
+  const harness = makeChooserPreviewBridgeHarness(componentProvider.manifest);
   const utils = render(
     <ChooserPreviewHost
+      componentProvider={componentProvider}
       entry={entry}
       catalogById={catalogById}
       createBridge={harness.createBridge}
@@ -132,7 +143,7 @@ describe("ChooserPreviewHost — empty state before first hover", () => {
 
 describe("ChooserPreviewHost — live document over its OWN bridge", () => {
   it("renders a fully loaded multi-root Pattern source unchanged through the isolated bridge", () => {
-    const harness = makeChooserPreviewBridgeHarness();
+    const harness = makeChooserPreviewBridgeHarness(componentProvider.manifest);
     const source = {
       schemaVersion: COMPOSITION_SCHEMA_VERSION,
       id: "feature-pattern",
@@ -145,6 +156,7 @@ describe("ChooserPreviewHost — live document over its OWN bridge", () => {
     };
     render(
       <ChooserPreviewHost
+        componentProvider={componentProvider}
         entry={null}
         sourceDocument={source}
         label="Pattern preview"
@@ -182,6 +194,7 @@ describe("ChooserPreviewHost — live document over its OWN bridge", () => {
 
     rerender(
       <ChooserPreviewHost
+        componentProvider={componentProvider}
         entry={containerEntry}
         catalogById={catalogById}
         createBridge={harness.createBridge}
@@ -198,6 +211,7 @@ describe("ChooserPreviewHost — live document over its OWN bridge", () => {
     expect(screen.getByText(/Hover or focus a component/)).toBeInTheDocument();
     rerender(
       <ChooserPreviewHost
+        componentProvider={componentProvider}
         entry={leafEntry}
         catalogById={catalogById}
         createBridge={harness.createBridge}
@@ -211,13 +225,14 @@ describe("ChooserPreviewHost — live document over its OWN bridge", () => {
 describe("ChooserPreviewHost — bridge lifecycle is fully independent", () => {
   it("disposes its OWN bridge on unmount, never affecting a second, separately-mounted harness", () => {
     const disposeSpy = vi.fn();
-    const harness = makeChooserPreviewBridgeHarness();
+    const harness = makeChooserPreviewBridgeHarness(componentProvider.manifest);
     const spyingCreateBridge: typeof harness.createBridge = (options) => {
       const bridge = harness.createBridge(options);
       return { ...bridge, dispose: () => (disposeSpy(), bridge.dispose()) };
     };
     const { unmount } = render(
       <ChooserPreviewHost
+        componentProvider={componentProvider}
         entry={leafEntry}
         catalogById={catalogById}
         createBridge={spyingCreateBridge}

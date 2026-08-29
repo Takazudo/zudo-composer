@@ -5,11 +5,11 @@ import type {
   CompositionDocument,
   CompositionNode,
   JsonObject,
-} from "../../../../composer";
+} from "../../../../composer/browser";
 import {
   COMPOSITION_SCHEMA_VERSION,
   createComponentCatalog,
-} from "../../../../composer";
+} from "../../../../composer/browser";
 import { createFixturePackManifest } from "../../../../composer/__tests__/fixtures";
 
 function src(module: string, exportName: string): PublicSourceDefinition {
