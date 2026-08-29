@@ -55,5 +55,28 @@ Pull request and main CI both verify the permanent package branch mapping. The
 final handoff is complete only after the manager records the package commit,
 permanent main SHA, and green CI run URL on the epic.
 
-Deployment and production hostname configuration are intentionally outside the
-scope of this foundation.
+## Deployment
+
+The standalone static application deploys as the `zudo-composer` Worker at
+`https://zudo-composer.takazudomodular.com`. Wrangler serves the committed Vite
+route set as an SPA from `dist`; it does not enable a workers.dev hostname or
+preview URLs.
+
+Build and validate the exact artifact locally with:
+
+```sh
+corepack pnpm build
+corepack pnpm provider:boundary
+corepack pnpm deployment:manifest
+corepack pnpm deploy:dry-run
+corepack pnpm smoke:local
+corepack pnpm test:browser:dist
+```
+
+CI builds once, records SHA-256 and MIME metadata for every emitted file, and
+uses that same `dist` tree for the Wrangler dry-run, local deployment smoke,
+browser suite, and deployment artifact. On `main`, both
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` enable deployment followed by
+live smoke. If both are absent, CI emits a credential-only handoff; providing
+only one is a hard configuration error. Never place credential values in this
+repository.

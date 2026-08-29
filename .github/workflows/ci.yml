@@ -12,7 +12,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
@@ -26,8 +26,60 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+      - run: pnpm headless:negative-scan
       - run: pnpm contract:conformance
       - run: pnpm contract:negative-scan
       - run: pnpm contract:external-install
+      - run: pnpm deployment:boundary
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm provider:boundary
+      - run: pnpm deployment:manifest
+      - run: pnpm deployment:manifest:check
+      - run: pnpm deploy:dry-run
+        env:
+          CLOUDFLARE_API_TOKEN: ""
+          CLOUDFLARE_ACCOUNT_ID: ""
+      - run: pnpm smoke:local
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:browser:dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deployment-artifact
+          path: |
+            dist
+            .artifacts/deployment-manifest.json
+          if-no-files-found: error
+          include-hidden-files: true
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: deployment-artifact
+      - run: pnpm deployment:manifest:check
+      - id: credentials
+        run: node scripts/check-deploy-credentials.mjs
+      - if: steps.credentials.outputs.state == 'absent'
+        run: echo 'Deployment handoff required; both CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are absent.'
+      - if: steps.credentials.outputs.state == 'complete'
+        run: pnpm deploy
+      - if: steps.credentials.outputs.state == 'complete'
+        run: pnpm smoke:live
