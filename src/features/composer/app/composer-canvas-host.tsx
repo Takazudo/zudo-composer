@@ -8,7 +8,7 @@
 // the chooser's live per-entry preview without any shared singleton.
 //
 // Lifecycle contract (all delegated to #248's `createComposerPreviewBridge`):
-//   - build the base-aware URL + exact origin once; spread the sandboxed,
+//   - build the canonical URL + exact origin once; spread the sandboxed,
 //     titled iframe props;
 //   - the bridge retains the newest snapshot and, on ready/late-ready/reload,
 //     replays it at a fresh revision — so the effect below only has to send the
@@ -110,7 +110,7 @@ export interface ComposerCanvasHostProps {
   // ── Test seams (production defaults) ──────────────────────────────────────
   /** Override the bridge factory. Defaults to #248's real bridge. */
   createBridge?: typeof createComposerPreviewBridge;
-  /** Override the resolved iframe location. Defaults to the base-aware URL. */
+  /** Override the resolved iframe location. Defaults to the canonical route. */
   location?: ComposerPreviewLocation;
   /** Override the window hosting the `message` listener. Defaults to `window`. */
   hostWindow?: MessageTarget;

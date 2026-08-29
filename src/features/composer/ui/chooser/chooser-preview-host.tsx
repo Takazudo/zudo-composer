@@ -17,8 +17,8 @@
 // ── Preview document shape ───────────────────────────────────────────────────
 // One node at the document root: the previewed entry's own `componentId` +
 // `defaults`. For a container (one or more declared slots) every slot gets a
-// single `PlaceholderBox` child (the #246 cohort's designated sample child,
-// looked up in the SAME catalog the chooser already has — no second registry
+// single `PlaceholderBox` child (the fixture pack's designated preview child,
+// looked up in the SAME catalog the chooser already has — no second provider
 // read) so the layout reads; a leaf (no declared slots) renders bare.
 //
 // ── Non-interactive ──────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ import {
   type PreviewSession,
 } from "../../preview";
 
-/** Stable id of the #246 cohort's designated sample child (see module header). */
+/** Stable id of the fixture pack's designated preview child (see module header). */
 export const CHOOSER_PREVIEW_PLACEHOLDER_ID = "ui.placeholder-box";
 
 const PREVIEW_IFRAME_TITLE = "Composer chooser live preview";
@@ -101,11 +101,11 @@ export interface ChooserPreviewHostProps {
   componentProvider: ComposerComponentProvider;
   /** The catalog entry currently previewed. Null before the first hover/focus. */
   entry: ComponentDefinition | null;
-  /** A fully loaded Pattern source document, rendered intact rather than as a single component sample. */
+  /** A fully loaded Pattern source document, rendered intact rather than as a single component preview. */
   sourceDocument?: CompositionDocument | null;
   /** Keeps the shared isolated-preview shell correctly labelled in each chooser tab. */
   label?: string;
-  /** Full catalog lookup, for resolving the PlaceholderBox sample child. */
+  /** Full catalog lookup, for resolving the PlaceholderBox preview child. */
   catalogById: ReadonlyMap<string, ComponentDefinition>;
 
   // ── Test seams (production defaults) — mirror ComposerCanvasHost's ────────

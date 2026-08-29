@@ -80,7 +80,7 @@ interface ProductionDetailSession extends ComposerDetailSession {
 }
 
 // The New-dialog adapter needs only the reuse service's catalog/selection
-// reads. Its manifest is static production registry data; the editor still
+// reads. Its manifest is static trusted provider data; the editor still
 // owns the single live manifest derivation passed to its controller.
 function emptyCompositionDocument(
   name: string,
@@ -177,7 +177,7 @@ function providerFromStore(store: CompositionStore): CompositionProvider {
   };
 }
 
-/** Build-gated registry: production gets IndexedDB only; dev gains file storage. */
+/** Build-gated providers: production gets IndexedDB only; dev gains file storage. */
 export function createProductionComposerProviders(manifest: ComponentPackManifest): readonly CompositionProvider[] {
   const catalog = createComponentCatalog(manifest);
   const providers: CompositionProvider[] = [createIndexedDbCompositionProvider({ initialDocument: createActiveSampleDocument })];

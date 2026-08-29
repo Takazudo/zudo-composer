@@ -51,7 +51,7 @@ import { getPersistedViewport, setPersistedViewport } from "./viewport";
 export interface UseComposerIntegrationOptions {
   /** Explicit serializable component pack shared with the controller and preview. */
   manifest: ComponentPackManifest;
-  /** Forwarded to `useComposerController` (sample/idFactory overrides for tests). */
+  /** Forwarded to `useComposerController` (including deterministic test seams). */
   controllerOptions: Omit<UseComposerControllerOptions, "manifest">;
   /**
    * Optional parent-owned, read-only Global-template resolver. The iframe

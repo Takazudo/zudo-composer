@@ -4,7 +4,7 @@
 // ── Trust model (locked by epic #243) ────────────────────────────────────────
 // The preview runs in an isolated same-origin iframe. Only JSON DATA crosses
 // the bridge: never a component function, never a VNode, never source text.
-// The iframe imports the TRUSTED Composer registry itself (#244) and maps the
+// The iframe receives the trusted local provider and maps the
 // received document's stable slot ids onto real Preact props locally. Nothing
 // received from a message is ever parsed as code or evaluated.
 //
@@ -100,12 +100,10 @@ export const previewSessionSchema = z
 /**
  * Prop names a Composition node may NEVER carry.
  *
- * Defined at the MODEL layer (`@/composer/model/reserved-keys`, issue #287)
+ * Defined by the component contract
  * so `updateProps` can reject these keys too — not just this wire schema and
  * `renderer.ts`'s `safeProps`. Re-exported here so existing preview-side
- * consumers (this module's own schema below, `renderer.ts`, `index.ts`,
- * `protocol.test.ts`) keep importing it from `./protocol` unchanged. See that
- * module for the full rationale.
+ * consumers share the same rejection list.
  */
 /**
  * Reject the reserved keys, then parse.
@@ -135,7 +133,7 @@ const nodePropsSchema = z
  * carrying an extra key (a smuggled `component`, a stray `adapters` object, a
  * future-schema property) is REJECTED rather than silently forwarded into the
  * renderer. The type annotation pins it to the model's own type, so the schema
- * cannot drift from `@/composer` without a compile error.
+ * cannot drift from the Composer model without a compile error.
  */
 export const compositionNodeSchema: z.ZodType<CompositionNode> = z.lazy(() =>
   z

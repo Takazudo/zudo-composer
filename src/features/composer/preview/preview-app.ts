@@ -3,7 +3,7 @@
 // The client-only app that runs INSIDE the Composer preview iframe.
 //
 // It is the trusted side of the boundary: it imports the Composer runtime
-// registry (#244) itself, so the real component functions are resolved HERE and
+// provider locally, so the real component functions are resolved HERE and
 // never travel over the bridge. What crosses the bridge is JSON only.
 //
 // Boot order matters. The listener is installed BEFORE `ready` is announced, so

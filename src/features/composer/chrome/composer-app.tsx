@@ -4,7 +4,7 @@
 /** @jsxImportSource preact */
 // The `/composer` entry mounts directly in the standalone host. Integration wires the real surfaces
 // in the editor surfaces. Issue #305 now delegates to `ProductionComposerApp`,
-// which composes the provider registry, library, hash-route coordinator, and a
+// which composes the provider collection, library, hash-route coordinator, and a
 // record-scoped `ComposerIntegration`. This entry remains a thin, stable mount
 // point so the page document and isolated `/composer/preview` route are
 // unchanged.

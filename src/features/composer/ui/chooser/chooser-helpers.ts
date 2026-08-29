@@ -17,7 +17,7 @@ export interface ChooserEligibility {
 
 /**
  * Filter the catalog down to what `target` can currently accept: the virtual
- * root accepts anything (mirrors `@/composer`'s `addNode`); a real slot is
+ * root accepts anything (matching the model's `addNode`); a real slot is
  * filtered by its `accepts` whitelist (undefined = any opted-in component) and
  * refuses everything when a `single`-cardinality slot already has a child.
  */
@@ -38,7 +38,7 @@ export function eligibleEntries(
   const slot = entry?.slots.find((s) => s.id === target.slotId);
   if (!entry || !slot) return { entries: [], blockedReason: "This destination is no longer available." };
 
-  // Mirrors `@/composer`'s own `validateInsertionTarget` guard: nothing may be
+  // Mirrors the model's `validateInsertionTarget` guard: nothing may be
   // added into an opaque parent (unknown component, unsupported version,
   // cardinality/accepts violation). The tree only ever offers Add on a
   // non-opaque parent, but the chooser is a shared, reusable dialog any

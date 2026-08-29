@@ -2,14 +2,8 @@
 /** @jsxImportSource preact */
 // The Composer document shell's toolbar + five-track workspace (issue #247).
 //
-// Purely presentational — no state of its own. This is the exact "typed
-// slots" seam #248 (preview iframe), #249 (inspector), #250 (structure tree
-// + chooser), and #251 (central integration) plug into WITHOUT rewriting
-// this shell: `tree` / `canvas` / `inspector` are plain `ComponentChildren`
-// props, each defaulting to a `ComposerPlaceholderPane` at this stage (per
-// the issue's Definition of Done: "a placeholder in the canvas is fine and
-// expected"). `toolbar` and `banner` are likewise free-form slots so the
-// toolbar (owned by this issue) can evolve without this file changing.
+// Purely presentational — no state of its own. `tree`, `canvas`, `inspector`,
+// `toolbar`, and `banner` are typed content seams driven by the app root.
 //
 // Geometry lives entirely in src/features/composer/styles.css: below 64rem
 // this renders a single canvas-only column (tree/inspector/resizers hidden
@@ -20,10 +14,8 @@
 //
 // The resizer `<div role="separator">` elements are inert markup here —
 // pointer/keyboard dragging and the ARIA `aria-valuenow`/`aria-valuemax`
-// live-updates are wired by the vanilla-JS ComposerResizerInitScript
-// (resizer-dom.ts), matching the code-panel resizer precedent
-// (src/features/styleguide/chrome/panel-scripts.tsx). The SSR `aria-value*`
-// defaults below match this file's CSS `:root` rail-width defaults.
+// live-updates are wired by the normal DOM hooks in `resizer-dom.ts`. The
+// initial `aria-value*` defaults match the CSS rail-width defaults.
 
 import type { ComponentChildren, JSX } from "preact";
 import {
@@ -37,7 +29,7 @@ import {
 import { ComposerPlaceholderPane } from "./composer-placeholder-pane";
 
 export interface ComposerWorkspaceProps {
-  /** The Composer toolbar (document name, save status, mode, viewport, reset). */
+  /** The Composer toolbar (document name, save status, mode, and viewport). */
   toolbar: ComponentChildren;
   /** Optional current provider/navigation status above the grid. */
   banner?: ComponentChildren;
