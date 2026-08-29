@@ -11,7 +11,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
 
 /** @typedef {import("../src/composer/library/types.ts").CompositionRecord} CompositionRecord */
-/** @typedef {{url?: string, method?: string, headers: Record<string, string | undefined>, body?: string}} DevRequest */
+/** @typedef {{url?: string, method?: string, protocol?: "http" | "https", headers: Record<string, string | undefined>, body?: string}} DevRequest */
 /** @typedef {{status: number, headers: Record<string, string>, body: string, bodyEncoding: "utf8"}} DevResponse */
 
 export const COMPOSER_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_file_provider";
@@ -109,11 +109,29 @@ function isSameOriginDevRequest(req) {
   const origin = req.headers.origin;
   if (!host || !origin || /[\s,]/.test(host)) return false;
   try {
-    const expected = new URL(`http://${host}`).origin;
+    const expected = new URL(`${req.protocol ?? "http"}://${host}`).origin;
     return new URL(origin).origin === expected && origin === expected;
   } catch {
     return false;
   }
+}
+
+function validateRequestHead(req, endpoint, capability) {
+  if (req.url !== endpoint) return errorResponse(404, "not-found", "File-provider route not found.");
+  if (req.method !== "POST") {
+    return errorResponse(405, "method-not-allowed", "Only POST is allowed.", undefined, { allow: "POST" });
+  }
+  if (!isSameOriginDevRequest(req)) {
+    return errorResponse(403, "origin-rejected", "A same-origin development request is required.");
+  }
+  if (!hasCapability(req, capability)) {
+    return errorResponse(401, "invalid-capability", "The development file capability is missing or invalid.");
+  }
+  const mediaType = req.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
+    return errorResponse(415, "unsupported-media-type", "Content-Type must be application/json.");
+  }
+  return undefined;
 }
 
 /** @param {DevRequest} req @param {string} expected */
@@ -225,20 +243,28 @@ function validateEnvelope(payload) {
       break;
     }
     case "put":
+    case "save-lifecycle-record":
       if (
         hasExactKeys(payload, ["operation", "record", "outputsById"])
         && isPlainObject(payload.record)
         && hasExactKeys(payload.record, ["id", "createdAt", "updatedAt", "document"])
       ) {
         const outputsById = parseOutputsById(payload.outputsById);
-        if (outputsById !== undefined) return { operation: "put", record: payload.record, outputsById };
+        if (outputsById !== undefined) return { operation: payload.operation, record: payload.record, outputsById };
       }
       break;
     case "delete":
+    case "delete-with-dependency-check":
       if (hasExactKeys(payload, ["operation", "id"]) && isSafeId(payload.id)) {
-        return { operation: "delete", id: payload.id };
+        return { operation: payload.operation, id: payload.id };
       }
       break;
+    case "unpublish-with-dependency-check": {
+      if (!hasExactKeys(payload, ["operation", "id", "outputsById"]) || !isSafeId(payload.id)) break;
+      const outputsById = parseOutputsById(payload.outputsById);
+      if (outputsById !== undefined) return { operation: payload.operation, id: payload.id, outputsById };
+      break;
+    }
     case "clear":
       if (hasExactKeys(payload, ["operation"])) return { operation: "clear" };
       break;
@@ -264,7 +290,10 @@ function validateEnvelope(payload) {
  *   createStore: (options: {provideJsx: (record: CompositionRecord, request: unknown) => string | {status: "generated", code: string} | {status: "blocked", reason: string}}) => Promise<{
  *     list(): Promise<unknown>, get(id: string): Promise<unknown>,
  *     put(record: CompositionRecord, jsx?: string): Promise<unknown>,
- *     delete(id: string): Promise<boolean>, clear(): Promise<void>
+ *     delete(id: string): Promise<boolean>, clear(): Promise<void>,
+ *     deleteWithDependencyCheck(id: string): Promise<unknown>,
+ *     unpublishWithDependencyCheck(id: string): Promise<unknown>,
+ *     saveLifecycleRecord(record: CompositionRecord): Promise<void>
  *   }>
  * }} options
  * @returns {(req: DevRequest) => Promise<DevResponse>}
@@ -277,22 +306,8 @@ export function createComposerFileProviderMiddleware(options) {
   return async function composerFileProviderMiddleware(req) {
     // Enforce the complete URL (including the absence of query/hash suffixes)
     // even when the handler is embedded outside the Vite/Connect adapter.
-    if (req.url !== endpoint) {
-      return errorResponse(404, "not-found", "File-provider route not found.");
-    }
-    if (req.method !== "POST") {
-      return errorResponse(405, "method-not-allowed", "Only POST is allowed.", undefined, { allow: "POST" });
-    }
-    if (!isSameOriginDevRequest(req)) {
-      return errorResponse(403, "origin-rejected", "A same-origin development request is required.");
-    }
-    if (!hasCapability(req, options.capability)) {
-      return errorResponse(401, "invalid-capability", "The development file capability is missing or invalid.");
-    }
-    const mediaType = req.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
-    if (mediaType !== "application/json") {
-      return errorResponse(415, "unsupported-media-type", "Content-Type must be application/json.");
-    }
+    const headError = validateRequestHead(req, endpoint, options.capability);
+    if (headError !== undefined) return headError;
     if (bodyBytes(req.body) > maxBodyBytes) {
       return errorResponse(413, "body-too-large", `Request body exceeds the ${maxBodyBytes}-byte limit.`);
     }
@@ -330,8 +345,18 @@ export function createComposerFileProviderMiddleware(options) {
           }
           return json(200, { ok: true, result: await store.put(validation.record) });
         }
+        case "save-lifecycle-record": {
+          const validation = options.validateRecord(envelope.record);
+          if (!validation.ok) return errorResponse(422, "validation", validation.issue.message, "put");
+          await store.saveLifecycleRecord(validation.record);
+          return json(200, { ok: true, result: null });
+        }
         case "delete":
           return json(200, { ok: true, result: await store.delete(envelope.id) });
+        case "delete-with-dependency-check":
+          return json(200, { ok: true, result: await store.deleteWithDependencyCheck(envelope.id) });
+        case "unpublish-with-dependency-check":
+          return json(200, { ok: true, result: await store.unpublishWithDependencyCheck(envelope.id) });
         case "clear":
           await store.clear();
           return json(200, { ok: true, result: null });
@@ -366,17 +391,47 @@ function readBody(req, maxBodyBytes) {
   return new Promise((resolveBody, rejectBody) => {
     const chunks = [];
     let size = 0;
-    req.on("data", (chunk) => {
+    let settled = false;
+    let ended = false;
+    const cleanup = () => {
+      req.off("data", onData);
+      req.off("end", onEnd);
+      req.off("error", onError);
+      req.off("aborted", onAborted);
+      req.off("close", onClose);
+    };
+    const rejectOnce = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      rejectBody(error);
+    };
+    const onData = (chunk) => {
       size += chunk.length;
       if (size > maxBodyBytes) {
-        rejectBody(Object.assign(new Error("body-too-large"), { code: "BODY_TOO_LARGE" }));
+        rejectOnce(Object.assign(new Error("body-too-large"), { code: "BODY_TOO_LARGE" }));
         req.resume();
         return;
       }
       chunks.push(chunk);
-    });
-    req.on("end", () => resolveBody(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", rejectBody);
+    };
+    const onEnd = () => {
+      if (settled) return;
+      ended = true;
+      settled = true;
+      cleanup();
+      resolveBody(Buffer.concat(chunks).toString("utf8"));
+    };
+    const onError = (error) => rejectOnce(error);
+    const onAborted = () => rejectOnce(Object.assign(new Error("request-aborted"), { code: "REQUEST_ABORTED" }));
+    const onClose = () => {
+      if (!ended) rejectOnce(Object.assign(new Error("request-closed"), { code: "REQUEST_ABORTED" }));
+    };
+    req.on("data", onData);
+    req.on("end", onEnd);
+    req.on("error", onError);
+    req.on("aborted", onAborted);
+    req.on("close", onClose);
   });
 }
 
@@ -430,6 +485,29 @@ export default function composerFileProviderPlugin() {
       });
       server.middlewares.use(async (req, res, next) => {
         if (req.url !== COMPOSER_FILE_PROVIDER_ENDPOINT) return next();
+        const headers = Object.fromEntries(
+          Object.entries(req.headers).map(([name, value]) => [name, Array.isArray(value) ? undefined : value]),
+        );
+        const requestHead = {
+          url: req.url,
+          method: req.method,
+          headers,
+          protocol: req.socket?.encrypted === true ? "https" : "http",
+        };
+        const headError = validateRequestHead(requestHead, COMPOSER_FILE_PROVIDER_ENDPOINT, activeCapability);
+        if (headError !== undefined) {
+          sendConnectResponse(res, headError);
+          return;
+        }
+        const contentLength = Number(headers["content-length"]);
+        if (Number.isFinite(contentLength) && contentLength > COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES) {
+          sendConnectResponse(res, errorResponse(
+            413,
+            "body-too-large",
+            `Request body exceeds the ${COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES}-byte limit.`,
+          ));
+          return;
+        }
         let body;
         try {
           body = await readBody(req, COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES);
@@ -442,13 +520,12 @@ export default function composerFileProviderPlugin() {
             ));
             return;
           }
-          sendConnectResponse(res, errorResponse(400, "read-failed", "Request body could not be read."));
+          if (!res.destroyed) {
+            sendConnectResponse(res, errorResponse(400, "read-failed", "Request body could not be read."));
+          }
           return;
         }
-        const headers = Object.fromEntries(
-          Object.entries(req.headers).map(([name, value]) => [name, Array.isArray(value) ? undefined : value]),
-        );
-        sendConnectResponse(res, await handler({ url: req.url, method: req.method, headers, body }));
+        sendConnectResponse(res, await handler({ ...requestHead, body }));
       });
     },
   };

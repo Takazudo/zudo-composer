@@ -35,6 +35,7 @@ function request(
     url: string;
     headers: Record<string, string>;
     rawBody: string;
+    protocol: "http" | "https";
   }> = {},
 ) {
   return {
@@ -48,6 +49,7 @@ function request(
       [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: CAPABILITY,
     },
     body: overrides.rawBody ?? JSON.stringify(body),
+    protocol: overrides.protocol,
   };
 }
 
@@ -93,6 +95,13 @@ describe("file-provider request boundary", () => {
       expect(response.status).toBe(403);
       expect(response.headers?.["cache-control"]).toBe("no-store");
     }
+  });
+
+  it("accepts an exact HTTPS origin when the active server transport is HTTPS", async () => {
+    const handler = makeHandler();
+    const headers = { ...request({}).headers, origin: "https://localhost:4321" };
+    const response = await handler(request({ operation: "clear" }, { headers, protocol: "https" }));
+    expect(response.status).toBe(200);
   });
 
   it("rejects missing and incorrect capabilities without disclosing the expected value", async () => {
@@ -216,6 +225,40 @@ describe("file-provider core integration", () => {
     expect(await readFile(join(root, "composition-alpha.tsx"), "utf8")).toBe("production-exact");
   });
 
+  it("exposes dependency-safe lifecycle operations and unpublish output handshakes", async () => {
+    const handler = makeHandler();
+    const source = record("source");
+    source.document.publication = {
+      kind: "global-template",
+      outlet: { id: "outlet-main", label: "Main", target: { parentId: "split-1", slotId: "left" } },
+    };
+    const consumer = record("consumer");
+    consumer.document.binding = { sourceRecordId: source.id, outletId: "outlet-main" };
+    expect((await handler(request({ operation: "put", record: source, outputsById: { source: generated("source") } }))).status).toBe(200);
+    expect((await handler(request({
+      operation: "put",
+      record: consumer,
+      outputsById: { source: generated("source"), consumer: generated("consumer") },
+    }))).status).toBe(200);
+
+    const blocked = await handler(request({ operation: "delete-with-dependency-check", id: source.id }));
+    expect(payload(blocked).result).toMatchObject({ status: "blocked", dependents: [{ summary: { id: consumer.id } }] });
+    expect((await handler(request({ operation: "delete", id: consumer.id }))).status).toBe(200);
+
+    const needsOutput = await handler(request({ operation: "unpublish-with-dependency-check", id: source.id, outputsById: {} }));
+    expect(needsOutput.status).toBe(409);
+    expect(payload(needsOutput)).toMatchObject({
+      error: { code: "output-required", operation: "unpublish-with-dependency-check" },
+      request: { targetIds: [source.id] },
+    });
+    const unpublished = await handler(request({
+      operation: "unpublish-with-dependency-check",
+      id: source.id,
+      outputsById: { source: generated("unpublished") },
+    }));
+    expect(payload(unpublished).result).toEqual({ status: "unpublished" });
+  });
+
   it("maps core failures to actionable errors without leaking host paths", async () => {
     const secretPath = join(sandbox, "private-host-path");
     const handler = createComposerFileProviderMiddleware({
@@ -318,7 +361,13 @@ describe("dev/build registration boundary", () => {
     ]) as Readable & { url?: string; method?: string; headers: Record<string, string> };
     requestStream.url = COMPOSER_FILE_PROVIDER_ENDPOINT;
     requestStream.method = "POST";
-    requestStream.headers = {};
+    requestStream.headers = {
+      host: "localhost:4321",
+      origin: "http://localhost:4321",
+      "sec-fetch-site": "same-origin",
+      "content-type": "application/json",
+      [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: config.capability,
+    };
     const response = {
       statusCode: 0,
       setHeader: vi.fn(),
@@ -328,6 +377,60 @@ describe("dev/build registration boundary", () => {
     expect(response.statusCode).toBe(413);
     expect(response.end).toHaveBeenCalledTimes(1);
     expect(response.end.mock.calls[0]![0]).toContain("body-too-large");
+  });
+
+  it("rejects unauthenticated Connect requests before attaching body readers", async () => {
+    const { instance } = setupSource("serve");
+    let middleware: ((request: Readable & { url?: string; method?: string; headers: Record<string, string> }, response: unknown, next: () => void) => Promise<void>) | undefined;
+    await instance.configureServer?.({
+      middlewares: { use(value: typeof middleware) { middleware = value; } },
+      ssrLoadModule: vi.fn().mockResolvedValue({ createFilesystemCompositionStore, validateCompositionRecord }),
+    } as never);
+    if (!middleware) throw new Error("Vite middleware was not registered");
+    const requestStream = Readable.from([Buffer.alloc(3 * 1024 * 1024)]) as Readable & {
+      url?: string; method?: string; headers: Record<string, string>;
+    };
+    requestStream.url = COMPOSER_FILE_PROVIDER_ENDPOINT;
+    requestStream.method = "POST";
+    requestStream.headers = {};
+    const response = { statusCode: 0, setHeader: vi.fn(), end: vi.fn() };
+    await middleware(requestStream, response, vi.fn());
+    expect(response.statusCode).toBe(403);
+    expect(requestStream.listenerCount("data")).toBe(0);
+  });
+
+  it("settles a prematurely aborted authenticated request", async () => {
+    const { instance, source } = setupSource("serve");
+    const config = JSON.parse(source.match(/= (.*);/)?.[1] ?? "null");
+    let middleware: ((request: Readable & { url?: string; method?: string; headers: Record<string, string> }, response: unknown, next: () => void) => Promise<void>) | undefined;
+    await instance.configureServer?.({
+      middlewares: { use(value: typeof middleware) { middleware = value; } },
+      ssrLoadModule: vi.fn().mockResolvedValue({ createFilesystemCompositionStore, validateCompositionRecord }),
+    } as never);
+    if (!middleware) throw new Error("Vite middleware was not registered");
+    let emitted = false;
+    const requestStream = new Readable({
+      read() {
+        if (emitted) return;
+        emitted = true;
+        this.push("{partial");
+        this.emit("aborted");
+        this.push(null);
+      },
+    }) as Readable & { url?: string; method?: string; headers: Record<string, string> };
+    requestStream.url = COMPOSER_FILE_PROVIDER_ENDPOINT;
+    requestStream.method = "POST";
+    requestStream.headers = {
+      host: "localhost:4321",
+      origin: "http://localhost:4321",
+      "sec-fetch-site": "same-origin",
+      "content-type": "application/json",
+      [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: config.capability,
+    };
+    const response = { statusCode: 0, destroyed: false, setHeader: vi.fn(), end: vi.fn() };
+    await middleware(requestStream, response, vi.fn());
+    expect(response.statusCode).toBe(400);
+    expect(response.end).toHaveBeenCalledTimes(1);
   });
 
   it("never loads the Node filesystem entry for production configuration", async () => {

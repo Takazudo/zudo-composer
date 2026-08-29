@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fixtureManifest, makeAbcDocument } from "../../../__tests__/fixtures";
-import type { CompositionRecord } from "../../../library";
+import { isCompositionLifecycleStore, type CompositionRecord } from "../../../library";
 
 const { DEV_CONFIG } = vi.hoisted(() => ({
   DEV_CONFIG: {
@@ -158,6 +158,41 @@ describe("browser file-provider adapter", () => {
     await expect(store!.clear()).resolves.toBeUndefined();
     expect(fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).operation))
       .toEqual(["get", "delete", "clear"]);
+  });
+
+  it("preserves lifecycle capabilities and completes unpublish after output planning", async () => {
+    const value = record("source");
+    value.document.publication = {
+      kind: "global-template",
+      outlet: { id: "main", label: "Main", target: { parentId: "split", slotId: "left" } },
+    };
+    const unpublished = structuredClone(value);
+    delete unpublished.document.publication;
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ok: true, result: { status: "blocked", dependents: [] } }))
+      .mockResolvedValueOnce(jsonResponse({
+        ok: false,
+        error: { code: "output-required", operation: "unpublish-with-dependency-check", message: "plan" },
+        request: outputRequest([unpublished]),
+      }, 409))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, result: { status: "unpublished" } }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, result: null }));
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock });
+    expect(isCompositionLifecycleStore(store!)).toBe(true);
+    if (!store || !isCompositionLifecycleStore(store)) throw new Error("missing lifecycle capability");
+
+    await expect(store.deleteWithDependencyCheck("source")).resolves.toMatchObject({ status: "blocked" });
+    await expect(store.unpublishWithDependencyCheck("source")).resolves.toEqual({ status: "unpublished" });
+    await expect(store.saveLifecycleRecord(value)).resolves.toBeUndefined();
+
+    const bodies = fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
+    expect(bodies.map(({ operation }) => operation)).toEqual([
+      "delete-with-dependency-check",
+      "unpublish-with-dependency-check",
+      "unpublish-with-dependency-check",
+      "save-lifecycle-record",
+    ]);
+    expect(bodies[2].outputsById.source).toMatchObject({ status: "generated" });
   });
 
 });

@@ -94,6 +94,32 @@ describe("filesystem composition store safety", () => {
     });
   });
 
+  it("validates every new binding inside the write queue even with pre-generated JSX", async () => {
+    const store = await createStore();
+    const source = record("source");
+    source.document.publication = {
+      kind: "global-template",
+      outlet: { id: "outlet-main", label: "Main", target: { parentId: "split-1", slotId: "left" } },
+    };
+    await store.put(source, "source jsx");
+    await store.put(record("ordinary"), "ordinary jsx");
+
+    for (const [id, sourceRecordId, outletId] of [
+      ["self", "self", "outlet-main"],
+      ["missing", "gone", "outlet-main"],
+      ["non-global", "ordinary", "outlet-main"],
+      ["wrong-outlet", "source", "gone"],
+    ] as const) {
+      const candidate = record(id);
+      candidate.document.binding = { sourceRecordId, outletId };
+      await expect(store.put(candidate, "pre-generated jsx")).rejects.toMatchObject({
+        operation: "put",
+        code: "conflict",
+      });
+      await expect(readFile(jsonPath(id), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  });
+
   it("serializes final dependency checks for Global-template source mutations", async () => {
     const store = await createStore({ now: () => T2 });
     const source = record("source");
@@ -159,12 +185,9 @@ describe("filesystem composition store safety", () => {
     });
   });
 
-  it("saves a consumer queued after a Global-template source has been deleted and blocks only its output", async () => {
-    const diagnostic = "The linked Global template is unavailable, so its consumer module cannot be generated.";
+  it("rejects a new binding after its Global-template source has been deleted", async () => {
     const store = await createStore({
-      provideJsx: (value, request) => request.records.some((candidate) => candidate.id === value.document.binding?.sourceRecordId)
-        ? `jsx:${value.id}`
-        : { status: "blocked", reason: diagnostic },
+      provideJsx: (value) => `jsx:${value.id}`,
     });
     const source = record("source");
     source.document.publication = {
@@ -176,15 +199,8 @@ describe("filesystem composition store safety", () => {
 
     const lateConsumer = record("late-consumer");
     lateConsumer.document.binding = { sourceRecordId: "source", outletId: "outlet-main" };
-    await expect(store.put(lateConsumer)).resolves.toMatchObject({
-      canonical: { status: "saved" },
-      derived: { status: "blocked", records: [{ recordId: "late-consumer", status: "blocked", reason: diagnostic }] },
-    });
-    expect(JSON.parse(await readFile(jsonPath("late-consumer"), "utf8"))).toMatchObject({
-      id: "late-consumer",
-      document: { binding: lateConsumer.document.binding },
-    });
-    await expect(readFile(jsxPath("late-consumer"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(store.put(lateConsumer)).rejects.toMatchObject({ operation: "put", code: "conflict" });
+    await expect(readFile(jsonPath("late-consumer"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("rejects a symlink root and a symlink file that resolves outside the root", async () => {

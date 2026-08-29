@@ -12,6 +12,7 @@ export interface DevRequest {
   url?: string;
   method?: string;
   headers: Record<string, string | undefined>;
+  protocol?: "http" | "https";
   body?: string;
 }
 
@@ -29,7 +30,10 @@ export function createComposerFileProviderMiddleware(options: {
   validateRecord(value: unknown): CompositionRecordValidation;
   createStore(options: {
     provideJsx(record: CompositionRecord, request: unknown): string | { status: "generated"; code: string } | { status: "blocked"; reason: string };
-  }): Promise<Pick<FilesystemCompositionStore, "list" | "get" | "put" | "delete" | "clear">>;
+  }): Promise<Pick<
+    FilesystemCompositionStore,
+    "list" | "get" | "put" | "delete" | "clear" | "deleteWithDependencyCheck" | "unpublishWithDependencyCheck" | "saveLifecycleRecord"
+  >>;
 }): (request: DevRequest) => Promise<DevResponse>;
 
 export default function composerFileProviderPlugin(): Plugin;

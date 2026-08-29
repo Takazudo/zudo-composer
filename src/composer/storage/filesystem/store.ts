@@ -11,6 +11,7 @@ import {
   summarizeComposition,
   validateCompositionRecord,
   type CompositionLoadOutcome,
+  type CompositionLifecycleStore,
   type CompositionDerivedOutputOutcome,
   type CompositionDerivedOutputRecordOutcome,
   type CompositionDependent,
@@ -18,7 +19,6 @@ import {
   type CompositionPersistenceOperation,
   type CompositionRecord,
   type CompositionSaveOutcome,
-  type CompositionStore,
   type CompositionSummary,
   type CompositionUnpublishOutcome,
 } from "../../library";
@@ -128,7 +128,7 @@ interface DependencyClosure {
   records: readonly CompositionRecord[];
 }
 
-export class FilesystemCompositionStore implements CompositionStore {
+export class FilesystemCompositionStore implements CompositionLifecycleStore {
   readonly provider = COMPOSITION_PROVIDERS.files;
 
   private constructor(
@@ -267,6 +267,7 @@ export class FilesystemCompositionStore implements CompositionStore {
 
     return this.run("put", async () => {
       await this.assertClosureUnchanged("put", closure, new Set([id]));
+      await this.assertBindingTransition(snapshotValidation.record);
       await this.atomicReplace("put", this.jsonPath(id), canonical);
       const outputs = await this.applyDerivedOutputs("put", closure, plans, targetIds);
       return {
@@ -538,6 +539,39 @@ export class FilesystemCompositionStore implements CompositionStore {
       }
     }
     await this.assertRoot(operation);
+  }
+
+  private async assertBindingTransition(next: CompositionRecord): Promise<void> {
+    const binding = next.document.binding;
+    if (binding === undefined) return;
+
+    const previous = await this.readCanonical("put", next.id);
+    if (previous !== undefined && previous.outcome.status !== "loaded") {
+      throw operationError("put", "validation", "The existing consumer record is invalid and cannot change bindings safely.");
+    }
+    const priorBinding = previous?.outcome.status === "loaded" ? previous.outcome.record.document.binding : undefined;
+    if (
+      priorBinding?.sourceRecordId === binding.sourceRecordId
+      && priorBinding.outletId === binding.outletId
+    ) {
+      return;
+    }
+    if (binding.sourceRecordId === next.id) {
+      throw operationError("put", "conflict", "A Composition cannot bind to itself as a Global template.");
+    }
+
+    const source = await this.readCanonical("put", binding.sourceRecordId);
+    if (source === undefined) {
+      throw operationError("put", "conflict", "The selected Global template is no longer available.");
+    }
+    if (
+      source.outcome.status !== "loaded"
+      || source.outcome.record.document.binding !== undefined
+      || source.outcome.record.document.publication?.kind !== "global-template"
+      || source.outcome.record.document.publication.outlet.id !== binding.outletId
+    ) {
+      throw operationError("put", "conflict", "The selected Global template changed before this consumer could be saved.");
+    }
   }
 
   private outputTargetsForGet(record: CompositionRecord, closure: DependencyClosure): string[] {

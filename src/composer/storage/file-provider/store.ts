@@ -5,13 +5,15 @@ import {
   loadCompositionRecord,
   validateCompositionRecord,
   type CompositionLoadOutcome,
+  type CompositionDeleteOutcome,
+  type CompositionLifecycleStore,
   type CompositionPutResult,
   type CompositionPersistenceErrorCode,
   type CompositionPersistenceOperation,
   type CompositionRecord,
   type CompositionSaveOutcome,
-  type CompositionStore,
   type CompositionSummary,
+  type CompositionUnpublishOutcome,
 } from "../../library";
 import type { ComponentCatalog } from "../../model/types";
 import { planLinkedJsxModules } from "../../source/plan-linked-jsx";
@@ -25,6 +27,16 @@ import type {
 const MAX_OUTPUT_PLAN_ROUNDS = 8;
 
 type Operation = CompositionPersistenceOperation;
+type WireOperation = Operation
+  | "delete-with-dependency-check"
+  | "unpublish-with-dependency-check"
+  | "save-lifecycle-record";
+
+function persistenceOperation(operation: WireOperation): Operation {
+  if (operation === "delete-with-dependency-check") return "delete";
+  if (operation === "unpublish-with-dependency-check" || operation === "save-lifecycle-record") return "put";
+  return operation;
+}
 
 type SuccessResponse<T> = { ok: true; result: T };
 type ErrorResponse = {
@@ -122,7 +134,7 @@ function isOutputRequest(value: unknown): value is ComposerFileProviderDerivedOu
  * `createFileProviderCompositionStore()` so production builds, whose virtual
  * config is `undefined`, cannot surface a usable file provider.
  */
-class BrowserFileProviderCompositionStore implements CompositionStore {
+class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
   readonly provider = COMPOSITION_PROVIDERS.files;
 
   constructor(
@@ -153,12 +165,26 @@ class BrowserFileProviderCompositionStore implements CompositionStore {
     return this.request<boolean>("delete", { id });
   }
 
+  async deleteWithDependencyCheck(id: string): Promise<CompositionDeleteOutcome> {
+    return this.request<CompositionDeleteOutcome>("delete-with-dependency-check", { id });
+  }
+
+  async unpublishWithDependencyCheck(id: string): Promise<CompositionUnpublishOutcome> {
+    return this.requestWithOutputPlan<CompositionUnpublishOutcome>("unpublish-with-dependency-check", { id });
+  }
+
+  async saveLifecycleRecord(record: CompositionRecord): Promise<void> {
+    const validation = validateCompositionRecord(record);
+    if (!validation.ok) throw persistenceError("put", "validation", validation.issue.message, false);
+    await this.requestWithOutputPlan<null>("save-lifecycle-record", { record: validation.record });
+  }
+
   async clear(): Promise<void> {
     await this.request<null>("clear");
   }
 
   private async requestWithOutputPlan<T>(
-    operation: "list" | "get" | "put",
+    operation: "list" | "get" | "put" | "save-lifecycle-record" | "unpublish-with-dependency-check",
     fields: Record<string, unknown> = {},
     decodeResult: (result: T) => T = (result) => result,
   ): Promise<T> {
@@ -167,11 +193,11 @@ class BrowserFileProviderCompositionStore implements CompositionStore {
       const response = await this.fetchJson<T>(operation, { ...fields, outputsById });
       if (response.ok) return decodeResult(response.result);
       if (response.error.code !== "output-required") {
-        throw this.fromServerError(operation, response.error);
+        throw this.fromServerError(persistenceOperation(operation), response.error);
       }
       if (!isOutputRequest(response.request)) {
         throw persistenceError(
-          operation,
+          persistenceOperation(operation),
           "validation",
           "The file provider returned an invalid dependency closure for output planning.",
           false,
@@ -189,7 +215,7 @@ class BrowserFileProviderCompositionStore implements CompositionStore {
         const record = response.request.records.find((candidate) => candidate.id === id);
         if (plan === undefined || record === undefined) {
           throw persistenceError(
-            operation,
+            persistenceOperation(operation),
             "conflict",
             `The file provider requested output for unavailable composition "${id}".`,
             true,
@@ -206,7 +232,7 @@ class BrowserFileProviderCompositionStore implements CompositionStore {
       }
     }
     throw persistenceError(
-      operation,
+      persistenceOperation(operation),
       "conflict",
       "File-provider output planning did not converge. Retry the save or reload the Composition.",
       true,
@@ -235,14 +261,14 @@ class BrowserFileProviderCompositionStore implements CompositionStore {
     };
   }
 
-  private async request<T>(operation: Operation, fields: Record<string, unknown> = {}): Promise<T> {
+  private async request<T>(operation: WireOperation, fields: Record<string, unknown> = {}): Promise<T> {
     const response = await this.fetchJson<T>(operation, fields);
     if (response.ok) return response.result;
-    throw this.fromServerError(operation, response.error);
+    throw this.fromServerError(persistenceOperation(operation), response.error);
   }
 
   private async fetchJson<T>(
-    operation: Operation,
+    operation: WireOperation,
     fields: Record<string, unknown>,
   ): Promise<SuccessResponse<T> | ErrorResponse> {
     let response: Response;
@@ -259,7 +285,7 @@ class BrowserFileProviderCompositionStore implements CompositionStore {
       });
     } catch (cause) {
       throw persistenceError(
-        operation,
+        persistenceOperation(operation),
         "unavailable",
         "The development file provider is unavailable. Confirm `pnpm dev` is running and retry.",
         true,
@@ -270,7 +296,7 @@ class BrowserFileProviderCompositionStore implements CompositionStore {
     const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
     if (mediaType !== "application/json") {
       throw persistenceError(
-        operation,
+        persistenceOperation(operation),
         "unknown",
         "The development file provider returned a non-JSON response.",
         true,
@@ -282,7 +308,7 @@ class BrowserFileProviderCompositionStore implements CompositionStore {
       payload = await response.json();
     } catch (cause) {
       throw persistenceError(
-        operation,
+        persistenceOperation(operation),
         "unknown",
         "The development file provider returned malformed JSON.",
         true,
@@ -291,7 +317,7 @@ class BrowserFileProviderCompositionStore implements CompositionStore {
     }
     if (!isProtocolResponse<T>(payload)) {
       throw persistenceError(
-        operation,
+        persistenceOperation(operation),
         "unknown",
         "The development file provider returned an invalid response.",
         true,
@@ -323,7 +349,7 @@ export interface CreateFileProviderCompositionStoreOptions {
  */
 export function createFileProviderCompositionStore(
   options: CreateFileProviderCompositionStoreOptions,
-): CompositionStore | undefined {
+): CompositionLifecycleStore | undefined {
   if (fileProviderConfig === undefined) return undefined;
   return new BrowserFileProviderCompositionStore(
     fileProviderConfig,
