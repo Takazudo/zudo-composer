@@ -5,10 +5,10 @@
 // return a discriminated `CommandResult` so callers get either the next
 // document + repaired selection, or an actionable error string.
 //
-// MVP movement is sibling up/down WITHIN one parent slot only. Cross-slot
-// reparenting and drag-and-drop are deferred (later waves). Opaque nodes are
-// preserved: they may be reordered/removed within their current slot, but their
-// props are read-only and nothing may be added into them.
+// Commands cover sibling movement, cross-slot drop/reparenting, and clipboard
+// insertion. Opaque nodes are preserved: they may be reordered/removed within
+// their current slot, but their props are read-only and nothing may be added
+// into them.
 
 import {
   RESERVED_PERSISTED_KEYS,

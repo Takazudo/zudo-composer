@@ -10,8 +10,8 @@
 //
 // "text" fields render as a `<textarea>` when the field's `inlineEdit.multiline`
 // hint is set. The authoring contract has no separate multiline flag for the
-// INSPECTOR specifically — `inlineEdit` (wave-8's on-canvas editing signal) is
-// the only multiline hint the schema carries, so it doubles as one here too.
+// INSPECTOR specifically — `inlineEdit` is the contract's only multiline hint,
+// so it intentionally drives the inspector control as well as canvas editing.
 //
 // Styling: Tailwind utilities directly on markup (component-first, per
 // the standalone design system), plus two small `sg-composer-inspector-*` classes

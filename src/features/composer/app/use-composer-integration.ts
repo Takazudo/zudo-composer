@@ -1,11 +1,8 @@
 "use client";
 
-// The central Composer integration hook (issue #251). This is the single place
-// every surface's callbacks are composed against #247's ONE controller/reducer.
-// It is also the seam waves 6-9 (#254 chooser-preview, #255 clipboard, #256
-// menus, #257 inline-edit, #258 DnD) extend: they can call this hook to obtain
-// the live session/document/selection and the shared chooser + callback set
-// without re-deriving any of it.
+// The central Composer integration hook. This is the single place every
+// surface's callbacks compose against one controller/reducer and obtain the
+// live session, document, selection, clipboard, menus, and shared chooser.
 //
 // Provider reconciliation (the one non-obvious wiring detail):
 //   - the tree (#250) and chooser (#250) want BOTH the RICHER

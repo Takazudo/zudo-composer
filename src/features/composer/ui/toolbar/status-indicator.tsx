@@ -1,10 +1,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Reusable, composable Composer save-status indicator (issue #249). Mirrors
-// the #247 toolbar's inline status span (`describeSaveStatus`) but extracted
-// so a later status chip (wave-6 clipboard status, #255) can render beside
-// it via `children` without editing the central Composer app entry — that's
-// the "keep the status seam composable" synthesis note on this issue.
+// Reusable Composer save-status indicator. Clipboard and other orthogonal
+// status chips render through `children` without changing canonical save state.
 
 import type { ComponentChildren, JSX } from "preact";
 import type { CompositionDerivedOutputOutcome } from "../../../../composer/browser";
@@ -16,7 +13,7 @@ export interface ComposerStatusIndicatorProps {
   onRetry?: () => void;
   /** Kept separate from canonical save state so Saved remains truthful. */
   derivedOutput?: CompositionDerivedOutputOutcome | null;
-  /** Composability seam — e.g. wave-6's clipboard status chip renders here. */
+  /** Composability seam for clipboard and other non-save status chips. */
   children?: ComponentChildren;
 }
 
