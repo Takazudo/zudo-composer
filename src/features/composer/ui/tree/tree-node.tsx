@@ -19,8 +19,8 @@ import type {
   DocumentIndex,
   GlobalTemplateOutletTarget,
   InsertionTarget,
-} from "../../../../composer";
-import { isPublishedOutletTarget, orderedSlotIds } from "../../../../composer";
+} from "../../../../composer/browser";
+import { isPublishedOutletTarget, orderedSlotIds } from "../../../../composer/browser";
 import { ChevronDownIcon, ChevronRightIcon, ContainerIcon, EllipsisIcon, LeafIcon, SlotIcon } from "../../../../components/icons";
 import type { ComponentDefinition } from "../../active-pack";
 import { countDescendants, siblingBounds, summarizeNode } from "./tree-helpers";

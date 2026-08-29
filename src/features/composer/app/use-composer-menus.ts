@@ -33,8 +33,8 @@
 // inline confirmation uses) instead of removing immediately.
 
 import { useCallback, useMemo, useState } from "preact/hooks";
-import type { InsertionTarget } from "../../../composer";
-import { findLocation, isNodeOpaque } from "../../../composer";
+import type { InsertionTarget } from "../../../composer/browser";
+import { findLocation, isNodeOpaque } from "../../../composer/browser";
 import { CopyIcon, CutIcon, DuplicateIcon, PlusIcon, TrashIcon } from "../../../components/icons";
 import type { ComposerMenuItemSpec } from "../ui/menu/composer-menu";
 import { anchorBelowRect, type MenuPoint } from "../ui/menu/menu-position";

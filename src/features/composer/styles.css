@@ -1,16 +1,10 @@
 /* ============================================================================
  * Composer — feature CSS (issue #247)
  *
- * The `/composer` route owns a dedicated document shell (NOT StyleguideLayout
- * / DocLayout — see pages/composer/index.tsx's header comment for why: no
- * docs sidebar/TOC/footer, no padded `.zd-doc-content-band` article geometry).
- * This file is the ONLY place Composer-specific selectors live, imported by
- * src/styles/global.css next to the styleguide feature import. `sg-` classes
- * / `data-sg-composer-*` attributes follow the same naming family as
- * src/features/styleguide/styles.css.
+ * The `/composer` route owns a dedicated standalone document shell. This file
+ * contains its host-only selectors; the iframe imports preview.css instead.
  *
- * Layout: below the shared 3.5rem header (--sg-header-h, already defined by
- * the styleguide feature CSS) sits a fixed-height toolbar, then a workspace
+ * Layout: below the standalone header sits a fixed-height toolbar, then a workspace
  * that fills the remaining viewport height. Desktop (>=64rem) is the
  * "five-track" grid the issue describes: tree rail | resizer | canvas
  * (minmax(0,1fr)) | resizer | inspector rail. Below 64rem the rails and
@@ -26,7 +20,7 @@
  * ========================================================================== */
 
 :root {
-  /* Rail widths — the resizer scripts (resizer-scripts-source.ts) override
+  /* Rail widths — the resizer scripts (resizer-dom.ts) override
    * these per-user in px at runtime; these are just the first-paint
    * defaults for a session with nothing persisted yet. */
   /* 20rem (320px) matches DEFAULT_TREE_W in resizer-contract.ts so the first
@@ -37,18 +31,6 @@
   --sg-composer-inspector-w: 20rem;
   /* Visual (not hit-area) width of each resizer track. */
   --sg-composer-resizer-w: 0.75rem;
-}
-
-/* Composer owns its own document (see pages/composer/index.tsx) — this guard
- * is scoped to it so no other route's <body> is affected. It hides any stray
- * horizontal overflow VISUALLY, but note it does NOT keep it out of
- * `documentElement.scrollWidth`: an `overflow` set on <body> is propagated to
- * the viewport by the CSS root-overflow-propagation rule, which leaves <body>
- * itself computing to `overflow: visible` — so it never actually clips its
- * descendants out of the scrollable extent. The real containment lives on
- * `.sg-composer-shell` below (a non-root element, so no propagation). */
-html[data-sg-composer-doc] body {
-  overflow-x: hidden;
 }
 
 .sg-composer-shell {
@@ -204,9 +186,7 @@ html[data-sg-composer-doc] body {
   }
 }
 
-/* Generous hit area for the resizer without widening its visible track —
- * mirrors the code panel resizer's grab-strip approach
- * (src/features/styleguide/styles.css). The pseudo-element extends the
+/* Generous hit area for the resizer without widening its visible track. The pseudo-element extends the
  * pointer/touch target to ~44px (touch-target-sizing best practice) while
  * the visible column stays a slim 0.75rem. */
 .sg-composer-resizer::before {
@@ -315,21 +295,8 @@ html[data-sg-composer-doc] body {
   color: var(--color-muted);
 }
 
-.sg-composer-save-status[data-sg-status="error"],
-.sg-composer-save-status[data-sg-status="quarantined"] {
+.sg-composer-save-status[data-sg-status="error"] {
   color: var(--color-warning);
-}
-
-.sg-composer-load-notice {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-hsp-sm);
-  padding-inline: var(--spacing-hsp-lg);
-  padding-block: var(--spacing-vsp-2xs);
-  border-bottom: 1px solid var(--color-warning);
-  background: color-mix(in oklch, var(--color-warning) 12%, transparent);
-  color: var(--color-fg);
-  font-size: var(--text-small);
 }
 
 .sg-composer-placeholder-pane {

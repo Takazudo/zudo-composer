@@ -6,7 +6,7 @@ import type {
   CompositionSaveOutcome,
   SaveQueue,
   CompositionSummary,
-} from "../../../composer";
+} from "../../../composer/browser";
 
 import type { ComposerProviderPreference } from "./provider-preference";
 import type { ComposerRoute, ComposerRouteError, ComposerRouteResolution } from "./route";

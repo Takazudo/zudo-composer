@@ -4,6 +4,7 @@
 /** @jsxImportSource preact */
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
+import type { ComponentPackManifest } from "@zudo-composer/component-contract";
 import {
   COMPOSITION_PROVIDERS,
   COMPOSITION_SCHEMA_VERSION,
@@ -32,13 +33,12 @@ import {
   type CompositionStore,
   type IdFactory,
   type ReuseConsumerLifecycleOutcome,
-} from "../../../composer";
-import type { ComponentPackManifest } from "@zudo-composer/component-contract";
-import { createActiveSampleDocument } from "../active-pack";
+} from "../../../composer/browser";
+import { createActiveSampleDocument, type ComposerComponentProvider } from "../active-pack";
 import { CompositionLibrary } from "../library";
 import type { CompositionLibraryIntents } from "../library";
 import {
-  composerDocumentPath,
+  COMPOSER_DOCUMENT_PATH,
   createComposerProviderPreference,
   createComposerTransitionCoordinator,
   ComposerTransitionError,
@@ -62,12 +62,11 @@ export interface ComposerBrowserNavigation extends ComposerTransitionHistory {
 }
 
 export interface ProductionComposerAppProps {
-  /** Exact component pack used by every controller and preview session. */
-  manifest: ComponentPackManifest;
+  /** One validated pack view used by every controller and preview session. */
+  componentProvider: ComposerComponentProvider;
   /** Provider injection is a production-integration test seam. */
   providers?: readonly CompositionProvider[];
   navigation?: ComposerBrowserNavigation;
-  routeConfig?: Pick<ComposerRouteConfig, "basePath" | "trailingSlash">;
   idFactory?: IdFactory;
   nodeIdFactory?: IdFactory;
   now?: () => string;
@@ -79,11 +78,6 @@ interface ProductionDetailSession extends ComposerDetailSession {
   readonly queue: SaveQueue<CompositionRecord, CompositionRecordRef, CompositionSaveOutcome>;
   registerFlushPendingProps(flush: (() => void) | null): void;
 }
-
-const DEFAULT_ROUTE_CONFIG = {
-  basePath: import.meta.env.BASE_URL || "/",
-  trailingSlash: "always" as const,
-};
 
 // The New-dialog adapter needs only the reuse service's catalog/selection
 // reads. Its manifest is static production registry data; the editor still
@@ -207,19 +201,17 @@ function canonicalResolution(
   location: ComposerRouteLocation,
   config: ComposerRouteConfig,
 ): { resolution: ReturnType<typeof parseComposerRoute>; url: string; history: ComposerTransitionIntent["history"] } {
-  const documentPath = composerDocumentPath(config);
-  const pathWithoutSlash = documentPath.replace(/\/$/, "");
   if (
-    (location.pathname === documentPath || location.pathname === pathWithoutSlash) &&
+    location.pathname === COMPOSER_DOCUMENT_PATH &&
     (location.hash === "" || location.hash === "#/")
   ) {
     const route = { kind: "index" } as const;
-    const url = formatComposerRoute(route, config);
+    const url = formatComposerRoute(route);
     return {
       resolution: { status: "matched", route },
       url,
       history:
-        location.pathname === documentPath && location.hash === "#/" ? "already-applied" : "replace",
+        location.hash === "#/" ? "already-applied" : "replace",
     };
   }
   return {
@@ -241,15 +233,15 @@ function errorText(error: ComposerTransitionError): string {
 }
 
 export function ProductionComposerApp({
-  manifest: componentPackManifest,
+  componentProvider,
   providers: injectedProviders,
   navigation: injectedNavigation,
-  routeConfig: injectedRouteConfig,
   idFactory: injectedIdFactory,
   nodeIdFactory: injectedNodeIdFactory,
   now: injectedNow,
   preview,
 }: ProductionComposerAppProps): JSX.Element {
+  const componentPackManifest = componentProvider.manifest;
   const reuseManifest = useMemo(() => createComponentCatalog(componentPackManifest), [componentPackManifest]);
   const providers = useMemo(
     () => injectedProviders ?? createProductionComposerProviders(componentPackManifest),
@@ -261,11 +253,9 @@ export function ProductionComposerApp({
   );
   const routeConfig = useMemo<ComposerRouteConfig>(
     () => ({
-      ...DEFAULT_ROUTE_CONFIG,
-      ...injectedRouteConfig,
       isKnownProvider: (id) => providers.some(({ descriptor }) => descriptor.id === id),
     }),
-    [injectedRouteConfig, providers],
+    [providers],
   );
   const providersById = useMemo(
     () => new Map(providers.map((provider) => [provider.descriptor.id, provider])),
@@ -455,12 +445,12 @@ export function ProductionComposerApp({
       setInitializationNotice(null);
       return transition({
         resolution: { status: "matched", route },
-        url: formatComposerRoute(route, routeConfig),
+        url: formatComposerRoute(route),
         history,
         indexProviderId,
       });
     },
-    [routeConfig, transition],
+    [transition],
   );
 
   const openLinkedSource = useCallback(
@@ -735,7 +725,7 @@ export function ProductionComposerApp({
     return (
       <ComposerIntegration
         key={`${ref.providerId}:${ref.recordId}:${state.generation}`}
-        manifest={componentPackManifest}
+          componentProvider={componentProvider}
         controllerOptions={{
           record: state.record,
           saveQueue: session.queue,

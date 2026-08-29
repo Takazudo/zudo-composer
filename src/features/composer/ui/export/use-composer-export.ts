@@ -23,8 +23,8 @@ import type {
   GlobalTemplateResolutionOutcome,
   IdFactory,
   JsxGenerationResult,
-} from "../../../../composer";
-import { generateBrowserJsxExport, generateJsx } from "../../../../composer";
+} from "../../../../composer/browser";
+import { generateBrowserJsxExport, generateJsx } from "../../../../composer/browser";
 
 export interface UseComposerExportResult {
   open: boolean;

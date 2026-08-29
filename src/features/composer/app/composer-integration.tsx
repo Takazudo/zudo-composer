@@ -8,7 +8,7 @@
 // snapshot everywhere:
 //
 //   toolbar   → #249 pieces (composed in ComposerToolbarBar) + viewport control
-//   banner    → #247 load-notice (recovered/quarantined storage)
+//   banner    → current provider/navigation recovery status
 //   tree      → #250 structure rail (read-only in Preview)
 //   canvas    → the #248 preview iframe host (ComposerCanvasHost)
 //   inspector → #249 schema-driven inspector
@@ -40,11 +40,9 @@ import {
   type ReuseCatalogOutcome,
   type ReuseSelectionOutcome,
   type CompositionRecordRef,
-} from "../../../composer";
-import type { ComponentDefinition } from "../active-pack";
-import type { ComponentPackManifest } from "@zudo-composer/component-contract";
+} from "../../../composer/browser";
+import type { ComposerComponentProvider } from "../active-pack";
 import { ComposerWorkspace } from "../chrome/composer-workspace";
-import { ComposerLoadNoticeBanner } from "../chrome/composer-load-notice";
 import type { UseComposerControllerOptions } from "../chrome/use-composer-controller";
 import { ComposerTree } from "../ui/tree/composer-tree";
 import { ComposerChooser } from "../ui/chooser/composer-chooser";
@@ -70,8 +68,8 @@ import type {
 } from "../ui/shared/reuse-authoring-contract";
 
 export interface ComposerIntegrationProps {
-  /** Explicit pack manifest; no registry or story discovery occurs here. */
-  manifest: ComponentPackManifest;
+  /** One validated provider view shared by controller, canvas, and chooser. */
+  componentProvider: ComposerComponentProvider;
   /** Forwarded to the controller (sample/idFactory overrides for tests). */
   controllerOptions: Omit<UseComposerControllerOptions, "manifest">;
   /** Parent-owned, provider-scoped resolver used for linked preview/Copy behavior. */
@@ -121,7 +119,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
     };
   }, [linkedRetryEpoch, props.reuseResolution]);
   const api = useComposerIntegration({
-    manifest: props.manifest,
+    manifest: props.componentProvider.manifest,
     controllerOptions: props.controllerOptions,
     reuseResolution: effectiveReuseResolution,
   });
@@ -323,9 +321,6 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
                 )}
               </div>
             )}
-            {state.loadNotice && (
-              <ComposerLoadNoticeBanner notice={state.loadNotice} onDismiss={controller.dismissLoadNotice} />
-            )}
           </>
         }
         toolbar={
@@ -338,7 +333,6 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
             viewport={viewport}
             onSetMode={controller.setMode}
             onSetViewport={setViewport}
-            onReset={controller.reset}
             onRetrySave={controller.retrySave}
             onExport={exportState.openExport}
             clipboard={state.clipboard}
@@ -371,6 +365,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
         }
         canvas={
           <ComposerCanvasHost
+            componentProvider={props.componentProvider}
             document={state.document}
             session={session}
             viewport={viewport}
@@ -409,6 +404,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
       />
 
       <ComposerChooser
+        componentProvider={props.componentProvider}
         open={chooser.open}
         target={chooser.target}
         document={state.document}

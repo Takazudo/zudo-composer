@@ -1,4 +1,4 @@
-// PARENT-SIDE half of the Composer preview bridge: the base-aware iframe URL,
+// PARENT-SIDE half of the Composer preview bridge: the exact iframe URL,
 // the exact target origin, and an INSTANCE-SCOPED connection handle.
 //
 // ── Why instance-scoped, not a module singleton ──────────────────────────────
@@ -33,7 +33,7 @@
 // iframe's own `contentWindow` AND carry that same origin (the preview is
 // same-origin by construction).
 
-import type { CompositionDocument, InsertionTarget } from "../../../composer";
+import type { InsertionTarget } from "../headless-api";
 import { COMPOSER_PREVIEW_IFRAME_TITLE, COMPOSER_PREVIEW_ROUTE_PATH } from "./route";
 import type {
   GuardFailure,
@@ -41,10 +41,10 @@ import type {
   MessagePoster,
   MessageTarget,
   PreviewSession,
+  PreviewPackIdentity,
   SerializedRect,
 } from "./protocol";
 import {
-  localPreviewSnapshot,
   modeMessage,
   readPreviewToParent,
   renderMessage,
@@ -56,7 +56,7 @@ import {
 
 /** The resolved preview iframe location: what to load, and who to talk to. */
 export interface ComposerPreviewLocation {
-  /** Value for the iframe's `src` — base-prefixed, trailing-slash normalized. */
+  /** Exact pathname for the iframe's `src`. */
   src: string;
   /** EXACT origin for every `postMessage`. Derived from `src`. Never `"*"`. */
   targetOrigin: string;
@@ -65,11 +65,8 @@ export interface ComposerPreviewLocation {
 /**
  * Build the preview iframe's URL and its exact target origin.
  *
- * `withBase` applies BOTH the configured `settings.base` (so a site served from
- * `/app/` loads `/app/composer/preview`, not `/composer/preview`) and
- * `settings.trailingSlash`. The origin is then read back off the RESOLVED URL
- * rather than assumed, which is what makes the exact-origin `postMessage`
- * honest even if the base ever becomes absolute.
+ * The standalone app has one canonical preview path. The origin is read from
+ * its resolved URL so every `postMessage` still uses an exact target origin.
  *
  * @param documentOrigin origin of the hosting document; defaults to
  *   `location.origin`. Explicit so the helper is testable and so a caller in a
@@ -82,9 +79,7 @@ export function buildComposerPreviewUrl(documentOrigin?: string): ComposerPrevie
       "buildComposerPreviewUrl: no document origin — pass one explicitly outside a browser.",
     );
   }
-  const base = import.meta.env.BASE_URL || "/";
-  const path = `${base.replace(/\/$/, "")}${COMPOSER_PREVIEW_ROUTE_PATH}/`.replace(/\/{2,}/g, "/");
-  const resolved = new URL(path, origin);
+  const resolved = new URL(COMPOSER_PREVIEW_ROUTE_PATH, origin);
   return { src: resolved.pathname, targetOrigin: resolved.origin };
 }
 
@@ -126,6 +121,8 @@ export interface ComposerPreviewBridgeOptions {
   location: ComposerPreviewLocation;
   /** Window hosting the `message` listener — normally the parent `window`. */
   hostWindow: MessageTarget;
+  /** Exact component pack this parent expects the iframe to run. */
+  pack: PreviewPackIdentity;
   /** Origin every inbound message must carry. Defaults to the location's origin. */
   expectedOrigin?: string;
 
@@ -160,7 +157,7 @@ export interface ComposerPreviewBridgeOptions {
 
 export interface ComposerPreviewBridge {
   /** Send (or retain, if not ready) a full snapshot. Returns its revision. */
-  render(snapshot: ComposerPreviewSnapshot | CompositionDocument, session: PreviewSession): number;
+  render(snapshot: ComposerPreviewSnapshot, session: PreviewSession): number;
   /** Send (or retain) a session-only change. Returns its revision. */
   updateSession(session: PreviewSession): number;
   /**
@@ -172,6 +169,8 @@ export interface ComposerPreviewBridge {
   restoreFocus(focusToken: string): void;
   /** True once the iframe has announced `ready` at least once. */
   readonly ready: boolean;
+  /** A trusted peer announced a different pack; this bridge can never revive. */
+  readonly terminal: boolean;
   /** Revision of the retained newest snapshot (`-1` before the first send). */
   readonly revision: number;
   dispose(): void;
@@ -186,7 +185,7 @@ interface Retained {
 export function createComposerPreviewBridge(
   options: ComposerPreviewBridgeOptions,
 ): ComposerPreviewBridge {
-  const { frame, location, hostWindow } = options;
+  const { frame, location, hostWindow, pack } = options;
   const { targetOrigin } = location;
   const expectedOrigin = options.expectedOrigin ?? targetOrigin;
 
@@ -195,13 +194,14 @@ export function createComposerPreviewBridge(
   let revisionCounter = -1;
   let retained: Retained | null = null;
   let disposed = false;
+  let terminal = false;
 
   const nextRevision = (): number => ++revisionCounter;
 
   const post = (message: unknown): void => {
     // `contentWindow` is read at send time, not captured: it is null before the
     // iframe attaches, and it is the window a reload replaces the contents of.
-    frame.contentWindow?.postMessage(message, targetOrigin);
+    if (!terminal) frame.contentWindow?.postMessage(message, targetOrigin);
   };
 
   /** Send the retained snapshot. Always at its CURRENT revision. */
@@ -209,8 +209,8 @@ export function createComposerPreviewBridge(
     if (!ready || !retained) return;
     post(
       retained.snapshot
-        ? renderMessage(retained.revision, retained.snapshot, retained.session)
-        : modeMessage(retained.revision, retained.session),
+        ? renderMessage(pack, retained.revision, retained.snapshot, retained.session)
+        : modeMessage(pack, retained.revision, retained.session),
     );
   };
 
@@ -226,12 +226,18 @@ export function createComposerPreviewBridge(
   };
 
   const onMessage = (event: MessageEventLike): void => {
-    if (disposed) return;
+    if (disposed || terminal) return;
     const result = readPreviewToParent(event, {
       source: frame.contentWindow,
       origin: expectedOrigin,
+      pack,
     });
     if (!result.ok) {
+      if (result.reason === "pack-mismatch") {
+        terminal = true;
+        ready = false;
+        retained = null;
+      }
       options.onRejected?.(result.reason, result.detail);
       return;
     }
@@ -285,8 +291,9 @@ export function createComposerPreviewBridge(
 
   return {
     render(snapshot, session) {
+      if (terminal) return -1;
       retained = {
-        snapshot: "document" in snapshot ? snapshot : localPreviewSnapshot(snapshot),
+        snapshot,
         session,
         revision: nextRevision(),
       };
@@ -294,6 +301,7 @@ export function createComposerPreviewBridge(
       return retained.revision;
     },
     updateSession(session) {
+      if (terminal) return -1;
       retained = {
         snapshot: retained?.snapshot ?? null,
         session,
@@ -301,17 +309,20 @@ export function createComposerPreviewBridge(
       };
       // Session-only: no need to resend the document to a live iframe. If the
       // iframe is mid-reload this post is lost — the `ready` replay covers it.
-      if (ready) post(modeMessage(retained.revision, session));
+      if (ready) post(modeMessage(pack, retained.revision, session));
       return retained.revision;
     },
     restoreFocus(focusToken) {
       // Not retained/replayed: a menu can only have been requested by an
       // iframe that already announced `ready`, and if it reloads mid-menu the
       // control the token pointed at is gone anyway — nothing to replay.
-      if (ready) post(restoreFocusMessage(focusToken));
+      if (ready) post(restoreFocusMessage(pack, focusToken));
     },
     get ready() {
       return ready;
+    },
+    get terminal() {
+      return terminal;
     },
     get revision() {
       return retained?.revision ?? -1;

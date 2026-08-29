@@ -17,7 +17,7 @@
 // If the authoring contract ever gains a real `flow` field, delete this and read
 // it from the slot descriptor.
 
-import type { CompositionNode } from "../../../composer";
+import type { CompositionNode } from "../headless-api";
 
 export type SlotFlow = "vertical" | "horizontal";
 

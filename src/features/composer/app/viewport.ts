@@ -43,7 +43,7 @@ export const COMPOSER_VIEWPORT_LABELS: Record<ComposerCanvasViewport, string> = 
 };
 
 /** localStorage key for the persisted viewport choice. */
-export const LS_COMPOSER_VIEWPORT = "sg-composer-viewport";
+export const LS_COMPOSER_VIEWPORT = "zudo-composer-viewport";
 
 /** Type guard: is `value` one of the known viewport choices? */
 export function isComposerViewport(value: unknown): value is ComposerCanvasViewport {

@@ -5,7 +5,7 @@ import type {
   CompositionRecordRef,
   CompositionSummary,
   ReuseCatalogOutcome,
-} from "../../../composer";
+} from "../../../composer/browser";
 
 /** A provider can be described even when the current runtime cannot offer it. */
 export interface CompositionLibraryProviderCapability {

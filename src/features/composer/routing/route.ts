@@ -1,4 +1,4 @@
-import type { CompositionProviderId, CompositionRecordRef } from "../../../composer";
+import type { CompositionProviderId, CompositionRecordRef } from "../../../composer/browser";
 
 export type ComposerRoute =
   | { readonly kind: "index" }
@@ -28,29 +28,12 @@ export interface ComposerRouteLocation {
 }
 
 export interface ComposerRouteConfig {
-  /** Deployment base such as `/` or `/team/zudo-sg/`. */
-  readonly basePath?: string;
-  /** Whether the Composer document itself ends in `/` before its hash. */
-  readonly trailingSlash?: "always" | "never";
   /** Runtime provider check supplied by the provider registry. */
   readonly isKnownProvider: (providerId: string) => boolean;
 }
 
-function normalizeBasePath(basePath: string | undefined): string {
-  const raw = basePath?.trim() || "/";
-  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
-  const withoutTrailingSlash = withLeadingSlash.replace(/\/+$/, "");
-  return withoutTrailingSlash === "" ? "" : withoutTrailingSlash;
-}
-
-/** Pathname of the static Composer document for the configured deployment. */
-export function composerDocumentPath(
-  config: Pick<ComposerRouteConfig, "basePath" | "trailingSlash"> = {},
-): string {
-  const base = normalizeBasePath(config.basePath);
-  const suffix = config.trailingSlash === "never" ? "" : "/";
-  return `${base}/composer${suffix}`;
-}
+/** Exact pathname of the standalone Composer document. */
+export const COMPOSER_DOCUMENT_PATH = "/composer";
 
 function routeError(
   code: ComposerRouteErrorCode,
@@ -77,11 +60,10 @@ export function parseComposerRoute(
   location: ComposerRouteLocation,
   config: ComposerRouteConfig,
 ): ComposerRouteResolution {
-  const expectedPath = composerDocumentPath(config);
-  if (location.pathname !== expectedPath) {
+  if (location.pathname !== COMPOSER_DOCUMENT_PATH) {
     return routeError(
       "wrong-document-path",
-      `Expected the Composer document at "${expectedPath}", received "${location.pathname}".`,
+      `Expected the Composer document at "${COMPOSER_DOCUMENT_PATH}", received "${location.pathname}".`,
       location,
     );
   }
@@ -140,9 +122,7 @@ export function parseComposerRoute(
 /** Format a canonical pathname + static hash for history APIs and links. */
 export function formatComposerRoute(
   route: ComposerRoute,
-  config: Pick<ComposerRouteConfig, "basePath" | "trailingSlash"> = {},
 ): string {
-  const documentPath = composerDocumentPath(config);
-  if (route.kind === "index") return `${documentPath}#/`;
-  return `${documentPath}#/composition/${route.providerId}/${encodeURIComponent(route.recordId)}`;
+  if (route.kind === "index") return `${COMPOSER_DOCUMENT_PATH}#/`;
+  return `${COMPOSER_DOCUMENT_PATH}#/composition/${route.providerId}/${encodeURIComponent(route.recordId)}`;
 }

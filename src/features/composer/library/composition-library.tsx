@@ -8,7 +8,7 @@ import {
   type CompositionProviderId,
   type CompositionRecoveryOutcome,
   type CompositionSummary,
-} from "../../../composer";
+} from "../../../composer/browser";
 import { InlineConfirm } from "../ui/shared/inline-confirm";
 import {
   NewCompositionDialog,

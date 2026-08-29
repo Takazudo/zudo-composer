@@ -3,13 +3,13 @@
 // PARENT-SIDE consumers (#251 central integration, #254 chooser live preview)
 // need only this module. The typical mount is:
 //
-//   const location = buildComposerPreviewUrl();              // base-aware URL + exact origin
+//   const location = buildComposerPreviewUrl();              // canonical URL + exact origin
 //   <iframe ref={ref} {...composerPreviewFrameProps(location)} />
 //   const bridge = createComposerPreviewBridge({
 //     frame: ref.current, location, hostWindow: window,
 //     onSelect, onRequestAdd, onRequestNodeMenu, onRequestInsertMenu, onError,
 //   });
-//   bridge.render(document, { mode, theme, selectedId });    // revision minted here
+//   bridge.render({ document, localRecordId }, session);     // revision minted here
 //   bridge.updateSession({ mode, theme, selectedId });       // session-only change
 //   bridge.dispose();                                        // on unmount
 //
@@ -17,7 +17,7 @@
 // separate readiness, revision counters, and retained snapshots.
 //
 // The IFRAME-SIDE modules (`preview-app`, `renderer`, `client`, `snapshot-store`,
-// `preview-styles`) are imported by `pages/composer/preview.tsx`, not from here.
+// `preview.css`) are imported by the preview route entry, not from here.
 // Only their TYPES are re-exported below, for hosts that want to name the
 // session/state they are driving.
 
@@ -39,8 +39,6 @@ export type {
 export {
   COMPOSER_PREVIEW_CHANNEL,
   COMPOSER_PREVIEW_PROTOCOL_VERSION,
-  COMPOSER_PREVIEW_PACK_ID,
-  COMPOSER_PREVIEW_PACK_VERSION,
   RESERVED_PROP_KEYS,
   commitInlineEditMessageSchema,
   dropNodeMessage,
@@ -81,6 +79,7 @@ export type {
   OpenSourceMessage,
   ParentToPreviewMessage,
   PreviewMode,
+  PreviewPackIdentity,
   ComposerPreviewSnapshot,
   PreviewLinkedSourceContext,
   PreviewSession,

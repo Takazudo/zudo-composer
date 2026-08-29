@@ -19,7 +19,7 @@
 import { h } from "preact";
 import type { JSX } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
-import type { InsertionTarget } from "../../../composer";
+import type { InsertionTarget } from "../headless-api";
 import type { ComposerComponentProvider } from "../active-pack";
 import { createPreviewClient, type PreviewClient } from "./client";
 import type { GuardFailure, MessagePoster, MessageTarget, SerializedRect } from "./protocol";
@@ -43,6 +43,7 @@ export interface ComposerPreviewAppProps { provider: ComposerComponentProvider }
 export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps): JSX.Element {
   const [state, setState] = useState<PreviewState>(INITIAL_PREVIEW_STATE);
   const [error, setError] = useState<string | null>(null);
+  const [fatalError, setFatalError] = useState<string | null>(null);
   const [framed] = useState(isFramed);
   const clientRef = useRef<PreviewClient | null>(null);
 
@@ -62,6 +63,10 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
       expectedOrigin: origin,
       // Exact target origin — never "*".
       targetOrigin: origin,
+      pack: {
+        packId: provider.manifest.packId,
+        packVersion: provider.manifest.packVersion,
+      },
       onState: (next) => {
         setState(next);
         // A valid snapshot means the bridge is healthy again.
@@ -77,6 +82,12 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
         // alarm and — worse — turn this preview into a postMessage amplifier.
         // Drop it silently; only a malformed message from our OWN parent is a
         // real bug worth surfacing.
+        if (reason === "pack-mismatch") {
+          setFatalError(
+            `Component pack mismatch. ${detail ?? "The host and preview loaded different component packs."}`,
+          );
+          return;
+        }
         if (reason !== "invalid-payload") return;
         const message =
           "The Composer sent a message this preview could not understand. The last valid composition is still shown.";
@@ -92,7 +103,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
       client.dispose();
       clientRef.current = null;
     };
-  }, [framed]);
+  }, [framed, provider.manifest.packId, provider.manifest.packVersion]);
 
   // Mirror the host's active theme onto THIS document. `colors.css` keys
   // `color-scheme` off `:root[data-theme]`, which is what makes every
@@ -155,7 +166,7 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
   }
 
   const banner =
-    error === null
+    error === null || fatalError !== null
       ? null
       : h(
           "div",
@@ -174,10 +185,17 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
           ),
         );
 
-  const body = state.document
+  const body = fatalError !== null
+    ? h(
+        "div",
+        { class: "zc-error", role: "alert", "data-composer-preview-fatal": "pack-mismatch" },
+        h("p", { class: "zc-error-title" }, "Preview cannot start"),
+        h("p", { class: "zc-error-detail" }, fatalError),
+      )
+    : state.document && state.localRecordId
     ? h(CompositionCanvas, {
         document: state.document,
-        localRecordId: state.localRecordId ?? state.document.id,
+        localRecordId: state.localRecordId,
         linked: state.linked,
         provider,
         session: state.session,
@@ -191,7 +209,9 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
         onDropNode,
         onNodeError,
       })
-    : h("p", { class: "zc-empty" }, "Waiting for a composition…");
+    : state.document
+      ? h("p", { class: "zc-error", role: "alert" }, "Preview received a composition without a local record identity.")
+      : h("p", { class: "zc-empty" }, "Waiting for a composition…");
 
   return h("div", { "data-composer-preview-root": "" }, banner, body);
 }

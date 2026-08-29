@@ -10,12 +10,13 @@
 // `/composer`). Everything else is dropped. `event.data` is never touched
 // before the schema validates it.
 
-import type { InsertionTarget } from "../../../composer";
+import type { InsertionTarget } from "../headless-api";
 import type {
   GuardFailure,
   MessageEventLike,
   MessagePoster,
   MessageTarget,
+  PreviewPackIdentity,
   SerializedRect,
 } from "./protocol";
 import {
@@ -43,6 +44,8 @@ export interface PreviewClientOptions {
   expectedOrigin: string;
   /** Exact origin for outbound posts. Never `"*"`. */
   targetOrigin: string;
+  /** Exact component pack imported by this iframe. */
+  pack: PreviewPackIdentity;
   /** A newer snapshot was applied. Stale messages never reach this. */
   onState: (state: PreviewState) => void;
   /**
@@ -86,17 +89,19 @@ export interface PreviewClient {
   emitError(message: string, recoverable?: boolean): void;
   /** The newest applied state. */
   readonly state: PreviewState;
+  readonly terminal: boolean;
   dispose(): void;
 }
 
 export function createPreviewClient(options: PreviewClientOptions): PreviewClient {
-  const { hostWindow, parentWindow, expectedSource, expectedOrigin, targetOrigin } = options;
+  const { hostWindow, parentWindow, expectedSource, expectedOrigin, targetOrigin, pack } = options;
 
   let state: PreviewState = INITIAL_PREVIEW_STATE;
   let disposed = false;
+  let terminal = false;
 
   const post = (message: unknown): void => {
-    parentWindow.postMessage(message, targetOrigin);
+    if (!terminal) parentWindow.postMessage(message, targetOrigin);
   };
 
   /**
@@ -107,12 +112,17 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
   const outboundRevision = (): number => Math.max(0, state.revision);
 
   const onMessage = (event: MessageEventLike): void => {
-    if (disposed) return;
+    if (disposed || terminal) return;
     const result = readParentToPreview(event, {
       source: expectedSource,
       origin: expectedOrigin,
+      pack,
     });
     if (!result.ok) {
+      if (result.reason === "pack-mismatch") {
+        terminal = true;
+        state = INITIAL_PREVIEW_STATE;
+      }
       options.onRejected?.(result.reason, result.detail);
       return;
     }
@@ -133,36 +143,39 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
 
   return {
     emitReady() {
-      post(readyMessage());
+      post(readyMessage(pack));
     },
     emitSelect(nodeId) {
-      post(selectMessage(outboundRevision(), nodeId));
+      post(selectMessage(pack, outboundRevision(), nodeId));
     },
     emitRequestAdd(target) {
-      post(requestAddMessage(outboundRevision(), target));
+      post(requestAddMessage(pack, outboundRevision(), target));
     },
     emitOpenSource(sourceRecordId) {
-      post(openSourceMessage(sourceRecordId));
+      post(openSourceMessage(pack, sourceRecordId));
     },
     emitRequestNodeMenu(nodeId, rect, focusToken) {
-      post(requestNodeMenuMessage(outboundRevision(), nodeId, rect, focusToken));
+      post(requestNodeMenuMessage(pack, outboundRevision(), nodeId, rect, focusToken));
     },
     emitRequestInsertMenu(target, rect, focusToken) {
-      post(requestInsertMenuMessage(outboundRevision(), target, rect, focusToken));
+      post(requestInsertMenuMessage(pack, outboundRevision(), target, rect, focusToken));
     },
     emitCommitInlineEdit(nodeId, fieldKey, value, documentRevision) {
       // `Math.max(0, ...)` mirrors `outboundRevision()`'s own guard — defence
       // against a rogue caller producing a schema-invalid negative revision.
-      post(commitInlineEditMessage(nodeId, fieldKey, value, Math.max(0, documentRevision)));
+      post(commitInlineEditMessage(pack, nodeId, fieldKey, value, Math.max(0, documentRevision)));
     },
     emitDropNode(sourceNodeId, target, copy) {
-      post(dropNodeMessage(sourceNodeId, target, copy, outboundRevision()));
+      post(dropNodeMessage(pack, sourceNodeId, target, copy, outboundRevision()));
     },
     emitError(message, recoverable = true) {
-      post(errorMessage(state.revision < 0 ? null : state.revision, message, recoverable));
+      post(errorMessage(pack, state.revision < 0 ? null : state.revision, message, recoverable));
     },
     get state() {
       return state;
+    },
+    get terminal() {
+      return terminal;
     },
     dispose() {
       disposed = true;

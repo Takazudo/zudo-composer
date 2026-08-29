@@ -27,15 +27,16 @@
 // (`sg-composer-chooser-preview-stage`, styles.css) keeps the frame itself
 // out of the tab/click order — this pane is look-only.
 
-import { useEffect, useMemo, useRef } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
-import type { CompositionDocument, CompositionNode } from "../../../../composer";
-import { COMPOSITION_SCHEMA_VERSION } from "../../../../composer";
-import type { ComponentDefinition } from "../../active-pack";
+import type { CompositionDocument, CompositionNode } from "../../../../composer/browser";
+import { COMPOSITION_SCHEMA_VERSION } from "../../../../composer/browser";
+import type { ComponentDefinition, ComposerComponentProvider } from "../../active-pack";
 import {
   buildComposerPreviewUrl,
   composerPreviewFrameProps,
   createComposerPreviewBridge,
+  localPreviewSnapshot,
   type ComposerPreviewBridge,
   type ComposerPreviewLocation,
   type MessageTarget,
@@ -97,6 +98,7 @@ export function buildChooserPreviewDocument(
 }
 
 export interface ChooserPreviewHostProps {
+  componentProvider: ComposerComponentProvider;
   /** The catalog entry currently previewed. Null before the first hover/focus. */
   entry: ComponentDefinition | null;
   /** A fully loaded Pattern source document, rendered intact rather than as a single component sample. */
@@ -114,6 +116,7 @@ export interface ChooserPreviewHostProps {
 
 export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element {
   const {
+    componentProvider,
     entry,
     sourceDocument,
     label = "Live preview",
@@ -126,6 +129,7 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const bridgeRef = useRef<ComposerPreviewBridge | null>(null);
   const renderedDocumentRef = useRef<CompositionDocument | null>(null);
+  const [fatalError, setFatalError] = useState<string | null>(null);
 
   const location = useMemo(() => locationProp ?? buildComposerPreviewUrl(), [locationProp]);
   const frameProps = useMemo(
@@ -145,7 +149,20 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
-    const bridge = createBridge({ frame, location, hostWindow: hostWindow ?? window });
+    const bridge = createBridge({
+      frame,
+      location,
+      hostWindow: hostWindow ?? window,
+      pack: {
+        packId: componentProvider.manifest.packId,
+        packVersion: componentProvider.manifest.packVersion,
+      },
+      onRejected: (reason, detail) => {
+        if (reason === "pack-mismatch") {
+          setFatalError(`Preview cannot start: ${detail ?? "The host and preview loaded different packs."}`);
+        }
+      },
+    });
     bridgeRef.current = bridge;
     renderedDocumentRef.current = null;
     // A Pattern host can mount only after an asynchronous source load. Render
@@ -153,7 +170,7 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
     // snapshot cannot be lost to effect ordering during that transition.
     const initialDocument = latestPreviewDocumentRef.current;
     if (initialDocument) {
-      bridge.render(initialDocument, {
+      bridge.render(localPreviewSnapshot(initialDocument, initialDocument.id), {
         mode: "preview",
         theme: resolveChooserPreviewTheme(),
         selectedId: null,
@@ -165,7 +182,7 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
       bridgeRef.current = null;
       renderedDocumentRef.current = null;
     };
-  }, [createBridge, location, hostWindow]);
+  }, [componentProvider.manifest.packId, componentProvider.manifest.packVersion, createBridge, location, hostWindow]);
 
   useEffect(() => {
     const bridge = bridgeRef.current;
@@ -175,7 +192,7 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
       theme: resolveChooserPreviewTheme(),
       selectedId: null,
     };
-    bridge.render(previewDocument, session);
+    bridge.render(localPreviewSnapshot(previewDocument, previewDocument.id), session);
     renderedDocumentRef.current = previewDocument;
   }, [previewDocument]);
 
@@ -183,6 +200,11 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
     <div class="sg-composer-chooser-preview">
       <p class="sg-composer-chooser-preview-label">{label}</p>
       <div class="sg-composer-chooser-preview-stage">
+        {fatalError && (
+          <p class="sg-composer-chooser-pattern-error" role="alert" data-composer-preview-fatal="pack-mismatch">
+            {fatalError}
+          </p>
+        )}
         {!previewDocument && (
           <p class="sg-composer-chooser-preview-empty">Hover or focus a component to preview it here.</p>
         )}

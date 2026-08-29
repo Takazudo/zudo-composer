@@ -1,6 +1,6 @@
-import type { CompositionProviderId } from "../../../composer";
+import type { CompositionProviderId } from "../../../composer/browser";
 
-export const COMPOSER_PROVIDER_PREFERENCE_KEY = "sg-composer-provider";
+export const COMPOSER_PROVIDER_PREFERENCE_KEY = "zudo-composer-provider";
 
 export interface ComposerProviderPreference {
   read(): string | null;

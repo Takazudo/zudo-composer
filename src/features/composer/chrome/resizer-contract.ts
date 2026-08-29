@@ -1,19 +1,15 @@
 // Composer workspace resizer contract — the single source of truth for the
 // tree/inspector rail localStorage keys, CSS custom-property names, and
-// data-attributes (issue #247). Mirrors
-// `src/features/styleguide/chrome/panel-contract.ts`'s split between pure
-// constants/DOM helpers (safe from SSR) and the inline scripts built in
-// `resizer-scripts-source.ts`.
+// data-attributes and pure DOM helpers.
 //
 // Unlike the single code-panel resizer, the Composer workspace has TWO
 // resizable rails either side of a `minmax(0, 1fr)` canvas. They share one
 // joint clamp: growing one rail is capped by how much width it would leave
-// for the other rail plus a minimum usable canvas — see `resizer-scripts-
-// source.ts`'s `clampFor`.
+// for the other rail plus a minimum usable canvas.
 
 // ── localStorage keys ──────────────────────────────────────────────────────
-export const LS_TREE_WIDTH = "sg-composer-tree-width";
-export const LS_INSPECTOR_WIDTH = "sg-composer-inspector-width";
+export const LS_TREE_WIDTH = "zudo-composer-tree-width";
+export const LS_INSPECTOR_WIDTH = "zudo-composer-inspector-width";
 
 // ── CSS custom properties (rail widths, px once the resizer script runs) ───
 export const CSS_VAR_TREE_W = "--sg-composer-tree-w";

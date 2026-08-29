@@ -17,7 +17,7 @@
 // Everything in this module is pure or DOM-only: no Preact, no bridge, no
 // session state.
 
-import type { CompositionNode } from "../../../composer";
+import type { CompositionNode } from "../headless-api";
 import type { ComposerRuntimeEntry } from "../active-pack";
 
 /**

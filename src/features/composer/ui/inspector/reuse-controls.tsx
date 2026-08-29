@@ -3,8 +3,8 @@
 
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import type { JSX, Ref } from "preact";
-import type { ComponentCatalog, CompositionDocument } from "../../../../composer";
-import { diagnoseDocument } from "../../../../composer";
+import type { ComponentCatalog, CompositionDocument } from "../../../../composer/browser";
+import { diagnoseDocument } from "../../../../composer/browser";
 import type { ComposerMode } from "../../chrome/controller-model";
 import type { ReuseAuthoringActionResult } from "../shared/reuse-authoring-contract";
 

@@ -3,7 +3,7 @@
 
 import type { JSX } from "preact";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { ReuseCatalogEntry } from "../../../composer";
+import type { ReuseCatalogEntry } from "../../../composer/browser";
 import {
   ToolDialogResizeHandle,
   toolDialogStyle,
@@ -134,7 +134,6 @@ export function NewCompositionDialog({
     void loadTemplates();
     // `open` is the fresh-session boundary. Provider changes cannot happen
     // behind the modal, but including it makes a controlled re-open safe.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, providerId]);
 
   useEffect(() => {

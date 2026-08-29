@@ -52,8 +52,8 @@ import type {
   ReuseCatalogOutcome,
   ReuseSelectionOutcome,
   RootPolicy,
-} from "../../../../composer";
-import type { ComponentDefinition } from "../../active-pack";
+} from "../../../../composer/browser";
+import type { ComponentDefinition, ComposerComponentProvider } from "../../active-pack";
 import type {
   ComposerPreviewLocation,
   MessageTarget,
@@ -70,6 +70,7 @@ import { ChooserPreviewHost } from "./chooser-preview-host";
 import { toolDialogStyle, useMovableToolDialog, useToolDialogGeometry } from "../shared/tool-dialog-geometry";
 
 export interface ComposerChooserProps {
+  componentProvider: ComposerComponentProvider;
   open: boolean;
   /** The target to capture on open. Ignored for the rest of the dialog's lifetime once captured. */
   target: InsertionTarget | null;
@@ -156,6 +157,7 @@ function selectionError(outcome: Exclude<ReuseSelectionOutcome, { status: "loade
 const ALL_CATEGORY = "All" as const;
 
 export function ComposerChooser({
+  componentProvider,
   open,
   target,
   document,
@@ -660,6 +662,7 @@ export function ComposerChooser({
 
               {activeTab === "components" ? (
                 <ChooserPreviewHost
+                  componentProvider={componentProvider}
                   entry={previewedEntry}
                   catalogById={catalogById}
                   createBridge={previewCreateBridge}
@@ -673,6 +676,7 @@ export function ComposerChooser({
                   {loadedPattern && !patternLoading && !patternLoadError && (
                     <>
                       <ChooserPreviewHost
+                        componentProvider={componentProvider}
                         entry={null}
                         sourceDocument={loadedPattern.document}
                         label="Pattern preview"

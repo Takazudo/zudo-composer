@@ -30,8 +30,8 @@ import type {
   CompositionRecord,
   GlobalTemplateResolutionOutcome,
   InsertionTarget,
-} from "../../../composer";
-import { compositionRecordRefKey, createComponentCatalog } from "../../../composer";
+} from "../../../composer/browser";
+import { compositionRecordRefKey, createComponentCatalog } from "../../../composer/browser";
 import type { ComponentPackManifest } from "@zudo-composer/component-contract";
 import type { ComponentDefinition } from "../active-pack";
 import type { ComposerCanvasViewport } from "../chrome/controller-model";
@@ -192,7 +192,6 @@ export function useComposerIntegration(
   useEffect(() => {
     const persisted = getPersistedViewport();
     if (persisted && persisted !== state.viewport) controller.setViewport(persisted);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
   const setViewport = useCallback(

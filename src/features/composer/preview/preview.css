@@ -1,36 +1,5 @@
-// Feature-local CSS for the Composer preview DOCUMENT (`/composer/preview`).
-//
-// ── Why a string, inlined into the document's own <head> ─────────────────────
-// The iframe owns this CSS string so its editor chrome stays isolated from the
-// host stylesheet and remains available in the dynamically loaded preview chunk.
-//
-// Rather than take a cross-ownership edit, this runtime carries its own CSS as a
-// string and the route inlines it into the preview document's `<head>`. It is
-// therefore:
-//   - guaranteed present inside the iframe, with no shared-stylesheet edit;
-//   - scoped to `html[data-composer-preview-doc]`, which ONLY this document
-//     carries, so the host chrome is provably unaffected;
-//   - free of Tailwind utilities, so it needs no `@source` registration.
-//
-// The palette is intentionally standalone. Issue #9 will import the provider's
-// public CSS at this seam without changing the iframe protocol or renderer.
-//
-// ── Part 2: the editor chrome ───────────────────────────────────────────────
-// Selection/hover chrome is OUT OF FLOW (absolute, floated above the node's box)
-// and hover is styled with pure CSS — no Preact hover state exists, so a hover
-// can never trigger a diff, and selection is a bare attribute swap styled with
-// `outline` (which does not reflow). See the DOM-identity note in `renderer.ts`.
-//
-// z-index uses the `--z-index-local-*` tier family: these affordances only need
-// to sit above their own isolated parent node, never above app chrome (raw
-// integers are rejected by `pnpm check:z-index`).
-
-/** Attribute the preview document's `<html>` carries. The scope hook. */
-export const COMPOSER_PREVIEW_DOC_ATTR = "data-composer-preview-doc";
-
-export const COMPOSER_PREVIEW_CSS = `
 /* ── Palette restoration (see header) ─────────────────────────────────────── */
-html[${COMPOSER_PREVIEW_DOC_ATTR}] {
+html[data-composer-preview-doc] {
   color-scheme: light dark;
   --color-bg:           light-dark(#f7f7f5, #171717);
   --color-surface:      light-dark(#ffffff, #222222);
@@ -155,14 +124,14 @@ html[${COMPOSER_PREVIEW_DOC_ATTR}] {
    caret. The outline is out-of-flow, so making a text node editable neither
    reflows nor remounts the component (see the caret-survival note in
    renderer.ts). */
-[${COMPOSER_PREVIEW_DOC_ATTR}] [data-zc-inline-editing] {
+[data-composer-preview-doc] [data-zc-inline-editing] {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;
   border-radius: 2px;
   cursor: text;
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
-[${COMPOSER_PREVIEW_DOC_ATTR}] [data-zc-inline-editing]:focus {
+[data-composer-preview-doc] [data-zc-inline-editing]:focus {
   outline-color: var(--color-focus);
 }
 
@@ -632,4 +601,3 @@ html[${COMPOSER_PREVIEW_DOC_ATTR}] {
   font-size: var(--text-caption);
   text-align: center;
 }
-`;

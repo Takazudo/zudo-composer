@@ -4,8 +4,8 @@
 // independent of the dialog's focus/capture mechanics — see
 // `composer-chooser.tsx` for how these compose into the rendered dialog.
 
-import type { ComponentCatalog, CompositionDocument, CompositionNode, InsertionTarget, RootPolicy } from "../../../../composer";
-import { findLocation, insertForest, isNodeOpaque } from "../../../../composer";
+import type { ComponentCatalog, CompositionDocument, CompositionNode, InsertionTarget, RootPolicy } from "../../../../composer/browser";
+import { findLocation, insertForest, isNodeOpaque } from "../../../../composer/browser";
 import type { ComponentDefinition } from "../../active-pack";
 
 export interface ChooserEligibility {
@@ -105,7 +105,7 @@ export function assessPatternForestInsertion(
     target,
     sourceRoots,
     () => {
-      let id = "";
+      let id: string;
       do {
         sequence += 1;
         id = `chooser-pattern-validation-${sequence}`;

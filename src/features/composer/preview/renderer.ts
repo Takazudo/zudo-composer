@@ -38,14 +38,13 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "preact/
 import type { ComponentChildren, JSX } from "preact";
 import { EllipsisIcon, PlusIcon } from "../../../components/icons";
 import type {
-  ComponentCatalog,
   CompositionDocument,
   CompositionNode,
   InsertionTarget,
   JsonObject,
   NodeDiagnostic,
-} from "../../../composer";
-import { VIRTUAL_ROOT_SLOT_ID, classifyNode } from "../../../composer";
+} from "../headless-api";
+import { VIRTUAL_ROOT_SLOT_ID, classifyNode } from "../headless-api";
 import type { ComposerComponentProvider, ComposerRuntimeEntry } from "../active-pack";
 import {
   INLINE_EDITING_ATTR,
@@ -158,7 +157,7 @@ function safeProps(props: JsonObject): Record<string, unknown> {
 export interface CompositionCanvasProps {
   document: CompositionDocument;
   /** Canonical consumer identity for owner-qualified runtime keys. */
-  localRecordId?: string;
+  localRecordId: string;
   /** Optional resolved, read-only Global-template source/outlet context. */
   linked?: PreviewLinkedSourceContext | null;
   /** The TRUSTED runtime registry — retains real component functions. */
@@ -233,7 +232,7 @@ function runtimeKey(owner: RuntimeOwner, recordId: string, nodeId: string): stri
 export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
   const {
     document,
-    localRecordId = document.id,
+    localRecordId,
     linked = null,
     provider,
     session,
@@ -476,7 +475,6 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
       el.removeAttribute(INLINE_EDITING_ATTR);
       if (editableRef.current === el) editableRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the session identity
   }, [inlineSession?.nodeId, inlineSession?.fieldKey]);
 
   // Switching to Preview mid-edit COMMITS the draft (defined, tested behavior).
@@ -489,7 +487,6 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
     if (previous !== "preview" && session.mode === "preview" && sessionRef.current) {
       commitInline();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires only on a mode transition
   }, [session.mode]);
 
   // Cancel the session outright when the GROUND MOVES under it (issue #288):
@@ -515,7 +512,6 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
     const entry = targetNode ? entryById.get(targetNode.componentId) : undefined;
     const currentValue = effectiveFieldValue(targetNode, entry, active.fieldKey);
     if (!targetNode || currentValue !== active.initialValue) cancelInline();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a document IDENTITY change gates this check
   }, [document]);
 
   // ── Drag & drop (issue #258) ──────────────────────────────────────────────

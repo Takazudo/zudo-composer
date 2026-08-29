@@ -1,5 +1,5 @@
 import { h, type ComponentChildren, type FunctionComponent } from "preact";
-import { COMPOSITION_SCHEMA_VERSION, type CompositionDocument } from "../../composer";
+import { COMPOSITION_SCHEMA_VERSION, type CompositionDocument } from "./headless-api";
 import {
   defineComponentPack,
   type ComponentManifest,
@@ -7,7 +7,7 @@ import {
   type TrustedComponentPack,
   validateRuntimeParity,
 } from "@zudo-composer/component-contract";
-import { createComponentCatalog, type ComponentCatalog } from "../../composer";
+import { createComponentCatalog, type ComponentCatalog } from "./headless-api";
 export type { ComponentManifest as ComponentDefinition } from "@zudo-composer/component-contract";
 
 type FixtureProps = Record<string, unknown> & { children?: ComponentChildren };

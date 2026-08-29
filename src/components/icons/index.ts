@@ -40,7 +40,7 @@
  */
 
 import { h } from "preact";
-import type { FunctionComponent, JSX, VNode } from "preact";
+import type { ComponentChildren, FunctionComponent, JSX } from "preact";
 
 export type IconSize = "xs" | "sm" | "md" | "lg";
 
@@ -61,7 +61,7 @@ export type IconComponent = FunctionComponent<IconProps>;
 // contravariant `ComponentType<P>`), so a `VNode<{ d: string }>` from
 // `h("path", …)` is NOT assignable to the default `VNode<{}>` — the internal
 // signatures use this erased alias instead.
-type AnyVNode = VNode<any>;
+type AnyVNode = ComponentChildren;
 
 const sizeClasses: Record<IconSize, string> = {
   xs: "w-icon-xs h-icon-xs",

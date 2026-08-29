@@ -18,7 +18,7 @@
 
 import type { JSX } from "preact";
 import { useEffect, useId, useLayoutEffect, useRef } from "preact/hooks";
-import type { BrowserJsxExportOutcome, JsxGenerationResult } from "../../../../composer";
+import type { BrowserJsxExportOutcome, JsxGenerationResult } from "../../../../composer/browser";
 import { ComposerCopyButton } from "./copy-button";
 
 export interface ComposerExportDialogProps {
