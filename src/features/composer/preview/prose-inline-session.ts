@@ -211,7 +211,7 @@ export function useProseInlineSession(options: ProseInlineSessionOptions): Prose
 
   // Every option that an imperative listener (attached outside Preact) reads is
   // mirrored into a ref, so a listener installed for one mount never closes
-  // over a stale document/registry/revision.
+  // over a stale document/provider/revision.
   const optionsRef = useRef(options);
   optionsRef.current = options;
 

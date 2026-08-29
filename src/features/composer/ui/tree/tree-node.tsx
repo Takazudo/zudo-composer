@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 // One recursive structure-rail row (issue #250): the component itself, its
-// declared/preserved slots (in canonical order — see `@/composer`'s
+// declared/preserved slots (in canonical model order — see
 // `orderedSlotIds`), each slot's children, and empty-slot placeholders.
 //
 // Plain nested `<ul>`/`<li>` + real `<button>`s — deliberately NOT

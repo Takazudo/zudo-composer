@@ -10,8 +10,8 @@
 //
 // ── Trust boundary ───────────────────────────────────────────────────────────
 // The document that arrives over the bridge is DATA. The component FUNCTIONS
-// come from the trusted registry (#244), which this module imports itself
-// inside the iframe. A `componentId` is only ever used as a Map key — never as
+// come from the injected trusted provider inside the iframe. A `componentId`
+// is only ever used as a Map key — never as
 // a module specifier, never evaluated.
 //
 // ── DOM identity (hard acceptance criterion) ─────────────────────────────────
@@ -95,7 +95,7 @@ export function focusByToken(token: string): void {
 // A flag alone can't target the right text node: real components render
 // decorations (`CtaButton` an arrow, `SectionHeading` an eyebrow/heading/intro).
 // So the trusted, non-serializable `adapters.inlineEditor` (kept only in the
-// runtime registry — #244/#246) resolves the editable element inside a rendered
+// provider runtime adapter) resolves the editable element inside a rendered
 // component. MVP: at most ONE inline-editable field per component.
 //
 // The three verified prototype rules the session code below follows exactly:
@@ -132,11 +132,6 @@ interface InlineSessionState {
 }
 
 /**
- * One manifest per registry array, built once. `runtimeEntryManifest` runs a zod
- * validation per entry, and the whole cohort would otherwise be re-validated on
- * every mount — which #254's ephemeral chooser preview pays repeatedly.
- */
-/**
  * Drop any prop the protocol reserves before it can reach a real component.
  *
  * The bridge already REFUSES a document carrying one of these
@@ -160,7 +155,7 @@ export interface CompositionCanvasProps {
   localRecordId: string;
   /** Optional resolved, read-only Global-template source/outlet context. */
   linked?: PreviewLinkedSourceContext | null;
-  /** The TRUSTED runtime registry — retains real component functions. */
+  /** The trusted provider view retaining real component functions. */
   provider: ComposerComponentProvider;
   session: PreviewSession;
   /**

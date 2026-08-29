@@ -250,7 +250,7 @@ html[data-composer-preview-doc] {
   padding: 0;
   /* Accent budget (#266): insert markers RECEDE until reached for — a muted,
      guide-toned dashed bar at reduced opacity, NOT accent, at rest. This is the
-     single biggest at-rest orange source (6+ markers in the sample doc). Accent
+     single biggest at-rest orange source (6+ markers in the seeded composition). Accent
      appears only on hover/focus (below) and on the active drop target. */
   border: 1px dashed var(--sg-composer-guide);
   border-radius: 3px;

@@ -9,12 +9,9 @@
 // This module is 100% pure — no DOM, no localStorage, no Preact. It only
 // applies #245's commands (addNode/updateProps/reorderNode/removeNode) and
 // folds their `CommandResult` into a new `ComposerControllerState`. Side
-// effects (reading/writing localStorage, wiring the resizer DOM, the
-// SPA-navigation guard) live in sibling modules (storage.ts,
-// use-composer-controller.ts, navigation-guard.ts) — keeping this module
-// pure is what makes "Controller unit tests cover save/reload/reset/
-// malformed/future-schema quarantine + typed callback seams" (issue #247)
-// cheap to prove without a DOM harness.
+// effects (queue persistence, resizer DOM wiring, and the native navigation
+// guard) live in sibling modules. Keeping this reducer pure makes its command
+// and callback behavior cheap to prove without a DOM harness.
 
 import type {
   CommandResult,
@@ -212,8 +209,7 @@ function ancestorIds(
 
 /**
  * Build the initial in-memory controller state from an already-resolved
- * document (the result of a #245 `loadCompositionDocument` call, an explicit
- * reset, or a native sample fallback). Pure — never touches storage itself.
+ * document from the active record. Pure — never touches storage itself.
  */
 export function createInitialControllerState(options: {
   document: CompositionDocument;

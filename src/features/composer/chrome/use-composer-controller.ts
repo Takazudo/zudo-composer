@@ -10,9 +10,7 @@
 //   resizer-contract.ts   — the vanilla-JS resizer script's width bridge
 //
 // A supported CompositionRecord is loaded before this hook is mounted; the
-// record-scoped path performs no provider read. The optional sample-only path
-// remains temporarily for the pre-library production mount and is replaced by
-// the provider/route composition in #305.
+// record-scoped path performs no provider read.
 //
 // State is kept in a ref (not just `useState`) so `dispatch` can always act
 // on the latest value without depending on `state` (which would otherwise

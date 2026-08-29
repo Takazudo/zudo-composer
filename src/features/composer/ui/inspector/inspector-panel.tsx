@@ -9,7 +9,7 @@
 //
 // Layered behaviour:
 //  - identity + breadcrumb + slot counts are derived, read-only views over
-//    the document, built with the public `@/composer` traversal/diagnostics
+//    the document, built with the headless traversal/diagnostics
 //    API (`findLocation`, `classifyNode`, `orderedSlotIds`) — never a second
 //    tree/index implementation;
 //  - editable fields are declared ONLY by the selected node's manifest entry

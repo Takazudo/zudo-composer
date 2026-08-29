@@ -70,7 +70,7 @@ import type {
 export interface ComposerIntegrationProps {
   /** One validated provider view shared by controller, canvas, and chooser. */
   componentProvider: ComposerComponentProvider;
-  /** Forwarded to the controller (sample/idFactory overrides for tests). */
+  /** Forwarded to the record-scoped controller. */
   controllerOptions: Omit<UseComposerControllerOptions, "manifest">;
   /** Parent-owned, provider-scoped resolver used for linked preview/Copy behavior. */
   reuseResolution?: ComposerReuseResolutionOptions;
