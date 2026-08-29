@@ -40,6 +40,13 @@ export function validateCompositionRecord(value: unknown): CompositionRecordVali
   }
 
   const raw = value as Record<string, unknown>;
+  const expectedKeys = ["id", "createdAt", "updatedAt", "document"];
+  if (
+    !expectedKeys.every((key) => Object.hasOwn(raw, key))
+    || Object.keys(raw).some((key) => !expectedKeys.includes(key))
+  ) {
+    return issue("invalid-record", "Composition record must contain exactly id, createdAt, updatedAt, and document.");
+  }
   if (!isSafeCompositionRecordId(raw.id)) {
     return issue("unsafe-id", "Composition record id is not a stable path-safe id.");
   }
@@ -79,7 +86,12 @@ export function validateCompositionRecord(value: unknown): CompositionRecordVali
 
   return {
     ok: true,
-    record: { ...raw, document: decoded.document } as CompositionRecord,
+    record: {
+      id: raw.id,
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+      document: decoded.document,
+    } as CompositionRecord,
   };
 }
 

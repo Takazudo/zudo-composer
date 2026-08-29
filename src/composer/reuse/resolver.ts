@@ -1,5 +1,5 @@
 import { findLocation } from "../model/index-model";
-import { validateRootForest } from "../model/validate";
+import { diagnoseDocument, validateRootForest } from "../model/validate";
 import type { RootPolicy } from "../model/types";
 import type { CompositionLoadOutcome, CompositionRecord } from "../library/types";
 import type {
@@ -41,12 +41,15 @@ export function resolveGlobalTemplate(
   }
   const outlet = publication.outlet;
   if (outlet.id !== binding.outletId) return { status: "missing-outlet", source, ...preserved };
+  if (!diagnoseDocument(source.document, manifest).canExport) {
+    return { status: "invalid-template", source, reason: "invalid-outlet-target", ...preserved };
+  }
 
   const location = findLocation(source.document, manifest, outlet.target.parentId);
   const owner = location?.node;
   const entry = owner ? manifest.get(owner.componentId) : undefined;
   const slot = entry?.slots.find((candidate) => candidate.id === outlet.target.slotId);
-  if (!owner || !slot || (owner.slots[outlet.target.slotId]?.length ?? 0) > 0) {
+  if (!owner || !entry || !slot || (owner.slots[outlet.target.slotId]?.length ?? 0) > 0) {
     return { status: "invalid-template", source, reason: "invalid-outlet-target", ...preserved };
   }
 

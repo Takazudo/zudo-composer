@@ -32,6 +32,12 @@ describe("isStructurallyValidDocument", () => {
     expect(isStructurallyValidDocument({ ...good(), schemaVersion: 99 })).toBe(false);
   });
 
+  it("rejects a component version outside the positive safe-integer domain", () => {
+    const invalid = good();
+    invalid.root[0]!.componentVersion = Number.MAX_SAFE_INTEGER + 1;
+    expect(isStructurallyValidDocument(invalid)).toBe(false);
+  });
+
   it("rejects a non-array root", () => {
     expect(isStructurallyValidDocument({ ...good(), root: {} })).toBe(false);
   });
@@ -44,6 +50,10 @@ describe("isStructurallyValidDocument", () => {
   it("rejects non-JSON-safe props", () => {
     const bad = doc([node(X.box, { fn: (() => 1) as never }, {}, "a")]);
     expect(isStructurallyValidDocument(bad)).toBe(false);
+  });
+
+  it("rejects reserved persisted prop keys", () => {
+    expect(isStructurallyValidDocument(doc([node(X.box, { dangerouslySetInnerHTML: "unsafe" }, {}, "a")]))).toBe(false);
   });
 
   it("rejects a structural cycle via a shared reference", () => {

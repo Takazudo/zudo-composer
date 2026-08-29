@@ -3,11 +3,12 @@ import { generateJsx } from "../generate-jsx";
 import { addNode } from "../../model/commands";
 import { createSequentialIdFactory } from "../../../shared/id-factory";
 import { traversalOrder } from "../../model/index-model";
-import { createComponentCatalog, VIRTUAL_ROOT_SLOT_ID } from "../../model/types";
+import { VIRTUAL_ROOT_SLOT_ID } from "../../model/types";
 import type { ComponentDefinition } from "../../model/types";
 import { COMPONENT_IDS as C, SLOT_IDS as S } from "../../__tests__/fixtures";
 import {
   FIXTURE_COMPONENT_IDS as X,
+  createFixturePackManifest,
   doc,
   fixtureManifest as M,
   makeAbcDocument,
@@ -159,7 +160,13 @@ describe("generateJsx — imports", () => {
       { id: "dup.a", schemaVersion: 1, title: "A", category: "Fixture", description: "A", source: { module: "@fixtures/dual", exportKind: "default", exportName: "Thing" }, defaults: {}, fields: [], slots: [] },
       { id: "dup.b", schemaVersion: 1, title: "B", category: "Fixture", description: "B", source: { module: "@fixtures/dual", exportKind: "default", exportName: "Thing" }, defaults: {}, fields: [], slots: [] },
     ];
-    const manifest = createComponentCatalog(entries);
+    const byId = new Map(entries.map((entry) => [entry.id, entry]));
+    const manifest = {
+      pack: createFixturePackManifest([]),
+      get: (id: string) => byId.get(id),
+      has: (id: string) => byId.has(id),
+      ids: () => [...byId.keys()],
+    };
     const document = doc([node("dup.a", {}, {}, "n1"), node("dup.b", {}, {}, "n2")]);
     const result = generateJsx(document, manifest);
     expect(result.ok).toBe(true);
@@ -172,6 +179,13 @@ describe("generateJsx — imports", () => {
 });
 
 describe("generateJsx — diagnostics gate", () => {
+  it("refuses structurally unsafe props before generating JSX", () => {
+    const document = doc([node(X.box, { dangerouslySetInnerHTML: "unsafe" }, {}, "unsafe")]);
+    const result = generateJsx(document, M);
+    expect(result).toMatchObject({ ok: false, blocked: true, diagnostics: { canExport: false } });
+    expect(result.code).toBe("");
+  });
+
   it("refuses export and returns diagnostics when an opaque node remains", () => {
     const document = doc([node(C.stack, {}, { [S.stackChildren]: [node("ghost.x", {}, {}, "g")] }, "stack")]);
     const result = generateJsx(document, M);

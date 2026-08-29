@@ -13,11 +13,12 @@ import {
   type CompositionNode,
   type CompositionRecord,
 } from "../../index";
+import { createFixturePackManifest } from "../../__tests__/fixtures";
 
 const TIMESTAMP = "2026-07-14T00:00:00.000Z";
 const VDIR = `${process.cwd()}/__linked_jsx_virtual__`;
 
-const manifest = createComponentCatalog([
+const manifest = createComponentCatalog(createFixturePackManifest([
   {
     id: "shell",
     schemaVersion: 1,
@@ -46,7 +47,7 @@ const manifest = createComponentCatalog([
     fields: [{ prop: "label", label: "Label", kind: "text" }],
     slots: [],
   },
-] satisfies ComponentDefinition[]);
+] satisfies ComponentDefinition[]));
 
 function node(
   id: string,

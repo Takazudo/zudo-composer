@@ -144,6 +144,18 @@ export const fixturePackManifest: ComponentPackManifest = {
   components: fixtureEntries,
 };
 
+export function createFixturePackManifest(
+  components: readonly ComponentManifest[],
+): ComponentPackManifest {
+  return {
+    kind: COMPONENT_PACK_KIND,
+    contractVersion: CONTRACT_VERSION,
+    packId: "@fixture/test-components",
+    packVersion: "1.0.0",
+    components,
+  };
+}
+
 export const fixtureManifest = createComponentCatalog(fixturePackManifest);
 
 let nodeCounter = 0;

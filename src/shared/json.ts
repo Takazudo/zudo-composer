@@ -25,10 +25,19 @@ export function isJsonSafe(value: unknown, ancestors: Set<unknown> = new Set()):
   }
   if (ancestors.has(obj)) return false; // cycle on the current path
   ancestors.add(obj);
-  const children = Array.isArray(obj)
-    ? obj
-    : Object.values(obj as Record<string, unknown>);
-  const ok = children.every((child) => isJsonSafe(child, ancestors));
+  let ok: boolean;
+  if (Array.isArray(obj)) {
+    const expectedNames = Array.from({ length: obj.length }, (_item, index) => String(index)).concat("length");
+    ok = Object.getOwnPropertySymbols(obj).length === 0
+      && Object.getOwnPropertyNames(obj).every((name) => expectedNames.includes(name))
+      && Array.from({ length: obj.length }, (_item, index) => index)
+        .every((index) => Object.hasOwn(obj, index) && isJsonSafe(obj[index], ancestors));
+  } else {
+    const record = obj as Record<string, unknown>;
+    ok = Object.getOwnPropertySymbols(record).length === 0
+      && Reflect.ownKeys(record).length === Object.keys(record).length
+      && Object.values(record).every((child) => isJsonSafe(child, ancestors));
+  }
   ancestors.delete(obj);
   return ok;
 }
@@ -41,11 +50,12 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 }
 
 /**
- * Structural deep clone of a JSON-safe value. Uses a `JSON` round-trip, which
- * both guarantees a fresh, unshared tree and strips anything non-JSON — the
- * callers rely on this to stay pure and never leak a shared reference back to
- * their input document.
+ * Structural deep clone of a JSON-safe value. Rejects anything that would not
+ * round-trip exactly, then uses JSON to produce a fresh, unshared tree.
  */
 export function cloneJson<T extends JsonValue | object>(value: T): T {
+  if (!isJsonSafe(value)) {
+    throw new TypeError("Cannot clone a value that does not round-trip through JSON exactly.");
+  }
   return JSON.parse(JSON.stringify(value)) as T;
 }

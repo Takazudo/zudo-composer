@@ -97,6 +97,14 @@ describe("composition record validation and loading", () => {
     });
   });
 
+  it("rejects JSON-safe extension fields instead of dropping them", () => {
+    const value = { ...record(), extension: "unknown" };
+    expect(validateCompositionRecord(value)).toMatchObject({
+      ok: false,
+      issue: { code: "invalid-record" },
+    });
+  });
+
   it("reports malformed structured documents without inventing recovery data", () => {
     const malformed = {
       ...record(),

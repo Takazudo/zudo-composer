@@ -14,11 +14,12 @@ import {
   type CompositionUnpublishOutcome,
   type ReuseLifecycleProvider,
 } from "../../index";
+import { createFixturePackManifest } from "../../__tests__/fixtures";
 
 const T1 = "2026-07-14T00:00:00.000Z";
 const T2 = "2026-07-14T01:00:00.000Z";
 
-const manifest = createComponentCatalog([
+const manifest = createComponentCatalog(createFixturePackManifest([
   {
     id: "shell",
     schemaVersion: 1,
@@ -41,7 +42,7 @@ const manifest = createComponentCatalog([
     fields: [],
     slots: [],
   },
-] satisfies ComponentDefinition[]);
+] satisfies ComponentDefinition[]));
 
 function node(id: string, componentId = "leaf", slots: Record<string, CompositionNode[]> = {}): CompositionNode {
   return { id, componentId, componentVersion: 1, props: {}, slots };

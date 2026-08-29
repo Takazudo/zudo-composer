@@ -15,6 +15,7 @@ import type {
   JsonValue,
   SlotCardinality,
 } from "@zudo-composer/component-contract";
+import { componentPackManifestSchema } from "@zudo-composer/component-contract";
 import type { RecordId } from "../../shared/record-identity";
 
 /** A JSON object — the shape of a node's `props`. */
@@ -167,19 +168,33 @@ export type ComponentDefinition = ContractComponentManifest;
 
 /** Fast, read-only lookup over a set of manifest entries. */
 export interface ComponentCatalog {
+  readonly pack: ComponentPackManifest;
   get(componentId: string): ComponentDefinition | undefined;
   has(componentId: string): boolean;
   ids(): string[];
 }
 
-/** Builds a `ComponentCatalog` index from a flat list of entries. */
+function freezeContractValue<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) freezeContractValue(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/** Parses a component pack and builds an identity-preserving lookup index. */
 export function createComponentCatalog(
-  source: ComponentPackManifest | readonly ComponentDefinition[],
+  source: ComponentPackManifest,
 ): ComponentCatalog {
-  const entries = "components" in source ? source.components : source;
+  const pack = freezeContractValue(structuredClone(componentPackManifestSchema.parse(source)));
+  const entries = pack.components;
   const byId = new Map<string, ComponentDefinition>();
-  for (const entry of entries) byId.set(entry.id, entry);
+  for (const entry of entries) {
+    if (byId.has(entry.id)) throw new TypeError(`Duplicate component id: ${entry.id}`);
+    byId.set(entry.id, entry);
+  }
   return {
+    pack,
     get: (id) => byId.get(id),
     has: (id) => byId.has(id),
     ids: () => [...byId.keys()],

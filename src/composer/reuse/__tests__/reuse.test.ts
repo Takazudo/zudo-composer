@@ -11,6 +11,7 @@ import {
   type CompositionSummary,
   type ReuseReadProvider,
 } from "../../index";
+import { createFixturePackManifest } from "../../__tests__/fixtures";
 
 const TIMESTAMP = "2026-07-14T00:00:00.000Z";
 
@@ -52,7 +53,7 @@ const entries: ComponentDefinition[] = [
     slots: [],
   },
 ];
-const manifest = createComponentCatalog(entries);
+const manifest = createComponentCatalog(createFixturePackManifest(entries));
 
 function node(id: string, componentId = "allowed") {
   return { id, componentId, componentVersion: 1, props: {}, slots: {} };
@@ -291,6 +292,20 @@ describe("live Global-template resolution", () => {
     const staleTarget = globalSource();
     (staleTarget.document.publication as { kind: "global-template"; outlet: { target: { parentId: string; slotId: string } } }).outlet.target.slotId = "gone";
     expect(resolveGlobalTemplate({ consumer: bound, source: staleTarget, manifest })).toMatchObject({
+      status: "invalid-template",
+      reason: "invalid-outlet-target",
+    });
+
+    const versionMismatch = globalSource();
+    versionMismatch.document.root[0]!.componentVersion = 2;
+    expect(resolveGlobalTemplate({ consumer: bound, source: versionMismatch, manifest })).toMatchObject({
+      status: "invalid-template",
+      reason: "invalid-outlet-target",
+    });
+
+    const opaqueSource = globalSource();
+    opaqueSource.document.root.push(node("opaque", "missing-component"));
+    expect(resolveGlobalTemplate({ consumer: bound, source: opaqueSource, manifest })).toMatchObject({
       status: "invalid-template",
       reason: "invalid-outlet-target",
     });

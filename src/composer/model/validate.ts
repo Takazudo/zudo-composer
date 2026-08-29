@@ -26,6 +26,9 @@ import { COMPOSITION_SCHEMA_VERSION, VIRTUAL_ROOT_SLOT_ID } from "./types";
 import { isJsonSafe, isPlainObject } from "../../shared/json";
 import { orderedSlotIds } from "./index-model";
 import { isSafeRecordId } from "../../shared/record-identity";
+import { RESERVED_PERSISTED_KEYS } from "@zudo-composer/component-contract";
+
+const reservedPersistedKeys = new Set<string>(RESERVED_PERSISTED_KEYS);
 
 // ── Structural validation (manifest-agnostic) ───────────────────────────────
 
@@ -56,12 +59,13 @@ function isValidNodeShape(
   if (typeof node.componentId !== "string" || node.componentId.length === 0) return false;
   if (
     typeof node.componentVersion !== "number"
-    || !Number.isInteger(node.componentVersion)
+    || !Number.isSafeInteger(node.componentVersion)
     || node.componentVersion <= 0
   ) {
     return false;
   }
   if (!isPlainObject(node.props) || !isJsonSafe(node.props)) return false;
+  if (Object.keys(node.props).some((key) => reservedPersistedKeys.has(key))) return false;
   if (!isPlainObject(node.slots)) return false;
 
   for (const children of Object.values(node.slots as Record<string, unknown>)) {
@@ -107,7 +111,7 @@ function isValidBinding(value: unknown): value is CompositionBinding {
  * no structural cycles. Unknown component ids do NOT fail this check.
  */
 export function isStructurallyValidDocument(value: unknown): value is CompositionDocument {
-  if (!isPlainObject(value)) return false;
+  if (!isPlainObject(value) || !isJsonSafe(value)) return false;
   const doc = value as Record<string, unknown>;
   if (!hasOnlyKeys(doc, ["schemaVersion", "id", "name", "root"], ["publication", "binding"])) {
     return false;
@@ -129,6 +133,7 @@ export function isStructurallyValidDocument(value: unknown): value is Compositio
 // ── Semantic diagnostics (manifest-aware) ───────────────────────────────────
 
 export type DiagnosticCode =
+  | "malformed-node"
   | "unknown-component"
   | "unsupported-version"
   | "removed-slot"
@@ -257,6 +262,22 @@ export function diagnoseDocument(
   manifest: ComponentCatalog,
   options: DiagnoseDocumentOptions = {},
 ): DocumentDiagnostics {
+  if (!isStructurallyValidDocument(document)) {
+    const malformed: NodeDiagnostic = {
+      nodeId: "__document__",
+      componentId: "",
+      opaque: true,
+      reasons: [{ code: "malformed-node", message: "Composition data is not structurally safe for rendering or export." }],
+    };
+    return {
+      byId: new Map([[malformed.nodeId, malformed]]),
+      opaqueIds: [malformed.nodeId],
+      hasOpaque: true,
+      canExport: false,
+      reuseReasons: [],
+      hasReuseIssues: false,
+    };
+  }
   const byId = new Map<string, NodeDiagnostic>();
   const nodesById = new Map<string, CompositionNode>();
   const opaqueIds: string[] = [];

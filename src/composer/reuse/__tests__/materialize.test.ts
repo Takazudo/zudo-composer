@@ -14,10 +14,11 @@ import {
   type CompositionRecord,
   type MaterializedViewNode,
 } from "../../index";
+import { createFixturePackManifest } from "../../__tests__/fixtures";
 
 const TIMESTAMP = "2026-07-14T00:00:00.000Z";
 
-const manifest = createComponentCatalog([
+const manifest = createComponentCatalog(createFixturePackManifest([
   {
     id: "shell",
     schemaVersion: 1,
@@ -29,7 +30,7 @@ const manifest = createComponentCatalog([
     fields: [],
     slots: [
       { id: "header", prop: "header", label: "Header", cardinality: "many" },
-      { id: "body", prop: "body", label: "Body", accepts: ["leaf"], cardinality: "many" },
+      { id: "body", prop: "body", label: "Body", accepts: ["leaf", "shell"], cardinality: "many" },
       { id: "footer", prop: "footer", label: "Footer", cardinality: "many" },
     ],
   },
@@ -44,7 +45,7 @@ const manifest = createComponentCatalog([
     fields: [],
     slots: [],
   },
-] satisfies ComponentDefinition[]);
+] satisfies ComponentDefinition[]));
 
 function node(
   id: string,
@@ -290,7 +291,7 @@ describe("standalone Global-template snapshots", () => {
   it("refuses failed resolutions and non-fresh ids without returning a partial snapshot", () => {
     const template = source();
     const bound = consumer();
-    const incompatible = consumer([node("wrong", "shell", { header: [], body: [], footer: [] })]);
+    const incompatible = consumer([node("wrong", "unknown", {})]);
     const incompatibleResolution = resolveGlobalTemplate({ consumer: incompatible, source: template, manifest });
     const before = structuredClone(incompatible);
     expect(materializeStandaloneSnapshot(incompatible, incompatibleResolution, createSequentialIdFactory())).toMatchObject({
