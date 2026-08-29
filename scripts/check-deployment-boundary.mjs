@@ -27,7 +27,7 @@ assert.deepEqual(config.assets, {
   not_found_handling: "single-page-application",
 });
 assert.deepEqual(config.routes, [{
-  pattern: "zudo-composer.takazudomodular.com",
+  pattern: "zudo-composer.zudolab.dev",
   custom_domain: true,
 }]);
 

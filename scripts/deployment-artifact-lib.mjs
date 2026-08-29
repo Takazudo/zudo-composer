@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 
 export const SPA_ROUTES = ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"];
-export const LIVE_ORIGIN = "https://zudo-composer.takazudomodular.com";
+export const LIVE_ORIGIN = "https://zudo-composer.zudolab.dev";
 export const HTTP_TIMEOUT_MS = 10_000;
 export const LIVE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];
 

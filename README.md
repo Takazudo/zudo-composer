@@ -117,7 +117,7 @@ of, the immutable external UI-provider Git dependency.
 ## Deployment and credential handoff
 
 The configured target is Worker `zudo-composer` with the Custom Domain
-`zudo-composer.takazudomodular.com` (`custom_domain: true`). `workers.dev` and
+`zudo-composer.zudolab.dev` (`custom_domain: true`). `workers.dev` and
 preview URLs are disabled. This identity, domain, and its credentials are
 project-specific and must never be copied from or shared with zudo-sg.
 
@@ -148,7 +148,7 @@ The local flow uses Wrangler OAuth. Never copy OAuth files/tokens into GitHub.
 Automated deployment instead requires both `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets. The token must come from
 Cloudflare's **Edit Cloudflare Workers** template and be least-privilege scoped
-to the intended account and active `takazudomodular.com` zone. One secret
+to the intended account and active `zudolab.dev` zone. One secret
 without the other is a hard configuration error; when both are absent, CI
 prints the exact credential-only handoff and leaves all noncredential gates
 enabled.

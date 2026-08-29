@@ -10,7 +10,7 @@
   },
   "routes": [
     {
-      "pattern": "zudo-composer.takazudomodular.com",
+      "pattern": "zudo-composer.zudolab.dev",
       "custom_domain": true
     }
   ]

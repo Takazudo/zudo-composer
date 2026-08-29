@@ -89,8 +89,8 @@ jobs:
           {
             echo '## Production deployment handoff'
             echo 'Deployment was skipped because both required Cloudflare credentials are absent.'
-            echo '1. Create a dedicated **Edit Cloudflare Workers** API token, scoped with least privilege to the intended account and `takazudomodular.com` zone.'
-            echo '2. Confirm the account, active zone, and `zudo-composer.takazudomodular.com` custom-domain state are ready.'
+            echo '1. Create a dedicated **Edit Cloudflare Workers** API token, scoped with least privilege to the intended account and `zudolab.dev` zone.'
+            echo '2. Confirm the account, active zone, and `zudo-composer.zudolab.dev` custom-domain state are ready.'
             echo '3. Add both `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets, then rerun this workflow.'
             echo 'Do not copy local Wrangler OAuth files or OAuth tokens into GitHub.'
           } >> "$GITHUB_STEP_SUMMARY"

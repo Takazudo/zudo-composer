@@ -21,9 +21,9 @@ const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}
 const contractSpec = `git+https://github.com/Takazudo/zudo-composer.git#${contractPackageSha}`;
 
 assert.deepEqual(SPA_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"]);
-assert.equal(LIVE_ORIGIN, "https://zudo-composer.takazudomodular.com");
+assert.equal(LIVE_ORIGIN, "https://zudo-composer.zudolab.dev");
 assert.equal(wrangler.name, "zudo-composer");
-assert.deepEqual(wrangler.routes, [{ pattern: "zudo-composer.takazudomodular.com", custom_domain: true }]);
+assert.deepEqual(wrangler.routes, [{ pattern: "zudo-composer.zudolab.dev", custom_domain: true }]);
 assert.equal(packageJson.dependencies["@zudo-sg/ui"], providerSpec);
 assert.equal(packageJson.dependencies["@zudo-composer/component-contract"], "workspace:*");
 assert.equal(contractHandoff.rootGitSpec, contractSpec);
@@ -46,7 +46,7 @@ for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]])
     providerSpec,
     "CLOUDFLARE_API_TOKEN",
     "CLOUDFLARE_ACCOUNT_ID",
-    "zudo-composer.takazudomodular.com",
+    "zudo-composer.zudolab.dev",
     "no users",
     "persisted production data",
     "migrations",

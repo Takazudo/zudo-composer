@@ -73,7 +73,7 @@ smoke to make a gate pass.
 ## Deployment and credentials
 
 The only deployment target is Worker `zudo-composer` at Custom Domain
-`zudo-composer.takazudomodular.com`; `workers.dev` and preview URLs remain
+`zudo-composer.zudolab.dev`; `workers.dev` and preview URLs remain
 disabled. Never reuse a zudo-sg Worker, domain, account assumption, OAuth file,
 token, or GitHub secret.
 
