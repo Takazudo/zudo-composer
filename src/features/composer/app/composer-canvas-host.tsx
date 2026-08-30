@@ -107,6 +107,10 @@ export interface ComposerCanvasHostProps {
    * path), which atomically revalidates and applies the move/copy.
    */
   onDropNode: (sourceNodeId: string, target: InsertionTarget, copy: boolean) => void;
+  /** Forward a guarded iframe shortcut to the controller's undo action. */
+  onRequestUndo?: () => void;
+  /** Forward a guarded iframe shortcut to the controller's redo action. */
+  onRequestRedo?: () => void;
 
   // ── Test seams (production defaults) ──────────────────────────────────────
   /** Override the bridge factory. Defaults to Takazudo/zudo-sg#248's real bridge. */
@@ -131,6 +135,8 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
     onRequestInsertMenu,
     onCommitInlineEdit,
     onDropNode,
+    onRequestUndo,
+    onRequestRedo,
     createBridge = createComposerPreviewBridge,
     location: locationProp,
     hostWindow,
@@ -152,6 +158,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
   // this ref so a controller state change never needs to re-create the bridge
   // (which would drop readiness and re-add a listener).
   const handlersRef = useRef({
+    mode: session.mode,
     onSelect,
     onRequestAdd,
     onOpenSource,
@@ -159,8 +166,11 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
     onRequestInsertMenu,
     onCommitInlineEdit,
     onDropNode,
+    onRequestUndo,
+    onRequestRedo,
   });
   handlersRef.current = {
+    mode: session.mode,
     onSelect,
     onRequestAdd,
     onOpenSource,
@@ -168,6 +178,8 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
     onRequestInsertMenu,
     onCommitInlineEdit,
     onDropNode,
+    onRequestUndo,
+    onRequestRedo,
   };
 
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -247,6 +259,12 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
         }
         setStaleNotice(null);
         handlersRef.current.onDropNode(sourceNodeId, target, copy);
+      },
+      onRequestUndo: () => {
+        if (handlersRef.current.mode === "edit") handlersRef.current.onRequestUndo?.();
+      },
+      onRequestRedo: () => {
+        if (handlersRef.current.mode === "edit") handlersRef.current.onRequestRedo?.();
       },
       onError: (message, recoverable) => {
         if (recoverable) setRenderError(message);
