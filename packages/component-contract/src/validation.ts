@@ -18,6 +18,7 @@ import {
   type RuntimeComponentEntry,
   type RuntimeSchema,
   type SlotDefinition,
+  type StaticPropDefinition,
   type TrustedComponentPack,
 } from './types.js';
 
@@ -35,10 +36,11 @@ const identifierPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 const packageImportPattern = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)(?:\/[A-Za-z0-9._~-]+)*$/u;
 
 type Mutable<T> = { -readonly [TKey in keyof T]: T[TKey] };
-type PackComponentInput<TComponent> = Omit<ComponentManifest, 'defaults' | 'fields' | 'slots'> & {
+type PackComponentInput<TComponent> = Omit<ComponentManifest, 'defaults' | 'fields' | 'slots' | 'staticProps'> & {
   readonly defaults?: unknown;
   readonly fields?: readonly unknown[];
   readonly slots?: readonly unknown[];
+  readonly staticProps?: readonly unknown[];
   readonly component: TComponent;
   readonly adapters?: unknown;
 };
@@ -230,16 +232,36 @@ function parseSlot(input: unknown, path: string): SlotDefinition {
   };
 }
 
+function parseStaticProp(input: unknown, path: string): StaticPropDefinition {
+  const value = objectAt(input, path);
+  exactKeys(value, ['prop', 'reason'], path);
+  const reason = value.reason === undefined ? undefined : stringAt(value.reason, `${path}.reason`);
+  return {
+    prop: persistedPropAt(value.prop, `${path}.prop`),
+    ...(reason === undefined ? {} : { reason }),
+  };
+}
+
 function defaultMatchesStep(value: number, min: number | undefined, step: number): boolean {
   const units = (value - (min ?? 0)) / step;
   return Math.abs(units - Math.round(units)) < 1e-9;
 }
 
-function validateDefaults(defaults: JsonObject, fields: readonly FieldDefinition[], slots: readonly SlotDefinition[], path: string): void {
+function validateDefaults(
+  defaults: JsonObject,
+  fields: readonly FieldDefinition[],
+  slots: readonly SlotDefinition[],
+  staticProps: readonly StaticPropDefinition[],
+  path: string,
+): void {
   const slotProps = new Set(slots.map((slot) => slot.prop));
+  const classifiedProps = new Set([...fields.map((field) => field.prop), ...staticProps.map((entry) => entry.prop)]);
   for (const prop of Object.keys(defaults)) {
     persistedPropAt(prop, `${path}.${prop}`);
     if (slotProps.has(prop)) fail('FIELD_SLOT_PROP_COLLISION', `${path}.${prop}`, 'structural slot props cannot have defaults');
+    if (!classifiedProps.has(prop)) {
+      fail('UNCLASSIFIED_DEFAULT', `${path}.${prop}`, 'defaults must correspond to an authorable field or an explicitly static prop');
+    }
   }
   for (const field of fields) {
     const hasDefault = Object.hasOwn(defaults, field.prop);
@@ -275,7 +297,7 @@ function parseComponent(input: unknown, path: string): ComponentManifest {
   if (Object.hasOwn(value, 'component') || Object.hasOwn(value, 'adapters')) {
     fail('TRUSTED_VALUE_IN_MANIFEST', path, 'component and adapters are trusted runtime values and cannot enter a manifest');
   }
-  exactKeys(value, ['id', 'schemaVersion', 'title', 'category', 'description', 'source', 'defaults', 'fields', 'slots'], path);
+  exactKeys(value, ['id', 'schemaVersion', 'title', 'category', 'description', 'source', 'defaults', 'fields', 'slots', 'staticProps'], path);
   const defaultsValue = objectAt(value.defaults ?? {}, `${path}.defaults`);
   assertJsonValue(defaultsValue, `${path}.defaults`);
   const defaults = defaultsValue as JsonObject;
@@ -289,7 +311,14 @@ function parseComponent(input: unknown, path: string): ComponentManifest {
   const fieldProps = new Set(fields.map((field) => field.prop));
   const collision = slots.find((slot) => fieldProps.has(slot.prop));
   if (collision !== undefined) fail('FIELD_SLOT_PROP_COLLISION', `${path}.slots`, `prop ${JSON.stringify(collision.prop)} is both a field and a slot`);
-  validateDefaults(defaults, fields, slots, `${path}.defaults`);
+  const staticProps = arrayAt(value.staticProps ?? [], `${path}.staticProps`)
+    .map((entry, index) => parseStaticProp(entry, `${path}.staticProps[${index}]`));
+  unique(staticProps.map((entry) => entry.prop), 'DUPLICATE_STATIC_PROP', `${path}.staticProps`, 'static prop');
+  const staticCollision = staticProps.find((entry) => fieldProps.has(entry.prop) || slots.some((slot) => slot.prop === entry.prop));
+  if (staticCollision !== undefined) {
+    fail('STATIC_PROP_COLLISION', `${path}.staticProps`, `prop ${JSON.stringify(staticCollision.prop)} cannot be both authorable and static`);
+  }
+  validateDefaults(defaults, fields, slots, staticProps, `${path}.defaults`);
   return {
     id: stringAt(value.id, `${path}.id`),
     schemaVersion: positiveIntegerAt(value.schemaVersion, `${path}.schemaVersion`),
@@ -300,6 +329,7 @@ function parseComponent(input: unknown, path: string): ComponentManifest {
     defaults,
     fields,
     slots,
+    staticProps,
   };
 }
 
@@ -477,7 +507,7 @@ export function defineComponentPack<const TComponents extends readonly PackCompo
     packVersion: input.packVersion,
     components: input.components.map((component, index) => {
       const authorValue = component as unknown as Record<string, unknown>;
-      exactKeys(authorValue, ['id', 'schemaVersion', 'title', 'category', 'description', 'source', 'defaults', 'fields', 'slots', 'component', 'adapters'], `$.components[${index}]`);
+      exactKeys(authorValue, ['id', 'schemaVersion', 'title', 'category', 'description', 'source', 'defaults', 'fields', 'slots', 'staticProps', 'component', 'adapters'], `$.components[${index}]`);
       const projected = { ...authorValue };
       delete projected.component;
       delete projected.adapters;

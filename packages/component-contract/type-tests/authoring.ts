@@ -58,13 +58,23 @@ defineComponent<ExampleProps>({
 
 const firstRuntime = defineComponent<ExampleProps, (props: ExampleProps) => string>({
   ...base,
+  staticProps: [{ prop: 'title' }],
   component: (props) => props.title,
 });
 const secondRuntime = defineComponent<{ active: boolean }, (props: { active: boolean }) => boolean>({
   ...base,
   id: 'second',
   source: { ...base.source, module: '@fixture/second', exportName: 'Second' },
+  staticProps: [{ prop: 'active' }],
   component: (props) => props.active,
+});
+
+// @ts-expect-error Required props cannot be left entirely outside the authoring contract.
+defineComponent<{ title: string }>({ ...base });
+// @ts-expect-error An optional prop does not classify the required prop.
+defineComponent<{ title: string; note?: string }>({
+  ...base,
+  fields: [{ kind: 'text', prop: 'note', label: 'Note' }],
 });
 const heterogeneousPack = defineComponentPack({
   packId: 'typed-pack',
@@ -82,6 +92,19 @@ defineComponent<Record<string, unknown>>({
     { kind: 'boolean', prop: 'enabled', label: 'Enabled' },
     { kind: 'number', prop: 'count', label: 'Count' },
     { kind: 'color', prop: 'color', label: 'Color' },
+  ],
+});
+
+defineComponent<ExampleProps>({
+  ...base,
+  staticProps: [{ prop: 'config', reason: 'Owned by application code.' }],
+});
+
+defineComponent<ExampleProps>({
+  ...base,
+  staticProps: [
+    // @ts-expect-error Static declarations must use a real component prop.
+    { prop: 'missing' },
   ],
 });
 

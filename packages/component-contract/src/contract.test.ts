@@ -68,7 +68,7 @@ describe('serializable component-pack contract v1', () => {
     expect(definitions[0]?.slots.map((slot) => slot.cardinality)).toEqual(['many', 'single']);
   });
 
-  it('normalizes omitted defaults, fields, and slots without leaking trusted values', () => {
+  it('normalizes omitted defaults, fields, slots, and static props without leaking trusted values', () => {
     const definition = defineComponent<{ title: string }, object>({
       id: 'card',
       schemaVersion: 1,
@@ -76,10 +76,16 @@ describe('serializable component-pack contract v1', () => {
       category: 'Content',
       description: '',
       source: { module: '@fixture/card', exportKind: 'default', exportName: 'Card' },
+      staticProps: [{ prop: 'title', reason: 'Provided by the embedding application.' }],
       component: {},
     });
     const pack = defineComponentPack({ packId: 'test-pack', packVersion: '1', components: [definition] });
-    expect(pack.manifest.components[0]).toMatchObject({ defaults: {}, fields: [], slots: [] });
+    expect(pack.manifest.components[0]).toMatchObject({
+      defaults: {},
+      fields: [],
+      slots: [],
+      staticProps: [{ prop: 'title', reason: 'Provided by the embedding application.' }],
+    });
     expect(Object.hasOwn(pack.manifest.components[0] ?? {}, 'component')).toBe(false);
     expect(Object.hasOwn(pack.manifest.components[0] ?? {}, 'adapters')).toBe(false);
   });
@@ -194,6 +200,32 @@ describe('serializable component-pack contract v1', () => {
     fields[4].kind = 'text';
     fields[4].inlineEdit = {};
     expectCode(() => componentPackManifestSchema.parse(multiple), 'MULTIPLE_INLINE_EDIT_FIELDS');
+  });
+
+  it('rejects unclassified defaults and accepts explicitly static defaults', () => {
+    const unclassified = manifest();
+    (container(unclassified).defaults as Record<string, unknown>).analytics = { enabled: true };
+    expectCode(() => componentPackManifestSchema.parse(unclassified), 'UNCLASSIFIED_DEFAULT');
+
+    const explicitlyStatic = manifest();
+    (container(explicitlyStatic).defaults as Record<string, unknown>).analytics = { enabled: true };
+    container(explicitlyStatic).staticProps = [
+      { prop: 'analytics', reason: 'Configured by application code.' },
+    ];
+    expect(componentPackManifestSchema.parse(explicitlyStatic).components[0]?.staticProps)
+      .toEqual([{ prop: 'analytics', reason: 'Configured by application code.' }]);
+  });
+
+  it('rejects duplicate static prop declarations', () => {
+    const value = manifest();
+    container(value).staticProps = [{ prop: 'analytics' }, { prop: 'analytics' }];
+    expectCode(() => componentPackManifestSchema.parse(value), 'DUPLICATE_STATIC_PROP');
+  });
+
+  it('rejects static props that are also authorable', () => {
+    const value = manifest();
+    container(value).staticProps = [{ prop: 'title' }];
+    expectCode(() => componentPackManifestSchema.parse(value), 'STATIC_PROP_COLLISION');
   });
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY, undefined, 1n, () => null, new Date()])(
