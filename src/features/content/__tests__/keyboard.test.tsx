@@ -7,10 +7,26 @@ import { createMemoryContentProvider } from "../fixtures";
 describe("Content keyboard behavior", () => {
   it("uses roving tab focus with Left and Right arrows", async () => {
     render(<ContentApp provider={createMemoryContentProvider()} />);
-    const models = await screen.findByRole("tab", { name: "Models" }); const entries = screen.getByRole("tab", { name: "Entries" });
-    models.focus(); fireEvent.keyDown(models, { key: "ArrowRight" });
-    expect(entries).toHaveFocus(); expect(entries).toHaveAttribute("aria-selected", "true"); expect(models).toHaveAttribute("tabindex", "-1");
-    fireEvent.keyDown(entries, { key: "ArrowLeft" }); expect(models).toHaveFocus();
+    const library = await screen.findByRole("tab", { name: "Library" }); const author = screen.getByRole("tab", { name: "Author" });
+    library.focus(); fireEvent.keyDown(library, { key: "ArrowRight" });
+    expect(author).toHaveFocus(); expect(author).toHaveAttribute("aria-selected", "true"); expect(library).toHaveAttribute("tabindex", "-1");
+    fireEvent.keyDown(author, { key: "ArrowLeft" }); expect(library).toHaveFocus();
+  });
+
+  it("projects Entries and Model fields beneath each model and switches explicit work modes", async () => {
+    render(<ContentApp provider={createMemoryContentProvider()} />);
+    const model = await screen.findByRole("button", { name: /Articles.*Collection/ });
+    expect(screen.getByRole("button", { name: /Entries.*1/ }).querySelector("svg")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /Model fields.*1/ }).querySelector("svg")).not.toBeNull();
+    fireEvent.click(model);
+    fireEvent.click(screen.getByRole("button", { name: /Model fields.*1/ }));
+    expect(await screen.findByRole("group", { name: "Authoring mode" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Model fields", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Type for Title" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("radiogroup", { name: "Type for Title" })).toHaveAttribute("aria-describedby", "content-kind-help-title");
+    fireEvent.click(screen.getByRole("button", { name: "Entries", pressed: false }));
+    expect(screen.getAllByRole("tab", { name: "Author" }).some((tab) => tab.getAttribute("aria-selected") === "true")).toBe(true);
+    expect(screen.getByRole("button", { name: "Entries", pressed: true })).toBeInTheDocument();
   });
 
   it("contains dialog focus, closes on Escape, and restores trigger focus", async () => {

@@ -5,6 +5,7 @@
 
 import type { JSX } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { DuplicateIcon, EditIcon, LibraryIcon, PlusIcon, RefreshIcon, TrashIcon } from "../../../components/icons";
 import { cloneJson, createUuidIdFactory, type IdFactory } from "../../../shared";
 import {
   compareSitemapSummariesNewestFirst,
@@ -15,6 +16,7 @@ import {
   type SitemapSummary,
 } from "../../../sitemapper/library";
 import { SITEMAP_SCHEMA_VERSION } from "../../../sitemapper/model";
+import { SitemapLibraryDialog, type SitemapLibraryDialogState } from "./sitemap-library-dialog";
 
 export interface SitemapLibraryProps {
   provider: SitemapProvider;
@@ -55,9 +57,11 @@ async function requireFreshRecordId(provider: SitemapProvider, id: string): Prom
 export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory, now: suppliedNow }: SitemapLibraryProps): JSX.Element {
   const idFactoryRef = useRef(suppliedIdFactory ?? createUuidIdFactory());
   const nowRef = useRef(suppliedNow ?? (() => new Date().toISOString()));
+  const primaryActionRef = useRef<HTMLButtonElement>(null);
   const [outcome, setOutcome] = useState<SitemapInitializationOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<SitemapLibraryDialogState | null>(null);
 
   const apply = useCallback((next: SitemapInitializationOutcome) => {
     setOutcome(next);
@@ -83,10 +87,8 @@ export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory,
     setOutcome({ ...outcome, summaries: sort([summary, ...outcome.summaries.filter((item) => item.id !== summary.id)]) });
   };
 
-  const create = async (): Promise<void> => {
+  const create = async (requested: string): Promise<void> => {
     if (busy) return;
-    const requested = globalThis.prompt?.("Sitemap name", "Untitled sitemap")?.trim();
-    if (!requested) return;
     setBusy(true);
     setOperationError(null);
     try {
@@ -94,9 +96,32 @@ export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory,
       await requireFreshRecordId(provider, record.id);
       await provider.store.put(record);
       commitSummary(summarizeSitemap(record));
+      setDialog(null);
       await onOpen(cloneJson(record));
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap could not be created."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rename = async (id: string, requested: string): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setOperationError(null);
+    try {
+      const loaded = await provider.store.get(id);
+      if (loaded.status !== "loaded") throw new Error(`Sitemap “${id}” could not be renamed (${loaded.status}).`);
+      const record: SitemapRecord = {
+        ...cloneJson(loaded.record),
+        updatedAt: nowRef.current(),
+        document: { ...cloneJson(loaded.record.document), name: requested },
+      };
+      await provider.store.put(record);
+      commitSummary(summarizeSitemap(record));
+      setDialog(null);
+    } catch (reason) {
+      setOperationError(message(reason, "The Sitemap could not be renamed."));
     } finally {
       setBusy(false);
     }
@@ -143,7 +168,7 @@ export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory,
   };
 
   const remove = async (id: string): Promise<void> => {
-    if (busy || !globalThis.confirm?.("Delete this sitemap? This cannot be undone.")) return;
+    if (busy) return;
     setBusy(true);
     setOperationError(null);
     try {
@@ -151,6 +176,7 @@ export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory,
       if (outcome && outcome.status !== "error") {
         setOutcome({ ...outcome, summaries: outcome.summaries.filter((item) => item.id !== id) });
       }
+      setDialog(null);
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap could not be deleted."));
     } finally {
@@ -160,33 +186,42 @@ export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory,
 
   if (!outcome) {
     return (
-      <main aria-busy={busy}>
-        <h1>Sitemaps</h1>
+      <main class="sg-sitemapper-library" aria-busy={busy}>
+        <header class="sg-sitemapper-library__header"><span class="sg-sitemapper-library__mark"><LibraryIcon size="lg" /></span><div><p class="sg-sitemapper-library__eyebrow">Sitemapper</p><h1>Sitemaps</h1></div></header>
         {operationError ? (
-          <div role="alert">
+          <div class="sg-sitemapper-library-notice" role="alert">
             <p>{operationError}</p>
-            <button type="button" disabled={busy} onClick={() => void initialize("retry")}>Retry</button>
+            <button type="button" class="sg-sitemapper-library-button" disabled={busy} onClick={() => void initialize("retry")}><RefreshIcon size="sm" />Retry</button>
           </div>
-        ) : <p>Loading Sitemaps…</p>}
+        ) : <p class="sg-sitemapper-library-notice" role="status">Loading Sitemaps…</p>}
       </main>
     );
   }
   if (outcome.status === "error") {
-    return <main><h1>Sitemaps</h1><div role="alert"><p>{outcome.error.message}</p><button type="button" disabled={busy} onClick={() => void initialize("retry")}>Retry</button></div></main>;
+    return <main class="sg-sitemapper-library"><header class="sg-sitemapper-library__header"><div><p class="sg-sitemapper-library__eyebrow">Sitemapper</p><h1>Sitemaps</h1></div></header><div class="sg-sitemapper-library-notice" role="alert"><p>{outcome.error.message}</p><button type="button" class="sg-sitemapper-library-button" disabled={busy} onClick={() => void initialize("retry")}><RefreshIcon size="sm" />Retry</button></div></main>;
   }
   if (outcome.status === "recovery-required") {
     return (
-      <main><h1>Sitemaps</h1><div role="alert"><h2>Recovery required</h2><p>{outcome.recovery.message}</p><p>Starting fresh permanently deletes every stored Sitemap.</p><button type="button" disabled={busy} onClick={() => void initialize("retry")}>Retry</button> <button type="button" disabled={busy} onClick={() => void initialize("startFresh")}>Start fresh</button></div></main>
+      <main class="sg-sitemapper-library"><header class="sg-sitemapper-library__header"><div><p class="sg-sitemapper-library__eyebrow">Sitemapper</p><h1>Sitemaps</h1></div></header><div class="sg-sitemapper-library-notice sg-sitemapper-library-notice--danger" role="alert"><h2>Recovery required</h2><p>{outcome.recovery.message}</p><p>Starting fresh permanently deletes every stored Sitemap.</p><div class="sg-sitemapper-library-notice__actions"><button type="button" class="sg-sitemapper-library-button" disabled={busy} onClick={() => void initialize("retry")}><RefreshIcon size="sm" />Retry</button><button type="button" class="sg-sitemapper-library-button sg-sitemapper-library-button--danger" disabled={busy} onClick={() => void initialize("startFresh")}><TrashIcon size="sm" />Start fresh</button></div></div></main>
     );
   }
 
   return (
-    <main>
-      <header><h1>Sitemaps</h1><button type="button" disabled={busy} onClick={() => void create()}>New sitemap</button></header>
-      {operationError && <p role="alert">{operationError}</p>}
-      {summaries.length === 0 ? <p>No sitemaps yet.</p> : (
-        <ul>{summaries.map((summary) => <li key={summary.id}><button type="button" disabled={busy} onClick={() => void open(summary.id)}><strong>{summary.name}</strong> · {summary.pageCount} {summary.pageCount === 1 ? "page" : "pages"}</button> <button type="button" disabled={busy} aria-label={`Duplicate ${summary.name}`} onClick={() => void duplicate(summary.id)}>Duplicate</button> <button type="button" disabled={busy} aria-label={`Delete ${summary.name}`} onClick={() => void remove(summary.id)}>Delete</button></li>)}</ul>
+    <main class="sg-sitemapper-library">
+      <header class="sg-sitemapper-library__header"><div class="sg-sitemapper-library__heading"><span class="sg-sitemapper-library__mark"><LibraryIcon size="lg" /></span><div><p class="sg-sitemapper-library__eyebrow">Sitemapper</p><h1>Sitemaps</h1><p>Open an existing sitemap or start a new site structure.</p></div></div><button ref={primaryActionRef} type="button" class="sg-sitemapper-library-button sg-sitemapper-library-button--primary" disabled={busy} onClick={() => { setOperationError(null); setDialog({ kind: "create" }); }}><PlusIcon size="sm" />New sitemap</button></header>
+      {operationError && !dialog && <p class="sg-sitemapper-library-notice" role="alert">{operationError}</p>}
+      {summaries.length === 0 ? <section class="sg-sitemapper-library-empty"><LibraryIcon size="lg" /><h2>No sitemaps yet</h2><p>Create a sitemap to organize pages, routes, and content assignments.</p><button type="button" class="sg-sitemapper-library-button sg-sitemapper-library-button--primary" disabled={busy} onClick={() => { setOperationError(null); setDialog({ kind: "create" }); }}><PlusIcon size="sm" />Create your first sitemap</button></section> : (
+        <ul class="sg-sitemapper-library-list">{summaries.map((summary) => <li key={summary.id} class="sg-sitemapper-library-card"><button type="button" class="sg-sitemapper-library-card__open" disabled={busy} onClick={() => void open(summary.id)}><span class="sg-sitemapper-library-card__icon"><LibraryIcon size="md" /></span><span><strong>{summary.name}</strong><small>{summary.pageCount} {summary.pageCount === 1 ? "page" : "pages"}</small></span></button><div class="sg-sitemapper-library-card__actions"><button type="button" class="sg-sitemapper-library-button" disabled={busy} aria-label={`Rename ${summary.name}`} onClick={() => { setOperationError(null); setDialog({ kind: "rename", id: summary.id, name: summary.name }); }}><EditIcon size="sm" />Rename</button><button type="button" class="sg-sitemapper-library-button" disabled={busy} aria-label={`Duplicate ${summary.name}`} onClick={() => void duplicate(summary.id)}><DuplicateIcon size="sm" />Duplicate</button><button type="button" class="sg-sitemapper-library-button sg-sitemapper-library-button--danger" disabled={busy} aria-label={`Delete ${summary.name}`} onClick={() => { setOperationError(null); setDialog({ kind: "delete", id: summary.id, name: summary.name }); }}><TrashIcon size="sm" />Delete</button></div></li>)}</ul>
       )}
+      <SitemapLibraryDialog
+        state={dialog}
+        busy={busy}
+        error={dialog ? operationError : null}
+        fallbackFocusRef={primaryActionRef}
+        onClose={() => { setDialog(null); setOperationError(null); }}
+        onSubmitName={(name) => dialog?.kind === "rename" ? rename(dialog.id, name) : create(name)}
+        onConfirmDelete={() => dialog?.kind === "delete" ? remove(dialog.id) : undefined}
+      />
     </main>
   );
 }

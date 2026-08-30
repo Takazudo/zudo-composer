@@ -9,6 +9,15 @@ import {
   type CompositionRecoveryOutcome,
   type CompositionSummary,
 } from "../../../composer/browser";
+import {
+  DuplicateIcon,
+  FileIcon,
+  LibraryIcon,
+  PlusIcon,
+  RefreshIcon,
+  TrashIcon,
+  XMarkIcon,
+} from "../../../components/icons";
 import { InlineConfirm } from "../ui/shared/inline-confirm";
 import {
   NewCompositionDialog,
@@ -420,9 +429,14 @@ export function CompositionLibrary({
       </p>
       <header class="sg-composer-library-header">
         <div class="sg-composer-library-heading">
-          <p class="sg-composer-library-eyebrow">Composer</p>
-          <h1 id="sg-composer-library-title">Composition library</h1>
-          <p>Create, find, and reopen your compositions.</p>
+          <div class="sg-composer-library-heading-mark" aria-hidden="true">
+            <LibraryIcon size="lg" />
+          </div>
+          <div class="sg-composer-library-heading-copy">
+            <p class="sg-composer-library-eyebrow">Composer</p>
+            <h1 id="sg-composer-library-title">Composition library</h1>
+            <p>Create, find, and reopen your compositions.</p>
+          </div>
         </div>
         <button
           ref={newButtonRef}
@@ -431,6 +445,7 @@ export function CompositionLibrary({
           disabled={!activeProviderId || controlsDisabled || recovery?.kind === "quarantined"}
           onClick={openNewCompositionDialog}
         >
+          <PlusIcon size="sm" class="sg-composer-button-icon" />
           New composition
         </button>
       </header>
@@ -472,6 +487,7 @@ export function CompositionLibrary({
               disabled={controlsDisabled}
               onClick={() => void loadProvider(activeProviderId, "retry")}
             >
+              <RefreshIcon size="sm" class="sg-composer-button-icon" />
               Retry library
             </button>
           )}
@@ -495,6 +511,7 @@ export function CompositionLibrary({
                 disabled={controlsDisabled}
                 onClick={() => activeProviderId && void loadProvider(activeProviderId, "retry")}
               >
+                <RefreshIcon size="sm" class="sg-composer-button-icon" />
                 Retry recovery
               </button>
               <button
@@ -504,6 +521,7 @@ export function CompositionLibrary({
                 disabled={controlsDisabled}
                 onClick={() => setConfirmation({ kind: "start-fresh" })}
               >
+                <RefreshIcon size="sm" class="sg-composer-button-icon" />
                 Start fresh
               </button>
             </div>
@@ -515,6 +533,7 @@ export function CompositionLibrary({
               disabled={controlsDisabled}
               onClick={() => activeProviderId && void loadProvider(activeProviderId, "retry")}
             >
+              <RefreshIcon size="sm" class="sg-composer-button-icon" />
               Retry recovery
             </button>
           )}
@@ -568,6 +587,7 @@ export function CompositionLibrary({
                 disabled={controlsDisabled}
                 onClick={() => setConfirmation({ kind: "clear" })}
               >
+                <TrashIcon size="sm" class="sg-composer-button-icon" />
                 Clear library
               </button>
             )}
@@ -595,6 +615,7 @@ export function CompositionLibrary({
                 disabled={controlsDisabled}
                 onClick={openNewCompositionDialog}
               >
+                <PlusIcon size="sm" class="sg-composer-button-icon" />
                 New composition
               </button>
             </div>
@@ -608,6 +629,7 @@ export function CompositionLibrary({
                 class="sg-composer-library-button"
                 onClick={() => setFilter("")}
               >
+                <XMarkIcon size="sm" class="sg-composer-button-icon" />
                 Clear filter
               </button>
             </div>
@@ -624,7 +646,10 @@ export function CompositionLibrary({
                       aria-label={`Open ${summary.name}`}
                       onClick={() => void openComposition(summary.id)}
                     >
-                      <span class="sg-composer-library-row-name">{summary.name}</span>
+                      <span class="sg-composer-library-row-name-line">
+                        <FileIcon size="md" class="sg-composer-button-icon" />
+                        <span class="sg-composer-library-row-name">{summary.name}</span>
+                      </span>
                       {publicationLabel(summary) && (
                         <span class="sg-composer-tree-badge" data-sg-composer-publication={summary.publicationKind}>
                           {publicationLabel(summary)}
@@ -656,6 +681,7 @@ export function CompositionLibrary({
                         aria-label={`Duplicate ${summary.name}`}
                         onClick={() => void duplicateComposition(summary.id)}
                       >
+                        <DuplicateIcon size="sm" class="sg-composer-button-icon" />
                         Duplicate
                       </button>
                       <button
@@ -666,6 +692,7 @@ export function CompositionLibrary({
                         aria-label={`Delete ${summary.name}`}
                         onClick={() => setConfirmation({ kind: "delete", id: summary.id })}
                       >
+                        <TrashIcon size="sm" class="sg-composer-button-icon" />
                         Delete
                       </button>
                     </div>

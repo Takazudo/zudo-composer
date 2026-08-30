@@ -16,7 +16,8 @@ import { createUuidIdFactory, type IdFactory } from "../../shared";
 import { createSaveQueue, type SaveQueue, type SaveQueueState } from "../../shared/persistence";
 
 export const CONTENT_ENTRY_PAGE_SIZE = 25;
-export type ContentPane = "models" | "entries" | "inspector";
+export type ContentPane = "library" | "author" | "preview";
+export type ContentWorkMode = "entries" | "model-fields";
 export type ContentSaveStatus = "saved" | "dirty" | "saving" | "error";
 
 export interface ContentAuthoringState {
@@ -29,6 +30,7 @@ export interface ContentAuthoringState {
   entry: ContentEntryRecord | null;
   nextCursor?: string;
   activePane: ContentPane;
+  workMode: ContentWorkMode;
   saveStatus: ContentSaveStatus;
   message: string;
   recoveryMessage: string | null;
@@ -36,7 +38,7 @@ export interface ContentAuthoringState {
 
 const initialState: ContentAuthoringState = {
   phase: "idle", models: [], entryCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
-  activePane: "models", saveStatus: "saved", message: "", recoveryMessage: null,
+  activePane: "library", workMode: "entries", saveStatus: "saved", message: "", recoveryMessage: null,
 };
 
 function queueStatus(state: SaveQueueState<ContentModelRecord> | SaveQueueState<ContentEntryRecord>): ContentSaveStatus {
@@ -89,7 +91,7 @@ export class ContentAuthoringController {
     ]);
     this.installModelQueue(outcome.record);
     this.set({ ...this.current, phase: "ready", model: outcome.record, entries: page.entries, entry: null,
-      usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, activePane: "entries", message: "Model loaded." });
+      usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, activePane: "library", workMode: "entries", message: "Model loaded." });
     if (outcome.record.document.kind === "single" && page.entries[0]) await this.openEntry(page.entries[0].id);
   }
 
@@ -181,13 +183,17 @@ export class ContentAuthoringController {
       write: ({ record }) => this.provider.store.putEntry(record) });
     this.unsubscribeEntry = this.entryQueue.subscribe((state) => this.set({ ...this.current, saveStatus: queueStatus(state),
       message: state.status === "error" ? state.error.message : state.status === "saved" ? "All changes saved." : state.status === "saving" ? "Saving changes…" : "Unsaved changes." }));
-    this.set({ ...this.current, entry: outcome.record, activePane: "inspector" });
+    this.set({ ...this.current, entry: outcome.record, activePane: "author", workMode: "entries" });
   }
 
   async inspectSchema(): Promise<void> {
     if (this.entryQueue) { await this.entryQueue.flush(); await this.entryQueue.close(); this.unsubscribeEntry?.(); }
     this.entryQueue = null; this.unsubscribeEntry = null;
-    this.set({ ...this.current, entry: null, activePane: "inspector", message: "Model schema ready." });
+    this.set({ ...this.current, entry: null, activePane: "author", workMode: "model-fields", message: "Model fields ready." });
+  }
+
+  browseEntries(activePane: ContentPane = "library"): void {
+    this.set({ ...this.current, workMode: "entries", activePane, message: "Entries ready." });
   }
 
   updateEntryValue(fieldId: string, value: ContentEntryRecord["values"][string] | undefined): void {
@@ -212,7 +218,8 @@ export class ContentAuthoringController {
     if (this.current.model?.id === id) { await this.flushSessions(); await this.closeQueues(); }
     await this.provider.store.deleteModel(id); await this.refreshModels();
     const entryCounts = { ...this.current.entryCounts }; delete entryCounts[id];
-    this.set({ ...this.current, entryCounts, model: this.current.model?.id === id ? null : this.current.model, entries: this.current.model?.id === id ? [] : this.current.entries, usedFieldIds: this.current.model?.id === id ? [] : this.current.usedFieldIds, entry: null, activePane: "models", message: "Model and its Entries deleted." });
+    const deletingCurrentModel = this.current.model?.id === id;
+    this.set({ ...this.current, entryCounts, model: deletingCurrentModel ? null : this.current.model, entries: deletingCurrentModel ? [] : this.current.entries, usedFieldIds: deletingCurrentModel ? [] : this.current.usedFieldIds, entry: deletingCurrentModel ? null : this.current.entry, activePane: "library", workMode: "entries", message: "Model and its Entries deleted." });
   }
 
   setActivePane(activePane: ContentPane): void { this.set({ ...this.current, activePane }); }

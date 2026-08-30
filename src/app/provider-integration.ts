@@ -7,6 +7,7 @@ import { createContentCatalog, type ContentCatalog } from "../content/catalog";
 import { ContentPersistenceError, createContentEntryRecord, createContentModelRecord, type ContentInitializationOutcome, type ContentProvider } from "../content/library";
 import { createIndexedDbContentProvider } from "../content/storage/indexeddb";
 import { activeComponentProvider } from "../features/composer/active-pack";
+import { createContentPreviewSource, type ContentPreviewSource } from "../features/content/preview-source";
 import type { MappingContentEntryCatalog } from "../features/mapping";
 import {
   createCompositionCatalog as createMappingCompositionCatalog, createIndexedDbMappingProvider,
@@ -55,7 +56,7 @@ export function createProductionSampleDocument(): CompositionDocument {
 export function createProductionContentSeed() {
   const model = createContentModelRecord({ name: "News Collection", kind: "collection", fields: [
     { id: PRODUCTION_SEED_IDS.titleField, key: "title", label: "Title", required: true, kind: "text" },
-    { id: PRODUCTION_SEED_IDS.bodyField, key: "body", label: "Body", required: true, kind: "text" },
+    { id: PRODUCTION_SEED_IDS.bodyField, key: "body", label: "Body", required: true, kind: "markdown" },
     { id: PRODUCTION_SEED_IDS.publishedField, key: "published", label: "Published", required: false, kind: "boolean" },
   ] }, { id: PRODUCTION_SEED_IDS.contentModel, timestamp: PRODUCTION_SEED_TIMESTAMP });
   return { models: [model], entries: [
@@ -128,6 +129,7 @@ export interface ProductionProviderIntegration {
   componentProvider: typeof activeComponentProvider;
   compositionProviders: readonly CompositionProvider[]; compositionCatalog: CompositionCatalog; mappingCompositionCatalog: MappingCompositionCatalog;
   contentProviders: readonly ContentProvider[]; contentProvider: ContentProvider; contentCatalog: ContentCatalog;
+  createContentPreviewSource(): ContentPreviewSource;
   mappingContentEntries: MappingContentEntryCatalog;
   mappingProviders: readonly MappingProvider[]; mappingProvider: MappingProvider; mappingCatalog: MappingCatalog;
   sitemapperMappingCatalog: MappingAssignmentCatalog;
@@ -208,11 +210,29 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       ? { status: "ready" }
       : { status: "blocked", diagnostics: definition.diagnostics.map(({ code, message }) => ({ code, message })) };
   });
+  const mappingCatalog = createMappingCatalog(mappingProviders);
+  const contentPreviewSource = () => createContentPreviewSource({
+    mappings: mappingCatalog,
+    catalogs: { content: contentCatalog, compositions: mappingCompositionCatalog },
+    manifest: activeComponentProvider.catalog,
+    initializeContent: async () => {
+      const outcome = await initializeContent();
+      return outcome.status === "ready"
+        ? { status: "ready" }
+        : { status: "error", reason: outcome.status === "error" ? outcome.error.message : outcome.recovery.message };
+    },
+    initializeMappings: async () => {
+      const outcome = await initializeMapping();
+      return outcome.status === "ready"
+        ? { status: "ready" }
+        : { status: "error", reason: outcome.status === "error" ? outcome.error.message : outcome.recovery.message };
+    },
+  });
   return Object.freeze({
     componentProvider: activeComponentProvider, compositionProviders,
     compositionCatalog: createInitializedCompositionCatalog(compositionProviders, compositionInitializers),
     mappingCompositionCatalog,
-    contentProviders, contentProvider, contentCatalog, mappingContentEntries,
-    mappingProviders, mappingProvider, mappingCatalog: createMappingCatalog(mappingProviders), sitemapperMappingCatalog,
+    contentProviders, contentProvider, contentCatalog, createContentPreviewSource: contentPreviewSource, mappingContentEntries,
+    mappingProviders, mappingProvider, mappingCatalog, sitemapperMappingCatalog,
   });
 }

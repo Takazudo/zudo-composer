@@ -31,6 +31,12 @@
     "test:browser:dist": "playwright test"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.9",
+    "@lezer/highlight": "^1.2.3",
     "@zudo-composer/component-contract": "workspace:*",
     "@zudo-sg/ui": "git+https://github.com/Takazudo/zudo-sg.git#fe3fc62d3f677f321f5eb7814240d4a55dc92cd0",
     "preact": "^10.29.8",

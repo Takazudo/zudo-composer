@@ -5,6 +5,7 @@
 
 import type { JSX } from "preact";
 import { useState } from "preact/hooks";
+import { CopyIcon } from "../../../../components/icons";
 import { copyText } from "../../../../shared/clipboard";
 
 export type ComposerCopyStatus = "idle" | "copied" | "failed";
@@ -33,6 +34,7 @@ export function ComposerCopyButton({ text, label = "Copy JSX" }: ComposerCopyBut
       onClick={() => void handleClick()}
       data-sg-copy-status={status}
     >
+      <CopyIcon size="sm" class="sg-composer-button-icon" />
       {visibleLabel}
       <span role="status" aria-live="polite" class="sr-only">
         {announcement}

@@ -1,4 +1,5 @@
 import { createSequentialIdFactory } from "../../../shared";
+import { createContentModelRecord } from "../../../content";
 import { describe, expect, it, vi } from "vitest";
 import { createContentAuthoringController, CONTENT_ENTRY_PAGE_SIZE } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
@@ -55,6 +56,20 @@ describe("ContentAuthoringController", () => {
     await controller.deleteModel("articles"); expect(controller.state.models).toHaveLength(0);
   });
 
+  it("keeps the selected model and Entry when deleting another model", async () => {
+    const provider = createMemoryContentProvider();
+    await provider.store.putModel(createContentModelRecord({ name: "Other", kind: "collection", fields: [] }, { id: "other", timestamp: "2026-01-01T00:00:00.000Z" }));
+    const controller = createContentAuthoringController(provider);
+    await controller.initialize();
+    await controller.openModel("articles");
+    await controller.openEntry("entry-1");
+
+    await controller.deleteModel("other");
+
+    expect(controller.state.model?.id).toBe("articles");
+    expect(controller.state.entry?.id).toBe("entry-1");
+  });
+
   it("surfaces latest-wins save failure and retries the retained draft", async () => {
     const provider = createMemoryContentProvider(); const original = provider.store.putEntry; let fail = true;
     vi.spyOn(provider.store, "putEntry").mockImplementation(async (record) => { if (fail) { fail = false; throw new Error("offline"); } await original(record); });
@@ -75,7 +90,7 @@ describe("ContentAuthoringController", () => {
     const provider = createMemoryContentProvider(); const controller = createContentAuthoringController(provider);
     await controller.initialize(); await controller.openModel("articles"); await controller.openEntry("entry-1");
     controller.updateEntryValue("title", "Saved before schema"); await controller.inspectSchema();
-    expect(controller.state.entry).toBeNull(); expect(controller.state.activePane).toBe("inspector");
+    expect(controller.state.entry).toBeNull(); expect(controller.state.activePane).toBe("author"); expect(controller.state.workMode).toBe("model-fields");
     const saved = await provider.store.getEntry("entry-1"); expect(saved.status === "loaded" && saved.record.values.title).toBe("Saved before schema");
   });
 

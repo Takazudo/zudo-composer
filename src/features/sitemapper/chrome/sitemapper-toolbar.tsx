@@ -9,6 +9,7 @@
 // through the workspace's `toolbar` slot.
 
 import type { JSX } from "preact";
+import { CheckCircleIcon, ErrorIcon, LoadingIcon, RefreshIcon, WarningIcon } from "../../../components/icons";
 
 /** Honest persistence states exposed by the Sitemapper save queue. */
 export type SitemapperSaveStatus =
@@ -49,6 +50,13 @@ export function SitemapperToolbar({
   saveStatus,
   onRetrySave,
 }: SitemapperToolbarProps): JSX.Element {
+  const StatusIcon = saveStatus.kind === "saved"
+    ? CheckCircleIcon
+    : saveStatus.kind === "saving"
+      ? LoadingIcon
+      : saveStatus.kind === "error"
+        ? ErrorIcon
+        : WarningIcon;
   return (
     <>
       <div class="sg-sitemapper-toolbar-identity">
@@ -62,11 +70,12 @@ export function SitemapperToolbar({
           aria-live="polite"
           title={saveStatus.kind === "error" ? saveStatus.reason : undefined}
         >
+          <StatusIcon size="xs" />
           {describeSitemapperSaveStatus(saveStatus)}
         </span>
         {saveStatus.kind === "error" && onRetrySave && (
           <button type="button" class="sg-sitemapper-toolbar-button" onClick={onRetrySave}>
-            Retry
+            <RefreshIcon size="sm" />Retry
           </button>
         )}
       </div>

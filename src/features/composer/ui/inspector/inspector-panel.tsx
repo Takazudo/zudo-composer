@@ -31,7 +31,14 @@ import type {
   LinkedEditorPresentation,
 } from "../../../../composer/browser";
 import { classifyNode, findLocation, orderedSlotIds } from "../../../../composer/browser";
-import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from "../../../../components/icons";
+import {
+  ArrowRightIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  RefreshIcon,
+  TrashIcon,
+  XMarkIcon,
+} from "../../../../components/icons";
 import type { ComposerMode } from "../../chrome/controller-model";
 import { InspectorField } from "./inspector-field";
 import { ReuseControls } from "./reuse-controls";
@@ -122,11 +129,13 @@ function LinkedInspectorStatus({
         <div class="mt-vsp-3xs flex flex-wrap gap-hsp-2xs">
           {actions?.onOpenSource && (
             <button type="button" class="sg-composer-toolbar-button" onClick={() => actions.onOpenSource?.(presentation.sourceRecordId)}>
+              <ArrowRightIcon size="sm" class="sg-composer-button-icon" />
               Open source
             </button>
           )}
           {actions?.onDetach && (
             <button type="button" class="sg-composer-toolbar-button" onClick={() => actions.onDetach?.()}>
+              <XMarkIcon size="sm" class="sg-composer-button-icon" />
               Detach
             </button>
           )}
@@ -139,14 +148,21 @@ function LinkedInspectorStatus({
       <p class="text-small font-semibold text-fg">Linked template unavailable</p>
       <p class="text-caption text-muted">{presentation.message}</p>
       <div class="mt-vsp-3xs flex flex-wrap gap-hsp-2xs">
-        {actions?.onRetry && <button type="button" class="sg-composer-toolbar-button" onClick={() => actions.onRetry?.()}>Retry</button>}
+        {actions?.onRetry && (
+          <button type="button" class="sg-composer-toolbar-button" onClick={() => actions.onRetry?.()}>
+            <RefreshIcon size="sm" class="sg-composer-button-icon" />
+            Retry
+          </button>
+        )}
         {actions?.onOpenSource && (
           <button type="button" class="sg-composer-toolbar-button" onClick={() => actions.onOpenSource?.(presentation.sourceRecordId)}>
+            <ArrowRightIcon size="sm" class="sg-composer-button-icon" />
             Open source
           </button>
         )}
         {actions?.onRemoveBrokenBinding && (
           <button type="button" class="sg-composer-toolbar-button sg-composer-inspector-remove" onClick={() => actions.onRemoveBrokenBinding?.()}>
+            <TrashIcon size="sm" class="sg-composer-button-icon" />
             Remove broken binding
           </button>
         )}

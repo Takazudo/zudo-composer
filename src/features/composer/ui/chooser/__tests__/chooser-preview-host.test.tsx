@@ -13,7 +13,7 @@ import "../../../test-support/cleanup";
 
 import { describe, expect, it, vi } from "vitest";
 import { act } from "preact/test-utils";
-import { render, screen } from "@testing-library/preact";
+import { render, screen, waitFor } from "@testing-library/preact";
 import { h } from "preact";
 import { defineComponentPack, type ComponentManifest } from "@zudo-composer/component-contract";
 import { COMPOSITION_SCHEMA_VERSION } from "../../../../../composer/browser";
@@ -185,6 +185,18 @@ describe("ChooserPreviewHost — live document over its OWN bridge", () => {
     expect(message.document.root).toHaveLength(1);
     // Non-interactive: always "preview" mode, never "edit".
     expect(message.session).toMatchObject({ mode: "preview", selectedId: null });
+  });
+
+  it("sends resolved host-theme changes through the existing preview session", async () => {
+    document.documentElement.dataset.theme = "light";
+    const { harness } = mount(leafEntry);
+    act(() => harness.deliverReady());
+    expect(harness.posts.at(-1)!.message).toMatchObject({ session: { theme: "light" } });
+
+    document.documentElement.dataset.theme = "dark";
+    await waitFor(() => {
+      expect(harness.posts.at(-1)!.message).toMatchObject({ type: "mode", session: { theme: "dark" } });
+    });
   });
 
   it("re-renders when the previewed entry changes (still one bridge instance, one growing post log)", () => {

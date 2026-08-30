@@ -104,13 +104,20 @@ for (const forbidden of [
   "styleguide",
   "zudo-doc",
   "zfb app",
-  "@/",
   "/src/",
   "/Users/",
   "sourceMappingURL",
 ]) {
   assert.ok(!assetText.includes(forbidden), `production artifact leaked forbidden marker: ${forbidden}`);
 }
+// Match the app's `@/…` module alias only when it is emitted as a string-like
+// specifier. CodeMirror's style runtime legitimately contains the regular
+// expression `/^@/`, whose closing slash creates the same two-byte sequence.
+assert.doesNotMatch(
+  assetText,
+  /["'`]@\/[A-Za-z0-9_.-]/,
+  "production artifact leaked forbidden module alias: @/",
+);
 for (const forbidden of [
   "virtual:composer-file-provider",
   "createComposerFileProviderMiddleware",

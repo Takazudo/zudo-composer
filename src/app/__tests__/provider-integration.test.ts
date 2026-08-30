@@ -21,6 +21,27 @@ import {
 } from "../provider-integration";
 
 describe("production provider integration", () => {
+  it("adapts initialized providers into a read-only current-draft Content preview source", async () => {
+    const factory = new FDBFactory();
+    const integration = createProductionProviderIntegration({ compositionIdbFactory: factory, contentIdbFactory: factory, mappingIdbFactory: factory });
+    const source = integration.createContentPreviewSource();
+    await source.load({ providerId: "content-indexeddb", recordId: PRODUCTION_SEED_IDS.contentModel }, {
+      schemaVersion: 1,
+      id: "unsaved-entry",
+      modelId: PRODUCTION_SEED_IDS.contentModel,
+      createdAt: PRODUCTION_SEED_TIMESTAMP,
+      updatedAt: PRODUCTION_SEED_TIMESTAMP,
+      values: {
+        [PRODUCTION_SEED_IDS.titleField]: "Unsaved title",
+        [PRODUCTION_SEED_IDS.bodyField]: "## Unsaved Markdown\n\nCurrent draft only.",
+        [PRODUCTION_SEED_IDS.publishedField]: true,
+      },
+    });
+    expect(source.state).toMatchObject({ phase: "ready", selectedRef: { providerId: "mapping-indexeddb", recordId: PRODUCTION_SEED_IDS.mapping }, context: { entry: { entryId: "unsaved-entry" }, appliedBindingCount: 2 } });
+    expect(source.state.document?.root[0]?.slots.content?.[0]?.props.heading).toBe("Unsaved title");
+    expect(source.state.document?.root[0]?.slots.content?.[1]?.props.markdown).toBe("## Unsaved Markdown\n\nCurrent draft only.");
+  });
+
   it("shares one active provider, seeded record, and Composer store with the Sitemapper catalog", async () => {
     vi.stubGlobal("indexedDB", new FDBFactory());
     try {
@@ -60,6 +81,7 @@ describe("production provider integration", () => {
     expect(concurrentContent).toMatchObject({ entries: [{ ref: { recordId: PRODUCTION_SEED_IDS.contentModel } }], failures: [] });
     const contentSnapshot = await integration.contentProvider.store.scanEntries(PRODUCTION_SEED_IDS.contentModel);
     expect(contentSnapshot.model).toMatchObject({ id: PRODUCTION_SEED_IDS.contentModel, createdAt: PRODUCTION_SEED_TIMESTAMP });
+    expect(contentSnapshot.model.document.fields.find(({ id }) => id === PRODUCTION_SEED_IDS.bodyField)?.kind).toBe("markdown");
     expect(contentSnapshot.entries.map(({ id }) => id).sort()).toEqual([...PRODUCTION_SEED_IDS.entries].sort());
     expect(await integration.mappingContentEntries.scan({ providerId: "content-indexeddb", recordId: PRODUCTION_SEED_IDS.contentModel })).toMatchObject({ status: "resolved", snapshot: { count: 2 } });
     expect(await integration.mappingContentEntries.scan({ providerId: "missing-provider", recordId: PRODUCTION_SEED_IDS.contentModel })).toMatchObject({ status: "provider-error" });

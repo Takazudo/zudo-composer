@@ -7,28 +7,17 @@
 // component library, so it must follow the same scheme — that theme is one
 // third of the `PreviewSession` snapshot the bridge sends.
 
-import { useEffect, useState } from "preact/hooks";
 import type { PreviewTheme } from "../preview";
+import { resolveRootTheme, useResolvedTheme } from "../../../theme/use-resolved-theme";
 
 /** Resolve the host document's current theme. Defaults to light off-DOM. */
 export function resolveHostTheme(
   root: Element | null = globalThis.document?.documentElement ?? null,
 ): PreviewTheme {
-  return root?.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  return resolveRootTheme(root);
 }
 
 /** Track the host `<html data-theme>` and re-render when the user toggles it. */
 export function useHostTheme(): PreviewTheme {
-  const [theme, setTheme] = useState<PreviewTheme>(() => resolveHostTheme());
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const update = (): void => setTheme(resolveHostTheme(root));
-    update();
-    const observer = new MutationObserver(update);
-    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, []);
-
-  return theme;
+  return useResolvedTheme();
 }

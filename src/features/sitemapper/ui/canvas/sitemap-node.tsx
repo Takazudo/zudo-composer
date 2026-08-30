@@ -2,6 +2,7 @@
 /** @jsxImportSource preact */
 
 import type { JSX, Ref } from "preact";
+import { CheckIcon, EllipsisIcon } from "../../../../components/icons";
 import type { SitemapNode as SitemapNodeModel } from "../../../../sitemapper/model";
 import type { SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
 import type { NodeRectangle } from "./layout";
@@ -64,7 +65,7 @@ export function SitemapNode({
         aria-pressed={selected}
         onClick={() => onSelect(node.id)}
       >
-        {selected && <span class="sg-sitemapper-node__selected"><span class="sg-sitemapper-sr-only">Selected</span>✓</span>}
+        {selected && <span class="sg-sitemapper-node__selected"><span class="sg-sitemapper-sr-only">Selected</span><CheckIcon size="xs" /></span>}
         <span class="sg-sitemapper-node__title">{node.title}</span>
         {rectangle.depth > 4 && <span class="sg-sitemapper-node__meta">Depth {rectangle.depth}</span>}
         {node.slug && <span class="sg-sitemapper-node__meta">{node.slug}</span>}
@@ -84,7 +85,7 @@ export function SitemapNode({
           onToggleMenu(node.id);
         }}
       >
-        <span aria-hidden="true">•••</span>
+        <EllipsisIcon size="sm" />
       </button>
       {menuOpen && (
         <div class="sg-sitemapper-node__menu" role="menu" aria-label={`Actions for ${node.title}`}>

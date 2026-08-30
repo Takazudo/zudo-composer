@@ -6,7 +6,8 @@
  * must import cleanly from BOTH the host chrome and that preview bundle — so
  * it stays `h()`-based.
  *
- * Pattern ported from zudo-text (`packages/ui-components/src/icons.tsx`):
+ * The shared icon factory follows the compact flat/line convention used by
+ * our authoring tools:
  * `makeIcon(renderSvg, defaultSize)` produces a named-export icon component.
  * Every icon: 16 viewBox, `currentColor` fill/stroke only (never hardcoded
  * hex), `aria-hidden="true"`, flat/line style, stroke-width 1.25–2.5.
@@ -18,26 +19,39 @@
  * `width`/`height` props
  * bypass the wrapper span and size the `<svg>` directly.
  *
- * ── Icon → Composer usage map (ported from Takazudo/zudo-sg#279) ──────────
+ * ── Icon → authoring-surface usage map ─────────────────────────────────────
  *
- * | Icon             | Composer surface(s)                                        |
- * | ---------------- | ---------------------------------------------------------- |
- * | ChevronRightIcon | Tree disclosure — collapsed row                            |
- * | ChevronDownIcon  | Tree disclosure — expanded row; inspector "move down"      |
- * | ChevronUpIcon    | Inspector "move up"                                        |
- * | EllipsisIcon     | Menu triggers — tree-row / node overflow kebab             |
- * | XMarkIcon        | Tree row remove; dialog close                              |
- * | PlusIcon         | Add affordances (insert buttons); "Add"/insert menu items  |
- * | CopyIcon         | Clipboard chip; "Copy" menu item                           |
- * | CutIcon          | "Cut" menu item                                            |
- * | DuplicateIcon    | Duplicate action — inspector button; "Duplicate" menu item |
- * | TrashIcon        | Delete action — inspector button; "Delete" menu item       |
- * | DragGripIcon     | Tree row drag handle                                       |
- * | ExpandIcon       | Component-chooser enlarge                                  |
- * | PageIcon         | Tree node-type glyph: page / root                          |
- * | SlotIcon         | Tree node-type glyph: slot                                 |
- * | ContainerIcon    | Tree node-type glyph: container                            |
- * | LeafIcon         | Tree node-type glyph: leaf component                       |
+ * The table is the shared vocabulary for route work. Feature code should import
+ * one of these components instead of introducing a local SVG or a Unicode
+ * arrow. Icons are always supporting evidence: unfamiliar actions still keep
+ * their visible text label at the owning call site, while icon-only controls
+ * provide their accessible name there (never in this decorative SVG).
+ *
+ * | Icon(s)                                      | Surface / meaning                                      |
+ * | -------------------------------------------- | ----------------------------------------------------- |
+ * | HomeIcon, ComposerIcon, ContentIcon         | Shared shell route navigation                          |
+ * | MappingIcon, SitemapperIcon                  | Mapping and Sitemapper route navigation                |
+ * | SystemThemeIcon, LightThemeIcon, DarkThemeIcon | Theme choice control                                  |
+ * | TextIcon, LongTextIcon, MarkdownIcon         | Content field cards: text, long text, Markdown         |
+ * | NumberIcon, BooleanIcon, DateIcon            | Content field cards: number, boolean, date             |
+ * | SlugIcon, ColorIcon, UrlIcon                 | Content field cards: slug, color, URL                 |
+ * | BoldIcon, ItalicIcon, InlineCodeIcon         | Markdown toolbar formatting                           |
+ * | HeadingIcon, LinkIcon, QuoteIcon, ListIcon   | Markdown toolbar formatting                           |
+ * | PreviewIcon, ExpandIcon, PlayIcon            | Evaluated preview and enlargement                      |
+ * | BellIcon, MailIcon                           | Notification panel and planned email row              |
+ * | CheckIcon, CheckCircleIcon                   | Saved/ready/success status                             |
+ * | WarningIcon, ErrorIcon, InfoIcon, LoadingIcon | Diagnostics and transient status                     |
+ * | LibraryIcon, FolderIcon, FileIcon            | Library and nested model navigation                   |
+ * | CollectionIcon, SingleIcon                   | Content model cardinality                              |
+ * | EditIcon, SaveIcon, RefreshIcon              | Authoring, persistence, retry/refresh                  |
+ * | ArrowRightIcon, ArrowLeftIcon                | Mapping source → target and back navigation            |
+ * | SearchIcon, SettingsIcon, FilterIcon         | Common labeled shell/library actions                   |
+ * | ChevronRightIcon, ChevronDownIcon, ChevronUpIcon | Tree disclosure and sibling movement                |
+ * | EllipsisIcon, XMarkIcon                      | Overflow menu, remove, and dialog close                |
+ * | PlusIcon, MinusIcon                          | Add and remove/compact controls                        |
+ * | CopyIcon, CutIcon, DuplicateIcon, TrashIcon  | Clipboard/menu and destructive actions                 |
+ * | DragGripIcon                                 | Tree row drag handle                                   |
+ * | PageIcon, SlotIcon, ContainerIcon, LeafIcon  | Composer tree node-type glyphs                        |
  */
 
 import { h } from "preact";
@@ -80,7 +94,7 @@ type IconRenderFn = (
 
 /**
  * Factory that produces an `XxxIcon` component from a single SVG render
- * function (zudo-text pattern).
+ * function.
  *
  * - Explicit-size branch (`width`/`height` prop given): delegates directly to
  *   `renderSvg` with the numeric dimensions, `class`, and `style`.
@@ -149,7 +163,7 @@ function evenOddPath(d: string): AnyVNode {
   return h("path", { "fill-rule": "evenodd", "clip-rule": "evenodd", d });
 }
 
-// ── Chevrons (ported from zudo-text) ─────────────────────────────────────────
+// ── Chevrons ─────────────────────────────────────────────────────────────────
 
 export const ChevronRightIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   svgRoot(w, hgt, cls, style, FILLED, [
@@ -175,7 +189,7 @@ export const ChevronUpIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   ]),
 );
 
-// ── Actions (ported from zudo-text) ──────────────────────────────────────────
+// ── Actions ──────────────────────────────────────────────────────────────────
 
 export const PlusIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   svgRoot(w, hgt, cls, style, FILLED, [
@@ -201,7 +215,7 @@ export const TrashIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   ]),
 );
 
-/** Corner brackets pointing outward — zudo-text's `ArrowsPointingOutIcon`. */
+/** Corner brackets pointing outward for full-screen and enlargement actions. */
 export const ExpandIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   svgRoot(w, hgt, cls, style, FILLED, [
     evenOddPath(
@@ -210,7 +224,7 @@ export const ExpandIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   ]),
 );
 
-// ── Actions (authored new, matching the zudo-text flat/line weight) ──────────
+// ── Additional actions using the shared flat/line weight ────────────────────
 
 /** Vertical kebab dots — the overflow-menu trigger glyph. */
 export const EllipsisIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
@@ -298,3 +312,477 @@ export const LeafIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
     h("rect", { x: 4.5, y: 4.5, width: 7, height: 7, rx: 1.75 }),
   ]),
 );
+
+// ── Inventory helpers ───────────────────────────────────────────────────────
+
+/** Build a filled icon from one path while preserving the shared shell. */
+function filledPathIcon(d: string): IconComponent {
+  return makeIcon((w, hgt, cls, style) => svgRoot(w, hgt, cls, style, FILLED, [h("path", { d })]));
+}
+
+/** Build a line icon whose children are recreated for every render. */
+function lineIcon(children: () => AnyVNode[]): IconComponent {
+  return makeIcon((w, hgt, cls, style) => svgRoot(w, hgt, cls, style, stroked(1.5), children()));
+}
+
+// ── Routes ───────────────────────────────────────────────────────────────────
+
+/** Home/dashboard route. */
+export const HomeIcon: IconComponent = filledPathIcon(
+  "M8 1.5 14.5 7v7a.5.5 0 0 1-.5.5h-4v-4H6v4H2a.5.5 0 0 1-.5-.5V7L8 1.5Z",
+);
+
+/** Composition authoring route. */
+export const ComposerIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 2, y: 2, width: 12, height: 12, rx: 1.5 }),
+  h("line", { x1: 2, y1: 5.25, x2: 14, y2: 5.25 }),
+  h("line", { x1: 5, y1: 8.25, x2: 11, y2: 8.25 }),
+  h("line", { x1: 5, y1: 11.25, x2: 9, y2: 11.25 }),
+]);
+
+/** Content authoring route. */
+export const ContentIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M3.25 2.25h6l3.5 3.5v8H3.25z" }),
+  h("path", { d: "M9.25 2.25v3.5h3.5" }),
+  h("line", { x1: 5.25, y1: 8.25, x2: 10.75, y2: 8.25 }),
+  h("line", { x1: 5.25, y1: 11, x2: 9.25, y2: 11 }),
+]);
+
+/** Mapping/binding authoring route. */
+export const MappingIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 1.75, y: 3, width: 4, height: 4, rx: 0.75 }),
+  h("rect", { x: 10.25, y: 9, width: 4, height: 4, rx: 0.75 }),
+  h("path", { d: "M5.75 5h2.25a2 2 0 0 1 2 2v2" }),
+  h("path", { d: "m8.5 8 1.5 1.5L11.5 8" }),
+]);
+
+/** Sitemapper/tree route. */
+export const SitemapperIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 6, y: 1.75, width: 4, height: 3.5, rx: 0.75 }),
+  h("rect", { x: 1.75, y: 10.75, width: 4, height: 3.5, rx: 0.75 }),
+  h("rect", { x: 10.25, y: 10.75, width: 4, height: 3.5, rx: 0.75 }),
+  h("path", { d: "M8 5.25v2.5M3.75 7.75h8.5M3.75 7.75v3M12.25 7.75v3" }),
+]);
+
+// Familiar alternate names make the route vocabulary easy to discover while
+// keeping one component per visual meaning.
+export const MapIcon = MappingIcon;
+export const SitemapIcon = SitemapperIcon;
+export const HomeRouteIcon = HomeIcon;
+export const ComposerRouteIcon = ComposerIcon;
+export const ContentRouteIcon = ContentIcon;
+export const MappingRouteIcon = MappingIcon;
+export const SitemapperRouteIcon = SitemapperIcon;
+
+// ── Theme choices ────────────────────────────────────────────────────────────
+
+/** System/OS theme preference. */
+export const SystemThemeIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 2, y: 2.25, width: 12, height: 8, rx: 1 }),
+  h("path", { d: "M6 13.75h4M8 10.25v3.5" }),
+]);
+
+/** Light theme preference. */
+export const LightThemeIcon: IconComponent = lineIcon(() => [
+  h("circle", { cx: 8, cy: 8, r: 2.5 }),
+  h("path", { d: "M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.05 1.05M11.55 11.55l1.05 1.05M12.6 3.4l-1.05 1.05M4.45 11.55 3.4 12.6" }),
+]);
+
+/** Dark theme preference. */
+export const DarkThemeIcon: IconComponent = filledPathIcon(
+  "M13.65 10.55A5.95 5.95 0 0 1 5.45 2.35 6.5 6.5 0 1 0 13.65 10.55Z",
+);
+
+export const ComputerDesktopIcon = SystemThemeIcon;
+export const SunIcon = LightThemeIcon;
+export const MoonIcon = DarkThemeIcon;
+export const SystemIcon = SystemThemeIcon;
+export const LightIcon = LightThemeIcon;
+export const DarkIcon = DarkThemeIcon;
+export const ThemeSystemIcon = SystemThemeIcon;
+export const ThemeLightIcon = LightThemeIcon;
+export const ThemeDarkIcon = DarkThemeIcon;
+export const ThemeIcon = SystemThemeIcon;
+
+// ── Content field kinds ──────────────────────────────────────────────────────
+
+/** Short single-line text field. */
+export const TextIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 2.25, y1: 4, x2: 13.75, y2: 4 }),
+  h("line", { x1: 2.25, y1: 8, x2: 11.5, y2: 8 }),
+  h("line", { x1: 2.25, y1: 12, x2: 8.5, y2: 12 }),
+]);
+
+/** Multi-line long text field. */
+export const LongTextIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 2.25, y1: 3.25, x2: 13.75, y2: 3.25 }),
+  h("line", { x1: 2.25, y1: 6.5, x2: 13.75, y2: 6.5 }),
+  h("line", { x1: 2.25, y1: 9.75, x2: 13.75, y2: 9.75 }),
+  h("line", { x1: 2.25, y1: 13, x2: 9.5, y2: 13 }),
+]);
+
+/** Formatting-assisted Markdown field. */
+export const MarkdownIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 2, y: 2.25, width: 12, height: 11.5, rx: 1.25 }),
+  h("polyline", { points: "4.25 10.75 4.25 5.25 6.25 8 8 5.25 9.75 8 11.75 5.25 11.75 10.75" }),
+]);
+
+/** Numeric field. */
+export const NumberIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 5, y1: 2, x2: 3.75, y2: 14 }),
+  h("line", { x1: 10.25, y1: 2, x2: 9, y2: 14 }),
+  h("line", { x1: 2.25, y1: 6, x2: 12, y2: 6 }),
+  h("line", { x1: 1.75, y1: 10, x2: 11.5, y2: 10 }),
+]);
+
+/** Boolean/toggle field. */
+export const BooleanIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 1.75, y: 4.25, width: 12.5, height: 7.5, rx: 3.75 }),
+  h("circle", { cx: 10.25, cy: 8, r: 2.25 }),
+]);
+
+/** Date field. */
+export const DateIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 2, y: 3.25, width: 12, height: 10.75, rx: 1.25 }),
+  h("line", { x1: 2, y1: 6.25, x2: 14, y2: 6.25 }),
+  h("line", { x1: 5, y1: 1.75, x2: 5, y2: 4.75 }),
+  h("line", { x1: 11, y1: 1.75, x2: 11, y2: 4.75 }),
+  h("circle", { cx: 6, cy: 9.5, r: 0.5 }),
+  h("circle", { cx: 10, cy: 9.5, r: 0.5 }),
+  h("circle", { cx: 6, cy: 12, r: 0.5 }),
+  h("circle", { cx: 10, cy: 12, r: 0.5 }),
+]);
+
+/** URL-friendly slug field. */
+export const SlugIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "m2.25 7.25 5-5h4.5l2 2v4.5l-5 5a1.25 1.25 0 0 1-1.75 0l-4.75-4.75a1.25 1.25 0 0 1 0-1.75Z" }),
+  h("circle", { cx: 10.5, cy: 5.5, r: 0.75 }),
+]);
+
+/** Color value field. */
+export const ColorIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M8 2a6 6 0 0 0 0 12h1.25a1.25 1.25 0 0 0 0-2.5H8.5a1.5 1.5 0 0 1 0-3H10a4 4 0 0 0 0-8H8Z" }),
+  h("circle", { cx: 4.5, cy: 6, r: 0.65 }),
+  h("circle", { cx: 6.5, cy: 4.5, r: 0.65 }),
+  h("circle", { cx: 9, cy: 4.5, r: 0.65 }),
+]);
+
+/** URL field. */
+export const UrlIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M6.75 9.25 5.5 10.5a2.65 2.65 0 0 1-3.75-3.75l2-2A2.65 2.65 0 0 1 7.5 4.5" }),
+  h("path", { d: "M9.25 6.75 10.5 5.5a2.65 2.65 0 0 1 3.75 3.75l-2 2A2.65 2.65 0 0 1 8.5 11.5" }),
+  h("line", { x1: 5.75, y1: 10.25, x2: 10.25, y2: 5.75 }),
+]);
+
+export const RichTextIcon = MarkdownIcon;
+export const TextFieldIcon = TextIcon;
+export const LongTextFieldIcon = LongTextIcon;
+export const MarkdownFieldIcon = MarkdownIcon;
+export const NumberFieldIcon = NumberIcon;
+export const BooleanFieldIcon = BooleanIcon;
+export const DateFieldIcon = DateIcon;
+export const SlugFieldIcon = SlugIcon;
+export const ColorFieldIcon = ColorIcon;
+export const UrlFieldIcon = UrlIcon;
+export const URLIcon = UrlIcon;
+export const DocumentTextIcon = LongTextIcon;
+export const HashtagIcon = NumberIcon;
+export const ToggleIcon = BooleanIcon;
+export const CalendarIcon = DateIcon;
+export const TagIcon = SlugIcon;
+export const SwatchIcon = ColorIcon;
+export const GlobeAltIcon = UrlIcon;
+
+// ── Markdown formatting ──────────────────────────────────────────────────────
+
+/** Bold formatting action. */
+export const BoldIcon: IconComponent = filledPathIcon(
+  "M4 2.25h3.8a3.15 3.15 0 0 1 2.3 5.3A3.45 3.45 0 0 1 8.8 13.75H4a.75.75 0 0 1-.75-.75V3A.75.75 0 0 1 4 2.25Zm.75 1.5v3.05h3a1.525 1.525 0 1 0 0-3.05h-3Zm0 4.55v3.95h4.05a1.975 1.975 0 1 0 0-3.95H4.75Z",
+);
+
+/** Italic formatting action. */
+export const ItalicIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 6.25, y1: 2.5, x2: 12.75, y2: 2.5 }),
+  h("line", { x1: 3.25, y1: 13.5, x2: 9.75, y2: 13.5 }),
+  h("line", { x1: 9.25, y1: 2.5, x2: 6.75, y2: 13.5 }),
+]);
+
+/** Inline-code formatting action. */
+export const InlineCodeIcon: IconComponent = lineIcon(() => [
+  h("polyline", { points: "6.25 4 2.75 8 6.25 12" }),
+  h("polyline", { points: "9.75 4 13.25 8 9.75 12" }),
+  h("line", { x1: 8.75, y1: 3, x2: 7.25, y2: 13 }),
+]);
+
+/** Heading formatting action. */
+export const HeadingIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 3, y1: 3, x2: 3, y2: 13 }),
+  h("line", { x1: 13, y1: 3, x2: 13, y2: 13 }),
+  h("line", { x1: 3, y1: 8, x2: 13, y2: 8 }),
+]);
+
+/** Link formatting action. */
+export const LinkIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M6.75 9.25 5.5 10.5a2.65 2.65 0 0 1-3.75-3.75l2-2A2.65 2.65 0 0 1 7.5 4.5" }),
+  h("path", { d: "M9.25 6.75 10.5 5.5a2.65 2.65 0 0 1 3.75 3.75l-2 2A2.65 2.65 0 0 1 8.5 11.5" }),
+  h("line", { x1: 5.75, y1: 10.25, x2: 10.25, y2: 5.75 }),
+]);
+
+/** Blockquote formatting action. */
+export const QuoteIcon: IconComponent = filledPathIcon(
+  "M2.25 3.5h4.1v4.25H3.85c.1 1.45.82 2.2 2.2 2.55v1.7c-2.72-.4-3.9-2.02-3.9-4.82V3.5Zm7.4 0h4.1v4.25h-2.5c.1 1.45.82 2.2 2.2 2.55v1.7c-2.72-.4-3.9-2.02-3.9-4.82V3.5Z",
+);
+
+/** Bullet/list formatting action. */
+export const ListIcon: IconComponent = lineIcon(() => [
+  h("circle", { cx: 2.75, cy: 4, r: 0.7 }),
+  h("circle", { cx: 2.75, cy: 8, r: 0.7 }),
+  h("circle", { cx: 2.75, cy: 12, r: 0.7 }),
+  h("line", { x1: 5.25, y1: 4, x2: 13.25, y2: 4 }),
+  h("line", { x1: 5.25, y1: 8, x2: 13.25, y2: 8 }),
+  h("line", { x1: 5.25, y1: 12, x2: 13.25, y2: 12 }),
+]);
+
+export const CodeIcon = InlineCodeIcon;
+export const ListBulletIcon = ListIcon;
+
+// ── Preview, notifications, and status ──────────────────────────────────────
+
+/** Evaluated preview/read-only view action. */
+export const PreviewIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M1.75 8s2.25-4 6.25-4 6.25 4 6.25 4-2.25 4-6.25 4-6.25-4-6.25-4Z" }),
+  h("circle", { cx: 8, cy: 8, r: 1.75 }),
+]);
+
+/** Start/play preview action. */
+export const PlayIcon: IconComponent = filledPathIcon("M5 3.25v9.5L12.75 8 5 3.25Z");
+
+/** Notification bell. */
+export const BellIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M3.25 11.75h9.5l-1.25-1.5V7a3.5 3.5 0 0 0-7 0v3.25l-1.25 1.5Z" }),
+  h("path", { d: "M6.5 13.25a1.65 1.65 0 0 0 3 0" }),
+]);
+
+/** Email/mail notification channel. */
+export const MailIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 1.75, y: 3.25, width: 12.5, height: 9.5, rx: 1.25 }),
+  h("path", { d: "m2.5 4.25 5.5 4.5 5.5-4.5" }),
+]);
+
+/** Successful/valid state. */
+export const CheckIcon: IconComponent = filledPathIcon(
+  "M6.55 12.9 2.4 8.75l1.1-1.1 3.05 3.05 5.95-5.95 1.1 1.1-7.05 7.05Z",
+);
+
+/** Successful/ready state with an explicit circle. */
+export const CheckCircleIcon: IconComponent = lineIcon(() => [
+  h("circle", { cx: 8, cy: 8, r: 5.75 }),
+  h("polyline", { points: "5.25 8 7.1 9.85 10.9 6.05" }),
+]);
+
+/** Warning/attention state. */
+export const WarningIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "m8 2 6.25 11H1.75L8 2Z" }),
+  h("line", { x1: 8, y1: 5.5, x2: 8, y2: 9 }),
+  h("circle", { cx: 8, cy: 11.25, r: 0.35 }),
+]);
+
+/** Error/failure state. */
+export const ErrorIcon: IconComponent = lineIcon(() => [
+  h("circle", { cx: 8, cy: 8, r: 5.75 }),
+  h("line", { x1: 5.75, y1: 5.75, x2: 10.25, y2: 10.25 }),
+  h("line", { x1: 10.25, y1: 5.75, x2: 5.75, y2: 10.25 }),
+]);
+
+/** Informational state. */
+export const InfoIcon: IconComponent = lineIcon(() => [
+  h("circle", { cx: 8, cy: 8, r: 5.75 }),
+  h("line", { x1: 8, y1: 7, x2: 8, y2: 11 }),
+  h("circle", { cx: 8, cy: 4.75, r: 0.35 }),
+]);
+
+/** In-flight/loading state; motion is left to the owning control's CSS. */
+export const LoadingIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M13.5 8a5.5 5.5 0 1 1-1.61-3.89" }),
+  h("polyline", { points: "13.5 3.5 13.5 8 9 8" }),
+]);
+
+export const EyeIcon = PreviewIcon;
+export const ArrowsPointingOutIcon = ExpandIcon;
+export const EnlargeIcon = ExpandIcon;
+export const EnvelopeIcon = MailIcon;
+export const EmailIcon = MailIcon;
+export const NotificationIcon = BellIcon;
+export const SuccessIcon = CheckCircleIcon;
+export const AlertIcon = WarningIcon;
+export const AlertTriangleIcon = WarningIcon;
+export const WarningTriangleIcon = WarningIcon;
+export const ExclamationTriangleIcon = WarningIcon;
+export const ExclamationCircleIcon = ErrorIcon;
+export const ErrorCircleIcon = ErrorIcon;
+export const XCircleIcon = ErrorIcon;
+export const InformationCircleIcon = InfoIcon;
+export const SpinnerIcon = LoadingIcon;
+export const ReadyIcon = CheckCircleIcon;
+export const SavedIcon = CheckCircleIcon;
+
+// ── Library and model cardinality ────────────────────────────────────────────
+
+/** Nested library/navigation surface. */
+export const LibraryIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M2.25 4.25h4l1.25 1.5h6.25v7.5H2.25v-9Z" }),
+  h("path", { d: "M2.25 6.25h11.5" }),
+]);
+
+/** Folder/model group. */
+export const FolderIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M1.75 4.25h4l1.25 1.5h7.25v7.5H1.75v-9Z" }),
+]);
+
+/** Single document/entry. */
+export const FileIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M3.25 1.75h6l3.5 3.5v9H3.25z" }),
+  h("path", { d: "M9.25 1.75v3.5h3.5" }),
+  h("line", { x1: 5.25, y1: 8, x2: 10.75, y2: 8 }),
+  h("line", { x1: 5.25, y1: 10.75, x2: 9.25, y2: 10.75 }),
+]);
+
+/** Collection model/cardinality (many entries). */
+export const CollectionIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 2.25, y: 2.25, width: 9.5, height: 9.5, rx: 1.25 }),
+  h("path", { d: "M4.25 4.25h9.5v9.5a1.25 1.25 0 0 1-1.25 1.25h-8.25" }),
+  h("line", { x1: 4.75, y1: 6, x2: 9.25, y2: 6 }),
+  h("line", { x1: 4.75, y1: 8.75, x2: 9.25, y2: 8.75 }),
+]);
+
+/** Single model/cardinality (one entry). */
+export const SingleIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 3, y: 1.75, width: 10, height: 12.5, rx: 1.25 }),
+  h("line", { x1: 5.25, y1: 6, x2: 10.75, y2: 6 }),
+  h("line", { x1: 5.25, y1: 8.75, x2: 9.25, y2: 8.75 }),
+  h("circle", { cx: 8, cy: 11.25, r: 1 }),
+]);
+
+export const DocumentIcon = FileIcon;
+export const EntryIcon = FileIcon;
+export const BookOpenIcon = LibraryIcon;
+export const FolderOpenIcon = FolderIcon;
+export const CollectionModelIcon = CollectionIcon;
+export const SingleModelIcon = SingleIcon;
+export const ContentCollectionIcon = CollectionIcon;
+export const ContentSingleIcon = SingleIcon;
+export const RootIcon = PageIcon;
+export const ManyIcon = CollectionIcon;
+export const OneIcon = SingleIcon;
+
+// ── Editing, persistence, and common actions ─────────────────────────────────
+
+/** Edit/pencil action. */
+export const EditIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "m3 11.75-.75 2.5 2.5-.75L12.9 5.35a1.6 1.6 0 0 0-2.25-2.25L3 11.75Z" }),
+  h("line", { x1: 9.5, y1: 4.25, x2: 11.75, y2: 6.5 }),
+]);
+
+/** Save/persist action. */
+export const SaveIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M2.25 2.25h9.5L13.75 4v9.75H2.25z" }),
+  h("path", { d: "M4.5 2.5v4h6v-4M4.5 13.5v-3.25h7v3.25" }),
+]);
+
+/** Refresh/retry action. */
+export const RefreshIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M13.25 5.75A5.5 5.5 0 1 0 13.5 9" }),
+  h("polyline", { points: "10.25 2.75 13.25 5.75 10.25 8.75" }),
+]);
+
+/** Undo action. */
+export const UndoIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M3 6.25h6a4 4 0 0 1 4 4v1.5" }),
+  h("polyline", { points: "5.75 3.5 3 6.25 5.75 9" }),
+]);
+
+/** Redo action. */
+export const RedoIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M13 6.25H7a4 4 0 0 0-4 4v1.5" }),
+  h("polyline", { points: "10.25 3.5 13 6.25 10.25 9" }),
+]);
+
+/** Minus/remove action. */
+export const MinusIcon: IconComponent = filledPathIcon(
+  "M3 7.25h10a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5Z",
+);
+
+/** Search action. */
+export const SearchIcon: IconComponent = lineIcon(() => [
+  h("circle", { cx: 7, cy: 7, r: 4.5 }),
+  h("line", { x1: 10.25, y1: 10.25, x2: 13.75, y2: 13.75 }),
+]);
+
+/** Settings/preferences action. */
+export const SettingsIcon: IconComponent = lineIcon(() => [
+  h("circle", { cx: 8, cy: 8, r: 2.25 }),
+  h("path", { d: "M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.58 3.58l1.06 1.06M11.36 11.36l1.06 1.06M12.42 3.58l-1.06 1.06M4.64 11.36l-1.06 1.06" }),
+]);
+
+/** Filter/refine action. */
+export const FilterIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M2 3h12l-4.5 5.25v4.5L6.5 14V8.25L2 3Z" }),
+]);
+
+/** Download/export action. */
+export const DownloadIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M8 2v8.25M4.75 7.25 8 10.5l3.25-3.25M3 13.5h10" }),
+]);
+
+/** Upload/import action. */
+export const UploadIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M8 10.5V2.25M4.75 5.5 8 2.25l3.25 3.25M3 13.5h10" }),
+]);
+
+export const PencilIcon = EditIcon;
+export const PencilSquareIcon = EditIcon;
+export const ArrowPathIcon = RefreshIcon;
+export const MoreIcon = EllipsisIcon;
+export const CloseIcon = XMarkIcon;
+export const CheckmarkIcon = CheckIcon;
+export const AddIcon = PlusIcon;
+export const RemoveIcon = MinusIcon;
+export const DeleteIcon = TrashIcon;
+
+// ── Mapping and directional arrows ──────────────────────────────────────────
+
+/** Left-to-right source → target binding direction. */
+export const ArrowRightIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 2.25, y1: 8, x2: 13.25, y2: 8 }),
+  h("polyline", { points: "9.75 4.5 13.25 8 9.75 11.5" }),
+]);
+
+/** Right-to-left/back navigation direction. */
+export const ArrowLeftIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 2.75, y1: 8, x2: 13.75, y2: 8 }),
+  h("polyline", { points: "6.25 4.5 2.75 8 6.25 11.5" }),
+]);
+
+/** Upward movement direction. */
+export const ArrowUpIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 8, y1: 13.75, x2: 8, y2: 2.75 }),
+  h("polyline", { points: "4.5 6.25 8 2.75 11.5 6.25" }),
+]);
+
+/** Downward movement direction. */
+export const ArrowDownIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 8, y1: 2.25, x2: 8, y2: 13.25 }),
+  h("polyline", { points: "4.5 9.75 8 13.25 11.5 9.75" }),
+]);
+
+/** Bidirectional mapping/reorder action. */
+export const ArrowsRightLeftIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 2.25, y1: 5.25, x2: 13.75, y2: 5.25 }),
+  h("polyline", { points: "10.5 2 13.75 5.25 10.5 8.5" }),
+  h("line", { x1: 13.75, y1: 10.75, x2: 2.25, y2: 10.75 }),
+  h("polyline", { points: "5.5 7.5 2.25 10.75 5.5 14" }),
+]);
+
+export const ArrowForwardIcon = ArrowRightIcon;
+export const ArrowBackIcon = ArrowLeftIcon;
+export const SwapIcon = ArrowsRightLeftIcon;

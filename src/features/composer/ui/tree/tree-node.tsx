@@ -21,7 +21,18 @@ import type {
   InsertionTarget,
 } from "../../../../composer/browser";
 import { isPublishedOutletTarget, orderedSlotIds } from "../../../../composer/browser";
-import { ChevronDownIcon, ChevronRightIcon, ContainerIcon, EllipsisIcon, LeafIcon, SlotIcon } from "../../../../components/icons";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ContainerIcon,
+  EditIcon,
+  EllipsisIcon,
+  LeafIcon,
+  PlusIcon,
+  SaveIcon,
+  SlotIcon,
+  XMarkIcon,
+} from "../../../../components/icons";
 import type { ComponentDefinition } from "../../active-pack";
 import { countDescendants, siblingBounds, summarizeNode } from "./tree-helpers";
 import { TreeRowActions } from "./tree-row-actions";
@@ -53,6 +64,10 @@ export interface TreeNodeProps extends TreeNodeCallbacks {
   selectedId: string | null;
   expandedIds: ReadonlySet<string>;
   readOnly: boolean;
+}
+
+function childListId(nodeId: string): string {
+  return `sg-composer-tree-children-${nodeId}`;
 }
 
 export function TreeNode(props: TreeNodeProps): JSX.Element {
@@ -146,6 +161,7 @@ export function TreeNode(props: TreeNodeProps): JSX.Element {
             type="button"
             class="sg-composer-tree-disclosure"
             aria-expanded={isExpanded}
+            aria-controls={childListId(node.id)}
             aria-label={`${isExpanded ? "Collapse" : "Expand"} ${displayName}`}
             onClick={() => onToggleExpanded(node.id)}
           >
@@ -289,6 +305,7 @@ export function TreeNode(props: TreeNodeProps): JSX.Element {
                               setOutletDraft({ slotId, label: publication!.outlet.label });
                             }}
                           >
+                            <EditIcon size="xs" class="sg-composer-button-icon" />
                             Rename outlet
                           </button>
                         )}
@@ -306,6 +323,7 @@ export function TreeNode(props: TreeNodeProps): JSX.Element {
                           setOutletDraft({ slotId, label: isGlobalTemplate ? publication!.outlet.label : label });
                         }}
                       >
+                        <PlusIcon size="xs" class="sg-composer-button-icon" />
                         {isGlobalTemplate ? "Reassign template outlet" : "Use as template outlet"}
                       </button>
                     )}
@@ -317,7 +335,8 @@ export function TreeNode(props: TreeNodeProps): JSX.Element {
                           aria-label={`Add component to ${label} in ${displayName}`}
                           onClick={() => onOpenChooser({ parentId: node.id, slotId, index: children.length })}
                         >
-                          + Add
+                          <PlusIcon size="xs" class="sg-composer-button-icon" />
+                          <span>Add</span>
                         </button>
                         <button
                           type="button"
@@ -367,6 +386,7 @@ export function TreeNode(props: TreeNodeProps): JSX.Element {
                       disabled={outletBusy}
                       onClick={() => void saveOutlet(outletTarget, outletDraft.label)}
                     >
+                      <SaveIcon size="xs" class="sg-composer-button-icon" />
                       {outletBusy
                         ? "Saving outlet…"
                         : isTemplateOutlet
@@ -381,6 +401,7 @@ export function TreeNode(props: TreeNodeProps): JSX.Element {
                       disabled={outletBusy}
                       onClick={closeOutletEditor}
                     >
+                      <XMarkIcon size="xs" class="sg-composer-button-icon" />
                       Cancel
                     </button>
                   </div>
@@ -389,7 +410,7 @@ export function TreeNode(props: TreeNodeProps): JSX.Element {
                 {children.length === 0 ? (
                   <p class="sg-composer-tree-empty">Empty slot</p>
                 ) : (
-                  <ul class="sg-composer-tree-list sg-composer-tree-list-nested">
+                  <ul id={childListId(node.id)} class="sg-composer-tree-list sg-composer-tree-list-nested">
                     {children.map((child) => (
                       <TreeNode
                         key={child.id}

@@ -36,7 +36,7 @@
 import { Component, Fragment, h } from "preact";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { ComponentChildren, JSX } from "preact";
-import { EllipsisIcon, PlusIcon } from "../../../components/icons";
+import { DragGripIcon, EllipsisIcon, PlusIcon } from "../../../components/icons";
 import type {
   CompositionDocument,
   CompositionNode,
@@ -946,7 +946,7 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
               },
               onDragEnd: () => endDrag(),
             },
-            h("span", { "aria-hidden": "true" }, "⠿"),
+            h(DragGripIcon, { width: 12, height: 12 }),
           )
         : null;
 

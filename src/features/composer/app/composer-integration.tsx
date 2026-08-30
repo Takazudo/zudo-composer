@@ -42,6 +42,7 @@ import {
   type CompositionRecordRef,
 } from "../../../composer/browser";
 import type { ComposerComponentProvider } from "../active-pack";
+import { ErrorIcon, RefreshIcon, WarningIcon } from "../../../components/icons";
 import { ComposerWorkspace } from "../chrome/composer-workspace";
 import type { UseComposerControllerOptions } from "../chrome/use-composer-controller";
 import { ComposerTree } from "../ui/tree/composer-tree";
@@ -293,7 +294,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
           <>
             {props.navigationError && (
               <div class="sg-composer-library-alert sg-composer-library-alert-error" role="alert">
-                <p>{props.navigationError}</p>
+                <p><ErrorIcon size="sm" class="sg-composer-button-icon" />{props.navigationError}</p>
                 {props.onRetryNavigation && (
                   <button
                     type="button"
@@ -301,6 +302,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
                     disabled={props.navigationRetrying}
                     onClick={props.onRetryNavigation}
                   >
+                    <RefreshIcon size="sm" class="sg-composer-button-icon" />
                     {props.navigationRetrying ? "Retrying navigation…" : "Retry navigation"}
                   </button>
                 )}
@@ -308,7 +310,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
             )}
             {props.recoveryNotice && (
               <div class="sg-composer-library-alert" aria-label="Composition recovery notice">
-                <p>{props.recoveryNotice}</p>
+                <p><WarningIcon size="sm" class="sg-composer-button-icon" />{props.recoveryNotice}</p>
                 {props.onRetryRecovery && (
                   <button
                     type="button"
@@ -316,6 +318,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
                     disabled={props.recoveryRetrying}
                     onClick={props.onRetryRecovery}
                   >
+                    <RefreshIcon size="sm" class="sg-composer-button-icon" />
                     {props.recoveryRetrying ? "Retrying recovery…" : "Retry recovery"}
                   </button>
                 )}

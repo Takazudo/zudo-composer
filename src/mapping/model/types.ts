@@ -127,6 +127,7 @@ export interface MappingEvaluationResult {
   document?: import("../../composer/model/types").CompositionDocument;
   definitionDiagnostics: readonly MappingDefinitionDiagnostic[];
   entryDiagnostics: readonly MappingEntryDiagnostic[];
+  appliedBindings: readonly AppliedMappingBinding[];
   appliedBindingCount: number;
   unchangedStaticCount: number;
 }
@@ -167,3 +168,4 @@ export interface MappingSeedOptions {
 }
 
 export interface AppliedMappingValue { target: MappingTarget; value: JsonValue }
+export interface AppliedMappingBinding extends AppliedMappingValue { bindingId: RecordId; sourceFieldId: RecordId }
