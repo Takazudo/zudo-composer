@@ -136,6 +136,12 @@ for (const forbidden of [
   "node:fs",
   "node:path",
   "zudo-composer-file-provider",
+  ".zudo-site-project",
+  "virtual:site-project-source",
+  "readActivatedSiteProject",
+  "SiteProjectStoreAdapter",
+  "server/site-project-local",
+  "node:crypto",
 ]) {
   assert.ok(!jsText.includes(forbidden), `client artifact leaked file-provider server capability: ${forbidden}`);
 }
