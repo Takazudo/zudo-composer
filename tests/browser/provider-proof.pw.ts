@@ -139,7 +139,7 @@ test("clean Sitemapper assigns and resolves the seeded Product overview catalog 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/sitemapper");
   await expect(page.getByRole("heading", { name: "Sitemaps" })).toBeVisible();
-  await expect(page.getByText("No sitemaps yet.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No sitemaps yet" })).toBeVisible();
   await page.getByRole("button", { name: "New sitemap" }).click();
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Provider proof");

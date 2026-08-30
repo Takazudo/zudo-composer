@@ -97,12 +97,12 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
 
   await newsCard.getByRole("button", { name: /^Entries/ }).click();
   await newsCard.getByRole("button", { name: "New Entry" }).click();
-  await expect(page.getByRole("status")).toContainText("Incomplete draft");
+  await expect(page.locator(".sg-content-completeness")).toContainText("Incomplete draft");
   await page.getByRole("textbox", { name: "Title (required)" }).fill("Browser journey article");
   await page.getByRole("textbox", { name: "Body (required)" }).fill("## Browser journey\n\nSaved Content drives the Mapping preview.");
   await page.getByRole("textbox", { name: "Route slug" }).fill("東京");
   await page.getByLabel("Publish date").fill("2026-08-29");
-  await expect(page.getByRole("status")).toContainText("Complete");
+  await expect(page.locator(".sg-content-completeness")).toContainText("Complete");
 
   const additionalSlugs = ["東京", ".", "", ...Array.from({ length: 20 }, (_, index) => `browser-${index + 5}`)];
   for (const [index, routeSlug] of additionalSlugs.entries()) {
@@ -122,13 +122,14 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(page.getByRole("list", { name: "Entries" }).getByRole("button", { name: /Browser journey article.*Complete/ })).toBeVisible();
 
   await page.getByRole("button", { name: "New Single" }).click();
-  const singleCard = page.locator(".sg-content-library > li").first();
+  const singleCard = page.locator(".sg-content-library > li").filter({ hasText: "Untitled single" });
   await singleCard.getByRole("button", { name: /^Model fields/ }).click();
   await page.getByRole("textbox", { name: "Model name" }).fill("Browser Site settings");
-  await singleCard.getByRole("button", { name: /^Entries/ }).click();
-  await singleCard.getByRole("button", { name: "New Entry" }).click();
-  await expect(singleCard.getByRole("button", { name: "New Entry" })).toHaveCount(0);
-  await expect(singleCard.getByRole("button", { name: /^Entries.*1/ })).toBeVisible();
+  const selectedSingleCard = page.locator(".sg-content-library > li[data-selected=true]");
+  await selectedSingleCard.getByRole("button", { name: /^Entries/ }).click();
+  await selectedSingleCard.getByRole("button", { name: "New Entry" }).click();
+  await expect(selectedSingleCard.getByRole("button", { name: "New Entry" })).toHaveCount(0);
+  await expect(selectedSingleCard.getByRole("button", { name: /^Entries.*1/ })).toBeVisible();
 
   // A native date input cannot author a malformed date, so preserve one
   // provider-level stale value to prove Mapping diagnoses it without rewriting it.
@@ -275,7 +276,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await page.getByRole("dialog", { name: "Choose a composition" }).getByRole("button", { name: /Assign Product overview from Browser storage/ }).click();
   await expect(inspector.getByText("Current: Static Composition", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "All sitemaps" }).click();
-  await page.getByRole("button", { name: /Content Mapping journey · 1 page/ }).click();
+  await page.getByRole("button", { name: "Content Mapping journey 1 page" }).click();
   await page.getByRole("region", { name: "Sitemap outline" }).getByRole("button", { name: /^Home\b/ }).click();
   await expect(page.getByLabel("Inspector for Home").getByText("Current: Static Composition", { exact: true })).toBeVisible();
   await screenshot(page, testInfo, "journey-sitemapper-static-persisted");
