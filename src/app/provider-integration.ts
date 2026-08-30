@@ -56,7 +56,7 @@ export function createProductionSampleDocument(): CompositionDocument {
 export function createProductionContentSeed() {
   const model = createContentModelRecord({ name: "News Collection", kind: "collection", fields: [
     { id: PRODUCTION_SEED_IDS.titleField, key: "title", label: "Title", required: true, kind: "text" },
-    { id: PRODUCTION_SEED_IDS.bodyField, key: "body", label: "Body", required: true, kind: "text" },
+    { id: PRODUCTION_SEED_IDS.bodyField, key: "body", label: "Body", required: true, kind: "markdown" },
     { id: PRODUCTION_SEED_IDS.publishedField, key: "published", label: "Published", required: false, kind: "boolean" },
   ] }, { id: PRODUCTION_SEED_IDS.contentModel, timestamp: PRODUCTION_SEED_TIMESTAMP });
   return { models: [model], entries: [
