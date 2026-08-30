@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
-const roots = ['src/shared', 'src/composer', 'src/content', 'src/mapping', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
+const roots = ['src/shared', 'src/composer', 'src/content', 'src/media', 'src/mapping', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
 const files = [];
 const violations = [];
 
