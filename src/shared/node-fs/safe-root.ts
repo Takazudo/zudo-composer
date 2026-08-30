@@ -54,6 +54,11 @@ export interface SafeRootReadResult {
   stats: Stats;
 }
 
+export interface SafeRootTemporaryFile {
+  path: string;
+  handle: FileHandle;
+}
+
 const defaultOperations: SafeRootFilesystemOperations = {
   mkdir: (path, options) => nodeFs.mkdir(path, options),
   lstat: (path) => nodeFs.lstat(path),
@@ -156,11 +161,15 @@ export class SafeRootFilesystem<Operation extends string> {
 
   ownedPath(filename: string): string {
     const path = join(this.realRoot, filename);
+    this.assertOwnedPath(path);
+    return path;
+  }
+
+  assertOwnedPath(path: string): void {
     const fromRoot = relative(this.realRoot, path);
     if (fromRoot.startsWith(`..${sep}`) || fromRoot === ".." || isAbsolute(fromRoot)) {
       throw new Error(`Internal ${this.ownerLabel} filename escaped its verified root.`);
     }
-    return path;
   }
 
   async run<T>(operation: Operation, task: () => Promise<T>): Promise<T> {
@@ -296,32 +305,9 @@ export class SafeRootFilesystem<Operation extends string> {
     let temporaryPath: string | undefined;
     let handle: FileHandle | undefined;
     try {
-      for (let attempt = 0; attempt < MAX_TEMP_ATTEMPTS; attempt += 1) {
-        const token = this.randomToken();
-        if (!/^[A-Za-z0-9_-]{8,128}$/.test(token)) {
-          throw this.errors.create(operation, "blocked", "Temporary filename source returned an unsafe token.");
-        }
-        const candidate = this.ownedPath(`.${basename(finalPath)}.${token}.tmp`);
-        try {
-          handle = await this.operations.open(
-            candidate,
-            constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | NO_FOLLOW,
-            0o600,
-          );
-          temporaryPath = candidate;
-          break;
-        } catch (cause) {
-          if (errorCode(cause) === "EEXIST") continue;
-          throw cause;
-        }
-      }
-      if (handle === undefined || temporaryPath === undefined) {
-        throw this.errors.create(
-          operation,
-          "write-failed",
-          `Could not allocate an exclusive temporary file for ${basename(finalPath)}.`,
-        );
-      }
+      const temporary = await this.openTemporaryFile(operation, finalPath);
+      handle = temporary.handle;
+      temporaryPath = temporary.path;
 
       await handle.writeFile(contents, { encoding: "utf8" });
       await handle.sync();
@@ -341,6 +327,45 @@ export class SafeRootFilesystem<Operation extends string> {
         await this.operations.unlink(temporaryPath).catch(() => undefined);
       }
     }
+  }
+
+  /** Allocate an owned temporary file for callers implementing atomic writes. */
+  async openTemporaryFile(
+    operation: Operation,
+    finalPath: string,
+  ): Promise<SafeRootTemporaryFile> {
+    for (let attempt = 0; attempt < MAX_TEMP_ATTEMPTS; attempt += 1) {
+      const token = this.randomToken();
+      if (!/^[A-Za-z0-9_-]{8,128}$/.test(token)) {
+        throw this.errors.create(operation, "blocked", "Temporary filename source returned an unsafe token.");
+      }
+      const path = this.ownedPath(`.${basename(finalPath)}.${token}.tmp`);
+      try {
+        const handle = await this.operations.open(
+          path,
+          constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | NO_FOLLOW,
+          0o600,
+        );
+        return { path, handle };
+      } catch (cause) {
+        if (errorCode(cause) === "EEXIST") continue;
+        throw cause;
+      }
+    }
+    throw this.errors.create(
+      operation,
+      "write-failed",
+      `Could not allocate an exclusive temporary file for ${basename(finalPath)}.`,
+    );
+  }
+
+  rethrowAtomicWriteFailure(operation: Operation, finalPath: string, cause: unknown): never {
+    this.errors.rethrow(
+      operation,
+      "write-failed",
+      `Could not atomically replace ${basename(finalPath)}.`,
+      cause,
+    );
   }
 
   async deleteValidatedPair(
