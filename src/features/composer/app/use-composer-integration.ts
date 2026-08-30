@@ -90,6 +90,16 @@ export interface ComposerIntegrationApi {
   /** Keyboard Escape → close any open menu/dialog. */
   handleEscape: () => void;
 
+  // ── History actions (undo/redo) ───────────────────────────────────────────
+  /** Undo the latest document mutation through the mounted controller. */
+  handleUndo: () => void;
+  /** Redo the next document mutation through the mounted controller. */
+  handleRedo: () => void;
+  /** Whether the mounted controller currently has an undo entry. */
+  canUndo: boolean;
+  /** Whether the mounted controller currently has a redo entry. */
+  canRedo: boolean;
+
   // ── Clipboard/duplicate seam used by the host menus ───────────────────────
   /** Copy: session clipboard = a snapshot of the node. Refused (via `controller.lastError`) for opaque nodes. */
   handleCopy: (nodeId: string) => void;
@@ -274,6 +284,9 @@ export function useComposerIntegration(
     if (openStateRef.current.exportOpen) closeExport();
   }, [closeChooser, closeExport]);
 
+  const handleUndo = useCallback(() => controller.undo(), [controller]);
+  const handleRedo = useCallback(() => controller.redo(), [controller]);
+
   return {
     controller,
     manifestEntries,
@@ -293,6 +306,10 @@ export function useComposerIntegration(
     handleExpandAncestors,
     handleRemoveSelected,
     handleEscape,
+    handleUndo,
+    handleRedo,
+    canUndo: controller.canUndo,
+    canRedo: controller.canRedo,
     handleCopy,
     handleCut,
     handlePaste,

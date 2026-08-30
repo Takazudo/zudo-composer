@@ -48,7 +48,6 @@ import type { UseComposerControllerOptions } from "../chrome/use-composer-contro
 import { ComposerTree } from "../ui/tree/composer-tree";
 import { ComposerChooser } from "../ui/chooser/composer-chooser";
 import { ComposerMenu } from "../ui/menu/composer-menu";
-import { SubtreeRemovalConfirm } from "../ui/tree/tree-row-actions";
 import { InspectorPanel } from "../ui/inspector/inspector-panel";
 import { ComposerExportDialog } from "../ui/export/export-dialog";
 import {
@@ -124,7 +123,20 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
     controllerOptions: props.controllerOptions,
     reuseResolution: effectiveReuseResolution,
   });
-  const { controller, manifestEntries, session, viewport, setViewport, chooser, exportState, titleFor } = api;
+  const {
+    controller,
+    manifestEntries,
+    session,
+    viewport,
+    setViewport,
+    chooser,
+    exportState,
+    titleFor,
+    handleUndo,
+    handleRedo,
+    canUndo,
+    canRedo,
+  } = api;
   const { state } = controller;
   const linkedView = useMemo(() => {
     if (!api.reuseResolution) return null;
@@ -282,6 +294,10 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
     selectedId: state.selectedId,
     onRemoveSelected: api.handleRemoveSelected,
     onEscape: api.handleEscape,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    canUndo,
+    canRedo,
     menuOpen: menus.open,
   });
 
@@ -337,6 +353,10 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
             onSetMode={controller.setMode}
             onSetViewport={setViewport}
             onRetrySave={controller.retrySave}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            canUndo={canUndo}
+            canRedo={canRedo}
             onExport={exportState.openExport}
             clipboard={state.clipboard}
             titleFor={titleFor}
@@ -378,6 +398,8 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
             onRequestInsertMenu={menus.openInsertMenu}
             onCommitInlineEdit={api.handleCommitInlineEdit}
             onDropNode={api.handleDropNode}
+            onRequestUndo={handleUndo}
+            onRequestRedo={handleRedo}
             createBridge={props.createBridge}
             location={props.previewLocation}
             hostWindow={props.hostWindow}
@@ -429,16 +451,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
         anchor={menus.anchor}
         onClose={menus.onClose}
         items={menus.items ?? undefined}
-      >
-        {menus.confirm && (
-          <SubtreeRemovalConfirm
-            nodeTitle={menus.confirm.nodeTitle}
-            descendantCount={menus.confirm.descendantCount}
-            onCancel={menus.onCancelConfirm}
-            onConfirm={menus.onConfirmDelete}
-          />
-        )}
-      </ComposerMenu>
+      />
 
       <ComposerExportDialog
         open={exportState.open}

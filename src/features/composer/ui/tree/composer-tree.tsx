@@ -252,5 +252,5 @@ export function ComposerTree({
 // Re-exported so Takazudo/zudo-sg#251/other waves can compose the same row-action affordance
 // elsewhere (e.g. a future canvas selection toolbar) without reaching into
 // this module's internals.
-export { TreeRowActions, SubtreeRemovalConfirm } from "./tree-row-actions";
-export type { TreeRowActionsProps, SubtreeRemovalConfirmProps } from "./tree-row-actions";
+export { TreeRowActions } from "./tree-row-actions";
+export type { TreeRowActionsProps } from "./tree-row-actions";

@@ -19,6 +19,7 @@ import {
   readyMessage as protocolReadyMessage,
   requestAddMessage as protocolRequestAddMessage,
   requestInsertMenuMessage as protocolRequestInsertMenuMessage,
+  requestHistoryMessage as protocolRequestHistoryMessage,
   requestNodeMenuMessage as protocolRequestNodeMenuMessage,
   selectMessage as protocolSelectMessage,
 } from "../../preview/protocol";
@@ -57,6 +58,8 @@ const dropNodeMessage = (
   copy: boolean,
   revision: number,
 ) => protocolDropNodeMessage(PREVIEW_PACK, sourceId, target, copy, revision);
+const requestHistoryMessage = (direction: "undo" | "redo") =>
+  protocolRequestHistoryMessage(PREVIEW_PACK, direction);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const asAny = (v: unknown) => v as any;
@@ -69,6 +72,8 @@ function mount(overrides: Partial<Parameters<typeof ComposerCanvasHost>[0]> = {}
   const onRequestInsertMenu = vi.fn();
   const onCommitInlineEdit = vi.fn();
   const onDropNode = vi.fn();
+  const onRequestUndo = vi.fn();
+  const onRequestRedo = vi.fn();
   const doc = createFixtureSampleDocument();
   doc.name = "first";
   const utils = render(
@@ -83,6 +88,8 @@ function mount(overrides: Partial<Parameters<typeof ComposerCanvasHost>[0]> = {}
       onRequestInsertMenu={onRequestInsertMenu}
       onCommitInlineEdit={onCommitInlineEdit}
       onDropNode={onDropNode}
+      onRequestUndo={onRequestUndo}
+      onRequestRedo={onRequestRedo}
       createBridge={bridge.createBridge}
       location={bridge.location}
       {...overrides}
@@ -95,6 +102,8 @@ function mount(overrides: Partial<Parameters<typeof ComposerCanvasHost>[0]> = {}
     onRequestNodeMenu,
     onRequestInsertMenu,
     onDropNode,
+    onRequestUndo,
+    onRequestRedo,
     onCommitInlineEdit,
     doc,
     ...utils,
@@ -239,6 +248,48 @@ describe("ComposerCanvasHost — bridge lifecycle (#251)", () => {
     act(() => bridge.deliver(readyMessage()));
     act(() => bridge.deliver(errorMessage(6, "fatal", false)));
     expect(screen.queryByText(/Preview error/)).not.toBeInTheDocument();
+  });
+});
+
+describe("ComposerCanvasHost — iframe history shortcut relay (issue #73)", () => {
+  it("forwards validated undo and redo requests in edit mode", () => {
+    const { bridge, onRequestUndo, onRequestRedo } = mount();
+    act(() => bridge.deliver(readyMessage()));
+
+    act(() => bridge.deliver(requestHistoryMessage("undo")));
+    act(() => bridge.deliver(requestHistoryMessage("redo")));
+
+    expect(onRequestUndo).toHaveBeenCalledOnce();
+    expect(onRequestRedo).toHaveBeenCalledOnce();
+  });
+
+  it("suppresses a valid request after the host changes to preview mode", () => {
+    const base = mount();
+    act(() => base.bridge.deliver(readyMessage()));
+    base.rerender(
+      <ComposerCanvasHost
+        componentProvider={fixtureComponentProvider}
+        document={base.doc}
+        session={{ ...EDIT, mode: "preview" }}
+        viewport="fluid"
+        onSelect={base.onSelect}
+        onRequestAdd={base.onRequestAdd}
+        onRequestNodeMenu={base.onRequestNodeMenu}
+        onRequestInsertMenu={base.onRequestInsertMenu}
+        onCommitInlineEdit={base.onCommitInlineEdit}
+        onDropNode={base.onDropNode}
+        onRequestUndo={base.onRequestUndo}
+        onRequestRedo={base.onRequestRedo}
+        createBridge={base.bridge.createBridge}
+        location={base.bridge.location}
+      />,
+    );
+
+    act(() => base.bridge.deliver(requestHistoryMessage("undo")));
+    act(() => base.bridge.deliver(requestHistoryMessage("redo")));
+
+    expect(base.onRequestUndo).not.toHaveBeenCalled();
+    expect(base.onRequestRedo).not.toHaveBeenCalled();
   });
 });
 

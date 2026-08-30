@@ -1,12 +1,12 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 import "../../test-support/cleanup";
-// Focused test for the clipboard chip wiring (issue #255) — the rest of
-// ComposerToolbarBar's presentational contract is exercised end-to-end via
-// composer-integration.test.tsx (issue #251).
+// Focused tests for optional ComposerToolbarBar presentation seams. The wider
+// toolbar contract is exercised end-to-end via composer-integration.test.tsx
+// (issue #251).
 
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/preact";
+import { fireEvent, render, screen } from "@testing-library/preact";
 import type { CompositionNode } from "../../../../composer/browser";
 import { ComposerToolbarBar } from "../composer-toolbar-bar";
 
@@ -70,5 +70,71 @@ describe("ComposerToolbarBar — clipboard chip", () => {
       "data-sg-generated-output",
       "blocked",
     );
+  });
+});
+
+describe("ComposerToolbarBar — undo and redo actions", () => {
+  it("preserves the existing toolbar DOM when the optional callbacks are omitted", () => {
+    render(<ComposerToolbarBar {...baseProps()} />);
+
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Redo" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Export JSX" })).toBeInTheDocument();
+  });
+
+  it("renders accessible toolbar buttons with shortcut titles and invokes enabled actions", () => {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    render(
+      <ComposerToolbarBar
+        {...baseProps()}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        canUndo
+        canRedo
+      />,
+    );
+
+    const undo = screen.getByRole("button", { name: "Undo" });
+    const redo = screen.getByRole("button", { name: "Redo" });
+    expect(undo).toHaveAttribute("title", "Undo (Cmd+Z / Ctrl+Z)");
+    expect(redo).toHaveAttribute("title", "Redo (Cmd+Shift+Z / Ctrl+Shift+Z or Ctrl+Y)");
+    expect(undo).toHaveClass("sg-composer-toolbar-button");
+    expect(redo).toHaveClass("sg-composer-toolbar-button");
+
+    fireEvent.click(undo);
+    fireEvent.click(redo);
+    expect(onUndo).toHaveBeenCalledOnce();
+    expect(onRedo).toHaveBeenCalledOnce();
+  });
+
+  it("uses actual disabled state from the supplied flags without masking preview mode", () => {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    const { rerender } = render(
+      <ComposerToolbarBar
+        {...baseProps()}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        canUndo={false}
+        canRedo={false}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Redo" })).toBeDisabled();
+
+    rerender(
+      <ComposerToolbarBar
+        {...baseProps()}
+        mode="preview"
+        onUndo={onUndo}
+        onRedo={onRedo}
+        canUndo
+        canRedo
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Redo" })).toBeEnabled();
   });
 });

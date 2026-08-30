@@ -486,6 +486,20 @@ export const dropNodeMessageSchema = z
   })
   .strict();
 
+/**
+ * A non-editable canvas shortcut asked the host to move through Composer
+ * history. This deliberately carries no document revision: undo/redo applies
+ * to the host controller's CURRENT history, not to the snapshot that happened
+ * to be on screen when the key was pressed.
+ */
+export const requestHistoryMessageSchema = z
+  .object({
+    ...envelope,
+    type: z.literal("request-history"),
+    direction: z.enum(["undo", "redo"]),
+  })
+  .strict();
+
 /** Append future preview → parent messages here (see the module header). */
 export const PREVIEW_TO_PARENT_MEMBERS = [
   readyMessageSchema,
@@ -497,6 +511,7 @@ export const PREVIEW_TO_PARENT_MEMBERS = [
   errorMessageSchema,
   commitInlineEditMessageSchema,
   dropNodeMessageSchema,
+  requestHistoryMessageSchema,
 ] as const;
 
 export const previewToParentSchema = z.discriminatedUnion("type", [...PREVIEW_TO_PARENT_MEMBERS]);
@@ -510,6 +525,7 @@ export type RequestInsertMenuMessage = z.infer<typeof requestInsertMenuMessageSc
 export type ErrorMessage = z.infer<typeof errorMessageSchema>;
 export type CommitInlineEditMessage = z.infer<typeof commitInlineEditMessageSchema>;
 export type DropNodeMessage = z.infer<typeof dropNodeMessageSchema>;
+export type RequestHistoryMessage = z.infer<typeof requestHistoryMessageSchema>;
 export type PreviewToParentMessage = z.infer<typeof previewToParentSchema>;
 
 // ── Structural window/message types ─────────────────────────────────────────
@@ -680,6 +696,13 @@ export function dropNodeMessage(
   documentRevision: number,
 ): DropNodeMessage {
   return { ...envelopeValue(pack), type: "drop-node", sourceNodeId, target, copy, documentRevision };
+}
+
+export function requestHistoryMessage(
+  pack: PreviewPackIdentity,
+  direction: RequestHistoryMessage["direction"],
+): RequestHistoryMessage {
+  return { ...envelopeValue(pack), type: "request-history", direction };
 }
 
 export function errorMessage(

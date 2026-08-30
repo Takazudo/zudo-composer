@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, renderHook } from "@testing-library/preact";
 import {
   isEditableEventTarget,
+  matchesUndoRedoShortcut,
   useComposerKeyboard,
   type ComposerKeyboardOptions,
   type KeyboardHost,
@@ -13,7 +14,18 @@ import {
 interface SyntheticKey {
   key: string;
   target: unknown;
+  altKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
   preventDefault: () => void;
+}
+
+interface ShortcutModifiers {
+  altKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
 }
 
 /** Mount the hook against a controllable host and return a way to fire keys. */
@@ -32,8 +44,20 @@ function setup(opts: Omit<ComposerKeyboardOptions, "host">) {
     return null;
   }
   render(<Probe />);
-  const fire = (key: string, target: unknown = { tagName: "BODY", isContentEditable: false }) => {
-    const event: SyntheticKey = { key, target, preventDefault: vi.fn() };
+  const fire = (
+    key: string,
+    target: unknown = { tagName: "BODY", isContentEditable: false },
+    modifiers: ShortcutModifiers = {},
+  ) => {
+    const event: SyntheticKey = {
+      key,
+      target,
+      altKey: modifiers.altKey ?? false,
+      ctrlKey: modifiers.ctrlKey ?? false,
+      metaKey: modifiers.metaKey ?? false,
+      shiftKey: modifiers.shiftKey ?? false,
+      preventDefault: vi.fn(),
+    };
     listener?.(event as unknown as KeyboardEvent);
     return event;
   };
@@ -50,6 +74,33 @@ describe("isEditableEventTarget", () => {
   it("does not flag ordinary elements or null", () => {
     expect(isEditableEventTarget({ tagName: "DIV", isContentEditable: false } as never)).toBe(false);
     expect(isEditableEventTarget(null)).toBe(false);
+  });
+});
+
+describe("matchesUndoRedoShortcut", () => {
+  const cases: Array<[string, string, ShortcutModifiers, "undo" | "redo" | null]> = [
+    ["Cmd+Z", "z", { metaKey: true }, "undo"],
+    ["Ctrl+Z", "z", { ctrlKey: true }, "undo"],
+    ["Cmd+Shift+Z", "z", { metaKey: true, shiftKey: true }, "redo"],
+    ["Ctrl+Shift+Z", "z", { ctrlKey: true, shiftKey: true }, "redo"],
+    ["Ctrl+Y", "y", { ctrlKey: true }, "redo"],
+    ["plain Z", "z", {}, null],
+    ["Alt+Z", "z", { altKey: true }, null],
+    ["Cmd+Shift+Y", "y", { metaKey: true, shiftKey: true }, null],
+    ["Cmd+Y", "y", { metaKey: true }, null],
+    ["Ctrl+Shift+Y", "y", { ctrlKey: true, shiftKey: true }, null],
+    ["Ctrl+Alt+Z", "z", { ctrlKey: true, altKey: true }, null],
+  ];
+
+  it.each(cases)("matches %s", (_label, key, modifiers, expected) => {
+    const event = {
+      key,
+      altKey: modifiers.altKey ?? false,
+      ctrlKey: modifiers.ctrlKey ?? false,
+      metaKey: modifiers.metaKey ?? false,
+      shiftKey: modifiers.shiftKey ?? false,
+    };
+    expect(matchesUndoRedoShortcut(event as KeyboardEvent)).toBe(expected);
   });
 });
 
@@ -90,6 +141,121 @@ describe("useComposerKeyboard — the guard matrix (#251)", () => {
     const { fire } = setup({ mode: "edit", selectedId: null, onRemoveSelected, onEscape: vi.fn() });
     fire("Delete");
     expect(onRemoveSelected).not.toHaveBeenCalled();
+  });
+
+  it("fires undo and redo in Edit mode and prevents the browser default", () => {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    const { fire } = setup({
+      mode: "edit",
+      selectedId: null,
+      onRemoveSelected: vi.fn(),
+      onEscape: vi.fn(),
+      onUndo,
+      onRedo,
+      canUndo: true,
+      canRedo: true,
+    });
+
+    const undo = fire("z", undefined, { metaKey: true });
+    const redo = fire("z", undefined, { ctrlKey: true, shiftKey: true });
+    fire("y", undefined, { ctrlKey: true });
+
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onRedo).toHaveBeenCalledTimes(2);
+    expect(undo.preventDefault).toHaveBeenCalledTimes(1);
+    expect(redo.preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not hijack undo/redo while focus is in an editable control", () => {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    const { fire } = setup({
+      mode: "edit",
+      selectedId: null,
+      onRemoveSelected: vi.fn(),
+      onEscape: vi.fn(),
+      onUndo,
+      onRedo,
+      canUndo: true,
+      canRedo: true,
+    });
+
+    const inputUndo = fire("z", { tagName: "INPUT", isContentEditable: false }, { ctrlKey: true });
+    const editorRedo = fire("z", { tagName: "DIV", isContentEditable: true }, { metaKey: true, shiftKey: true });
+
+    expect(onUndo).not.toHaveBeenCalled();
+    expect(onRedo).not.toHaveBeenCalled();
+    expect(inputUndo.preventDefault).not.toHaveBeenCalled();
+    expect(editorRedo.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for undo/redo in Preview mode", () => {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    const { fire } = setup({
+      mode: "preview",
+      selectedId: null,
+      onRemoveSelected: vi.fn(),
+      onEscape: vi.fn(),
+      onUndo,
+      onRedo,
+      canUndo: true,
+      canRedo: true,
+    });
+
+    const undo = fire("z", undefined, { ctrlKey: true });
+    const redo = fire("y", undefined, { ctrlKey: true });
+
+    expect(onUndo).not.toHaveBeenCalled();
+    expect(onRedo).not.toHaveBeenCalled();
+    expect(undo.preventDefault).not.toHaveBeenCalled();
+    expect(redo.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("does not let menuOpen suppress undo/redo because history has no node subject", () => {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    const { fire } = setup({
+      mode: "edit",
+      selectedId: "n1",
+      onRemoveSelected: vi.fn(),
+      onEscape: vi.fn(),
+      onUndo,
+      onRedo,
+      canUndo: true,
+      canRedo: true,
+      menuOpen: true,
+    });
+
+    fire("z", undefined, { metaKey: true });
+    fire("z", undefined, { metaKey: true, shiftKey: true });
+
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onRedo).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fire or preventDefault when the matching history capability is unavailable", () => {
+    const onUndo = vi.fn();
+    const onRedo = vi.fn();
+    const { fire } = setup({
+      mode: "edit",
+      selectedId: null,
+      onRemoveSelected: vi.fn(),
+      onEscape: vi.fn(),
+      onUndo,
+      onRedo,
+      canUndo: false,
+      canRedo: false,
+    });
+
+    const undo = fire("z", undefined, { ctrlKey: true });
+    const redo = fire("y", undefined, { ctrlKey: true });
+
+    expect(onUndo).not.toHaveBeenCalled();
+    expect(onRedo).not.toHaveBeenCalled();
+    expect(undo.preventDefault).not.toHaveBeenCalled();
+    expect(redo.preventDefault).not.toHaveBeenCalled();
   });
 
   it("Escape closes menus/dialogs — even in Preview, since it never mutates", () => {

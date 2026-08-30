@@ -150,6 +150,10 @@ export interface ComposerPreviewBridgeOptions {
    * controller, dropping a stale drop rather than applying it.
    */
   onDropNode?: (sourceNodeId: string, target: InsertionTarget, copy: boolean, documentRevision: number) => void;
+  /** A guarded undo shortcut was pressed on non-editable iframe chrome. */
+  onRequestUndo?: () => void;
+  /** A guarded redo shortcut was pressed on non-editable iframe chrome. */
+  onRequestRedo?: () => void;
   onError?: (message: string, recoverable: boolean, revision: number | null) => void;
   /** A message that failed source/origin/schema validation was DROPPED. */
   onRejected?: (reason: GuardFailure, detail?: string) => void;
@@ -268,6 +272,10 @@ export function createComposerPreviewBridge(
         return;
       case "drop-node":
         options.onDropNode?.(message.sourceNodeId, message.target, message.copy, message.documentRevision);
+        return;
+      case "request-history":
+        if (message.direction === "undo") options.onRequestUndo?.();
+        else options.onRequestRedo?.();
         return;
       case "error":
         options.onError?.(message.message, message.recoverable, message.revision);

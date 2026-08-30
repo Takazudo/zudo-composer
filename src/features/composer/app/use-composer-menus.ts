@@ -27,10 +27,8 @@
 // race the chooser's synchronous `document.activeElement` capture with an
 // asynchronous cross-frame focus round-trip.
 //
-// ── Delete confirmation reuses Takazudo/zudo-sg#250's exact copy/behavior ───────────────────
-// Selecting Delete on a node with descendants swaps the menu's `items` for
-// `SubtreeRemovalConfirm`'s `children` (same component the tree row's own
-// inline confirmation uses) instead of removing immediately.
+// Delete is a single action because document mutations can be recovered
+// through Composer history.
 
 import { useCallback, useMemo, useState } from "preact/hooks";
 import type { InsertionTarget } from "../../../composer/browser";
@@ -38,7 +36,7 @@ import { findLocation, isNodeOpaque } from "../../../composer/browser";
 import { CopyIcon, CutIcon, DuplicateIcon, PlusIcon, TrashIcon } from "../../../components/icons";
 import type { ComposerMenuItemSpec } from "../ui/menu/composer-menu";
 import { anchorBelowRect, type MenuPoint } from "../ui/menu/menu-position";
-import { buildCatalogById, countDescendants, summarizeNode } from "../ui/tree/tree-helpers";
+import { buildCatalogById, summarizeNode } from "../ui/tree/tree-helpers";
 import type { ComposerIntegrationApi } from "./use-composer-integration";
 
 /** A `getBoundingClientRect()`-shaped value in HOST viewport coordinates. */
@@ -59,7 +57,6 @@ interface NodeMenu {
   nodeId: string;
   anchor: MenuPoint;
   restoreFocus: () => void;
-  confirmingDelete: boolean;
 }
 
 interface InsertMenu {
@@ -76,25 +73,14 @@ type MenuState = ClosedMenu | NodeMenu | InsertMenu;
 
 const CLOSED: MenuState = { open: false };
 
-export interface ComposerMenuConfirmContent {
-  nodeTitle: string;
-  descendantCount: number;
-}
-
 export interface ComposerMenusApi {
   open: boolean;
-  /** Accessible name for the current menu (or its confirmation sub-view). */
+  /** Accessible name for the current menu. */
   label: string;
   anchor: MenuPoint | null;
-  /** The item list, or `null` while `confirm` is showing instead. */
   items: readonly ComposerMenuItemSpec[] | null;
-  /** Non-null while Delete's subtree-removal confirmation replaces the item list. */
-  confirm: ComposerMenuConfirmContent | null;
   /** Escape / outside click / scroll / resize / Cancel — restores focus, then closes. */
   onClose: () => void;
-  onConfirmDelete: () => void;
-  onCancelConfirm: () => void;
-
   // ── Generic openers (rect + explicit restoreFocus — canvas relay uses these directly) ──
   openNodeMenu: (nodeId: string, rect: MenuAnchorRect, restoreFocus: () => void) => void;
   openInsertMenu: (
@@ -125,15 +111,8 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
     closeSilently();
   }, [menu, closeSilently]);
 
-  const onConfirmDelete = useCallback(() => {
-    if (menu.open && menu.kind === "node") controller.remove(menu.nodeId);
-    close();
-  }, [menu, controller, close]);
-
-  const onCancelConfirm = useCallback(() => close(), [close]);
-
   const openNodeMenu = useCallback((nodeId: string, rect: MenuAnchorRect, restoreFocus: () => void) => {
-    setMenu({ open: true, kind: "node", nodeId, anchor: anchorBelowRect(rect), restoreFocus, confirmingDelete: false });
+    setMenu({ open: true, kind: "node", nodeId, anchor: anchorBelowRect(rect), restoreFocus });
   }, []);
 
   const openInsertMenu = useCallback(
@@ -167,26 +146,17 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
   const derived = useMemo((): {
     label: string;
     items: readonly ComposerMenuItemSpec[] | null;
-    confirm: ComposerMenuConfirmContent | null;
   } => {
-    if (!menu.open) return { label: "", items: null, confirm: null };
+    if (!menu.open) return { label: "", items: null };
 
     if (menu.kind === "node") {
       const location = findLocation(controller.state.document, manifest, menu.nodeId);
       // The node vanished from under an open menu (a rare race) — nothing to
       // show; Escape/outside-click still closes it normally.
-      if (!location) return { label: "Menu", items: [], confirm: null };
+      if (!location) return { label: "Menu", items: [] };
 
       const summary = summarizeNode(location.node, manifest, catalogById);
       const displayName = summary.subtitle ? `${summary.title} ${summary.subtitle}` : summary.title;
-
-      if (menu.confirmingDelete) {
-        return {
-          label: `Confirm removing ${displayName}`,
-          items: null,
-          confirm: { nodeTitle: displayName, descendantCount: countDescendants(location.node) },
-        };
-      }
 
       const opaque = isNodeOpaque(location.node, manifest);
       const items: ComposerMenuItemSpec[] = [];
@@ -216,15 +186,11 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
         danger: true,
         icon: TrashIcon,
         onSelect: () => {
-          if (countDescendants(location.node) > 0) {
-            setMenu((prev) => (prev.open && prev.kind === "node" ? { ...prev, confirmingDelete: true } : prev));
-            return;
-          }
           controller.remove(menu.nodeId);
           close();
         },
       });
-      return { label: `${displayName} menu`, items, confirm: null };
+      return { label: `${displayName} menu`, items };
     }
 
     // Insert menu: "Add component…" AND "Paste here" are BOTH always present.
@@ -248,7 +214,7 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
         onSelect: () => { controller.paste(menu.target); close(); },
       },
     ];
-    return { label: "Insert menu", items, confirm: null };
+    return { label: "Insert menu", items };
   }, [menu, controller, manifest, catalogById, titleFor, close, closeSilently]);
 
   return {
@@ -256,10 +222,7 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
     label: derived.label,
     anchor: menu.open ? menu.anchor : null,
     items: derived.items,
-    confirm: derived.confirm,
     onClose: close,
-    onConfirmDelete,
-    onCancelConfirm,
     openNodeMenu,
     openInsertMenu,
     handleTreeOpenNodeMenu,

@@ -29,6 +29,7 @@ import {
   requestAddMessage,
   requestInsertMenuMessage,
   requestNodeMenuMessage,
+  requestHistoryMessage,
   selectMessage,
 } from "./protocol";
 import { INITIAL_PREVIEW_STATE, applyInbound, type PreviewState } from "./snapshot-store";
@@ -86,6 +87,10 @@ export interface PreviewClient {
    * like `emitCommitInlineEdit` stamps its own.
    */
   emitDropNode(sourceNodeId: string, target: InsertionTarget, copy: boolean): void;
+  /** Ask the host controller to undo; only called for guarded canvas chrome keys. */
+  emitRequestUndo(): void;
+  /** Ask the host controller to redo; only called for guarded canvas chrome keys. */
+  emitRequestRedo(): void;
   emitError(message: string, recoverable?: boolean): void;
   /** The newest applied state. */
   readonly state: PreviewState;
@@ -167,6 +172,12 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
     },
     emitDropNode(sourceNodeId, target, copy) {
       post(dropNodeMessage(pack, sourceNodeId, target, copy, outboundRevision()));
+    },
+    emitRequestUndo() {
+      post(requestHistoryMessage(pack, "undo"));
+    },
+    emitRequestRedo() {
+      post(requestHistoryMessage(pack, "redo"));
     },
     emitError(message, recoverable = true) {
       post(errorMessage(pack, state.revision < 0 ? null : state.revision, message, recoverable));

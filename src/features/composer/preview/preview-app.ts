@@ -21,7 +21,12 @@ import type { JSX } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { InsertionTarget } from "../headless-api";
 import type { ComposerComponentProvider } from "../active-pack";
+import {
+  isEditableEventTarget,
+  matchesUndoRedoShortcut,
+} from "../app/use-composer-keyboard";
 import { createPreviewClient, type PreviewClient } from "./client";
+import { INLINE_EDITING_ATTR } from "./inline-edit-dom";
 import type { GuardFailure, MessagePoster, MessageTarget, SerializedRect } from "./protocol";
 import { CompositionCanvas, focusByToken } from "./renderer";
 import { INITIAL_PREVIEW_STATE, type PreviewState } from "./snapshot-store";
@@ -39,6 +44,19 @@ function isFramed(): boolean {
 }
 
 export interface ComposerPreviewAppProps { provider: ComposerComponentProvider }
+
+/**
+ * Match a history request owned by canvas chrome. Inline sessions and native
+ * editable controls retain their own browser undo stack.
+ */
+export function canvasHistoryRequest(
+  event: KeyboardEvent,
+  mode: PreviewState["session"]["mode"],
+  inlineEditActive: boolean,
+): "undo" | "redo" | null {
+  if (mode === "preview" || inlineEditActive || isEditableEventTarget(event.target)) return null;
+  return matchesUndoRedoShortcut(event);
+}
 
 export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps): JSX.Element {
   const [state, setState] = useState<PreviewState>(INITIAL_PREVIEW_STATE);
@@ -111,6 +129,25 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
   useEffect(() => {
     document.documentElement.dataset.theme = state.session.theme;
   }, [state.session.theme]);
+
+  useEffect(() => {
+    if (!framed) return;
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const direction = canvasHistoryRequest(
+        event,
+        state.session.mode,
+        document.querySelector(`[${INLINE_EDITING_ATTR}]`) !== null,
+      );
+      if (direction === null) return;
+      event.preventDefault();
+      if (direction === "undo") clientRef.current?.emitRequestUndo();
+      else clientRef.current?.emitRequestRedo();
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [framed, state.session.mode]);
 
   const onSelect = useCallback((nodeId: string | null) => {
     clientRef.current?.emitSelect(nodeId);
