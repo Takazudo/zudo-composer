@@ -9,7 +9,7 @@ import type { MappingContentEntryCatalog } from "../features/mapping";
 import { createCompositionCatalog as createMappingCompositionCatalog, createIndexedDbMappingProvider, createMappingCatalog, MappingPersistenceError, resolveMappingDefinition, type CompositionCatalog as MappingCompositionCatalog, type MappingCatalog, type MappingInitializationOutcome, type MappingProvider, type MappingRecord } from "../mapping";
 import { browserProviderIdFor, canonicalizeSiteProject, validateSiteProject, type SiteProject, type SiteProjectDomain } from "../site-project";
 import { createCompositionCatalog, createMappingAssignmentCatalog, type CompositionCatalog } from "../sitemapper/catalog";
-import { isSitemapCollectionStore, SitemapPersistenceError, type SitemapInitializationOutcome, type SitemapProvider } from "../sitemapper/library";
+import { isSitemapCollectionStore, SitemapPersistenceError, type SitemapInitializationOutcome, type SitemapProvider, type SitemapRecord } from "../sitemapper/library";
 import type { MappingAssignmentCatalog } from "../sitemapper/routes";
 import { createIndexedDbSitemapProvider } from "../sitemapper/storage/indexeddb/provider";
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
@@ -42,11 +42,40 @@ function activate(value: unknown): { project?: SiteProject; error?: ProviderInte
 
 function assertReady(phase: ProviderIntegrationError["phase"], outcome: { status: string; error?: Error; recovery?: { message?: string } }): void {
   if (outcome.status === "ready") return;
-  throw new ProviderIntegrationError(phase, outcome.error?.message ?? outcome.recovery?.message ?? `${phase} provider requires recovery.`);
+  const retryable = outcome.error && "retryable" in outcome.error && typeof outcome.error.retryable === "boolean"
+    ? outcome.error.retryable
+    : false;
+  const recoveryMessage = outcome.recovery?.message
+    ? `${outcome.recovery.message} Start fresh is required before initialization can continue.`
+    : undefined;
+  throw new ProviderIntegrationError(
+    phase,
+    outcome.error?.message ?? recoveryMessage ?? `${phase} provider requires startFresh recovery.`,
+    retryable,
+    { cause: outcome.error },
+  );
+}
+
+function integrationError(phase: ProviderIntegrationError["phase"], cause: unknown, fallback: string): ProviderIntegrationError {
+  if (cause instanceof ProviderIntegrationError) return cause;
+  const retryable = cause !== null && typeof cause === "object" && "retryable" in cause && typeof cause.retryable === "boolean"
+    ? cause.retryable
+    : true;
+  return new ProviderIntegrationError(phase, cause instanceof Error ? cause.message : fallback, retryable, { cause });
 }
 
 function matches(domain: SiteProjectDomain, logicalId: string, browserId: string): boolean {
   try { return browserProviderIdFor(domain, logicalId as never) === browserId; } catch { return false; }
+}
+
+function resolveBrowserProviderId(domain: SiteProjectDomain, logicalId: string, phase: ProviderIntegrationError["phase"]): string {
+  try {
+    const browserId = browserProviderIdFor(domain, logicalId as never);
+    if (typeof browserId !== "string") throw new TypeError("Provider is not registered.");
+    return browserId;
+  } catch (cause) {
+    throw new ProviderIntegrationError(phase, `Provider "${logicalId}" is not registered for ${domain}.`, false, { cause });
+  }
 }
 
 interface ContentSnapshotStore { readAll(): Promise<{ models: SiteProject["providers"]["content"][number]["models"]; entries: SiteProject["providers"]["content"][number]["entries"] }> }
@@ -61,7 +90,7 @@ export interface ProductionProviderIntegration {
   initialization: { initialize(): Promise<ProviderIntegrationOutcome>; retry(): Promise<ProviderIntegrationOutcome>; startFresh(): Promise<ProviderIntegrationOutcome> };
   getCurrentSiteProject(): Promise<SiteProjectSnapshotOutcome>;
 }
-export interface ProductionProviderIntegrationOptions { project?: SiteProject | null; compositionIdbFactory?: IDBFactory | null; contentIdbFactory?: IDBFactory | null; mappingIdbFactory?: IDBFactory | null; sitemapIdbFactory?: IDBFactory | null }
+export interface ProductionProviderIntegrationOptions { project?: SiteProject | null; compositionIdbFactory?: IDBFactory | null; contentIdbFactory?: IDBFactory | null; mappingIdbFactory?: IDBFactory | null; sitemapIdbFactory?: IDBFactory | null; fileCompositionProvider?: CompositionProvider | null }
 
 /** Compatibility fixture retained for focused renderer tests; production seeding uses SiteProject records. */
 export function createProductionSampleDocument(): CompositionDocument {
@@ -75,8 +104,11 @@ export const PRODUCTION_SEED_IDS = { composition: "product-overview", contentMod
 export const PRODUCTION_SEED_TIMESTAMP = "2026-08-29T00:00:00.000Z";
 export function createProductionComposerProviders(idbFactory?: IDBFactory | null): readonly CompositionProvider[] {
   const project = activate(injectedSiteProject).project;
-  const providers: CompositionProvider[] = [createIndexedDbCompositionProvider({ seed: project?.providers.compositions.find(({ id }) => id === "indexeddb")?.records ?? [], ...(idbFactory === undefined ? {} : { idbFactory }) })];
-  const files = createFileProviderCompositionStore({ catalog: activeComponentProvider.catalog }); if (files) providers.push(providerFromStore(files)); return providers;
+  const providers: CompositionProvider[] = [];
+  if (project?.providers.compositions.some(({ id }) => id === "indexeddb")) providers.push(createIndexedDbCompositionProvider({ seed: project.providers.compositions.find(({ id }) => id === "indexeddb")?.records ?? [], ...(idbFactory === undefined ? {} : { idbFactory }) }));
+  const files = createFileProviderCompositionStore({ catalog: activeComponentProvider.catalog });
+  if (files && project?.providers.compositions.some(({ id }) => id === "files")) providers.push(providerFromStore(files));
+  return providers;
 }
 export function createInitializedCompositionCatalog(providers: readonly CompositionProvider[]): CompositionCatalog {
   const catalog = createCompositionCatalog(providers); const ready = new Map<CompositionProvider, Promise<CompositionInitializationOutcome>>();
@@ -98,9 +130,17 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   const idb = <T>(value: T | undefined, key: string): Record<string, T> => value === undefined ? {} : { [key]: value };
 
   const baseComposition = createIndexedDbCompositionProvider({ seed: compositionSeed, ...idb(options.compositionIdbFactory, "idbFactory") });
-  const baseCompositions: CompositionProvider[] = [baseComposition];
-  const fileStore = createFileProviderCompositionStore({ catalog: activeComponentProvider.catalog });
-  if (fileStore) baseCompositions.push(providerFromStore(fileStore));
+  const fileStore = options.fileCompositionProvider === undefined
+    ? createFileProviderCompositionStore({ catalog: activeComponentProvider.catalog })
+    : null;
+  const fileProvider = options.fileCompositionProvider ?? (fileStore ? providerFromStore(fileStore) : undefined);
+  const compositionCandidates = new Map<string, CompositionProvider>([[baseComposition.descriptor.id, baseComposition]]);
+  if (fileProvider?.descriptor.id === "files") compositionCandidates.set(fileProvider.descriptor.id, fileProvider);
+  const baseCompositions: CompositionProvider[] = [];
+  for (const declared of project?.providers.compositions ?? []) {
+    const provider = compositionCandidates.get(browserProviderIdFor("compositions", declared.id));
+    if (provider) baseCompositions.push(provider);
+  }
   const baseContent = createIndexedDbContentProvider({ seed: { models: contentSeed?.models ?? [], entries: contentSeed?.entries ?? [] }, ...idb(options.contentIdbFactory, "idbFactory") });
   const baseMapping = createIndexedDbMappingProvider({ seed: { mappings: mappingSeed }, ...idb(options.mappingIdbFactory, "idbFactory") });
   const baseSitemap = createIndexedDbSitemapProvider({ seed: sitemapSeed, ...idb(options.sitemapIdbFactory, "idbFactory") });
@@ -121,21 +161,54 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     }
   };
 
+  const readCompositionRecords = async (provider: CompositionProvider): Promise<readonly import("../composer/browser").CompositionRecord[]> => {
+    if (isCompositionCollectionStore(provider.store)) return provider.store.readAll();
+    const summaries = await provider.store.list();
+    return Promise.all(summaries.map(async ({ id }) => {
+      const loaded = await provider.store.get(id);
+      if (loaded.status !== "loaded") throw new ProviderIntegrationError("composition", `Composition "${provider.descriptor.id}:${id}" could not be loaded coherently.`);
+      return loaded.record;
+    }));
+  };
+
+  const compositionIdsByProvider = async (): Promise<Map<string, Set<string>>> => {
+    const result = new Map<string, Set<string>>();
+    for (const provider of baseCompositions) result.set(provider.descriptor.id, new Set((await readCompositionRecords(provider)).map(({ id }) => id)));
+    return result;
+  };
+
   const verifyMappingRefs = async (records: readonly MappingRecord[] = mappingSeed): Promise<void> => {
-    if (!isCompositionCollectionStore(baseComposition.store)) throw new ProviderIntegrationError("composition", "Composition provider lacks atomic collection support.");
-    const compositions = await baseComposition.store.readAll();
+    const compositions = await compositionIdsByProvider();
     const content = await (baseContent.store as unknown as ContentSnapshotStore).readAll();
-    const compositionIds = new Set(compositions.map(({ id }) => id)); const modelIds = new Set(content.models.map(({ id }) => id));
+    const modelIds = new Set(content.models.map(({ id }) => id));
     for (const record of records) {
-      if (!matches("compositions", record.document.composition.providerId, baseComposition.descriptor.id) || !compositionIds.has(record.document.composition.recordId)) throw new ProviderIntegrationError("mapping", `Mapping "${record.id}" references an unavailable Composition.`);
+      const compositionProviderId = resolveBrowserProviderId("compositions", record.document.composition.providerId, "mapping");
+      if (!compositions.get(compositionProviderId)?.has(record.document.composition.recordId)) throw new ProviderIntegrationError("mapping", `Mapping "${record.id}" references unavailable Composition "${record.document.composition.providerId}:${record.document.composition.recordId}".`);
       if (!matches("content", record.document.contentModel.providerId, baseContent.descriptor.id) || !modelIds.has(record.document.contentModel.recordId)) throw new ProviderIntegrationError("mapping", `Mapping "${record.id}" references an unavailable Content model.`);
     }
   };
 
-  const verifySitemapRefs = async (): Promise<void> => {
+  const verifySitemapRefs = async (action: "initialize" | "retry" | "startFresh"): Promise<void> => {
+    const compositions = await compositionIdsByProvider();
     const mappings = await (baseMapping.store as unknown as MappingSnapshotStore).readAll(); const mappingIds = new Set(mappings.map(({ id }) => id));
-    for (const sitemap of sitemapSeed) {
-      const visit = (nodes: typeof sitemap.document.root): void => { for (const node of nodes) { if (node.source.kind === "mapping" && (!matches("mappings", node.source.ref.providerId, baseMapping.descriptor.id) || !mappingIds.has(node.source.ref.recordId))) throw new ProviderIntegrationError("sitemap", `Sitemap "${sitemap.id}" references an unavailable Mapping.`); visit(node.children); } };
+    let live: readonly SitemapRecord[] = [];
+    if (action !== "startFresh") {
+      try {
+        if (!isSitemapCollectionStore(baseSitemap.store)) throw new ProviderIntegrationError("sitemap", "Sitemap provider lacks atomic collection support.", false);
+        live = await baseSitemap.store.readAll();
+      } catch (cause) { throw integrationError("sitemap", cause, "Existing Sitemaps could not be preflighted."); }
+    }
+    const effective = new Map(sitemapSeed.map((record) => [record.id, record]));
+    for (const record of live) effective.set(record.id, record);
+    for (const sitemap of effective.values()) {
+      const visit = (nodes: typeof sitemap.document.root): void => { for (const node of nodes) {
+        if (node.source.kind === "composition") {
+          const providerId = resolveBrowserProviderId("compositions", node.source.ref.providerId, "sitemap");
+          if (!compositions.get(providerId)?.has(node.source.ref.recordId)) throw new ProviderIntegrationError("sitemap", `Sitemap "${sitemap.id}" references unavailable Composition "${node.source.ref.providerId}:${node.source.ref.recordId}".`);
+        }
+        if (node.source.kind === "mapping" && (!matches("mappings", node.source.ref.providerId, baseMapping.descriptor.id) || !mappingIds.has(node.source.ref.recordId))) throw new ProviderIntegrationError("sitemap", `Sitemap "${sitemap.id}" references unavailable Mapping "${node.source.ref.providerId}:${node.source.ref.recordId}".`);
+        visit(node.children);
+      } };
       visit(sitemap.document.root);
     }
   };
@@ -165,9 +238,9 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       assertReady("content", await baseContent.initialization[action]()); await verifyMappingRefs();
       assertReady("mapping", await baseMapping.initialization[action]());
       await verifyMappingRefs(await (baseMapping.store as unknown as MappingSnapshotStore).readAll());
-      await verifySitemapRefs();
+      await verifySitemapRefs(action);
       assertReady("sitemap", await baseSitemap.initialization[action]()); await snapshotNow(); freshPending = false; return { status: "ready" };
-    } catch (cause) { return { status: "error", error: cause instanceof ProviderIntegrationError ? cause : new ProviderIntegrationError("snapshot", cause instanceof Error ? cause.message : "Provider integration failed.", true, { cause }) }; }
+    } catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Provider integration failed.") }; }
   };
   const schedule = (kind: "initialize" | "retry" | "startFresh"): Promise<ProviderIntegrationOutcome> => {
     if (active?.kind === kind) return active.promise;
