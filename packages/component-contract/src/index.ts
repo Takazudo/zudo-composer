@@ -10,6 +10,7 @@ export type {
   AuthorFieldDefinition,
   AuthorInlineEditMetadata,
   AuthorSlotDefinition,
+  AuthorStaticPropDefinition,
   ComponentDefaults,
   ComponentDocument,
   ComponentManifest,
@@ -32,6 +33,7 @@ export type {
   RuntimeSchema,
   SlotCardinality,
   SlotDefinition,
+  StaticPropDefinition,
   TrustedComponentPack,
 } from './types.js';
 export { resolveComponentNode } from './runtime.js';

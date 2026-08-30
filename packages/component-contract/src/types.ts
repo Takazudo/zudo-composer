@@ -127,6 +127,15 @@ export interface SlotDefinition<TComponentId extends string = string, TProp exte
   readonly cardinality: SlotCardinality;
 }
 
+/** Explicitly documents a prop that is intentionally not authorable. */
+export interface StaticPropDefinition<TProp extends string = string> {
+  readonly prop: TProp;
+  readonly reason?: string;
+}
+
+export type AuthorStaticPropDefinition<TProps extends object = Record<string, unknown>> =
+  StaticPropDefinition<PropKey<TProps>>;
+
 /** Public import metadata for deterministic generated source. */
 export interface PublicSourceDefinition {
   readonly module: string;
@@ -145,6 +154,8 @@ export interface ComponentManifest<TComponentId extends string = string> {
   readonly defaults: JsonObject;
   readonly fields: readonly FieldDefinition[];
   readonly slots: readonly SlotDefinition<TComponentId>[];
+  /** Normalized to an empty array by the runtime parser when omitted. */
+  readonly staticProps?: readonly StaticPropDefinition[];
 }
 
 export interface ComponentPackManifest<TComponentId extends string = string> {
@@ -169,7 +180,7 @@ export interface RuntimeAdapters<
   readonly inlineEditor?: InlineEditorAdapter<TProps, TElement>;
 }
 
-export interface AuthorComponentDefinition<
+interface AuthorComponentDefinitionBase<
   TProps extends object = Record<string, unknown>,
   TComponent = unknown,
   TRenderOutput = unknown,
@@ -185,10 +196,40 @@ export interface AuthorComponentDefinition<
   readonly defaults?: ComponentDefaults<TProps>;
   readonly fields?: readonly AuthorFieldDefinition<TProps>[];
   readonly slots?: readonly AuthorSlotDefinition<TProps, string>[];
+  /** Props intentionally kept outside the authoring surface. */
+  readonly staticProps?: readonly AuthorStaticPropDefinition<TProps>[];
   /** Trusted runtime values; neither member enters the manifest. */
   readonly component: TComponent;
   readonly adapters?: RuntimeAdapters<TProps, TRenderOutput, TElement>;
 }
+
+type RequiredPropKey<TProps extends object> = {
+  [TKey in PropKey<TProps>]-?: object extends Pick<TProps, TKey> ? never : TKey;
+}[PropKey<TProps>];
+
+type AtLeastOneRequiredDefault<TProps extends object> = {
+  [TKey in RequiredPropKey<TProps>]: Readonly<Record<TKey, Extract<TProps[TKey], JsonValue>>>
+    & ComponentDefaults<TProps>;
+}[RequiredPropKey<TProps>];
+
+type NonEmptyArray<TValue> = readonly [TValue, ...TValue[]];
+
+type HasRequiredPropClassification<TProps extends object> = [RequiredPropKey<TProps>] extends [never]
+  ? unknown
+  :
+    | { readonly defaults: AtLeastOneRequiredDefault<TProps> }
+    | { readonly fields: NonEmptyArray<AuthorFieldDefinition<TProps> & { readonly prop: RequiredPropKey<TProps> }> }
+    | { readonly slots: NonEmptyArray<AuthorSlotDefinition<TProps, string> & { readonly prop: RequiredPropKey<TProps> }> }
+    | { readonly staticProps: NonEmptyArray<AuthorStaticPropDefinition<TProps> & { readonly prop: RequiredPropKey<TProps> }> };
+
+export type AuthorComponentDefinition<
+  TProps extends object = Record<string, unknown>,
+  TComponent = unknown,
+  TRenderOutput = unknown,
+  TElement = unknown,
+  TComponentId extends string = string,
+> = AuthorComponentDefinitionBase<TProps, TComponent, TRenderOutput, TElement, TComponentId>
+  & HasRequiredPropClassification<TProps>;
 
 export interface RuntimeComponentEntry<TComponent = unknown, TRenderOutput = unknown, TElement = unknown> {
   readonly schemaVersion: number;
@@ -250,6 +291,7 @@ export type ContractIssueCode =
   | 'DUPLICATE_SLOT_ID'
   | 'DUPLICATE_SLOT_PROP'
   | 'DUPLICATE_SOURCE'
+  | 'DUPLICATE_STATIC_PROP'
   | 'FIELD_SLOT_PROP_COLLISION'
   | 'INLINE_EDITOR_MISMATCH'
   | 'INVALID_FIELD_DOMAIN'
@@ -264,7 +306,9 @@ export type ContractIssueCode =
   | 'RUNTIME_COMPONENT_VERSION_MISMATCH'
   | 'RUNTIME_MANIFEST_MISMATCH'
   | 'SOURCE_ADAPTER_NOT_ALLOWED'
+  | 'STATIC_PROP_COLLISION'
   | 'TRUSTED_VALUE_IN_MANIFEST'
+  | 'UNCLASSIFIED_DEFAULT'
   | 'UNRESOLVED_ACCEPTS'
   | 'UNKNOWN_KEY'
   | 'UNSUPPORTED_CONTRACT_VERSION'
