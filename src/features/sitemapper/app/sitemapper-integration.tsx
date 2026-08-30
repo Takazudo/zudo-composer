@@ -5,6 +5,7 @@
 
 import type { JSX } from "preact";
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+import { ArrowLeftIcon } from "../../../components/icons";
 import type { IdFactory } from "../../../shared";
 import type { CompositionCatalog } from "../../../sitemapper/catalog";
 import type { SitemapRecord, SitemapStore } from "../../../sitemapper/library";
@@ -81,7 +82,7 @@ export function SitemapperIntegration({ record, store, catalog, mappingCatalog, 
   return (
     <SitemapperWorkspace
       banner={transitionError || controller.lastError ? <p role="alert">{transitionError ?? controller.lastError}</p> : null}
-      toolbar={<><button type="button" class="sg-sitemapper-toolbar-button" onClick={() => void back()}>All sitemaps</button><SitemapperToolbar documentName={document.name} saveStatus={controller.state.saveStatus} onRetrySave={controller.retrySave} /></>}
+      toolbar={<><button type="button" class="sg-sitemapper-toolbar-button" onClick={() => void back()}><ArrowLeftIcon size="sm" />All sitemaps</button><SitemapperToolbar documentName={document.name} saveStatus={controller.state.saveStatus} onRetrySave={controller.retrySave} /></>}
       tree={<SitemapTree document={document} routeInfo={routeExpansion?.nodes ?? new Map()} selectedId={selectedId} expandedIds={controller.state.expandedIds} onSelect={select} onToggleExpanded={(pageId) => dispatch({ type: "toggleExpanded", pageId })} onAddChild={addChild} onAddSibling={addSibling} onRename={(pageId, title) => dispatch({ type: "updateProps", pageId, patch: { title } })} onDuplicate={duplicate} onDelete={remove} onReorder={(pageId, direction) => dispatch({ type: "reorder", pageId, direction })} />}
       canvas={<SitemapCanvas document={document} routeInfo={routeExpansion?.nodes ?? new Map()} selectedId={selectedId} onSelect={select} onAddChild={addChild} onAddSibling={addSibling} onDuplicate={duplicate} onDelete={remove} onCreateRoot={() => undefined} />}
       inspector={<InspectorPanel selectedId={selectedId} node={selectedNode} catalog={catalog} mappingCatalog={mappingCatalog} routeInfo={selectedId ? routeExpansion?.nodes.get(selectedId) : undefined} onUpdatePropsDebounced={controller.updatePropsDebounced} onFlushPropUpdates={controller.flushPropUpdates} onUpdateComposition={(pageId, composition) => dispatch({ type: "updateProps", pageId, patch: { source: composition ? { kind: "composition", ref: composition } : { kind: "unassigned" } } })} onUpdateSource={(pageId, source) => dispatch({ type: "updateProps", pageId, patch: { source } })} />}

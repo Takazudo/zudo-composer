@@ -14,7 +14,7 @@ import {
   CopyIcon,
   PlusIcon,
   TrashIcon,
-} from "../icons";
+} from "../../../../components/icons";
 
 export interface DeleteConfirmProps {
   nodeTitle: string;
