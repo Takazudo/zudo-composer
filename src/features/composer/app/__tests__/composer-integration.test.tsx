@@ -26,6 +26,7 @@ import {
   readyMessage as protocolReadyMessage,
   requestAddMessage as protocolRequestAddMessage,
   requestInsertMenuMessage as protocolRequestInsertMenuMessage,
+  requestHistoryMessage as protocolRequestHistoryMessage,
   requestNodeMenuMessage as protocolRequestNodeMenuMessage,
   selectMessage as protocolSelectMessage,
 } from "../../preview/protocol";
@@ -54,6 +55,8 @@ const PREVIEW_PACK = fixtureComponentProvider.manifest;
 const readyMessage = () => protocolReadyMessage(PREVIEW_PACK);
 const requestAddMessage = (revision: number, target: InsertionTarget) =>
   protocolRequestAddMessage(PREVIEW_PACK, revision, target);
+const requestHistoryMessage = (direction: "undo" | "redo") =>
+  protocolRequestHistoryMessage(PREVIEW_PACK, direction);
 const selectMessage = (revision: number, nodeId: string) => protocolSelectMessage(PREVIEW_PACK, revision, nodeId);
 const commitInlineEditMessage = (nodeId: string, fieldKey: string, value: string, revision: number) =>
   protocolCommitInlineEditMessage(PREVIEW_PACK, nodeId, fieldKey, value, revision);
@@ -546,6 +549,93 @@ describe("ComposerIntegration — replay + guarded keyboard (#251)", () => {
     fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Edit" }));
     fireEvent.keyDown(document.body, { key: "Delete" });
     expect(s.canvasDoc().root).toHaveLength(0);
+  });
+});
+
+describe("ComposerIntegration — undo/redo app wiring (#74)", () => {
+  it("drives one controller from toolbar, parent shortcuts, and canvas relay", () => {
+    const s = setup();
+    const undo = () => within(s.toolbar()).getByRole("button", { name: "Undo" });
+    const redo = () => within(s.toolbar()).getByRole("button", { name: "Redo" });
+
+    expect(undo()).toBeDisabled();
+    expect(redo()).toBeDisabled();
+
+    s.addAt(ROOT, "Box");
+    expect(s.canvasDoc().root).toHaveLength(1);
+    expect(undo()).toBeEnabled();
+    expect(redo()).toBeDisabled();
+
+    // Toolbar actions are wired directly to the mounted controller.
+    fireEvent.click(undo());
+    expect(s.canvasDoc().root).toHaveLength(0);
+    expect(undo()).toBeDisabled();
+    expect(redo()).toBeEnabled();
+    fireEvent.click(redo());
+    expect(s.canvasDoc().root).toHaveLength(1);
+
+    // Parent-document shortcuts use the same callbacks and capability flags.
+    fireEvent.keyDown(document, { key: "z", ctrlKey: true });
+    expect(s.canvasDoc().root).toHaveLength(0);
+    expect(undo()).toBeDisabled();
+    expect(redo()).toBeEnabled();
+
+    // Canvas-relayed shortcuts reach that same controller as well.
+    act(() => s.bridge.deliver(requestHistoryMessage("redo")));
+    expect(s.canvasDoc().root).toHaveLength(1);
+    act(() => s.bridge.deliver(requestHistoryMessage("undo")));
+    expect(s.canvasDoc().root).toHaveLength(0);
+    expect(undo()).toBeDisabled();
+    expect(redo()).toBeEnabled();
+  });
+
+  it("tracks disabled history buttons through mutation, undo, and Preview mode", () => {
+    const s = setup();
+    const undo = () => within(s.toolbar()).getByRole("button", { name: "Undo" });
+    const redo = () => within(s.toolbar()).getByRole("button", { name: "Redo" });
+
+    s.addAt(ROOT, "Box");
+    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Preview" }));
+
+    expect(undo()).toBeDisabled();
+    expect(redo()).toBeDisabled();
+    expect(s.canvasDoc().root).toHaveLength(1);
+
+    // Preview's controller capability flags disable both affordances and its
+    // keyboard/canvas guards leave the document untouched.
+    fireEvent.keyDown(document, { key: "z", ctrlKey: true });
+    act(() => s.bridge.deliver(requestHistoryMessage("undo")));
+    expect(s.canvasDoc().root).toHaveLength(1);
+
+    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Edit" }));
+    expect(undo()).toBeEnabled();
+    expect(redo()).toBeDisabled();
+    fireEvent.click(undo());
+    expect(undo()).toBeDisabled();
+    expect(redo()).toBeEnabled();
+  });
+
+  it("drops an inline commit stamped before undo and shows the existing stale notice", () => {
+    const s = setup();
+    s.addAt(ROOT, "Box");
+    const boxId = s.canvasDoc().root[0]!.id;
+    const beforeUndoRevision = asAny(
+      s.bridge.posts.filter((p) => asAny(p.message).type === "render").at(-1)!.message,
+    ).revision as number;
+
+    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Undo" }));
+    expect(s.canvasDoc().root).toHaveLength(0);
+    const afterUndoRevision = asAny(
+      s.bridge.posts.filter((p) => asAny(p.message).type === "render").at(-1)!.message,
+    ).revision as number;
+    expect(afterUndoRevision).toBeGreaterThan(beforeUndoRevision);
+
+    act(() =>
+      s.bridge.deliver(commitInlineEditMessage(boxId, "label", "Late canvas edit", beforeUndoRevision)),
+    );
+
+    expect(s.canvasDoc().root).toHaveLength(0);
+    expect(screen.getByText(/Your inline edit was not applied/)).toBeInTheDocument();
   });
 });
 
