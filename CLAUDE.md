@@ -15,8 +15,11 @@ application runtime/config, virtual-zfb, or styleguide registry may enter this
 application. Never copy provider components or add a fallback registry.
 
 Exact routes are `/`, `/composer`, same-origin `/composer/preview`, `/content`,
-`/mapping`, `/sitemapper`, and `/media`; emitted files live under `/assets/`. Keep Vite base `/` and the
-preview graph isolated from the host application and filesystem provider.
+`/mapping`, `/sitemapper`, and `/media`; build-emitted files live under
+`/assets/`, while committed images and PDFs from `media-store/public` are
+delivered under `/uploaded-media/`. Upload authoring remains dev-only. Keep Vite
+base `/` and the preview graph isolated from the host application and filesystem
+provider.
 
 ## Clean-break authority
 

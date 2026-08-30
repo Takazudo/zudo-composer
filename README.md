@@ -31,10 +31,13 @@ The Vite application has base `/` and these exact SPA routes:
 - `/sitemapper` — Sitemapper library and editor
 - `/media` — Media library and upload/delivery status
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
+- `/uploaded-media/` — committed images and PDFs copied from `media-store/public`
 
 The preview route is an implementation boundary, not an independent public
 product. Cloudflare serves route fallbacks from the same immutable `dist` tree;
-all emitted assets remain rooted at `/assets/`.
+build-emitted assets remain rooted at `/assets/`, while committed media is
+delivered from `/uploaded-media/`. Upload authoring is available only in local
+development, but committed media delivery is part of the production artifact.
 
 ## Development and validation
 

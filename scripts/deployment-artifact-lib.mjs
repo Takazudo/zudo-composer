@@ -9,10 +9,16 @@ export const LIVE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];
 
 const MIME_BY_EXTENSION = new Map([
   [".css", "text/css"],
+  [".gif", "image/gif"],
   [".html", "text/html"],
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
   [".js", "text/javascript"],
   [".mjs", "text/javascript"],
+  [".pdf", "application/pdf"],
+  [".png", "image/png"],
   [".wasm", "application/wasm"],
+  [".webp", "image/webp"],
 ]);
 
 export function sha256(bytes) {
