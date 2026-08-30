@@ -1,21 +1,60 @@
 import type { ContentFieldKind } from "../../content/model";
 import type { MappingTargetKind, MappingTransform } from "../model";
 
-const STRING_KINDS = new Set<ContentFieldKind>(["text", "long-text", "markdown", "slug", "url", "date", "color"]);
+function assertNever(value: never, axis: "Content field" | "component target"): never {
+  throw new TypeError(`Unhandled ${axis} kind: ${String(value)}`);
+}
 
-export function isStringProducingSource(kind: ContentFieldKind): boolean { return STRING_KINDS.has(kind); }
+export function isStringProducingSource(kind: ContentFieldKind): boolean {
+  switch (kind) {
+    case "text": case "long-text": case "markdown": case "date": case "slug": case "color": case "url": return true;
+    case "number": case "boolean": return false;
+    default: return assertNever(kind, "Content field");
+  }
+}
+
+function isIdentityCompatible(source: ContentFieldKind, target: MappingTargetKind): boolean {
+  switch (target) {
+    case "text": return isStringProducingSource(source);
+    case "select": {
+      switch (source) {
+        case "text": case "slug": return true;
+        case "long-text": case "markdown": case "number": case "boolean": case "date": case "color": case "url": return false;
+        default: return assertNever(source, "Content field");
+      }
+    }
+    case "color": {
+      switch (source) {
+        case "color": return true;
+        case "text": case "long-text": case "markdown": case "number": case "boolean": case "date": case "slug": case "url": return false;
+        default: return assertNever(source, "Content field");
+      }
+    }
+    case "number": {
+      switch (source) {
+        case "number": return true;
+        case "text": case "long-text": case "markdown": case "boolean": case "date": case "slug": case "color": case "url": return false;
+        default: return assertNever(source, "Content field");
+      }
+    }
+    case "boolean": {
+      switch (source) {
+        case "boolean": return true;
+        case "text": case "long-text": case "markdown": case "number": case "date": case "slug": case "color": case "url": return false;
+        default: return assertNever(source, "Content field");
+      }
+    }
+    default: return assertNever(target, "component target");
+  }
+}
 
 export function isMappingCompatible(source: ContentFieldKind, target: MappingTargetKind, transform: MappingTransform): boolean {
   switch (transform.kind) {
     case "identity":
-      if (target === "text") return STRING_KINDS.has(source);
-      if (target === "select") return source === "text" || source === "slug";
-      if (target === "color") return source === "color";
-      if (target === "number") return source === "number";
-      return target === "boolean" && source === "boolean";
+      return isIdentityCompatible(source, target);
     case "date-medium": return source === "date" && target === "text";
-    case "truncate-160": return STRING_KINDS.has(source) && target === "text";
-    case "prefix": return STRING_KINDS.has(source) && target === "text" && Array.from(transform.prefix).length <= 80;
+    case "truncate-160": return isStringProducingSource(source) && target === "text";
+    case "prefix": return isStringProducingSource(source) && target === "text" && Array.from(transform.prefix).length <= 80;
   }
 }
 

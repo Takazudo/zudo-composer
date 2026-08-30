@@ -29,7 +29,7 @@ function stubFor(entry: ComponentDefinition): string {
   const props = new Map<string, string>();
   for (const f of entry.fields) {
     if (f.prop === "children") props.set("children", "ComponentChildren");
-    else props.set(f.prop, f.kind === "number" ? "number" : f.kind === "boolean" ? "boolean" : "string");
+    else props.set(f.prop, f.schema.type === "number" ? "number" : f.schema.type === "boolean" ? "boolean" : "string");
   }
   for (const slot of entry.slots) {
     if (slot.prop === "children") props.set("children", "ComponentChildren");

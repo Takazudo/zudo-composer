@@ -7,8 +7,8 @@ import { activeComponentProvider } from "../../composer/active-pack";
 import { MappingEditorController, type MappingContentEntryCatalog } from "../controller";
 
 const now = "2026-01-02T03:04:05.000Z";
-const component = activeComponentProvider.manifest.components.find((item) => item.fields.some((field) => field.kind === "text"))!;
-const targetField = component.fields.find((field) => field.kind === "text")!;
+const component = activeComponentProvider.manifest.components.find((item) => item.fields.some((field) => field.editor.kind === "text"))!;
+const targetField = component.fields.find((field) => field.editor.kind === "text")!;
 const sourceKind = "text" as const;
 const model: ContentModelRecord = { id: "model-1", createdAt: now, updatedAt: now, document: { schemaVersion: 1, id: "model-1", name: "Articles", kind: "collection", fields: [{ id: "field-1", key: "title", label: "Title", required: true, kind: sourceKind }] } };
 const entry: ContentEntryRecord = { schemaVersion: 1, id: "entry-1", modelId: model.id, createdAt: now, updatedAt: now, values: { "field-1": "Hello" } };

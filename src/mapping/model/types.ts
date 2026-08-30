@@ -1,4 +1,4 @@
-import type { JsonValue } from "@zudo-composer/component-contract";
+import type { FieldDefinition, JsonValue } from "@zudo-composer/component-contract";
 import type { CompositionRecordRef } from "../../composer/library";
 import type { ContentModelRef } from "../../content/catalog";
 import type { ContentFieldKind } from "../../content/model";
@@ -9,9 +9,13 @@ export const MAPPING_SCHEMA_VERSION = 1 as const;
 export interface MappingTarget { nodeId: string; prop: string }
 
 export type MappingTransform =
+  /** Preserve the scalar value exactly when the source and target domains agree. */
   | { kind: "identity" }
+  /** Format a canonical Content date string as a medium, UTC-stable display date. */
   | { kind: "date-medium" }
+  /** Keep 160 Unicode code points from longer Content, then append an ellipsis. */
   | { kind: "truncate-160" }
+  /** Add a configured label/decorator before string-producing Content. */
   | { kind: "prefix"; prefix: string };
 
 export interface MappingBinding {
@@ -60,25 +64,38 @@ export type MappingValidation =
   | { ok: true; record: MappingRecord }
   | { ok: false; issue: MappingValidationIssue };
 
-export type MappingTargetKind = "text" | "select" | "boolean" | "number" | "color";
+type StructuredComponentField = Extract<FieldDefinition, { readonly schema: { readonly items: unknown } | { readonly fields: unknown } }>;
+export type ScalarMappingTargetField = Exclude<FieldDefinition, StructuredComponentField>;
+export type MappingTargetKind = ScalarMappingTargetField["editor"]["kind"];
 
-export interface MappingTargetDescriptor {
+interface MappingTargetDescriptorBase {
   target: MappingTarget;
   nodeLabel: string;
   componentId: string;
   componentVersion: number;
   componentLabel: string;
   fieldLabel: string;
-  kind: MappingTargetKind;
   required: boolean;
-  options?: readonly string[];
 }
+
+type MappingTargetDescriptorFor<TField extends ScalarMappingTargetField> =
+  MappingTargetDescriptorBase
+  & { kind: TField["editor"]["kind"] }
+  & (TField extends { readonly schema: { readonly enum: infer TOptions extends readonly string[] } }
+    ? { options: TOptions }
+    : { options?: never });
+
+export type MappingTargetDescriptor = ScalarMappingTargetField extends infer TField
+  ? TField extends ScalarMappingTargetField
+    ? MappingTargetDescriptorFor<TField>
+    : never
+  : never;
 
 export type MappingDefinitionDiagnosticCode =
   | "content-model-not-found" | "content-model-invalid" | "content-provider-error"
   | "composition-not-found" | "composition-invalid" | "composition-provider-error"
   | "source-field-missing" | "target-node-missing" | "component-missing"
-  | "component-version-mismatch" | "target-field-missing" | "duplicate-target"
+  | "component-version-mismatch" | "target-field-missing" | "structured-target-unsupported" | "duplicate-target"
   | "incompatible-binding" | "invalid-transform-config";
 
 export interface MappingDefinitionDiagnostic {

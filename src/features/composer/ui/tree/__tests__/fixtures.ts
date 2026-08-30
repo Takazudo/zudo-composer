@@ -28,7 +28,7 @@ export const fixtureCatalog: ComponentManifest[] = [
     description: "Two-column layout with named left/right slots.",
     source: src("SplitLayout"),
     defaults: { ratio: "50-50" },
-    fields: [{ kind: "select", prop: "ratio", label: "Ratio", options: ["50-50", "33-67"] }],
+    fields: [{ schema: { type: "string", enum: ["50-50", "33-67"] }, editor: { kind: "select" }, prop: "ratio", label: "Ratio" }],
     slots: [
       { id: "left", prop: "left", label: "Left", cardinality: "single" },
       { id: "right", prop: "right", label: "Right", cardinality: "many" },
@@ -42,7 +42,7 @@ export const fixtureCatalog: ComponentManifest[] = [
     description: "Vertical stack rendering its default slot.",
     source: src("Stack"),
     defaults: { gap: "md" },
-    fields: [{ kind: "select", prop: "gap", label: "Gap", options: ["sm", "md", "lg"] }],
+    fields: [{ schema: { type: "string", enum: ["sm", "md", "lg"] }, editor: { kind: "select" }, prop: "gap", label: "Gap" }],
     slots: [{ id: "content", prop: "children", label: "Content", cardinality: "many" }],
   },
   {
@@ -66,7 +66,7 @@ export const fixtureCatalog: ComponentManifest[] = [
     description: "A generic content leaf.",
     source: src("Box"),
     defaults: { label: "Box" },
-    fields: [{ kind: "text", prop: "label", label: "Label" }],
+    fields: [{ schema: { type: "string" }, editor: { kind: "text" }, prop: "label", label: "Label" }],
     slots: [],
   },
   {
@@ -77,7 +77,7 @@ export const fixtureCatalog: ComponentManifest[] = [
     description: "A scalar text leaf.",
     source: src("Text"),
     defaults: { children: "Text" },
-    fields: [{ kind: "text", prop: "children", label: "Text" }],
+    fields: [{ schema: { type: "string" }, editor: { kind: "text" }, prop: "children", label: "Text" }],
     slots: [],
   },
   {
@@ -89,8 +89,8 @@ export const fixtureCatalog: ComponentManifest[] = [
     source: src("Button"),
     defaults: { children: "Go", href: "#" },
     fields: [
-      { kind: "text", prop: "children", label: "Label" },
-      { kind: "text", prop: "href", label: "Href" },
+      { schema: { type: "string" }, editor: { kind: "text" }, prop: "children", label: "Label" },
+      { schema: { type: "string" }, editor: { kind: "text" }, prop: "href", label: "Href" },
     ],
     slots: [],
   },
