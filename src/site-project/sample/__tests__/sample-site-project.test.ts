@@ -134,17 +134,18 @@ describe("sample SiteProject", () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.build.routes.map((route) => [
       route.pathname,
+      route.displayTitle,
       `${route.source.kind}:${route.source.ref.providerId}:${route.source.ref.recordId}`,
       route.selectedEntry ? `${route.selectedEntry.providerId}:${route.selectedEntry.recordId}` : null,
       `${route.composition.local.providerId}:${route.composition.local.recordId}`,
     ])).toEqual([
-      ["/", "composition:indexeddb:home-page", null, "indexeddb:home-page"],
-      ["/about", "mapping:mapping-indexeddb:about-page-mapping", "content-indexeddb:about-entry", "indexeddb:about-page"],
-      ["/journal", "composition:indexeddb:journal-index-page", null, "indexeddb:journal-index-page"],
-      ["/journal/map-the-moving-parts", "mapping:mapping-indexeddb:journal-entry-mapping", "content-indexeddb:article-moving-parts", "indexeddb:journal-entry-page"],
-      ["/journal/review-in-small-loops", "mapping:mapping-indexeddb:journal-entry-mapping", "content-indexeddb:article-small-loops", "indexeddb:journal-entry-page"],
-      ["/journal/start-with-the-question", "mapping:mapping-indexeddb:journal-entry-mapping", "content-indexeddb:article-first-question", "indexeddb:journal-entry-page"],
-      ["/services", "composition:indexeddb:services-page", null, "indexeddb:services-page"],
+      ["/", "Home", "composition:indexeddb:home-page", null, "indexeddb:home-page"],
+      ["/about", "About", "mapping:mapping-indexeddb:about-page-mapping", "content-indexeddb:about-entry", "indexeddb:about-page"],
+      ["/journal", "Journal", "composition:indexeddb:journal-index-page", null, "indexeddb:journal-index-page"],
+      ["/journal/map-the-moving-parts", "Map the moving parts", "mapping:mapping-indexeddb:journal-entry-mapping", "content-indexeddb:article-moving-parts", "indexeddb:journal-entry-page"],
+      ["/journal/review-in-small-loops", "Review in small loops", "mapping:mapping-indexeddb:journal-entry-mapping", "content-indexeddb:article-small-loops", "indexeddb:journal-entry-page"],
+      ["/journal/start-with-the-question", "Start with the question", "mapping:mapping-indexeddb:journal-entry-mapping", "content-indexeddb:article-first-question", "indexeddb:journal-entry-page"],
+      ["/services", "Services", "composition:indexeddb:services-page", null, "indexeddb:services-page"],
     ]);
     expect(result.build.routes).toHaveLength(7);
     expect(result.build.routes.every((route) => route.composition.linkedSource?.ref.recordId === "site-frame")).toBe(true);
@@ -160,7 +161,7 @@ describe("sample SiteProject", () => {
         sources.push(node.source.kind);
         if (node.id === "journal-entry-node") {
           expect(node).not.toHaveProperty("slug");
-          expect(node.source).toMatchObject({ route: { kind: "entry-field", fieldId: "article-slug-field" } });
+          expect(node.source).toMatchObject({ route: { kind: "entry-field", fieldId: "article-slug-field", titleFieldId: "article-heading-field" } });
         }
         walk(node.children);
       }

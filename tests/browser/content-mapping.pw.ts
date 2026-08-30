@@ -134,8 +134,10 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   // A native date input cannot author a malformed date, so preserve one
   // provider-level stale value to prove Mapping diagnoses it without rewriting it.
   await page.evaluate(async () => {
+    const databaseName = (await indexedDB.databases()).find(({ name }) => name?.startsWith("zudo-composer-content--site-project--"))?.name
+      ?? "zudo-composer-content";
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("zudo-composer-content", 1);
+      const request = indexedDB.open(databaseName, 1);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -293,8 +295,10 @@ test("focused broken Mapping refs remain visible and can be repaired", async ({ 
   await page.getByRole("button", { name: new RegExp(`^${COLLECTION_MAPPING}`) }).click();
   await page.getByRole("button", { name: "Library" }).click();
   await page.evaluate(async () => {
+    const databaseName = (await indexedDB.databases()).find(({ name }) => name?.startsWith("zudo-composer-mapping--site-project--"))?.name
+      ?? "zudo-composer-mapping";
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("zudo-composer-mapping", 1);
+      const request = indexedDB.open(databaseName, 1);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });

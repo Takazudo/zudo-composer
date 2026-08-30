@@ -24,6 +24,7 @@ describe("SiteProject compiler", () => {
     expect(result.build.routes).toHaveLength(1);
     expect(result.build.routes[0]).toMatchObject({
       pathname: "/",
+      displayTitle: "home",
       source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "landing" } },
       composition: { local: { providerId: "indexeddb", recordId: "landing" }, document: { id: "landing" } },
     });
@@ -37,18 +38,30 @@ describe("SiteProject compiler", () => {
     const result = await compile(project({ root: page("about", "about", mappingSource("single")), contentModel: model("single"), entries: [entry("singleton", "Mapped title")] }));
     expect(result.status).toBe("ready");
     if (result.status !== "ready") return;
-    expect(result.build.routes[0]).toMatchObject({ pathname: "/about", selectedEntry: { providerId: "content-indexeddb", recordId: "singleton" }, composition: { document: { root: [{ props: { title: "Mapped title" } }] } } });
+    expect(result.build.routes[0]).toMatchObject({ pathname: "/about", displayTitle: "about", selectedEntry: { providerId: "content-indexeddb", recordId: "singleton" }, composition: { document: { root: [{ props: { title: "Mapped title" } }] } } });
     expect(result.build.modules[0]!.code).toContain("Mapped title");
   });
 
   it("expands collection Entries with encoded Unicode routes and exact Entry selection", async () => {
-    const result = await compile(project({ root: page("articles", "café", mappingSource()), entries: [entry("z", "Zulu", "東京"), entry("a", "Alpha", "crème brûlée")] }));
+    const result = await compile(project({ root: page("articles", "café", mappingSource("entry-field", "title")), entries: [entry("z", "Zulu", "東京"), entry("a", "Alpha", "crème brûlée")] }));
     expect(result.status).toBe("ready");
     if (result.status !== "ready") return;
-    expect(result.build.routes.map((route) => [route.pathname, route.selectedEntry?.recordId, route.composition.document.root[0]?.props.title])).toEqual([
-      ["/caf%C3%A9/%E6%9D%B1%E4%BA%AC", "z", "Zulu"],
-      ["/caf%C3%A9/cr%C3%A8me%20br%C3%BBl%C3%A9e", "a", "Alpha"],
+    expect(result.build.routes.map((route) => [route.pathname, route.displayTitle, route.selectedEntry?.recordId, route.composition.document.root[0]?.props.title])).toEqual([
+      ["/caf%C3%A9/%E6%9D%B1%E4%BA%AC", "Zulu", "z", "Zulu"],
+      ["/caf%C3%A9/cr%C3%A8me%20br%C3%BBl%C3%A9e", "Alpha", "a", "Alpha"],
     ]);
+  });
+
+  it("falls back to the Sitemap node title for an Entry with no usable configured title value", async () => {
+    const value = project({ root: page("articles", "articles", mappingSource("entry-field", "display")), entries: [entry("one", "One"), entry("two", "Two")] });
+    value.providers.sitemaps[0]!.records[0]!.document.root[0]!.title = "Article fallback";
+    value.providers.content[0]!.models[0]!.document.fields.push({ id: "display", key: "display", label: "Display title", required: false, kind: "text" });
+    value.providers.content[0]!.entries[0]!.values.display = "Entry one";
+    value.providers.content[0]!.entries[1]!.values.display = "   ";
+    const result = await compile(value);
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.build.routes.map(({ displayTitle }) => displayTitle)).toEqual(["Entry one", "Article fallback"]);
   });
 
   it.each([0, 2])("blocks a single Mapping with %i Entries and exposes no build", async (count) => {

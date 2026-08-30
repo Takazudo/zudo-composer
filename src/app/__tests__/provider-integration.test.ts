@@ -1,18 +1,23 @@
+import { createHash } from "node:crypto";
 import { IDBFactory as FDBFactory } from "fake-indexeddb";
-import { describe, expect, it } from "vitest";
-import { COMPOSITION_PROVIDERS, createIndexedDbCompositionProvider, summarizeComposition, type CompositionProvider, type CompositionRecord } from "../../composer/browser";
+import { describe, expect, it, vi } from "vitest";
+import { COMPOSITION_PROVIDERS, summarizeComposition, type CompositionProvider, type CompositionRecord } from "../../composer/browser";
 import { CONTENT_DATABASE_NAME, CONTENT_DATABASE_VERSION } from "../../content/storage/indexeddb/types";
-import { createIndexedDbSitemapProvider } from "../../sitemapper/storage/indexeddb/provider";
 import { compileSiteProject } from "../../site-project/compiler";
+import { serializeSiteProject } from "../../site-project/model/canonical";
 import { loadSampleSiteProject } from "../../site-project/sample";
 import { activeComponentProvider } from "../../features/composer/active-pack";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import { createProductionProviderIntegration } from "../provider-integration";
 
 const sample = () => loadSampleSiteProject(activeSiteProjectValidationContext);
-const integration = (factories = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() }) => createProductionProviderIntegration({
-  project: sample(), compositionIdbFactory: factories.composition, contentIdbFactory: factories.content, mappingIdbFactory: factories.mapping, sitemapIdbFactory: factories.sitemap,
-});
+const revision = (project: ReturnType<typeof sample>) => createHash("sha256").update(serializeSiteProject(project), "utf8").digest("hex");
+const integration = (factories = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() }) => {
+  const project = sample();
+  return createProductionProviderIntegration({
+    project, sourceRevision: revision(project), compositionIdbFactory: factories.composition, contentIdbFactory: factories.content, mappingIdbFactory: factories.mapping, sitemapIdbFactory: factories.sitemap,
+  });
+};
 
 function failFirstOpen(backing: IDBFactory): IDBFactory {
   let fail = true;
@@ -71,6 +76,142 @@ describe("SiteProject provider integration", () => {
     expect(sample().providers.compositions[0]!.records.find(({ id }) => id === "services-page")!.document.name).toBe("Services page");
   });
 
+  it("isolates browser records by exact activated revision while preserving edits within one revision", async () => {
+    const factories = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
+    const firstProject = sample();
+    const firstRevision = revision(firstProject);
+    const first = createProductionProviderIntegration({
+      project: firstProject,
+      sourceRevision: firstRevision,
+      compositionIdbFactory: factories.composition,
+      contentIdbFactory: factories.content,
+      mappingIdbFactory: factories.mapping,
+      sitemapIdbFactory: factories.sitemap,
+    });
+    expect(await first.initialization.initialize()).toEqual({ status: "ready" });
+    const firstServices = await first.compositionProviders[0]!.store.get("services-page");
+    if (firstServices.status !== "loaded") throw new Error("missing first revision Composition");
+    await first.compositionProviders[0]!.store.put({
+      ...firstServices.record,
+      updatedAt: "2026-09-01T00:00:00.000Z",
+      document: { ...firstServices.record.document, name: "First revision browser edit" },
+    });
+
+    const firstReload = createProductionProviderIntegration({
+      project: firstProject,
+      sourceRevision: firstRevision,
+      compositionIdbFactory: factories.composition,
+      contentIdbFactory: factories.content,
+      mappingIdbFactory: factories.mapping,
+      sitemapIdbFactory: factories.sitemap,
+    });
+    const firstSnapshot = await firstReload.getCurrentSiteProject();
+    expect(firstSnapshot).toMatchObject({
+      status: "ready",
+      project: { providers: { compositions: [{ records: expect.arrayContaining([expect.objectContaining({ document: expect.objectContaining({ name: "First revision browser edit" }) })]) }] } },
+    });
+
+    const secondProject = sample();
+    secondProject.name = "Second revision source";
+    secondProject.providers.compositions[0]!.records.find(({ id }) => id === "services-page")!.document.name = "Second revision services";
+    secondProject.providers.content[0]!.entries.find(({ id }) => id === "about-entry")!.values["about-heading-field"] = "Second revision about";
+    secondProject.providers.mappings[0]!.records.find(({ id }) => id === "about-page-mapping")!.document.name = "Second revision mapping";
+    secondProject.providers.sitemaps[0]!.records[0]!.document.root[0]!.title = "Second revision home";
+    const secondRevision = revision(secondProject);
+    expect(secondRevision).not.toBe(firstRevision);
+    const second = createProductionProviderIntegration({
+      project: secondProject,
+      sourceRevision: secondRevision,
+      compositionIdbFactory: factories.composition,
+      contentIdbFactory: factories.content,
+      mappingIdbFactory: factories.mapping,
+      sitemapIdbFactory: factories.sitemap,
+    });
+    const secondSnapshot = await second.getCurrentSiteProject();
+    expect(secondSnapshot).toMatchObject({
+      status: "ready",
+      project: {
+        name: "Second revision source",
+        providers: {
+          compositions: [{ records: expect.arrayContaining([expect.objectContaining({ document: expect.objectContaining({ name: "Second revision services" }) })]) }],
+          content: [{ entries: expect.arrayContaining([expect.objectContaining({ values: expect.objectContaining({ "about-heading-field": "Second revision about" }) })]) }],
+          mappings: [{ records: expect.arrayContaining([expect.objectContaining({ document: expect.objectContaining({ name: "Second revision mapping" }) })]) }],
+          sitemaps: [{ records: [expect.objectContaining({ document: expect.objectContaining({ root: [expect.objectContaining({ title: "Second revision home" })] }) })] }],
+        },
+      },
+    });
+  });
+
+  it("rejects a non-canonical source revision before provider initialization", async () => {
+    const current = createProductionProviderIntegration({
+      project: sample(),
+      sourceRevision: "not-a-revision",
+      compositionIdbFactory: new FDBFactory(),
+      contentIdbFactory: new FDBFactory(),
+      mappingIdbFactory: new FDBFactory(),
+      sitemapIdbFactory: new FDBFactory(),
+    });
+    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("SHA-256") } });
+  });
+
+  it("rejects an explicit project without a canonical source revision", async () => {
+    const current = createProductionProviderIntegration({
+      project: sample(),
+      compositionIdbFactory: new FDBFactory(),
+      contentIdbFactory: new FDBFactory(),
+      mappingIdbFactory: new FDBFactory(),
+      sitemapIdbFactory: new FDBFactory(),
+    } as unknown as Parameters<typeof createProductionProviderIntegration>[0]);
+    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("missing its canonical revision") } });
+  });
+
+  it("fails closed before opening provider databases when revision locking fails", async () => {
+    const factory = new FDBFactory(); const opened: string[] = [];
+    const trackedFactory = new Proxy(factory, {
+      get(target, property) {
+        if (property === "open") return (name: string, version?: number) => {
+          opened.push(name);
+          return version === undefined ? target.open(name) : target.open(name, version);
+        };
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const hadOwnLocks = Object.hasOwn(navigator, "locks");
+    const priorLocks = navigator.locks;
+    vi.stubGlobal("indexedDB", trackedFactory);
+    Object.defineProperty(navigator, "locks", { configurable: true, value: { request: () => Promise.reject(new Error("locking unavailable")) } });
+    try {
+      const project = sample();
+      const current = createProductionProviderIntegration({ project, sourceRevision: revision(project) });
+      expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: true, message: expect.stringContaining("storage lock") } });
+      expect(opened).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+      if (hadOwnLocks) Object.defineProperty(navigator, "locks", { configurable: true, value: priorLocks });
+      else Reflect.deleteProperty(navigator, "locks");
+    }
+  });
+
+  it("rejects a portable static-only graph that cannot back every browser authoring workspace", async () => {
+    const project = sample();
+    const root = project.providers.sitemaps[0]!.records[0]!.document.root[0]!;
+    const about = root.children.find(({ id }) => id === "about-node")!;
+    about.source = { kind: "composition", ref: { providerId: "indexeddb", recordId: "about-page" } };
+    root.children.find(({ id }) => id === "journal-node")!.children = [];
+    project.providers.content = [];
+    project.providers.mappings = [];
+    const current = createProductionProviderIntegration({
+      project,
+      sourceRevision: revision(project),
+      compositionIdbFactory: new FDBFactory(),
+      contentIdbFactory: new FDBFactory(),
+      mappingIdbFactory: new FDBFactory(),
+      sitemapIdbFactory: new FDBFactory(),
+    });
+    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("content") } });
+  });
+
   it.each(["composition", "content", "mapping", "sitemap"] as const)("recovers a %s phase failure without false readiness", async (phase) => {
     const backing = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
     const factories = { ...backing, [phase]: failFirstOpen(backing[phase]) };
@@ -101,41 +242,55 @@ describe("SiteProject provider integration", () => {
   it("returns a recoverable unavailable state for a null development source", async () => {
     const current = createProductionProviderIntegration({ project: null, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: true } });
+    expect(await current.compositionCatalog.listCompositions()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
+    expect(await current.compositionCatalog.resolveComposition({ providerId: "indexeddb", recordId: "home-page" })).toEqual({ status: "provider-unavailable" });
+    expect(await current.contentCatalog.listModels()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
+    expect(await current.contentCatalog.resolveModel({ providerId: "content-indexeddb", recordId: "articles" })).toMatchObject({ status: "provider-error", reason: expect.stringContaining("No development SiteProject") });
+    expect(await current.mappingCompositionCatalog.list()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
+    expect(await current.mappingCompositionCatalog.resolve({ providerId: "indexeddb", recordId: "home-page" })).toMatchObject({ status: "provider-error", reason: expect.stringContaining("No development SiteProject") });
+    expect(await current.mappingCatalog.list()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
+    expect(await current.sitemapperMappingCatalog.list()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
   });
 
   it("never reaches ready when a Single model seed contains multiple Entries", async () => {
     const invalid = sample(); const content = invalid.providers.content[0]!; const entry = content.entries.find(({ modelId }) => modelId === "about-content")!;
     content.entries.push({ ...structuredClone(entry), id: "about-entry-duplicate" });
-    const current = createProductionProviderIntegration({ project: invalid, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
+    const current = createProductionProviderIntegration({ project: invalid, sourceRevision: revision(invalid), compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("at most one Entry") } });
   });
 
   it("preflights static Composition refs before seeding a fresh Sitemap store", async () => {
     const project = sample(); const compositionFactory = new FDBFactory(); const sitemapFactory = new FDBFactory();
-    const prior = createIndexedDbCompositionProvider({ idbFactory: compositionFactory, seed: project.providers.compositions[0]!.records });
-    expect(await prior.initialization.initialize()).toMatchObject({ status: "ready" });
-    expect(await prior.store.delete("services-page")).toBe(true);
+    const projectRevision = revision(project);
+    const prior = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: compositionFactory, contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
+    expect(await prior.compositionProviders[0]!.initialization.initialize()).toMatchObject({ status: "ready" });
+    expect(await prior.compositionProviders[0]!.store.delete("services-page")).toBe(true);
 
-    const current = createProductionProviderIntegration({ project, compositionIdbFactory: compositionFactory, contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
+    const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: compositionFactory, contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "sitemap", message: expect.stringContaining("indexeddb:services-page") } });
     expect(await current.sitemapProvider.store.list()).toEqual([]);
   });
 
   it("preflights provider-qualified Mapping refs in an existing live Sitemap", async () => {
     const project = sample(); const sitemapFactory = new FDBFactory();
-    const live = structuredClone(project.providers.sitemaps[0]!.records[0]!);
+    const projectRevision = revision(project);
+    const prior = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
+    expect(await prior.sitemapProvider.initialization.initialize()).toMatchObject({ status: "ready" });
+    const loaded = await prior.sitemapProvider.store.get("sample-studio-sitemap");
+    if (loaded.status !== "loaded") throw new Error("missing live Sitemap");
+    const live = structuredClone(loaded.record);
     const about = live.document.root[0]!.children.find(({ id }) => id === "about-node")!;
     if (about.source.kind !== "mapping") throw new Error("expected Mapping source");
     about.source.ref.recordId = "missing-mapping";
-    const prior = createIndexedDbSitemapProvider({ idbFactory: sitemapFactory, seed: [live] });
-    expect(await prior.initialization.initialize()).toMatchObject({ status: "ready" });
-    const current = createProductionProviderIntegration({ project, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
+    await prior.sitemapProvider.store.put(live);
+    const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "sitemap", message: expect.stringContaining("mapping-indexeddb:missing-mapping") } });
   });
 
   it("exposes and snapshots exactly the declared Composition provider set", async () => {
     const availableUndeclared = fileProvider([]);
-    const ordinary = createProductionProviderIntegration({ project: sample(), fileCompositionProvider: availableUndeclared, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
+    const ordinaryProject = sample();
+    const ordinary = createProductionProviderIntegration({ project: ordinaryProject, sourceRevision: revision(ordinaryProject), fileCompositionProvider: availableUndeclared, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
     expect(ordinary.compositionProviders.map(({ descriptor }) => descriptor.id)).toEqual(["indexeddb"]);
 
     const declared = sample();
@@ -143,7 +298,7 @@ describe("SiteProject provider integration", () => {
     fileRecord.id = "file-page"; fileRecord.document.id = "file-page"; delete fileRecord.document.binding;
     declared.providers.compositions.push({ id: "files", records: [fileRecord] });
     declared.providers.sitemaps[0]!.records[0]!.document.root[0]!.children.push({ id: "file-page-node", title: "File page", slug: "file", source: { kind: "composition", ref: { providerId: "files", recordId: "file-page" } }, children: [] });
-    const current = createProductionProviderIntegration({ project: declared, fileCompositionProvider: fileProvider([fileRecord]), compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
+    const current = createProductionProviderIntegration({ project: declared, sourceRevision: revision(declared), fileCompositionProvider: fileProvider([fileRecord]), compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
     expect(current.compositionProviders.map(({ descriptor }) => descriptor.id).sort()).toEqual(declared.providers.compositions.map(({ id }) => id).sort());
     const snapshot = await current.getCurrentSiteProject();
     expect(snapshot.status).toBe("ready");
@@ -153,8 +308,10 @@ describe("SiteProject provider integration", () => {
   });
 
   it("preserves non-retryable Content version failures through initialize and retry wrappers", async () => {
-    const contentFactory = new FDBFactory(); const newer = await request(contentFactory.open(CONTENT_DATABASE_NAME, CONTENT_DATABASE_VERSION + 1)); newer.close();
-    const current = createProductionProviderIntegration({ project: sample(), compositionIdbFactory: new FDBFactory(), contentIdbFactory: contentFactory, mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
+    const project = sample();
+    const projectRevision = revision(project);
+    const contentFactory = new FDBFactory(); const newer = await request(contentFactory.open(`${CONTENT_DATABASE_NAME}--site-project--${projectRevision}`, CONTENT_DATABASE_VERSION + 1)); newer.close();
+    const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: new FDBFactory(), contentIdbFactory: contentFactory, mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
     expect(await current.contentProvider.initialization.initialize()).toMatchObject({ status: "error", error: { retryable: false, message: expect.stringContaining("newer") } });
     expect(await current.contentProvider.initialization.retry()).toMatchObject({ status: "error", error: { retryable: false, message: expect.stringContaining("newer") } });
   });

@@ -164,7 +164,7 @@ describe("LocalSiteProjectStore", () => {
     await expect(store.publish({ projectId: "compiler-site", revision: applied.value.revision, build })).resolves.toEqual({ status: "ok" });
     await expect(store.publish({ projectId: "compiler-site", revision: applied.value.revision, build })).resolves.toEqual({ status: "ok" });
     const pointer = await readFile(join(testRoot, "active-build.json"), "utf8");
-    const different: SiteBuildPlan = { ...build, routes: [{ pathname: "/", sitemapNode: { id: "x", path: "/" }, source: { kind: "composition" as const, ref: { providerId: "p", recordId: "r" } }, composition: { local: { providerId: "p", recordId: "r" }, routeRecordId: "r", document: { schemaVersion: 2 as const, id: "r", name: "r", root: [] } }, modules: [] }] };
+    const different: SiteBuildPlan = { ...build, routes: [{ pathname: "/", displayTitle: "Home", sitemapNode: { id: "x", path: "/" }, source: { kind: "composition" as const, ref: { providerId: "p", recordId: "r" } }, composition: { local: { providerId: "p", recordId: "r" }, routeRecordId: "r", document: { schemaVersion: 2 as const, id: "r", name: "r", root: [] } }, modules: [] }] };
     await expect(store.publish({ projectId: "compiler-site", revision: applied.value.revision, build: different })).resolves.toEqual(expect.objectContaining({ status: "unavailable" }));
     await expect(readFile(join(testRoot, "active-build.json"), "utf8")).resolves.toBe(pointer);
 
@@ -190,5 +190,27 @@ describe("LocalSiteProjectStore", () => {
     await writeFile(join(testRoot, "builds", "compiler-site", third.value.revision, "build.json"), "conflicting", "utf8");
     await expect(store.publish({ projectId: "compiler-site", revision: third.value.revision, build })).resolves.toEqual(expect.objectContaining({ status: "unavailable", message: expect.stringContaining("conflicts") }));
     await expect(readFile(join(testRoot, "active-build.json"), "utf8")).resolves.toBe(recoveredPointer);
+  });
+
+  it("resumes an immutable build after a crash between output files", async () => {
+    const testRoot = await root();
+    const store = createLocalSiteProjectStore({ testRoot });
+    const applied = await store.apply({ project: makeProject(), expectedRevision: null, expectedActive: null });
+    if (applied.status !== "ok") throw new Error("apply failed");
+    const build: SiteBuildPlan = {
+      projectId: "compiler-site",
+      activeSitemap: { providerId: "sitemap-indexeddb", recordId: "main" },
+      routes: [],
+      modules: [{ recordId: "home", moduleSpecifier: "./home.mjs", kind: "standalone", code: "export default 'home';\n" }],
+    };
+    let failed = false;
+    const faulty = createLocalSiteProjectStore({ testRoot, fault(point) {
+      if (!failed && point === "after-directory-sync") { failed = true; throw new Error("mid-output crash"); }
+    } });
+    await expect(faulty.publish({ projectId: "compiler-site", revision: applied.value.revision, build })).resolves.toEqual({ status: "unavailable", message: "mid-output crash" });
+    await expect(readFile(join(testRoot, "active-build.json"), "utf8")).rejects.toThrow();
+    await expect(store.publish({ projectId: "compiler-site", revision: applied.value.revision, build })).resolves.toEqual({ status: "ok" });
+    await expect(readFile(join(testRoot, "builds", "compiler-site", applied.value.revision, "module-0000.mjs"), "utf8")).resolves.toBe("export default 'home';\n");
+    await expect(readFile(join(testRoot, "builds", "compiler-site", applied.value.revision, "complete.json"), "utf8")).resolves.toContain("module-0000.mjs");
   });
 });

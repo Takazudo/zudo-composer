@@ -145,8 +145,8 @@ export function project(options: {
   };
 }
 
-export const mappingSource = (kind: "single" | "entry-field" = "entry-field") => ({
+export const mappingSource = (kind: "single" | "entry-field" = "entry-field", titleFieldId?: string) => ({
   kind: "mapping" as const,
   ref: { providerId: "mapping-indexeddb", recordId: "article-page" },
-  route: kind === "single" ? { kind: "single" as const } : { kind: "entry-field" as const, fieldId: "slug" },
+  route: kind === "single" ? { kind: "single" as const } : { kind: "entry-field" as const, fieldId: "slug", ...(titleFieldId ? { titleFieldId } : {}) },
 });

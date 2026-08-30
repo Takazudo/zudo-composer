@@ -287,6 +287,27 @@ describe("SiteProject API protocol", () => {
     });
   });
 
+  it("refuses to activate a stored revision that is invalid or compiler-blocked under the current contract", async () => {
+    const invalid = makeProject();
+    invalid.componentPack.packVersion = "older-pack";
+    const invalidSetup = setup({ project: invalid, revision: "invalid-1" });
+    await expect(invalidSetup.service.handle({ protocolVersion, operation: "get", projectId: invalid.id, revision: "invalid-1" })).resolves.toEqual(
+      expect.objectContaining({ ok: false, error: expect.objectContaining({ code: "internal" }) }),
+    );
+    await expect(invalidSetup.service.handle({ protocolVersion, operation: "activate", projectId: invalid.id, revision: "invalid-1", expectedActive: null })).resolves.toEqual(
+      expect.objectContaining({ ok: false, error: expect.objectContaining({ code: "internal" }) }),
+    );
+    expect(invalidSetup.projectStore.active).toBeNull();
+
+    const blocked = makeProject();
+    blocked.providers.sitemaps[0]!.records[0]!.document.root[0]!.source = { kind: "unassigned" };
+    const blockedSetup = setup({ project: blocked, revision: "blocked-1" });
+    await expect(blockedSetup.service.handle({ protocolVersion, operation: "activate", projectId: blocked.id, revision: "blocked-1", expectedActive: null })).resolves.toEqual(
+      expect.objectContaining({ ok: false, error: expect.objectContaining({ code: "compile-blocked" }) }),
+    );
+    expect(blockedSetup.projectStore.active).toBeNull();
+  });
+
   it("builds an exact stored revision before publishing derived artifacts", async () => {
     const project = makeProject();
     const { service, buildStore } = setup({ project, revision: "build-1" });

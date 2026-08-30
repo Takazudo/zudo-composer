@@ -5,13 +5,16 @@ import { RESOLVED_SITE_PROJECT_SOURCE_ID, SITE_PROJECT_SOURCE_ID, siteProjectSou
 describe("siteProjectSourcePlugin", () => {
   it("requires and exclusively serializes the injected bundled project in build mode", async () => {
     expect(() => siteProjectSourcePlugin(undefined as never)).toThrow(/requires bundledProject/);
+    expect(() => siteProjectSourcePlugin({ bundledProject: {} } as never)).toThrow(/canonical SHA-256/);
     const readDevProject = vi.fn();
-    const plugin = siteProjectSourcePlugin({ bundledProject: { marker: "bundled-only" } as never, readDevProject });
+    const bundledRevision = "b".repeat(64);
+    const plugin = siteProjectSourcePlugin({ bundledProject: { marker: "bundled-only" } as never, bundledRevision, readDevProject });
     (plugin.configResolved as (config: unknown) => void)({ command: "build" });
     expect(plugin.resolveId?.call({} as never, SITE_PROJECT_SOURCE_ID, undefined, {} as never)).toBe(RESOLVED_SITE_PROJECT_SOURCE_ID);
     const source = await plugin.load?.call({} as never, RESOLVED_SITE_PROJECT_SOURCE_ID, {} as never);
     expect(source).toContain('"bundled-only"');
-    for (const forbidden of [".zudo-site-project", "virtual:site-project-source", "node:fs", "node:path", "readActivatedSiteProject", "revision"]) {
+    expect(source).toContain(`siteProjectRevision = "${bundledRevision}"`);
+    for (const forbidden of [".zudo-site-project", "virtual:site-project-source", "node:fs", "node:path", "readActivatedSiteProject"]) {
       expect(source).not.toContain(forbidden);
     }
     expect(readDevProject).not.toHaveBeenCalled();
@@ -22,7 +25,7 @@ describe("siteProjectSourcePlugin", () => {
     watcher.add = vi.fn(); watcher.unwatch = vi.fn();
     const invalidateModule = vi.fn(); const send = vi.fn();
     const readDevProject = vi.fn().mockResolvedValue({ project: { id: "demo" }, revision: "a".repeat(64) });
-    const plugin = siteProjectSourcePlugin({ bundledProject: null as never, readDevProject });
+    const plugin = siteProjectSourcePlugin({ bundledProject: null as never, bundledRevision: "b".repeat(64), readDevProject });
     (plugin.configResolved as (config: unknown) => void)({ command: "serve" });
     (plugin.configureServer as (server: unknown) => void)({
       config: { root: "/repo" }, watcher,
@@ -32,7 +35,7 @@ describe("siteProjectSourcePlugin", () => {
     await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith("/repo/.zudo-site-project/projects/demo.site-project.json"));
     const source = await plugin.load?.call({} as never, RESOLVED_SITE_PROJECT_SOURCE_ID, {} as never);
     expect(source).toContain('"id":"demo"');
-    expect(source).not.toContain("revision");
+    expect(source).toContain(`siteProjectRevision = "${"a".repeat(64)}"`);
     watcher.emit("unlink", "/repo/.zudo-site-project/active.json");
     await vi.waitFor(() => expect(send).toHaveBeenCalledWith({ type: "full-reload", path: "*" }));
     expect(invalidateModule).toHaveBeenCalledTimes(1);

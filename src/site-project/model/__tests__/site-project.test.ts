@@ -105,6 +105,25 @@ describe("SiteProject contract", () => {
     expect(validateSiteProject(project(), context)).toEqual({ ok: true, project: project(), diagnostics: [] });
   });
 
+  it("validates an explicit Entry route title field against its mapped Content model", () => {
+    const value = project();
+    const model = value.providers.content[0]!.models[0]!;
+    model.document.fields.push(
+      { id: "slug", key: "slug", label: "Slug", required: true, kind: "slug" },
+      { id: "count", key: "count", label: "Count", required: false, kind: "number" },
+    );
+    value.providers.content[0]!.entries[0]!.values.slug = "welcome";
+    const source = value.providers.sitemaps[0]!.records[0]!.document.root[0]!.source;
+    if (source.kind !== "mapping") throw new Error("expected Mapping source");
+    source.route = { kind: "entry-field", fieldId: "slug", titleFieldId: "title" };
+    expect(validateSiteProject(value, context).ok).toBe(true);
+
+    source.route.titleFieldId = "missing";
+    expect(validateSiteProject(value, context)).toMatchObject({ ok: false, diagnostics: [expect.objectContaining({ code: "dangling-sitemap-title-field", path: "$.providers.sitemaps[0].records[0].document.root[0].source.route.titleFieldId" })] });
+    source.route.titleFieldId = "count";
+    expect(validateSiteProject(value, context)).toMatchObject({ ok: false, diagnostics: [expect.objectContaining({ code: "invalid-sitemap-title-field", path: "$.providers.sitemaps[0].records[0].document.root[0].source.route.titleFieldId" })] });
+  });
+
   it("round-trips canonical JSON byte-stably independent of provider and record order", () => {
     const original = project();
     const permuted = structuredClone(original);
@@ -119,6 +138,7 @@ describe("SiteProject contract", () => {
   it("uses Unicode code-point order rather than locale or UTF-16 order", () => {
     expect(["\u{10000}", "\uE000"].sort(compareUnicodeCodePoints)).toEqual(["\uE000", "\u{10000}"]);
     expect(canonicalStringifyJson(JSON.parse('{"__proto__":{"safe":true},"a":1}'))).toBe('{"__proto__":{"safe":true},"a":1}\n');
+    expect(canonicalStringifyJson({ "2": "two", "10": "ten", "\u{10000}": "astral", "\uE000": "private" })).toBe('{"10":"ten","2":"two","":"private","𐀀":"astral"}\n');
   });
 
   it.each([

@@ -5,6 +5,7 @@ import { isValueValidForField, validateContentEntryRecord, validateContentModelR
 import { validateMappingRecord } from "../../mapping/model";
 import { discoverMappingTargets } from "../../mapping/resolver/targets";
 import { validateSitemapRecord } from "../../sitemapper/library";
+import { isSitemapDisplayTitleFieldKind } from "../../sitemapper/model";
 import { isJsonSafe, isPlainObject, isSafeRecordId } from "../../shared";
 import { compareUnicodeCodePoints } from "./canonical";
 import { isSiteProjectProviderId } from "./provider-registry";
@@ -385,9 +386,17 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
           const mapping = target as SiteProject["providers"]["mappings"][number]["records"][number];
           const modelRef = mapping.document.contentModel;
           const model = contentModels.get(modelRef.providerId)?.find((candidate) => candidate.id === modelRef.recordId);
-          const route = source.route as { kind: "entry-field"; fieldId: string };
+          const route = source.route as { kind: "entry-field"; fieldId: string; titleFieldId?: string };
           if (model && !model.document.fields.some((field) => field.id === route.fieldId)) {
             diagnostic(diagnostics, "dangling-sitemap-route-field", `${sourcePath}.route.fieldId`, `Sitemap route field ${JSON.stringify(route.fieldId)} does not exist in Content model ${JSON.stringify(model.id)}.`);
+          }
+          if (model && route.titleFieldId !== undefined) {
+            const titleField = model.document.fields.find((field) => field.id === route.titleFieldId);
+            if (!titleField) {
+              diagnostic(diagnostics, "dangling-sitemap-title-field", `${sourcePath}.route.titleFieldId`, `Sitemap title field ${JSON.stringify(route.titleFieldId)} does not exist in Content model ${JSON.stringify(model.id)}.`);
+            } else if (!isSitemapDisplayTitleFieldKind(titleField.kind)) {
+              diagnostic(diagnostics, "invalid-sitemap-title-field", `${sourcePath}.route.titleFieldId`, `Sitemap title field ${JSON.stringify(route.titleFieldId)} must be text, long-text, or slug.`);
+            }
           }
         }
       });

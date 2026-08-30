@@ -1,5 +1,5 @@
 import type { ContentEntryRecord } from "../../content";
-import type { SitemapNode } from "../model";
+import { isSitemapDisplayTitleFieldKind, type SitemapNode } from "../model";
 import type { DerivedSitemapRoute, ExpandSitemapRoutesOptions, SitemapMappingRouteMetadata, SitemapNodeRouteInfo, SitemapRouteDiagnostic, SitemapRouteExpansion } from "./types";
 
 function isDotPathAlias(part: string): boolean {
@@ -119,6 +119,9 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
             slugFields: content.model.document.fields
               .filter((field) => field.kind === "slug")
               .map((field) => ({ id: field.id, label: field.label })),
+            titleFields: content.model.document.fields
+              .filter((field) => isSitemapDisplayTitleFieldKind(field.kind))
+              .map((field) => ({ id: field.id, label: field.label })),
           });
         }
         if (readiness.status === "ready" && content.status === "resolved") {
@@ -133,11 +136,17 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
             if (!field) diagnose(node, "route-field-missing", "The selected Entry route field no longer exists.");
             else if (field.kind !== "slug") diagnose(node, "route-field-not-slug", "The selected Entry route field is not a slug field.");
             else {
-              for (const entry of content.snapshot.entries) {
-                const segment = entrySegment((entry as ContentEntryRecord).values[field.id]);
-                if (!segment.ok) {
-                  diagnose(node, segment.missing ? "entry-slug-missing" : "entry-slug-invalid", segment.missing ? "Entry slug is missing or empty." : "Entry slug contains a forbidden route delimiter.", { entryId: entry.id });
-                } else emit({ pathname: append(base, segment.segment), nodeId: node.id, sourceKind: "mapping", entryId: entry.id });
+              const titleFieldId = mappingSource.route.titleFieldId;
+              const titleField = titleFieldId === undefined ? undefined : content.model.document.fields.find((candidate) => candidate.id === titleFieldId);
+              if (titleFieldId !== undefined && !titleField) diagnose(node, "title-field-missing", "The selected Entry title field no longer exists.");
+              else if (titleField && !isSitemapDisplayTitleFieldKind(titleField.kind)) diagnose(node, "title-field-not-textual", "The selected Entry title field is not a suitable textual field.");
+              else {
+                for (const entry of content.snapshot.entries) {
+                  const segment = entrySegment((entry as ContentEntryRecord).values[field.id]);
+                  if (!segment.ok) {
+                    diagnose(node, segment.missing ? "entry-slug-missing" : "entry-slug-invalid", segment.missing ? "Entry slug is missing or empty." : "Entry slug contains a forbidden route delimiter.", { entryId: entry.id });
+                  } else emit({ pathname: append(base, segment.segment), nodeId: node.id, sourceKind: "mapping", entryId: entry.id });
+                }
               }
             }
           }

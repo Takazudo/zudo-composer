@@ -148,7 +148,11 @@ function validSource(value: unknown): value is SitemapPageSource {
   if (value.kind !== "mapping" || Object.keys(value).length !== 3 || !validRef(value.ref) || !isPlainObject(value.route)) return false;
   return value.route.kind === "single"
     ? Object.keys(value.route).length === 1
-    : value.route.kind === "entry-field" && Object.keys(value.route).length === 2 && isSafeRecordId(value.route.fieldId);
+    : value.route.kind === "entry-field"
+      && (Object.keys(value.route).length === 2 || Object.keys(value.route).length === 3)
+      && Object.keys(value.route).every((key) => key === "kind" || key === "fieldId" || key === "titleFieldId")
+      && isSafeRecordId(value.route.fieldId)
+      && (!Object.hasOwn(value.route, "titleFieldId") || isSafeRecordId(value.route.titleFieldId));
 }
 
 function equalSource(a: unknown, b: SitemapPageSource): boolean {
@@ -156,7 +160,7 @@ function equalSource(a: unknown, b: SitemapPageSource): boolean {
   if (a.kind === "unassigned" || b.kind === "unassigned") return a.kind === b.kind;
   if (a.ref.providerId !== b.ref.providerId || a.ref.recordId !== b.ref.recordId) return false;
   if (a.kind === "composition" || b.kind === "composition") return a.kind === b.kind;
-  return a.route.kind === b.route.kind && (a.route.kind === "single" || (b.route.kind === "entry-field" && a.route.fieldId === b.route.fieldId));
+  return a.route.kind === b.route.kind && (a.route.kind === "single" || (b.route.kind === "entry-field" && a.route.fieldId === b.route.fieldId && a.route.titleFieldId === b.route.titleFieldId));
 }
 
 function validPatchValue(key: string, value: unknown): boolean {

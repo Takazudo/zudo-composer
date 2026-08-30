@@ -1,4 +1,6 @@
 .site-delivery { min-block-size: 100vh; display: grid; grid-template-rows: auto auto 1fr auto; color: var(--color-fg); background: var(--color-bg); }
+.site-delivery__skip { position: fixed; z-index: 10; inset-block-start: .5rem; inset-inline-start: .5rem; padding: .75rem 1rem; color: var(--color-fg); background: var(--color-surface); transform: translateY(calc(-100% - 1rem)); }
+.site-delivery__skip:focus { transform: translateY(0); }
 .site-delivery__header { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem 2rem; padding: 1rem clamp(1rem, 4vw, 3rem); border-block-end: 1px solid var(--color-border); background: var(--color-surface); }
 .site-delivery__brand { color: var(--color-fg); font-weight: 750; text-decoration: none; }
 .site-delivery__brand, .site-delivery__header nav a, .site-delivery__footer nav a { display: inline-flex; align-items: center; min-block-size: 2.75rem; padding-inline: .25rem; }
