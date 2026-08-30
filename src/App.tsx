@@ -6,6 +6,7 @@ import { Shell } from "./app/shell";
 import ComposerApp from "./features/composer/chrome/composer-app";
 import { ContentRouteContent } from "./features/content";
 import { MappingRouteContent } from "./features/mapping";
+import { MediaRouteContent } from "./features/media";
 import { SitemapperRouteContent } from "./features/sitemapper";
 import { bootstrapTheme, createThemeController, type ThemeController } from "./theme/theme";
 
@@ -38,6 +39,7 @@ export function App({ themeController }: AppProps = {}) {
   else if (path === "/content") content = <ContentRouteContent provider={providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} />;
   else if (path === "/mapping") content = <MappingRouteContent provider={providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
+  else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} />;
   else if (path === "/") content = <Home />;
   else content = <NotFound />;
   return <Shell path={path} themeController={activeThemeController} themeSnapshot={themeSnapshot}>{content}</Shell>;

@@ -1,0 +1,39 @@
+@import "@zudo-sg/ui/styles/tokens.css";
+@import "@zudo-sg/ui/styles/colors.css";
+
+.sg-media-app {
+  min-width: 0;
+  padding: var(--spacing-hsp-lg);
+  color: var(--color-fg);
+  background: var(--color-bg);
+}
+
+.sg-media-app :where(h1, h2, p) { margin: 0; }
+.sg-media-app__header { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-hsp-sm); margin-block-end: var(--spacing-vsp-sm); }
+.sg-media-app h1 { font-size: var(--text-xl); line-height: var(--leading-tight); }
+.sg-media-app h2 { font-size: var(--text-lg); line-height: var(--leading-tight); }
+.sg-media-eyebrow { color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--font-weight-bold); letter-spacing: .08em; text-transform: uppercase; }
+
+.sg-media-state {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-hsp-sm);
+  max-width: 42rem;
+  padding: var(--spacing-vsp-md) var(--spacing-hsp-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-DEFAULT);
+  background: var(--color-surface);
+}
+
+.sg-media-state > :first-child { flex: 0 0 auto; color: var(--color-muted); }
+.sg-media-state > div { display: grid; gap: var(--spacing-vsp-3xs); min-width: 0; }
+.sg-media-state p { color: var(--color-muted); line-height: var(--leading-normal); }
+
+@media (max-width: 42rem) {
+  .sg-media-app { padding: var(--spacing-hsp-md); }
+  .sg-media-state { padding: var(--spacing-vsp-sm) var(--spacing-hsp-sm); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sg-media-app * { scroll-behavior: auto; transition-duration: .01ms; animation-duration: .01ms; animation-iteration-count: 1; }
+}
