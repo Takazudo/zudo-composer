@@ -433,6 +433,9 @@ type AuthorDefinitionValueErrors<TProps extends object, TDefinition> =
 
 export type ValidateAuthorComponentDefinition<TProps extends object, TDefinition> =
   TDefinition extends { readonly component: infer TComponent }
+    // Adapter element types are deliberately erased at this structural gate;
+    // their concrete types remain preserved by the returned definition.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? Omit<TDefinition, 'component'> extends AuthorComponentDefinitionInput<TProps, TComponent, unknown, any>
       ? TProps extends ComponentProps<TComponent>
         ? Exclude<RequiredPropKey<TProps>, ClassifiedPropKey<TDefinition>> extends never
@@ -441,7 +444,10 @@ export type ValidateAuthorComponentDefinition<TProps extends object, TDefinition
             : AuthorDefinitionValueErrors<TProps, TDefinition>
           : { readonly ERROR_unclassified_required_props: Exclude<RequiredPropKey<TProps>, ClassifiedPropKey<TDefinition>> }
         : { readonly ERROR_props_must_belong_to_component: ComponentProps<TComponent> }
-      : { readonly ERROR_invalid_component_definition: AuthorComponentDefinitionInput<TProps, TComponent, unknown, any> }
+      : {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          readonly ERROR_invalid_component_definition: AuthorComponentDefinitionInput<TProps, TComponent, unknown, any>
+        }
     : never;
 
 export interface RuntimeComponentEntry<TComponent = unknown, TRenderOutput = unknown, TElement = unknown> {

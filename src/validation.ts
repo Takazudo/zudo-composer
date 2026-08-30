@@ -5,7 +5,6 @@ import {
   ContractValidationError,
   DOCUMENT_VERSION,
   type AuthorComponentDefinition,
-  type AuthorComponentDefinitionInput,
   type ComponentDocument,
   type ComponentManifest,
   type ComponentPackManifest,
@@ -227,7 +226,7 @@ function parseValueDefinition(
         if (editor.kind === 'text') return { schema: { type: 'string' }, editor: parseTextEditor(editor, `${path}.editor`) };
         exactKeys(editor, ['kind'], `${path}.editor`);
         if (editor.kind === 'color') return { schema: { type: 'string' }, editor: { kind: 'color' } };
-        schemaFail(`${path}.editor.kind`, 'string schema requires a text or color editor');
+        return schemaFail(`${path}.editor.kind`, 'string schema requires a text or color editor');
       }
       case 'number': {
         exactKeys(schema, ['type', 'min', 'max', 'step'], `${path}.schema`);

@@ -90,7 +90,10 @@ interface TotalProps {
   applicationOwned: { readonly token: string };
 }
 
-const TotalComponent = (_props: TotalProps) => null;
+const TotalComponent = (props: TotalProps) => {
+  void props;
+  return null;
+};
 
 defineComponent<TotalProps>()(TotalComponent, {
   ...base,
@@ -101,12 +104,18 @@ defineComponent<TotalProps>()(TotalComponent, {
 });
 
 // @ts-expect-error Every required prop must be classified, not merely one of them.
-defineComponent<{ first: string; second: string }>()((_props: { first: string; second: string }) => null, {
+defineComponent<{ first: string; second: string }>()((props: { first: string; second: string }) => {
+  void props;
+  return null;
+}, {
   ...base,
   defaults: { first: 'classified' },
 });
 
-const OtherComponent = (_props: { count: number }) => null;
+const OtherComponent = (props: { count: number }) => {
+  void props;
+  return null;
+};
 // @ts-expect-error The declared authoring props must belong to the registered component.
 defineComponent<{ title: string }>()(OtherComponent, { ...base, defaults: { title: 'wrong component' } });
 
@@ -163,7 +172,10 @@ interface RecursiveProps {
   only?: readonly string[];
 }
 
-const RecursiveComponent = (_props: RecursiveProps) => null;
+const RecursiveComponent = (props: RecursiveProps) => {
+  void props;
+  return null;
+};
 const recursiveBase = { ...base, id: 'recursive', source: { ...base.source, module: '@fixture/recursive' } };
 
 defineComponent<RecursiveProps>()(RecursiveComponent, {
@@ -196,7 +208,10 @@ defineComponent<RecursiveProps>()(RecursiveComponent, {
 });
 
 // @ts-expect-error Every required nested object member must be declared with required: true.
-defineComponent<{ action: HeroAction }>()((_props: { action: HeroAction }) => null, {
+defineComponent<{ action: HeroAction }>()((props: { action: HeroAction }) => {
+  void props;
+  return null;
+}, {
   ...recursiveBase,
   defaults: { action: { label: 'Read', href: '/read' } },
   fields: [{ prop: 'action', label: 'Action', schema: { type: 'object', fields: [
@@ -205,7 +220,10 @@ defineComponent<{ action: HeroAction }>()((_props: { action: HeroAction }) => nu
 });
 
 // @ts-expect-error Duplicate literal nested object keys are rejected.
-defineComponent<{ action: HeroAction }>()((_props: { action: HeroAction }) => null, {
+defineComponent<{ action: HeroAction }>()((props: { action: HeroAction }) => {
+  void props;
+  return null;
+}, {
   ...recursiveBase,
   defaults: { action: { label: 'Read', href: '/read' } },
   fields: [{ prop: 'action', label: 'Action', schema: { type: 'object', fields: [
@@ -216,7 +234,10 @@ defineComponent<{ action: HeroAction }>()((_props: { action: HeroAction }) => nu
 });
 
 // @ts-expect-error Inline editing is limited to top-level text fields.
-defineComponent<{ actions: readonly HeroAction[] }>()((_props: { actions: readonly HeroAction[] }) => null, {
+defineComponent<{ actions: readonly HeroAction[] }>()((props: { actions: readonly HeroAction[] }) => {
+  void props;
+  return null;
+}, {
   ...recursiveBase,
   defaults: { actions: [] },
   fields: [{ prop: 'actions', label: 'Actions', inlineEdit: true, schema: { type: 'array', items: {
@@ -227,7 +248,10 @@ defineComponent<{ actions: readonly HeroAction[] }>()((_props: { actions: readon
   } }, editor: { kind: 'list' } }],
 });
 
-defineComponent<{ pair: readonly [string, number] }>()((_props: { pair: readonly [string, number] }) => null, {
+defineComponent<{ pair: readonly [string, number] }>()((props: { pair: readonly [string, number] }) => {
+  void props;
+  return null;
+}, {
   ...recursiveBase,
   defaults: { pair: ['one', 1] },
   fields: [{ prop: 'pair', label: 'Pair', schema: { type: 'tuple', items: [
@@ -237,7 +261,10 @@ defineComponent<{ pair: readonly [string, number] }>()((_props: { pair: readonly
 });
 
 // @ts-expect-error Tuple schemas are fixed-length and positional.
-defineComponent<{ pair: readonly [string, number] }>()((_props: { pair: readonly [string, number] }) => null, {
+defineComponent<{ pair: readonly [string, number] }>()((props: { pair: readonly [string, number] }) => {
+  void props;
+  return null;
+}, {
   ...recursiveBase,
   defaults: { pair: ['one', 1] },
   fields: [{ prop: 'pair', label: 'Pair', schema: { type: 'tuple', items: [
@@ -247,7 +274,10 @@ defineComponent<{ pair: readonly [string, number] }>()((_props: { pair: readonly
 });
 
 // @ts-expect-error Explicit null is unsupported and is not erased at the type boundary.
-defineComponent<{ nullable?: string | null }>()((_props: { nullable?: string | null }) => null, {
+defineComponent<{ nullable?: string | null }>()((props: { nullable?: string | null }) => {
+  void props;
+  return null;
+}, {
   ...recursiveBase,
   fields: [{ prop: 'nullable', label: 'Nullable', schema: { type: 'string' }, editor: { kind: 'text' } }],
 });
