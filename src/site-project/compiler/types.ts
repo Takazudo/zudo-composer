@@ -40,7 +40,7 @@ export interface SiteCompiledRouteComposition {
   document: CompositionDocument;
   linkedSource?: {
     ref: SiteProjectRecordRef;
-    outlet: { id: string; label: string };
+    outlet: { id: string; label: string; target: { parentId: string; slotId: string } };
     document: CompositionDocument;
   };
 }

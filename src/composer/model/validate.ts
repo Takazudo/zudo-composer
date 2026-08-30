@@ -26,6 +26,7 @@ import { COMPOSITION_SCHEMA_VERSION, VIRTUAL_ROOT_SLOT_ID } from "./types";
 import { isJsonSafe, isPlainObject } from "../../shared/json";
 import { orderedSlotIds } from "./index-model";
 import { isSafeRecordId } from "../../shared/record-identity";
+import { validateNodeProps } from "./node-props";
 import { RESERVED_PERSISTED_KEYS } from "@zudo-composer/component-contract";
 
 const reservedPersistedKeys = new Set<string>(RESERVED_PERSISTED_KEYS);
@@ -136,6 +137,7 @@ export type DiagnosticCode =
   | "malformed-node"
   | "unknown-component"
   | "unsupported-version"
+  | "invalid-prop"
   | "removed-slot"
   | "cardinality-violation"
   | "unaccepted-child";
@@ -208,6 +210,11 @@ export function classifyNode(
       code: "unsupported-version",
       message: `Node uses "${node.componentId}" v${node.componentVersion}, but the manifest provides v${entry.schemaVersion}`,
     });
+  }
+
+  const propValidation = validateNodeProps(node, entry);
+  for (const issue of propValidation.issues) {
+    reasons.push({ code: "invalid-prop", message: issue.message });
   }
 
   const declaredIds = new Set(entry.slots.map((s) => s.id));

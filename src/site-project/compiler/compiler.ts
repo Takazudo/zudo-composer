@@ -437,7 +437,11 @@ export async function compileSiteProject(
       }
       linkedSource = {
         ref: { providerId, recordId: direct.id },
-        outlet: { id: resolution.outlet.id, label: resolution.outlet.label },
+        outlet: {
+          id: resolution.outlet.id,
+          label: resolution.outlet.label,
+          target: { ...resolution.outlet.target },
+        },
         document: cloneDocument(materialized.sourceDocument),
       };
     }

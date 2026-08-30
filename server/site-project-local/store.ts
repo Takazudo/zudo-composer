@@ -495,14 +495,29 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
         input.build.modules.forEach((module, index) => outputs.set(`module-${String(index).padStart(4, "0")}.mjs`, module.code));
         const fileDigests = Object.fromEntries([...outputs].map(([name, text]) => [name, hash(text)]));
         const completeText = canonicalStringifyJson({ files: fileDigests });
+        const expectedOutputEntries = [...outputs.keys()].sort();
         const expectedEntries = [...outputs.keys(), "complete.json"].sort();
         if (await exists(revisionDir)) {
           const info = await lstat(revisionDir);
           if (info.isSymbolicLink() || !info.isDirectory()) throw new Error("Unsafe immutable build directory.");
           const entries = (await readdir(revisionDir)).sort();
-          if (entries.join(",") !== expectedEntries.join(",")) throw new Error("Immutable build is partial or contains unknown files.");
-          for (const [name, text] of outputs) if (await readFile(join(revisionDir, name), "utf8") !== text) throw new Error("Immutable build conflicts with existing output.");
-          if (await readFile(join(revisionDir, "complete.json"), "utf8") !== completeText) throw new Error("Immutable build completion marker conflicts.");
+          if (entries.some((entry) => !expectedEntries.includes(entry))) throw new Error("Immutable build contains unknown files.");
+          const hasComplete = entries.includes("complete.json");
+          if (hasComplete && entries.join(",") !== expectedEntries.join(",")) throw new Error("Immutable completed build is partial.");
+          if (!hasComplete && entries.join(",") !== expectedOutputEntries.join(",")) throw new Error("Immutable build is partial.");
+          for (const name of entries) {
+            const path = join(revisionDir, name);
+            await this.verifyTarget(path, false);
+            const expected = name === "complete.json" ? completeText : outputs.get(name);
+            if (expected === undefined || await readFile(path, "utf8") !== expected) {
+              throw new Error(name === "complete.json" ? "Immutable build completion marker conflicts." : "Immutable build conflicts with existing output.");
+            }
+          }
+          if (!hasComplete) {
+            await this.hit("build-files-durable");
+            await this.atomicWrite(join(revisionDir, "complete.json"), completeText);
+            await syncDirectory(revisionDir);
+          }
         } else {
           await mkdir(revisionDir, { mode: 0o700 });
           await syncDirectory(projectDir);

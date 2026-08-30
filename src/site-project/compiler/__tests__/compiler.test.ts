@@ -109,8 +109,18 @@ describe("SiteProject compiler", () => {
     const route = result.build.routes[0]!;
     expect(route.composition).toMatchObject({
       document: { root: [{ props: { title: "Mapped linked" } }] },
-      linkedSource: { ref: { providerId: "indexeddb", recordId: "shell" }, outlet: { id: "main", label: "Main" }, document: { id: "shell" } },
+      linkedSource: {
+        ref: { providerId: "indexeddb", recordId: "shell" },
+        outlet: { id: "main", label: "Main", target: { parentId: "shell-root", slotId: "body" } },
+        document: { id: "shell" },
+      },
     });
+    const publication = route.composition.linkedSource?.document.publication;
+    expect(publication?.kind).toBe("global-template");
+    if (publication?.kind === "global-template") {
+      expect(route.composition.linkedSource?.outlet.target).not.toBe(publication.outlet.target);
+      expect(route.composition.linkedSource?.outlet.target).toEqual(publication.outlet.target);
+    }
     expect(route.modules.map((module) => module.kind)).toEqual(["global-template", "linked-consumer"]);
     expect(route.modules.find((module) => module.kind === "linked-consumer")?.code).toContain("Mapped linked");
   });

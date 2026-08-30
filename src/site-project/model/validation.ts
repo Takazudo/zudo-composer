@@ -278,6 +278,7 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
 
   for (const [providerId, entries] of contentEntries) {
     const models = contentModels.get(providerId) ?? [];
+    const singleEntryCounts = new Map<string, number>();
     entries.forEach((entry) => {
       const entryPath = recordPaths.get(entry) ?? "$.providers.content";
       const path = `${entryPath}.modelId`;
@@ -288,6 +289,13 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
           ? `Content Entry model ${JSON.stringify(entry.modelId)} belongs to another provider.`
           : `Content Entry model ${JSON.stringify(entry.modelId)} does not exist in provider ${JSON.stringify(providerId)}.`);
         return;
+      }
+      if (model.document.kind === "single") {
+        const count = (singleEntryCounts.get(model.id) ?? 0) + 1;
+        singleEntryCounts.set(model.id, count);
+        if (count > 1) {
+          diagnostic(diagnostics, "single-content-cardinality", path, `Single Content model ${JSON.stringify(model.id)} permits at most one Entry in provider ${JSON.stringify(providerId)}.`);
+        }
       }
       for (const [fieldId, fieldValue] of Object.entries(entry.values)) {
         const field = model.document.fields.find((candidate) => candidate.id === fieldId);

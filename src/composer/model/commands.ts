@@ -38,6 +38,7 @@ import {
   validateRootForest,
   validateRootInsertion,
 } from "./validate";
+import { validateNodeProps } from "./node-props";
 
 export type CommandResult =
   | {
@@ -206,8 +207,8 @@ export function addNode(
  * refuse it too), and any key that names a declared STRUCTURAL slot's `prop`
  * (that prop is reserved for the slot's rendered children — a scalar written
  * there would sit inert in storage yet claim the same prop the generator
- * binds structural children to). Props not described by a field are
- * otherwise still accepted as long as they are JSON-safe.
+ * binds structural children to). Every resulting scalar prop must satisfy the
+ * component manifest's field/static/default contract.
  */
 export function updateProps(
   document: CompositionDocument,
@@ -283,6 +284,8 @@ export function updateProps(
 
   const nextProps = { ...node.props, ...(cloneJson(patch) as JsonObject) };
   for (const prop of removeProps) delete nextProps[prop];
+  const propsValidation = validateNodeProps({ componentId: node.componentId, props: nextProps }, entry);
+  if (!propsValidation.ok) return { ok: false, error: propsValidation.issues[0]!.message };
   const changed = Object.keys(patch).some((prop) => !Object.is(node.props[prop], patch[prop]))
     || removeProps.some((prop) => Object.hasOwn(node.props, prop));
   node.props = nextProps;
