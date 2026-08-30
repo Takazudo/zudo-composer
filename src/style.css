@@ -21,7 +21,8 @@
 
 .app-header {
   position: relative;
-  z-index: var(--z-index-toolbar);
+  /* App-level disclosures must clear sticky toolbars owned by every route. */
+  z-index: var(--z-index-popover);
   min-height: var(--sg-header-h);
   display: flex;
   flex-wrap: wrap;

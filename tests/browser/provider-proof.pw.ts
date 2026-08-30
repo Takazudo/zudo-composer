@@ -127,6 +127,10 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   await expect(narrowChooser.getByText("12 of 12 components", { exact: true })).toBeVisible();
   await narrowChooser.getByRole("button", { name: "Cancel" }).click();
   await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: /^Theme:/ }).click();
+  await page.getByRole("menuitemradio", { name: "Light", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(canvas.locator("html")).toHaveAttribute("data-theme", "light");
   for (const theme of ["light", "dark"] as const) {
     await useTheme(page, theme);
     await expect(canvas.locator("html")).toHaveAttribute("data-theme", theme);

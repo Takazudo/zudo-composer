@@ -56,4 +56,27 @@ describe("CompositionPreviewHost", () => {
     expect(latestCurrent).toHaveBeenCalledOnce();
     expect(latestError).toHaveBeenCalledWith("renderer failed");
   });
+
+  it("reports current when an already-ready bridge accepts a new render", () => {
+    const renderSnapshot = vi.fn();
+    const createBridge = vi.fn(() => ({
+      render: renderSnapshot,
+      updateSession: vi.fn(),
+      restoreFocus: vi.fn(),
+      dispose: vi.fn(),
+      ready: true,
+      terminal: false,
+      revision: 0,
+    }));
+    const current = vi.fn();
+    const location = { src: "/composer/preview", targetOrigin: "https://example.test" };
+    const hostWindow = { addEventListener() {}, removeEventListener() {} };
+    const view = render(<CompositionPreviewHost componentProvider={activeComponentProvider} document={previewDocument("first")} onCurrent={current} createBridge={createBridge as never} location={location} hostWindow={hostWindow} />);
+
+    expect(current).toHaveBeenCalledOnce();
+    view.rerender(<CompositionPreviewHost componentProvider={activeComponentProvider} document={previewDocument("second")} onCurrent={current} createBridge={createBridge as never} location={location} hostWindow={hostWindow} />);
+
+    expect(renderSnapshot).toHaveBeenCalledTimes(2);
+    expect(current).toHaveBeenCalledTimes(2);
+  });
 });

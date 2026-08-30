@@ -79,6 +79,7 @@ export function CompositionPreviewHost({
       bridge.render(localPreviewSnapshot(initialDocument, initialDocument.id), { mode: "preview", theme: latestThemeRef.current, selectedId: null });
       renderedDocumentRef.current = initialDocument;
       renderedThemeRef.current = latestThemeRef.current;
+      if (bridge.ready) onCurrentRef.current?.();
     }
     return () => {
       bridge.dispose();
@@ -94,6 +95,7 @@ export function CompositionPreviewHost({
     bridge.render(localPreviewSnapshot(document, document.id), { mode: "preview", theme: activeTheme, selectedId: null });
     renderedDocumentRef.current = document;
     renderedThemeRef.current = activeTheme;
+    if (bridge.ready) onCurrentRef.current?.();
   }, [activeTheme, document]);
 
   useEffect(() => {

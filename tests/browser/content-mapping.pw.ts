@@ -172,6 +172,9 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(frame.getByRole("heading", { name: "Mapping is ready" })).toBeVisible();
 
   const firstBinding = page.locator(".sg-mapping-binding").first();
+  expect(await firstBinding.locator(".sg-mapping-binding__region-heading").evaluateAll((nodes) =>
+    nodes.map((node) => node.scrollWidth <= node.clientWidth),
+  )).toEqual([true, true, true]);
   const transform = firstBinding.getByRole("combobox", { name: "Transform" });
   await expect(transform.locator("option")).toHaveText(["Use value", "Truncate to 160", "Add prefix"]);
   await expect(transform.locator("option", { hasText: "Format date" })).toHaveCount(0);
