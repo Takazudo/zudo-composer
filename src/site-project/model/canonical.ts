@@ -19,7 +19,7 @@ function compareById(left: { id: string }, right: { id: string }): number {
 function canonicalJson(value: JsonValue): JsonValue {
   if (Array.isArray(value)) return value.map(canonicalJson);
   if (value !== null && typeof value === "object") {
-    const output: Record<string, JsonValue> = {};
+    const output = Object.create(null) as Record<string, JsonValue>;
     const record = value as Record<string, JsonValue>;
     for (const key of Object.keys(record).sort(compareUnicodeCodePoints)) output[key] = canonicalJson(record[key]!);
     return output;

@@ -4,6 +4,7 @@ import type { ContentEntryRecord, ContentModelRecord } from "../../content/model
 import type { MappingRecord } from "../../mapping/model";
 import type { SitemapRecord } from "../../sitemapper/library";
 import type { RecordId } from "../../shared";
+import type { SiteProjectProviderId } from "./provider-registry";
 
 export const SITE_PROJECT_SCHEMA_VERSION = 1 as const;
 
@@ -13,29 +14,29 @@ export interface SiteProjectComponentPackRequirement {
   packVersion: string;
 }
 
-export interface SiteProjectRecordRef {
-  providerId: string;
+export interface SiteProjectRecordRef<TProviderId extends string = string> {
+  providerId: TProviderId;
   recordId: RecordId;
 }
 
 export interface SiteProjectCompositionProvider {
-  id: string;
+  id: SiteProjectProviderId<"compositions">;
   records: CompositionRecord[];
 }
 
 export interface SiteProjectContentProvider {
-  id: string;
+  id: SiteProjectProviderId<"content">;
   models: ContentModelRecord[];
   entries: ContentEntryRecord[];
 }
 
 export interface SiteProjectMappingProvider {
-  id: string;
+  id: SiteProjectProviderId<"mappings">;
   records: MappingRecord[];
 }
 
 export interface SiteProjectSitemapProvider {
-  id: string;
+  id: SiteProjectProviderId<"sitemaps">;
   records: SitemapRecord[];
 }
 
@@ -53,7 +54,7 @@ export interface SiteProject {
   name: string;
   componentPack: SiteProjectComponentPackRequirement;
   providers: SiteProjectProviders;
-  activeSitemap: SiteProjectRecordRef;
+  activeSitemap: SiteProjectRecordRef<SiteProjectProviderId<"sitemaps">>;
 }
 
 export type SiteProjectDiagnosticSeverity = "error";
@@ -75,9 +76,12 @@ export type SiteProjectDiagnosticCode =
   | "malformed-record"
   | "component-pack-incompatible"
   | "dangling-composition-binding"
+  | "invalid-composition-binding"
   | "invalid-active-sitemap"
   | "dangling-content-model"
   | "wrong-content-provider"
+  | "dangling-entry-field"
+  | "invalid-entry-value"
   | "dangling-mapping-reference"
   | "wrong-mapping-provider"
   | "dangling-mapping-field"

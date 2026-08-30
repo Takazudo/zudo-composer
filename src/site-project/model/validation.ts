@@ -1,7 +1,9 @@
-import { createComponentCatalog, diagnoseDocument } from "../../composer";
+import { createComponentCatalog } from "../../composer/model/types";
+import { diagnoseDocument } from "../../composer/model/validate";
 import { validateCompositionRecord } from "../../composer/library";
-import { validateContentEntryRecord, validateContentModelRecord } from "../../content/model";
+import { isValueValidForField, validateContentEntryRecord, validateContentModelRecord } from "../../content/model";
 import { validateMappingRecord } from "../../mapping/model";
+import { discoverMappingTargets } from "../../mapping/resolver/targets";
 import { validateSitemapRecord } from "../../sitemapper/library";
 import { isJsonSafe, isPlainObject, isSafeRecordId } from "../../shared";
 import { compareUnicodeCodePoints } from "./canonical";
@@ -164,6 +166,7 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
   const contentEntries = new Map<string, SiteProjectContentProvider["entries"]>();
   const mappings = new Map<string, SiteProject["providers"]["mappings"][number]["records"]>();
   const sitemaps = new Map<string, SiteProject["providers"]["sitemaps"][number]["records"]>();
+  const recordPaths = new Map<object, string>();
 
   const validateRecordProviders = <TRecord extends { id: string }>(
     domain: "compositions" | "mappings" | "sitemaps",
@@ -199,6 +202,7 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
         if (recordIds.has(result.record.id)) diagnostic(diagnostics, "duplicate-record", `${path}.id`, `Duplicate record id ${JSON.stringify(result.record.id)} in provider ${JSON.stringify(providerId)}.`);
         recordIds.add(result.record.id);
         records.push(result.record);
+        recordPaths.set(result.record, path);
       });
       if (!target.has(providerId)) target.set(providerId, records);
     });
@@ -238,6 +242,7 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
           }
           if (recordIds.has(result.value.id)) diagnostic(diagnostics, "duplicate-record", `${path}.id`, `Duplicate content ${collectionName.slice(0, -1)} id ${JSON.stringify(result.value.id)} in provider ${JSON.stringify(providerId)}.`);
           recordIds.add(result.value.id);
+          recordPaths.set(result.value, path);
           if (collectionName === "models") validModels.push(result.value as SiteProjectContentProvider["models"][number]);
           else validEntries.push(result.value as SiteProjectContentProvider["entries"][number]);
         });
@@ -250,9 +255,7 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
   const componentCatalog = packCompatible ? createComponentCatalog(context.componentPack) : undefined;
   for (const [providerId, records] of compositions) {
     for (const record of records) {
-      const providerIndex = (value.providers.compositions as unknown[]).findIndex((item) => isPlainObject(item) && item.id === providerId);
-      const recordIndex = records.indexOf(record);
-      const path = `$.providers.compositions[${providerIndex}].records[${recordIndex}]`;
+      const path = recordPaths.get(record) ?? "$.providers.compositions";
       if (componentCatalog) {
         const packDiagnostics = diagnoseDocument(record.document, componentCatalog, { containingRecordId: record.id });
         const nodePaths = compositionNodePaths(record.document.root, `${path}.document.root`);
@@ -262,48 +265,69 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
         for (const reason of packDiagnostics.reuseReasons) diagnostic(diagnostics, "component-pack-incompatible", `${path}.document`, reason.message);
       }
       const binding = record.document.binding;
-      if (binding && !records.some((candidate) => candidate.id === binding.sourceRecordId)) {
-        diagnostic(diagnostics, "dangling-composition-binding", `${path}.document.binding.sourceRecordId`, `Composition binding target ${JSON.stringify(recordRefKey(providerId, binding.sourceRecordId))} does not exist in the same provider.`);
+      if (binding) {
+        const source = records.find((candidate) => candidate.id === binding.sourceRecordId);
+        if (!source) {
+          diagnostic(diagnostics, "dangling-composition-binding", `${path}.document.binding.sourceRecordId`, `Composition binding target ${JSON.stringify(recordRefKey(providerId, binding.sourceRecordId))} does not exist in the same provider.`);
+        } else if (source.document.publication?.kind !== "global-template" || source.document.publication.outlet.id !== binding.outletId) {
+          diagnostic(diagnostics, "invalid-composition-binding", `${path}.document.binding`, `Composition binding target does not expose Global-template outlet ${JSON.stringify(binding.outletId)}.`);
+        }
       }
     }
   }
 
   for (const [providerId, entries] of contentEntries) {
     const models = contentModels.get(providerId) ?? [];
-    const providerIndex = (value.providers.content as unknown[]).findIndex((item) => isPlainObject(item) && item.id === providerId);
-    entries.forEach((entry, entryIndex) => {
-      const path = `$.providers.content[${providerIndex}].entries[${entryIndex}].modelId`;
-      if (!models.some((model) => model.id === entry.modelId)) {
+    entries.forEach((entry) => {
+      const entryPath = recordPaths.get(entry) ?? "$.providers.content";
+      const path = `${entryPath}.modelId`;
+      const model = models.find((candidate) => candidate.id === entry.modelId);
+      if (!model) {
         const elsewhere = recordExistsElsewhere(contentModels, providerId, entry.modelId);
         diagnostic(diagnostics, elsewhere ? "wrong-content-provider" : "dangling-content-model", path, elsewhere
           ? `Content Entry model ${JSON.stringify(entry.modelId)} belongs to another provider.`
           : `Content Entry model ${JSON.stringify(entry.modelId)} does not exist in provider ${JSON.stringify(providerId)}.`);
+        return;
+      }
+      for (const [fieldId, fieldValue] of Object.entries(entry.values)) {
+        const field = model.document.fields.find((candidate) => candidate.id === fieldId);
+        if (!field) {
+          diagnostic(diagnostics, "dangling-entry-field", `${entryPath}.values[${JSON.stringify(fieldId)}]`, `Content Entry value refers to unknown field ${JSON.stringify(fieldId)}.`);
+        } else if (!isValueValidForField(field, fieldValue)) {
+          diagnostic(diagnostics, "invalid-entry-value", `${entryPath}.values[${JSON.stringify(fieldId)}]`, `Content Entry value for field ${JSON.stringify(fieldId)} does not match ${field.kind}.`);
+        }
       }
     });
   }
 
-  for (const [providerId, records] of mappings) {
-    const providerIndex = (value.providers.mappings as unknown[]).findIndex((item) => isPlainObject(item) && item.id === providerId);
-    records.forEach((mapping, mappingIndex) => {
-      const path = `$.providers.mappings[${providerIndex}].records[${mappingIndex}].document`;
+  for (const records of mappings.values()) {
+    records.forEach((mapping) => {
+      const path = `${recordPaths.get(mapping) ?? "$.providers.mappings"}.document`;
       const contentRef = mapping.document.contentModel;
-      const models = contentModels.get(contentRef.providerId);
+      const knownContentProvider = isSiteProjectProviderId("content", contentRef.providerId);
+      if (!knownContentProvider) diagnostic(diagnostics, "unknown-provider", `${path}.contentModel.providerId`, `Provider id ${JSON.stringify(contentRef.providerId)} is not registered for content.`);
+      const models = knownContentProvider ? contentModels.get(contentRef.providerId) : undefined;
       const model = models?.find((candidate) => candidate.id === contentRef.recordId);
-      if (!model) {
+      if (knownContentProvider && !model) {
         const elsewhere = recordExistsElsewhere(contentModels, contentRef.providerId, contentRef.recordId);
         diagnostic(diagnostics, elsewhere ? "wrong-mapping-provider" : "dangling-mapping-reference", `${path}.contentModel`, elsewhere
           ? `Mapping Content model ${JSON.stringify(contentRef.recordId)} belongs to another provider.`
           : `Mapping Content model ${JSON.stringify(recordRefKey(contentRef.providerId, contentRef.recordId))} does not exist.`);
       }
       const compositionRef = mapping.document.composition;
-      const compositionRecords = compositions.get(compositionRef.providerId);
+      const knownCompositionProvider = isSiteProjectProviderId("compositions", compositionRef.providerId);
+      if (!knownCompositionProvider) diagnostic(diagnostics, "unknown-provider", `${path}.composition.providerId`, `Provider id ${JSON.stringify(compositionRef.providerId)} is not registered for compositions.`);
+      const compositionRecords = knownCompositionProvider ? compositions.get(compositionRef.providerId) : undefined;
       const composition = compositionRecords?.find((candidate) => candidate.id === compositionRef.recordId);
-      if (!composition) {
+      if (knownCompositionProvider && !composition) {
         const elsewhere = recordExistsElsewhere(compositions, compositionRef.providerId, compositionRef.recordId);
         diagnostic(diagnostics, elsewhere ? "wrong-mapping-provider" : "dangling-mapping-reference", `${path}.composition`, elsewhere
           ? `Mapping Composition ${JSON.stringify(compositionRef.recordId)} belongs to another provider.`
           : `Mapping Composition ${JSON.stringify(recordRefKey(compositionRef.providerId, compositionRef.recordId))} does not exist.`);
       }
+      const mappingTargets = composition && componentCatalog
+        ? new Set(discoverMappingTargets(composition.document, componentCatalog).targets.map((target) => recordRefKey(target.target.nodeId, target.target.prop)))
+        : undefined;
       const nodeIds = composition ? new Set(compositionNodePaths(composition.document.root, "").keys()) : undefined;
       mapping.document.bindings.forEach((binding, bindingIndex) => {
         const bindingPath = `${path}.bindings[${bindingIndex}]`;
@@ -312,6 +336,8 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
         }
         if (nodeIds && !nodeIds.has(binding.target.nodeId)) {
           diagnostic(diagnostics, "dangling-mapping-target", `${bindingPath}.target.nodeId`, `Mapping target node ${JSON.stringify(binding.target.nodeId)} does not exist in Composition ${JSON.stringify(composition!.id)}.`);
+        } else if (mappingTargets && !mappingTargets.has(recordRefKey(binding.target.nodeId, binding.target.prop))) {
+          diagnostic(diagnostics, "dangling-mapping-target", `${bindingPath}.target.prop`, `Mapping target field ${JSON.stringify(binding.target.prop)} is not an available scalar field on node ${JSON.stringify(binding.target.nodeId)}.`);
         }
       });
     });
@@ -320,19 +346,24 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
   const activeSitemap = value.activeSitemap;
   if (!validateRefShape(activeSitemap)) {
     diagnostic(diagnostics, "invalid-active-sitemap", "$.activeSitemap", "activeSitemap must contain exactly a registered providerId and safe recordId.");
-  } else if (!isSiteProjectProviderId("sitemaps", activeSitemap.providerId)
-    || !sitemaps.get(activeSitemap.providerId)?.some((record) => record.id === activeSitemap.recordId)) {
+  } else if (!isSiteProjectProviderId("sitemaps", activeSitemap.providerId)) {
+    diagnostic(diagnostics, "unknown-provider", "$.activeSitemap.providerId", `Provider id ${JSON.stringify(activeSitemap.providerId)} is not registered for sitemaps.`);
+  } else if (!sitemaps.get(activeSitemap.providerId)?.some((record) => record.id === activeSitemap.recordId)) {
     diagnostic(diagnostics, "invalid-active-sitemap", "$.activeSitemap", `Active Sitemap ${JSON.stringify(recordRefKey(activeSitemap.providerId, activeSitemap.recordId))} does not exist.`);
   }
 
-  for (const [providerId, records] of sitemaps) {
-    const providerIndex = (value.providers.sitemaps as unknown[]).findIndex((item) => isPlainObject(item) && item.id === providerId);
-    records.forEach((sitemap, sitemapIndex) => {
-      const base = `$.providers.sitemaps[${providerIndex}].records[${sitemapIndex}].document.root`;
+  for (const records of sitemaps.values()) {
+    records.forEach((sitemap) => {
+      const base = `${recordPaths.get(sitemap) ?? "$.providers.sitemaps"}.document.root`;
       sitemapNodes(sitemap.document.root, base, (source, sourcePath) => {
         if (!isPlainObject(source) || source.kind === "unassigned") return;
         const domain = source.kind === "composition" ? compositions : mappings;
         const ref = source.ref as { providerId: string; recordId: string };
+        const registryDomain = source.kind === "composition" ? "compositions" : "mappings";
+        if (!isSiteProjectProviderId(registryDomain, ref.providerId)) {
+          diagnostic(diagnostics, "unknown-provider", `${sourcePath}.ref.providerId`, `Provider id ${JSON.stringify(ref.providerId)} is not registered for ${registryDomain}.`);
+          return;
+        }
         const recordsForProvider = domain.get(ref.providerId);
         const target = recordsForProvider?.find((candidate) => candidate.id === ref.recordId);
         if (!target) {

@@ -18,6 +18,7 @@ describe("active SiteProject component manifest seam", () => {
       packVersion: activeComponentManifest.packVersion,
     });
     expect(JSON.parse(serializeActiveSiteProjectComponentManifest())).toEqual(activeComponentManifest);
+    expect(Object.isFrozen(activeSiteProjectComponentManifest.components)).toBe(true);
   });
 
   it("serializes manifest data only, never installed component runtime functions", () => {

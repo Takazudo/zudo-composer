@@ -80,6 +80,22 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+function readonlyMap<K, V>(source: Map<K, V>): ReadonlyMap<K, V> {
+  const facade: ReadonlyMap<K, V> = Object.freeze({
+    get size() { return source.size; },
+    get: (key: K) => source.get(key),
+    has: (key: K) => source.has(key),
+    entries: () => source.entries(),
+    keys: () => source.keys(),
+    values: () => source.values(),
+    forEach: (callback: (value: V, key: K, map: ReadonlyMap<K, V>) => void, thisArg?: unknown) => {
+      source.forEach((value, key) => callback.call(thisArg, value, key, facade));
+    },
+    [Symbol.iterator]: () => source[Symbol.iterator](),
+  } satisfies ReadonlyMap<K, V>);
+  return facade;
+}
+
 function createDomainAdapters<TRecord extends { id: string }>(
   domain: Exclude<SiteProjectDomain, "content">,
   collections: readonly { id: string; records: readonly TRecord[] }[],
@@ -100,14 +116,15 @@ function createDomainAdapters<TRecord extends { id: string }>(
       store,
     });
   });
-  const stores = new Map(providers.map((provider) => [provider.descriptor.id, provider.store]));
+  const storeIndex = new Map<string, InMemorySiteProjectStore<TRecord>>(providers.map((provider) => [provider.descriptor.id, provider.store]));
+  const stores = readonlyMap(storeIndex);
   const entries = providers.flatMap((provider) => provider.store.list().map((record) => Object.freeze({
     ref: Object.freeze({ providerId: provider.descriptor.id, recordId: record.id }),
     record,
   })));
   const catalog: InMemorySiteProjectCatalog<TRecord> = Object.freeze({
     list: () => entries,
-    resolve: (ref: SiteProjectRecordRef) => stores.get(ref.providerId)?.get(ref.recordId),
+    resolve: (ref: SiteProjectRecordRef) => storeIndex.get(ref.providerId)?.get(ref.recordId),
   });
   return Object.freeze({ providers: Object.freeze(providers), stores, catalog });
 }
@@ -130,16 +147,17 @@ function createContentAdapters(collections: SiteProject["providers"]["content"])
       store,
     });
   });
-  const stores = new Map(providers.map((provider) => [provider.descriptor.id, provider.store]));
+  const storeIndex = new Map<string, InMemorySiteProjectContentStore>(providers.map((provider) => [provider.descriptor.id, provider.store]));
+  const stores = readonlyMap(storeIndex);
   const modelEntries = providers.flatMap((provider) => provider.store.listModels().map((record) => Object.freeze({ ref: Object.freeze({ providerId: provider.descriptor.id, recordId: record.id }), record })));
   const contentEntries = providers.flatMap((provider) => provider.store.listEntries().map((record) => Object.freeze({ ref: Object.freeze({ providerId: provider.descriptor.id, recordId: record.id }), record })));
   const catalog: InMemorySiteProjectContentCatalog = Object.freeze({
     listModels: () => modelEntries,
-    resolveModel: (ref: SiteProjectRecordRef) => stores.get(ref.providerId)?.getModel(ref.recordId),
+    resolveModel: (ref: SiteProjectRecordRef) => storeIndex.get(ref.providerId)?.getModel(ref.recordId),
     listEntries: (modelRef?: SiteProjectRecordRef) => modelRef === undefined
       ? contentEntries
       : contentEntries.filter((entry) => entry.ref.providerId === modelRef.providerId && entry.record.modelId === modelRef.recordId),
-    resolveEntry: (ref: SiteProjectRecordRef) => stores.get(ref.providerId)?.getEntry(ref.recordId),
+    resolveEntry: (ref: SiteProjectRecordRef) => storeIndex.get(ref.providerId)?.getEntry(ref.recordId),
   });
   return Object.freeze({ providers: Object.freeze(providers), stores, catalog });
 }

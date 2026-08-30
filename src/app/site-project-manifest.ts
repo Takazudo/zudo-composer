@@ -2,12 +2,20 @@ import { componentPackManifestSchema, type JsonValue } from "@zudo-composer/comp
 import { activeComponentManifest } from "../features/composer/active-pack";
 import { canonicalStringifyJson, type SiteProjectValidationContext } from "../site-project";
 
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 /**
  * The application-owned, manifest-only bridge into pure SiteProject services.
  * It is parsed directly from the pinned active provider; no component runtime
  * functions or hand-maintained fallback component registry cross this seam.
  */
-export const activeSiteProjectComponentManifest = Object.freeze(
+export const activeSiteProjectComponentManifest = deepFreeze(
   componentPackManifestSchema.parse(structuredClone(activeComponentManifest)),
 );
 
