@@ -11,6 +11,7 @@ interface ContainerProps {
   enabled: boolean;
   columns: number;
   accent: string;
+  actions: readonly { label: string; href: string; variant?: 'primary' | 'secondary' }[];
   children?: unknown;
   aside?: unknown;
 }
@@ -37,6 +38,7 @@ const container = defineComponent<ContainerProps>()((_props: ContainerProps) => 
     enabled: true,
     columns: 2,
     accent: '#336699',
+    actions: [{ label: 'Read more', href: '/more', variant: 'primary' }],
   },
   fields: [
     { kind: 'text', prop: 'title', label: 'Title', required: true, inlineEdit: { multiline: false } },
@@ -44,6 +46,30 @@ const container = defineComponent<ContainerProps>()((_props: ContainerProps) => 
     { kind: 'boolean', prop: 'enabled', label: 'Enabled' },
     { kind: 'number', prop: 'columns', label: 'Columns', min: 1, max: 4, step: 1 },
     { kind: 'color', prop: 'accent', label: 'Accent' },
+    {
+      prop: 'actions',
+      label: 'Actions',
+      schema: {
+        type: 'array',
+        items: {
+          schema: {
+            type: 'object',
+            fields: [
+              { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+              { key: 'href', label: 'URL', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+              {
+                key: 'variant',
+                label: 'Variant',
+                schema: { type: 'string', enum: ['primary', 'secondary'] },
+                editor: { kind: 'select' },
+              },
+            ],
+          },
+          editor: { kind: 'group' },
+        },
+      },
+      editor: { kind: 'list' },
+    },
   ],
   slots: [
     { id: 'content', prop: 'children', label: 'Content', accepts: ['prose', 'badge'], cardinality: 'many' },
@@ -112,6 +138,7 @@ export const fixtureComponentDocument: ComponentDocument = {
         enabled: true,
         columns: 2,
         accent: '#336699',
+        actions: [{ label: 'Read more', href: '/more', variant: 'primary' }],
         analytics: { tags: ['fixture'] },
       },
       slots: {

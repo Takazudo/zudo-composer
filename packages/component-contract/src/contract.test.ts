@@ -11,6 +11,7 @@ import {
   defineComponent,
   defineComponentPack,
   resolveComponentNode,
+  validateFieldValue,
   validateRuntimeParity,
   type ContractIssueCode,
 } from './index.js';
@@ -41,7 +42,18 @@ function expectCode(run: () => unknown, code: ContractIssueCode): void {
   throw new Error(`Expected ${code}`);
 }
 
-describe('serializable component-pack contract v1', () => {
+function expectIssue(run: () => unknown, code: ContractIssueCode, path: string): void {
+  try {
+    run();
+  } catch (error) {
+    expect(error).toBeInstanceOf(ContractValidationError);
+    expect((error as ContractValidationError).issues[0]).toMatchObject({ code, path });
+    return;
+  }
+  throw new Error(`Expected ${code} at ${path}`);
+}
+
+describe('serializable component-pack contract v2', () => {
   it('keeps every version concept distinct and includes display/source metadata', () => {
     expect(fixtureComponentPack.manifest).toMatchObject({
       kind: COMPONENT_PACK_KIND,
@@ -60,11 +72,11 @@ describe('serializable component-pack contract v1', () => {
 
   it('expresses all editable field kinds, inline modes, and slot cardinalities', () => {
     const definitions = fixtureComponentPack.manifest.components;
-    const kinds = new Set(definitions.flatMap((definition) => definition.fields.map((field) => field.kind)));
-    expect(kinds).toEqual(new Set(['text', 'select', 'boolean', 'number', 'color']));
+    const kinds = new Set(definitions.flatMap((definition) => definition.fields.map((field) => field.editor.kind)));
+    expect(kinds).toEqual(new Set(['text', 'select', 'boolean', 'number', 'color', 'list']));
     expect(definitions.flatMap((definition) => definition.fields)
-      .filter((field) => field.kind === 'text' && field.inlineEdit)
-      .map((field) => field.inlineEdit?.mode)).toEqual(['plain', 'markdown-source']);
+      .filter((field) => field.editor.kind === 'text' && field.inlineEdit)
+      .map((field) => field.editor.kind === 'text' ? field.editor.mode : undefined)).toEqual(['plain', 'markdown-source']);
     expect(definitions[0]?.slots.map((slot) => slot.cardinality)).toEqual(['many', 'single']);
   });
 
@@ -92,7 +104,7 @@ describe('serializable component-pack contract v1', () => {
   it('normalizes inline text defaults while preserving omitted accepts as unrestricted', () => {
     const definition = fixtureComponentPack.manifest.components[0];
     const title = definition?.fields.find((field) => field.prop === 'title');
-    expect(title).toMatchObject({ inlineEdit: { multiline: false, mode: 'plain' } });
+    expect(title).toMatchObject({ inlineEdit: true, editor: { kind: 'text', multiline: false, mode: 'plain' } });
     const value = manifest();
     const firstSlot = (container(value).slots as Record<string, unknown>[])[0];
     delete firstSlot.accepts;
@@ -108,7 +120,7 @@ describe('serializable component-pack contract v1', () => {
   });
 
   it('fails unsupported contract and document versions before other work', () => {
-    expectCode(() => componentPackManifestSchema.parse({ contractVersion: 2, components: 'bad' }), 'UNSUPPORTED_CONTRACT_VERSION');
+    expectCode(() => componentPackManifestSchema.parse({ contractVersion: 3, components: 'bad' }), 'UNSUPPORTED_CONTRACT_VERSION');
     expectCode(() => componentDocumentSchema.parse({ documentVersion: 2 }), 'UNSUPPORTED_DOCUMENT_VERSION');
   });
 
@@ -118,7 +130,7 @@ describe('serializable component-pack contract v1', () => {
     ['slot id', 'DUPLICATE_SLOT_ID', (value: Record<string, unknown>) => { const list = container(value).slots as unknown[]; list.push(structuredClone(list[0])); }],
     ['slot prop', 'DUPLICATE_SLOT_PROP', (value: Record<string, unknown>) => { const list = container(value).slots as Record<string, unknown>[]; list[1].prop = list[0].prop; }],
     ['accepts target', 'DUPLICATE_ACCEPTS', (value: Record<string, unknown>) => { const accepts = ((container(value).slots as Record<string, unknown>[])[0].accepts as string[]); accepts.push(accepts[0]); }],
-    ['select option', 'DUPLICATE_SELECT_OPTION', (value: Record<string, unknown>) => { const field = (container(value).fields as Record<string, unknown>[])[1]; const options = field.options as string[]; options.push(options[0]); }],
+    ['select option', 'DUPLICATE_SELECT_OPTION', (value: Record<string, unknown>) => { const field = (container(value).fields as Record<string, unknown>[])[1]; const options = (field.schema as Record<string, unknown>).enum as string[]; options.push(options[0]); }],
     ['source import', 'DUPLICATE_SOURCE', (value: Record<string, unknown>) => { const duplicate = structuredClone(components(value)[0]); duplicate.id = 'duplicate-source'; components(value).push(duplicate); }],
   ] as const)('rejects duplicate %s identities', (_label, code, mutate) => {
     const value = manifest();
@@ -183,10 +195,130 @@ describe('serializable component-pack contract v1', () => {
     expectCode(() => componentPackManifestSchema.parse(number), 'INVALID_FIELD_DOMAIN');
 
     const range = manifest();
-    const numberField = (container(range).fields as Record<string, unknown>[])[3];
-    numberField.min = 5;
-    numberField.max = 1;
-    expectCode(() => componentPackManifestSchema.parse(range), 'INVALID_FIELD_DOMAIN');
+    const numberSchema = ((container(range).fields as Record<string, unknown>[])[3].schema as Record<string, unknown>);
+    numberSchema.min = 5;
+    numberSchema.max = 1;
+    expectCode(() => componentPackManifestSchema.parse(range), 'INVALID_VALUE_SCHEMA');
+  });
+
+  it('validates HeroAction[], nested NavSection/NavLeaf, and optional string[] schemas', () => {
+    const value = manifest();
+    const target = container(value);
+    const fields = target.fields as Record<string, unknown>[];
+    const defaults = target.defaults as Record<string, unknown>;
+    fields.push({
+      prop: 'sections', label: 'Navigation sections', required: true,
+      schema: { type: 'array', items: {
+        schema: { type: 'object', fields: [
+          { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+          { key: 'children', label: 'Children', required: true, schema: { type: 'array', items: {
+            schema: { type: 'object', fields: [
+              { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+              { key: 'href', label: 'URL', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+              { key: 'slug', label: 'Slug', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+            ] }, editor: { kind: 'group' },
+          } }, editor: { kind: 'list' } },
+        ] }, editor: { kind: 'group' },
+      } }, editor: { kind: 'list' },
+    });
+    fields.push({
+      prop: 'only', label: 'Visible line keys',
+      schema: { type: 'array', items: { schema: { type: 'string' }, editor: { kind: 'text' } } },
+      editor: { kind: 'list' },
+    });
+    defaults.sections = [{ label: 'Docs', children: [{ label: 'Start', href: '/start', slug: 'start' }] }];
+    defaults.only = ['business', 'technology'];
+    const parsed = componentPackManifestSchema.parse(value);
+    expect(parsed.components[0]?.defaults).toMatchObject({ sections: defaults.sections, only: defaults.only });
+    expect(parsed.components[0]?.defaults.actions).toEqual([{ label: 'Read more', href: '/more', variant: 'primary' }]);
+
+    delete ((defaults.sections as Record<string, unknown>[])[0].children as Record<string, unknown>[])[0].slug;
+    expectIssue(
+      () => componentPackManifestSchema.parse(value),
+      'REQUIRED_DEFAULT_MISSING',
+      '$.components[0].defaults.sections[0].children[0].slug',
+    );
+    const child = ((defaults.sections as Record<string, unknown>[])[0].children as Record<string, unknown>[])[0];
+    child.slug = 'start';
+    child.href = 42;
+    expectIssue(
+      () => componentPackManifestSchema.parse(value),
+      'INVALID_FIELD_DOMAIN',
+      '$.components[0].defaults.sections[0].children[0].href',
+    );
+  });
+
+  it('validates labeled tuples and closed objects with exact nested paths', () => {
+    const value = manifest();
+    const target = container(value);
+    (target.fields as unknown[]).push({
+      prop: 'coordinates', label: 'Coordinates',
+      schema: { type: 'tuple', items: [
+        { label: 'X', schema: { type: 'number' }, editor: { kind: 'number' } },
+        { label: 'Metadata', schema: { type: 'object', fields: [
+          { key: 'name', label: 'Name', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+        ] }, editor: { kind: 'group' } },
+      ] }, editor: { kind: 'tuple' },
+    });
+    (target.defaults as Record<string, unknown>).coordinates = [1, { name: 'origin' }];
+    expect(componentPackManifestSchema.parse(value).components[0]?.defaults.coordinates).toEqual([1, { name: 'origin' }]);
+    ((target.defaults as Record<string, unknown>).coordinates as unknown[])[1] = { name: 'origin', extra: true };
+    expectIssue(() => componentPackManifestSchema.parse(value), 'UNKNOWN_KEY', '$.components[0].defaults.coordinates[1].extra');
+  });
+
+  it('rejects malformed, duplicate, cyclic, and over-depth value schemas with exact codes', () => {
+    const malformed = manifest();
+    (container(malformed).fields as Record<string, unknown>[])[0].editor = { kind: 'number' };
+    expectCode(() => componentPackManifestSchema.parse(malformed), 'INVALID_VALUE_SCHEMA');
+
+    const duplicate = manifest();
+    const actionField = (container(duplicate).fields as Record<string, unknown>[]).find((field) => field.prop === 'actions');
+    const actionObject = (((actionField?.schema as Record<string, unknown>).items as Record<string, unknown>).schema as Record<string, unknown>);
+    const actionFields = actionObject.fields as unknown[];
+    actionFields.push(structuredClone(actionFields[0]));
+    expectCode(() => componentPackManifestSchema.parse(duplicate), 'DUPLICATE_OBJECT_FIELD_KEY');
+
+    const cyclic = manifest();
+    const cyclicField = (container(cyclic).fields as Record<string, unknown>[])[0];
+    cyclicField.schema = { type: 'array', items: cyclicField };
+    cyclicField.editor = { kind: 'list' };
+    expectCode(() => componentPackManifestSchema.parse(cyclic), 'INVALID_VALUE_SCHEMA');
+
+    let nested: Record<string, unknown> = { schema: { type: 'string' }, editor: { kind: 'text' } };
+    let nestedValue: unknown = 'leaf';
+    for (let index = 0; index < 32; index += 1) {
+      nested = { schema: { type: 'array', items: nested }, editor: { kind: 'list' } };
+      nestedValue = [nestedValue];
+    }
+    const atLimit = manifest();
+    (container(atLimit).fields as Record<string, unknown>[])[0] = { prop: 'title', label: 'Title', ...nested };
+    (container(atLimit).defaults as Record<string, unknown>).title = nestedValue;
+    expect(componentPackManifestSchema.parse(atLimit).components[0]?.defaults.title).toEqual(nestedValue);
+
+    nested = { schema: { type: 'array', items: nested }, editor: { kind: 'list' } };
+    const deep = manifest();
+    (container(deep).fields as Record<string, unknown>[])[0] = { prop: 'title', label: 'Title', ...nested };
+    expectCode(() => componentPackManifestSchema.parse(deep), 'INVALID_VALUE_SCHEMA');
+  });
+
+  it('rejects cyclic and over-depth values while validateFieldValue shares domain rules', () => {
+    const actionField = fixtureComponentPack.manifest.components[0]?.fields.find((field) => field.prop === 'actions');
+    if (actionField === undefined) throw new Error('fixture action field missing');
+    validateFieldValue(actionField, [{ label: 'Read', href: '/read' }], '$actions');
+    expectIssue(() => validateFieldValue(actionField, [{ label: 'Read' }], '$actions'), 'REQUIRED_DEFAULT_MISSING', '$actions[0].href');
+
+    const cyclic: unknown[] = [];
+    cyclic.push(cyclic);
+    expectCode(() => validateFieldValue(actionField, cyclic), 'INVALID_JSON_VALUE');
+
+    let deep: unknown = 'leaf';
+    for (let index = 0; index < 33; index += 1) deep = [deep];
+    const listField = {
+      prop: 'items', label: 'Items',
+      schema: { type: 'array', items: { schema: { type: 'string' }, editor: { kind: 'text' } } },
+      editor: { kind: 'list' },
+    } as const;
+    expectCode(() => validateFieldValue(listField, deep), 'INVALID_JSON_VALUE');
   });
 
   it('rejects structural defaults and multiple inline-editable fields', () => {
@@ -196,8 +328,8 @@ describe('serializable component-pack contract v1', () => {
 
     const multiple = manifest();
     const fields = container(multiple).fields as Record<string, unknown>[];
-    fields[4].kind = 'text';
-    fields[4].inlineEdit = {};
+    fields[4].editor = { kind: 'text' };
+    fields[4].inlineEdit = true;
     expectCode(() => componentPackManifestSchema.parse(multiple), 'MULTIPLE_INLINE_EDIT_FIELDS');
   });
 
