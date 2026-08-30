@@ -27,7 +27,7 @@ const manifest = createComponentCatalog(createFixturePackManifest([
     description: "shell",
     source: { module: "test", exportKind: "named", exportName: "Shell" },
     defaults: {},
-    fields: [],
+    fields: [{ prop: "label", label: "Label", schema: { type: "string" }, editor: { kind: "text" } }],
     slots: [
       { id: "header", prop: "header", label: "Header", cardinality: "many" },
       { id: "body", prop: "body", label: "Body", accepts: ["leaf", "shell"], cardinality: "many" },
@@ -42,7 +42,7 @@ const manifest = createComponentCatalog(createFixturePackManifest([
     description: "leaf",
     source: { module: "test", exportKind: "named", exportName: "Leaf" },
     defaults: {},
-    fields: [],
+    fields: [{ prop: "label", label: "Label", schema: { type: "string" }, editor: { kind: "text" } }],
     slots: [],
   },
 ] satisfies ComponentDefinition[]));

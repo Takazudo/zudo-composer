@@ -59,6 +59,7 @@ export { validateNodeProps } from "./model/node-props";
 export {
   isStructurallyValidDocument,
   classifyNode,
+  canRepairNodeProps,
   diagnoseDocument,
   isNodeOpaque,
   UNRESTRICTED_ROOT_POLICY,

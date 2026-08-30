@@ -161,12 +161,17 @@ describe("recursive contract-v2 inspector fields", () => {
     }, null);
   });
 
-  it("keeps tuple positions fixed and surfaces invalid select values without normalizing them", () => {
-    renderInspector({ actions: [{ label: "A", href: "#", variant: "tertiary" }], settings: { enabled: true }, layout: ["row", 2] });
+  it("keeps invalid values blocked but exposes declared fields as an accessible recovery path", () => {
+    const { onUpdateProps } = renderInspector({ actions: [{ label: "A", href: "#", variant: "tertiary" }], settings: { enabled: true }, layout: ["row", 2] });
+    expect(screen.getByText(/invalid properties/i, { selector: "p" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "A" }));
     const variant = screen.getByLabelText("Variant");
     expect(variant).toHaveAttribute("aria-invalid", "true");
     expect(screen.getAllByRole("alert").some((alert) => /allowed options/i.test(alert.textContent ?? ""))).toBe(true);
+    fireEvent.change(variant, { target: { value: "secondary" } });
+    expect(onUpdateProps).toHaveBeenCalledWith("hero", {
+      actions: [{ label: "A", href: "#", variant: "secondary" }],
+    }, [["actions", 0, "variant"]]);
     expect(screen.queryByRole("button", { name: "Add item" })).toBeInTheDocument();
     expect(screen.getByLabelText("Columns")).toHaveAttribute("type", "number");
   });

@@ -13,8 +13,9 @@
 //    API (`findLocation`, `classifyNode`, `orderedSlotIds`) — never a second
 //    tree/index implementation;
 //  - editable fields are declared ONLY by the selected node's manifest entry
-//    (`entry.fields`) — an opaque/unknown node renders zero fields, only its
-//    diagnostics + raw identity, per the epic's opaque-node contract. Sibling
+//    (`entry.fields`). Nodes blocked solely by invalid persisted prop values
+//    retain those fields as a recovery path; every other opaque/unknown node
+//    renders zero fields and only its diagnostics + raw identity. Sibling
 //    move/remove stay available for opaque nodes (they act on the SLOT
 //    array, not the node's own props);
 //  - Preview/read-only mode keeps the same selection/values on screen but
@@ -30,7 +31,7 @@ import type {
   LinkedEditorLifecycleActions,
   LinkedEditorPresentation,
 } from "../../../../composer/browser";
-import { classifyNode, findLocation, orderedSlotIds } from "../../../../composer/browser";
+import { canRepairNodeProps, classifyNode, findLocation, orderedSlotIds } from "../../../../composer/browser";
 import {
   ArrowRightIcon,
   ChevronDownIcon,
@@ -225,6 +226,8 @@ export function InspectorPanel({
   const node = location.node;
   const diagnostic = classifyNode(node, manifest);
   const entry = manifest.get(node.componentId);
+  const canRepairProps = entry !== undefined && canRepairNodeProps(diagnostic);
+  const fieldsEditable = !diagnostic.opaque || canRepairProps;
   const breadcrumb = buildBreadcrumb(document, manifest, selectedId, titleFor);
   const title = titleFor?.(node.componentId) ?? node.componentId;
 
@@ -239,7 +242,7 @@ export function InspectorPanel({
   return (
     <div
       class="flex h-full flex-col overflow-y-auto p-hsp-md py-[10px]"
-      data-sg-inspector-state={diagnostic.opaque ? "opaque" : "editable"}
+      data-sg-inspector-state={canRepairProps ? "recoverable" : diagnostic.opaque ? "opaque" : "editable"}
     >
       <LinkedInspectorStatus presentation={linkedPresentation} actions={linkedActions} />
       <ReuseControls
@@ -275,7 +278,9 @@ export function InspectorPanel({
 
         {diagnostic.opaque && (
           <div class="sg-composer-inspector-diagnostics" role="alert">
-            <p class="sg-composer-inspector-diagnostics-title">This component can't be edited.</p>
+            <p class="sg-composer-inspector-diagnostics-title">
+              {canRepairProps ? "This component has invalid properties. Review the declared fields below; output stays blocked until every listed issue is corrected." : "This component can't be edited."}
+            </p>
             <ul class="list-disc pl-hsp-md">
               {diagnostic.reasons.map((reason, i) => (
                 <li key={`${reason.code}-${i}`}>{reason.message}</li>
@@ -315,7 +320,7 @@ export function InspectorPanel({
         </button>
       </div>
 
-      {!diagnostic.opaque && entry && entry.fields.length > 0 && (
+      {fieldsEditable && entry && entry.fields.length > 0 && (
         <div class="sg-composer-inspector-section flex flex-col gap-vsp-xs">
           {entry.fields.map((field) => (
             <InspectorField
