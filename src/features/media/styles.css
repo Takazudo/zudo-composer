@@ -22,6 +22,16 @@
 .sg-media-eyebrow { color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--font-weight-bold); letter-spacing: .08em; text-transform: uppercase; }
 .sg-media-status, .sg-media-toolbar p { color: var(--color-muted); font-size: var(--text-sm); }
 .sg-media-status { text-align: end; }
+.sg-media-upload { display: grid; gap: var(--sg-media-space-group); margin-block-end: var(--sg-media-space-section); padding: var(--sg-media-space-group); border: 1px dashed var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface-2); transition: border-color .15s ease, background-color .15s ease; }
+.sg-media-upload--drag-active { border-color: var(--color-accent); background: var(--color-surface); }
+.sg-media-upload__intro { display: flex; align-items: center; justify-content: space-between; gap: var(--sg-media-space-inline); }
+.sg-media-upload__intro > div { display: grid; gap: var(--sg-media-space-row); }
+.sg-media-upload__intro p, .sg-media-upload__rejection { color: var(--color-muted); font-size: var(--text-sm); }
+.sg-media-upload__input { position: fixed; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.sg-media-upload__status { display: grid; gap: var(--sg-media-space-row); margin: 0; padding: 0; list-style: none; }
+.sg-media-upload__status li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sg-media-space-row) var(--sg-media-space-inline); padding-block-start: var(--sg-media-space-row); border-block-start: 1px solid var(--color-border); font-size: var(--text-sm); }
+.sg-media-upload__status li > span { min-width: 0; overflow-wrap: anywhere; }
+.sg-media-upload__status li > span:nth-child(n + 3) { grid-column: 1 / -1; color: var(--color-muted); }
 .sg-media-toolbar { align-items: flex-end; margin-block-end: var(--sg-media-space-group); }
 
 .sg-media-tabs { display: flex; gap: var(--spacing-hsp-xs); }
@@ -73,6 +83,7 @@
   .sg-media-app__header, .sg-media-toolbar { align-items: stretch; flex-direction: column; }
   .sg-media-status { text-align: start; }
   .sg-media-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sg-media-upload__intro { align-items: stretch; flex-direction: column; }
 }
 
 @media (pointer: coarse) {

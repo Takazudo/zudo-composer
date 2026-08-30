@@ -4,6 +4,7 @@ import type { MediaProvider, MediaSummary } from "../../media";
 import { MediaConfirmDialog } from "./confirm-dialog";
 import { createMediaLibraryController, type MediaLibraryController, type MediaLibraryControllerOptions, type MediaLibraryState } from "./controller";
 import { MediaLibrary } from "./media-library";
+import { MediaUpload, type MediaUploadStore } from "./media-upload";
 
 export interface MediaRouteContentProps { provider?: MediaProvider; controller?: MediaLibraryController; controllerOptions?: MediaLibraryControllerOptions; }
 type Confirm = { kind: "delete"; record: MediaSummary } | { kind: "fresh" };
@@ -39,7 +40,7 @@ function ConnectedMedia({ provider, supplied, controllerOptions }: { provider: M
     {state.phase === "loading" && <p class="sg-media-state" role="status">Loading Media library…</p>}
     {state.phase === "error" && <section class="sg-media-state" aria-labelledby="media-error"><h2 id="media-error">Media library unavailable</h2><p>{state.message}</p><button type="button" onClick={() => run(() => controller.retryInitialization())}>Retry</button></section>}
     {state.phase === "recovery" && <section class="sg-media-state" aria-labelledby="media-recovery"><h2 id="media-recovery">Stored Media needs recovery</h2><p>{state.recoveryMessage}</p><p>Your source records are quarantined and will not be overwritten.</p><div class="sg-media-actions"><button type="button" onClick={() => run(() => controller.retryInitialization())}>Retry</button><button type="button" class="sg-media-button--danger" onClick={() => setConfirm({ kind: "fresh" })}>Start fresh…</button></div></section>}
-    {state.phase === "ready" && <MediaLibrary state={state} controller={controller} run={run} onDelete={requestDelete} />}
+    {state.phase === "ready" && <>{isMediaUploadStore(provider.store) && <MediaUpload store={provider.store} refresh={() => controller.refresh()} />}<MediaLibrary state={state} controller={controller} run={run} onDelete={requestDelete} /></>}
     <MediaConfirmDialog open={confirm !== null} title={confirm?.kind === "fresh" ? "Start fresh?" : "Delete media?"} confirmLabel={confirm?.kind === "fresh" ? "Start fresh" : "Delete permanently"} onClose={closeDelete} onConfirm={() => { if (confirm?.kind === "delete") run(() => controller.deleteMedia(confirm.record.id)); else if (confirm?.kind === "fresh") run(() => controller.startFresh()); }}>
       {confirm?.kind === "fresh" ? <><p>All quarantined Media data will be permanently removed.</p><p>This cannot be undone.</p></> : <>
         <p><strong>{confirm?.record.fileName}</strong> will be permanently removed.</p>
@@ -48,6 +49,10 @@ function ConnectedMedia({ provider, supplied, controllerOptions }: { provider: M
       </>}
     </MediaConfirmDialog>
   </main>;
+}
+
+function isMediaUploadStore(store: MediaProvider["store"]): store is MediaProvider["store"] & MediaUploadStore {
+  return "upload" in store && typeof store.upload === "function";
 }
 
 function ReferenceScan({ state, mediaId }: { state: MediaLibraryState; mediaId?: string }): JSX.Element {
