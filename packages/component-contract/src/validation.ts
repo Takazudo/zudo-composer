@@ -5,6 +5,7 @@ import {
   ContractValidationError,
   DOCUMENT_VERSION,
   type AuthorComponentDefinition,
+  type AuthorComponentDefinitionInput,
   type ComponentDocument,
   type ComponentManifest,
   type ComponentPackManifest,
@@ -20,6 +21,7 @@ import {
   type SlotDefinition,
   type StaticPropDefinition,
   type TrustedComponentPack,
+  type ValidateAuthorComponentDefinition,
 } from './types.js';
 
 export const RESERVED_PERSISTED_KEYS = Object.freeze([
@@ -531,12 +533,24 @@ export function defineComponentPack<const TComponents extends readonly PackCompo
   });
 }
 
-export function defineComponent<
-  TProps extends object = Record<string, unknown>,
-  TComponent = unknown,
-  TRenderOutput = unknown,
-  TElement = unknown,
-  TComponentId extends string = string,
->(definition: AuthorComponentDefinition<TProps, TComponent, TRenderOutput, TElement, TComponentId>): AuthorComponentDefinition<TProps, TComponent, TRenderOutput, TElement, TComponentId> {
-  return definition;
+/**
+ * Curried so the caller fixes its authoring props before the literal definition
+ * is inferred; this preserves the exact keys needed for required-prop totality.
+ */
+export function defineComponent<TProps extends object>() {
+  return <
+    TComponent,
+    const TDefinition extends object,
+  >(
+    component: TComponent,
+    definition: TDefinition,
+    // Invalid definitions make a diagnostic third argument mandatory, so a
+    // bad call fails without widening away the literal definition above.
+    ...validation: unknown extends ValidateAuthorComponentDefinition<TProps, TDefinition & { readonly component: TComponent }>
+      ? []
+      : [error: ValidateAuthorComponentDefinition<TProps, TDefinition & { readonly component: TComponent }>]
+  ): AuthorComponentDefinition<TProps, TComponent> & TDefinition => {
+    void validation;
+    return { ...definition, component } as AuthorComponentDefinition<TProps, TComponent> & TDefinition;
+  };
 }

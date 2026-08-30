@@ -10,8 +10,16 @@ export interface JsonObject {
 }
 
 export type PropKey<TProps extends object> = Extract<keyof TProps, string>;
+type JsonCompatible<TValue> = TValue extends JsonPrimitive
+  ? TValue
+  : TValue extends readonly (infer TItem)[]
+    ? readonly JsonCompatible<TItem>[]
+    : TValue extends object
+      ? { readonly [TKey in keyof TValue]: JsonCompatible<TValue[TKey]> }
+      : never;
+
 export type ComponentDefaults<TProps extends object> = {
-  readonly [TKey in PropKey<TProps>]?: Extract<TProps[TKey], JsonValue>;
+  readonly [TKey in PropKey<TProps>]?: JsonCompatible<TProps[TKey]>;
 };
 
 type SelectOption<TValue> = unknown extends TValue
@@ -110,14 +118,28 @@ export type FieldDefinition<TProp extends string = string> =
 
 export type SlotCardinality = 'single' | 'many';
 
-export interface AuthorSlotDefinition<TProps extends object = Record<string, unknown>, TComponentId extends string = string> {
+/** Framework-neutral structural equivalent of the values a component renderer can project. */
+type RenderedComponentChild = object | string | number | bigint | boolean | null | undefined;
+type RenderedComponentChildren = RenderedComponentChild | RenderedComponentChild[];
+
+type SlotPropKey<TProps extends object, TCardinality extends SlotCardinality> = {
+  [TKey in PropKey<TProps>]: TCardinality extends 'single'
+    ? RenderedComponentChildren extends TProps[TKey] ? TKey : never
+    : RenderedComponentChildren[] extends TProps[TKey] ? TKey : never;
+}[PropKey<TProps>];
+
+interface AuthorSlotDefinitionBase<TProp extends string, TComponentId extends string, TCardinality extends SlotCardinality> {
   readonly id: string;
-  readonly prop: PropKey<TProps>;
+  readonly prop: TProp;
   readonly label: string;
   /** Omitted means any component in the pack is accepted. */
   readonly accepts?: readonly TComponentId[];
-  readonly cardinality: SlotCardinality;
+  readonly cardinality: TCardinality;
 }
+
+export type AuthorSlotDefinition<TProps extends object = Record<string, unknown>, TComponentId extends string = string> =
+  | AuthorSlotDefinitionBase<SlotPropKey<TProps, 'single'>, TComponentId, 'single'>
+  | AuthorSlotDefinitionBase<SlotPropKey<TProps, 'many'>, TComponentId, 'many'>;
 
 export interface SlotDefinition<TComponentId extends string = string, TProp extends string = string> {
   readonly id: string;
@@ -203,12 +225,20 @@ interface AuthorComponentDefinitionBase<
   readonly adapters?: RuntimeAdapters<TProps, TRenderOutput, TElement>;
 }
 
+export type AuthorComponentDefinitionInput<
+  TProps extends object,
+  TComponent = unknown,
+  TRenderOutput = unknown,
+  TElement = unknown,
+  TComponentId extends string = string,
+> = Omit<AuthorComponentDefinitionBase<TProps, TComponent, TRenderOutput, TElement, TComponentId>, 'component'>;
+
 type RequiredPropKey<TProps extends object> = {
   [TKey in PropKey<TProps>]-?: object extends Pick<TProps, TKey> ? never : TKey;
 }[PropKey<TProps>];
 
 type AtLeastOneRequiredDefault<TProps extends object> = {
-  [TKey in RequiredPropKey<TProps>]: Readonly<Record<TKey, Extract<TProps[TKey], JsonValue>>>
+  [TKey in RequiredPropKey<TProps>]: Readonly<Record<TKey, JsonCompatible<TProps[TKey]>>>
     & ComponentDefaults<TProps>;
 }[RequiredPropKey<TProps>];
 
@@ -230,6 +260,35 @@ export type AuthorComponentDefinition<
   TComponentId extends string = string,
 > = AuthorComponentDefinitionBase<TProps, TComponent, TRenderOutput, TElement, TComponentId>
   & HasRequiredPropClassification<TProps>;
+
+type ComponentProps<TComponent> = TComponent extends (props: infer TProps, ...args: never[]) => unknown
+  ? TProps extends object ? TProps : never
+  : TComponent extends abstract new (props: infer TProps, ...args: never[]) => unknown
+    ? TProps extends object ? TProps : never
+    : never;
+
+type ClassifiedPropKey<TDefinition> =
+  | (TDefinition extends { readonly defaults: infer TDefaults } ? Extract<keyof TDefaults, string> : never)
+  | (TDefinition extends { readonly fields: readonly (infer TField)[] }
+    ? TField extends { readonly prop: infer TProp extends string } ? TProp : never
+    : never)
+  | (TDefinition extends { readonly slots: readonly (infer TSlot)[] }
+    ? TSlot extends { readonly prop: infer TProp extends string } ? TProp : never
+    : never)
+  | (TDefinition extends { readonly staticProps: readonly (infer TStatic)[] }
+    ? TStatic extends { readonly prop: infer TProp extends string } ? TProp : never
+    : never);
+
+export type ValidateAuthorComponentDefinition<TProps extends object, TDefinition> =
+  TDefinition extends { readonly component: infer TComponent }
+    ? Omit<TDefinition, 'component'> extends AuthorComponentDefinitionInput<TProps, TComponent, unknown, any>
+      ? TProps extends ComponentProps<TComponent>
+        ? Exclude<RequiredPropKey<TProps>, ClassifiedPropKey<TDefinition>> extends never
+          ? unknown
+          : { readonly ERROR_unclassified_required_props: Exclude<RequiredPropKey<TProps>, ClassifiedPropKey<TDefinition>> }
+        : { readonly ERROR_props_must_belong_to_component: ComponentProps<TComponent> }
+      : { readonly ERROR_invalid_component_definition: AuthorComponentDefinitionInput<TProps, TComponent, unknown, any> }
+    : never;
 
 export interface RuntimeComponentEntry<TComponent = unknown, TRenderOutput = unknown, TElement = unknown> {
   readonly schemaVersion: number;
