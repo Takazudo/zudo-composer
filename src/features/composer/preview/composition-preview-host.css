@@ -1,0 +1,13 @@
+.sg-composition-preview { position: relative; min-width: 0; }
+.sg-composition-preview__stage { position: relative; min-height: 28rem; overflow: clip; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-bg); }
+.sg-composition-preview__frame { display: block; width: 100%; min-width: 0; height: 100%; min-height: 28rem; border: 0; pointer-events: none; }
+.sg-composition-preview__empty { position: absolute; z-index: 1; inset: var(--spacing-hsp-lg); display: grid; align-content: start; gap: var(--spacing-vsp-2xs); padding: var(--spacing-hsp-lg); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface-2); }
+.sg-composition-preview__empty :where(h3, p) { margin: 0; }
+.sg-composition-preview__empty p { color: var(--color-muted); font-size: var(--text-sm); }
+.sg-composition-preview__stage[aria-busy="true"]::after { content: "Updating preview…"; position: absolute; z-index: 2; inset-block-start: var(--spacing-hsp-sm); inset-inline-end: var(--spacing-hsp-sm); padding: var(--spacing-vsp-3xs) var(--spacing-hsp-xs); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); color: var(--color-muted); background: var(--color-surface); font-size: var(--text-xs); }
+.sg-composition-preview__enlarge, .sg-composition-preview__close { position: absolute; z-index: 3; inset-block-start: var(--spacing-hsp-sm); inset-inline-start: var(--spacing-hsp-sm); min-height: 2.25rem; padding: var(--spacing-vsp-3xs) var(--spacing-hsp-md); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); color: var(--color-fg); background: var(--color-surface); }
+.sg-composition-preview--enlarged { position: fixed; z-index: var(--z-index-modal); inset: 0; display: grid; padding: var(--spacing-hsp-lg); background: color-mix(in oklch, var(--color-bg) 96%, transparent); }
+.sg-composition-preview--enlarged .sg-composition-preview__stage { min-height: 0; }
+.sg-composition-preview--enlarged .sg-composition-preview__frame { height: 100%; min-height: 0; }
+.sg-composition-preview--enlarged .sg-composition-preview__close { inset-inline: auto var(--spacing-hsp-lg); inset-block-start: var(--spacing-hsp-lg); }
+@media (pointer: coarse) { .sg-composition-preview :is(.sg-composition-preview__enlarge, .sg-composition-preview__close) { min-width: 44px; min-height: 44px; } }
