@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { loadCompositionDocument, resetToSample } from "../recovery";
-import { createFixtureDocument } from "../../__tests__/fixtures";
+import { COMPONENT_IDS, createFixtureDocument, fixtureManifest } from "../../__tests__/fixtures";
 import { COMPOSITION_SCHEMA_VERSION, type CompositionDocument } from "../types";
+import { classifyNode } from "../validate";
 
 const sample = (): CompositionDocument => createFixtureDocument();
 
@@ -18,6 +19,21 @@ describe("loadCompositionDocument", () => {
     const outcome = loadCompositionDocument(JSON.stringify(stored), sample());
     expect(outcome.status).toBe("ok");
     expect(outcome.document.name).toBe("Edited");
+  });
+
+  it("preserves structured props while unknown and version-mismatched nodes stay opaque", () => {
+    const actions = [{ label: "Read docs", href: "/docs", variant: "secondary" }];
+    const stored = sample();
+    stored.root = [
+      { id: "unknown", componentId: "ghost.hero", componentVersion: 1, props: { actions }, slots: {} },
+      { id: "future", componentId: COMPONENT_IDS.box, componentVersion: 99, props: { actions }, slots: {} },
+    ];
+
+    const outcome = loadCompositionDocument(JSON.stringify(stored), sample());
+    expect(outcome.status).toBe("ok");
+    if (outcome.status !== "ok") return;
+    expect(outcome.document.root.map((node) => node.props.actions)).toEqual([actions, actions]);
+    expect(outcome.document.root.map((node) => classifyNode(node, fixtureManifest).opaque)).toEqual([true, true]);
   });
 
   it("recovers older schema prototypes instead of migrating them", () => {

@@ -11,9 +11,9 @@
 // into them.
 
 import {
+  ContractValidationError,
   RESERVED_PERSISTED_KEYS,
-  type FieldDefinition,
-  type JsonValue,
+  validateFieldValue,
 } from "@zudo-composer/component-contract";
 import type {
   ComponentCatalog,
@@ -197,27 +197,6 @@ export function addNode(
 
 // ── update props ───────────────────────────────────────────────────────────
 
-function validateFieldValue(field: FieldDefinition, value: JsonValue): string | null {
-  switch (field.kind) {
-    case "select":
-      return field.options.includes(value as string)
-        ? null
-        : `must be one of [${field.options.join(", ")}]`;
-    case "boolean":
-      return typeof value === "boolean" ? null : "must be a boolean";
-    case "number":
-      if (typeof value !== "number" || !Number.isFinite(value)) return "must be a finite number";
-      if (field.min !== undefined && value < field.min) return `is below min ${field.min}`;
-      if (field.max !== undefined && value > field.max) return `is above max ${field.max}`;
-      return null;
-    case "text":
-    case "color":
-      return typeof value === "string" ? null : "must be a string";
-    default:
-      return null;
-  }
-}
-
 /**
  * Merge a JSON-safe prop patch into a node's props. Rejects opaque nodes
  * (their props are read-only), non-JSON-safe values, values that violate a
@@ -235,6 +214,7 @@ export function updateProps(
   manifest: ComponentCatalog,
   nodeId: string,
   patch: JsonObject,
+  removeProps: readonly string[] = [],
 ): CommandResult {
   const next = cloneJson(document);
   const locate = nodeLookup(next, manifest);
@@ -247,6 +227,30 @@ export function updateProps(
   const entry = manifest.get(node.componentId)!;
   const fieldsByProp = new Map(entry.fields.map((f) => [f.prop, f]));
   const slotProps = new Set(entry.slots.map((s) => s.prop));
+  const removeSet = new Set(removeProps);
+
+  if (removeSet.size !== removeProps.length) {
+    return { ok: false, error: "A prop cannot be removed more than once" };
+  }
+
+  for (const prop of removeProps) {
+    if (RESERVED_PERSISTED_KEYS.includes(prop as (typeof RESERVED_PERSISTED_KEYS)[number])) {
+      return { ok: false, error: `Prop "${prop}" is a reserved key and cannot be removed` };
+    }
+    if (slotProps.has(prop)) {
+      return {
+        ok: false,
+        error: `Prop "${prop}" is a structural slot on "${node.componentId}" and cannot be removed as a scalar prop`,
+      };
+    }
+    const field = fieldsByProp.get(prop);
+    if (field?.required === true) {
+      return { ok: false, error: `Prop "${prop}" is required and cannot be removed` };
+    }
+    if (Object.hasOwn(patch, prop)) {
+      return { ok: false, error: `Prop "${prop}" cannot be updated and removed in the same command` };
+    }
+  }
 
   for (const [prop, value] of Object.entries(patch)) {
     if (RESERVED_PERSISTED_KEYS.includes(prop as (typeof RESERVED_PERSISTED_KEYS)[number])) {
@@ -266,13 +270,23 @@ export function updateProps(
     }
     const field = fieldsByProp.get(prop);
     if (field) {
-      const problem = validateFieldValue(field, value);
-      if (problem) return { ok: false, error: `Prop "${prop}" ${problem}` };
+      try {
+        validateFieldValue(field, value, `$props.${prop}`);
+      } catch (error) {
+        if (error instanceof ContractValidationError) {
+          return { ok: false, error: `Prop "${prop}" is invalid: ${error.message}` };
+        }
+        throw error;
+      }
     }
   }
 
-  node.props = { ...node.props, ...(cloneJson(patch) as JsonObject) };
-  return { ok: true, document: next, selectedId: nodeId, changed: true };
+  const nextProps = { ...node.props, ...(cloneJson(patch) as JsonObject) };
+  for (const prop of removeProps) delete nextProps[prop];
+  const changed = Object.keys(patch).some((prop) => !Object.is(node.props[prop], patch[prop]))
+    || removeProps.some((prop) => Object.hasOwn(node.props, prop));
+  node.props = nextProps;
+  return { ok: true, document: next, selectedId: nodeId, changed };
 }
 
 // ── reorder (sibling up/down within one parent slot) ─────────────────────────

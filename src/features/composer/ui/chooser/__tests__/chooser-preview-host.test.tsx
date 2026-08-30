@@ -39,6 +39,7 @@ const placeholderEntry: ComponentManifest = {
   defaults: { label: "hero-image.png", aspect: "16/9" },
   fields: [],
   slots: [],
+  staticProps: [{ prop: "label" }, { prop: "aspect" }],
 };
 
 const leafEntry: ComponentManifest = {
@@ -51,6 +52,7 @@ const leafEntry: ComponentManifest = {
   defaults: { label: "Box" },
   fields: [],
   slots: [],
+  staticProps: [{ prop: "label" }],
 };
 
 const containerEntry: ComponentManifest = {
@@ -66,6 +68,7 @@ const containerEntry: ComponentManifest = {
     { id: "left", prop: "left", label: "Left", cardinality: "single" },
     { id: "right", prop: "right", label: "Right", cardinality: "many" },
   ],
+  staticProps: [{ prop: "ratio" }],
 };
 
 const catalogById = new Map<string, ComponentManifest>(

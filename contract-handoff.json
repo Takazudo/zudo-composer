@@ -2,6 +2,6 @@
   "packageName": "@zudo-composer/component-contract",
   "sourcePath": "packages/component-contract",
   "packageBranch": "package/component-contract-v1",
-  "packageCommit": "51f1c64a7639134254866458ff72b497da9c2f36",
-  "rootGitSpec": "git+https://github.com/Takazudo/zudo-composer.git#51f1c64a7639134254866458ff72b497da9c2f36"
+  "packageCommit": "9b774b827e9f6fec14379995ac2c691ccc3b7e5b",
+  "rootGitSpec": "git+https://github.com/Takazudo/zudo-composer.git#9b774b827e9f6fec14379995ac2c691ccc3b7e5b"
 }

@@ -6,8 +6,70 @@ import { fixtureComponentProvider, createFixtureSampleDocument } from "../../tes
 import { createComposerComponentProvider } from "../../component-provider";
 import { ComposerCanvasHost } from "../../app/composer-canvas-host";
 import { createComposerPreviewBridge } from "../bridge";
+import type { JsonObject } from "../../../../composer/browser";
 
 describe("CompositionCanvas provider view", () => {
+  it("passes structured field records to Hero unchanged rather than rendering them as VNodes", () => {
+    const actions: JsonObject[] = [
+      { label: "Read docs", href: "/docs", variant: "secondary" },
+      { label: "Get started", href: "/start" },
+    ];
+    const received: unknown[] = [];
+    const Hero = (props: { actions: readonly JsonObject[] }) => {
+      void props;
+      return null;
+    };
+    const provider = createComposerComponentProvider(defineComponentPack({
+      packId: "@test/hero-actions",
+      packVersion: "1.0.0",
+      components: [{
+        id: "ui.hero",
+        schemaVersion: 1,
+        title: "Hero",
+        category: "Content",
+        description: "Structured action renderer fixture.",
+        source: { module: "@test/hero-actions", exportKind: "named", exportName: "Hero" },
+        defaults: { actions: [{ label: "Default", href: "/" }] },
+        fields: [{
+          prop: "actions",
+          label: "Actions",
+          schema: {
+            type: "array",
+            items: {
+              schema: {
+                type: "object",
+                fields: [
+                  { key: "label", label: "Label", required: true, schema: { type: "string" }, editor: { kind: "text" } },
+                  { key: "href", label: "URL", required: true, schema: { type: "string" }, editor: { kind: "text" } },
+                  { key: "variant", label: "Variant", schema: { type: "string", enum: ["primary", "secondary"] }, editor: { kind: "select" } },
+                ],
+              },
+              editor: { kind: "group" },
+            },
+          },
+          editor: { kind: "list" },
+        }],
+        slots: [],
+        component: Hero,
+        adapters: { render: (props: Partial<{ actions: readonly JsonObject[] }>) => { received.push(props.actions); return null; } },
+      }],
+    }));
+    const document = createFixtureSampleDocument();
+    document.root = [{
+      id: "hero",
+      componentId: "ui.hero",
+      componentVersion: 1,
+      props: { actions },
+      slots: {},
+    }];
+
+    render(<CompositionCanvas document={document} localRecordId={document.id} provider={provider} session={{ mode: "preview", theme: "light", selectedId: null }} onSelect={vi.fn()} onRequestAdd={vi.fn()} onRequestNodeMenu={vi.fn()} onRequestInsertMenu={vi.fn()} />);
+
+    expect(received).toEqual([actions]);
+    expect(received[0]).toBe(actions);
+    expect(Array.isArray(received[0])).toBe(true);
+  });
+
   it("renders both named Split slots from the injected provider", () => {
     const document = createFixtureSampleDocument();
     document.root = [{

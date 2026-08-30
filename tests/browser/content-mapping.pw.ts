@@ -238,7 +238,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(composerFrame.getByRole("heading", { name: "Mapping is ready" })).toHaveCount(0);
 
   await page.goto("/sitemapper");
-  await expect(page.getByRole("heading", { name: "Sitemaps" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "New sitemap" }).click();
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Content Mapping journey");

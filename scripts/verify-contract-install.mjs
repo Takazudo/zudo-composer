@@ -108,8 +108,8 @@ async function assertInstalledModule(directory) {
   const probe = [
     `const contract = await import(${JSON.stringify(packageName)});`,
     `const fixtures = await import(${JSON.stringify(`${packageName}/fixtures`)});`,
-    "if (contract.CONTRACT_VERSION !== 1) throw new Error('unexpected contract version');",
-    "if (fixtures.fixtureComponentPack?.manifest?.contractVersion !== 1) throw new Error('fixture export is unavailable');",
+    "if (contract.CONTRACT_VERSION !== 2) throw new Error('unexpected contract version');",
+    "if (fixtures.fixtureComponentPack?.manifest?.contractVersion !== 2) throw new Error('fixture export is unavailable');",
   ].join('\n');
   await run('node', ['--input-type=module', '--eval', probe], directory);
 }

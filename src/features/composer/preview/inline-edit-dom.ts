@@ -55,11 +55,11 @@ export function inlineEditableForEntry(entry: ComposerRuntimeEntry | undefined):
   const adapter = entry?.runtime.adapters?.inlineEditor;
   if (!adapter) return null;
   const field = entry?.manifest.fields.find((f) => f.prop === adapter.field);
-  if (!field || field.kind !== "text" || !field.inlineEdit) return null;
+  if (!field || field.editor.kind !== "text" || !field.inlineEdit) return null;
   return {
     field: adapter.field,
-    multiline: field.inlineEdit.multiline ?? false,
-    mode: field.inlineEdit.mode ?? "plain",
+    multiline: field.editor.multiline ?? false,
+    mode: field.editor.mode ?? "plain",
     resolveElement: (root) => adapter.resolveElement(root) as HTMLElement | null,
   };
 }

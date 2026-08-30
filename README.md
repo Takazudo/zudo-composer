@@ -74,8 +74,8 @@ The current UI provider identity has four distinct version/provenance domains:
 
 | Domain | Current value |
 |---|---|
-| Provider Git spec | `git+https://github.com/Takazudo/zudo-sg.git#fe3fc62d3f677f321f5eb7814240d4a55dc92cd0` |
-| Provider commit / root tree | `fe3fc62d3f677f321f5eb7814240d4a55dc92cd0` / `96a42a59cf4d05078ba85e7a0ccdb7d7765d29cc` |
+| Provider Git spec | `git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf` |
+| Provider commit / root tree | `6b0826cdaa14d9888e58c795ee015f70e2c5cbdf` / `1c3cbfd3a25d1425f447cdadd5ba538916394309` |
 | Installed package metadata | `@zudo-sg/ui@0.1.0` |
 | Component-pack protocol identity | `@zudo-sg/ui@1.0.0` |
 
@@ -106,9 +106,9 @@ consumers use the package-only commit recorded by
 [`contract-handoff.json`](./contract-handoff.json):
 
 - API/package version: `@zudo-composer/component-contract@1.0.0`
-- package commit: `51f1c64a7639134254866458ff72b497da9c2f36`
+- package commit: `9b774b827e9f6fec14379995ac2c691ccc3b7e5b`
 - exact external Git spec:
-  `git+https://github.com/Takazudo/zudo-composer.git#51f1c64a7639134254866458ff72b497da9c2f36`
+  `git+https://github.com/Takazudo/zudo-composer.git#9b774b827e9f6fec14379995ac2c691ccc3b7e5b`
 
 The monorepo itself intentionally resolves this contract with `workspace:*`.
 That local workspace relationship must not be confused with, or used in place

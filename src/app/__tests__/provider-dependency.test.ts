@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const SHA = "fe3fc62d3f677f321f5eb7814240d4a55dc92cd0";
-const TREE = "96a42a59cf4d05078ba85e7a0ccdb7d7765d29cc";
+const SHA = "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf";
+const TREE = "1c3cbfd3a25d1425f447cdadd5ba538916394309";
 const SPEC = `git+https://github.com/Takazudo/zudo-sg.git#${SHA}`;
 const TARBALL = `https://codeload.github.com/Takazudo/zudo-sg/tar.gz/${SHA}`;
 
@@ -56,8 +56,8 @@ describe("immutable UI provider dependency", () => {
 
   it("records the independently verified immutable provider tree", () => {
     expect({ commit: SHA, tree: TREE }).toEqual({
-      commit: "fe3fc62d3f677f321f5eb7814240d4a55dc92cd0",
-      tree: "96a42a59cf4d05078ba85e7a0ccdb7d7765d29cc",
+      commit: "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf",
+      tree: "1c3cbfd3a25d1425f447cdadd5ba538916394309",
     });
   });
 });
