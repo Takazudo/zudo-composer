@@ -11,8 +11,9 @@
 // into them.
 
 import {
+  ContractValidationError,
   RESERVED_PERSISTED_KEYS,
-  type FieldDefinition,
+  validateFieldValue,
   type JsonValue,
 } from "@zudo-composer/component-contract";
 import type {
@@ -197,27 +198,6 @@ export function addNode(
 
 // ── update props ───────────────────────────────────────────────────────────
 
-function validateFieldValue(field: FieldDefinition, value: JsonValue): string | null {
-  switch (field.kind) {
-    case "select":
-      return field.options.includes(value as string)
-        ? null
-        : `must be one of [${field.options.join(", ")}]`;
-    case "boolean":
-      return typeof value === "boolean" ? null : "must be a boolean";
-    case "number":
-      if (typeof value !== "number" || !Number.isFinite(value)) return "must be a finite number";
-      if (field.min !== undefined && value < field.min) return `is below min ${field.min}`;
-      if (field.max !== undefined && value > field.max) return `is above max ${field.max}`;
-      return null;
-    case "text":
-    case "color":
-      return typeof value === "string" ? null : "must be a string";
-    default:
-      return null;
-  }
-}
-
 /**
  * Merge a JSON-safe prop patch into a node's props. Rejects opaque nodes
  * (their props are read-only), non-JSON-safe values, values that violate a
@@ -266,8 +246,14 @@ export function updateProps(
     }
     const field = fieldsByProp.get(prop);
     if (field) {
-      const problem = validateFieldValue(field, value);
-      if (problem) return { ok: false, error: `Prop "${prop}" ${problem}` };
+      try {
+        validateFieldValue(field, value, `$props.${prop}`);
+      } catch (error) {
+        if (error instanceof ContractValidationError) {
+          return { ok: false, error: `Prop "${prop}" is invalid: ${error.message}` };
+        }
+        throw error;
+      }
     }
   }
 

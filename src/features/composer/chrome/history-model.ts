@@ -17,11 +17,27 @@ export interface ComposerHistoryEntry {
  * Identifies a coalescing group. Two consecutive pushes merge only when their
  * keys are EQUAL by the rule below. `null` means "never merge with anything".
  */
+export type PropPath = readonly [prop: string, ...segments: (string | number)[]];
+export type PropCoalescing = readonly PropPath[] | null;
+
+/** Merge debounced leaf identities without ever weakening a structural null barrier. */
+export function mergePropCoalescing(left: PropCoalescing, right: PropCoalescing): PropCoalescing {
+  if (left === null || right === null) return null;
+  const merged: PropPath[] = left.map((path) => [...path] as PropPath);
+  for (const path of right) {
+    if (!merged.some((candidate) => candidate.length === path.length
+      && candidate.every((segment, index) => segment === path[index]))) {
+      merged.push([...path] as PropPath);
+    }
+  }
+  return merged;
+}
+
 export interface CoalesceKey {
   kind: "updateProps";
   nodeId: string;
-  /** The mutation's patch keys, SORTED, so key equality is a plain compare. */
-  propKeys: readonly string[];
+  /** Exact edited leaves, sorted lexicographically by typed path segment. */
+  propPaths: readonly PropPath[];
 }
 
 /** A past entry plus the metadata coalescing needs. Internal shape, exported for tests. */
@@ -59,15 +75,34 @@ function snapshotKey(key: CoalesceKey | null): CoalesceKey | null {
   return {
     kind: key.kind,
     nodeId: key.nodeId,
-    propKeys: [...key.propKeys].sort(),
+    propPaths: key.propPaths.map((path) => [...path] as PropPath).sort(comparePropPaths),
   };
+}
+
+function comparePathSegments(left: string | number, right: string | number): number {
+  if (typeof left !== typeof right) return typeof left === "string" ? -1 : 1;
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
+function comparePropPaths(left: PropPath, right: PropPath): number {
+  const length = Math.min(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const comparison = comparePathSegments(left[index]!, right[index]!);
+    if (comparison !== 0) return comparison;
+  }
+  return left.length - right.length;
+}
+
+function samePropPath(left: PropPath, right: PropPath): boolean {
+  return left.length === right.length && left.every((segment, index) => segment === right[index]);
 }
 
 function sameCoalesceKey(left: CoalesceKey | null, right: CoalesceKey | null): boolean {
   if (left === null || right === null) return false;
   if (left.kind !== right.kind || left.nodeId !== right.nodeId) return false;
-  if (left.propKeys.length !== right.propKeys.length) return false;
-  return left.propKeys.every((propKey, index) => propKey === right.propKeys[index]);
+  if (left.propPaths.length !== right.propPaths.length) return false;
+  return left.propPaths.every((propPath, index) => samePropPath(propPath, right.propPaths[index]!));
 }
 
 function capPast(past: readonly StampedEntry[]): readonly StampedEntry[] {

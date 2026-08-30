@@ -50,6 +50,7 @@ import {
   setGlobalTemplateOutlet,
   updateProps,
 } from "../../../composer/browser";
+import type { PropPath } from "./history-model";
 
 /** Edit vs. read-only preview rendering of the canvas. */
 export type ComposerMode = "edit" | "preview";
@@ -112,7 +113,13 @@ export interface ComposerControllerState {
 export type ComposerAction =
   | { type: "add"; target: InsertionTarget; componentId: string }
   | { type: "rename"; name: string }
-  | { type: "updateProps"; nodeId: string; patch: JsonObject }
+  | {
+      type: "updateProps";
+      nodeId: string;
+      patch: JsonObject;
+      /** Exact leaf paths coalesce; null marks list/object structural edits as standalone. */
+      coalescePaths?: readonly PropPath[] | null;
+    }
   | { type: "reorder"; nodeId: string; direction: "up" | "down" }
   | { type: "remove"; nodeId: string }
   | { type: "copy"; nodeId: string }

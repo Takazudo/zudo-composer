@@ -9,6 +9,7 @@ import {
   type CompositionRecord,
   type CompositionRecordRef,
   type CompositionSaveOutcome,
+  type JsonObject,
   type RootPolicy,
   type SaveQueue,
   type SaveQueueSnapshot,
@@ -195,6 +196,79 @@ describe("useComposerController — history", () => {
     act(() => interrupted.result.current.undo());
     expect(labelOfA(interrupted.result.current.state.document)).toBe("A1");
     expect(interrupted.result.current.state.selectedId).toBe("B");
+  });
+
+  it("coalesces exact structured leaves while structural edits checkpoint whole arrays", () => {
+    let atMs = 0;
+    const initialActions: JsonObject[] = [
+      { label: "Start", href: "/start" },
+      { label: "Docs", href: "/docs" },
+    ];
+    const source = doc([node(F.box, { label: "Hero", actions: initialActions }, {}, "A")]);
+    const { result } = setup(source, undefined, () => atMs);
+    const actions = () => result.current.state.document.root[0]!.props.actions;
+
+    act(() => result.current.select("A"));
+    const firstTyping = structuredClone(initialActions);
+    firstTyping[0]!.label = "Start now";
+    act(() => result.current.updateProps("A", { actions: firstTyping }, [["actions", 0, "label"]]));
+    atMs = 100;
+    const secondTyping = structuredClone(firstTyping);
+    secondTyping[0]!.label = "Start today";
+    act(() => result.current.updateProps("A", { actions: secondTyping }, [["actions", 0, "label"]]));
+
+    const added = [...secondTyping, { label: "Contact", href: "/contact" }];
+    atMs = 200;
+    act(() => result.current.updateProps("A", { actions: added }, null));
+    const reordered = [added[2]!, added[0]!, added[1]!];
+    atMs = 300;
+    act(() => result.current.updateProps("A", { actions: reordered }, null));
+    expect(actions()).toEqual(reordered);
+
+    act(() => result.current.undo());
+    expect(actions()).toEqual(added);
+    expect(result.current.state.selectedId).toBe("A");
+    expect(result.current.record.document).toEqual(result.current.state.document);
+    act(() => result.current.undo());
+    expect(actions()).toEqual(secondTyping);
+    act(() => result.current.undo());
+    expect(actions()).toEqual(initialActions);
+    expect(result.current.canUndo).toBe(false);
+
+    act(() => result.current.redo());
+    expect(actions()).toEqual(secondTyping);
+    act(() => result.current.redo());
+    expect(actions()).toEqual(added);
+    act(() => result.current.redo());
+    expect(actions()).toEqual(reordered);
+    expect(result.current.state.selectedId).toBe("A");
+    expect(result.current.record.document).toEqual(result.current.state.document);
+  });
+
+  it("keeps a mixed pending structural and leaf batch non-coalescing", () => {
+    let atMs = 0;
+    const initialActions: JsonObject[] = [{ label: "Start", href: "/start" }];
+    const source = doc([node(F.box, { label: "Hero", actions: initialActions }, {}, "A")]);
+    const { result } = setup(source, undefined, () => atMs);
+    const actions = () => result.current.state.document.root[0]!.props.actions;
+    const added: JsonObject[] = [...initialActions, { label: "Docs", href: "/docs" }];
+    const edited = structuredClone(added);
+    edited[1]!.label = "Read docs";
+
+    act(() => {
+      result.current.updatePropsDebounced("A", { actions: added }, null);
+      result.current.updatePropsDebounced("A", { actions: edited }, [["actions", 1, "label"]]);
+      result.current.flushPropUpdates();
+    });
+    const next = structuredClone(edited);
+    next[1]!.label = "Read the docs";
+    atMs = 100;
+    act(() => result.current.updateProps("A", { actions: next }, [["actions", 1, "label"]]));
+
+    act(() => result.current.undo());
+    expect(actions()).toEqual(edited);
+    act(() => result.current.undo());
+    expect(actions()).toEqual(initialActions);
   });
 
   it("flushes pending inspector input before undo and queues the reverted latest revision", async () => {

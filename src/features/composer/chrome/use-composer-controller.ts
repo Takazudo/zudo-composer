@@ -60,11 +60,14 @@ import {
   canUndo as historyCanUndo,
   clearHistory,
   createHistory,
+  mergePropCoalescing,
   pushHistory,
   redoHistory,
   undoHistory,
   type CoalesceKey,
   type ComposerHistory,
+  type PropCoalescing,
+  type PropPath,
 } from "./history-model";
 import { installComposerNavigationGuard } from "./navigation-guard";
 import {
@@ -79,6 +82,10 @@ import {
 
 type CompositionSaveQueue = SaveQueue<CompositionRecord, CompositionRecordRef, CompositionSaveOutcome>;
 type CompositionSaveQueueState = SaveQueueState<CompositionRecord, CompositionRecordRef, CompositionSaveOutcome>;
+interface PendingProps {
+  patch: JsonObject;
+  coalescePaths: PropCoalescing;
+}
 
 /**
  * The typed reducer/controller API surface. UI consumers depend on this type,
@@ -98,7 +105,7 @@ export interface ComposerController {
   canRedo: boolean;
   add: (target: InsertionTarget, componentId: string) => void;
   rename: (name: string) => void;
-  updateProps: (nodeId: string, patch: JsonObject) => void;
+  updateProps: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing) => void;
   /**
    * Debounced sibling of `updateProps` for PER-KEYSTROKE sources (the
    * inspector's text/color/number streams, issue Takazudo/zudo-sg#291/#259). Patches are
@@ -113,7 +120,7 @@ export interface ComposerController {
    *   - `flushPropUpdates` is wired to field blur, export/JSX generation, the
    *     navigation guard, and controller unmount.
    */
-  updatePropsDebounced: (nodeId: string, patch: JsonObject) => void;
+  updatePropsDebounced: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing) => void;
   /**
    * Synchronously dispatch any `updatePropsDebounced` patches still pending.
    * Returns the post-flush document read from the live state ref — fresh in
@@ -252,7 +259,7 @@ export function useComposerController(options: UseComposerControllerOptions): Co
 
   const [state, setState] = useState<ComposerControllerState>(stateRef.current);
   const [lastError, setLastError] = useState<string | null>(null);
-  const pendingPropsRef = useRef<Map<string, JsonObject>>(new Map());
+  const pendingPropsRef = useRef<Map<string, PendingProps>>(new Map());
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingBaseSaveStatusRef = useRef<ComposerSaveStatus | null>(null);
 
@@ -311,7 +318,13 @@ export function useComposerController(options: UseComposerControllerOptions): Co
           historyRef.current = clearHistory();
         } else {
           const coalesceKey: CoalesceKey | null = action.type === "updateProps"
-            ? { kind: "updateProps", nodeId: action.nodeId, propKeys: Object.keys(action.patch).sort() }
+            ? action.coalescePaths === null
+              ? null
+              : {
+                  kind: "updateProps",
+                  nodeId: action.nodeId,
+                  propPaths: action.coalescePaths ?? Object.keys(action.patch).map((prop) => [prop]),
+                }
             : null;
           historyRef.current = pushHistory(
             historyRef.current,
@@ -352,7 +365,9 @@ export function useComposerController(options: UseComposerControllerOptions): Co
     if (pendingPropsRef.current.size > 0) {
       const pending = pendingPropsRef.current;
       pendingPropsRef.current = new Map();
-      for (const [nodeId, patch] of pending) applyAction({ type: "updateProps", nodeId, patch });
+      for (const [nodeId, item] of pending) {
+        applyAction({ type: "updateProps", nodeId, patch: item.patch, coalescePaths: item.coalescePaths });
+      }
       pendingBaseSaveStatusRef.current = null;
     }
     return stateRef.current!.document;
@@ -371,10 +386,18 @@ export function useComposerController(options: UseComposerControllerOptions): Co
   );
 
   const updatePropsDebounced = useCallback(
-    (nodeId: string, patch: JsonObject) => {
+    (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing) => {
       const pending = pendingPropsRef.current;
       if (pending.size === 0) pendingBaseSaveStatusRef.current = stateRef.current!.saveStatus;
-      pending.set(nodeId, { ...pending.get(nodeId), ...patch });
+      const previous = pending.get(nodeId);
+      const nextPaths = coalescePaths ?? Object.keys(patch).map((prop) => [prop] as PropPath);
+      pending.set(nodeId, {
+        patch: { ...previous?.patch, ...patch },
+        coalescePaths: mergePropCoalescing(
+          previous === undefined ? [] : previous.coalescePaths,
+          nextPaths,
+        ),
+      });
       const current = stateRef.current!;
       if (current.saveStatus.kind !== "dirty") {
         const next = { ...current, saveStatus: { kind: "dirty" } as const, derivedOutput: null };
@@ -544,7 +567,7 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       canRedo: state.mode !== "preview" && historyCanRedo(historyRef.current),
       add: (target, componentId) => dispatch({ type: "add", target, componentId }),
       rename: (name) => dispatch({ type: "rename", name }),
-      updateProps: (nodeId, patch) => dispatch({ type: "updateProps", nodeId, patch }),
+      updateProps: (nodeId, patch, coalescePaths) => dispatch({ type: "updateProps", nodeId, patch, coalescePaths }),
       updatePropsDebounced,
       flushPropUpdates,
       flushPersistence,
