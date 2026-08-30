@@ -4,7 +4,7 @@
 // assemblies: rather than reuse Takazudo/zudo-sg#247's monolithic `chrome/ComposerToolbar`
 // (which predates the Export action and inlines its own mode toggle), this
 // COMPOSES Takazudo/zudo-sg#249's presentational pieces — `ComposerStatusIndicator`,
-// `ComposerModeToggle`, `ComposerToolbarActions` (Export) — plus the
+// `ComposerModeToggle`, `ComposerToolbarActions` (Undo, Redo, Export) — plus the
 // canvas-viewport `<select>` this issue owns. Purely presentational; every
 // action is a typed callback the integration composes against the one
 // controller. The status indicator keeps its `children` seam open for wave-6's
@@ -35,6 +35,10 @@ export interface ComposerToolbarBarProps {
   onSetMode: (mode: ComposerMode) => void;
   onSetViewport: (viewport: ComposerCanvasViewport) => void;
   onRetrySave?: () => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
   onExport: () => void;
   exportDisabled?: boolean;
   /** The session clipboard (issue Takazudo/zudo-sg#255) — renders as a chip beside the save status when non-empty. */
@@ -58,6 +62,10 @@ export function ComposerToolbarBar({
   onSetMode,
   onSetViewport,
   onRetrySave,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
   onExport,
   exportDisabled = false,
   clipboard = null,
@@ -126,7 +134,14 @@ export function ComposerToolbarBar({
 
         <ComposerModeToggle mode={mode} onSetMode={onSetMode} />
 
-        <ComposerToolbarActions onExport={onExport} exportDisabled={exportDisabled} />
+        <ComposerToolbarActions
+          onUndo={onUndo}
+          onRedo={onRedo}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onExport={onExport}
+          exportDisabled={exportDisabled}
+        />
       </div>
     </>
   );
