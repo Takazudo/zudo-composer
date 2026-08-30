@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SiteBuildPlan } from "../../compiler/types";
-import { componentCatalog, project as makeProject } from "../../compiler/__tests__/fixtures";
+import { componentCatalog, entry, project as makeProject } from "../../compiler/__tests__/fixtures";
 import { canonicalizeSiteProject } from "../../model/canonical";
 import type { SiteProject } from "../../model/types";
 import { createSiteProjectApiService } from "../service";
@@ -214,6 +214,19 @@ describe("SiteProject API protocol", () => {
     await expect(setup().service.handle({ protocolVersion, operation: "apply", project: blocked, expectedRevision: null, expectedActive: null })).resolves.toEqual(
       expect.objectContaining({ ok: false, error: expect.objectContaining({ code: "compile-blocked", diagnostics: expect.any(Array) }) }),
     );
+  });
+
+  it("rejects Single Content cardinality during API apply before calling the store", async () => {
+    const invalid = makeProject();
+    invalid.providers.content[0]!.models[0]!.document.kind = "single";
+    invalid.providers.content[0]!.entries.push(entry("first"), entry("second"));
+    const current = setup();
+    const result = await current.service.handle({ protocolVersion, operation: "apply", project: invalid, expectedRevision: null, expectedActive: null });
+    expect(result).toEqual(expect.objectContaining({
+      ok: false,
+      error: expect.objectContaining({ code: "validation", diagnostics: expect.arrayContaining([expect.objectContaining({ code: "single-content-cardinality" })]) }),
+    }));
+    expect(current.projectStore.records.size).toBe(0);
   });
 
   it("enforces create-only and replacement CAS and atomically advances a matching active pointer", async () => {

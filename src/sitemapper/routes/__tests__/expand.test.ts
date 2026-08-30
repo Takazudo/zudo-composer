@@ -73,6 +73,17 @@ describe("Sitemapper route expansion", () => {
     expect(() => authoredPath([malformed])).not.toThrow();
   });
 
+  it.each(["../admin", ".", "..", "%2e", ".%2e", "%252e%252e", "%2e%2e%2fadmin"])(
+    "blocks authored dot-path form %j before it can escape or collide after normalization",
+    async (slug) => {
+      const root = page("site", "site", undefined, [page("bad", slug), page("admin", "admin")]);
+      const result = await expandSitemapRoutes({ document: document(root), catalog: catalog() });
+      expect(result.routes.map((route) => route.pathname)).toEqual(["/site", "/site/admin"]);
+      expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: "route-fragment-invalid", nodeId: "bad" }));
+      expect(result.nodes.get("bad")).toMatchObject({ status: "blocked", derivedRouteCount: 0 });
+    },
+  );
+
   it("diagnoses both route-mode mismatches and missing/non-slug fields", async () => {
     const singleMismatch = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "single" }))), catalog: catalog({ kind: "collection" }) });
     const collectionMismatch = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ kind: "single" }) });
@@ -94,6 +105,15 @@ describe("Sitemapper route expansion", () => {
     expect(generatedGenerated.nodes.get("first")?.status).toBe("blocked");
     expect(generatedGenerated.nodes.get("second")?.status).toBe("blocked");
     expect(staticStatic.routes.some((route) => route.pathname === "/Same")).toBe(true);
+  });
+
+  it("reports canonically equivalent Unicode authored routes as one normalized collision", async () => {
+    const result = await expandSitemapRoutes({
+      document: document(page("root", "/", undefined, [page("decomposed", "e\u0301"), page("composed", "é")])),
+      catalog: catalog(),
+    });
+    expect(result.routes.map((route) => route.pathname)).toEqual(["/", "/%C3%A9", "/%C3%A9"]);
+    expect(result.diagnostics.filter((item) => item.code === "route-collision").map((item) => item.nodeId)).toEqual(["decomposed", "composed"]);
   });
 
   it("diagnoses unsupported external bases and provider outcomes", async () => {

@@ -90,9 +90,22 @@ describe("generateJsx — escaping", () => {
     expect(code).toContain('as="h2"'); // simple string stays a string attribute
   });
 
-  it("emits booleans, numbers, arrays, and objects as escaped expressions", () => {
-    const box = node(X.box, { label: "x", size: 3, list: [1, 2], meta: { a: 1 } }, {}, "b");
-    const code = generateJsx(doc([box]), M).code;
+  it("emits declared booleans, numbers, arrays, and objects as escaped expressions", () => {
+    const entries: ComponentDefinition[] = [{
+      id: "fixture.structured", schemaVersion: 1, title: "Structured", category: "Fixture", description: "",
+      source: { module: "@fixtures/structured", exportKind: "named", exportName: "Structured" },
+      defaults: {}, slots: [], fields: [
+        { prop: "enabled", label: "Enabled", schema: { type: "boolean" }, editor: { kind: "boolean" } },
+        { prop: "size", label: "Size", schema: { type: "number" }, editor: { kind: "number" } },
+        { prop: "list", label: "List", schema: { type: "array", items: { schema: { type: "number" }, editor: { kind: "number" } } }, editor: { kind: "list" } },
+        { prop: "meta", label: "Meta", schema: { type: "object", fields: [{ key: "a", label: "A", required: true, schema: { type: "number" }, editor: { kind: "number" } }] }, editor: { kind: "group" } },
+      ],
+    }];
+    const byId = new Map(entries.map((entry) => [entry.id, entry]));
+    const manifest = { pack: createFixturePackManifest([]), get: (id: string) => byId.get(id), has: (id: string) => byId.has(id), ids: () => [...byId.keys()] };
+    const box = node("fixture.structured", { enabled: true, size: 3, list: [1, 2], meta: { a: 1 } }, {}, "b");
+    const code = generateJsx(doc([box]), manifest).code;
+    expect(code).toContain("enabled={true}");
     expect(code).toContain("size={3}");
     expect(code).toContain("list={[1,2]}");
     expect(code).toContain('meta={{"a":1}}');
@@ -122,11 +135,10 @@ describe("generateJsx — escaping", () => {
     expect(code).toContain("\\f");
   });
 
-  it("omits a prop key that cannot be expressed as a valid JSX attribute name", () => {
+  it("blocks a prop key that is neither declared nor expressible as a JSX attribute", () => {
     const box = node(X.box, { label: "ok", "not a name": "x" } as never, {}, "b");
-    const code = generateJsx(doc([box]), M).code;
-    expect(code).toContain('label="ok"');
-    expect(code).not.toContain("not a name"); // would otherwise produce unparseable JSX
+    const result = generateJsx(doc([box]), M);
+    expect(result).toMatchObject({ ok: false, blocked: true, code: "" });
   });
 });
 
@@ -184,6 +196,14 @@ describe("generateJsx — diagnostics gate", () => {
     const result = generateJsx(document, M);
     expect(result).toMatchObject({ ok: false, blocked: true, diagnostics: { canExport: false } });
     expect(result.code).toBe("");
+  });
+
+  it.each([
+    { label: { nested: "wrong domain" } },
+    { label: "valid", unknown: "not declared" },
+  ])("emits no JSX when persisted props violate the manifest: %#", (props) => {
+    const result = generateJsx(doc([node(X.box, props as never, {}, "invalid")]), M);
+    expect(result).toMatchObject({ ok: false, blocked: true, code: "", diagnostics: { canExport: false } });
   });
 
   it("refuses export and returns diagnostics when an opaque node remains", () => {

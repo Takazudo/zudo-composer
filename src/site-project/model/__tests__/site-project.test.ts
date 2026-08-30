@@ -180,6 +180,19 @@ describe("SiteProject contract", () => {
       path: "$.providers.compositions[1].records[1].document.binding",
     }));
   });
+
+  it("enforces provider-scoped max-one cardinality for every Single Content model", () => {
+    const value = project();
+    const provider = value.providers.content[0]!;
+    provider.models[0]!.document.kind = "single";
+    provider.entries.push({ ...structuredClone(provider.entries[0]!), id: "second" });
+    const result = validateSiteProject(value, context);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "single-content-cardinality",
+      path: "$.providers.content[0].entries[1].modelId",
+    }));
+  });
 });
 
 describe("in-memory SiteProject adapters", () => {

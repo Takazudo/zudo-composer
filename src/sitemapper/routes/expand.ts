@@ -2,12 +2,25 @@ import type { ContentEntryRecord } from "../../content";
 import type { SitemapNode } from "../model";
 import type { DerivedSitemapRoute, ExpandSitemapRoutesOptions, SitemapMappingRouteMetadata, SitemapNodeRouteInfo, SitemapRouteDiagnostic, SitemapRouteExpansion } from "./types";
 
+function isDotPathAlias(part: string): boolean {
+  let decoded = part.normalize("NFC");
+  for (let pass = 0; pass < 32; pass += 1) {
+    let next: string;
+    try { next = decodeURIComponent(decoded); }
+    catch { return false; }
+    if (next === decoded) return decoded.split("/").some((candidate) => candidate === "." || candidate === "..");
+    decoded = next.normalize("NFC");
+  }
+  return true; // reject pathologically deep encoded input instead of doing unbounded decode work
+}
+
 function encodedParts(fragment: string): { ok: true; parts: string[] } | { ok: false } {
   try {
+    const rawParts = fragment.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+    if (rawParts.some(isDotPathAlias)) return { ok: false };
     return {
       ok: true,
-      parts: fragment.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean)
-        .map((part) => encodeURIComponent(part.normalize("NFC"))),
+      parts: rawParts.map((part) => encodeURIComponent(part.normalize("NFC"))),
     };
   } catch (error) {
     if (error instanceof URIError) return { ok: false };
@@ -67,7 +80,7 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
     const fragments = [...ancestors, node.slug ?? ""];
     const malformedFragment = fragments.find((fragment) => !encodedParts(fragment).ok);
     if (malformedFragment !== undefined) {
-      diagnose(node, "route-fragment-invalid", "A route fragment contains malformed Unicode and cannot be encoded.");
+      diagnose(node, "route-fragment-invalid", "A route fragment is malformed or contains a forbidden dot-path segment.");
       for (const child of node.children) await visit(child, fragments);
       return;
     }

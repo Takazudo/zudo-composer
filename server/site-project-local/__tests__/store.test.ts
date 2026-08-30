@@ -176,6 +176,19 @@ describe("LocalSiteProjectStore", () => {
     } });
     await expect(faulty.publish({ projectId: "compiler-site", revision: replacement.value.revision, build })).resolves.toEqual({ status: "unavailable", message: "build crash" });
     await expect(readFile(join(testRoot, "active-build.json"), "utf8")).resolves.toBe(pointer);
-    await expect(store.publish({ projectId: "compiler-site", revision: replacement.value.revision, build })).resolves.toEqual(expect.objectContaining({ status: "unavailable", message: expect.stringContaining("partial") }));
+    await expect(store.publish({ projectId: "compiler-site", revision: replacement.value.revision, build })).resolves.toEqual({ status: "ok" });
+    const recoveredPointer = await readFile(join(testRoot, "active-build.json"), "utf8");
+    expect(recoveredPointer).not.toBe(pointer);
+
+    const third = await store.apply({ project: { ...makeProject(), name: "Third revision" }, expectedRevision: replacement.value.revision, expectedActive: null });
+    if (third.status !== "ok") throw new Error("third apply failed");
+    let failedAgain = false;
+    const faultyAgain = createLocalSiteProjectStore({ testRoot, fault(point) {
+      if (!failedAgain && point === "build-files-durable") { failedAgain = true; throw new Error("second build crash"); }
+    } });
+    await expect(faultyAgain.publish({ projectId: "compiler-site", revision: third.value.revision, build })).resolves.toEqual({ status: "unavailable", message: "second build crash" });
+    await writeFile(join(testRoot, "builds", "compiler-site", third.value.revision, "build.json"), "conflicting", "utf8");
+    await expect(store.publish({ projectId: "compiler-site", revision: third.value.revision, build })).resolves.toEqual(expect.objectContaining({ status: "unavailable", message: expect.stringContaining("conflicts") }));
+    await expect(readFile(join(testRoot, "active-build.json"), "utf8")).resolves.toBe(recoveredPointer);
   });
 });

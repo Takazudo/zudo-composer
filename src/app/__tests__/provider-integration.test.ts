@@ -83,6 +83,6 @@ describe("SiteProject provider integration", () => {
     const invalid = sample(); const content = invalid.providers.content[0]!; const entry = content.entries.find(({ modelId }) => modelId === "about-content")!;
     content.entries.push({ ...structuredClone(entry), id: "about-entry-duplicate" });
     const current = createProductionProviderIntegration({ project: invalid, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
-    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false } });
+    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("at most one Entry") } });
   });
 });

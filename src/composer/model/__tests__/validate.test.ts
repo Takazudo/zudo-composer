@@ -6,11 +6,13 @@ import {
   isStructurallyValidDocument,
   validateInsertionTarget,
 } from "../validate";
+import { validateNodeProps } from "../node-props";
+import { createComponentCatalog } from "../types";
 import { indexDocument } from "../index-model";
 import { COMPOSITION_SCHEMA_VERSION, VIRTUAL_ROOT_SLOT_ID } from "../types";
 import type { CompositionDocument, CompositionNode, InsertionTarget } from "../types";
 import { COMPONENT_IDS as C, SLOT_IDS as S } from "../../__tests__/fixtures";
-import { FIXTURE_COMPONENT_IDS as X, doc, fixtureManifest as M, node } from "../../__tests__/fixtures";
+import { FIXTURE_COMPONENT_IDS as X, createFixturePackManifest, doc, fixtureManifest as M, node } from "../../__tests__/fixtures";
 
 const locateIn =
   (d: CompositionDocument) =>
@@ -52,7 +54,7 @@ describe("isStructurallyValidDocument", () => {
     expect(isStructurallyValidDocument(bad)).toBe(false);
   });
 
-  it("rejects reserved persisted prop keys", () => {
+  it("rejects reserved persisted prop keys structurally", () => {
     expect(isStructurallyValidDocument(doc([node(X.box, { dangerouslySetInnerHTML: "unsafe" }, {}, "a")]))).toBe(false);
   });
 
@@ -170,6 +172,57 @@ describe("classifyNode / opaque detection", () => {
 
   it("treats a valid node as available", () => {
     expect(isNodeOpaque(node(C.stack, { gap: "md" }, { [S.stackChildren]: [] }, "n"), M)).toBe(false);
+  });
+
+  it("validates structured fields and exact static defaults while rejecting every non-authorable prop class", () => {
+    const catalog = createComponentCatalog(createFixturePackManifest([{
+      id: "fixture.contract-props",
+      schemaVersion: 1,
+      title: "Contract props",
+      category: "Fixture",
+      description: "",
+      source: { module: "@fixtures/contract-props", exportKind: "named", exportName: "ContractProps" },
+      defaults: { metadata: { label: "Default" }, runtime: { mode: "safe" } },
+      fields: [{
+        prop: "metadata",
+        label: "Metadata",
+        schema: { type: "object", fields: [{ key: "label", label: "Label", required: true, schema: { type: "string" }, editor: { kind: "text" } }] },
+        editor: { kind: "group" },
+      }],
+      slots: [{ id: "content", prop: "children", label: "Content", cardinality: "many" }],
+      staticProps: [{ prop: "runtime" }],
+    }]));
+    const component = catalog.get("fixture.contract-props")!;
+    expect(validateNodeProps(node(component.id, { metadata: { label: "Valid" }, runtime: { mode: "safe" } }), component)).toEqual({ ok: true, issues: [] });
+    const invalid = validateNodeProps(node(component.id, {
+      metadata: { wrong: true },
+      runtime: { mode: "changed" },
+      children: "not structural",
+      unknown: true,
+      ref: "reserved",
+    }), component);
+    expect(invalid.ok).toBe(false);
+    expect(invalid.issues.map((issue) => issue.code)).toEqual([
+      "slot-backed-prop",
+      "invalid-field-value",
+      "reserved-prop",
+      "static-prop-mismatch",
+      "unknown-prop",
+    ]);
+  });
+
+  it.each([
+    [{ label: { nested: "wrong domain" } }, "invalid-field-value"],
+    [{ unknown: true }, "unknown-prop"],
+    [{ children: "scalar" }, "slot-backed-prop"],
+    [{ ref: "reserved" }, "reserved-prop"],
+  ] as const)("makes a manifest-invalid prop opaque: %#", (props, issueCode) => {
+    const componentId = issueCode === "slot-backed-prop" ? C.stack : X.box;
+    const target = node(componentId, props as never, {}, "invalid-props");
+    const diagnostic = classifyNode(target, M);
+    expect(diagnostic.opaque).toBe(true);
+    expect(diagnostic.reasons).toContainEqual(expect.objectContaining({ code: "invalid-prop", message: expect.any(String) }));
+    expect(validateNodeProps(target, M.get(componentId)!).issues).toContainEqual(expect.objectContaining({ code: issueCode }));
   });
 });
 

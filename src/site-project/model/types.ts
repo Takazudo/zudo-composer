@@ -82,6 +82,7 @@ export type SiteProjectDiagnosticCode =
   | "wrong-content-provider"
   | "dangling-entry-field"
   | "invalid-entry-value"
+  | "single-content-cardinality"
   | "dangling-mapping-reference"
   | "wrong-mapping-provider"
   | "dangling-mapping-field"
