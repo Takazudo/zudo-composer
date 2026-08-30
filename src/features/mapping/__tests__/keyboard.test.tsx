@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { describe, expect, it, vi } from "vitest";
 import "../../composer/test-support/cleanup";
 import { createMappingRecord } from "../../../mapping";
@@ -12,9 +12,9 @@ const base: MappingEditorState = { phase: "ready", mappings: [], libraryDetails:
 
 function renderState(initial: MappingEditorState) {
   let listener: ((state: MappingEditorState) => void) | undefined; const setActivePane = vi.fn((activePane) => listener?.({ ...initial, activePane }));
-  const controller = { state: initial, subscribe(next: (state: MappingEditorState) => void) { listener = next; next(initial); return () => { listener = undefined; }; }, setActivePane, initialize: vi.fn(), close: vi.fn(), flush: vi.fn(), setPreviewCurrent: vi.fn(), setPreviewError: vi.fn() } as unknown as MappingEditorController;
+  const controller = { state: initial, subscribe(next: (state: MappingEditorState) => void) { listener = next; next(initial); return () => { listener = undefined; }; }, setActivePane, initialize: vi.fn(), close: vi.fn(), flush: vi.fn(), delete: vi.fn(async () => undefined), setPreviewCurrent: vi.fn(), setPreviewError: vi.fn() } as unknown as MappingEditorController;
   const view = render(<MappingApp provider={{} as never} contentCatalog={{} as never} compositionCatalog={{} as never} contentEntries={{} as never} componentProvider={activeComponentProvider} controller={controller} />);
-  return { setActivePane, container: view.container };
+  return { controller, setActivePane, container: view.container };
 }
 
 describe("Mapping keyboard and dialog behavior", () => {
@@ -29,6 +29,17 @@ describe("Mapping keyboard and dialog behavior", () => {
     renderState({ ...base, mapping: null }); const opener = screen.getByRole("button", { name: "New Mapping" }); opener.focus(); fireEvent.click(opener);
     expect(screen.getByRole("dialog", { name: "Create Mapping" })).toBeInTheDocument(); fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await Promise.resolve(); expect(opener).toHaveFocus();
+  });
+
+  it("restores focus after a confirmed Mapping deletion", async () => {
+    const summary = { id: "mapping-1", name: "Article", createdAt: now, updatedAt: now, bindingCount: 0 };
+    const { controller } = renderState({ ...base, mapping: null, mappings: [summary] });
+    const opener = screen.getByRole("button", { name: "Delete Article" });
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(controller.delete).toHaveBeenCalledWith("mapping-1"));
+    await waitFor(() => expect(opener).toHaveFocus());
   });
 
   it("keeps each binding's source, transform, and target meaning visible", () => {

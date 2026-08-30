@@ -1,4 +1,5 @@
 import { createSequentialIdFactory } from "../../../shared";
+import { createContentModelRecord } from "../../../content";
 import { describe, expect, it, vi } from "vitest";
 import { createContentAuthoringController, CONTENT_ENTRY_PAGE_SIZE } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
@@ -53,6 +54,20 @@ describe("ContentAuthoringController", () => {
     await controller.loadMoreEntries(); expect(pageEntries).toHaveBeenLastCalledWith("articles", { limit: CONTENT_ENTRY_PAGE_SIZE, cursor: "1" });
     await controller.deleteEntry("entry-1"); expect(controller.state.entries).toHaveLength(0);
     await controller.deleteModel("articles"); expect(controller.state.models).toHaveLength(0);
+  });
+
+  it("keeps the selected model and Entry when deleting another model", async () => {
+    const provider = createMemoryContentProvider();
+    await provider.store.putModel(createContentModelRecord({ name: "Other", kind: "collection", fields: [] }, { id: "other", timestamp: "2026-01-01T00:00:00.000Z" }));
+    const controller = createContentAuthoringController(provider);
+    await controller.initialize();
+    await controller.openModel("articles");
+    await controller.openEntry("entry-1");
+
+    await controller.deleteModel("other");
+
+    expect(controller.state.model?.id).toBe("articles");
+    expect(controller.state.entry?.id).toBe("entry-1");
   });
 
   it("surfaces latest-wins save failure and retries the retained draft", async () => {

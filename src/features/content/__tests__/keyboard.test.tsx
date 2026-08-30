@@ -23,6 +23,7 @@ describe("Content keyboard behavior", () => {
     expect(await screen.findByRole("group", { name: "Authoring mode" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Model fields", pressed: true })).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: "Type for Title" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("radiogroup", { name: "Type for Title" })).toHaveAttribute("aria-describedby", "content-kind-help-title");
     fireEvent.click(screen.getByRole("button", { name: "Entries", pressed: false }));
     expect(screen.getAllByRole("tab", { name: "Author" }).some((tab) => tab.getAttribute("aria-selected") === "true")).toBe(true);
     expect(screen.getByRole("button", { name: "Entries", pressed: true })).toBeInTheDocument();

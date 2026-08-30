@@ -114,6 +114,23 @@ describe("SitemapLibrary dialogs", () => {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
+  it("exposes operation failures through the dialog description", async () => {
+    const setup = provider([record()]);
+    vi.spyOn(setup.provider.store, "put").mockRejectedValue(new Error("Storage quota exceeded."));
+    render(<SitemapLibrary provider={setup.provider} onOpen={() => undefined} />);
+    const trigger = await screen.findByRole("button", { name: "Rename Product map" });
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "Rename sitemap" });
+    const input = within(dialog).getByRole("textbox", { name: "Sitemap name" });
+    fireEvent.input(input, { target: { value: "Launch architecture" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save name" }));
+
+    const error = await within(dialog).findByRole("alert");
+    expect(error).toHaveTextContent("Storage quota exceeded.");
+    expect(dialog.getAttribute("aria-describedby")).toContain(error.id);
+    expect(dialog).toBeInTheDocument();
+  });
+
   it("labels destructive deletion, focuses Cancel, and deletes only after confirmation", async () => {
     const setup = provider([record()]);
     const confirm = vi.fn();

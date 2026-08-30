@@ -122,7 +122,7 @@
 .sg-mapping-empty p { color: var(--color-muted); font-size: var(--text-sm); }
 .sg-mapping-empty .sg-mapping-button--primary { justify-self: start; }
 
-.sg-mapping-dialog { z-index: var(--z-index-ui-modal); display: grid; gap: var(--sg-mapping-space-section-y, var(--spacing-vsp-sm)); width: min(32rem, calc(100% - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; overscroll-behavior: contain; margin: auto; padding: var(--sg-mapping-space-region, var(--spacing-hsp-lg)); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-fg); background: var(--color-surface); box-shadow: var(--shadow-overlay); }
+.sg-mapping-dialog { z-index: var(--z-index-modal); display: grid; gap: var(--sg-mapping-space-section-y, var(--spacing-vsp-sm)); width: min(32rem, calc(100% - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; overscroll-behavior: contain; margin: auto; padding: var(--sg-mapping-space-region, var(--spacing-hsp-lg)); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-fg); background: var(--color-surface); box-shadow: var(--shadow-overlay); }
 .sg-mapping-dialog::backdrop { background: color-mix(in oklch, var(--color-fg) 45%, transparent); }
 .sg-mapping-dialog--test { width: min(42rem, 100%); }
 .sg-mapping-dialog :where(h2, p) { margin: 0; }
