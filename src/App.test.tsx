@@ -30,10 +30,12 @@ describe('App', () => {
   it('keeps the same-origin preview on its isolated entry graph', () => {
     const main = readFileSync(resolve('src/main.tsx'), 'utf8');
     const previewBranch = main.indexOf('window.location.pathname === "/composer/preview"');
+    const bootstrap = main.indexOf('bootstrapTheme()');
     const previewImport = main.indexOf('import("./features/composer/preview/preview-entry")');
     const hostStyle = main.indexOf('import("./style.css")');
     const hostApp = main.indexOf('import("./App")');
-    expect(previewBranch).toBeGreaterThan(-1);
+    expect(bootstrap).toBeGreaterThan(-1);
+    expect(bootstrap).toBeLessThan(previewBranch);
     expect(previewBranch).toBeLessThan(previewImport);
     expect(previewImport).toBeLessThan(hostStyle);
     expect(hostStyle).toBeLessThan(hostApp);
