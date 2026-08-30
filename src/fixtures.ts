@@ -11,6 +11,7 @@ interface ContainerProps {
   enabled: boolean;
   columns: number;
   accent: string;
+  actions: readonly { label: string; href: string; variant?: 'primary' | 'secondary' }[];
   children?: unknown;
   aside?: unknown;
 }
@@ -24,7 +25,7 @@ interface BadgeProps {
   tone: 'neutral' | 'positive';
 }
 
-const container = defineComponent<ContainerProps, string, string, FixtureElement, 'container'>({
+const container = defineComponent<ContainerProps>()((_props: ContainerProps) => 'fixture-container-component', {
   id: 'container',
   schemaVersion: 2,
   title: 'Container',
@@ -37,6 +38,7 @@ const container = defineComponent<ContainerProps, string, string, FixtureElement
     enabled: true,
     columns: 2,
     accent: '#336699',
+    actions: [{ label: 'Read more', href: '/more', variant: 'primary' }],
   },
   fields: [
     { kind: 'text', prop: 'title', label: 'Title', required: true, inlineEdit: { multiline: false } },
@@ -44,19 +46,42 @@ const container = defineComponent<ContainerProps, string, string, FixtureElement
     { kind: 'boolean', prop: 'enabled', label: 'Enabled' },
     { kind: 'number', prop: 'columns', label: 'Columns', min: 1, max: 4, step: 1 },
     { kind: 'color', prop: 'accent', label: 'Accent' },
+    {
+      prop: 'actions',
+      label: 'Actions',
+      schema: {
+        type: 'array',
+        items: {
+          schema: {
+            type: 'object',
+            fields: [
+              { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+              { key: 'href', label: 'URL', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+              {
+                key: 'variant',
+                label: 'Variant',
+                schema: { type: 'string', enum: ['primary', 'secondary'] },
+                editor: { kind: 'select' },
+              },
+            ],
+          },
+          editor: { kind: 'group' },
+        },
+      },
+      editor: { kind: 'list' },
+    },
   ],
   slots: [
     { id: 'content', prop: 'children', label: 'Content', accepts: ['prose', 'badge'], cardinality: 'many' },
     { id: 'aside', prop: 'aside', label: 'Aside', accepts: ['badge'], cardinality: 'single' },
   ],
-  component: 'fixture-container-component',
   adapters: {
-    render: (props) => `container:${props.title ?? ''}`,
-    inlineEditor: { field: 'title', resolveElement: (root) => root },
+    render: (props: Partial<ContainerProps>) => `container:${props.title ?? ''}`,
+    inlineEditor: { field: 'title', resolveElement: (root: FixtureElement) => root },
   },
 });
 
-const prose = defineComponent<ProseProps, string, string, FixtureElement, 'prose'>({
+const prose = defineComponent<ProseProps>()((_props: ProseProps) => 'fixture-prose-component', {
   id: 'prose',
   schemaVersion: 1,
   title: 'Prose',
@@ -72,13 +97,12 @@ const prose = defineComponent<ProseProps, string, string, FixtureElement, 'prose
       inlineEdit: { multiline: true, mode: 'markdown-source' },
     },
   ],
-  component: 'fixture-prose-component',
   adapters: {
-    inlineEditor: { field: 'markdown', resolveElement: (root) => root },
+    inlineEditor: { field: 'markdown', resolveElement: (root: FixtureElement) => root },
   },
 });
 
-const badge = defineComponent<BadgeProps, string, string, FixtureElement, 'badge'>({
+const badge = defineComponent<BadgeProps>()((_props: BadgeProps) => 'fixture-badge-component', {
   id: 'badge',
   schemaVersion: 1,
   title: 'Badge',
@@ -90,8 +114,7 @@ const badge = defineComponent<BadgeProps, string, string, FixtureElement, 'badge
     { kind: 'text', prop: 'label', label: 'Label' },
     { kind: 'select', prop: 'tone', label: 'Tone', options: ['neutral', 'positive'] },
   ],
-  component: 'fixture-badge-component',
-  adapters: { render: (props) => `badge:${props.label ?? ''}` },
+  adapters: { render: (props: Partial<BadgeProps>) => `badge:${props.label ?? ''}` },
 });
 
 /** Stable in-package conformance fixture; applications must not use it as provider data. */
@@ -115,6 +138,7 @@ export const fixtureComponentDocument: ComponentDocument = {
         enabled: true,
         columns: 2,
         accent: '#336699',
+        actions: [{ label: 'Read more', href: '/more', variant: 'primary' }],
         analytics: { tags: ['fixture'] },
       },
       slots: {
