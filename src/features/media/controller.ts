@@ -25,12 +25,23 @@ export interface MediaLibraryControllerOptions {
 
 const initialState: MediaLibraryState = { phase: "idle", records: [], view: "gallery", message: "", recoveryMessage: null, referenceScan: { status: "idle" } };
 const errorMessage = (reason: unknown, fallback: string): string => reason instanceof Error ? reason.message : fallback;
+const MEDIA_PUBLIC_EXTENSION = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "application/pdf": "pdf",
+} as const satisfies Record<MediaSummary["mediaType"], string>;
 
-export function mediaUrl(record: Pick<MediaSummary, "fileName">): string {
-  return `/uploaded-media/${encodeURIComponent(record.fileName)}`;
+export function mediaPublicFileName(record: Pick<MediaSummary, "id" | "mediaType">): string {
+  return `media-${record.id}.${MEDIA_PUBLIC_EXTENSION[record.mediaType]}`;
 }
 
-export function mediaMarkdown(record: Pick<MediaSummary, "fileName">): string {
+export function mediaUrl(record: Pick<MediaSummary, "id" | "mediaType">): string {
+  return `/uploaded-media/${encodeURIComponent(mediaPublicFileName(record))}`;
+}
+
+export function mediaMarkdown(record: Pick<MediaSummary, "id" | "mediaType" | "fileName">): string {
   return `![${record.fileName.replace(/\.[^.]+$/, "")}](${mediaUrl(record)})`;
 }
 

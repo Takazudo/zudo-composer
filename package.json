@@ -28,7 +28,8 @@
     "smoke:local": "node scripts/smoke-deployment.mjs --local",
     "smoke:live": "node scripts/smoke-deployment.mjs --base-url https://zudo-composer.zudolab.dev",
     "test:browser": "pnpm build && pnpm test:browser:dist",
-    "test:browser:dist": "playwright test"
+    "test:browser:dist": "playwright test",
+    "test:browser:dev": "playwright test --config=playwright.dev.config.ts"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",
