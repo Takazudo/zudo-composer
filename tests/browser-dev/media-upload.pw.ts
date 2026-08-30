@@ -141,7 +141,15 @@ test("uploads real media bytes through the dev provider and renders the stored i
     await expect(uploadStatus.getByText("Stored", { exact: true })).toBeVisible();
     const card = page.locator(".sg-media-card").filter({ hasText: fileName });
     await expect(card).toHaveCount(1);
-    await expect(card.locator("img")).toBeVisible();
+    const galleryImage = card.locator("img");
+    const publicPath = `/uploaded-media/media-${result.id}.${extension}`;
+    await galleryImage.scrollIntoViewIfNeeded();
+    await expect(galleryImage).toBeVisible();
+    await expect(galleryImage).toHaveAttribute("src", publicPath);
+    await expect.poll(() => galleryImage.evaluate((image) => {
+      const rendered = image as HTMLImageElement;
+      return rendered.complete && rendered.naturalWidth > 0;
+    })).toBe(true);
 
     const storedPath = ownedFile(bytesRoot, `media-${result.id}.${extension}`);
     await expect(readFile(storedPath)).resolves.toEqual(UPLOAD_BYTES);
@@ -160,22 +168,13 @@ test("uploads real media bytes through the dev provider and renders the stored i
       },
     });
 
-    // The filesystem provider names public bytes by its safe record id. Load
-    // that exact public URL in the browser so this proves an actual image
-    // decode/render, not just that the gallery card exists.
-    const publicPath = `/uploaded-media/media-${result.id}.${extension}`;
+    // The filesystem provider names public bytes by its safe record id. The
+    // gallery now uses that exact public URL, so the naturalWidth check above
+    // proves this is an actual image decode/render, not just a visible card.
     const publicResponse = await page.request.get(publicPath);
     expect(publicResponse.ok()).toBe(true);
     expect(publicResponse.headers()["content-type"]).toMatch(/^image\/png/);
     await expect(publicResponse.body()).resolves.toEqual(UPLOAD_BYTES);
-    const rendered = await page.evaluate(async (src) => {
-      const image = new Image();
-      image.src = src;
-      await image.decode();
-      return { width: image.naturalWidth, height: image.naturalHeight };
-    }, publicPath);
-    expect(rendered.width).toBeGreaterThan(0);
-    expect(rendered.height).toBeGreaterThan(0);
   } finally {
     await cleanupRecords(fileName, uploaded);
   }

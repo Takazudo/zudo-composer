@@ -43,7 +43,7 @@ describe("Media Markdown consumption", () => {
     library.unmount();
 
     const markdown = writeClipboard.mock.calls[0]![0];
-    expect(markdown).toBe("![hero image](/uploaded-media/hero%20image.png)");
+    expect(markdown).toBe("![hero image](/uploaded-media/media-hero-image.png)");
 
     const model: ContentModelRecord = {
       id: "articles",
@@ -136,7 +136,7 @@ describe("Media Markdown consumption", () => {
     await waitFor(() => {
       const image = container.querySelector("img");
       expect(image).toHaveAttribute("alt", "hero image");
-      expect(image).toHaveAttribute("src", "/uploaded-media/hero%20image.png");
+      expect(image).toHaveAttribute("src", "/uploaded-media/media-hero-image.png");
     });
   });
 });

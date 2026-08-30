@@ -26,8 +26,12 @@ describe("Media library browse UI", () => {
     const writeClipboard = vi.fn(); const provider = createMemoryMediaProvider({ records: [hero] });
     const controller = createMediaLibraryController(provider, { writeClipboard, scanReferences: vi.fn().mockResolvedValue([]) });
     render(<MediaApp provider={provider} controller={controller} />);
-    await screen.findAllByText("hero.png"); fireEvent.click(screen.getAllByRole("button", { name: "Copy Markdown" })[0]!);
-    await waitFor(() => expect(writeClipboard).toHaveBeenCalledWith("![hero](/uploaded-media/hero.png)"));
+    await screen.findAllByText("hero.png");
+    const previews = screen.getAllByAltText("hero.png");
+    expect(previews).toHaveLength(2);
+    for (const preview of previews) expect(preview).toHaveAttribute("src", "/uploaded-media/media-hero.png");
+    fireEvent.click(screen.getAllByRole("button", { name: "Copy Markdown" })[0]!);
+    await waitFor(() => expect(writeClipboard).toHaveBeenCalledWith("![hero](/uploaded-media/media-hero.png)"));
     fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]!);
     expect(screen.getByRole("dialog", { name: "Delete media?" })).toBeInTheDocument();
     expect(screen.getByText(/Not authoritative:/)).toBeInTheDocument();

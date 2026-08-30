@@ -25,7 +25,7 @@ function MediaViewTabs({ active, onChange }: { active: MediaLibraryView; onChang
 }
 
 function MediaPreview({ record, compact = false }: { record: MediaSummary; compact?: boolean }): JSX.Element {
-  return <div class={compact ? "sg-media-preview sg-media-preview--compact" : "sg-media-preview"}>{record.mediaType.startsWith("image/") ? <img src={mediaUrl(record)} alt="" loading="lazy" /> : <span aria-hidden="true">PDF</span>}</div>;
+  return <div class={compact ? "sg-media-preview sg-media-preview--compact" : "sg-media-preview"}>{record.mediaType.startsWith("image/") ? <img src={mediaUrl(record)} alt={record.fileName} loading="lazy" /> : <span aria-hidden="true">PDF</span>}</div>;
 }
 function MediaFacts({ record }: { record: MediaSummary }): JSX.Element { return <dl class="sg-media-facts"><div><dt>Type</dt><dd>{mediaTypeLabel(record.mediaType)}</dd></div><div><dt>Size</dt><dd>{formatBytes(record.byteLength)}</dd></div><div><dt>Date</dt><dd>{formatDate(record.updatedAt)}</dd></div></dl>; }
 function MediaActions({ record, controller, run, onDelete }: { record: MediaSummary; controller: MediaLibraryController; run(action: () => void | Promise<void>): void; onDelete(record: MediaSummary): void }): JSX.Element { return <div class="sg-media-actions"><button type="button" onClick={() => run(() => controller.copyMarkdown(record))}>Copy Markdown</button><button type="button" class="sg-media-button--danger" onClick={() => onDelete(record)}>Delete</button></div>; }
