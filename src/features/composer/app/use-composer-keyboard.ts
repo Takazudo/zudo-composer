@@ -4,15 +4,18 @@
 //
 //   - Delete / Backspace removes the currently selected node.
 //   - Escape closes any open menu/dialog.
+//   - Cmd/Ctrl+Z and the supported redo variants call the history callbacks.
 //
-// Both are GUARDED: they never fire while focus is in an input, textarea,
-// select, or contentEditable surface (so typing a prop value never deletes the
-// node), and Delete/Backspace never mutates in Preview mode (Preview has no
-// structural-mutation affordances at all). Escape is allowed in Preview — it
-// only closes transient UI, it does not mutate the document.
+// All shortcuts are GUARDED: they never fire while focus is in an input,
+// textarea, select, or contentEditable surface. This lets native text-input
+// undo (and the Content route's CodeMirror undo) keep working, while also
+// ensuring typing a prop value never deletes the node. Delete/Backspace and
+// undo/redo never mutate in Preview mode (Preview has no mutation
+// affordances). Escape is allowed in Preview — it only closes transient UI.
 //
-// Kept as a tiny, pure-ish hook so the whole guard matrix is unit-testable
-// without a full app render; menus reuse the Escape path.
+// Kept as a tiny hook with a pure detector so the whole guard matrix is
+// unit-testable without a full app render; the canvas iframe shares the
+// detector rather than maintaining a second shortcut matrix.
 //
 // ── `menuOpen` (issue Takazudo/zudo-sg#256) ──────────────────────────────────────────────────
 // A `ComposerMenu` owns its OWN Escape/outside/scroll/resize dismissal (see
@@ -22,7 +25,9 @@
 // while a menu happens to be open — a double/wrong-node delete, since the
 // menu's own subject is not necessarily `selectedId` (an insert menu has no
 // node subject at all). `menuOpen: true` suppresses ONLY that structural
-// shortcut; Escape still runs `onEscape` too (harmless — nothing else is ever
+// shortcut; undo/redo are intentionally not suppressed because they have no
+// node subject and therefore cannot act on the wrong node while a menu is
+// open. Escape still runs `onEscape` too (harmless — nothing else is ever
 // open at the same time as a menu) so this hook remains the single place
 // Escape is wired, per the epic's "don't duplicate the shortcut" invariant.
 
@@ -43,6 +48,14 @@ export interface ComposerKeyboardOptions {
   onRemoveSelected: (nodeId: string) => void;
   /** Close open menus/dialogs (chooser, export). */
   onEscape: () => void;
+  /** Undo the latest Composer history entry. */
+  onUndo?: () => void;
+  /** Redo the next Composer history entry. */
+  onRedo?: () => void;
+  /** Whether an undo entry is currently available. */
+  canUndo?: boolean;
+  /** Whether a redo entry is currently available. */
+  canRedo?: boolean;
   /** A `ComposerMenu` (issue Takazudo/zudo-sg#256) is currently open — suppresses the global Delete/Backspace shortcut. */
   menuOpen?: boolean;
   /** Test seam — defaults to `document`. */
@@ -58,8 +71,42 @@ export function isEditableEventTarget(target: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
+/**
+ * Match the Composer's cross-platform undo/redo shortcuts without changing
+ * the event or consulting any application state.
+ *
+ * `Ctrl+Y` is retained as the Windows/Linux redo spelling; on macOS the
+ * standard spelling is `Cmd+Shift+Z`, just as it is for the corresponding
+ * Ctrl shortcut on other platforms.
+ */
+export function matchesUndoRedoShortcut(event: KeyboardEvent): "undo" | "redo" | null {
+  // Alt changes the meaning of these combinations in browser/platform
+  // shortcuts, so it must never be treated as a Composer command modifier.
+  if (event.altKey || !(event.metaKey || event.ctrlKey)) return null;
+
+  switch (event.key.toLowerCase()) {
+    case "z":
+      return event.shiftKey ? "redo" : "undo";
+    case "y":
+      return event.ctrlKey && !event.shiftKey ? "redo" : null;
+    default:
+      return null;
+  }
+}
+
 export function useComposerKeyboard(options: ComposerKeyboardOptions): void {
-  const { mode, selectedId, onRemoveSelected, onEscape, menuOpen = false, host } = options;
+  const {
+    mode,
+    selectedId,
+    onRemoveSelected,
+    onEscape,
+    onUndo,
+    onRedo,
+    canUndo,
+    canRedo,
+    menuOpen = false,
+    host,
+  } = options;
 
   useEffect(() => {
     const target: KeyboardHost = host ?? document;
@@ -76,6 +123,20 @@ export function useComposerKeyboard(options: ComposerKeyboardOptions): void {
       // Structural mutation is Edit-only.
       if (mode === "preview") return;
 
+      const undoRedo = matchesUndoRedoShortcut(event);
+      if (undoRedo !== null) {
+        const callback = undoRedo === "undo" ? onUndo : onRedo;
+        const canRun = undoRedo === "undo" ? canUndo : canRedo;
+        // A matching command with no callback is not handled here, so native
+        // browser behavior remains available when this hook is used without
+        // the optional history wiring.
+        if (callback && canRun !== false) {
+          event.preventDefault();
+          callback();
+        }
+        return;
+      }
+
       // An open ComposerMenu owns Delete via its own item, and its subject is
       // not necessarily `selectedId` — see the module header.
       if (menuOpen) return;
@@ -88,5 +149,5 @@ export function useComposerKeyboard(options: ComposerKeyboardOptions): void {
 
     target.addEventListener("keydown", onKeyDown);
     return () => target.removeEventListener("keydown", onKeyDown);
-  }, [mode, selectedId, onRemoveSelected, onEscape, menuOpen, host]);
+  }, [mode, selectedId, onRemoveSelected, onEscape, onUndo, onRedo, canUndo, canRedo, menuOpen, host]);
 }
