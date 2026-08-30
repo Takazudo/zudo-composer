@@ -316,11 +316,9 @@
   opacity: 0.5;
 }
 
-/* Reset's inline confirm (Takazudo/zudo-sg#269) restyled for the toolbar row (Takazudo/zudo-sg#267) — the
-   generic `InlineConfirm` also renders inside the tree/menu with the
-   `.sg-composer-tree-confirm*` classes (that pairing stays as S3/S6 left it);
-   this is the toolbar-only variant, sized to sit inline with the other
-   toolbar controls instead of a tree row. */
+/* Full-size `InlineConfirm` variant used by record-level library actions.
+   Its compact default retains the `.sg-composer-tree-confirm*` class family;
+   this variant is sized to sit inline with toolbar controls. */
 .sg-composer-toolbar-confirm {
   display: flex;
   flex-wrap: wrap;
@@ -1473,9 +1471,7 @@
 
 /* ── Context menu (issue Takazudo/zudo-sg#256) ──────────────────────────────────────────────
    ONE host-side popover (`ComposerMenu`) reused for the node menu (Copy/Cut/
-   Duplicate/Delete), the insert menu (Add component…/Paste here), and the
-   Delete subtree-removal confirmation (`SubtreeRemovalConfirm`, styled by the
-   `.sg-composer-tree-confirm*` rules above — reused verbatim, not restyled).
+   Duplicate/Delete) and the insert menu (Add component…/Paste here).
    `position: fixed`, positioned/clamped in JS (`menu-position.ts`) — this
    file only supplies appearance.
 

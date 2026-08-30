@@ -8,43 +8,6 @@
 
 import type { JSX } from "preact";
 import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from "../../../../components/icons";
-import { InlineConfirm } from "../shared/inline-confirm";
-
-export interface SubtreeRemovalConfirmProps {
-  nodeTitle: string;
-  descendantCount: number;
-  onCancel: () => void;
-  onConfirm: () => void;
-}
-
-/**
- * The inline "Remove X and its N nested components?" confirmation shown
- * before removing a populated subtree. Extracted so issue Takazudo/zudo-sg#256's node
- * context menu can reuse the EXACT same copy/behavior for its Delete item
- * (rendered as the menu's `children`, in place of its item list) instead of
- * re-deriving a second confirmation flow — see `use-composer-menus.ts`.
- *
- * A thin wrapper around the generic `InlineConfirm` (issue Takazudo/zudo-sg#269/#260, which
- * also unified this component's initial focus to land on Cancel — the SAFE
- * action — for both entry points, where before the menu path and this
- * component's own default disagreed).
- */
-export function SubtreeRemovalConfirm({
-  nodeTitle,
-  descendantCount,
-  onCancel,
-  onConfirm,
-}: SubtreeRemovalConfirmProps): JSX.Element {
-  return (
-    <InlineConfirm
-      ariaLabel={`Confirm removing ${nodeTitle}`}
-      message={`Remove ${nodeTitle} and its ${descendantCount} nested component${descendantCount === 1 ? "" : "s"}?`}
-      confirmLabel="Confirm removal"
-      onCancel={onCancel}
-      onConfirm={onConfirm}
-    />
-  );
-}
 
 export interface TreeRowActionsProps {
   nodeTitle: string;

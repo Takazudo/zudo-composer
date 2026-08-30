@@ -65,7 +65,7 @@ function controlledQueue(initialRecord: CompositionRecord): {
   return { queue, attempts };
 }
 
-function setup(source?: CompositionDocument, rootPolicy?: RootPolicy) {
+function setup(source?: CompositionDocument, rootPolicy?: RootPolicy, historyNow?: () => number) {
   resetFixtureIds();
   const initialRecord = makeRecord(source);
   const harness = controlledQueue(initialRecord);
@@ -76,6 +76,7 @@ function setup(source?: CompositionDocument, rootPolicy?: RootPolicy) {
     rootPolicy,
     idFactory: createSequentialIdFactory("history"),
     now: () => "2026-01-02T04:04:05.000Z",
+    historyNow,
   }));
   return { ...hook, ...harness };
 }
@@ -164,21 +165,20 @@ describe("useComposerController — history", () => {
   });
 
   it("coalesces sorted same-field prop bursts, respects the window, and breaks on selection", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(0);
-    const coalesced = setup();
+    let atMs = 0;
+    const coalesced = setup(undefined, undefined, () => atMs);
     act(() => coalesced.result.current.updateProps("A", { size: 1, label: "A1" }));
-    vi.setSystemTime(100);
+    atMs = 100;
     act(() => coalesced.result.current.updateProps("A", { label: "A2", size: 2 }));
     act(() => coalesced.result.current.undo());
     expect(labelOfA(coalesced.result.current.state.document)).toBe("A");
     expect(coalesced.result.current.canUndo).toBe(false);
     coalesced.unmount();
 
-    vi.setSystemTime(0);
-    const separated = setup();
+    atMs = 0;
+    const separated = setup(undefined, undefined, () => atMs);
     act(() => separated.result.current.updateProps("A", { label: "A1" }));
-    vi.setSystemTime(1001);
+    atMs = 1001;
     act(() => separated.result.current.updateProps("A", { label: "A2" }));
     act(() => separated.result.current.undo());
     expect(labelOfA(separated.result.current.state.document)).toBe("A1");
@@ -186,11 +186,11 @@ describe("useComposerController — history", () => {
     expect(labelOfA(separated.result.current.state.document)).toBe("A");
     separated.unmount();
 
-    vi.setSystemTime(0);
-    const interrupted = setup();
+    atMs = 0;
+    const interrupted = setup(undefined, undefined, () => atMs);
     act(() => interrupted.result.current.updateProps("A", { label: "A1" }));
     act(() => interrupted.result.current.select("B"));
-    vi.setSystemTime(100);
+    atMs = 100;
     act(() => interrupted.result.current.updateProps("A", { label: "A2" }));
     act(() => interrupted.result.current.undo());
     expect(labelOfA(interrupted.result.current.state.document)).toBe("A1");
@@ -262,6 +262,26 @@ describe("useComposerController — history", () => {
     expect(result.current.canRedo).toBe(true);
     act(() => result.current.rename("Replacement"));
     expect(result.current.canRedo).toBe(false);
+  });
+
+  it("does not flush pending prop edits when history commands no-op in Preview", () => {
+    vi.useFakeTimers();
+    const { result, queue } = setup();
+    act(() => result.current.setMode("preview"));
+    act(() => result.current.updatePropsDebounced("A", { label: "pending" }));
+    expect(queue.state.draftRevision).toBe(0);
+
+    act(() => {
+      result.current.undo();
+      result.current.redo();
+    });
+    expect(labelOfA(result.current.state.document)).toBe("A");
+    expect(queue.state.draftRevision).toBe(0);
+
+    act(() => {
+      result.current.flushPropUpdates();
+    });
+    expect(labelOfA(result.current.state.document)).toBe("pending");
   });
 
   it("clears history only for a material effective root-policy change", () => {

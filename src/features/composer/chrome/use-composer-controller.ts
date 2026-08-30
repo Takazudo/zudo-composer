@@ -185,6 +185,8 @@ export interface UseComposerControllerOptions {
   rootPolicy?: RootPolicy;
   idFactory?: IdFactory;
   now?: () => string;
+  /** Monotonic milliseconds used only for history coalescing. */
+  historyNow?: () => number;
 }
 
 /** 200ms — just above a fast typist's ~100-180ms inter-key gap (so steady typing coalesces into one trailing commit) yet keeps the trailing persist+preview inside the ~300ms "feels instant" budget; the UX trade is documented in Takazudo/zudo-sg#259. */
@@ -222,9 +224,11 @@ export function useComposerController(options: UseComposerControllerOptions): Co
   const manifest = options.manifest;
   const idFactory = useMemo(() => options.idFactory ?? createUuidIdFactory(), [options.idFactory]);
   const now = options.now ?? (() => new Date().toISOString());
+  const historyNow = options.historyNow ?? (() => performance.now());
 
   const queueRef = useRef<CompositionSaveQueue>(options.saveQueue);
   const nowRef = useRef(now);
+  const historyNowRef = useRef(historyNow);
   const recordRef = useRef<CompositionRecord | null>(null);
   const stateRef = useRef<ComposerControllerState | null>(null);
   const historyRef = useRef<ComposerHistory>(createHistory());
@@ -312,7 +316,7 @@ export function useComposerController(options: UseComposerControllerOptions): Co
           historyRef.current = pushHistory(
             historyRef.current,
             { document: current.document, selectedId: current.selectedId },
-            { coalesceKey, atMs: Date.now() },
+            { coalesceKey, atMs: historyNowRef.current() },
           );
         }
         next = persistDocumentState(next);
@@ -415,9 +419,9 @@ export function useComposerController(options: UseComposerControllerOptions): Co
   }, [manifest, persistDocumentState]);
 
   const undo = useCallback((): void => {
+    if (stateRef.current!.mode === "preview") return;
     flushPropUpdates();
     const current = stateRef.current!;
-    if (current.mode === "preview") return;
     const transition = undoHistory(historyRef.current, {
       document: current.document,
       selectedId: current.selectedId,
@@ -428,9 +432,9 @@ export function useComposerController(options: UseComposerControllerOptions): Co
   }, [flushPropUpdates, restoreHistoryEntry]);
 
   const redo = useCallback((): void => {
+    if (stateRef.current!.mode === "preview") return;
     flushPropUpdates();
     const current = stateRef.current!;
-    if (current.mode === "preview") return;
     const transition = redoHistory(historyRef.current, {
       document: current.document,
       selectedId: current.selectedId,
