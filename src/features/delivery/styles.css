@@ -1,0 +1,20 @@
+.site-delivery { min-block-size: 100vh; display: grid; grid-template-rows: auto auto 1fr auto; color: var(--color-fg); background: var(--color-bg); }
+.site-delivery__header { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem 2rem; padding: 1rem clamp(1rem, 4vw, 3rem); border-block-end: 1px solid var(--color-border); background: var(--color-surface); }
+.site-delivery__brand { color: var(--color-fg); font-weight: 750; text-decoration: none; }
+.site-delivery__brand, .site-delivery__header nav a, .site-delivery__footer nav a { display: inline-flex; align-items: center; min-block-size: 2.75rem; padding-inline: .25rem; }
+.site-delivery :is(ul, ol) { margin: 0; padding: 0; list-style: none; }
+.site-delivery__header ul, .site-delivery__footer ul { display: flex; flex-wrap: wrap; gap: .25rem 1rem; }
+.site-delivery nav a { color: var(--color-muted); text-decoration: none; }
+.site-delivery nav a[aria-current="page"] { color: var(--color-fg); text-decoration: underline; text-decoration-color: var(--color-accent); text-underline-offset: .35rem; }
+.site-delivery__header nav a[data-active="true"] { color: var(--color-fg); }
+.site-delivery :is(a, button):focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+.site-delivery__breadcrumbs { inline-size: min(72rem, calc(100% - 2rem)); margin-inline: auto; padding-block: 1rem; font-size: .8125rem; }
+.site-delivery__breadcrumbs ol { display: flex; flex-wrap: wrap; gap: .375rem; color: var(--color-muted); }
+.site-delivery__breadcrumbs li + li::before { content: "/"; margin-inline-end: .375rem; color: var(--color-border-strong); }
+.site-delivery__main { min-inline-size: 0; inline-size: min(78rem, 100%); margin-inline: auto; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
+.site-delivery__footer { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem 2rem; padding: 2rem clamp(1rem, 4vw, 3rem); border-block-start: 1px solid var(--color-border); background: var(--color-surface); }
+.site-delivery__footer p { margin: 0; font-weight: 700; }
+.site-delivery__state { inline-size: min(42rem, calc(100% - 2rem)); margin-block: 12vh; margin-inline: auto; padding: 1.5rem; border: 1px solid var(--color-border); color: var(--color-fg); background: var(--color-surface); }
+.site-delivery__state h1 { margin-top: 0; }
+.site-delivery__component-error { padding: 1rem; border: 1px solid var(--color-border); color: var(--color-muted); background: var(--color-surface-2); }
+@media (min-width: 42rem) { .site-delivery__header, .site-delivery__footer { flex-direction: row; align-items: center; justify-content: space-between; } }
