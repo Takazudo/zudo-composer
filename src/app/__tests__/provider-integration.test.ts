@@ -81,6 +81,7 @@ describe("production provider integration", () => {
     expect(concurrentContent).toMatchObject({ entries: [{ ref: { recordId: PRODUCTION_SEED_IDS.contentModel } }], failures: [] });
     const contentSnapshot = await integration.contentProvider.store.scanEntries(PRODUCTION_SEED_IDS.contentModel);
     expect(contentSnapshot.model).toMatchObject({ id: PRODUCTION_SEED_IDS.contentModel, createdAt: PRODUCTION_SEED_TIMESTAMP });
+    expect(contentSnapshot.model.document.fields.find(({ id }) => id === PRODUCTION_SEED_IDS.bodyField)?.kind).toBe("markdown");
     expect(contentSnapshot.entries.map(({ id }) => id).sort()).toEqual([...PRODUCTION_SEED_IDS.entries].sort());
     expect(await integration.mappingContentEntries.scan({ providerId: "content-indexeddb", recordId: PRODUCTION_SEED_IDS.contentModel })).toMatchObject({ status: "resolved", snapshot: { count: 2 } });
     expect(await integration.mappingContentEntries.scan({ providerId: "missing-provider", recordId: PRODUCTION_SEED_IDS.contentModel })).toMatchObject({ status: "provider-error" });
