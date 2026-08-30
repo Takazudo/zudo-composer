@@ -4,7 +4,7 @@ import type { ContentCatalog } from "../../content/catalog";
 import type { ContentEntryRecord } from "../../content/model";
 import { isValueValidForField } from "../../content/model";
 import type { CompositionCatalog } from "../catalog";
-import type { MappingDefinitionDiagnostic, MappingDefinitionResolution, MappingEntryDiagnostic, MappingEvaluationResult, MappingRecord, ResolvedMappingBinding } from "../model";
+import type { AppliedMappingBinding, MappingDefinitionDiagnostic, MappingDefinitionResolution, MappingEntryDiagnostic, MappingEvaluationResult, MappingRecord, ResolvedMappingBinding } from "../model";
 import { validateMappingTransform } from "../model";
 import { applyMappingTransform, isCanonicalDate, isMappingCompatible } from "./compatibility";
 import { discoverMappingTargets } from "./targets";
@@ -39,10 +39,22 @@ function findNode(nodes: readonly CompositionNode[], id: string): CompositionNod
 
 export async function evaluateMapping(mapping: MappingRecord, entry: ContentEntryRecord, catalogs: { content: ContentCatalog; compositions: CompositionCatalog }, manifest: ComponentCatalog): Promise<MappingEvaluationResult> {
   const definition = await resolveMappingDefinition(mapping, catalogs, manifest);
+  return evaluateResolvedMapping(definition, entry);
+}
+
+/**
+ * Evaluates transient Entry data against an already-resolved Mapping.
+ *
+ * Resolution may involve provider I/O, while evaluation is deliberately pure
+ * and synchronous so authoring surfaces can render every current draft
+ * revision without rereading either Content or Mapping storage.
+ */
+export function evaluateResolvedMapping(definition: MappingDefinitionResolution, entry: ContentEntryRecord): MappingEvaluationResult {
+  const mapping = definition.mapping;
   const document = definition.composition ? cloneJson(definition.composition.document) : undefined;
-  if (definition.status === "blocked" || !document) return { status: "blocked", ...(document ? { document } : {}), definitionDiagnostics: definition.diagnostics, entryDiagnostics: [], appliedBindingCount: 0, unchangedStaticCount: mapping.document.bindings.length };
-  const entryDiagnostics: MappingEntryDiagnostic[] = []; let applied = 0;
-  if (!definition.contentModel || entry.modelId !== definition.contentModel.id) return { status: "blocked", document, definitionDiagnostics: definition.diagnostics, entryDiagnostics: [{ scope: "entry", severity: "blocking", code: "entry-model-mismatch", entryId: entry.id, message: `Entry "${entry.id}" belongs to Content model "${entry.modelId}", not "${definition.contentModel?.id ?? "unresolved"}".` }], appliedBindingCount: 0, unchangedStaticCount: mapping.document.bindings.length };
+  if (definition.status === "blocked" || !document) return { status: "blocked", ...(document ? { document } : {}), definitionDiagnostics: definition.diagnostics, entryDiagnostics: [], appliedBindings: [], appliedBindingCount: 0, unchangedStaticCount: mapping.document.bindings.length };
+  const entryDiagnostics: MappingEntryDiagnostic[] = []; const appliedBindings: AppliedMappingBinding[] = [];
+  if (!definition.contentModel || entry.modelId !== definition.contentModel.id) return { status: "blocked", document, definitionDiagnostics: definition.diagnostics, entryDiagnostics: [{ scope: "entry", severity: "blocking", code: "entry-model-mismatch", entryId: entry.id, message: `Entry "${entry.id}" belongs to Content model "${entry.modelId}", not "${definition.contentModel?.id ?? "unresolved"}".` }], appliedBindings, appliedBindingCount: 0, unchangedStaticCount: mapping.document.bindings.length };
   for (const resolved of definition.bindings) {
     const { binding, source, target } = resolved; const value = entry.values[source.id];
     if (value === undefined || (typeof value === "string" && value.trim().length === 0)) { const blocking = source.required; entryDiagnostics.push({ scope: "entry", severity: blocking ? "blocking" : "nonblocking", code: blocking ? "required-value-missing" : "optional-value-missing", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `${blocking ? "Required" : "Optional"} source field "${source.label}" has no value; the static target value is unchanged.` }); continue; }
@@ -50,7 +62,7 @@ export async function evaluateMapping(mapping: MappingRecord, entry: ContentEntr
     if (source.kind === "date" && !isCanonicalDate(value as string)) { entryDiagnostics.push({ scope: "entry", severity: "blocking", code: "invalid-canonical-date", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `Source date for "${source.label}" is not canonical YYYY-MM-DD.` }); continue; }
     const transformed = applyMappingTransform(value as string | number | boolean, binding.transform);
     if (target.kind === "select" && !target.options?.includes(transformed as string)) { entryDiagnostics.push({ scope: "entry", severity: "blocking", code: "select-option-invalid", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `Value "${String(transformed)}" is not a current option for "${target.fieldLabel}".` }); continue; }
-    const node = findNode(document.root, target.target.nodeId); if (node) { node.props[target.target.prop] = transformed; applied += 1; }
+    const node = findNode(document.root, target.target.nodeId); if (node) { node.props[target.target.prop] = transformed; appliedBindings.push({ bindingId: binding.id, sourceFieldId: source.id, target: { ...target.target }, value: transformed }); }
   }
-  return { status: entryDiagnostics.some((item) => item.severity === "blocking") ? "blocked" : "ready", document, definitionDiagnostics: definition.diagnostics, entryDiagnostics, appliedBindingCount: applied, unchangedStaticCount: mapping.document.bindings.length - applied };
+  return { status: entryDiagnostics.some((item) => item.severity === "blocking") ? "blocked" : "ready", document, definitionDiagnostics: definition.diagnostics, entryDiagnostics, appliedBindings, appliedBindingCount: appliedBindings.length, unchangedStaticCount: mapping.document.bindings.length - appliedBindings.length };
 }

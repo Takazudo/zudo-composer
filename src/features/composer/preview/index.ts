@@ -97,3 +97,6 @@ export type {
 
 // Type only — the store itself runs inside the iframe.
 export type { PreviewState } from "./snapshot-store";
+
+export { CompositionPreviewHost } from "./composition-preview-host";
+export type { CompositionPreviewHostProps } from "./composition-preview-host";

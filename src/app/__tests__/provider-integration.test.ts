@@ -21,6 +21,27 @@ import {
 } from "../provider-integration";
 
 describe("production provider integration", () => {
+  it("adapts initialized providers into a read-only current-draft Content preview source", async () => {
+    const factory = new FDBFactory();
+    const integration = createProductionProviderIntegration({ compositionIdbFactory: factory, contentIdbFactory: factory, mappingIdbFactory: factory });
+    const source = integration.createContentPreviewSource();
+    await source.load({ providerId: "content-indexeddb", recordId: PRODUCTION_SEED_IDS.contentModel }, {
+      schemaVersion: 1,
+      id: "unsaved-entry",
+      modelId: PRODUCTION_SEED_IDS.contentModel,
+      createdAt: PRODUCTION_SEED_TIMESTAMP,
+      updatedAt: PRODUCTION_SEED_TIMESTAMP,
+      values: {
+        [PRODUCTION_SEED_IDS.titleField]: "Unsaved title",
+        [PRODUCTION_SEED_IDS.bodyField]: "## Unsaved Markdown\n\nCurrent draft only.",
+        [PRODUCTION_SEED_IDS.publishedField]: true,
+      },
+    });
+    expect(source.state).toMatchObject({ phase: "ready", selectedRef: { providerId: "mapping-indexeddb", recordId: PRODUCTION_SEED_IDS.mapping }, context: { entry: { entryId: "unsaved-entry" }, appliedBindingCount: 2 } });
+    expect(source.state.document?.root[0]?.slots.content?.[0]?.props.heading).toBe("Unsaved title");
+    expect(source.state.document?.root[0]?.slots.content?.[1]?.props.markdown).toBe("## Unsaved Markdown\n\nCurrent draft only.");
+  });
+
   it("shares one active provider, seeded record, and Composer store with the Sitemapper catalog", async () => {
     vi.stubGlobal("indexedDB", new FDBFactory());
     try {
