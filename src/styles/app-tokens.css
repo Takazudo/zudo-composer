@@ -1,9 +1,62 @@
 :root {
-  --sg-composer-panel-bg: var(--color-surface);
-  --sg-composer-canvas-backdrop: light-dark(#ecebe7, #111);
-  --sg-composer-guide: light-dark(oklch(.680 .008 65), oklch(.560 .008 65));
   --zudo-composer-header-height: 3.5rem;
   --sg-header-h: var(--zudo-composer-header-height);
+}
+
+/*
+ * App theme override. Feature route chunks import the provider color sheet
+ * again, so these attribute selectors intentionally outrank its later :root
+ * declarations without importance flags or load-order assumptions.
+ *
+ * CSS Wisdom references:
+ * - color/dark-mode-strategies.mdx
+ * - color/three-tier-color-strategy.mdx
+ * - architecture/cascade-layers.mdx
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: oklch(0.972 0.004 255);
+  --color-surface: oklch(0.992 0.002 255);
+  --color-surface-2: oklch(0.938 0.007 255);
+  --color-border: oklch(0.845 0.012 255);
+  --color-fg: oklch(0.235 0.018 255);
+  --color-muted: oklch(0.455 0.020 255);
+  --color-accent: oklch(0.515 0.170 255);
+  --color-accent-hover: oklch(0.455 0.165 255);
+  --color-on-accent: oklch(0.985 0.004 255);
+  --color-focus: oklch(0.515 0.170 255);
+  --color-rail-bg: oklch(0.205 0.018 255);
+  --color-rail-bg-strong: oklch(0.170 0.016 255);
+  --color-rail-fg: oklch(0.925 0.008 255);
+  --color-rail-muted: oklch(0.690 0.015 255);
+  --color-rail-border: oklch(0.330 0.020 255);
+  --color-rail-hover-bg: oklch(0.285 0.022 255);
+  --sg-composer-panel-bg: var(--color-surface);
+  --sg-composer-canvas-backdrop: oklch(0.910 0.008 255);
+  --sg-composer-guide: oklch(0.610 0.018 255);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: oklch(0.170 0.016 255);
+  --color-surface: oklch(0.205 0.018 255);
+  --color-surface-2: oklch(0.260 0.020 255);
+  --color-border: oklch(0.340 0.022 255);
+  --color-fg: oklch(0.925 0.008 255);
+  --color-muted: oklch(0.690 0.015 255);
+  --color-accent: oklch(0.710 0.135 255);
+  --color-accent-hover: oklch(0.770 0.115 255);
+  --color-on-accent: oklch(0.175 0.024 255);
+  --color-focus: oklch(0.710 0.135 255);
+  --color-rail-bg: oklch(0.145 0.014 255);
+  --color-rail-bg-strong: oklch(0.125 0.012 255);
+  --color-rail-fg: oklch(0.925 0.008 255);
+  --color-rail-muted: oklch(0.690 0.015 255);
+  --color-rail-border: oklch(0.300 0.020 255);
+  --color-rail-hover-bg: oklch(0.245 0.020 255);
+  --sg-composer-panel-bg: var(--color-surface);
+  --sg-composer-canvas-backdrop: oklch(0.125 0.012 255);
+  --sg-composer-guide: oklch(0.550 0.020 255);
 }
 
 @media (max-width: 42rem) {

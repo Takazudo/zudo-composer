@@ -42,18 +42,12 @@ import {
   type MessageTarget,
   type PreviewSession,
 } from "../../preview";
+import { useResolvedTheme } from "../../../../theme/use-resolved-theme";
 
 /** Stable id of the fixture pack's designated preview child (see module header). */
 export const CHOOSER_PREVIEW_PLACEHOLDER_ID = "ui.placeholder-box";
 
 const PREVIEW_IFRAME_TITLE = "Composer chooser live preview";
-
-/** Resolve the host document's light/dark scheme. Deliberately self-contained
- *  (no cross-feature import) — mirrors `app/use-host-theme.ts`'s DOM read,
- *  which lives outside this issue's owned directory. */
-function resolveChooserPreviewTheme(): "light" | "dark" {
-  return globalThis.document?.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-}
 
 /**
  * Builds the single-node preview document for `entry`: its own `defaults` as
@@ -130,6 +124,7 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
   const bridgeRef = useRef<ComposerPreviewBridge | null>(null);
   const renderedDocumentRef = useRef<CompositionDocument | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
+  const activeTheme = useResolvedTheme();
 
   const location = useMemo(() => locationProp ?? buildComposerPreviewUrl(), [locationProp]);
   const frameProps = useMemo(
@@ -142,6 +137,8 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
   );
   const latestPreviewDocumentRef = useRef(previewDocument);
   latestPreviewDocumentRef.current = previewDocument;
+  const latestThemeRef = useRef(activeTheme);
+  latestThemeRef.current = activeTheme;
 
   // Created on mount, disposed on unmount — this pane's whole lifetime is the
   // dialog being open, which is exactly the "ephemeral" contract (Takazudo/zudo-sg#254): no
@@ -172,7 +169,7 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
     if (initialDocument) {
       bridge.render(localPreviewSnapshot(initialDocument, initialDocument.id), {
         mode: "preview",
-        theme: resolveChooserPreviewTheme(),
+        theme: latestThemeRef.current,
         selectedId: null,
       });
       renderedDocumentRef.current = initialDocument;
@@ -189,12 +186,17 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
     if (!bridge || !previewDocument || renderedDocumentRef.current === previewDocument) return;
     const session: PreviewSession = {
       mode: "preview",
-      theme: resolveChooserPreviewTheme(),
+      theme: activeTheme,
       selectedId: null,
     };
     bridge.render(localPreviewSnapshot(previewDocument, previewDocument.id), session);
     renderedDocumentRef.current = previewDocument;
-  }, [previewDocument]);
+  }, [activeTheme, previewDocument]);
+
+  useEffect(() => {
+    if (!bridgeRef.current || !renderedDocumentRef.current) return;
+    bridgeRef.current.updateSession({ mode: "preview", theme: activeTheme, selectedId: null });
+  }, [activeTheme]);
 
   return (
     <div class="sg-composer-chooser-preview">
