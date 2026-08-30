@@ -101,7 +101,9 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   await expect(addedNode).toHaveCount(0);
   await expect(canvas.getByRole("heading", { name: "Toolbar history heading", exact: true })).toHaveCount(0);
   await expect(page.locator("dialog:visible")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Remove", exact: true })).toHaveCount(0);
+  const emptyInspector = page.locator('[data-sg-inspector-state="empty"]');
+  await expect(emptyInspector).toBeVisible();
+  await expect(emptyInspector.getByText("Nothing selected", { exact: true })).toBeVisible();
 
   await undo.click();
   await expect(addedNode).toHaveCount(1);
