@@ -1,5 +1,6 @@
 declare module "virtual:composer-file-provider-config" {
   import type { ComposerFileProviderConfig } from "../composer/storage/file-provider/types";
+  import type { MediaFileProviderConfig } from "../media/storage/file-provider/types";
 
-  export const fileProviderConfig: ComposerFileProviderConfig | undefined;
+  export const fileProviderConfig: (ComposerFileProviderConfig & MediaFileProviderConfig) | undefined;
 }

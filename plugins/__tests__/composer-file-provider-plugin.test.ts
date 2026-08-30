@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFilesystemCompositionStore } from "../../src/composer/storage/filesystem";
+import { createFilesystemMediaStore } from "../../src/media/storage/filesystem";
 import {
   CompositionPersistenceError,
   validateCompositionRecord,
@@ -13,7 +14,12 @@ import { createFixtureDocument } from "../../src/composer/__tests__/fixtures";
 import plugin, {
   COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER,
   COMPOSER_FILE_PROVIDER_ENDPOINT,
+  MEDIA_FILE_PROVIDER_ENDPOINT,
+  MEDIA_FILE_PROVIDER_FILE_NAME_HEADER,
+  MEDIA_FILE_PROVIDER_OPERATION_HEADER,
+  MEDIA_UPLOAD_MAX_BYTES,
   createComposerFileProviderMiddleware,
+  createMediaUploadMiddleware,
 } from "../composer-file-provider-plugin.mjs";
 
 const CAPABILITY = "test-capability-value-that-is-not-guessable";
@@ -305,6 +311,104 @@ describe("file-provider core integration", () => {
     expect(response.status).toBe(500);
     expect(payload(response).ok).toBe(false);
     expect(response.body).not.toContain(root);
+  });
+});
+
+describe("media upload request boundary and core integration", () => {
+  function mediaRequest(chunks: readonly Uint8Array[], overrides: { headers?: Record<string, string>; url?: string; method?: string } = {}) {
+    const stream = Readable.from(chunks) as Readable & { url?: string; method?: string; headers: Record<string, string>; aborted?: boolean; destroyed?: boolean };
+    stream.url = overrides.url ?? MEDIA_FILE_PROVIDER_ENDPOINT;
+    stream.method = overrides.method ?? "POST";
+    stream.headers = overrides.headers ?? {
+      host: "localhost:4321", origin: "http://localhost:4321", "sec-fetch-site": "same-origin",
+      "content-type": "image/png", [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: CAPABILITY,
+      [MEDIA_FILE_PROVIDER_OPERATION_HEADER]: "upload", [MEDIA_FILE_PROVIDER_FILE_NAME_HEADER]: "pixel.png",
+    };
+    return stream;
+  }
+  function connectResponse() {
+    return { statusCode: 0, destroyed: false, writableEnded: false, setHeader: vi.fn(), end: vi.fn(function (this: { writableEnded: boolean }) { this.writableEnded = true; }) };
+  }
+
+  it("streams exact bytes into the media store and returns frozen JSON headers", async () => {
+    const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, "media-store"), idFactory: () => "pixel", now: () => T1 }) });
+    const res = connectResponse();
+    await handler(mediaRequest([bytes.subarray(0, 8), bytes.subarray(8)]), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.end).toHaveBeenCalledTimes(1);
+    expect(res.setHeader).toHaveBeenCalledWith("cache-control", "no-store");
+    expect(res.setHeader).toHaveBeenCalledWith("x-content-type-options", "nosniff");
+    expect(await readFile(join(sandbox, "media-store/public/uploaded-media/media-pixel.png"))).toEqual(Buffer.from(bytes));
+  });
+
+  it("rejects request-head failures before opening a store", async () => {
+    const createStore = vi.fn();
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore });
+    for (const requestStream of [
+      mediaRequest([], { url: `${MEDIA_FILE_PROVIDER_ENDPOINT}?operation=clear` }),
+      mediaRequest([], { url: `${MEDIA_FILE_PROVIDER_ENDPOINT}/extra` }),
+      mediaRequest([], { method: "GET" }),
+      mediaRequest([], { headers: { ...mediaRequest([]).headers, origin: "http://evil.example" } }),
+      mediaRequest([], { headers: { ...mediaRequest([]).headers, "sec-fetch-site": "cross-site" } }),
+      mediaRequest([], { headers: { ...mediaRequest([]).headers, [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: "wrong" } }),
+      mediaRequest([], { headers: { ...mediaRequest([]).headers, "content-type": "text/plain" } }),
+    ]) {
+      const res = connectResponse();
+      await handler(requestStream, res);
+      expect(res.end).toHaveBeenCalledTimes(1);
+      expect(res.setHeader).toHaveBeenCalledWith("cache-control", "no-store");
+      expect(res.setHeader).toHaveBeenCalledWith("x-content-type-options", "nosniff");
+      expect(String(res.end.mock.calls[0]![0])).not.toContain(CAPABILITY);
+    }
+    expect(createStore).not.toHaveBeenCalled();
+  });
+
+  it("preflights an oversized content-length before opening the store", async () => {
+    const createStore = vi.fn();
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore });
+    const req = mediaRequest([], { headers: { ...mediaRequest([]).headers, "content-length": String(MEDIA_UPLOAD_MAX_BYTES + 1) } });
+    const res = connectResponse();
+    await handler(req, res);
+    expect(res.statusCode).toBe(413);
+    expect(createStore).not.toHaveBeenCalled();
+  });
+
+  it("lets the sink drain chunked overflow and sends one 413", async () => {
+    let chunks = 0;
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, maxBodyBytes: 4, createStore: async () => ({ upload: async ({ bytes }: { bytes: AsyncIterable<Uint8Array> }) => {
+      let size = 0;
+      for await (const chunk of bytes) { chunks += 1; size += chunk.byteLength; }
+      if (size > 4) throw Object.assign(new Error("too large"), { code: "BYTE_CAP_EXCEEDED" });
+    } }) });
+    const res = connectResponse();
+    await handler(mediaRequest([Uint8Array.of(1, 2, 3), Uint8Array.of(4, 5), Uint8Array.of(6)]), res);
+    expect(chunks).toBe(3);
+    expect(res.statusCode).toBe(413);
+    expect(res.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes a non-destroying iterator and abort signal, then sends nothing on client abort", async () => {
+    const req = mediaRequest([Uint8Array.of(1)]);
+    const iterator = vi.spyOn(req, "iterator");
+    let release!: () => void;
+    const aborted = new Promise<void>((resolve) => { release = resolve; });
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: async () => ({
+      upload: async ({ signal }: { signal: AbortSignal }) => {
+        signal.addEventListener("abort", release, { once: true });
+        await aborted;
+        signal.throwIfAborted();
+      },
+    }) });
+    const res = connectResponse();
+    const pending = handler(req, res);
+    await vi.waitFor(() => expect(req.listenerCount("aborted")).toBe(1));
+    req.aborted = true;
+    req.emit("aborted");
+    await pending;
+    expect(iterator).toHaveBeenCalledWith({ destroyOnReturn: false });
+    expect(res.end).not.toHaveBeenCalled();
+    expect(req.listenerCount("aborted")).toBe(0);
   });
 });
 
