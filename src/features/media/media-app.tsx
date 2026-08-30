@@ -6,6 +6,7 @@ import { createMediaLibraryController, type MediaLibraryController, type MediaLi
 import { MediaLibrary } from "./media-library";
 
 export interface MediaRouteContentProps { provider?: MediaProvider; controller?: MediaLibraryController; controllerOptions?: MediaLibraryControllerOptions; }
+type Confirm = { kind: "delete"; record: MediaSummary } | { kind: "fresh" };
 
 export function MediaApp({ provider, controller: supplied, controllerOptions }: MediaRouteContentProps): JSX.Element {
   if (!provider) return <DisconnectedMedia />;
@@ -15,7 +16,7 @@ export function MediaApp({ provider, controller: supplied, controllerOptions }: 
 function ConnectedMedia({ provider, supplied, controllerOptions }: { provider: MediaProvider; supplied?: MediaLibraryController; controllerOptions?: MediaLibraryControllerOptions }): JSX.Element {
   const controller = useMemo(() => supplied ?? createMediaLibraryController(provider, controllerOptions), [provider, supplied, controllerOptions]);
   const [state, setState] = useState<MediaLibraryState>(controller.state);
-  const [confirm, setConfirm] = useState<MediaSummary | null>(null);
+  const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
   useEffect(() => {
@@ -29,7 +30,7 @@ function ConnectedMedia({ provider, supplied, controllerOptions }: { provider: M
     setError(null);
     try { void Promise.resolve(action()).catch(fail); } catch (reason) { fail(reason); }
   };
-  const requestDelete = (record: MediaSummary) => { setConfirm(record); run(() => controller.scanDeleteReferences(record)); };
+  const requestDelete = (record: MediaSummary) => { setConfirm({ kind: "delete", record }); run(() => controller.scanDeleteReferences(record)); };
   const closeDelete = () => { setConfirm(null); controller.clearReferenceScan(); };
 
   return <main class="sg-media-app" aria-busy={state.phase === "loading"}>
@@ -37,12 +38,14 @@ function ConnectedMedia({ provider, supplied, controllerOptions }: { provider: M
     {error && <div class="sg-media-notice sg-media-notice--error" role="alert">{error}</div>}
     {state.phase === "loading" && <p class="sg-media-state" role="status">Loading Media library…</p>}
     {state.phase === "error" && <section class="sg-media-state" aria-labelledby="media-error"><h2 id="media-error">Media library unavailable</h2><p>{state.message}</p><button type="button" onClick={() => run(() => controller.retryInitialization())}>Retry</button></section>}
-    {state.phase === "recovery" && <section class="sg-media-state" aria-labelledby="media-recovery"><h2 id="media-recovery">Stored Media needs recovery</h2><p>{state.recoveryMessage}</p><p>Your source records are quarantined and will not be overwritten.</p><div class="sg-media-actions"><button type="button" onClick={() => run(() => controller.retryInitialization())}>Retry</button><button type="button" class="sg-media-button--danger" onClick={() => run(() => controller.startFresh())}>Start fresh</button></div></section>}
+    {state.phase === "recovery" && <section class="sg-media-state" aria-labelledby="media-recovery"><h2 id="media-recovery">Stored Media needs recovery</h2><p>{state.recoveryMessage}</p><p>Your source records are quarantined and will not be overwritten.</p><div class="sg-media-actions"><button type="button" onClick={() => run(() => controller.retryInitialization())}>Retry</button><button type="button" class="sg-media-button--danger" onClick={() => setConfirm({ kind: "fresh" })}>Start fresh…</button></div></section>}
     {state.phase === "ready" && <MediaLibrary state={state} controller={controller} run={run} onDelete={requestDelete} />}
-    <MediaConfirmDialog open={confirm !== null} title="Delete media?" onClose={closeDelete} onConfirm={() => { if (confirm) run(() => controller.deleteMedia(confirm.id)); }}>
-      <p><strong>{confirm?.fileName}</strong> will be permanently removed.</p>
-      <ReferenceScan state={state} mediaId={confirm?.id} />
-      <p class="sg-media-advisory"><strong>Not authoritative:</strong> references may also exist as opaque URL text in browser Content or filesystem compositions. A clear scan does not prove this media is unused.</p>
+    <MediaConfirmDialog open={confirm !== null} title={confirm?.kind === "fresh" ? "Start fresh?" : "Delete media?"} confirmLabel={confirm?.kind === "fresh" ? "Start fresh" : "Delete permanently"} onClose={closeDelete} onConfirm={() => { if (confirm?.kind === "delete") run(() => controller.deleteMedia(confirm.record.id)); else if (confirm?.kind === "fresh") run(() => controller.startFresh()); }}>
+      {confirm?.kind === "fresh" ? <><p>All quarantined Media data will be permanently removed.</p><p>This cannot be undone.</p></> : <>
+        <p><strong>{confirm?.record.fileName}</strong> will be permanently removed.</p>
+        <ReferenceScan state={state} mediaId={confirm?.record.id} />
+        <p class="sg-media-advisory"><strong>Not authoritative:</strong> references may also exist as opaque URL text in browser Content or filesystem compositions. A clear scan does not prove this media is unused.</p>
+      </>}
     </MediaConfirmDialog>
   </main>;
 }
