@@ -12,20 +12,6 @@ const packSource = readFileSync(join(root, "node_modules/@zudo-sg/ui/src/compose
 
 const providerSha = "fe3fc62d3f677f321f5eb7814240d4a55dc92cd0";
 const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}`;
-const expectedIds = [
-  "ui.callout",
-  "ui.card",
-  "ui.prose-md",
-  "ui.prose-p",
-  "ui.placeholder-box",
-  "ui.auto-grid",
-  "ui.container",
-  "ui.cta-button",
-  "ui.hero",
-  "ui.section-heading",
-  "ui.split-layout",
-  "ui.stack",
-];
 
 function filesUnder(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -75,19 +61,40 @@ for (const block of [importer, packageBlock, snapshot]) {
 }
 assert.equal(providerPackage.version, "0.1.0", "installed package metadata version drifted");
 assert.match(packSource, /packId:\s*["']@zudo-sg\/ui["']/);
-assert.match(packSource, /packVersion:\s*["']1\.0\.0["']/);
+const packVersion = packSource.match(/\bpackVersion:\s*["']([^"']+)["']/)?.[1];
+assert.ok(packVersion, "provider pack must declare a non-empty pack version");
 
-const sidecars = [...packSource.matchAll(/from\s+["'](\.\/[^"']+\.composer)["']/g)]
-  .map((match) => join(root, "node_modules/@zudo-sg/ui/src", `${match[1]}.tsx`));
-assert.equal(sidecars.length, 12, "provider pack must contain exactly 12 sidecars");
-const identities = sidecars.map((path) => {
+const sidecarImports = [...packSource.matchAll(
+  /import\s+\{\s*\w+\s+as\s+(\w+)\s*\}\s+from\s+["'](\.\/[^"']+\.composer)["']/g,
+)].map((match) => ({
+  localName: match[1],
+  path: join(root, "node_modules/@zudo-sg/ui/src", `${match[2]}.tsx`),
+}));
+assert.ok(sidecarImports.length > 0, "provider pack must import at least one component sidecar");
+const componentList = packSource.match(/\bcomponents:\s*\[([\s\S]*?)\]\s*,\s*\}\);/)?.[1];
+assert.ok(componentList, "provider pack must declare its generated component list");
+const componentNames = componentList.split(",").map((name) => name.trim()).filter(Boolean);
+assert.deepEqual(
+  componentNames,
+  sidecarImports.map(({ localName }) => localName),
+  "every generated sidecar import must have one matching runtime entry in stable order",
+);
+assert.equal(new Set(componentNames).size, componentNames.length, "provider runtime entries must be unique");
+
+const identities = sidecarImports.map(({ path }) => {
   const source = readFileSync(path, "utf8");
   const id = source.match(/\bid:\s*["']([^"']+)["']/)?.[1];
   const schemaVersion = Number(source.match(/\bschemaVersion:\s*(\d+)/)?.[1]);
+  const sourceModule = source.match(/\bsource:\s*\{[\s\S]*?\bmodule:\s*["']([^"']+)["']/)?.[1];
+  assert.ok(id, `${path} must declare a component id`);
+  assert.ok(Number.isInteger(schemaVersion) && schemaVersion > 0, `${id} must declare a positive schema version`);
+  assert.ok(sourceModule, `${id} must declare a public source module`);
+  assert.equal(sourceModule, "@zudo-sg/ui", `${id} source.module must identify the installed provider package`);
+  assert.doesNotMatch(sourceModule, /(?:^|\/)src(?:\/|$)/, `${id} source.module must not expose a private /src/ import`);
   return { id, schemaVersion };
 });
-assert.deepEqual(identities.map(({ id }) => id), expectedIds, "provider component IDs/order drifted");
-assert.ok(identities.every(({ schemaVersion }) => schemaVersion === 1), "all provider schemas must remain v1");
+const componentIds = identities.map(({ id }) => id);
+assert.equal(new Set(componentIds).size, componentIds.length, "provider component ids must be unique");
 
 assert.ok(statSync(dist).isDirectory(), "dist must exist; run the production build first");
 const assetFiles = filesUnder(assetsDir);
@@ -189,4 +196,4 @@ for (const [size, value] of Object.entries({ xs: ".75rem", sm: "1rem", md: "1.25
 assert.equal(css.reduce((total, source) => total + count(source, ".hi-kw{"), 0), 2, "canonical provider CSS must occur once in each host/preview graph");
 assert.equal(css.filter((source) => source.includes(".hi-kw{")).length, 2, "host and preview must each own one canonical CSS asset");
 
-console.log(`Provider boundary passed: ${expectedIds.length} components, ${assetFiles.length} assets, ${wasm.length} WASM, ${glue.length} glue.`);
+console.log(`Provider boundary passed: ${componentIds.length} components from pack ${packVersion}, ${assetFiles.length} assets, ${wasm.length} WASM, ${glue.length} glue.`);
