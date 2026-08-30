@@ -1,5 +1,6 @@
 @import "@zudo-sg/ui/styles/tokens.css";
 @import "@zudo-sg/ui/styles/colors.css";
+@import "@zudo-sg/ui/src/content/prose-md/prose-md.css";
 
 .sg-content-app {
   --sg-content-space-row-y: var(--spacing-vsp-2xs); /* 7 */
@@ -59,6 +60,44 @@
 .sg-content-form .sg-content-check { display: flex; align-items: center; gap: var(--sg-content-space-inline); min-height: 2.25rem; }
 .sg-content-check input { width: 1.125rem; min-width: 1.125rem; padding: 0; accent-color: var(--color-accent); }
 .sg-content-help { margin-block-start: calc(var(--sg-content-space-row-y) * -1) !important; color: var(--color-muted); font-size: var(--text-xs); line-height: var(--leading-normal); }
+
+.sg-content-markdown-editor {
+  --sg-content-markdown-editor-bg: var(--color-surface);
+  --sg-content-markdown-editor-fg: var(--color-fg);
+  --sg-content-markdown-editor-caret: var(--color-fg);
+  --sg-content-markdown-editor-selection: color-mix(in oklch, var(--color-accent) 25%, transparent);
+  --sg-content-markdown-syntax-heading: var(--color-accent);
+  --sg-content-markdown-syntax-emphasis: var(--color-fg);
+  --sg-content-markdown-syntax-link: var(--color-link, var(--color-accent));
+  --sg-content-markdown-syntax-code: var(--color-warning, var(--color-accent));
+  --sg-content-markdown-syntax-quote: var(--color-muted);
+  display: grid;
+  gap: var(--sg-content-space-row-y, var(--spacing-vsp-2xs));
+  min-width: 0;
+}
+.sg-content-markdown-editor__heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--spacing-vsp-3xs) var(--spacing-hsp-sm); }
+.sg-content-markdown-editor__label { font-size: var(--text-sm); font-weight: var(--font-weight-semibold); }
+.sg-content-markdown-editor__kind, .sg-content-markdown-editor__preview-label { color: var(--color-muted); font-size: var(--text-xs); }
+.sg-content-markdown-editor__mode { display: flex; gap: var(--spacing-hsp-xs); }
+.sg-content-markdown-editor__mode button[aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-surface-2); }
+.sg-content-markdown-editor__workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); overflow: clip; background: var(--color-surface); }
+.sg-content-markdown-editor__source, .sg-content-markdown-editor__preview { min-width: 0; }
+.sg-content-markdown-editor__source[hidden], .sg-content-markdown-editor__preview[hidden] { display: none; }
+.sg-content-markdown-editor__source { border-inline-end: 1px solid var(--color-border); }
+.sg-content-markdown-editor__toolbar { display: flex; flex-wrap: wrap; gap: var(--spacing-hsp-xs); padding: var(--spacing-vsp-3xs) var(--spacing-hsp-xs); border-block-end: 1px solid var(--color-border); background: var(--color-surface-2); }
+.sg-content-markdown-editor__toolbar button { display: inline-flex; align-items: center; gap: var(--spacing-hsp-xs); min-height: 2rem; padding: var(--spacing-vsp-3xs) var(--spacing-hsp-xs); }
+.sg-content-markdown-editor__preview { min-height: 12rem; padding: var(--spacing-vsp-xs) var(--spacing-hsp-md); overflow: auto; }
+.sg-content-markdown-editor__preview-label { margin-block-end: var(--spacing-vsp-xs); font-weight: var(--font-weight-semibold); text-transform: uppercase; letter-spacing: .06em; }
+.sg-content-markdown-editor[data-mode="edit"] .sg-content-markdown-editor__workspace { grid-template-columns: minmax(0, 1fr); }
+.sg-content-markdown-editor[data-mode="edit"] .sg-content-markdown-editor__preview { display: none; }
+.sg-content-markdown-editor[data-mode="edit"] .sg-content-markdown-editor__source { border-inline-end: 0; }
+.sg-content-markdown-editor[data-mode="preview"] .sg-content-markdown-editor__workspace { grid-template-columns: minmax(0, 1fr); }
+
+@media (max-width: 42rem) {
+  .sg-content-markdown-editor__workspace { grid-template-columns: minmax(0, 1fr); }
+  .sg-content-markdown-editor__source { border-inline-end: 0; border-block-end: 1px solid var(--color-border); }
+  .sg-content-markdown-editor__toolbar button span:last-child { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+}
 .sg-content-field { display: grid; gap: var(--sg-content-space-control-y); min-width: 0; margin: 0; padding: var(--sg-content-space-group-y); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); box-shadow: none; }
 .sg-content-field legend { max-width: 100%; padding-inline: var(--spacing-hsp-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--font-weight-semibold); }
 .sg-content-completeness, .sg-content-notice, .sg-content-state, .sg-content-empty { display: grid; gap: var(--sg-content-space-row-y); padding: var(--sg-content-space-group-y); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface-2); box-shadow: none; }
