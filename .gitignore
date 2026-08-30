@@ -5,6 +5,7 @@ coverage/
 /playwright-report/
 .vite/
 .artifacts/
+.zudo-site-project/
 .wrangler/
 *.local
 *.log
