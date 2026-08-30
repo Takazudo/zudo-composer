@@ -12,6 +12,7 @@
 
 import { useEffect, useRef } from "preact/hooks";
 import type { JSX } from "preact";
+import { TrashIcon, XMarkIcon } from "../../../../components/icons";
 
 export interface InlineConfirmProps {
   message: string;
@@ -68,6 +69,7 @@ export function InlineConfirm({
           if (e.key === "Escape") onCancel();
         }}
       >
+        <XMarkIcon size="sm" class="sg-composer-button-icon" />
         {cancelLabel}
       </button>
       <button
@@ -78,6 +80,7 @@ export function InlineConfirm({
           if (e.key === "Escape") onCancel();
         }}
       >
+        <TrashIcon size="sm" class="sg-composer-button-icon" />
         {confirmLabel}
       </button>
     </div>

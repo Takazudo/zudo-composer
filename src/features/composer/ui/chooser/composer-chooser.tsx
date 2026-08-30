@@ -66,6 +66,7 @@ import {
 } from "./chooser-helpers";
 import { ChooserPreviewHost } from "./chooser-preview-host";
 import { toolDialogStyle, useMovableToolDialog, useToolDialogGeometry } from "../shared/tool-dialog-geometry";
+import { DragGripIcon, DuplicateIcon, XMarkIcon } from "../../../../components/icons";
 
 export interface ComposerChooserProps {
   componentProvider: ComposerComponentProvider;
@@ -450,9 +451,7 @@ export function ComposerChooser({
                 title="Move dialog (Arrow keys; Shift moves farther; Home resets)"
                 {...moveGrip}
               >
-                <span aria-hidden="true" class="sg-composer-tool-dialog-grip-dots">
-                  ⠿
-                </span>
+                <DragGripIcon size="sm" class="sg-composer-tool-dialog-grip-dots" />
               </button>
               <h2 id={titleId} class="sg-composer-chooser-title">
                 Add to {targetLabel}
@@ -462,6 +461,7 @@ export function ComposerChooser({
                 class="sg-composer-toolbar-button sg-composer-chooser-cancel"
                 onClick={() => dialogRef.current?.close()}
               >
+                <XMarkIcon size="sm" class="sg-composer-button-icon" />
                 Cancel
               </button>
               <p class="sg-composer-chooser-target">
@@ -550,6 +550,7 @@ export function ComposerChooser({
                           <p>No matching components. Try another search or clear the filters.</p>
                           {hasActiveFilter && (
                             <button type="button" class="sg-composer-toolbar-button" onClick={clearFilters}>
+                              <XMarkIcon size="sm" class="sg-composer-button-icon" />
                               Clear filters
                             </button>
                           )}
@@ -621,6 +622,7 @@ export function ComposerChooser({
                       <p>{patterns.length === 0 ? "No published Patterns are available." : "No matching Patterns."}</p>
                       {query.trim() && (
                         <button type="button" class="sg-composer-toolbar-button" onClick={clearFilters}>
+                          <XMarkIcon size="sm" class="sg-composer-button-icon" />
                           Clear search
                         </button>
                       )}
@@ -695,6 +697,7 @@ export function ComposerChooser({
                         disabled={!patternEligibility?.eligible || !onInsertPattern || insertingPattern}
                         onClick={() => void confirmPatternInsertion()}
                       >
+                        <DuplicateIcon size="sm" class="sg-composer-button-icon" />
                         {insertingPattern ? "Inserting…" : "Insert Pattern"}
                       </button>
                     </>

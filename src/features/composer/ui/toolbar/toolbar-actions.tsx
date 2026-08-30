@@ -4,6 +4,7 @@
 // preview-bridge logic. The integration layer generates JSX and owns the dialog.
 
 import type { JSX } from "preact";
+import { DownloadIcon } from "../../../../components/icons";
 
 export interface ComposerToolbarActionsProps {
   onExport: () => void;
@@ -25,6 +26,7 @@ export function ComposerToolbarActions({
         disabled={exportDisabled}
         aria-disabled={exportDisabled}
       >
+        <DownloadIcon size="sm" class="sg-composer-button-icon" />
         {exportLabel}
       </button>
     </div>
