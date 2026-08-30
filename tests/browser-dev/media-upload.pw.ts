@@ -106,7 +106,7 @@ test("uploads real media bytes through the dev provider and renders the stored i
 
   try {
     await page.goto("/media");
-    await expect(page.getByRole("heading", { name: "Media library", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Media library", exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "Upload media", exact: true })).toBeVisible();
 
     const uploadResponsePromise = page.waitForResponse((response) => {

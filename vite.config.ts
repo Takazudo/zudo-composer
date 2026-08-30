@@ -5,5 +5,8 @@ import composerFileProviderPlugin from './plugins/composer-file-provider-plugin.
 
 export default defineConfig({
   publicDir: 'media-store/public',
+  // The focused renderer imports WASM/glue through Vite asset queries, which
+  // must stay in Vite's normal transform pipeline instead of dep optimization.
+  optimizeDeps: { exclude: ['@zudo-sg/ui'] },
   plugins: [composerFileProviderPlugin(), tailwindcss(), preact()],
 });
