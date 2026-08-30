@@ -78,23 +78,25 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(page.getByRole("heading", { name: "Content authoring" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Content authoring" })).toBeVisible();
-  await page.getByRole("button", { name: /News Collection.*Collection.*3 fields.*2 Entries/ }).click();
-  await page.getByRole("button", { name: "Edit schema" }).click();
+  const newsCard = page.locator(".sg-content-library > li").first();
+  await newsCard.getByRole("button", { name: /^News Collection\s+Collection$/ }).click();
+  await newsCard.getByRole("button", { name: /^Model fields/ }).click();
   await page.getByRole("textbox", { name: "Model name" }).fill("Browser News Collection");
   await page.getByRole("button", { name: "Add field" }).click();
   const slugField = page.locator(".sg-content-field").last();
   await slugField.getByRole("textbox", { name: "Label" }).fill("Route slug");
   await slugField.getByRole("textbox", { name: "Key" }).fill("routeSlug");
-  await slugField.getByRole("combobox", { name: "Type" }).selectOption("slug");
+  await slugField.getByRole("radiogroup", { name: "Type for Route slug" }).getByRole("radio", { name: /^Slug\b/ }).click();
   await slugField.getByRole("button", { name: "Move up" }).click();
   await page.getByRole("button", { name: "Add field" }).click();
   const dateField = page.locator(".sg-content-field").last();
   await dateField.getByRole("textbox", { name: "Label" }).fill("Publish date");
   await dateField.getByRole("textbox", { name: "Key" }).fill("publishDate");
-  await dateField.getByRole("combobox", { name: "Type" }).selectOption("date");
+  await dateField.getByRole("radiogroup", { name: "Type for Publish date" }).getByRole("radio", { name: /^Date\b/ }).click();
   await expect(page.locator(".sg-content-save")).toContainText("All changes saved.");
 
-  await page.getByRole("button", { name: "New Entry" }).click();
+  await newsCard.getByRole("button", { name: /^Entries/ }).click();
+  await newsCard.getByRole("button", { name: "New Entry" }).click();
   await expect(page.getByRole("status")).toContainText("Incomplete draft");
   await page.getByRole("textbox", { name: "Title (required)" }).fill("Browser journey article");
   await page.getByRole("textbox", { name: "Body (required)" }).fill("## Browser journey\n\nSaved Content drives the Mapping preview.");
@@ -104,26 +106,29 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
 
   const additionalSlugs = ["東京", ".", "", ...Array.from({ length: 20 }, (_, index) => `browser-${index + 5}`)];
   for (const [index, routeSlug] of additionalSlugs.entries()) {
-    await page.getByRole("button", { name: "New Entry" }).click();
+    await newsCard.getByRole("button", { name: "New Entry" }).click();
     await expect(page.locator(".sg-content-completeness")).toContainText("Incomplete draft");
     await page.getByRole("textbox", { name: "Title (required)" }).fill(`Browser article ${index + 2}`);
     await page.getByRole("textbox", { name: "Body (required)" }).fill(`Body ${index + 2}`);
     if (routeSlug) await page.getByRole("textbox", { name: "Route slug" }).fill(routeSlug);
     await expect(page.locator(".sg-content-save")).toContainText("All changes saved.");
   }
-  await expect(page.getByText("Browser News Collection · 26 total", { exact: true })).toBeVisible();
+  await expect(newsCard.getByRole("button", { name: /^Entries.*26/ })).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: /Browser News Collection.*26 Entries/ }).click();
+  const browserNewsCard = page.locator(".sg-content-library > li").filter({ hasText: "Browser News Collection" });
+  await browserNewsCard.getByRole("button", { name: /^Entries/ }).click();
   await expect(page.getByRole("button", { name: "Load more Entries" })).toBeVisible();
   await page.getByRole("button", { name: "Load more Entries" }).click();
   await expect(page.getByRole("list", { name: "Entries" }).getByRole("button", { name: /Browser journey article.*Complete/ })).toBeVisible();
 
   await page.getByRole("button", { name: "New Single" }).click();
-  await page.getByRole("button", { name: "Edit schema" }).click();
+  const singleCard = page.locator(".sg-content-library > li").first();
+  await singleCard.getByRole("button", { name: /^Model fields/ }).click();
   await page.getByRole("textbox", { name: "Model name" }).fill("Browser Site settings");
-  await page.getByRole("button", { name: "New Entry" }).click();
-  await expect(page.getByRole("button", { name: "New Entry" })).toHaveCount(0);
-  await expect(page.getByText(/Browser Site settings · 1 total/)).toBeVisible();
+  await singleCard.getByRole("button", { name: /^Entries/ }).click();
+  await singleCard.getByRole("button", { name: "New Entry" }).click();
+  await expect(singleCard.getByRole("button", { name: "New Entry" })).toHaveCount(0);
+  await expect(singleCard.getByRole("button", { name: /^Entries.*1/ })).toBeVisible();
 
   // A native date input cannot author a malformed date, so preserve one
   // provider-level stale value to prove Mapping diagnoses it without rewriting it.
@@ -230,8 +235,10 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
 
   await page.goto("/sitemapper");
   await expect(page.getByRole("heading", { name: "Sitemaps" })).toBeVisible();
-  page.once("dialog", (dialog) => dialog.accept("Content Mapping journey"));
   await page.getByRole("button", { name: "New sitemap" }).click();
+  const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
+  await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Content Mapping journey");
+  await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
   const outline = page.getByRole("region", { name: "Sitemap outline" });
   await outline.getByRole("button", { name: "Home", exact: true }).click();
   const inspector = page.getByLabel("Inspector for Home");
@@ -359,13 +366,13 @@ test("desktop and narrow light-dark seams use accessible computed geometry", asy
   await expect(page.locator(".app-header")).toHaveCSS("min-height", "112px");
   const navigation = page.getByRole("navigation", { name: "Main navigation" });
   for (const product of PRODUCT_LINKS) await expect(navigation.getByRole("link", { name: product, exact: true })).toBeVisible();
-  await expectArrowTabs(page, "Content workspace", ["Models", "Entries", "Inspector"]);
-  const focusedTab = page.getByRole("tab", { name: "Models", exact: true });
+  await expectArrowTabs(page, "Content workspace", ["Library", "Author", "Preview"]);
+  const focusedTab = page.getByRole("tab", { name: "Library", exact: true });
   await expect(focusedTab).toHaveCSS("outline-width", "2px");
   await expectNoHorizontalOverflow(page);
 
   const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1, configuration: "mobile" });
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
   for (const product of PRODUCT_LINKS) {
     const box = await navigation.getByRole("link", { name: product, exact: true }).boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(44);
@@ -377,7 +384,7 @@ test("desktop and narrow light-dark seams use accessible computed geometry", asy
   expect(targets.filter(({ width, height }) => width < 44 || height < 44)).toEqual([]);
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
 
-  await page.getByRole("tab", { name: "Models", exact: true }).click();
+  await page.getByRole("tab", { name: "Library", exact: true }).click();
   const deleteTrigger = page.getByRole("button", { name: "Delete News Collection" });
   await deleteTrigger.click();
   const dialog = page.getByRole("dialog", { name: "Delete model?" });
@@ -415,8 +422,10 @@ test("desktop and narrow light-dark seams use accessible computed geometry", asy
   }
 
   await page.goto("/sitemapper");
-  page.once("dialog", (nativeDialog) => nativeDialog.accept("Responsive panels"));
   await page.getByRole("button", { name: "New sitemap" }).click();
+  const responsiveDialog = page.getByRole("dialog", { name: "Create sitemap" });
+  await responsiveDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Responsive panels");
+  await responsiveDialog.getByRole("button", { name: "Create sitemap" }).click();
   await expectArrowTabs(page, "Sitemapper panels", ["Outline", "Canvas", "Inspector"]);
   await expectNoHorizontalOverflow(page);
   for (const theme of ["light", "dark"] as const) {

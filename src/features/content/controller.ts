@@ -218,7 +218,8 @@ export class ContentAuthoringController {
     if (this.current.model?.id === id) { await this.flushSessions(); await this.closeQueues(); }
     await this.provider.store.deleteModel(id); await this.refreshModels();
     const entryCounts = { ...this.current.entryCounts }; delete entryCounts[id];
-    this.set({ ...this.current, entryCounts, model: this.current.model?.id === id ? null : this.current.model, entries: this.current.model?.id === id ? [] : this.current.entries, usedFieldIds: this.current.model?.id === id ? [] : this.current.usedFieldIds, entry: null, activePane: "library", workMode: "entries", message: "Model and its Entries deleted." });
+    const deletingCurrentModel = this.current.model?.id === id;
+    this.set({ ...this.current, entryCounts, model: deletingCurrentModel ? null : this.current.model, entries: deletingCurrentModel ? [] : this.current.entries, usedFieldIds: deletingCurrentModel ? [] : this.current.usedFieldIds, entry: deletingCurrentModel ? null : this.current.entry, activePane: "library", workMode: "entries", message: "Model and its Entries deleted." });
   }
 
   setActivePane(activePane: ContentPane): void { this.set({ ...this.current, activePane }); }

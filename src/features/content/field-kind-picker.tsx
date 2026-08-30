@@ -36,10 +36,11 @@ export interface FieldKindPickerProps {
   value: ContentFieldKind;
   locked?: boolean;
   label?: string;
+  descriptionId?: string;
   onChange(kind: ContentFieldKind): void;
 }
 
-export function FieldKindPicker({ value, locked = false, label = "Field type", onChange }: FieldKindPickerProps): JSX.Element {
+export function FieldKindPicker({ value, locked = false, label = "Field type", descriptionId, onChange }: FieldKindPickerProps): JSX.Element {
   const move = (event: JSX.TargetedKeyboardEvent<HTMLButtonElement>, index: number): void => {
     if (locked || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -50,7 +51,7 @@ export function FieldKindPicker({ value, locked = false, label = "Field type", o
     (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
   };
 
-  return <div class="sg-content-kind-picker" role="radiogroup" aria-label={label} aria-disabled={locked || undefined}>
+  return <div class="sg-content-kind-picker" role="radiogroup" aria-label={label} aria-describedby={descriptionId} aria-disabled={locked || undefined}>
     {CONTENT_FIELD_KIND_PRESENTATIONS.map(({ kind, label: friendlyLabel, explanation, icon: Icon }, index) => {
       const selected = kind === value;
       const unavailable = locked && !selected;

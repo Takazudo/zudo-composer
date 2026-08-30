@@ -117,7 +117,21 @@ export function MappingApp(props: MappingRouteContentProps): JSX.Element {
     try { void Promise.resolve(action()).catch(fail); } catch (reason) { fail(reason); }
   };
   const openDialog = (setter: (value: boolean) => void, opener: HTMLElement) => { dialogOpener.current = opener; setter(true); };
-  const closeDialog = (setter: (value: boolean) => void) => { setter(false); queueMicrotask(() => dialogOpener.current?.focus()); };
+  const restoreDialogFocus = () => {
+    const opener = dialogOpener.current;
+    queueMicrotask(() => {
+      if (opener?.isConnected) {
+        opener.focus();
+        return;
+      }
+      // A successful delete/create can remove the original trigger. Keep
+      // keyboard focus in this workspace even when that element no longer
+      // exists.
+      document.querySelector<HTMLElement>(".sg-mapping-app button:not([disabled])")?.focus();
+    });
+  };
+  const closeDialog = (setter: (value: boolean) => void) => { setter(false); restoreDialogFocus(); };
+  const closeDeleteDialog = () => { setDeleteId(null); restoreDialogFocus(); };
   const onPreviewCurrent = useCallback(() => controller.setPreviewCurrent(), [controller]);
   const onPreviewError = useCallback((message: string) => controller.setPreviewError(message), [controller]);
   const usages = useMemo(() => new Map((props.usages ?? []).map((usage) => [usage.mappingId, usage.sitemapNames])), [props.usages]);
@@ -151,7 +165,7 @@ export function MappingApp(props: MappingRouteContentProps): JSX.Element {
       </div>
     </>}
     {newOpen && <NewMappingDialog state={state} close={() => closeDialog(setNewOpen)} create={(name, contentRef, compositionRef) => run(async () => { await controller.create(name, contentRef, compositionRef); closeDialog(setNewOpen); })} />}
-    {deleteId && <ConfirmDialog title={deleteId === "__fresh__" ? "Start fresh?" : "Delete Mapping?"} close={() => { setDeleteId(null); queueMicrotask(() => dialogOpener.current?.focus()); }} confirm={() => run(async () => { if (deleteId === "__fresh__") await controller.startFresh(); else await controller.delete(deleteId); setDeleteId(null); })}><p>{deleteId === "__fresh__" ? "All quarantined Mapping records will be permanently discarded." : <><strong>{state.mappings.find((mapping) => mapping.id === deleteId)?.name}</strong> will be permanently removed.</>}</p></ConfirmDialog>}
+    {deleteId && <ConfirmDialog title={deleteId === "__fresh__" ? "Start fresh?" : "Delete Mapping?"} close={closeDeleteDialog} confirm={() => run(async () => { if (deleteId === "__fresh__") await controller.startFresh(); else await controller.delete(deleteId); closeDeleteDialog(); })}><p>{deleteId === "__fresh__" ? "All quarantined Mapping records will be permanently discarded." : <><strong>{state.mappings.find((mapping) => mapping.id === deleteId)?.name}</strong> will be permanently removed.</>}</p></ConfirmDialog>}
     {testOpen && <TestDialog state={state} close={() => closeDialog(setTestOpen)} />}
   </main>;
 }

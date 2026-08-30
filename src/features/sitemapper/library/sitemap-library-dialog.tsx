@@ -84,7 +84,7 @@ export function SitemapLibraryDialog({
       class="sg-sitemapper-library-dialog"
       aria-modal={state ? "true" : undefined}
       aria-labelledby={state ? titleId : undefined}
-      aria-describedby={state ? descriptionId : undefined}
+      aria-describedby={state ? [descriptionId, error ? errorId : null].filter(Boolean).join(" ") : undefined}
       aria-busy={busy}
       onCancel={(event) => {
         event.preventDefault();
