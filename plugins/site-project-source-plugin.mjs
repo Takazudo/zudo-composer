@@ -36,7 +36,10 @@ export function siteProjectSourcePlugin(options) {
     configResolved(config) { command = config.command; },
     configureServer(viteServer) {
       server = viteServer;
-      const localRoot = resolve(viteServer.config.root, ".zudo-site-project");
+      // Keep the watcher aligned with the store used by the dev reader. The
+      // acceptance lane supplies a disposable root through this env seam.
+      const configuredRoot = process.env.ZUDO_SITE_PROJECT_ROOT?.trim();
+      const localRoot = configuredRoot ? resolve(configuredRoot) : resolve(viteServer.config.root, ".zudo-site-project");
       currentActive = resolve(localRoot, "active.json");
       viteServer.watcher.add(currentActive);
       const watchCurrent = async () => {

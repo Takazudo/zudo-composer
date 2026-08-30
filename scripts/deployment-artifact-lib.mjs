@@ -2,7 +2,18 @@ import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 
-export const SPA_ROUTES = ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"];
+export const AUTHORING_ROUTES = ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"];
+/** The checked-in sample compiler currently emits one root and six nested site routes. */
+export const SITE_ROUTES = [
+  "/site",
+  "/site/about",
+  "/site/services",
+  "/site/journal",
+  "/site/journal/map-the-moving-parts",
+  "/site/journal/review-in-small-loops",
+  "/site/journal/start-with-the-question",
+];
+export const SPA_ROUTES = [...AUTHORING_ROUTES, ...SITE_ROUTES];
 export const LIVE_ORIGIN = "https://zudo-composer.zudolab.dev";
 export const HTTP_TIMEOUT_MS = 10_000;
 export const LIVE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];

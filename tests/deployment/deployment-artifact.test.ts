@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 import {
   createArtifactManifest,
   deploymentCredentialState,
+  AUTHORING_ROUTES,
   HTTP_TIMEOUT_MS,
   SPA_ROUTES,
+  SITE_ROUTES,
   sha256,
   verifyDeployment,
   verifyLiveDeployment,
@@ -23,6 +25,22 @@ async function fixture() {
 }
 
 describe("deployment artifact contract", () => {
+  it("keeps authoring, isolated preview, and compiler-emitted site routes explicit", () => {
+    expect(AUTHORING_ROUTES).toEqual(["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"]);
+    expect(SITE_ROUTES).toEqual([
+      "/site",
+      "/site/about",
+      "/site/services",
+      "/site/journal",
+      "/site/journal/map-the-moving-parts",
+      "/site/journal/review-in-small-loops",
+      "/site/journal/start-with-the-question",
+    ]);
+    expect(SPA_ROUTES).toEqual([...AUTHORING_ROUTES, ...SITE_ROUTES]);
+    expect(SPA_ROUTES).toContain("/composer/preview");
+    expect(SPA_ROUTES).toContain("/site");
+  });
+
   it("creates a deterministic sorted SHA/MIME manifest", async () => {
     const dist = await fixture();
     const manifest = await createArtifactManifest(dist);

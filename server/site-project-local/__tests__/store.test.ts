@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { project as makeProject } from "../../../src/site-project/compiler/__tests__/fixtures";
 import { serializeSiteProject } from "../../../src/site-project/model/canonical";
 import type { SiteBuildPlan } from "../../../src/site-project/compiler/types";
-import { createLocalSiteProjectStore } from "../store";
+import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV } from "../store";
 
 const roots: string[] = [];
 async function root(): Promise<string> {
@@ -18,6 +18,18 @@ async function root(): Promise<string> {
 afterEach(async () => { await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 
 describe("LocalSiteProjectStore", () => {
+  it("uses the disposable environment root when no explicit test root is supplied", async () => {
+    const configured = await root();
+    const prior = process.env[SITE_PROJECT_LOCAL_ROOT_ENV];
+    process.env[SITE_PROJECT_LOCAL_ROOT_ENV] = configured;
+    try {
+      await expect(createLocalSiteProjectStore().list()).resolves.toEqual({ status: "ok", value: { projects: [], active: null } });
+    } finally {
+      if (prior === undefined) delete process.env[SITE_PROJECT_LOCAL_ROOT_ENV];
+      else process.env[SITE_PROJECT_LOCAL_ROOT_ENV] = prior;
+    }
+  });
+
   it("hashes exact canonical UTF-8 including the newline and enforces both CAS dimensions", async () => {
     const store = createLocalSiteProjectStore({ testRoot: await root() });
     const project = makeProject();
