@@ -37,7 +37,7 @@ export function App({ themeController }: AppProps = {}) {
   if (path === "/composer") content = <ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} />;
   else if (path === "/content") content = <ContentRouteContent provider={providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} />;
   else if (path === "/mapping") content = <MappingRouteContent provider={providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} />;
-  else if (path === "/sitemapper") content = <SitemapperRouteContent catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
+  else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
   else if (path === "/") content = <Home />;
   else content = <NotFound />;
   return <Shell path={path} themeController={activeThemeController} themeSnapshot={themeSnapshot}>{content}</Shell>;

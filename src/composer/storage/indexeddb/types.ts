@@ -28,8 +28,10 @@ export interface InitializationMeta {
 export type ComposerMetaRecord = SchemaMeta | InitializationMeta;
 
 export interface IndexedDbCompositionProviderOptions {
-  /** Supplies the clean current-schema document seeded into a new database. */
-  initialDocument: () => CompositionDocument;
+  /** Backwards-compatible one-document seed. */
+  initialDocument?: () => CompositionDocument;
+  /** Current-schema records inserted as one idempotent transaction. */
+  seed?: readonly import("../../library").CompositionRecord[];
   /** `null` explicitly represents an unavailable browser implementation. */
   idbFactory?: IDBFactory | null;
   idFactory?: IdFactory;

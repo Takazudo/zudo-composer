@@ -8,13 +8,14 @@ export type {
   SitemapPersistenceOperation,
   SitemapPersistenceErrorCode,
   SitemapStore,
+  SitemapCollectionStore,
   SitemapLibraryRecoveryReason,
   SitemapRecoveryOutcome,
   SitemapInitializationOutcome,
   SitemapProviderInitializer,
   SitemapProvider,
 } from "./types";
-export { SitemapPersistenceError } from "./types";
+export { SitemapPersistenceError, SITEMAP_PROVIDERS, isSitemapCollectionStore } from "./types";
 export {
   countSitemapPages,
   summarizeSitemap,

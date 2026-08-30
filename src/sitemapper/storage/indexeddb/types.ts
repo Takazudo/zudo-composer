@@ -19,4 +19,5 @@ export type SitemapMetaRecord = SitemapSchemaMeta;
 export interface IndexedDbSitemapProviderOptions {
   /** `null` explicitly represents an unavailable browser implementation. */
   idbFactory?: IDBFactory | null;
+  seed?: readonly import("../../library").SitemapRecord[];
 }

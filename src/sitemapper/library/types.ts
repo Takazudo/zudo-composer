@@ -89,6 +89,20 @@ export interface SitemapStore {
   clear(): Promise<void>;
 }
 
+export interface SitemapCollectionStore extends SitemapStore {
+  seed(records: readonly SitemapRecord[]): Promise<void>;
+  readAll(): Promise<readonly SitemapRecord[]>;
+}
+
+export function isSitemapCollectionStore(store: SitemapStore): store is SitemapCollectionStore {
+  return "seed" in store && typeof store.seed === "function"
+    && "readAll" in store && typeof store.readAll === "function";
+}
+
+export const SITEMAP_PROVIDERS = {
+  indexeddb: { id: "sitemap-indexeddb", label: "Browser storage", storageLabel: "IndexedDB: zudo-composer-sitemapper" },
+} as const;
+
 export type SitemapLibraryRecoveryReason = "invalid" | "future-schema";
 
 export interface SitemapRecoveryOutcome {
@@ -116,6 +130,7 @@ export interface SitemapProviderInitializer {
 }
 
 export interface SitemapProvider {
+  descriptor?: typeof SITEMAP_PROVIDERS.indexeddb;
   store: SitemapStore;
   initialization: SitemapProviderInitializer;
 }

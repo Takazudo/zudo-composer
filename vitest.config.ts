@@ -9,6 +9,9 @@ export default defineConfig({
       'virtual:composer-file-provider-config': fileURLToPath(
         new URL('./src/test/composer-file-provider-config.ts', import.meta.url),
       ),
+      'virtual:site-project-source': fileURLToPath(
+        new URL('./src/test/site-project-source.ts', import.meta.url),
+      ),
     },
   },
   test: {

@@ -1,6 +1,6 @@
 import { IDBFactory as FDBFactory } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
-import { SitemapPersistenceError } from "../../../library";
+import { isSitemapCollectionStore, SitemapPersistenceError } from "../../../library";
 import type { SitemapRecord } from "../../../library";
 import { SITEMAP_SCHEMA_VERSION } from "../../../model";
 import { createIndexedDbSitemapProvider } from "../provider";
@@ -53,6 +53,23 @@ async function seedRaw(factory: IDBFactory, value: unknown): Promise<void> {
 }
 
 describe("IndexedDB Sitemap provider", () => {
+  it("seeds multiple records atomically, preserves edits, and snapshots the collection", async () => {
+    const provider = createIndexedDbSitemapProvider({ idbFactory: new FDBFactory(), seed: [record("alpha"), record("beta")] });
+    expect(await provider.initialization.initialize()).toMatchObject({ status: "ready", summaries: expect.any(Array) });
+    expect(isSitemapCollectionStore(provider.store)).toBe(true);
+    if (!isSitemapCollectionStore(provider.store)) return;
+    await provider.store.put({ ...record("alpha", "2026-01-02T00:00:00.000Z"), document: { ...record("alpha").document, name: "edited" } });
+    await provider.store.seed([record("alpha"), record("beta")]);
+    expect((await provider.store.readAll()).find(({ id }) => id === "alpha")!.document.name).toBe("edited");
+  });
+
+  it("rejects duplicate seed ids before any record write", async () => {
+    const factory = new FDBFactory(); const duplicate = record("duplicate");
+    const provider = createIndexedDbSitemapProvider({ idbFactory: factory, seed: [duplicate, duplicate] });
+    expect(await provider.initialization.initialize()).toMatchObject({ status: "error", error: { code: "validation" } });
+    const db = await inspectDatabase(factory); const records = await request(db.transaction(SITEMAPS_STORE_NAME).objectStore(SITEMAPS_STORE_NAME).getAll()); db.close();
+    expect(records).toEqual([]);
+  });
   it("uses the separate Sitemapper database schema", async () => {
     const factory = new FDBFactory();
     const provider = createIndexedDbSitemapProvider({ idbFactory: factory });
