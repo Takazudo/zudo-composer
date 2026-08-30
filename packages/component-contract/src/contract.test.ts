@@ -69,7 +69,7 @@ describe('serializable component-pack contract v1', () => {
   });
 
   it('normalizes omitted defaults, fields, slots, and static props without leaking trusted values', () => {
-    const definition = defineComponent<{ title: string }, object>({
+    const definition = defineComponent<{ title: string }>()((props: { title: string }) => props.title, {
       id: 'card',
       schemaVersion: 1,
       title: 'Card',
@@ -77,7 +77,6 @@ describe('serializable component-pack contract v1', () => {
       description: '',
       source: { module: '@fixture/card', exportKind: 'default', exportName: 'Card' },
       staticProps: [{ prop: 'title', reason: 'Provided by the embedding application.' }],
-      component: {},
     });
     const pack = defineComponentPack({ packId: 'test-pack', packVersion: '1', components: [definition] });
     expect(pack.manifest.components[0]).toMatchObject({
@@ -348,7 +347,7 @@ describe('trusted runtime projection', () => {
     expect(resolveComponentNode(unknown, fixtureComponentPack)).toEqual({ status: 'opaque', reason: 'unknown-component', node: unknown });
     expect(resolveComponentNode(node, fixtureComponentPack)).toMatchObject({
       status: 'resolved',
-      runtime: { component: 'fixture-container-component', adapters: { render: expect.any(Function), inlineEditor: { field: 'title' } } },
+      runtime: { component: expect.any(Function), adapters: { render: expect.any(Function), inlineEditor: { field: 'title' } } },
     });
   });
 });

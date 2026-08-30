@@ -24,7 +24,7 @@ interface BadgeProps {
   tone: 'neutral' | 'positive';
 }
 
-const container = defineComponent<ContainerProps, string, string, FixtureElement, 'container'>({
+const container = defineComponent<ContainerProps>()((_props: ContainerProps) => 'fixture-container-component', {
   id: 'container',
   schemaVersion: 2,
   title: 'Container',
@@ -49,14 +49,13 @@ const container = defineComponent<ContainerProps, string, string, FixtureElement
     { id: 'content', prop: 'children', label: 'Content', accepts: ['prose', 'badge'], cardinality: 'many' },
     { id: 'aside', prop: 'aside', label: 'Aside', accepts: ['badge'], cardinality: 'single' },
   ],
-  component: 'fixture-container-component',
   adapters: {
-    render: (props) => `container:${props.title ?? ''}`,
-    inlineEditor: { field: 'title', resolveElement: (root) => root },
+    render: (props: Partial<ContainerProps>) => `container:${props.title ?? ''}`,
+    inlineEditor: { field: 'title', resolveElement: (root: FixtureElement) => root },
   },
 });
 
-const prose = defineComponent<ProseProps, string, string, FixtureElement, 'prose'>({
+const prose = defineComponent<ProseProps>()((_props: ProseProps) => 'fixture-prose-component', {
   id: 'prose',
   schemaVersion: 1,
   title: 'Prose',
@@ -72,13 +71,12 @@ const prose = defineComponent<ProseProps, string, string, FixtureElement, 'prose
       inlineEdit: { multiline: true, mode: 'markdown-source' },
     },
   ],
-  component: 'fixture-prose-component',
   adapters: {
-    inlineEditor: { field: 'markdown', resolveElement: (root) => root },
+    inlineEditor: { field: 'markdown', resolveElement: (root: FixtureElement) => root },
   },
 });
 
-const badge = defineComponent<BadgeProps, string, string, FixtureElement, 'badge'>({
+const badge = defineComponent<BadgeProps>()((_props: BadgeProps) => 'fixture-badge-component', {
   id: 'badge',
   schemaVersion: 1,
   title: 'Badge',
@@ -90,8 +88,7 @@ const badge = defineComponent<BadgeProps, string, string, FixtureElement, 'badge
     { kind: 'text', prop: 'label', label: 'Label' },
     { kind: 'select', prop: 'tone', label: 'Tone', options: ['neutral', 'positive'] },
   ],
-  component: 'fixture-badge-component',
-  adapters: { render: (props) => `badge:${props.label ?? ''}` },
+  adapters: { render: (props: Partial<BadgeProps>) => `badge:${props.label ?? ''}` },
 });
 
 /** Stable in-package conformance fixture; applications must not use it as provider data. */
