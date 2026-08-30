@@ -58,6 +58,33 @@ describe("ContentPreviewSource", () => {
     expect(vi.mocked(h.content.resolveModel)).toHaveBeenCalledTimes(contentCalls);
   });
 
+  it("keeps ready candidates available when another candidate throws during resolution", async () => {
+    const h = harness({
+      list: vi.fn(async () => ({
+        status: "listed" as const,
+        entries: [catalogEntry("ready"), catalogEntry("unavailable")],
+        failures: [],
+      })),
+      resolve: vi.fn(async (ref) => {
+        if (ref.recordId === "unavailable") throw new Error("Provider disconnected.");
+        return { status: "resolved" as const, record: mapping("ready") };
+      }),
+    });
+
+    await h.source.load(contentRef, entry("Still previewable"));
+
+    expect(h.source.state).toMatchObject({
+      phase: "ready",
+      selectedRef: { providerId: "mapping", recordId: "ready" },
+      document: { root: [{ props: { markdown: "Still previewable" } }] },
+    });
+    expect(h.source.state.failures).toContainEqual({
+      scope: "candidate",
+      mappingRef: { providerId: "mapping", recordId: "unavailable" },
+      message: "Provider disconnected.",
+    });
+  });
+
   it("suppresses stale asynchronous model-transition results", async () => {
     let release!: (value: Awaited<ReturnType<MappingCatalog["list"]>>) => void;
     let calls = 0;

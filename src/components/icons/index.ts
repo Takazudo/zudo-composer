@@ -6,7 +6,8 @@
  * must import cleanly from BOTH the host chrome and that preview bundle — so
  * it stays `h()`-based.
  *
- * Pattern ported from zudo-text (`packages/ui-components/src/icons.tsx`):
+ * The shared icon factory follows the compact flat/line convention used by
+ * our authoring tools:
  * `makeIcon(renderSvg, defaultSize)` produces a named-export icon component.
  * Every icon: 16 viewBox, `currentColor` fill/stroke only (never hardcoded
  * hex), `aria-hidden="true"`, flat/line style, stroke-width 1.25–2.5.
@@ -93,7 +94,7 @@ type IconRenderFn = (
 
 /**
  * Factory that produces an `XxxIcon` component from a single SVG render
- * function (zudo-text pattern).
+ * function.
  *
  * - Explicit-size branch (`width`/`height` prop given): delegates directly to
  *   `renderSvg` with the numeric dimensions, `class`, and `style`.
@@ -162,7 +163,7 @@ function evenOddPath(d: string): AnyVNode {
   return h("path", { "fill-rule": "evenodd", "clip-rule": "evenodd", d });
 }
 
-// ── Chevrons (ported from zudo-text) ─────────────────────────────────────────
+// ── Chevrons ─────────────────────────────────────────────────────────────────
 
 export const ChevronRightIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   svgRoot(w, hgt, cls, style, FILLED, [
@@ -188,7 +189,7 @@ export const ChevronUpIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   ]),
 );
 
-// ── Actions (ported from zudo-text) ──────────────────────────────────────────
+// ── Actions ──────────────────────────────────────────────────────────────────
 
 export const PlusIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   svgRoot(w, hgt, cls, style, FILLED, [
@@ -214,7 +215,7 @@ export const TrashIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   ]),
 );
 
-/** Corner brackets pointing outward — zudo-text's `ArrowsPointingOutIcon`. */
+/** Corner brackets pointing outward for full-screen and enlargement actions. */
 export const ExpandIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   svgRoot(w, hgt, cls, style, FILLED, [
     evenOddPath(
@@ -223,7 +224,7 @@ export const ExpandIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   ]),
 );
 
-// ── Actions (authored new, matching the zudo-text flat/line weight) ──────────
+// ── Additional actions using the shared flat/line weight ────────────────────
 
 /** Vertical kebab dots — the overflow-menu trigger glyph. */
 export const EllipsisIcon: IconComponent = makeIcon((w, hgt, cls, style) =>

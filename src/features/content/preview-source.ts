@@ -195,23 +195,35 @@ export class ContentPreviewSource {
   }
 
   private async resolveCandidate(candidate: MappingCatalogEntry, modelRef: ContentModelRef): Promise<{ candidate?: ContentPreviewCandidate; failure?: ContentPreviewFailure } | null> {
-    const outcome = await this.options.mappings.resolve(candidate.ref);
-    if (outcome.status !== "resolved") {
-      const message = outcome.status === "not-found" ? "Mapping was not found." : outcome.reason;
+    try {
+      const outcome = await this.options.mappings.resolve(candidate.ref);
+      if (outcome.status !== "resolved") {
+        const message = outcome.status === "not-found" ? "Mapping was not found." : outcome.reason;
+        return {
+          failure: { scope: "candidate", mappingRef: { ...candidate.ref }, message },
+        };
+      }
+      if (!sameRef(outcome.record.document.contentModel, modelRef)) return null;
+      const definition = await resolveMappingDefinition(outcome.record, this.options.catalogs, this.options.manifest);
       return {
-        failure: { scope: "candidate", mappingRef: { ...candidate.ref }, message },
+        candidate: {
+          ...candidate,
+          status: definition.status === "ready" ? "ready" : "broken",
+          definition,
+          diagnostics: definition.diagnostics,
+        },
+      };
+    } catch (error) {
+      return {
+        failure: {
+          scope: "candidate",
+          mappingRef: { ...candidate.ref },
+          message: error instanceof Error && error.message
+            ? error.message
+            : `Mapping “${candidate.summary.name}” could not be resolved.`,
+        },
       };
     }
-    if (!sameRef(outcome.record.document.contentModel, modelRef)) return null;
-    const definition = await resolveMappingDefinition(outcome.record, this.options.catalogs, this.options.manifest);
-    return {
-      candidate: {
-        ...candidate,
-        status: definition.status === "ready" ? "ready" : "broken",
-        definition,
-        diagnostics: definition.diagnostics,
-      },
-    };
   }
 
   private fail(revision: number, modelRef: ContentModelRef, message: string): ContentPreviewState {

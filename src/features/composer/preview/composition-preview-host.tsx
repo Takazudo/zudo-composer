@@ -1,6 +1,7 @@
 import type { JSX } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { CompositionDocument } from "../../../composer/model/types";
+import { ExpandIcon, XMarkIcon } from "../../../components/icons";
 import type { ComposerComponentProvider } from "../component-provider";
 import { useResolvedTheme } from "../../../theme/use-resolved-theme";
 import { buildComposerPreviewUrl, composerPreviewFrameProps, createComposerPreviewBridge, type ComposerPreviewBridge, type ComposerPreviewLocation } from "./bridge";
@@ -126,8 +127,8 @@ export function CompositionPreviewHost({
     class={`sg-composition-preview${enlarged ? " sg-composition-preview--enlarged" : ""}`}
     {...(enlarged ? { role: "dialog", "aria-modal": "true", "aria-label": `${title}, full screen` } : {})}
   >
-    {enlargeable && <button ref={enlargeButtonRef} hidden={enlarged} type="button" class="sg-composition-preview__enlarge" aria-label={`Enlarge ${title}`} onClick={() => setEnlarged(true)}>Full screen</button>}
-    {enlarged && <button ref={closeButtonRef} type="button" class="sg-composition-preview__close" aria-label={`Close full-screen ${title}`} onClick={() => setEnlarged(false)}>Close</button>}
+    {enlargeable && <button ref={enlargeButtonRef} hidden={enlarged} type="button" class="sg-composition-preview__enlarge" aria-label={`Enlarge ${title}`} onClick={() => setEnlarged(true)}><ExpandIcon size="sm" /><span>Full screen</span></button>}
+    {enlarged && <button ref={closeButtonRef} type="button" class="sg-composition-preview__close" aria-label={`Close full-screen ${title}`} onClick={() => setEnlarged(false)}><XMarkIcon size="sm" /><span>Close</span></button>}
     <div class="sg-composition-preview__stage" aria-busy={loading}>
       {!document && <div class="sg-composition-preview__empty"><h3>{emptyTitle}</h3><p>{emptyMessage}</p></div>}
       <iframe ref={frameRef} class="sg-composition-preview__frame" tabIndex={-1} aria-hidden={!document} {...frameProps} />
