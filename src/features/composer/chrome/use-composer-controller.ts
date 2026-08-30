@@ -39,17 +39,33 @@ import type {
 import {
   cloneJson,
   createUuidIdFactory,
+  findLocation,
+  repairSelection,
 } from "../../../composer/browser";
 import {
   applyComposerAction,
   createInitialControllerState,
+  DOCUMENT_MUTATION_HISTORY_POLICY,
   hasUnsavedChanges,
+  isDocumentMutation,
   type ComposerAction,
   type ComposerCanvasViewport,
   type ComposerControllerState,
   type ComposerMode,
   type ComposerSaveStatus,
 } from "./controller-model";
+import {
+  breakHistoryCoalescing,
+  canRedo as historyCanRedo,
+  canUndo as historyCanUndo,
+  clearHistory,
+  createHistory,
+  pushHistory,
+  redoHistory,
+  undoHistory,
+  type CoalesceKey,
+  type ComposerHistory,
+} from "./history-model";
 import { installComposerNavigationGuard } from "./navigation-guard";
 import {
   LS_INSPECTOR_WIDTH,
@@ -76,6 +92,10 @@ export interface ComposerController {
   manifest: ComponentCatalog;
   /** Non-null right after a rejected command (e.g. cardinality/accepts) until the next successful action. */
   lastError: string | null;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
   add: (target: InsertionTarget, componentId: string) => void;
   rename: (name: string) => void;
   updateProps: (nodeId: string, patch: JsonObject) => void;
@@ -188,6 +208,16 @@ function derivedOutputFromQueue(state: CompositionSaveQueueState): CompositionDe
   return state.status === "saved" ? state.outcome?.derived ?? null : null;
 }
 
+function sameRootPolicy(left: RootPolicy, right: RootPolicy): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind !== "resolved" || right.kind !== "resolved") return true;
+  if (left.cardinality !== right.cardinality) return false;
+  const leftAccepts = left.accepts ? [...left.accepts].sort() : null;
+  const rightAccepts = right.accepts ? [...right.accepts].sort() : null;
+  if (leftAccepts === null || rightAccepts === null) return leftAccepts === rightAccepts;
+  return leftAccepts.length === rightAccepts.length && leftAccepts.every((value, index) => value === rightAccepts[index]);
+}
+
 export function useComposerController(options: UseComposerControllerOptions): ComposerController {
   const manifest = options.manifest;
   const idFactory = useMemo(() => options.idFactory ?? createUuidIdFactory(), [options.idFactory]);
@@ -197,6 +227,7 @@ export function useComposerController(options: UseComposerControllerOptions): Co
   const nowRef = useRef(now);
   const recordRef = useRef<CompositionRecord | null>(null);
   const stateRef = useRef<ComposerControllerState | null>(null);
+  const historyRef = useRef<ComposerHistory>(createHistory());
   if (stateRef.current === null) {
     const record = cloneJson(options.record);
     if (record.id !== record.document.id || options.saveQueue.ref.recordId !== record.id) {
@@ -221,12 +252,40 @@ export function useComposerController(options: UseComposerControllerOptions): Co
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingBaseSaveStatusRef = useRef<ComposerSaveStatus | null>(null);
 
+  const persistDocumentState = useCallback((stateWithDocument: ComposerControllerState): ComposerControllerState => {
+    recordRef.current = {
+      ...recordRef.current!,
+      updatedAt: nowRef.current(),
+      document: stateWithDocument.document,
+    };
+
+    const queue = queueRef.current;
+    try {
+      queue.edit(queue.ref, recordRef.current);
+      return {
+        ...stateWithDocument,
+        saveStatus: saveStatusFromQueue(queue.state),
+        derivedOutput: null,
+      };
+    } catch (error) {
+      return {
+        ...stateWithDocument,
+        saveStatus: {
+          kind: "error",
+          reason: error instanceof Error ? error.message : "Composition persistence failed.",
+        },
+        derivedOutput: null,
+      };
+    }
+  }, []);
+
   const applyAction = useCallback(
     (action: ComposerAction): string | null => {
       const current = stateRef.current!;
       const result = applyComposerAction(current, action, { manifest, idFactory });
       setLastError(result.error);
       if (result.error) {
+        historyRef.current = breakHistoryCoalescing(historyRef.current);
         const restoredStatus = queueRef.current
           ? saveStatusFromQueue(queueRef.current.state)
           : pendingBaseSaveStatusRef.current;
@@ -240,34 +299,41 @@ export function useComposerController(options: UseComposerControllerOptions): Co
 
       let next = result.state;
       if (result.documentChanged) {
-        recordRef.current = {
-          ...recordRef.current!,
-          updatedAt: nowRef.current(),
-          document: next.document,
-        };
-
-        const queue = queueRef.current;
-        try {
-          queue.edit(queue.ref, recordRef.current);
-          next = { ...next, saveStatus: saveStatusFromQueue(queue.state), derivedOutput: null };
-        } catch (error) {
-          next = {
-            ...next,
-            saveStatus: { kind: "error", reason: error instanceof Error ? error.message : "Composition persistence failed." },
-            derivedOutput: null,
-          };
+        if (!isDocumentMutation(action)) {
+          throw new Error(`Document-changing Composer action "${action.type}" is not classified as a mutation.`);
         }
+        const policy = DOCUMENT_MUTATION_HISTORY_POLICY[action.type];
+        if (policy === "barrier") {
+          historyRef.current = clearHistory();
+        } else {
+          const coalesceKey: CoalesceKey | null = action.type === "updateProps"
+            ? { kind: "updateProps", nodeId: action.nodeId, propKeys: Object.keys(action.patch).sort() }
+            : null;
+          historyRef.current = pushHistory(
+            historyRef.current,
+            { document: current.document, selectedId: current.selectedId },
+            { coalesceKey, atMs: Date.now() },
+          );
+        }
+        next = persistDocumentState(next);
       } else if (action.type === "updateProps" && pendingBaseSaveStatusRef.current) {
         next = {
           ...next,
           saveStatus: saveStatusFromQueue(queueRef.current.state),
         };
+        historyRef.current = breakHistoryCoalescing(historyRef.current);
+      } else {
+        if (action.type === "setRootPolicy" && !sameRootPolicy(current.rootPolicy, next.rootPolicy)) {
+          historyRef.current = clearHistory();
+        } else {
+          historyRef.current = breakHistoryCoalescing(historyRef.current);
+        }
       }
       stateRef.current = next;
       setState(next);
       return null;
     },
-    [manifest, idFactory],
+    [manifest, idFactory, persistDocumentState],
   );
 
   // ── Debounced updateProps channel (issue Takazudo/zudo-sg#291) ─────────────────────────────
@@ -325,6 +391,54 @@ export function useComposerController(options: UseComposerControllerOptions): Co
     const queue = queueRef.current;
     if (queue) await queue.flush();
   }, [flushPropUpdates]);
+
+  const restoreHistoryEntry = useCallback((entry: { document: CompositionDocument; selectedId: string | null }) => {
+    const current = stateRef.current!;
+    const selectedId = repairSelection(entry.document, manifest, entry.selectedId);
+    const expandedIds = new Set(current.expandedIds);
+    if (selectedId !== null) {
+      let location = findLocation(entry.document, manifest, selectedId);
+      while (location && location.parentId !== null) {
+        expandedIds.add(location.parentId);
+        location = findLocation(entry.document, manifest, location.parentId);
+      }
+    }
+    const next = persistDocumentState({
+      ...current,
+      document: entry.document,
+      selectedId,
+      expandedIds,
+    });
+    stateRef.current = next;
+    setLastError(null);
+    setState(next);
+  }, [manifest, persistDocumentState]);
+
+  const undo = useCallback((): void => {
+    flushPropUpdates();
+    const current = stateRef.current!;
+    if (current.mode === "preview") return;
+    const transition = undoHistory(historyRef.current, {
+      document: current.document,
+      selectedId: current.selectedId,
+    });
+    if (!transition) return;
+    historyRef.current = transition.history;
+    restoreHistoryEntry(transition.restore);
+  }, [flushPropUpdates, restoreHistoryEntry]);
+
+  const redo = useCallback((): void => {
+    flushPropUpdates();
+    const current = stateRef.current!;
+    if (current.mode === "preview") return;
+    const transition = redoHistory(historyRef.current, {
+      document: current.document,
+      selectedId: current.selectedId,
+    });
+    if (!transition) return;
+    historyRef.current = transition.history;
+    restoreHistoryEntry(transition.restore);
+  }, [flushPropUpdates, restoreHistoryEntry]);
 
   const flushPropUpdatesRef = useRef(flushPropUpdates);
   flushPropUpdatesRef.current = flushPropUpdates;
@@ -420,6 +534,10 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       record: recordRef.current!,
       manifest,
       lastError,
+      undo,
+      redo,
+      canUndo: state.mode !== "preview" && historyCanUndo(historyRef.current),
+      canRedo: state.mode !== "preview" && historyCanRedo(historyRef.current),
       add: (target, componentId) => dispatch({ type: "add", target, componentId }),
       rename: (name) => dispatch({ type: "rename", name }),
       updateProps: (nodeId, patch) => dispatch({ type: "updateProps", nodeId, patch }),
@@ -471,6 +589,8 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       flushPropUpdates,
       flushPersistence,
       retrySave,
+      undo,
+      redo,
     ],
   );
 }

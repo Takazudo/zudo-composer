@@ -11,6 +11,8 @@ import {
 import {
   applyComposerAction,
   createInitialControllerState,
+  DOCUMENT_MUTATION_HISTORY_POLICY,
+  DOCUMENT_MUTATION_TYPES,
   describeSaveStatus,
   hasUnsavedChanges,
   isDocumentMutation,
@@ -260,6 +262,20 @@ describe("applyComposerAction — mode, viewport, widths, save status", () => {
 });
 
 describe("isDocumentMutation / hasUnsavedChanges", () => {
+  it("locks the exhaustive document-mutation history partition at 10 undoable / 8 barriers", () => {
+    const entries = Object.entries(DOCUMENT_MUTATION_HISTORY_POLICY);
+    expect(DOCUMENT_MUTATION_TYPES).toHaveLength(18);
+    expect(new Set(DOCUMENT_MUTATION_TYPES).size).toBe(18);
+    expect(entries.filter(([, policy]) => policy === "undoable").map(([type]) => type).sort()).toEqual([
+      "add", "cut", "drop", "duplicate", "insertForest", "paste", "remove", "rename", "reorder", "updateProps",
+    ]);
+    expect(entries.filter(([, policy]) => policy === "barrier").map(([type]) => type).sort()).toEqual([
+      "bindConsumer", "clearPublication", "publishGlobalTemplate", "publishPattern", "reassignGlobalTemplateOutlet",
+      "removeBinding", "renameGlobalTemplateOutlet", "setGlobalTemplateOutlet",
+    ]);
+    expect([...DOCUMENT_MUTATION_TYPES].sort()).toEqual(entries.map(([type]) => type).sort());
+  });
+
   it("flags exactly the document-mutating action types", () => {
     expect(isDocumentMutation({ type: "add", target: { parentId: null, slotId: "root", index: 0 }, componentId: "x" })).toBe(
       true,

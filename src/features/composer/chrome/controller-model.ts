@@ -154,7 +154,27 @@ export interface ComposerReducerResult {
   documentChanged: boolean;
 }
 
-const DOCUMENT_MUTATION_TYPES = new Set<ComposerAction["type"]>([
+type NonDocumentMutationType =
+  | "copy"
+  | "setRootPolicy"
+  | "select"
+  | "reveal"
+  | "toggleExpanded"
+  | "setExpanded"
+  | "setMode"
+  | "setViewport"
+  | "setLeftWidth"
+  | "setRightWidth"
+  | "setSaveStatus";
+
+/**
+ * Every action type not explicitly classified as session-only is a document
+ * mutation. Deriving this union from `ComposerAction` makes a newly-added
+ * action fail the history-policy typecheck below until it is classified.
+ */
+export type DocumentMutationType = Exclude<ComposerAction["type"], NonDocumentMutationType>;
+
+export const DOCUMENT_MUTATION_TYPES = [
   "add",
   "rename",
   "updateProps",
@@ -173,11 +193,60 @@ const DOCUMENT_MUTATION_TYPES = new Set<ComposerAction["type"]>([
   "clearPublication",
   "bindConsumer",
   "removeBinding",
-]);
+] as const satisfies readonly DocumentMutationType[];
+
+export type DocumentMutationHistoryPolicy = "undoable" | "barrier";
+
+/**
+ * Publication/binding writes are barriers because their live cross-record
+ * guards and resolved contracts cannot safely be re-established by restoring
+ * a raw document snapshot. They clear both history stacks instead.
+ */
+export const DOCUMENT_MUTATION_HISTORY_POLICY = {
+  add: "undoable",
+  rename: "undoable",
+  updateProps: "undoable",
+  reorder: "undoable",
+  remove: "undoable",
+  cut: "undoable",
+  paste: "undoable",
+  insertForest: "undoable",
+  duplicate: "undoable",
+  drop: "undoable",
+  publishPattern: "barrier",
+  publishGlobalTemplate: "barrier",
+  setGlobalTemplateOutlet: "barrier",
+  renameGlobalTemplateOutlet: "barrier",
+  reassignGlobalTemplateOutlet: "barrier",
+  clearPublication: "barrier",
+  bindConsumer: "barrier",
+  removeBinding: "barrier",
+} as const satisfies Record<DocumentMutationType, DocumentMutationHistoryPolicy>;
+
+const documentMutationTypeSet = new Set<DocumentMutationType>(DOCUMENT_MUTATION_TYPES);
+
+// Runtime net beside the compile-time Record check: this also catches an
+// accidentally duplicated/omitted list entry or a drift from the locked 10/8 split.
+const undoableMutationCount = Object.values(DOCUMENT_MUTATION_HISTORY_POLICY).filter(
+  (policy) => policy === "undoable",
+).length;
+const barrierMutationCount = Object.values(DOCUMENT_MUTATION_HISTORY_POLICY).filter(
+  (policy) => policy === "barrier",
+).length;
+if (
+  documentMutationTypeSet.size !== DOCUMENT_MUTATION_TYPES.length ||
+  DOCUMENT_MUTATION_TYPES.length !== Object.keys(DOCUMENT_MUTATION_HISTORY_POLICY).length ||
+  undoableMutationCount !== 10 ||
+  barrierMutationCount !== 8
+) {
+  throw new Error("Composer document mutation history policy must retain its exact 10/8 partition.");
+}
 
 /** True for actions that mutate `document` (used by the hook to gate autosave). */
-export function isDocumentMutation(action: ComposerAction): boolean {
-  return DOCUMENT_MUTATION_TYPES.has(action.type);
+export function isDocumentMutation(
+  action: ComposerAction,
+): action is Extract<ComposerAction, { type: DocumentMutationType }> {
+  return documentMutationTypeSet.has(action.type as DocumentMutationType);
 }
 
 function withExpanded(
