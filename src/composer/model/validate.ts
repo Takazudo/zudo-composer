@@ -164,6 +164,13 @@ export interface NodeDiagnostic {
   reasons: DiagnosticReason[];
 }
 
+/** True only for known/current nodes blocked exclusively by persisted prop diagnostics. */
+export function canRepairNodeProps(diagnostic: NodeDiagnostic): boolean {
+  return diagnostic.opaque
+    && diagnostic.reasons.length > 0
+    && diagnostic.reasons.every((reason) => reason.code === "invalid-prop");
+}
+
 export interface ReuseDiagnosticReason {
   code: ReuseDiagnosticCode;
   message: string;

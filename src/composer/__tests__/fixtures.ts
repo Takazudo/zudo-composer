@@ -77,6 +77,24 @@ const fields = {
     label: "Ratio",
   } as FieldDefinition,
   sizeSelect: { schema: { type: "string", enum: ["sm", "md", "lg"] }, editor: { kind: "select" }, prop: "size", label: "Size" } as FieldDefinition,
+  actions: {
+    prop: "actions",
+    label: "Actions",
+    schema: {
+      type: "array",
+      items: {
+        schema: {
+          type: "object",
+          fields: [
+            { key: "label", label: "Label", required: true, schema: { type: "string" }, editor: { kind: "text" } },
+            { key: "href", label: "Href", required: true, schema: { type: "string" }, editor: { kind: "text" } },
+          ],
+        },
+        editor: { kind: "group" },
+      },
+    },
+    editor: { kind: "list" },
+  } as FieldDefinition,
 };
 
 export const fixtureEntries: readonly ComponentManifest[] = [
@@ -119,6 +137,7 @@ export const fixtureEntries: readonly ComponentManifest[] = [
     fields: [
       { schema: { type: "string" }, editor: { kind: "text" }, prop: "label", label: "Label" },
       { schema: { type: "number", min: 0, max: 10 }, editor: { kind: "number" }, prop: "size", label: "Size" },
+      fields.actions,
     ],
   }),
   definition(C.widgetA, src("@fixtures/widget-a", "Widget")),

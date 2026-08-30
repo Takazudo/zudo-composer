@@ -168,6 +168,23 @@ describe("updateProps", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("repairs a node whose only opacity reason is an invalid declared prop value", () => {
+    const heading = node(C.sectionHeading, { heading: "H", as: "h9" }, {}, "h");
+    const result = updateProps(doc([heading]), M, "h", { as: "h3" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.document.root[0]!.props).toEqual({ heading: "H", as: "h3" });
+  });
+
+  it("does not repair props when a non-prop opacity reason is also present", () => {
+    const heading = node(C.sectionHeading, { heading: "H", as: "h9" }, {}, "h");
+    heading.componentVersion = 2;
+    const result = updateProps(doc([heading]), M, "h", { as: "h3" });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/read-only/i);
+  });
+
   it("rejects a non-JSON-safe value", () => {
     const heading = node(C.sectionHeading, { heading: "H" }, {}, "h");
     const result = updateProps(doc([heading]), M, "h", { heading: (() => 1) as never });
