@@ -156,11 +156,20 @@ export function createThemeController(
     if (snapshot.preference === "system") commit("system");
   };
   const onStorage = (event: StorageEvent): void => {
-    if (event.key !== THEME_STORAGE_KEY) return;
+    // key=null is localStorage.clear(): the persisted theme disappeared too.
+    if (event.key !== null && event.key !== THEME_STORAGE_KEY) return;
+    if (event.key === null) {
+      commit("system");
+      return;
+    }
     const preference = isThemePreference(event.newValue) ? event.newValue : "system";
     removeInvalidPreference(storage, event.newValue);
     commit(preference);
   };
+
+  // Reconcile the second matchMedia read with the synchronous bootstrap. The
+  // OS can change in the narrow interval before this observer is installed.
+  commit(initial.preference);
 
   try {
     if (media?.addEventListener) media.addEventListener("change", onSystemChange);

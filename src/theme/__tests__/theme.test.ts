@@ -86,6 +86,12 @@ describe("theme bootstrap", () => {
     persistThemePreference("system", target);
     expect(target.setItem).toHaveBeenCalledWith(THEME_STORAGE_KEY, "system");
   });
+
+  it("does not throw when a theme choice cannot be persisted", () => {
+    const target = storage();
+    target.setItem.mockImplementation(() => { throw new Error("blocked"); });
+    expect(() => persistThemePreference("dark", target)).not.toThrow();
+  });
 });
 
 describe("theme controller", () => {
@@ -125,6 +131,20 @@ describe("theme controller", () => {
     expect(storageTarget.removeItem).toHaveBeenCalledWith(THEME_STORAGE_KEY);
     events.emit("another-key", "light");
     expect(controller.getSnapshot().preference).toBe("system");
+    events.emit(THEME_STORAGE_KEY, "light");
+    events.emit(null, null);
+    expect(controller.getSnapshot()).toEqual({ preference: "system", resolved: "dark" });
+    controller.dispose();
+  });
+
+  it("reconciles an OS change between bootstrap and listener installation", () => {
+    const system = media(true);
+    const controller = createThemeController(
+      { preference: "system", resolved: "light" },
+      { matchMedia: () => system.query, eventTarget: null, storage: null },
+    );
+    expect(controller.getSnapshot()).toEqual({ preference: "system", resolved: "dark" });
+    expect(document.documentElement.dataset.theme).toBe("dark");
     controller.dispose();
   });
 
