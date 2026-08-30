@@ -8,6 +8,7 @@ import { ContentPersistenceError, createContentEntryRecord, createContentModelRe
 import { createIndexedDbContentProvider } from "../content/storage/indexeddb";
 import { activeComponentProvider } from "../features/composer/active-pack";
 import { createContentPreviewSource, type ContentPreviewSource } from "../features/content/preview-source";
+import type { MediaProvider } from "../media";
 import type { MappingContentEntryCatalog } from "../features/mapping";
 import {
   createCompositionCatalog as createMappingCompositionCatalog, createIndexedDbMappingProvider,
@@ -129,6 +130,7 @@ export interface ProductionProviderIntegration {
   componentProvider: typeof activeComponentProvider;
   compositionProviders: readonly CompositionProvider[]; compositionCatalog: CompositionCatalog; mappingCompositionCatalog: MappingCompositionCatalog;
   contentProviders: readonly ContentProvider[]; contentProvider: ContentProvider; contentCatalog: ContentCatalog;
+  mediaProvider: MediaProvider | undefined;
   createContentPreviewSource(): ContentPreviewSource;
   mappingContentEntries: MappingContentEntryCatalog;
   mappingProviders: readonly MappingProvider[]; mappingProvider: MappingProvider; mappingCatalog: MappingCatalog;
@@ -233,6 +235,6 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     compositionCatalog: createInitializedCompositionCatalog(compositionProviders, compositionInitializers),
     mappingCompositionCatalog,
     contentProviders, contentProvider, contentCatalog, createContentPreviewSource: contentPreviewSource, mappingContentEntries,
-    mappingProviders, mappingProvider, mappingCatalog, sitemapperMappingCatalog,
+    mappingProviders, mappingProvider, mappingCatalog, sitemapperMappingCatalog, mediaProvider: undefined,
   });
 }

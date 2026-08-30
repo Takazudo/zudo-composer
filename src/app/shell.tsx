@@ -10,6 +10,7 @@ import {
   DarkThemeIcon,
   MappingIcon,
   MailIcon,
+  FolderIcon,
   SitemapperIcon,
   SystemThemeIcon,
   XMarkIcon,
@@ -55,6 +56,12 @@ export const APP_ROUTES: readonly AppRoute[] = [
     href: "/sitemapper",
     description: "Organize Compositions into navigable site routes.",
     icon: SitemapperIcon,
+  },
+  {
+    label: "Media",
+    href: "/media",
+    description: "Browse project media and prepare references for authored content.",
+    icon: FolderIcon,
   },
 ] as const;
 

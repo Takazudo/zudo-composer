@@ -20,7 +20,7 @@ const contractPackageSha = "9b774b827e9f6fec14379995ac2c691ccc3b7e5b";
 const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}`;
 const contractSpec = `git+https://github.com/Takazudo/zudo-composer.git#${contractPackageSha}`;
 
-assert.deepEqual(SPA_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"]);
+assert.deepEqual(SPA_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/media"]);
 assert.equal(LIVE_ORIGIN, "https://zudo-composer.zudolab.dev");
 assert.equal(wrangler.name, "zudo-composer");
 assert.deepEqual(wrangler.routes, [{ pattern: "zudo-composer.zudolab.dev", custom_domain: true }]);
