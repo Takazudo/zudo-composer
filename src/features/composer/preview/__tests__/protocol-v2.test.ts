@@ -5,8 +5,10 @@ import {
   readParentToPreview,
   readPreviewToParent,
   readyMessage,
+  requestHistoryMessage,
   renderMessage,
 } from "../protocol";
+import { canvasHistoryRequest } from "../preview-app";
 
 const source = {};
 const pack = { packId: fixtureComponentManifest.packId, packVersion: fixtureComponentManifest.packVersion };
@@ -39,5 +41,56 @@ describe("Composer preview protocol v2 pack handshake", () => {
     const withoutRecord: Record<string, unknown> = { ...message };
     delete withoutRecord.localRecordId;
     expect(readParentToPreview(event(withoutRecord), expected)).toMatchObject({ ok: false, reason: "invalid-payload" });
+  });
+});
+
+describe("Composer preview history requests", () => {
+  it.each(["undo", "redo"] as const)("accepts a strict %s request", (direction) => {
+    const message = requestHistoryMessage(pack, direction);
+    expect(readPreviewToParent(event(message), expected)).toMatchObject({
+      ok: true,
+      message: { type: "request-history", direction },
+    });
+  });
+
+  it.each([
+    ["missing direction", { ...requestHistoryMessage(pack, "undo"), direction: undefined }],
+    ["unknown direction", { ...requestHistoryMessage(pack, "undo"), direction: "back" }],
+    ["extra key", { ...requestHistoryMessage(pack, "redo"), extra: true }],
+  ])("rejects malformed history request: %s", (_label, message) => {
+    expect(readPreviewToParent(event(message), expected)).toMatchObject({
+      ok: false,
+      reason: "invalid-payload",
+    });
+  });
+
+  const keyEvent = (
+    key: string,
+    init: KeyboardEventInit,
+    target: EventTarget | null = null,
+  ): KeyboardEvent => {
+    const keydown = new KeyboardEvent("keydown", { key, ...init });
+    Object.defineProperty(keydown, "target", { value: target });
+    return keydown;
+  };
+
+  it("uses the shared shortcut detector for non-editable canvas chrome", () => {
+    expect(canvasHistoryRequest(keyEvent("z", { ctrlKey: true }), "edit", false)).toBe("undo");
+    expect(canvasHistoryRequest(keyEvent("Z", { metaKey: true, shiftKey: true }), "edit", false)).toBe("redo");
+    expect(canvasHistoryRequest(keyEvent("y", { ctrlKey: true }), "edit", false)).toBe("redo");
+  });
+
+  it("preserves native undo for inline sessions and editable targets", () => {
+    const input = document.createElement("input");
+    const editable = document.createElement("div");
+    Object.defineProperty(editable, "isContentEditable", { value: true });
+
+    expect(canvasHistoryRequest(keyEvent("z", { ctrlKey: true }), "edit", true)).toBeNull();
+    expect(canvasHistoryRequest(keyEvent("z", { ctrlKey: true }, input), "edit", false)).toBeNull();
+    expect(canvasHistoryRequest(keyEvent("z", { ctrlKey: true }, editable), "edit", false)).toBeNull();
+  });
+
+  it("suppresses history requests in preview mode", () => {
+    expect(canvasHistoryRequest(keyEvent("z", { ctrlKey: true }), "preview", false)).toBeNull();
   });
 });
