@@ -67,6 +67,9 @@ describe("ContentPreviewSource", () => {
     const stale = h.source.load(contentRef, entry("old"));
     await Promise.resolve(); await Promise.resolve();
     const current = h.source.load(otherRef, entry("new"));
+    expect(h.source.state).toMatchObject({ phase: "loading", modelRef: otherRef, candidates: [], selectedRef: null, document: null });
+    h.source.evaluate(entry("must not use stale definition"));
+    expect(h.source.state.document).toBeNull();
     await current;
     release({ status: "listed", entries: [catalogEntry("ready")], failures: [] });
     await stale;

@@ -46,6 +46,10 @@ export function CompositionPreviewHost({
   const activeTheme = useResolvedTheme();
   const latestThemeRef = useRef(activeTheme);
   latestThemeRef.current = activeTheme;
+  const onCurrentRef = useRef(onCurrent);
+  onCurrentRef.current = onCurrent;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
   const [enlarged, setEnlarged] = useState(false);
   const enlargeButtonRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -61,10 +65,10 @@ export function CompositionPreviewHost({
       location,
       hostWindow: hostWindow ?? window,
       pack: { packId: componentProvider.manifest.packId, packVersion: componentProvider.manifest.packVersion },
-      onReady: () => onCurrent?.(),
-      onError: (message) => onError?.(message),
+      onReady: () => onCurrentRef.current?.(),
+      onError: (message) => onErrorRef.current?.(message),
       onRejected: (reason, detail) => {
-        if (reason === "pack-mismatch") onError?.(`Preview pack mismatch${detail ? `: ${detail}` : "."}`);
+        if (reason === "pack-mismatch") onErrorRef.current?.(`Preview pack mismatch${detail ? `: ${detail}` : "."}`);
       },
     });
     bridgeRef.current = bridge;
@@ -81,7 +85,7 @@ export function CompositionPreviewHost({
       renderedDocumentRef.current = null;
       renderedThemeRef.current = null;
     };
-  }, [componentProvider.manifest.packId, componentProvider.manifest.packVersion, createBridge, hostWindow, location, onCurrent, onError]);
+  }, [componentProvider.manifest.packId, componentProvider.manifest.packVersion, createBridge, hostWindow, location]);
 
   useEffect(() => {
     const bridge = bridgeRef.current;
@@ -95,6 +99,8 @@ export function CompositionPreviewHost({
     if (enlarged) {
       wasEnlargedRef.current = true;
       closeButtonRef.current?.focus();
+      const previousOverflow = globalThis.document.body.style.overflow;
+      globalThis.document.body.style.overflow = "hidden";
       const onKeyDown = (event: KeyboardEvent) => {
         if (event.key === "Escape") {
           event.preventDefault();
@@ -105,7 +111,10 @@ export function CompositionPreviewHost({
         }
       };
       window.addEventListener("keydown", onKeyDown);
-      return () => window.removeEventListener("keydown", onKeyDown);
+      return () => {
+        window.removeEventListener("keydown", onKeyDown);
+        globalThis.document.body.style.overflow = previousOverflow;
+      };
     }
     if (wasEnlargedRef.current) {
       wasEnlargedRef.current = false;

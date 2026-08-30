@@ -22,9 +22,13 @@ describe("CompositionPreviewHost", () => {
     expect(dialog.querySelector("iframe")).toBe(frame);
     const close = screen.getByRole("button", { name: "Close full-screen Current Entry preview" });
     expect(document.activeElement).toBe(close);
+    expect(document.body.style.overflow).toBe("hidden");
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(document.activeElement).toBe(close);
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(enlarge);
+    expect(document.body.style.overflow).toBe("");
   });
 
   it("keeps only the newest document for bridge replay and reports current/error callbacks", () => {
@@ -36,12 +40,20 @@ describe("CompositionPreviewHost", () => {
     });
     const current = vi.fn(); const error = vi.fn();
     const first = previewDocument("first"); const newest = previewDocument("newest");
-    const view = render(<CompositionPreviewHost componentProvider={activeComponentProvider} document={first} onCurrent={current} onError={error} createBridge={createBridge as never} location={{ src: "/composer/preview", targetOrigin: "https://example.test" }} hostWindow={{ addEventListener() {}, removeEventListener() {} }} />);
-    view.rerender(<CompositionPreviewHost componentProvider={activeComponentProvider} document={newest} onCurrent={current} onError={error} createBridge={createBridge as never} location={{ src: "/composer/preview", targetOrigin: "https://example.test" }} hostWindow={{ addEventListener() {}, removeEventListener() {} }} />);
+    const location = { src: "/composer/preview", targetOrigin: "https://example.test" };
+    const hostWindow = { addEventListener() {}, removeEventListener() {} };
+    const view = render(<CompositionPreviewHost componentProvider={activeComponentProvider} document={first} onCurrent={current} onError={error} createBridge={createBridge as never} location={location} hostWindow={hostWindow} />);
+    fireEvent.click(screen.getByRole("button", { name: "Enlarge Composition preview" }));
+    const frame = screen.getByTitle("Composition preview");
+    const latestCurrent = vi.fn(); const latestError = vi.fn();
+    view.rerender(<CompositionPreviewHost componentProvider={activeComponentProvider} document={newest} onCurrent={latestCurrent} onError={latestError} createBridge={createBridge as never} location={location} hostWindow={hostWindow} />);
+    expect(screen.getByRole("dialog").querySelector("iframe")).toBe(frame);
     expect(renderSnapshot).toHaveBeenLastCalledWith(expect.objectContaining({ document: newest }), expect.objectContaining({ mode: "preview" }));
     act(() => options.onReady?.());
     act(() => options.onError?.("renderer failed", true, 2));
-    expect(current).toHaveBeenCalledOnce();
-    expect(error).toHaveBeenCalledWith("renderer failed");
+    expect(createBridge).toHaveBeenCalledOnce();
+    expect(current).not.toHaveBeenCalled(); expect(error).not.toHaveBeenCalled();
+    expect(latestCurrent).toHaveBeenCalledOnce();
+    expect(latestError).toHaveBeenCalledWith("renderer failed");
   });
 });
