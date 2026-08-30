@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
-const roots = ['src/shared', 'src/composer', 'src/content', 'src/mapping', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
+const roots = ['src/shared', 'src/composer', 'src/content', 'src/mapping', 'src/site-project', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
 const files = [];
 const violations = [];
 
@@ -52,11 +52,14 @@ if (!indexedDbTypes.includes('COMPOSER_DATABASE_VERSION = 1')) {
 // Mapping is allowed to consume only the pure catalog/model seams required to
 // resolve provider-qualified Content and Composition references.
 const mappingImports = files.filter((file) => file.includes(`${path.sep}src${path.sep}mapping${path.sep}`));
-const contentAndMapping = files.filter((file) => file.includes(`${path.sep}src${path.sep}content${path.sep}`) || file.includes(`${path.sep}src${path.sep}mapping${path.sep}`));
+const contentAndMapping = files.filter((file) => file.includes(`${path.sep}src${path.sep}content${path.sep}`) || file.includes(`${path.sep}src${path.sep}mapping${path.sep}`) || file.includes(`${path.sep}src${path.sep}site-project${path.sep}`));
 for (const file of contentAndMapping) {
   const content = await readFile(file, 'utf8');
   if (/\b(?:window|localStorage)\b|globalThis\.document|\bHTMLElement\b/.test(content)) violations.push(`${path.relative(repositoryRoot, file)}: headless DOM dependency`);
   if (/\b(?:legacy|migration|migrate|compatibility shim|fallback registry)\b/i.test(content)) violations.push(`${path.relative(repositoryRoot, file)}: legacy or migration compatibility`);
+  if (file.includes(`${path.sep}src${path.sep}site-project${path.sep}`) && /(?:from|import\()\s*["'](?:node:)?(?:fs|path|os|url|child_process)["']/.test(content)) {
+    violations.push(`${path.relative(repositoryRoot, file)}: headless Node dependency`);
+  }
 }
 for (const file of mappingImports) {
   const content = await readFile(file, 'utf8');
