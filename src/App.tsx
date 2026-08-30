@@ -7,6 +7,8 @@ import ComposerApp from "./features/composer/chrome/composer-app";
 import { ContentRouteContent } from "./features/content";
 import { MappingRouteContent } from "./features/mapping";
 import { SitemapperRouteContent } from "./features/sitemapper";
+import { SiteDelivery } from "./features/delivery/site-delivery";
+import { isSitePath } from "./features/delivery/routing";
 import { bootstrapTheme, createThemeController, type ThemeController } from "./theme/theme";
 
 function NotFound() { return <main class="route-placeholder"><h1>Not found</h1><p>This standalone route does not exist.</p><a href="/">Return home</a></main>; }
@@ -33,6 +35,7 @@ export function App({ themeController }: AppProps = {}) {
   const providers = useMemo(createProductionProviderIntegration, []);
   const path = window.location.pathname;
   useEffect(() => { if (path === "/sitemapper") void providers.compositionCatalog.listCompositions().catch(() => undefined); }, [path, providers]);
+  if (isSitePath(path)) return <SiteDelivery providers={providers} pathname={path} />;
   let content: ComponentChildren;
   if (path === "/composer") content = <ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} />;
   else if (path === "/content") content = <ContentRouteContent provider={providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} />;

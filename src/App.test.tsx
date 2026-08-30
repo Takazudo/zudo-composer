@@ -120,4 +120,14 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Sitemaps' })).toBeInTheDocument();
     expect(screen.queryByText(/being connected/i)).not.toBeInTheDocument();
   });
+
+  it('dispatches Site outside the authoring Shell while preserving author navigation isolation', async () => {
+    vi.stubGlobal('indexedDB', new FDBFactory());
+    window.history.replaceState(null, '', '/site');
+    const { container } = render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Clear ideas, carefully shaped' })).toBeInTheDocument();
+    expect(container.querySelector('.app-shell')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
+  });
 });
