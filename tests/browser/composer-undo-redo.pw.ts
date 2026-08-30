@@ -127,3 +127,64 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
 
   expect(failures).toEqual([]);
 });
+
+test("Hero structured actions persist, render, export, and undo structural edits", async ({ page }) => {
+  test.setTimeout(120_000);
+  const failures = watchRuntimeFailures(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  await page.goto("/composer");
+  await page.getByRole("button", { name: "Open Product overview" }).click();
+  await page.getByRole("button", { name: "Add component to document root" }).click();
+  const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
+  await chooser.getByRole("button", { name: "Hero", exact: true }).click();
+
+  const toolbar = page.getByRole("toolbar", { name: "Composer toolbar" });
+  const undo = toolbar.getByRole("button", { name: "Undo" });
+  const redo = toolbar.getByRole("button", { name: "Redo" });
+  const canvas = page.frameLocator('iframe[title="Composer preview canvas"]');
+  const hero = canvas.getByRole("region", { name: "Hero" });
+  const actions = page.locator('[data-sg-inspector-list="actions"]');
+  const first = actions.locator('[data-sg-inspector-list-item="0"]');
+
+  await expect(actions).toBeVisible();
+  await first.getByRole("button", { name: "Get started", exact: true }).click();
+  await first.getByRole("textbox", { name: "Label", exact: true }).fill("Read docs");
+  await first.getByRole("textbox", { name: "Label", exact: true }).blur();
+  await first.getByRole("textbox", { name: "URL", exact: true }).fill("/docs");
+  await first.getByRole("textbox", { name: "URL", exact: true }).blur();
+
+  await actions.getByRole("button", { name: "Add item", exact: true }).click();
+  const second = actions.locator('[data-sg-inspector-list-item="1"]');
+  await second.getByRole("textbox", { name: "Label", exact: true }).fill("Contact us");
+  await second.getByRole("textbox", { name: "Label", exact: true }).blur();
+  await second.getByRole("textbox", { name: "URL", exact: true }).fill("/contact");
+  await second.getByRole("textbox", { name: "URL", exact: true }).blur();
+  await second.getByRole("button", { name: "Add Variant", exact: true }).click();
+  await second.getByRole("combobox", { name: "Variant", exact: true }).selectOption("secondary");
+
+  await expect(hero.getByRole("link")).toHaveText([/^Read docs/, /^Contact us/]);
+  await page.getByRole("button", { name: "Export JSX" }).click();
+  const exportDialog = page.getByRole("dialog", { name: /Export — Product overview/i });
+  await expect(exportDialog).toContainText("Read docs");
+  await expect(exportDialog).toContainText("Contact us");
+  await expect(exportDialog).toContainText("secondary");
+  await exportDialog.getByRole("button", { name: "Close" }).click();
+
+  await second.getByRole("button", { name: "Move up", exact: true }).click();
+  await expect(hero.getByRole("link")).toHaveText([/^Contact us/, /^Read docs/]);
+  await undo.click();
+  await expect(hero.getByRole("link")).toHaveText([/^Read docs/, /^Contact us/]);
+  await redo.click();
+  await expect(hero.getByRole("link")).toHaveText([/^Contact us/, /^Read docs/]);
+
+  await actions.locator('[data-sg-inspector-list-item="0"]').getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(hero.getByRole("link")).toHaveText([/^Read docs/]);
+  await undo.click();
+  await expect(hero.getByRole("link")).toHaveText([/^Contact us/, /^Read docs/]);
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(canvas.getByRole("region", { name: "Hero" }).getByRole("link")).toHaveText([/^Contact us/, /^Read docs/]);
+  expect(failures).toEqual([]);
+});

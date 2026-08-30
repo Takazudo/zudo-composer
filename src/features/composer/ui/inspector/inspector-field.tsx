@@ -649,6 +649,7 @@ function ListValueEditor({
         return (
           <div
             key={`${path.join(".")}-${index}`}
+            data-sg-inspector-list-item={index}
             class="flex flex-col gap-vsp-3xs rounded-md border border-border p-hsp-sm"
             draggable={!disabled}
             onDragStart={() => setDraggedIndex(index)}
