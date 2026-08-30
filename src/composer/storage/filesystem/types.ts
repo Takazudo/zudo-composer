@@ -1,6 +1,5 @@
-import type { Dirent, Stats } from "node:fs";
-import type { FileHandle } from "node:fs/promises";
 import type { CompositionLoadOutcome, CompositionRecord } from "../../library";
+import type { SafeRootFilesystemOperations } from "../../../shared/node-fs";
 
 /**
  * Browser-produced output for one canonical record. The filesystem core owns
@@ -36,15 +35,7 @@ export type CompositionJsxProvider = (
 ) => string | FilesystemDerivedOutputPlan | Promise<string | FilesystemDerivedOutputPlan>;
 
 /** Narrow injectable seam used to exercise filesystem failure recovery. */
-export interface FilesystemStoreOperations {
-  mkdir(path: string, options: { recursive: true }): Promise<unknown>;
-  lstat(path: string): Promise<Stats>;
-  realpath(path: string): Promise<string>;
-  readdir(path: string, options: { withFileTypes: true }): Promise<Dirent[]>;
-  open(path: string, flags: number, mode?: number): Promise<FileHandle>;
-  rename(oldPath: string, newPath: string): Promise<void>;
-  unlink(path: string): Promise<void>;
-}
+export type FilesystemStoreOperations = SafeRootFilesystemOperations;
 
 export interface FilesystemCompositionStoreOptions {
   /** The fixed directory below which all Composer-owned artifacts live. */
