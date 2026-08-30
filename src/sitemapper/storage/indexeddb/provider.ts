@@ -1,4 +1,4 @@
-import { SitemapPersistenceError } from "../../library";
+import { SITEMAP_PROVIDERS, SitemapPersistenceError } from "../../library";
 import type {
   SitemapInitializationOutcome,
   SitemapPersistenceErrorCode,
@@ -252,7 +252,7 @@ function recoveryFromScan(
 /** Creates the browser-only Sitemap provider. */
 export function createIndexedDbSitemapProvider(
   options: IndexedDbSitemapProviderOptions = {},
-): SitemapProvider {
+): SitemapProvider & { descriptor: typeof SITEMAP_PROVIDERS.indexeddb } {
   const runtime = new IndexedDbSitemapRuntime(options);
   const store = new IndexedDbSitemapStore(runtime);
 
@@ -260,8 +260,9 @@ export function createIndexedDbSitemapProvider(
     try {
       await runtime.open("initialize");
       const scan = await store.scanForInitialization();
+      if (scan.failures.length === 0 && options.seed) await store.seed(options.seed);
       return scan.failures.length === 0
-        ? { status: "ready", summaries: scan.summaries }
+        ? { status: "ready", summaries: await store.list() }
         : {
             status: "recovery-required",
             summaries: scan.summaries,
@@ -284,6 +285,7 @@ export function createIndexedDbSitemapProvider(
   };
 
   return {
+    descriptor: SITEMAP_PROVIDERS.indexeddb,
     store,
     initialization: {
       initialize,
@@ -294,7 +296,8 @@ export function createIndexedDbSitemapProvider(
       startFresh: async () => {
         try {
           await store.forceClear();
-          return { status: "ready", summaries: [] };
+          if (options.seed) await store.seed(options.seed);
+          return { status: "ready", summaries: await store.list() };
         } catch (error) {
           return {
             status: "error",

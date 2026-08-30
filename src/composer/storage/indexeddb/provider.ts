@@ -95,6 +95,7 @@ class IndexedDbProviderRuntime {
   readonly idFactory;
   readonly now: () => string;
   readonly initialDocument: IndexedDbCompositionProviderOptions["initialDocument"];
+  readonly seedRecords: readonly CompositionRecord[] | undefined;
   connection: OpenConnection | undefined;
   opening: Promise<OpenConnection> | undefined;
 
@@ -106,6 +107,7 @@ class IndexedDbProviderRuntime {
     this.idFactory = options.idFactory ?? createUuidIdFactory();
     this.now = options.now ?? (() => new Date().toISOString());
     this.initialDocument = options.initialDocument;
+    this.seedRecords = options.seed;
   }
 
   async open(operation: CompositionPersistenceOperation): Promise<OpenConnection> {
@@ -135,7 +137,11 @@ class IndexedDbProviderRuntime {
     if (this.connection?.invalidated) this.connection = undefined;
   }
 
-  createInitialRecord(): CompositionRecord {
+  createSeedRecords(): readonly CompositionRecord[] {
+    if (this.seedRecords) return cloneJson(this.seedRecords);
+    if (!this.initialDocument) {
+      throw persistenceError("initialize", "validation", "Composer provider requires an initialDocument or seed records.", false);
+    }
     const record = createCompositionRecord(this.initialDocument(), {
       idFactory: this.idFactory,
       now: this.now,
@@ -144,7 +150,7 @@ class IndexedDbProviderRuntime {
     if (!validation.ok) {
       throw persistenceError("initialize", "validation", validation.issue.message, false);
     }
-    return validation.record;
+    return [validation.record];
   }
 
   private openDatabase(): Promise<OpenConnection> {
@@ -173,20 +179,11 @@ class IndexedDbProviderRuntime {
           const compositions = request.result.createObjectStore(COMPOSITIONS_STORE_NAME, { keyPath: "id" });
           compositions.createIndex(UPDATED_AT_INDEX_NAME, "updatedAt", { unique: false });
           const meta = request.result.createObjectStore(META_STORE_NAME, { keyPath: "key" });
-          const initializedAt = this.now();
-          const record = this.createInitialRecord();
-          compositions.add(record);
           meta.put({
             key: COMPOSER_META_KEYS.schema,
             databaseVersion: COMPOSER_DATABASE_VERSION,
             recordSchemaVersion: COMPOSITION_SCHEMA_VERSION,
           } satisfies ComposerMetaRecord);
-          meta.put({
-            key: COMPOSER_META_KEYS.initialization,
-            state: "ready",
-            initializedAt,
-            recordId: record.id,
-          } satisfies InitializationMeta);
         } catch (error) {
           upgradeFailure =
             error instanceof CompositionPersistenceError
@@ -249,6 +246,21 @@ class IndexedDbCompositionStore implements CompositionStore {
 
   constructor(private readonly runtime: IndexedDbProviderRuntime) {}
 
+  async hasInitializationMeta(): Promise<boolean> {
+    const connection = await this.runtime.open("initialize");
+    const transaction = connection.db.transaction(META_STORE_NAME, "readonly");
+    const value = await requestResult(transaction.objectStore(META_STORE_NAME).get(COMPOSER_META_KEYS.initialization));
+    await transactionComplete(transaction);
+    return value !== undefined;
+  }
+
+  async markInitialized(recordId: string): Promise<void> {
+    const connection = await this.runtime.open("initialize");
+    const transaction = connection.db.transaction(META_STORE_NAME, "readwrite");
+    transaction.objectStore(META_STORE_NAME).put({ key: COMPOSER_META_KEYS.initialization, state: "ready", initializedAt: this.runtime.now(), recordId } satisfies InitializationMeta);
+    await transactionComplete(transaction);
+  }
+
   async initializationOutcome(): Promise<CompositionInitializationOutcome> {
     const records = await this.run("initialize", "readonly", (store) =>
       requestResult(store.getAll()) as Promise<unknown[]>,
@@ -307,6 +319,46 @@ class IndexedDbCompositionStore implements CompositionStore {
   async get(id: string): Promise<CompositionLoadOutcome> {
     const raw = await this.run("get", "readonly", (store) => requestResult(store.get(id)));
     return raw === undefined ? { status: "not-found", id } : loadCompositionRecord(raw);
+  }
+
+  async readAll(): Promise<readonly CompositionRecord[]> {
+    const records = await this.run("list", "readonly", (store) => requestResult(store.getAll()) as Promise<unknown[]>);
+    return records.map((raw) => {
+      const loaded = loadCompositionRecord(raw);
+      if (loaded.status !== "loaded") throw persistenceError("list", "validation", "Composer storage contains a record that cannot be snapshotted safely.", false);
+      return cloneJson(loaded.record);
+    });
+  }
+
+  async seed(records: readonly CompositionRecord[]): Promise<void> {
+    const validated: CompositionRecord[] = [];
+    const ids = new Set<string>();
+    for (const record of records) {
+      const result = validateCompositionRecord(record);
+      if (!result.ok) throw persistenceError("put", "validation", result.issue.message, false);
+      if (ids.has(result.record.id)) throw persistenceError("put", "validation", `Duplicate seed Composition id "${result.record.id}".`, false);
+      ids.add(result.record.id);
+      validated.push(result.record);
+    }
+    await this.run("put", "readwrite", async (store) => {
+      const existingRaw = await requestResult(store.getAll()) as unknown[];
+      const merged = new Map<string, CompositionRecord>();
+      for (const raw of existingRaw) {
+        const loaded = loadCompositionRecord(raw);
+        if (loaded.status !== "loaded") throw persistenceError("put", "validation", "Invalid Composer data was preserved. Use startFresh to discard it explicitly.", false);
+        merged.set(loaded.record.id, loaded.record);
+      }
+      for (const record of validated) if (!merged.has(record.id)) merged.set(record.id, record);
+      for (const record of merged.values()) {
+        const binding = record.document.binding;
+        if (!binding) continue;
+        const source = merged.get(binding.sourceRecordId);
+        if (!source || source.document.binding || source.document.publication?.kind !== "global-template" || source.document.publication.outlet.id !== binding.outletId) {
+          throw persistenceError("put", "conflict", `Seed Composition "${record.id}" has an unresolved Global-template binding.`, false);
+        }
+      }
+      for (const record of validated) if (!existingRaw.some((raw) => (raw as { id?: unknown })?.id === record.id)) await requestResult(store.add(cloneJson(record)));
+    });
   }
 
   async put(record: CompositionRecord): Promise<import("../../library").CompositionSaveOutcome> {
@@ -571,6 +623,11 @@ export function createIndexedDbCompositionProvider(
   const initialize = async (): Promise<CompositionInitializationOutcome> => {
     try {
       await runtime.open("initialize");
+      const scanned = await store.initializationOutcome();
+      if (scanned.status !== "ready" || await store.hasInitializationMeta()) return scanned;
+      const seed = runtime.createSeedRecords();
+      await store.seed(seed);
+      await store.markInitialized(seed[0]?.id ?? "empty-seed");
       return store.initializationOutcome();
     } catch (error) {
       return {
@@ -595,7 +652,9 @@ export function createIndexedDbCompositionProvider(
       startFresh: async () => {
         try {
           await store.forceClear();
-          await store.put(runtime.createInitialRecord());
+          const seed = runtime.createSeedRecords();
+          await store.seed(seed);
+          await store.markInitialized(seed[0]?.id ?? "empty-seed");
           return { status: "ready", summaries: await store.list() };
         } catch (error) {
           return {
