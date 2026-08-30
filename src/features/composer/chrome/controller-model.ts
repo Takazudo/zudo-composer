@@ -119,6 +119,8 @@ export type ComposerAction =
       patch: JsonObject;
       /** Exact leaf paths coalesce; null marks list/object structural edits as standalone. */
       coalescePaths?: readonly PropPath[] | null;
+      /** Explicit top-level omission for optional props; never encode absence as JSON null. */
+      removeProps?: readonly string[];
     }
   | { type: "reorder"; nodeId: string; direction: "up" | "down" }
   | { type: "remove"; nodeId: string }
@@ -352,7 +354,7 @@ export function applyComposerAction(
       };
     }
     case "updateProps": {
-      const result = updateProps(state.document, ctx.manifest, action.nodeId, action.patch);
+      const result = updateProps(state.document, ctx.manifest, action.nodeId, action.patch, action.removeProps);
       if (!result.ok) return { state, error: result.error, documentChanged: false };
       return {
         state: { ...state, document: result.document, selectedId: result.selectedId },

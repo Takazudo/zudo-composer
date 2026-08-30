@@ -105,7 +105,7 @@ export interface ComposerController {
   canRedo: boolean;
   add: (target: InsertionTarget, componentId: string) => void;
   rename: (name: string) => void;
-  updateProps: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing) => void;
+  updateProps: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing, removeProps?: readonly string[]) => void;
   /**
    * Debounced sibling of `updateProps` for PER-KEYSTROKE sources (the
    * inspector's text/color/number streams, issue Takazudo/zudo-sg#291/#259). Patches are
@@ -318,7 +318,7 @@ export function useComposerController(options: UseComposerControllerOptions): Co
           historyRef.current = clearHistory();
         } else {
           const coalesceKey: CoalesceKey | null = action.type === "updateProps"
-            ? action.coalescePaths === null
+            ? action.coalescePaths === null || (action.removeProps?.length ?? 0) > 0
               ? null
               : {
                   kind: "updateProps",
@@ -567,7 +567,7 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       canRedo: state.mode !== "preview" && historyCanRedo(historyRef.current),
       add: (target, componentId) => dispatch({ type: "add", target, componentId }),
       rename: (name) => dispatch({ type: "rename", name }),
-      updateProps: (nodeId, patch, coalescePaths) => dispatch({ type: "updateProps", nodeId, patch, coalescePaths }),
+      updateProps: (nodeId, patch, coalescePaths, removeProps) => dispatch({ type: "updateProps", nodeId, patch, coalescePaths, removeProps }),
       updatePropsDebounced,
       flushPropUpdates,
       flushPersistence,

@@ -15,7 +15,10 @@ describe("CompositionCanvas provider view", () => {
       { label: "Get started", href: "/start" },
     ];
     const received: unknown[] = [];
-    const Hero = (_props: { actions: readonly JsonObject[] }) => null;
+    const Hero = (props: { actions: readonly JsonObject[] }) => {
+      void props;
+      return null;
+    };
     const provider = createComposerComponentProvider(defineComponentPack({
       packId: "@test/hero-actions",
       packVersion: "1.0.0",

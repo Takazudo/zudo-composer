@@ -97,7 +97,7 @@ export const fixtureEntries: readonly ComponentManifest[] = [
     defaults: { heading: "Heading", as: "h2" },
     fields: [
       { schema: { type: "string" }, editor: { kind: "text" }, prop: "eyebrow", label: "Eyebrow" },
-      { schema: { type: "string" }, editor: { kind: "text" }, prop: "heading", label: "Heading" },
+      { schema: { type: "string" }, editor: { kind: "text" }, prop: "heading", label: "Heading", required: true },
       { schema: { type: "string", enum: ["h2", "h3"] }, editor: { kind: "select" }, prop: "as", label: "As" },
     ],
   }),

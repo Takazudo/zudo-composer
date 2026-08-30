@@ -106,9 +106,9 @@ consumers use the package-only commit recorded by
 [`contract-handoff.json`](./contract-handoff.json):
 
 - API/package version: `@zudo-composer/component-contract@1.0.0`
-- package commit: `51f1c64a7639134254866458ff72b497da9c2f36`
+- package commit: `701ff1bbbc87d836453cdba6dc5c3c479f4ed2ff`
 - exact external Git spec:
-  `git+https://github.com/Takazudo/zudo-composer.git#51f1c64a7639134254866458ff72b497da9c2f36`
+  `git+https://github.com/Takazudo/zudo-composer.git#701ff1bbbc87d836453cdba6dc5c3c479f4ed2ff`
 
 The monorepo itself intentionally resolves this contract with `workspace:*`.
 That local workspace relationship must not be confused with, or used in place

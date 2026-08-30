@@ -40,6 +40,7 @@ import {
   XMarkIcon,
 } from "../../../../components/icons";
 import type { ComposerMode } from "../../chrome/controller-model";
+import type { PropPath, PropCoalescing } from "../../chrome/history-model";
 import { InspectorField } from "./inspector-field";
 import { ReuseControls } from "./reuse-controls";
 import type { ReuseAuthoringActionResult } from "../shared/reuse-authoring-contract";
@@ -49,7 +50,12 @@ export interface InspectorPanelProps {
   manifest: ComponentCatalog;
   selectedId: string | null;
   mode: ComposerMode;
-  onUpdateProps: (nodeId: string, patch: JsonObject) => void;
+  onUpdateProps: (
+    nodeId: string,
+    patch: JsonObject,
+    coalescePaths?: PropCoalescing,
+    removeProps?: readonly string[],
+  ) => void;
   /**
    * Debounced commit channel for PER-KEYSTREAM fields — text/color/number
    * (issue Takazudo/zudo-sg#291). When absent, those fields fall back to `onUpdateProps`
@@ -58,7 +64,7 @@ export interface InspectorPanelProps {
    * are single commit points with nothing to coalesce, per the resizer's
    * live-vs-commit philosophy.
    */
-  onUpdatePropsDebounced?: (nodeId: string, patch: JsonObject) => void;
+  onUpdatePropsDebounced?: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing) => void;
   /** Synchronously land any debounce-pending commit (issue Takazudo/zudo-sg#291) — fields call it on blur. */
   onFlushPendingProps?: () => void;
   onReorder: (nodeId: string, direction: "up" | "down") => void;
@@ -315,12 +321,21 @@ export function InspectorPanel({
             <InspectorField
               key={`${selectedId}:${field.prop}`}
               field={field}
-              value={node.props[field.prop] ?? null}
+              value={Object.hasOwn(node.props, field.prop) ? node.props[field.prop] : undefined}
               disabled={readOnly}
-              onCommit={(value) => onUpdateProps(node.id, { [field.prop]: value })}
+              onRemove={() => onUpdateProps(node.id, {}, null, [field.prop])}
+              onCommit={(value, path, structural) => {
+                const coalescePaths = structural ? null : path && path.length > 0 ? [path as PropPath] : undefined;
+                if (coalescePaths === undefined) onUpdateProps(node.id, { [field.prop]: value });
+                else onUpdateProps(node.id, { [field.prop]: value }, coalescePaths);
+              }}
               onCommitDebounced={
                 onUpdatePropsDebounced &&
-                ((value) => onUpdatePropsDebounced(node.id, { [field.prop]: value }))
+                ((value, path, structural) => {
+                  const coalescePaths = structural ? null : path && path.length > 0 ? [path as PropPath] : undefined;
+                  if (coalescePaths === undefined) onUpdatePropsDebounced(node.id, { [field.prop]: value });
+                  else onUpdatePropsDebounced(node.id, { [field.prop]: value }, coalescePaths);
+                })
               }
               onFlushPending={onFlushPendingProps}
             />
