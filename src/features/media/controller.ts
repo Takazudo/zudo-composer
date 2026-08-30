@@ -42,7 +42,10 @@ export function mediaUrl(record: Pick<MediaSummary, "id" | "mediaType">): string
 }
 
 export function mediaMarkdown(record: Pick<MediaSummary, "id" | "mediaType" | "fileName">): string {
-  return `![${record.fileName.replace(/\.[^.]+$/, "")}](${mediaUrl(record)})`;
+  const alt = record.fileName
+    .replace(/\.[^.]+$/, "")
+    .replace(/([\\[\]])/g, "\\$1");
+  return `![${alt}](${mediaUrl(record)})`;
 }
 
 export class MediaLibraryController {

@@ -6,6 +6,7 @@ import {
   createMediaRecord,
   summarizeMedia,
   type MediaByteSource,
+  type MediaInitializationOutcome,
   type MediaLoadOutcome,
   type MediaPersistenceOperation,
   type MediaRecord,
@@ -255,7 +256,7 @@ export class FilesystemMediaStore implements MediaStore {
     }
     let result: StreamingAtomicWriteResult;
     try {
-      result = await this.writeBytes(id, sniffed.extension, peeked.stream, input.signal);
+      result = await this.writeBytes(id, sniffed.extension, peeked.stream, { signal: input.signal });
     } catch (cause) {
       await peeked.cancel().catch(() => undefined);
       throw cause;
@@ -270,6 +271,56 @@ export class FilesystemMediaStore implements MediaStore {
     return structuredClone(record);
   }
 
+  async initialize(): Promise<MediaInitializationOutcome> {
+    return this.run("initialize", async () => {
+      let entries: Dirent[];
+      try {
+        entries = await this.filesystem.operations.readdir(this.recordsDirectory.path, { withFileTypes: true });
+        await this.assertDirectories("initialize");
+      } catch (cause) {
+        rethrow("initialize", "read-failed", "Could not inspect Media records during initialization.", cause);
+      }
+
+      const summaries: MediaSummary[] = [];
+      const failures: Array<{ id: string; status: "invalid" | "future-schema"; foundSchemaVersion?: number }> = [];
+      for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+        const match = RECORD_PATTERN.exec(entry.name);
+        if (!match) continue;
+        if (entry.isSymbolicLink() || !entry.isFile()) {
+          throw operationError("initialize", "blocked", `Refusing to initialize from a non-regular Media record path: ${entry.name}`);
+        }
+        const id = match[1]!;
+        const canonical = await this.readCanonical("initialize", id);
+        if (canonical === undefined) continue;
+        if (canonical.outcome.status === "loaded") {
+          summaries.push(summarizeMedia(canonical.outcome.record));
+        } else if (canonical.outcome.status === "future-schema") {
+          failures.push({ id, status: "future-schema", foundSchemaVersion: canonical.outcome.foundSchemaVersion });
+        } else if (canonical.outcome.status === "invalid") {
+          failures.push({ id, status: "invalid" });
+        }
+      }
+      summaries.sort(compareMediaSummariesNewestFirst);
+      if (failures.length === 0) return { status: "ready", summaries };
+
+      const future = failures.find((failure) => failure.status === "future-schema");
+      return {
+        status: "recovery-required",
+        summaries,
+        recovery: {
+          kind: "quarantined",
+          reason: future === undefined ? "invalid" : "future-schema",
+          sourcePreserved: true,
+          affectedRecordIds: failures.map(({ id }) => id),
+          ...(future?.foundSchemaVersion === undefined ? {} : { foundSchemaVersion: future.foundSchemaVersion }),
+          message: future === undefined
+            ? "Media storage contains malformed records. The source data was preserved."
+            : "Media storage contains records from a newer schema. The source data was preserved.",
+        },
+      };
+    });
+  }
+
   async put(record: MediaRecord, source: MediaByteSource): Promise<void> {
     const validation = validateMediaRecord(record);
     if (!validation.ok) throw operationError("put", "validation", validation.issue.message);
@@ -280,15 +331,16 @@ export class FilesystemMediaStore implements MediaStore {
       await peeked.cancel().catch(() => undefined);
       throw operationError("put", "validation", "Media byte signature does not match the canonical mediaType.");
     }
-    let result: StreamingAtomicWriteResult;
     try {
-      result = await this.writeBytes(snapshot.id, sniffed.extension, peeked.stream);
+      await this.writeBytes(snapshot.id, sniffed.extension, peeked.stream, {
+        expected: {
+          byteLength: snapshot.document.byteLength,
+          checksum: snapshot.document.checksum,
+        },
+      });
     } catch (cause) {
       await peeked.cancel().catch(() => undefined);
       throw cause;
-    }
-    if (result.byteLength !== snapshot.document.byteLength || result.checksum !== snapshot.document.checksum) {
-      throw operationError("put", "validation", "Media bytes do not match the canonical length and checksum.");
     }
     await this.writeRecord(snapshot);
   }
@@ -426,10 +478,23 @@ export class FilesystemMediaStore implements MediaStore {
     id: string,
     extension: SniffedMedia["extension"],
     source: AsyncIterable<Uint8Array>,
-    signal?: AbortSignal,
+    options: {
+      signal?: AbortSignal;
+      expected?: StreamingAtomicWriteResult;
+    } = {},
   ): Promise<StreamingAtomicWriteResult> {
     await this.assertDirectories("put");
-    return streamingAtomicReplace(this.filesystem, "put", this.bytePath(id, extension), source, { byteCap: MEDIA_MAX_BYTE_LENGTH, signal });
+    return streamingAtomicReplace(this.filesystem, "put", this.bytePath(id, extension), source, {
+      byteCap: MEDIA_MAX_BYTE_LENGTH,
+      signal: options.signal,
+      ...(options.expected === undefined ? {} : {
+        validateResult: (result: StreamingAtomicWriteResult) => {
+          if (result.byteLength !== options.expected!.byteLength || result.checksum !== options.expected!.checksum) {
+            throw operationError("put", "validation", "Media bytes do not match the canonical length and checksum.");
+          }
+        },
+      }),
+    });
   }
 
   private async writeRecord(record: MediaRecord): Promise<void> {

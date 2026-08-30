@@ -72,4 +72,10 @@ describe("MediaLibraryController", () => {
     expect(scanReferences).toHaveBeenCalledWith("/uploaded-media/media-hero.png");
     expect(controller.state.referenceScan).toEqual({ status: "complete", mediaId: "hero", references: ["Content: Home"] });
   });
+
+  it("escapes structural Markdown characters in display filenames", () => {
+    const source = record("diagram", "hero [draft].png");
+    const summary = { ...source, ...source.document };
+    expect(mediaMarkdown(summary)).toBe(String.raw`![hero \[draft\]](/uploaded-media/media-diagram.png)`);
+  });
 });

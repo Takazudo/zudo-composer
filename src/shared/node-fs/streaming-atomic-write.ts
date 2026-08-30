@@ -5,6 +5,8 @@ import type { SafeRootFilesystem } from "./safe-root";
 export interface StreamingAtomicWriteOptions {
   byteCap: number;
   signal?: AbortSignal;
+  /** Synchronous pre-commit integrity check. Throwing leaves the old target untouched. */
+  validateResult?(result: StreamingAtomicWriteResult): void;
 }
 
 export interface StreamingAtomicWriteResult {
@@ -116,6 +118,9 @@ export async function streamingAtomicReplace<Operation extends string>(
         throw new StreamingAtomicWriteCapError(options.byteCap, byteLength);
       }
 
+      const result = { byteLength, checksum: hash.digest("hex") };
+      options.validateResult?.(result);
+
       throwIfAborted(options.signal);
       await handle.sync();
       throwIfAborted(options.signal);
@@ -128,7 +133,7 @@ export async function streamingAtomicReplace<Operation extends string>(
       await filesystem.operations.rename(temporaryPath, finalPath);
       temporaryPath = undefined;
 
-      return { byteLength, checksum: hash.digest("hex") };
+      return result;
     } catch (cause) {
       if (cause instanceof StreamingAtomicWriteCapError) throw cause;
       filesystem.rethrowAtomicWriteFailure(operation, finalPath, cause);

@@ -26,6 +26,9 @@ export const MEDIA_FILE_PROVIDER_RECORD_ID_HEADER = "x-zudo-composer-media-recor
 export const MEDIA_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 export const MEDIA_FILE_PROVIDER_ROOT = "media-store";
 const MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
+// A valid 255-code-point display name can expand to 3,060 characters when
+// encodeURIComponent represents astral Unicode as four percent-encoded bytes.
+const MEDIA_ENCODED_FILE_NAME_MAX_LENGTH = 4096;
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -164,7 +167,7 @@ function mediaOperationError(value, operation) {
 }
 
 function decodeMediaFileName(value) {
-  if (typeof value !== "string" || value.length === 0 || value.length > 1024) return undefined;
+  if (typeof value !== "string" || value.length === 0 || value.length > MEDIA_ENCODED_FILE_NAME_MAX_LENGTH) return undefined;
   try { return decodeURIComponent(value); } catch { return undefined; }
 }
 
@@ -209,7 +212,7 @@ export function createMediaUploadMiddleware(options) {
       const store = await options.createStore();
       let result;
       switch (operation) {
-        case "initialize":
+        case "initialize": result = await store.initialize(); break;
         case "list": result = await store.list(); break;
         case "get": result = await store.get(req.headers[MEDIA_FILE_PROVIDER_RECORD_ID_HEADER] ?? ""); break;
         case "delete": result = await store.delete(req.headers[MEDIA_FILE_PROVIDER_RECORD_ID_HEADER] ?? ""); break;

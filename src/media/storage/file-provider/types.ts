@@ -1,4 +1,4 @@
-import type { MediaProvider, MediaRecord, MediaStore } from "../../library";
+import type { MediaInitializationOutcome, MediaProvider, MediaRecord, MediaStore } from "../../library";
 
 export interface MediaFileProviderConfig {
   mediaEndpoint: string;
@@ -11,6 +11,7 @@ export interface MediaFileProviderConfig {
 }
 
 export interface MediaFileProviderStore extends MediaStore {
+  initialize(): Promise<MediaInitializationOutcome>;
   upload(file: Blob & { name: string }): Promise<MediaRecord>;
 }
 

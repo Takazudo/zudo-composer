@@ -55,12 +55,12 @@ describe("browser media file provider", () => {
 
   it("adapts initialization, list, get, delete, clear and startFresh", async () => {
     const summary = { id: "hero", fileName: "hero.png", mediaType: "image/png", byteLength: 8, checksum: "a".repeat(64), createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
-    fetchMock.mockResolvedValue(response({ ok: true, result: [summary] }));
+    fetchMock.mockResolvedValue(response({ ok: true, result: { status: "ready", summaries: [summary] } }));
     const provider = createFileProviderMediaProvider({ fetch: fetchMock })!;
     await expect(provider.initialization.initialize()).resolves.toEqual({ status: "ready", summaries: [summary] });
-    expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get("x-operation")).toBe("list");
-    fetchMock.mockReset().mockResolvedValueOnce(response({ ok: true, result: null })).mockResolvedValueOnce(response({ ok: true, result: [] }));
+    expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get("x-operation")).toBe("initialize");
+    fetchMock.mockReset().mockResolvedValueOnce(response({ ok: true, result: null })).mockResolvedValueOnce(response({ ok: true, result: { status: "ready", summaries: [] } }));
     await expect(provider.initialization.startFresh()).resolves.toEqual({ status: "ready", summaries: [] });
-    expect(fetchMock.mock.calls.map((call) => new Headers(call[1]?.headers).get("x-operation"))).toEqual(["clear", "list"]);
+    expect(fetchMock.mock.calls.map((call) => new Headers(call[1]?.headers).get("x-operation"))).toEqual(["clear", "initialize"]);
   });
 });

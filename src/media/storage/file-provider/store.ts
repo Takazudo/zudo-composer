@@ -39,6 +39,7 @@ function isProtocolResponse<T>(value: unknown): value is ProtocolResponse<T> {
 class BrowserFileProviderMediaStore implements MediaFileProviderStore {
   readonly provider = MEDIA_PROVIDERS.files;
   constructor(private readonly config: MediaFileProviderConfig, private readonly fetchImpl: typeof fetch) {}
+  initialize() { return this.request<MediaInitializationOutcome>("initialize"); }
   list() { return this.request<readonly MediaSummary[]>("list"); }
   async get(id: string): Promise<MediaLoadOutcome> {
     const result = await this.request<MediaLoadOutcome>("get", id);
@@ -95,7 +96,7 @@ export function createFileProviderMediaProvider(options: CreateFileProviderMedia
   const store = createFileProviderMediaStore(options);
   if (store === undefined) return undefined;
   const initialize = async (): Promise<MediaInitializationOutcome> => {
-    try { return { status: "ready", summaries: await store.list() }; }
+    try { return await store.initialize(); }
     catch (error) { return { status: "error", error: error instanceof MediaPersistenceError ? error : persistenceError("initialize", "unknown", "Media storage initialization failed.", error) }; }
   };
   return { descriptor: MEDIA_PROVIDERS.files, store, initialization: { initialize, retry: initialize, startFresh: async () => { await store.clear(); return initialize(); } } };

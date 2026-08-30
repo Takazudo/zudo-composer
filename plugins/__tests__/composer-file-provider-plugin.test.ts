@@ -374,6 +374,17 @@ describe("media upload request boundary and core integration", () => {
     expect(createStore).not.toHaveBeenCalled();
   });
 
+  it("accepts a maximally long encoded Unicode display filename", async () => {
+    const fileName = "界".repeat(255);
+    const upload = vi.fn().mockResolvedValue({ id: "unicode-name" });
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: async () => ({ upload }) });
+    const req = mediaRequest([], { headers: { ...mediaRequest([]).headers, [MEDIA_FILE_PROVIDER_FILE_NAME_HEADER]: encodeURIComponent(fileName) } });
+    const res = connectResponse();
+    await handler(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(upload).toHaveBeenCalledWith(expect.objectContaining({ fileName }));
+  });
+
   it("lets the sink drain chunked overflow and sends one 413", async () => {
     let chunks = 0;
     const handler = createMediaUploadMiddleware({ capability: CAPABILITY, maxBodyBytes: 4, createStore: async () => ({ upload: async ({ bytes }: { bytes: AsyncIterable<Uint8Array> }) => {

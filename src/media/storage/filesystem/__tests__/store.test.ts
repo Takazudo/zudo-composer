@@ -39,6 +39,34 @@ function paths(root: string, extension = "png") {
 }
 
 describe("FilesystemMediaStore", () => {
+  it("quarantines malformed and future-schema records during initialization", async () => {
+    const root = await sandbox();
+    const store = await createFilesystemMediaStore(options(root));
+    await store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES });
+    const futurePath = join(root, "records", "media-future.json");
+    const malformedPath = join(root, "records", "media-malformed.json");
+    await fs.writeFile(futurePath, JSON.stringify({
+      id: "future",
+      createdAt: "2026-08-31T00:00:00.000Z",
+      updatedAt: "2026-08-31T00:00:00.000Z",
+      document: { schemaVersion: 2 },
+    }));
+    await fs.writeFile(malformedPath, "{broken");
+
+    await expect(store.initialize()).resolves.toMatchObject({
+      status: "recovery-required",
+      summaries: [{ id: "safe-id" }],
+      recovery: {
+        reason: "future-schema",
+        sourcePreserved: true,
+        affectedRecordIds: ["future", "malformed"],
+        foundSchemaVersion: 2,
+      },
+    });
+    await expect(fs.readFile(futurePath, "utf8")).resolves.toContain('"schemaVersion":2');
+    await expect(fs.readFile(malformedPath, "utf8")).resolves.toBe("{broken");
+  });
+
   it("commits bytes first and leaves a list-skipped orphan if metadata commit fails", async () => {
     const root = await sandbox();
     const store = await createFilesystemMediaStore(options(root, {
@@ -208,5 +236,28 @@ describe("FilesystemMediaStore", () => {
     });
     await store.put(record, PNG_BYTES);
     await expect(store.get("imported-id")).resolves.toMatchObject({ status: "loaded", record: { id: "imported-id" } });
+  });
+
+  it("rejects an import integrity mismatch before replacing existing bytes", async () => {
+    const root = await sandbox();
+    const store = await createFilesystemMediaStore(options(root));
+    await store.upload({ fileName: "original.png", declaredMediaType: "image/png", bytes: PNG_BYTES });
+    const expectedBytes = Uint8Array.from(PNG_BYTES);
+    expectedBytes[expectedBytes.length - 1] = 8;
+    const mismatchedBytes = Uint8Array.from(PNG_BYTES);
+    mismatchedBytes[mismatchedBytes.length - 1] = 9;
+    const replacement = createMediaRecord({
+      fileName: "replacement.png",
+      mediaType: "image/png",
+      byteLength: expectedBytes.byteLength,
+      checksum: createHash("sha256").update(expectedBytes).digest("hex"),
+    }, { id: "safe-id", timestamp: "2026-08-31T00:00:00.000Z" });
+
+    await expect(store.put(replacement, mismatchedBytes)).rejects.toMatchObject({ operation: "put", code: "validation" });
+    await expect(fs.readFile(paths(root).bytes)).resolves.toEqual(Buffer.from(PNG_BYTES));
+    await expect(store.get("safe-id")).resolves.toMatchObject({
+      status: "loaded",
+      record: { document: { fileName: "original.png" } },
+    });
   });
 });
