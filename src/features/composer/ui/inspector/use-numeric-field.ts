@@ -15,6 +15,7 @@ export interface UseNumericFieldOptions {
   value: number;
   min?: number;
   max?: number;
+  step?: number;
   onCommit: (value: number) => void;
 }
 
@@ -28,16 +29,27 @@ export interface UseNumericFieldResult {
 
 type DraftValidation = { ok: true; value: number } | { ok: false; message: string };
 
-function validateDraft(text: string, min: number | undefined, max: number | undefined): DraftValidation {
+function validateDraft(
+  text: string,
+  min: number | undefined,
+  max: number | undefined,
+  step: number | undefined,
+): DraftValidation {
   if (text.trim() === "") return { ok: false, message: "Enter a number" };
   const parsed = Number(text);
   if (!Number.isFinite(parsed)) return { ok: false, message: "Must be a finite number" };
   if (min !== undefined && parsed < min) return { ok: false, message: `Must be at least ${min}` };
   if (max !== undefined && parsed > max) return { ok: false, message: `Must be at most ${max}` };
+  if (step !== undefined) {
+    const units = (parsed - (min ?? 0)) / step;
+    if (Math.abs(units - Math.round(units)) >= 1e-9) {
+      return { ok: false, message: `Must use increments of ${step}` };
+    }
+  }
   return { ok: true, value: parsed };
 }
 
-export function useNumericField({ value, min, max, onCommit }: UseNumericFieldOptions): UseNumericFieldResult {
+export function useNumericField({ value, min, max, step, onCommit }: UseNumericFieldOptions): UseNumericFieldResult {
   const [draft, setDraft] = useState(() => String(value));
   const [error, setError] = useState<string | null>(null);
   const focusedRef = useRef(false);
@@ -62,7 +74,7 @@ export function useNumericField({ value, min, max, onCommit }: UseNumericFieldOp
     error,
     onInput: (text) => {
       setDraft(text);
-      const result = validateDraft(text, min, max);
+      const result = validateDraft(text, min, max, step);
       if (result.ok) {
         setError(null);
         // Never commit a value equal to what's already there (or already in
@@ -81,7 +93,7 @@ export function useNumericField({ value, min, max, onCommit }: UseNumericFieldOp
     },
     onBlur: () => {
       focusedRef.current = false;
-      const result = validateDraft(draft, min, max);
+      const result = validateDraft(draft, min, max, step);
       if (!result.ok) {
         setDraft(String(value));
         setError(null);

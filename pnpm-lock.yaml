@@ -30,8 +30,8 @@ importers:
         specifier: workspace:*
         version: link:packages/component-contract
       '@zudo-sg/ui':
-        specifier: git+https://github.com/Takazudo/zudo-sg.git#fe3fc62d3f677f321f5eb7814240d4a55dc92cd0
-        version: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/fe3fc62d3f677f321f5eb7814240d4a55dc92cd0(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)
+        specifier: git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf
+        version: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)
       preact:
         specifier: ^10.29.8
         version: 10.29.8(preact-render-to-string@6.7.0)
@@ -1186,8 +1186,8 @@ packages:
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
 
-  '@zudo-sg/ui@https://codeload.github.com/Takazudo/zudo-sg/tar.gz/fe3fc62d3f677f321f5eb7814240d4a55dc92cd0':
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/fe3fc62d3f677f321f5eb7814240d4a55dc92cd0}
+  '@zudo-sg/ui@https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf':
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf}
     version: 0.1.0
     peerDependencies:
       '@zudo-composer/component-contract': ^1.0.0
@@ -3602,7 +3602,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
 
-  '@zudo-sg/ui@https://codeload.github.com/Takazudo/zudo-sg/tar.gz/fe3fc62d3f677f321f5eb7814240d4a55dc92cd0(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)':
+  '@zudo-sg/ui@https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)':
     dependencies:
       '@takazudo/zfb-md-wasm': 2.10.1
       '@zudo-composer/component-contract': link:packages/component-contract

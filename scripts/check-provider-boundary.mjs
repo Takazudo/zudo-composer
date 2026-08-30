@@ -10,7 +10,7 @@ const providerPackage = JSON.parse(readFileSync(join(root, "node_modules/@zudo-s
 const lock = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
 const packSource = readFileSync(join(root, "node_modules/@zudo-sg/ui/src/composer-pack.ts"), "utf8");
 
-const providerSha = "fe3fc62d3f677f321f5eb7814240d4a55dc92cd0";
+const providerSha = "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf";
 const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}`;
 
 function filesUnder(directory) {

@@ -25,7 +25,10 @@ interface BadgeProps {
   tone: 'neutral' | 'positive';
 }
 
-const container = defineComponent<ContainerProps>()((_props: ContainerProps) => 'fixture-container-component', {
+const container = defineComponent<ContainerProps>()((props: ContainerProps) => {
+  void props;
+  return 'fixture-container-component';
+}, {
   id: 'container',
   schemaVersion: 2,
   title: 'Container',
@@ -81,7 +84,10 @@ const container = defineComponent<ContainerProps>()((_props: ContainerProps) => 
   },
 });
 
-const prose = defineComponent<ProseProps>()((_props: ProseProps) => 'fixture-prose-component', {
+const prose = defineComponent<ProseProps>()((props: ProseProps) => {
+  void props;
+  return 'fixture-prose-component';
+}, {
   id: 'prose',
   schemaVersion: 1,
   title: 'Prose',
@@ -102,7 +108,10 @@ const prose = defineComponent<ProseProps>()((_props: ProseProps) => 'fixture-pro
   },
 });
 
-const badge = defineComponent<BadgeProps>()((_props: BadgeProps) => 'fixture-badge-component', {
+const badge = defineComponent<BadgeProps>()((props: BadgeProps) => {
+  void props;
+  return 'fixture-badge-component';
+}, {
   id: 'badge',
   schemaVersion: 1,
   title: 'Badge',

@@ -192,6 +192,20 @@ describe("updateProps", () => {
     expect(result.error).toMatch(/structural slot/i);
   });
 
+  it("removes an optional top-level prop explicitly and refuses required omission", () => {
+    const heading = node(C.sectionHeading, { heading: "Old", as: "h2" }, {}, "h");
+    const removed = updateProps(doc([heading]), M, "h", {}, ["as"]);
+    expect(removed.ok).toBe(true);
+    if (!removed.ok) return;
+    expect(removed.changed).toBe(true);
+    expect(removed.document.root[0]!.props).toEqual({ heading: "Old" });
+
+    const refused = updateProps(doc([heading]), M, "h", {}, ["heading"]);
+    expect(refused.ok).toBe(false);
+    if (refused.ok) return;
+    expect(refused.error).toMatch(/required.*cannot be removed/i);
+  });
+
   describe("rejects RESERVED_PERSISTED_KEYS", () => {
     // `updateProps` is the model layer's own gate: a direct caller bypasses the
     // preview protocol's wire-level rejection (`protocol.ts`) entirely, so the
