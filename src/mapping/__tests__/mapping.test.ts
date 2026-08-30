@@ -5,9 +5,9 @@ import { createComponentCatalog } from "../../composer/model/types";
 import type { CompositionRecord } from "../../composer/library";
 import { createContentCatalog } from "../../content/catalog";
 import type { ContentEntryRecord, ContentFieldKind, ContentModelRecord } from "../../content/model";
-import { CONTENT_ENTRY_SCHEMA_VERSION, CONTENT_MODEL_SCHEMA_VERSION } from "../../content/model";
+import { CONTENT_ENTRY_SCHEMA_VERSION, CONTENT_FIELD_KINDS, CONTENT_MODEL_SCHEMA_VERSION } from "../../content/model";
 import { createCompositionCatalog, createIndexedDbMappingProvider, createMappingCatalog, createMappingRecord, discoverMappingTargets, evaluateMapping, evaluateResolvedMapping, isMappingCompatible, mapMappingOperationalError, MAPPING_DATABASE_NAME, MAPPING_DATABASE_VERSION, MAPPING_META_STORE_NAME, MAPPING_RECORDS_STORE_NAME, MAPPING_SCHEMA_VERSION, MAPPING_UPDATED_AT_INDEX, resolveMappingDefinition, validateMappingRecord } from "..";
-import type { MappingBinding, MappingTargetKind, MappingTransform } from "..";
+import type { MappingBinding, MappingTransform, ScalarMappingTargetField } from "..";
 
 const stamp = "2026-08-29T00:00:00.000Z";
 const fields = [
@@ -17,9 +17,9 @@ const fields = [
 ] as const;
 const model: ContentModelRecord = { id: "articles", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: CONTENT_MODEL_SCHEMA_VERSION, id: "articles", name: "Articles", kind: "collection", fields: [...fields] } };
 const composition: CompositionRecord = { id: "landing", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 2, id: "landing", name: "Landing", root: [{ id: "hero", componentId: "hero", componentVersion: 1, props: { title: "Static", subtitle: "Keep", tone: "quiet" }, slots: { body: [{ id: "nested", componentId: "copy", componentVersion: 1, props: { text: "Nested" }, slots: {} }] } }] } };
-const manifest = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 1, packId: "test", packVersion: "1", components: [
-  { id: "hero", schemaVersion: 1, title: "Hero", category: "Test", description: "", source: { module: "x", exportKind: "named", exportName: "Hero" }, defaults: {}, fields: [{ kind: "text", prop: "title", label: "Title" }, { kind: "text", prop: "subtitle", label: "Subtitle" }, { kind: "select", prop: "tone", label: "Tone", options: ["quiet", "loud"] }], slots: [{ id: "body", prop: "body", label: "Body", cardinality: "many" }] },
-  { id: "copy", schemaVersion: 1, title: "Copy", category: "Test", description: "", source: { module: "x", exportKind: "named", exportName: "Copy" }, defaults: {}, fields: [{ kind: "text", prop: "text", label: "Text" }], slots: [] },
+const manifest = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "test", packVersion: "1", components: [
+  { id: "hero", schemaVersion: 1, title: "Hero", category: "Test", description: "", source: { module: "x", exportKind: "named", exportName: "Hero" }, defaults: {}, fields: [{ schema: { type: "string" }, editor: { kind: "text" }, prop: "title", label: "Title" }, { schema: { type: "string" }, editor: { kind: "text" }, prop: "subtitle", label: "Subtitle" }, { schema: { type: "string", enum: ["quiet", "loud"] }, editor: { kind: "select" }, prop: "tone", label: "Tone" }, { schema: { type: "array", items: { schema: { type: "string" }, editor: { kind: "text" } } }, editor: { kind: "list" }, prop: "tags", label: "Tags" }], slots: [{ id: "body", prop: "body", label: "Body", cardinality: "many" }] },
+  { id: "copy", schemaVersion: 1, title: "Copy", category: "Test", description: "", source: { module: "x", exportKind: "named", exportName: "Copy" }, defaults: {}, fields: [{ schema: { type: "string" }, editor: { kind: "text" }, prop: "text", label: "Text" }], slots: [] },
 ] });
 
 function mapping(bindings: readonly MappingBinding[] = [{ id: "bind-title", sourceFieldId: "title", target: { nodeId: "hero", prop: "title" }, transform: { kind: "identity" } }]) { return createMappingRecord({ id: "article-landing", name: "Article landing", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "indexeddb", recordId: "landing" }, bindings, createdAt: stamp }); }
@@ -27,16 +27,33 @@ function catalogs(contentRecord = model, compositionRecord = composition) { retu
 function entry(values: ContentEntryRecord["values"]): ContentEntryRecord { return { schemaVersion: CONTENT_ENTRY_SCHEMA_VERSION, id: "entry-one", modelId: "articles", createdAt: stamp, updatedAt: stamp, values }; }
 
 describe("normative compatibility matrix", () => {
-  const sources: ContentFieldKind[] = ["text", "long-text", "markdown", "number", "boolean", "date", "slug", "color", "url"];
-  const targets: MappingTargetKind[] = ["text", "select", "boolean", "number", "color"];
+  const sources: readonly ContentFieldKind[] = CONTENT_FIELD_KINDS;
+  const scalarTargetFields = [
+    { prop: "text", label: "Text", schema: { type: "string" }, editor: { kind: "text" } },
+    { prop: "choice", label: "Choice", schema: { type: "string", enum: ["one"] }, editor: { kind: "select" } },
+    { prop: "toggle", label: "Toggle", schema: { type: "boolean" }, editor: { kind: "boolean" } },
+    { prop: "quantity", label: "Quantity", schema: { type: "number" }, editor: { kind: "number" } },
+    { prop: "swatch", label: "Swatch", schema: { type: "string" }, editor: { kind: "color" } },
+  ] as const satisfies readonly ScalarMappingTargetField[];
+  const targets = scalarTargetFields.map((field) => field.editor.kind);
   const transforms: MappingTransform[] = [{ kind: "identity" }, { kind: "date-medium" }, { kind: "truncate-160" }, { kind: "prefix", prefix: "P" }];
-  function expected(source: ContentFieldKind, target: MappingTargetKind, transform: MappingTransform): boolean { const string = ["text", "long-text", "markdown", "date", "slug", "color", "url"].includes(source); if (transform.kind === "date-medium") return source === "date" && target === "text"; if (transform.kind === "truncate-160" || transform.kind === "prefix") return string && target === "text"; return target === "text" ? string : target === "select" ? source === "text" || source === "slug" : target === "color" ? source === "color" : target === "number" ? source === "number" : source === "boolean"; }
+  function expected(source: ContentFieldKind, target: (typeof targets)[number], transform: MappingTransform): boolean {
+    const string = ["text", "long-text", "markdown", "date", "slug", "color", "url"].includes(source);
+    if (transform.kind === "date-medium") return source === "date" && target === "text";
+    if (transform.kind === "truncate-160" || transform.kind === "prefix") return string && target === "text";
+    if (target === "text") return string;
+    if (target === "select") return source === "text" || source === "slug";
+    if (target === "color") return source === "color";
+    if (target === "number") return source === "number";
+    return source === "boolean";
+  }
   for (const source of sources) for (const target of targets) for (const transform of transforms) it(`${source} -> ${target} via ${transform.kind}`, () => expect(isMappingCompatible(source, target, transform)).toBe(expected(source, target, transform)));
 });
 
 describe("Mapping model and resolver", () => {
   it("preserves broken references structurally and reports them semantically", async () => { const record = mapping([{ id: "stale", sourceFieldId: "gone", target: { nodeId: "missing", prop: "old" }, transform: { kind: "identity" } }]); expect(validateMappingRecord(record).ok).toBe(true); const result = await resolveMappingDefinition(record, catalogs(), manifest); expect(result.status).toBe("blocked"); expect(result.diagnostics.map((item) => item.code)).toEqual(["source-field-missing", "target-node-missing"]); });
   it("discovers only recursively manifest-declared scalar targets", () => { const result = discoverMappingTargets(composition.document, manifest); expect(result.targets.map((item) => `${item.target.nodeId}.${item.target.prop}`)).toEqual(["hero.title", "hero.subtitle", "hero.tone", "nested.text"]); expect(result.targets.some((item) => item.target.prop === "undeclared")).toBe(false); });
+  it("rejects a structured component field with an explicit diagnostic", async () => { const result = await resolveMappingDefinition(mapping([{ id: "tags", sourceFieldId: "title", target: { nodeId: "hero", prop: "tags" }, transform: { kind: "identity" } }]), catalogs(), manifest); expect(result.status).toBe("blocked"); expect(result.diagnostics).toMatchObject([{ code: "structured-target-unsupported", target: { nodeId: "hero", prop: "tags" } }]); expect(result.diagnostics[0]?.message).toContain("cannot be used as a scalar mapping target"); expect(result.bindings).toEqual([]); });
   it("allows one source to many targets but blocks a duplicate target", async () => { const result = await resolveMappingDefinition(mapping([{ id: "one", sourceFieldId: "title", target: { nodeId: "hero", prop: "title" }, transform: { kind: "identity" } }, { id: "two", sourceFieldId: "title", target: { nodeId: "nested", prop: "text" }, transform: { kind: "truncate-160" } }]), catalogs(), manifest); expect(result.status).toBe("ready"); const duplicate = await resolveMappingDefinition(mapping([{ id: "one", sourceFieldId: "title", target: { nodeId: "hero", prop: "title" }, transform: { kind: "identity" } }, { id: "two", sourceFieldId: "tone", target: { nodeId: "hero", prop: "title" }, transform: { kind: "identity" } }]), catalogs(), manifest); expect(duplicate.diagnostics.map((item) => item.code)).toContain("duplicate-target"); });
   it("reports component version and stale field failures", async () => { const changed = structuredClone(composition); changed.document.root[0]!.componentVersion = 2; const mismatch = await resolveMappingDefinition(mapping(), catalogs(model, changed), manifest); expect(mismatch.diagnostics.map((item) => item.code)).toContain("component-version-mismatch"); const stale = await resolveMappingDefinition(mapping([{ id: "x", sourceFieldId: "title", target: { nodeId: "hero", prop: "gone" }, transform: { kind: "identity" } }]), catalogs(), manifest); expect(stale.diagnostics.map((item) => item.code)).toContain("target-field-missing"); });
   it("evaluates into a detached transient document and keeps static values", async () => { const record = mapping([{ id: "one", sourceFieldId: "title", target: { nodeId: "hero", prop: "title" }, transform: { kind: "identity" } }, { id: "two", sourceFieldId: "date", target: { nodeId: "hero", prop: "subtitle" }, transform: { kind: "date-medium" } }]); const source = entry({ title: "Mapped", date: "2026-08-29" }); const beforeEntry = JSON.stringify(source); const beforeComposition = JSON.stringify(composition); const result = await evaluateMapping(record, source, catalogs(), manifest); expect(result.status).toBe("ready"); expect(result.document?.root[0]?.props).toMatchObject({ title: "Mapped", subtitle: "Aug 29, 2026", tone: "quiet" }); expect(JSON.stringify(source)).toBe(beforeEntry); expect(JSON.stringify(composition)).toBe(beforeComposition); expect(result).toMatchObject({ appliedBindingCount: 2, unchangedStaticCount: 0 }); });

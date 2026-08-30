@@ -266,7 +266,7 @@ export function generateJsx(
     const hasDefaultChildrenSlot = entry.slots.some((s) => s.prop === "children");
     const childrenTextField = hasDefaultChildrenSlot
       ? undefined
-      : entry.fields.find((f) => f.prop === "children" && f.kind === "text");
+      : entry.fields.find((f) => f.prop === "children" && f.editor.kind === "text");
     const textChildProp = childrenTextField?.prop;
 
     // Scalar attributes: field-declared props first (in declaration order), then

@@ -52,6 +52,7 @@ const placeholderFixtureEntry: ComponentManifest = {
   defaults: { label: "hero-image.png" },
   fields: [],
   slots: [],
+  staticProps: [{ prop: "label", reason: "Fixed chooser-preview fixture label." }],
 };
 const catalogWithPlaceholder: ComponentManifest[] = [...fixtureCatalog, placeholderFixtureEntry];
 

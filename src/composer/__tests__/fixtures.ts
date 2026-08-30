@@ -69,14 +69,14 @@ function definition(
 }
 
 const fields = {
-  gapSelect: { kind: "select", prop: "gap", label: "Gap", options: ["sm", "md", "lg"] } as FieldDefinition,
+  gapSelect: { schema: { type: "string", enum: ["sm", "md", "lg"] }, editor: { kind: "select" }, prop: "gap", label: "Gap" } as FieldDefinition,
   ratioSelect: {
-    kind: "select",
+    schema: { type: "string", enum: ["50-50", "33-67", "67-33"] },
+    editor: { kind: "select" },
     prop: "ratio",
     label: "Ratio",
-    options: ["50-50", "33-67", "67-33"],
   } as FieldDefinition,
-  sizeSelect: { kind: "select", prop: "size", label: "Size", options: ["sm", "md", "lg"] } as FieldDefinition,
+  sizeSelect: { schema: { type: "string", enum: ["sm", "md", "lg"] }, editor: { kind: "select" }, prop: "size", label: "Size" } as FieldDefinition,
 };
 
 export const fixtureEntries: readonly ComponentManifest[] = [
@@ -96,29 +96,29 @@ export const fixtureEntries: readonly ComponentManifest[] = [
   definition(C.sectionHeading, src("@fixtures/section-heading", "SectionHeading"), {
     defaults: { heading: "Heading", as: "h2" },
     fields: [
-      { kind: "text", prop: "eyebrow", label: "Eyebrow" },
-      { kind: "text", prop: "heading", label: "Heading" },
-      { kind: "select", prop: "as", label: "As", options: ["h2", "h3"] },
+      { schema: { type: "string" }, editor: { kind: "text" }, prop: "eyebrow", label: "Eyebrow" },
+      { schema: { type: "string" }, editor: { kind: "text" }, prop: "heading", label: "Heading" },
+      { schema: { type: "string", enum: ["h2", "h3"] }, editor: { kind: "select" }, prop: "as", label: "As" },
     ],
   }),
   definition(C.prose, src("@fixtures/prose", "Prose"), {
     defaults: { size: "md", children: "Body text." },
-    fields: [{ kind: "text", prop: "children", label: "Text" }, fields.sizeSelect],
+    fields: [{ schema: { type: "string" }, editor: { kind: "text" }, prop: "children", label: "Text" }, fields.sizeSelect],
   }),
   definition(C.ctaButton, src("@fixtures/cta-button", "CtaButton"), {
     defaults: { href: "#", variant: "solid", arrow: false, children: "Go" },
     fields: [
-      { kind: "text", prop: "children", label: "Label" },
-      { kind: "text", prop: "href", label: "Href" },
-      { kind: "select", prop: "variant", label: "Variant", options: ["solid", "ghost"] },
-      { kind: "boolean", prop: "arrow", label: "Arrow" },
+      { schema: { type: "string" }, editor: { kind: "text" }, prop: "children", label: "Label" },
+      { schema: { type: "string" }, editor: { kind: "text" }, prop: "href", label: "Href" },
+      { schema: { type: "string", enum: ["solid", "ghost"] }, editor: { kind: "select" }, prop: "variant", label: "Variant" },
+      { schema: { type: "boolean" }, editor: { kind: "boolean" }, prop: "arrow", label: "Arrow" },
     ],
   }),
   definition(C.box, src("@fixtures/box", "Box", "default"), {
     defaults: { label: "Box" },
     fields: [
-      { kind: "text", prop: "label", label: "Label" },
-      { kind: "number", prop: "size", label: "Size", min: 0, max: 10 },
+      { schema: { type: "string" }, editor: { kind: "text" }, prop: "label", label: "Label" },
+      { schema: { type: "number", min: 0, max: 10 }, editor: { kind: "number" }, prop: "size", label: "Size" },
     ],
   }),
   definition(C.widgetA, src("@fixtures/widget-a", "Widget")),

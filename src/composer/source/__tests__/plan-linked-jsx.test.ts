@@ -44,7 +44,7 @@ const manifest = createComponentCatalog(createFixturePackManifest([
     // Deliberately collides with the consumer's stable source-import name.
     source: { module: "@linked-test/leaf", exportKind: "named", exportName: "LinkedTemplate" },
     defaults: {},
-    fields: [{ prop: "label", label: "Label", kind: "text" }],
+    fields: [{ prop: "label", label: "Label", schema: { type: "string" }, editor: { kind: "text" } }],
     slots: [],
   },
 ] satisfies ComponentDefinition[]));

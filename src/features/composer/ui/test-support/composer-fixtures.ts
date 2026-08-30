@@ -38,7 +38,7 @@ export const testManifestEntries: ComponentManifest[] = [
     ],
   },
   {
-    // Every field `kind` the inspector must render, on one component.
+    // Every scalar editor kind the inspector must render, on one component.
     id: TEST_COMPONENT_IDS.widget,
     schemaVersion: 1,
     title: "Widget",
@@ -54,22 +54,23 @@ export const testManifestEntries: ComponentManifest[] = [
       tint: "#336699",
     },
     fields: [
-      { kind: "text", prop: "title", label: "Title" } as FieldDefinition,
+      { schema: { type: "string" }, editor: { kind: "text" }, prop: "title", label: "Title" } as FieldDefinition,
       {
-        kind: "text",
+        schema: { type: "string" },
+        editor: { kind: "text", multiline: true },
         prop: "note",
         label: "Note",
-        inlineEdit: { multiline: true },
+        inlineEdit: true,
       } as FieldDefinition,
-      { kind: "boolean", prop: "enabled", label: "Enabled" } as FieldDefinition,
-      { kind: "number", prop: "count", label: "Count", min: 0, max: 10, step: 1 } as FieldDefinition,
+      { schema: { type: "boolean" }, editor: { kind: "boolean" }, prop: "enabled", label: "Enabled" } as FieldDefinition,
+      { schema: { type: "number", min: 0, max: 10, step: 1 }, editor: { kind: "number" }, prop: "count", label: "Count" } as FieldDefinition,
       {
-        kind: "select",
+        schema: { type: "string", enum: ["solid", "ghost"] },
+        editor: { kind: "select" },
         prop: "variant",
         label: "Variant",
-        options: ["solid", "ghost"],
       } as FieldDefinition,
-      { kind: "color", prop: "tint", label: "Tint" } as FieldDefinition,
+      { schema: { type: "string" }, editor: { kind: "color" }, prop: "tint", label: "Tint" } as FieldDefinition,
     ],
     slots: [],
   },
@@ -81,7 +82,7 @@ export const testManifestEntries: ComponentManifest[] = [
     description: "Simple label fixture.",
     source: src("@fixtures/label", "Label"),
     defaults: { text: "Hello" },
-    fields: [{ kind: "text", prop: "text", label: "Text" } as FieldDefinition],
+    fields: [{ schema: { type: "string" }, editor: { kind: "text" }, prop: "text", label: "Text" } as FieldDefinition],
     slots: [],
   },
 ];
