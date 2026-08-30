@@ -13,6 +13,8 @@ import {
   type ContractIssueCode,
   type FieldDefinition,
   type JsonObject,
+  type JsonValue,
+  type ObjectFieldDefinition,
   type PersistedComponentNode,
   type PublicSourceDefinition,
   type RuntimeAdapters,
@@ -22,6 +24,7 @@ import {
   type StaticPropDefinition,
   type TrustedComponentPack,
   type ValidateAuthorComponentDefinition,
+  type ValueDefinition,
 } from './types.js';
 
 export const RESERVED_PERSISTED_KEYS = Object.freeze([
@@ -36,6 +39,7 @@ export const RESERVED_PERSISTED_KEYS = Object.freeze([
 const reservedKeys = new Set<string>(RESERVED_PERSISTED_KEYS);
 const identifierPattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 const packageImportPattern = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)(?:\/[A-Za-z0-9._~-]+)*$/u;
+export const MAX_VALUE_SCHEMA_DEPTH = 32;
 
 type Mutable<T> = { -readonly [TKey in keyof T]: T[TKey] };
 type PackComponentInput<TComponent> = Omit<ComponentManifest, 'defaults' | 'fields' | 'slots' | 'staticProps'> & {
@@ -77,13 +81,6 @@ function positiveIntegerAt(input: unknown, path: string): number {
   return input as number;
 }
 
-function finiteNumberAt(input: unknown, path: string): number {
-  if (typeof input !== 'number' || !Number.isFinite(input)) {
-    fail('INVALID_FIELD_DOMAIN', path, 'expected a finite number');
-  }
-  return input;
-}
-
 function exactKeys(value: Record<string, unknown>, allowed: readonly string[], path: string): void {
   const allow = new Set(allowed);
   if (Object.getOwnPropertySymbols(value).length > 0) fail('UNKNOWN_KEY', path, 'symbol keys are not part of the contract');
@@ -106,7 +103,8 @@ function persistedPropAt(input: unknown, path: string): string {
   return value;
 }
 
-function assertJsonValue(value: unknown, path: string, ancestors = new Set<object>()): asserts value is import('./types.js').JsonValue {
+function assertJsonValue(value: unknown, path: string, ancestors = new Set<object>(), depth = 0): asserts value is JsonValue {
+  if (depth > MAX_VALUE_SCHEMA_DEPTH) fail('INVALID_JSON_VALUE', path, `JSON value depth exceeds ${MAX_VALUE_SCHEMA_DEPTH}`);
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) fail('INVALID_JSON_VALUE', path, 'numbers must be finite JSON numbers');
@@ -124,7 +122,7 @@ function assertJsonValue(value: unknown, path: string, ancestors = new Set<objec
     }
     for (let index = 0; index < value.length; index += 1) {
       if (!Object.hasOwn(value, index)) fail('INVALID_JSON_VALUE', `${path}[${index}]`, 'sparse arrays do not round-trip through JSON exactly');
-      assertJsonValue(value[index], `${path}[${index}]`, ancestors);
+      assertJsonValue(value[index], `${path}[${index}]`, ancestors, depth + 1);
     }
   } else {
     const record = value as Record<string, unknown>;
@@ -132,15 +130,23 @@ function assertJsonValue(value: unknown, path: string, ancestors = new Set<objec
     if (prototype !== Object.prototype && prototype !== null) fail('INVALID_JSON_VALUE', path, 'JSON objects must be plain objects');
     if (Object.getOwnPropertySymbols(record).length > 0) fail('INVALID_JSON_VALUE', path, 'symbol-keyed data is not JSON-serializable');
     if (Reflect.ownKeys(record).length !== Object.keys(record).length) fail('INVALID_JSON_VALUE', path, 'non-enumerable data is not JSON-serializable');
-    for (const [key, item] of Object.entries(record)) assertJsonValue(item, `${path}.${key}`, ancestors);
+    for (const [key, item] of Object.entries(record)) assertJsonValue(item, `${path}.${key}`, ancestors, depth + 1);
   }
   ancestors.delete(object);
+}
+
+function assertJsonObjectValues(value: Record<string, unknown>, path: string): asserts value is JsonObject {
+  const prototype = Object.getPrototypeOf(value) as object | null;
+  if (prototype !== Object.prototype && prototype !== null) fail('INVALID_JSON_VALUE', path, 'JSON objects must be plain objects');
+  if (Object.getOwnPropertySymbols(value).length > 0) fail('INVALID_JSON_VALUE', path, 'symbol-keyed data is not JSON-serializable');
+  if (Reflect.ownKeys(value).length !== Object.keys(value).length) fail('INVALID_JSON_VALUE', path, 'non-enumerable data is not JSON-serializable');
+  for (const [key, item] of Object.entries(value)) assertJsonValue(item, `${path}.${key}`);
 }
 
 function parseSource(input: unknown, path: string): PublicSourceDefinition {
   const value = objectAt(input, path);
   if (Object.keys(value).some((key) => /adapter/iu.test(key))) {
-    fail('SOURCE_ADAPTER_NOT_ALLOWED', path, 'source adapters are not part of contract v1');
+    fail('SOURCE_ADAPTER_NOT_ALLOWED', path, 'source adapters are not part of the component-pack contract');
   }
   exactKeys(value, ['module', 'exportKind', 'exportName', 'localName'], path);
   const module = stringAt(value.module, `${path}.module`);
@@ -164,55 +170,143 @@ function parseRequired(input: unknown, path: string): boolean | undefined {
   return input as boolean | undefined;
 }
 
+function schemaFail(path: string, message: string): never {
+  fail('INVALID_VALUE_SCHEMA', path, message);
+}
+
+function schemaObjectAt(input: unknown, path: string): Record<string, unknown> {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) schemaFail(path, 'expected an object');
+  return input as Record<string, unknown>;
+}
+
+function parseTextEditor(input: unknown, path: string): { readonly kind: 'text'; readonly multiline?: boolean; readonly mode?: 'plain' | 'markdown-source' } {
+  const editor = schemaObjectAt(input, path);
+  exactKeys(editor, ['kind', 'multiline', 'mode'], path);
+  if (editor.kind !== 'text') schemaFail(`${path}.kind`, 'string schema requires a text, color, or select editor');
+  if (editor.multiline !== undefined && typeof editor.multiline !== 'boolean') schemaFail(`${path}.multiline`, 'expected a boolean');
+  if (editor.mode !== undefined && editor.mode !== 'plain' && editor.mode !== 'markdown-source') {
+    schemaFail(`${path}.mode`, 'expected plain or markdown-source');
+  }
+  return {
+    kind: 'text',
+    ...(editor.multiline === undefined ? {} : { multiline: editor.multiline as boolean }),
+    ...(editor.mode === undefined ? {} : { mode: editor.mode as 'plain' | 'markdown-source' }),
+  };
+}
+
+function parseValueDefinition(
+  input: unknown,
+  path: string,
+  ancestors: Set<object>,
+  depth: number,
+  envelopeKeys: readonly string[] = ['schema', 'editor'],
+): ValueDefinition {
+  if (depth > MAX_VALUE_SCHEMA_DEPTH) schemaFail(path, `value schema depth exceeds ${MAX_VALUE_SCHEMA_DEPTH}`);
+  const value = schemaObjectAt(input, path);
+  if (ancestors.has(value)) schemaFail(path, 'cyclic value schemas are not supported');
+  ancestors.add(value);
+  try {
+    exactKeys(value, envelopeKeys, path);
+    const schema = schemaObjectAt(value.schema, `${path}.schema`);
+    const editor = schemaObjectAt(value.editor, `${path}.editor`);
+    switch (schema.type) {
+      case 'string': {
+        if (Object.hasOwn(schema, 'enum')) {
+          exactKeys(schema, ['type', 'enum'], `${path}.schema`);
+          exactKeys(editor, ['kind'], `${path}.editor`);
+          if (editor.kind !== 'select') schemaFail(`${path}.editor.kind`, 'enum string schema requires a select editor');
+          if (!Array.isArray(schema.enum) || schema.enum.length === 0) schemaFail(`${path}.schema.enum`, 'select enum must be a non-empty array');
+          const options = schema.enum.map((option, index) => {
+            if (typeof option !== 'string') schemaFail(`${path}.schema.enum[${index}]`, 'expected a string');
+            return option;
+          });
+          unique(options, 'DUPLICATE_SELECT_OPTION', `${path}.schema.enum`, 'select option');
+          return { schema: { type: 'string', enum: options as [string, ...string[]] }, editor: { kind: 'select' } };
+        }
+        exactKeys(schema, ['type'], `${path}.schema`);
+        if (editor.kind === 'text') return { schema: { type: 'string' }, editor: parseTextEditor(editor, `${path}.editor`) };
+        exactKeys(editor, ['kind'], `${path}.editor`);
+        if (editor.kind === 'color') return { schema: { type: 'string' }, editor: { kind: 'color' } };
+        schemaFail(`${path}.editor.kind`, 'string schema requires a text or color editor');
+      }
+      case 'number': {
+        exactKeys(schema, ['type', 'min', 'max', 'step'], `${path}.schema`);
+        exactKeys(editor, ['kind'], `${path}.editor`);
+        if (editor.kind !== 'number') schemaFail(`${path}.editor.kind`, 'number schema requires a number editor');
+        const numberAt = (inputNumber: unknown, numberPath: string): number | undefined => {
+          if (inputNumber === undefined) return undefined;
+          if (typeof inputNumber !== 'number' || !Number.isFinite(inputNumber)) schemaFail(numberPath, 'expected a finite number');
+          return inputNumber;
+        };
+        const min = numberAt(schema.min, `${path}.schema.min`);
+        const max = numberAt(schema.max, `${path}.schema.max`);
+        const step = numberAt(schema.step, `${path}.schema.step`);
+        if (min !== undefined && max !== undefined && min > max) schemaFail(`${path}.schema`, 'number min cannot exceed max');
+        if (step !== undefined && step <= 0) schemaFail(`${path}.schema.step`, 'number step must be greater than zero');
+        return {
+          schema: { type: 'number', ...(min === undefined ? {} : { min }), ...(max === undefined ? {} : { max }), ...(step === undefined ? {} : { step }) },
+          editor: { kind: 'number' },
+        };
+      }
+      case 'boolean':
+        exactKeys(schema, ['type'], `${path}.schema`);
+        exactKeys(editor, ['kind'], `${path}.editor`);
+        if (editor.kind !== 'boolean') schemaFail(`${path}.editor.kind`, 'boolean schema requires a boolean editor');
+        return { schema: { type: 'boolean' }, editor: { kind: 'boolean' } };
+      case 'array': {
+        exactKeys(schema, ['type', 'items'], `${path}.schema`);
+        exactKeys(editor, ['kind'], `${path}.editor`);
+        if (editor.kind !== 'list') schemaFail(`${path}.editor.kind`, 'array schema requires a list editor');
+        return { schema: { type: 'array', items: parseValueDefinition(schema.items, `${path}.schema.items`, ancestors, depth + 1) }, editor: { kind: 'list' } };
+      }
+      case 'tuple': {
+        exactKeys(schema, ['type', 'items'], `${path}.schema`);
+        exactKeys(editor, ['kind'], `${path}.editor`);
+        if (editor.kind !== 'tuple') schemaFail(`${path}.editor.kind`, 'tuple schema requires a tuple editor');
+        if (!Array.isArray(schema.items)) schemaFail(`${path}.schema.items`, 'expected an array');
+        const items = schema.items.map((item, index) => {
+          const itemValue = schemaObjectAt(item, `${path}.schema.items[${index}]`);
+          const label = stringAt(itemValue.label, `${path}.schema.items[${index}].label`);
+          const parsed = parseValueDefinition(itemValue, `${path}.schema.items[${index}]`, ancestors, depth + 1, ['label', 'schema', 'editor']);
+          return { label, ...parsed };
+        });
+        return { schema: { type: 'tuple', items }, editor: { kind: 'tuple' } };
+      }
+      case 'object': {
+        exactKeys(schema, ['type', 'fields'], `${path}.schema`);
+        exactKeys(editor, ['kind'], `${path}.editor`);
+        if (editor.kind !== 'group') schemaFail(`${path}.editor.kind`, 'object schema requires a group editor');
+        if (!Array.isArray(schema.fields)) schemaFail(`${path}.schema.fields`, 'expected an array');
+        const fields = schema.fields.map((field, index): ObjectFieldDefinition => {
+          const fieldPath = `${path}.schema.fields[${index}]`;
+          const fieldValue = schemaObjectAt(field, fieldPath);
+          const key = persistedPropAt(fieldValue.key, `${fieldPath}.key`);
+          const label = stringAt(fieldValue.label, `${fieldPath}.label`);
+          const required = parseRequired(fieldValue.required, `${fieldPath}.required`);
+          const parsed = parseValueDefinition(fieldValue, fieldPath, ancestors, depth + 1, ['key', 'label', 'required', 'schema', 'editor']);
+          return { key, label, ...(required === undefined ? {} : { required }), ...parsed };
+        });
+        unique(fields.map((field) => field.key), 'DUPLICATE_OBJECT_FIELD_KEY', `${path}.schema.fields`, 'object field key');
+        return { schema: { type: 'object', fields }, editor: { kind: 'group' } };
+      }
+      default:
+        schemaFail(`${path}.schema.type`, 'expected string, number, boolean, array, tuple, or object');
+    }
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
 function parseField(input: unknown, path: string): FieldDefinition {
   const value = objectAt(input, path);
+  exactKeys(value, ['prop', 'label', 'required', 'schema', 'editor', 'inlineEdit'], path);
   const prop = persistedPropAt(value.prop, `${path}.prop`);
   const label = stringAt(value.label, `${path}.label`);
   const required = parseRequired(value.required, `${path}.required`);
-  const common = { prop, label, ...(required === undefined ? {} : { required }) };
-  switch (value.kind) {
-    case 'text': {
-      exactKeys(value, ['kind', 'prop', 'label', 'required', 'inlineEdit'], path);
-      if (value.inlineEdit === undefined) return { kind: 'text', ...common };
-      const inline = objectAt(value.inlineEdit, `${path}.inlineEdit`);
-      exactKeys(inline, ['multiline', 'mode'], `${path}.inlineEdit`);
-      if (inline.multiline !== undefined && typeof inline.multiline !== 'boolean') {
-        fail('INVALID_VALUE', `${path}.inlineEdit.multiline`, 'expected a boolean');
-      }
-      if (inline.mode !== undefined && inline.mode !== 'plain' && inline.mode !== 'markdown-source') {
-        fail('INVALID_VALUE', `${path}.inlineEdit.mode`, 'expected plain or markdown-source');
-      }
-      return {
-        kind: 'text',
-        ...common,
-        inlineEdit: { multiline: inline.multiline ?? false, mode: inline.mode ?? 'plain' },
-      };
-    }
-    case 'select': {
-      exactKeys(value, ['kind', 'prop', 'label', 'required', 'options'], path);
-      const options = arrayAt(value.options, `${path}.options`).map((option, index) => stringAt(option, `${path}.options[${index}]`));
-      if (options.length === 0) fail('INVALID_FIELD_DOMAIN', `${path}.options`, 'select fields require at least one option');
-      unique(options, 'DUPLICATE_SELECT_OPTION', `${path}.options`, 'select option');
-      return { kind: 'select', ...common, options };
-    }
-    case 'boolean':
-      exactKeys(value, ['kind', 'prop', 'label', 'required'], path);
-      return { kind: 'boolean', ...common };
-    case 'number': {
-      exactKeys(value, ['kind', 'prop', 'label', 'required', 'min', 'max', 'step'], path);
-      const min = value.min === undefined ? undefined : finiteNumberAt(value.min, `${path}.min`);
-      const max = value.max === undefined ? undefined : finiteNumberAt(value.max, `${path}.max`);
-      const step = value.step === undefined ? undefined : finiteNumberAt(value.step, `${path}.step`);
-      if (min !== undefined && max !== undefined && min > max) fail('INVALID_FIELD_DOMAIN', path, 'number field min cannot exceed max');
-      if (step !== undefined && step <= 0) fail('INVALID_FIELD_DOMAIN', `${path}.step`, 'number field step must be greater than zero');
-      return { kind: 'number', ...common, ...(min === undefined ? {} : { min }), ...(max === undefined ? {} : { max }), ...(step === undefined ? {} : { step }) };
-    }
-    case 'color':
-      exactKeys(value, ['kind', 'prop', 'label', 'required'], path);
-      return { kind: 'color', ...common };
-    default:
-      fail('INVALID_VALUE', `${path}.kind`, 'expected text, select, boolean, number, or color');
-  }
+  const parsed = parseValueDefinition(value, path, new Set(), 0, ['prop', 'label', 'required', 'schema', 'editor', 'inlineEdit']);
+  if (value.inlineEdit !== undefined && value.inlineEdit !== true) schemaFail(`${path}.inlineEdit`, 'expected true when present');
+  if (value.inlineEdit === true && parsed.editor.kind !== 'text') schemaFail(`${path}.inlineEdit`, 'only text fields may be inline-editable');
+  return { prop, label, ...(required === undefined ? {} : { required }), ...parsed, ...(value.inlineEdit === true ? { inlineEdit: true as const } : {}) } as FieldDefinition;
 }
 
 function parseSlot(input: unknown, path: string): SlotDefinition {
@@ -249,6 +343,81 @@ function defaultMatchesStep(value: number, min: number | undefined, step: number
   return Math.abs(units - Math.round(units)) < 1e-9;
 }
 
+function assertNever(value: never): never {
+  throw new Error(`unhandled value definition ${String(value)}`);
+}
+
+function validateDefinitionValue(definition: ValueDefinition, value: JsonValue, path: string, depth: number): void {
+  if (depth > MAX_VALUE_SCHEMA_DEPTH) fail('INVALID_JSON_VALUE', path, `JSON value depth exceeds ${MAX_VALUE_SCHEMA_DEPTH}`);
+  const invalid = (message: string): never => fail('INVALID_FIELD_DOMAIN', path, message);
+  switch (definition.editor.kind) {
+    case 'text':
+    case 'color':
+      if (typeof value !== 'string') invalid('value must be a string');
+      return;
+    case 'select':
+      if (typeof value !== 'string' || !(definition as Extract<ValueDefinition, { editor: { kind: 'select' } }>).schema.enum.includes(value)) {
+        invalid('value must be one of the select enum values');
+      }
+      return;
+    case 'number': {
+      const current = definition as Extract<ValueDefinition, { editor: { kind: 'number' } }>;
+      if (typeof value !== 'number' || !Number.isFinite(value)) invalid('value must be a finite number');
+      const numberValue = value as number;
+      if (current.schema.min !== undefined && numberValue < current.schema.min) invalid(`value is below min ${current.schema.min}`);
+      if (current.schema.max !== undefined && numberValue > current.schema.max) invalid(`value is above max ${current.schema.max}`);
+      if (current.schema.step !== undefined && !defaultMatchesStep(numberValue, current.schema.min, current.schema.step)) {
+        invalid(`value does not align to step ${current.schema.step}`);
+      }
+      return;
+    }
+    case 'boolean':
+      if (typeof value !== 'boolean') invalid('value must be a boolean');
+      return;
+    case 'list': {
+      const current = definition as Extract<ValueDefinition, { editor: { kind: 'list' } }>;
+      if (!Array.isArray(value)) invalid('value must be an array');
+      (value as readonly JsonValue[]).forEach((item, index) => validateDefinitionValue(current.schema.items, item, `${path}[${index}]`, depth + 1));
+      return;
+    }
+    case 'tuple': {
+      const current = definition as Extract<ValueDefinition, { editor: { kind: 'tuple' } }>;
+      if (!Array.isArray(value)) invalid('value must be an array');
+      const tupleValue = value as readonly JsonValue[];
+      if (tupleValue.length !== current.schema.items.length) invalid(`tuple value must contain exactly ${current.schema.items.length} items`);
+      current.schema.items.forEach((item, index) => {
+        validateDefinitionValue(item, tupleValue[index] as JsonValue, `${path}[${index}]`, depth + 1);
+      });
+      return;
+    }
+    case 'group': {
+      const current = definition as Extract<ValueDefinition, { editor: { kind: 'group' } }>;
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) invalid('value must be an object');
+      const record = value as JsonObject;
+      const fieldsByKey = new Map(current.schema.fields.map((field) => [field.key, field]));
+      for (const key of Object.keys(record)) {
+        persistedPropAt(key, `${path}.${key}`);
+        if (!fieldsByKey.has(key)) fail('UNKNOWN_KEY', `${path}.${key}`, `unknown object field ${JSON.stringify(key)}`);
+      }
+      for (const field of current.schema.fields) {
+        if (!Object.hasOwn(record, field.key)) {
+          if (field.required === true) fail('REQUIRED_DEFAULT_MISSING', `${path}.${field.key}`, 'required object field is missing');
+          continue;
+        }
+        validateDefinitionValue(field, record[field.key] as JsonValue, `${path}.${field.key}`, depth + 1);
+      }
+      return;
+    }
+    default:
+      return assertNever(definition.editor);
+  }
+}
+
+export function validateFieldValue(field: FieldDefinition, value: unknown, path = '$value'): asserts value is JsonValue {
+  assertJsonValue(value, path);
+  validateDefinitionValue(field, value, path, 0);
+}
+
 function validateDefaults(
   defaults: JsonObject,
   fields: readonly FieldDefinition[],
@@ -271,26 +440,7 @@ function validateDefaults(
       fail('REQUIRED_DEFAULT_MISSING', `${path}.${field.prop}`, 'required fields must have a default');
     }
     if (!hasDefault) continue;
-    const value = defaults[field.prop];
-    const invalid = (message: string): never => fail('INVALID_FIELD_DOMAIN', `${path}.${field.prop}`, message);
-    switch (field.kind) {
-      case 'text':
-      case 'color':
-        if (typeof value !== 'string') invalid(`${field.kind} field defaults must be strings`);
-        break;
-      case 'select':
-        if (typeof value !== 'string' || !field.options.includes(value)) invalid('select default must be one of its options');
-        break;
-      case 'boolean':
-        if (typeof value !== 'boolean') invalid('boolean field defaults must be booleans');
-        break;
-      case 'number':
-        if (typeof value !== 'number' || !Number.isFinite(value)) invalid('number field defaults must be finite numbers');
-        if (field.min !== undefined && (value as number) < field.min) invalid(`number default is below min ${field.min}`);
-        if (field.max !== undefined && (value as number) > field.max) invalid(`number default is above max ${field.max}`);
-        if (field.step !== undefined && !defaultMatchesStep(value as number, field.min, field.step)) invalid(`number default does not align to step ${field.step}`);
-        break;
-    }
+    validateFieldValue(field, defaults[field.prop], `${path}.${field.prop}`);
   }
 }
 
@@ -301,12 +451,12 @@ function parseComponent(input: unknown, path: string): ComponentManifest {
   }
   exactKeys(value, ['id', 'schemaVersion', 'title', 'category', 'description', 'source', 'defaults', 'fields', 'slots', 'staticProps'], path);
   const defaultsValue = objectAt(value.defaults ?? {}, `${path}.defaults`);
-  assertJsonValue(defaultsValue, `${path}.defaults`);
+  assertJsonObjectValues(defaultsValue, `${path}.defaults`);
   const defaults = defaultsValue as JsonObject;
   const fields = arrayAt(value.fields ?? [], `${path}.fields`).map((field, index) => parseField(field, `${path}.fields[${index}]`));
   unique(fields.map((field) => field.prop), 'DUPLICATE_FIELD_PROP', `${path}.fields`, 'field prop');
-  const inlineFields = fields.filter((field) => field.kind === 'text' && field.inlineEdit !== undefined);
-  if (inlineFields.length > 1) fail('MULTIPLE_INLINE_EDIT_FIELDS', `${path}.fields`, 'contract v1 allows at most one inline-editable field');
+  const inlineFields = fields.filter((field) => field.editor.kind === 'text' && field.inlineEdit === true);
+  if (inlineFields.length > 1) fail('MULTIPLE_INLINE_EDIT_FIELDS', `${path}.fields`, 'contract v2 allows at most one inline-editable field');
   const slots = arrayAt(value.slots ?? [], `${path}.slots`).map((slot, index) => parseSlot(slot, `${path}.slots[${index}]`));
   unique(slots.map((slot) => slot.id), 'DUPLICATE_SLOT_ID', `${path}.slots`, 'slot id');
   unique(slots.map((slot) => slot.prop), 'DUPLICATE_SLOT_PROP', `${path}.slots`, 'slot prop');
@@ -370,7 +520,7 @@ function parseNode(input: unknown, path: string, ancestors: Set<object>): Persis
   ancestors.add(value);
   exactKeys(value, ['id', 'componentId', 'componentVersion', 'props', 'slots'], path);
   const propsValue = objectAt(value.props ?? {}, `${path}.props`);
-  assertJsonValue(propsValue, `${path}.props`);
+  assertJsonObjectValues(propsValue, `${path}.props`);
   for (const prop of Object.keys(propsValue)) persistedPropAt(prop, `${path}.props.${prop}`);
   const slotsValue = objectAt(value.slots ?? {}, `${path}.slots`);
   const slots: Mutable<PersistedComponentNode['slots']> = Object.create(null) as Mutable<PersistedComponentNode['slots']>;
@@ -482,7 +632,7 @@ export function validateRuntimeParity<TComponent, TRenderOutput = unknown, TElem
     if (entry.schemaVersion !== component.schemaVersion) {
       fail('RUNTIME_COMPONENT_VERSION_MISMATCH', `$runtime.components.${component.id}.schemaVersion`, `runtime version ${entry.schemaVersion} does not match manifest version ${component.schemaVersion}`);
     }
-    const inlineFields = component.fields.filter((field) => field.kind === 'text' && field.inlineEdit !== undefined);
+    const inlineFields = component.fields.filter((field) => field.editor.kind === 'text' && field.inlineEdit === true);
     const adapterField = entry.adapters?.inlineEditor?.field;
     if (inlineFields.length === 1 && adapterField !== inlineFields[0]?.prop) {
       fail('INLINE_EDITOR_MISMATCH', `$runtime.components.${component.id}.adapters.inlineEditor`, `inline editor must target ${JSON.stringify(inlineFields[0]?.prop)}`);
@@ -495,6 +645,52 @@ export function validateRuntimeParity<TComponent, TRenderOutput = unknown, TElem
     if (!manifestIds.has(id)) fail('RUNTIME_MANIFEST_MISMATCH', `$runtime.components.${id}`, `runtime entry ${JSON.stringify(id)} has no serializable manifest component`);
   }
   return { manifest, runtime };
+}
+
+function normalizeAuthorField(input: unknown, path: string): unknown {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return input;
+  const field = input as Record<string, unknown>;
+  if (!Object.hasOwn(field, 'kind')) return input;
+  const common = { prop: field.prop, label: field.label, ...(field.required === undefined ? {} : { required: field.required }) };
+  switch (field.kind) {
+    case 'text': {
+      exactKeys(field, ['kind', 'prop', 'label', 'required', 'inlineEdit'], path);
+      const inline = field.inlineEdit === undefined ? undefined : objectAt(field.inlineEdit, `${path}.inlineEdit`);
+      if (inline !== undefined) exactKeys(inline, ['multiline', 'mode'], `${path}.inlineEdit`);
+      return {
+        ...common,
+        schema: { type: 'string' },
+        editor: {
+          kind: 'text',
+          ...(inline === undefined ? {} : { multiline: inline.multiline ?? false, mode: inline.mode ?? 'plain' }),
+        },
+        ...(inline === undefined ? {} : { inlineEdit: true }),
+      };
+    }
+    case 'select':
+      exactKeys(field, ['kind', 'prop', 'label', 'required', 'options'], path);
+      return { ...common, schema: { type: 'string', enum: field.options }, editor: { kind: 'select' } };
+    case 'boolean':
+      exactKeys(field, ['kind', 'prop', 'label', 'required'], path);
+      return { ...common, schema: { type: 'boolean' }, editor: { kind: 'boolean' } };
+    case 'number':
+      exactKeys(field, ['kind', 'prop', 'label', 'required', 'min', 'max', 'step'], path);
+      return {
+        ...common,
+        schema: {
+          type: 'number',
+          ...(field.min === undefined ? {} : { min: field.min }),
+          ...(field.max === undefined ? {} : { max: field.max }),
+          ...(field.step === undefined ? {} : { step: field.step }),
+        },
+        editor: { kind: 'number' },
+      };
+    case 'color':
+      exactKeys(field, ['kind', 'prop', 'label', 'required'], path);
+      return { ...common, schema: { type: 'string' }, editor: { kind: 'color' } };
+    default:
+      fail('INVALID_VALUE', `${path}.kind`, 'expected text, select, boolean, number, or color');
+  }
 }
 
 export function defineComponentPack<const TComponents extends readonly PackComponentInput<unknown>[]>(input: {
@@ -513,6 +709,9 @@ export function defineComponentPack<const TComponents extends readonly PackCompo
       const projected = { ...authorValue };
       delete projected.component;
       delete projected.adapters;
+      if (Array.isArray(projected.fields)) {
+        projected.fields = projected.fields.map((field, fieldIndex) => normalizeAuthorField(field, `$.components[${index}].fields[${fieldIndex}]`));
+      }
       return projected;
     }),
   };

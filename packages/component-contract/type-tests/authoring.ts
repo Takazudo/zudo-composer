@@ -140,6 +140,118 @@ defineComponent<ExampleProps>()(ExampleComponent, {
   },
 });
 
+interface HeroAction {
+  label: string;
+  href: string;
+  variant?: 'primary' | 'secondary';
+}
+
+interface NavLeaf {
+  label: string;
+  href: string;
+  slug: string;
+}
+
+interface NavSection {
+  label: string;
+  children: readonly NavLeaf[];
+}
+
+interface RecursiveProps {
+  actions: readonly HeroAction[];
+  sections: readonly NavSection[];
+  only?: readonly string[];
+}
+
+const RecursiveComponent = (_props: RecursiveProps) => null;
+const recursiveBase = { ...base, id: 'recursive', source: { ...base.source, module: '@fixture/recursive' } };
+
+defineComponent<RecursiveProps>()(RecursiveComponent, {
+  ...recursiveBase,
+  defaults: { actions: [], sections: [] },
+  fields: [
+    { prop: 'actions', label: 'Actions', schema: { type: 'array', items: {
+      schema: { type: 'object', fields: [
+        { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+        { key: 'href', label: 'URL', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+        { key: 'variant', label: 'Variant', schema: { type: 'string', enum: ['primary', 'secondary'] }, editor: { kind: 'select' } },
+      ] }, editor: { kind: 'group' },
+    } }, editor: { kind: 'list' } },
+    { prop: 'sections', label: 'Sections', schema: { type: 'array', items: {
+      schema: { type: 'object', fields: [
+        { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+        { key: 'children', label: 'Children', required: true, schema: { type: 'array', items: {
+          schema: { type: 'object', fields: [
+            { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+            { key: 'href', label: 'URL', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+            { key: 'slug', label: 'Slug', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+          ] }, editor: { kind: 'group' },
+        } }, editor: { kind: 'list' } },
+      ] }, editor: { kind: 'group' },
+    } }, editor: { kind: 'list' } },
+    { prop: 'only', label: 'Only', schema: { type: 'array', items: {
+      schema: { type: 'string' }, editor: { kind: 'text' },
+    } }, editor: { kind: 'list' } },
+  ],
+});
+
+// @ts-expect-error Every required nested object member must be declared with required: true.
+defineComponent<{ action: HeroAction }>()((_props: { action: HeroAction }) => null, {
+  ...recursiveBase,
+  defaults: { action: { label: 'Read', href: '/read' } },
+  fields: [{ prop: 'action', label: 'Action', schema: { type: 'object', fields: [
+    { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+  ] }, editor: { kind: 'group' } }],
+});
+
+// @ts-expect-error Duplicate literal nested object keys are rejected.
+defineComponent<{ action: HeroAction }>()((_props: { action: HeroAction }) => null, {
+  ...recursiveBase,
+  defaults: { action: { label: 'Read', href: '/read' } },
+  fields: [{ prop: 'action', label: 'Action', schema: { type: 'object', fields: [
+    { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+    { key: 'label', label: 'Duplicate', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+    { key: 'href', label: 'URL', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+  ] }, editor: { kind: 'group' } }],
+});
+
+// @ts-expect-error Inline editing is limited to top-level text fields.
+defineComponent<{ actions: readonly HeroAction[] }>()((_props: { actions: readonly HeroAction[] }) => null, {
+  ...recursiveBase,
+  defaults: { actions: [] },
+  fields: [{ prop: 'actions', label: 'Actions', inlineEdit: true, schema: { type: 'array', items: {
+    schema: { type: 'object', fields: [
+      { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+      { key: 'href', label: 'URL', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+    ] }, editor: { kind: 'group' },
+  } }, editor: { kind: 'list' } }],
+});
+
+defineComponent<{ pair: readonly [string, number] }>()((_props: { pair: readonly [string, number] }) => null, {
+  ...recursiveBase,
+  defaults: { pair: ['one', 1] },
+  fields: [{ prop: 'pair', label: 'Pair', schema: { type: 'tuple', items: [
+    { label: 'Name', schema: { type: 'string' }, editor: { kind: 'text' } },
+    { label: 'Count', schema: { type: 'number' }, editor: { kind: 'number' } },
+  ] }, editor: { kind: 'tuple' } }],
+});
+
+// @ts-expect-error Tuple schemas are fixed-length and positional.
+defineComponent<{ pair: readonly [string, number] }>()((_props: { pair: readonly [string, number] }) => null, {
+  ...recursiveBase,
+  defaults: { pair: ['one', 1] },
+  fields: [{ prop: 'pair', label: 'Pair', schema: { type: 'tuple', items: [
+    { label: 'Count', schema: { type: 'number' }, editor: { kind: 'number' } },
+    { label: 'Name', schema: { type: 'string' }, editor: { kind: 'text' } },
+  ] }, editor: { kind: 'tuple' } }],
+});
+
+// @ts-expect-error Explicit null is unsupported and is not erased at the type boundary.
+defineComponent<{ nullable?: string | null }>()((_props: { nullable?: string | null }) => null, {
+  ...recursiveBase,
+  fields: [{ prop: 'nullable', label: 'Nullable', schema: { type: 'string' }, editor: { kind: 'text' } }],
+});
+
 // @ts-expect-error Number fields require the whole non-null prop domain to be numeric.
 defineComponent<ExampleProps>()(ExampleComponent, {
   ...base,
