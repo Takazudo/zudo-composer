@@ -7,6 +7,8 @@ export interface MappingPreviewHostProps {
   componentProvider: ComposerComponentProvider;
   document: CompositionDocument | null;
   loading?: boolean;
+  /** Keep the feature's preview chrome on the shared fullscreen host. */
+  enlargeable?: boolean;
   onCurrent?: () => void;
   onError?: (message: string) => void;
   createBridge?: typeof createComposerPreviewBridge;
@@ -15,13 +17,14 @@ export interface MappingPreviewHostProps {
 }
 
 /** Dedicated read-only bridge host. Only resolved Composition JSON crosses into the preview chunk. */
-export function MappingPreviewHost({ componentProvider, document, loading = false, onCurrent, onError, createBridge = createComposerPreviewBridge, location: suppliedLocation, hostWindow }: MappingPreviewHostProps): JSX.Element {
+export function MappingPreviewHost({ componentProvider, document, loading = false, enlargeable = true, onCurrent, onError, createBridge = createComposerPreviewBridge, location: suppliedLocation, hostWindow }: MappingPreviewHostProps): JSX.Element {
   return <CompositionPreviewHost
     componentProvider={componentProvider}
     document={document}
     loading={loading}
     title="Resolved Mapping preview"
     emptyMessage="Choose a valid Composition and sample Entry to render a resolved preview."
+    enlargeable={enlargeable}
     onCurrent={onCurrent}
     onError={onError}
     createBridge={createBridge}

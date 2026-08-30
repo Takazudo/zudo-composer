@@ -17,7 +17,8 @@ import {
   type MappingTargetDescriptor,
   type MappingTransform,
 } from "../../mapping";
-import { createUuidIdFactory, type IdFactory } from "../../shared";
+import { createUuidIdFactory, isSafeRecordId, type IdFactory } from "../../shared";
+import { type MappingDeepLinkRequest, type MappingDeepLinkState } from "./deep-link";
 
 export type MappingPane = "source" | "bindings" | "preview";
 export type MappingSaveStatus = "saved" | "dirty" | "saving" | "error";
@@ -58,12 +59,14 @@ export interface MappingEditorState {
   saveStatus: MappingSaveStatus;
   message: string;
   recoveryMessage: string | null;
+  deepLink?: MappingDeepLinkState;
 }
 
 const initialState: MappingEditorState = {
   phase: "idle", mappings: [], libraryDetails: {}, contentModels: [], compositions: [], catalogFailures: [], mapping: null,
   definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null,
   previewStatus: "empty", activePane: "source", saveStatus: "saved", message: "", recoveryMessage: null,
+  deepLink: { status: "none" },
 };
 
 export interface MappingEditorControllerOptions {
@@ -101,7 +104,7 @@ export class MappingEditorController {
     this.listeners.add(listener); listener(this.current); return () => this.listeners.delete(listener);
   }
 
-  async initialize(): Promise<void> { await this.runInitialization(() => this.provider.initialization.initialize()); }
+  async initialize(deepLink?: MappingDeepLinkRequest): Promise<void> { await this.runInitialization(() => this.provider.initialization.initialize(), deepLink); }
   async retryInitialization(): Promise<void> { await this.runInitialization(() => this.provider.initialization.retry()); }
   async startFresh(): Promise<void> { await this.runInitialization(() => this.provider.initialization.startFresh()); }
 
@@ -120,11 +123,57 @@ export class MappingEditorController {
     await this.flush();
     const outcome = await this.provider.store.get(id);
     if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Mapping was not found." : "This Mapping is unreadable and has been preserved.");
-    this.set({ ...this.current, mapping: outcome.record, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null, previewStatus: "loading", activePane: "source", saveStatus: "saved", message: "Mapping loaded." });
-    await this.refreshResolution();
+    await this.openLoadedRecord(outcome.record);
   }
 
-  async close(): Promise<void> { await this.flush(); this.refreshRevision += 1; this.set({ ...this.current, mapping: null, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null, previewStatus: "empty", activePane: "source", message: "Mapping library ready." }); }
+  async close(): Promise<void> { await this.flush(); this.refreshRevision += 1; this.set({ ...this.current, mapping: null, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null, previewStatus: "empty", activePane: "source", message: "Mapping library ready.", deepLink: { status: "none" } }); }
+
+  /**
+   * Resolve a route request against the named provider only. A provider
+   * mismatch is intentionally not treated as a library lookup: opening a
+   * same-named record from another provider would make a copied deep link
+   * point at the wrong document.
+   */
+  async openDeepLink(request: MappingDeepLinkRequest): Promise<MappingDeepLinkState> {
+    const loading: MappingDeepLinkState = { status: "loading", request };
+    this.set({ ...this.current, deepLink: loading, message: "Opening linked Mapping…" });
+    if (!isSafeRecordId(request.providerId) || !isSafeRecordId(request.mappingId)) {
+      return this.finishDeepLink({ status: "invalid", message: "The Mapping link contains a malformed provider or record id." });
+    }
+    if (request.providerId !== this.provider.descriptor.id) {
+      return this.finishDeepLink({ status: "provider-failure", request, message: `Mapping provider "${request.providerId}" is unavailable.` });
+    }
+    if (this.current.phase !== "ready") {
+      return this.finishDeepLink({ status: "provider-failure", request, message: "The Mapping provider is not ready. Return to the library and retry." });
+    }
+
+    let outcome: Awaited<ReturnType<MappingProvider["store"]["get"]>>;
+    try { outcome = await this.provider.store.get(request.mappingId); }
+    catch (reason) {
+      return this.finishDeepLink({ status: "provider-failure", request, message: reason instanceof Error ? reason.message : "The Mapping provider could not open this record." });
+    }
+    if (outcome.status === "not-found") {
+      return this.finishDeepLink({ status: "missing", request, message: `Mapping record "${request.mappingId}" was not found in provider "${request.providerId}".` });
+    }
+    if (outcome.status !== "loaded" || outcome.record.id !== request.mappingId) {
+      const detail = outcome.status === "invalid"
+        ? outcome.issue.message
+        : outcome.status === "future-schema"
+          ? `unsupported schema version ${outcome.foundSchemaVersion}`
+          : "the provider returned an unexpected record";
+      return this.finishDeepLink({ status: "provider-failure", request, message: `Mapping provider "${request.providerId}" could not open "${request.mappingId}": ${detail}.` });
+    }
+    try { await this.openLoadedRecord(outcome.record); }
+    catch (reason) {
+      return this.finishDeepLink({ status: "provider-failure", request, message: reason instanceof Error ? reason.message : "The linked Mapping could not be resolved." });
+    }
+    return this.finishDeepLink({ status: "ready", request });
+  }
+
+  setDeepLinkOutcome(outcome: MappingDeepLinkState): void {
+    if (outcome.status === "none") this.set({ ...this.current, deepLink: outcome });
+    else this.finishDeepLink(outcome);
+  }
 
   async delete(id: string): Promise<void> {
     await this.flush(); await this.provider.store.delete(id); await this.refreshLibrary();
@@ -194,15 +243,56 @@ export class MappingEditorController {
 
   async retrySave(): Promise<void> { if (this.current.mapping) { this.set({ ...this.current, saveStatus: "dirty" }); await this.flush(); } }
 
-  private async runInitialization(load: () => ReturnType<MappingProvider["initialization"]["initialize"]>): Promise<void> {
-    this.set({ ...initialState, phase: "loading", message: "Loading Mapping library…" });
+  private async runInitialization(load: () => ReturnType<MappingProvider["initialization"]["initialize"]>, deepLink?: MappingDeepLinkRequest): Promise<void> {
+    const deepLinkState: MappingDeepLinkState = deepLink ? { status: "loading", request: deepLink } : { status: "none" };
+    this.set({ ...initialState, phase: "loading", message: "Loading Mapping library…", deepLink: deepLinkState });
     try {
       const [outcome, content, compositions] = await Promise.all([load(), this.catalogs.content.listModels(), this.catalogs.compositions.list()]);
       const failures = [...content.failures, ...compositions.failures].map((failure) => `${failure.providerLabel}: ${failure.reason}`);
-      if (outcome.status === "ready") { this.set({ ...initialState, phase: "ready", mappings: outcome.summaries, contentModels: content.entries, compositions: compositions.entries, catalogFailures: failures, message: "Mapping library ready." }); await this.refreshLibraryDetails(); }
-      else if (outcome.status === "recovery-required") this.set({ ...initialState, phase: "recovery", mappings: outcome.summaries, contentModels: content.entries, compositions: compositions.entries, catalogFailures: failures, recoveryMessage: outcome.recovery.message, message: "Recovery required. Source data was preserved." });
-      else this.set({ ...initialState, phase: "error", contentModels: content.entries, compositions: compositions.entries, catalogFailures: failures, message: outcome.error.message });
-    } catch (reason) { this.set({ ...initialState, phase: "error", message: reason instanceof Error ? reason.message : "Mapping initialization failed." }); }
+      if (outcome.status === "ready") {
+        this.set({ ...initialState, phase: "ready", mappings: outcome.summaries, contentModels: content.entries, compositions: compositions.entries, catalogFailures: failures, message: "Mapping library ready.", deepLink: deepLinkState });
+        await this.refreshLibraryDetails();
+        if (deepLink) await this.openDeepLink(deepLink);
+      } else if (outcome.status === "recovery-required") {
+        this.set({
+          ...initialState,
+          phase: "recovery",
+          mappings: outcome.summaries,
+          contentModels: content.entries,
+          compositions: compositions.entries,
+          catalogFailures: failures,
+          recoveryMessage: outcome.recovery.message,
+          message: "Recovery required. Source data was preserved.",
+          deepLink: deepLink
+            ? { status: "provider-failure", request: deepLink, message: outcome.recovery.message }
+            : deepLinkState,
+        });
+      } else {
+        this.set({ ...initialState, phase: "error", contentModels: content.entries, compositions: compositions.entries, catalogFailures: failures, message: outcome.error.message, deepLink: deepLink ? { status: "provider-failure", request: deepLink, message: outcome.error.message } : { status: "none" } });
+      }
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Mapping initialization failed.";
+      this.set({ ...initialState, phase: "error", message, deepLink: deepLink ? { status: "provider-failure", request: deepLink, message } : { status: "none" } });
+    }
+  }
+
+  private async openLoadedRecord(record: MappingRecord): Promise<void> {
+    if (this.current.mapping?.id === record.id) return;
+    await this.flush();
+    this.set({ ...this.current, mapping: record, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null, previewStatus: "loading", activePane: "source", saveStatus: "saved", message: "Mapping loaded." });
+    await this.refreshResolution();
+  }
+
+  private finishDeepLink(outcome: MappingDeepLinkState): MappingDeepLinkState {
+    const message = outcome.status === "ready"
+      ? "Linked Mapping opened."
+      : outcome.status === "missing"
+        ? "Linked Mapping was not found."
+        : "message" in outcome
+          ? outcome.message
+          : "Mapping link could not be opened.";
+    this.set({ ...this.current, deepLink: outcome, message });
+    return outcome;
   }
 
   private edit(change: (record: MappingRecord) => MappingRecord): void {
