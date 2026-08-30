@@ -52,8 +52,6 @@ describe("production Sitemapper walkthrough", () => {
           : { status: "not-found" as const, id },
       },
     }]);
-    vi.stubGlobal("prompt", vi.fn(() => "Product map"));
-
     const { container } = render(h(ProductionSitemapperApp, {
       provider,
       catalog,
@@ -63,6 +61,9 @@ describe("production Sitemapper walkthrough", () => {
     }));
 
     fireEvent.click(await screen.findByRole("button", { name: "New sitemap" }));
+    const createDialog = screen.getByRole("dialog", { name: "Create sitemap" });
+    fireEvent.input(within(createDialog).getByRole("textbox", { name: "Sitemap name" }), { target: { value: "Product map" } });
+    fireEvent.click(within(createDialog).getByRole("button", { name: "Create sitemap" }));
     await screen.findByRole("toolbar", { name: "Sitemapper toolbar" });
 
     const tray = () => within(container.querySelector(".sg-sitemapper-canvas__action-tray") as HTMLElement);
@@ -80,7 +81,8 @@ describe("production Sitemapper walkthrough", () => {
     fireEvent.click(await within(picker).findByRole("button", { name: /Assign Hero composition/ }));
 
     fireEvent.click(screen.getByRole("button", { name: "All sitemaps" }));
-    fireEvent.click(await screen.findByRole("button", { name: /^Product map ·/ }));
+    await waitFor(() => expect(container.querySelector(".sg-sitemapper-library-card__open")).not.toBeNull());
+    fireEvent.click(container.querySelector(".sg-sitemapper-library-card__open") as HTMLButtonElement);
     await screen.findByRole("toolbar", { name: "Sitemapper toolbar" });
 
     await waitFor(async () => {

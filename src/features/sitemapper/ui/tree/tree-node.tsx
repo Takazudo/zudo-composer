@@ -10,7 +10,7 @@ import type {
   SitemapNode,
 } from "../../../../sitemapper/model";
 import type { SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
-import { ChevronDownIcon, ChevronRightIcon, PageIcon } from "../icons";
+import { ChevronDownIcon, ChevronRightIcon, PageIcon } from "../../../../components/icons";
 import { countDescendants, siblingBounds } from "./tree-helpers";
 import { TreeRowActions } from "./tree-row-actions";
 
