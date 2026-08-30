@@ -102,13 +102,16 @@ describe("SitemapLibrary dialogs", () => {
   it("renames through the dialog and preserves the record identity", async () => {
     const setup = provider([record()]);
     render(<SitemapLibrary provider={setup.provider} onOpen={() => undefined} now={() => "2026-03-01T00:00:00.000Z"} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Rename Product map" }));
+    const trigger = await screen.findByRole("button", { name: "Rename Product map" });
+    trigger.focus();
+    fireEvent.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "Rename sitemap" });
     const input = within(dialog).getByRole("textbox", { name: "Sitemap name" });
     fireEvent.input(input, { target: { value: "Launch architecture" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save name" }));
     await waitFor(() => expect(setup.records.get("product-map")?.document.name).toBe("Launch architecture"));
     expect(setup.records.get("product-map")).toMatchObject({ id: "product-map", updatedAt: "2026-03-01T00:00:00.000Z" });
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("labels destructive deletion, focuses Cancel, and deletes only after confirmation", async () => {
