@@ -2,17 +2,23 @@ import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 
-export const SPA_ROUTES = ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"];
+export const SPA_ROUTES = ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/media"];
 export const LIVE_ORIGIN = "https://zudo-composer.zudolab.dev";
 export const HTTP_TIMEOUT_MS = 10_000;
 export const LIVE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000];
 
 const MIME_BY_EXTENSION = new Map([
   [".css", "text/css"],
+  [".gif", "image/gif"],
   [".html", "text/html"],
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
   [".js", "text/javascript"],
   [".mjs", "text/javascript"],
+  [".pdf", "application/pdf"],
+  [".png", "image/png"],
   [".wasm", "application/wasm"],
+  [".webp", "image/webp"],
 ]);
 
 export function sha256(bytes) {

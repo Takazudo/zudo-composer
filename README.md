@@ -1,6 +1,6 @@
 # zudo-composer
 
-`zudo-composer` is the permanent standalone home of four Preact authoring
+`zudo-composer` is the permanent standalone home of five Preact authoring
 products:
 
 - Composer owns its document model, source generation, reuse rules, storage,
@@ -10,6 +10,7 @@ products:
   and authoring UI.
 - Sitemapper owns its page-tree model, storage, library, authoring UI, and the
   catalog integration that resolves saved Composer records.
+- Media owns its metadata model, library route, and upload/delivery boundaries.
 
 The products do not depend on zudo-doc, a zfb application runtime/configuration,
 or a styleguide registry. `zudo-sg` has a narrower permanent role: its installed
@@ -28,11 +29,15 @@ The Vite application has base `/` and these exact SPA routes:
 - `/content` — Content model and Entry authoring
 - `/mapping` — Content-to-Composition Mapping authoring
 - `/sitemapper` — Sitemapper library and editor
+- `/media` — Media library and upload/delivery status
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
+- `/uploaded-media/` — committed images and PDFs copied from `media-store/public`
 
 The preview route is an implementation boundary, not an independent public
 product. Cloudflare serves route fallbacks from the same immutable `dist` tree;
-all emitted assets remain rooted at `/assets/`.
+build-emitted assets remain rooted at `/assets/`, while committed media is
+delivered from `/uploaded-media/`. Upload authoring is available only in local
+development, but committed media delivery is part of the production artifact.
 
 ## Development and validation
 
@@ -155,7 +160,7 @@ enabled.
 
 The hostname above is the configured target, not a claim that this branch is
 deployed. Permanent `main` SHA, root-PR CI, post-merge CI, deployment success,
-and live six-route/all-asset smoke evidence are recorded only after merge.
+and live seven-route/all-asset smoke evidence are recorded only after merge.
 
 ## Destructive current-only policy
 
@@ -180,4 +185,4 @@ After the Phase 3 root reaches `main`, the integration owner records one
 canonical evidence block on both Phase 3 and Phase 4 epics: root PR URL; full
 permanent `main` SHA; provider Git spec/SHA/tree and all version domains; green
 root-PR and post-merge CI URLs; and either the deployed URL with successful
-six-route/all-asset smoke or the exact credential-only handoff.
+seven-route/all-asset smoke or the exact credential-only handoff.

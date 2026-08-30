@@ -8,6 +8,7 @@ import { ContentPersistenceError, createContentEntryRecord, createContentModelRe
 import { createIndexedDbContentProvider } from "../content/storage/indexeddb";
 import { activeComponentProvider } from "../features/composer/active-pack";
 import { createContentPreviewSource, type ContentPreviewSource } from "../features/content/preview-source";
+import { createFileProviderMediaProvider, type MediaFileProvider } from "../media";
 import type { MappingContentEntryCatalog } from "../features/mapping";
 import {
   createCompositionCatalog as createMappingCompositionCatalog, createIndexedDbMappingProvider,
@@ -129,6 +130,7 @@ export interface ProductionProviderIntegration {
   componentProvider: typeof activeComponentProvider;
   compositionProviders: readonly CompositionProvider[]; compositionCatalog: CompositionCatalog; mappingCompositionCatalog: MappingCompositionCatalog;
   contentProviders: readonly ContentProvider[]; contentProvider: ContentProvider; contentCatalog: ContentCatalog;
+  mediaProvider: MediaFileProvider | undefined;
   createContentPreviewSource(): ContentPreviewSource;
   mappingContentEntries: MappingContentEntryCatalog;
   mappingProviders: readonly MappingProvider[]; mappingProvider: MappingProvider; mappingCatalog: MappingCatalog;
@@ -136,6 +138,7 @@ export interface ProductionProviderIntegration {
 }
 export interface ProductionProviderIntegrationOptions { compositionIdbFactory?: IDBFactory | null; contentIdbFactory?: IDBFactory | null; mappingIdbFactory?: IDBFactory | null }
 export function createProductionProviderIntegration(options: ProductionProviderIntegrationOptions = {}): ProductionProviderIntegration {
+  const mediaProvider = createFileProviderMediaProvider();
   const compositionProviders = createProductionComposerProviders(options.compositionIdbFactory);
   const browserComposition = compositionProviders.find(({ descriptor }) => descriptor.id === COMPOSITION_PROVIDERS.indexeddb.id)!;
   const compositionInitializers = compositionProviders.map((provider) => initializeUntilReady(() => provider.initialization.initialize()));
@@ -233,6 +236,6 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     compositionCatalog: createInitializedCompositionCatalog(compositionProviders, compositionInitializers),
     mappingCompositionCatalog,
     contentProviders, contentProvider, contentCatalog, createContentPreviewSource: contentPreviewSource, mappingContentEntries,
-    mappingProviders, mappingProvider, mappingCatalog, sitemapperMappingCatalog,
+    mappingProviders, mappingProvider, mappingCatalog, sitemapperMappingCatalog, mediaProvider,
   });
 }

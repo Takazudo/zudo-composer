@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page, type Response, type TestInfo } from "@playwright/test";
 
-const PRODUCT_LINKS = ["Composer", "Content", "Mapping", "Sitemapper"] as const;
+const PRODUCT_LINKS = ["Composer", "Content", "Mapping", "Sitemapper", "Media"] as const;
 const COLLECTION_MAPPING = "News to Product overview";
 const SINGLE_MAPPING = "Site settings to Product overview";
 

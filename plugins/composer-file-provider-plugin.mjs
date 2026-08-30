@@ -19,6 +19,16 @@ export const COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER = "x-zudo-composer-capabil
 /** UTF-8 bytes. Large enough for a substantial document plus generated JSX. */
 export const COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES = 2 * 1024 * 1024;
 export const COMPOSER_FILE_PROVIDER_ROOT = "compositions";
+export const MEDIA_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_media_file_provider";
+export const MEDIA_FILE_PROVIDER_OPERATION_HEADER = "x-zudo-composer-media-operation";
+export const MEDIA_FILE_PROVIDER_FILE_NAME_HEADER = "x-zudo-composer-media-file-name";
+export const MEDIA_FILE_PROVIDER_RECORD_ID_HEADER = "x-zudo-composer-media-record-id";
+export const MEDIA_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
+export const MEDIA_FILE_PROVIDER_ROOT = "media-store";
+const MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
+// A valid 255-code-point display name can expand to 3,060 characters when
+// encodeURIComponent represents astral Unicode as four percent-encoded bytes.
+const MEDIA_ENCODED_FILE_NAME_MAX_LENGTH = 4096;
 
 const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -116,7 +126,13 @@ function isSameOriginDevRequest(req) {
   }
 }
 
-function validateRequestHead(req, endpoint, capability) {
+function validateRequestHead(
+  req,
+  endpoint,
+  capability,
+  acceptedMediaTypes = new Set(["application/json"]),
+  unsupportedMediaTypeMessage = "Content-Type must be application/json.",
+) {
   if (req.url !== endpoint) return errorResponse(404, "not-found", "File-provider route not found.");
   if (req.method !== "POST") {
     return errorResponse(405, "method-not-allowed", "Only POST is allowed.", undefined, { allow: "POST" });
@@ -128,10 +144,106 @@ function validateRequestHead(req, endpoint, capability) {
     return errorResponse(401, "invalid-capability", "The development file capability is missing or invalid.");
   }
   const mediaType = req.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
-  if (mediaType !== "application/json") {
-    return errorResponse(415, "unsupported-media-type", "Content-Type must be application/json.");
+  if (mediaType === undefined || !acceptedMediaTypes.has(mediaType)) {
+    return errorResponse(415, "unsupported-media-type", unsupportedMediaTypeMessage);
   }
   return undefined;
+}
+
+function isDeadResponse(req, res) {
+  return req.aborted === true || req.socket?.destroyed === true || res.destroyed === true || res.writableEnded === true;
+}
+
+function mediaOperationError(value, operation) {
+  if (value?.code === "BYTE_CAP_EXCEEDED") {
+    return errorResponse(413, "body-too-large", `Upload exceeds the ${MEDIA_UPLOAD_MAX_BYTES}-byte limit. Choose a file no larger than 25 MiB.`, operation);
+  }
+  const code = typeof value?.code === "string" ? value.code : "unknown";
+  if (code === "validation") return errorResponse(422, code, "The media upload is invalid or uses an unsupported file signature.", operation);
+  if (code === "blocked") return errorResponse(409, code, "A filesystem safety check blocked the media operation.", operation);
+  if (code === "read-failed") return errorResponse(503, code, "Local media files could not be read. Check directory permissions and retry.", operation);
+  if (code === "write-failed" || code === "transaction-failed") return errorResponse(500, code, "Local media files could not be updated. Check permissions and free space, then retry.", operation);
+  return errorResponse(500, "unknown", "The local media provider failed unexpectedly. Retry or restart the development server.", operation);
+}
+
+function decodeMediaFileName(value) {
+  if (typeof value !== "string" || value.length === 0 || value.length > MEDIA_ENCODED_FILE_NAME_MAX_LENGTH) return undefined;
+  try { return decodeURIComponent(value); } catch { return undefined; }
+}
+
+/**
+ * Raw-body media transport. The request async iterator is passed directly to
+ * the filesystem sink, preserving backpressure and avoiding a second buffer.
+ *
+ * @param {{capability: string, maxBodyBytes?: number, createStore: () => Promise<any>}} options
+ */
+export function createMediaUploadMiddleware(options) {
+  const maxBodyBytes = options.maxBodyBytes ?? MEDIA_UPLOAD_MAX_BYTES;
+  return async function mediaUploadMiddleware(req, res) {
+    const acceptedMediaTypes = req.headers[MEDIA_FILE_PROVIDER_OPERATION_HEADER] === "upload"
+      ? MEDIA_TYPES
+      : new Set(["application/json"]);
+    const headError = validateRequestHead(
+      req,
+      MEDIA_FILE_PROVIDER_ENDPOINT,
+      options.capability,
+      acceptedMediaTypes,
+      "Content-Type must be an allowed image or PDF type for uploads and application/json otherwise.",
+    );
+    if (headError !== undefined) {
+      if (!isDeadResponse(req, res)) sendConnectResponse(res, headError);
+      return;
+    }
+    const operation = req.headers[MEDIA_FILE_PROVIDER_OPERATION_HEADER];
+    if (!["initialize", "list", "get", "upload", "delete", "clear"].includes(operation)) {
+      sendConnectResponse(res, errorResponse(400, "invalid-request", "A valid media operation header is required."));
+      return;
+    }
+    const contentLengthText = req.headers["content-length"];
+    const contentLength = contentLengthText === undefined ? undefined : Number(contentLengthText);
+    if (contentLength !== undefined && Number.isFinite(contentLength) && contentLength > maxBodyBytes) {
+      sendConnectResponse(res, errorResponse(413, "body-too-large", `Upload exceeds the ${maxBodyBytes}-byte limit. Choose a smaller file.`, operation));
+      return;
+    }
+    const controller = new globalThis.AbortController();
+    const onAborted = () => controller.abort(new Error("request-aborted"));
+    req.once("aborted", onAborted);
+    try {
+      const store = await options.createStore();
+      let result;
+      switch (operation) {
+        case "initialize": result = await store.initialize(); break;
+        case "list": result = await store.list(); break;
+        case "get": result = await store.get(req.headers[MEDIA_FILE_PROVIDER_RECORD_ID_HEADER] ?? ""); break;
+        case "delete": result = await store.delete(req.headers[MEDIA_FILE_PROVIDER_RECORD_ID_HEADER] ?? ""); break;
+        case "clear": await store.clear(); result = null; break;
+        case "upload": {
+          const fileName = decodeMediaFileName(req.headers[MEDIA_FILE_PROVIDER_FILE_NAME_HEADER]);
+          if (fileName === undefined) {
+            if (!isDeadResponse(req, res)) sendConnectResponse(res, errorResponse(400, "invalid-request", "A valid encoded media filename header is required.", operation));
+            return;
+          }
+          result = await store.upload({
+            fileName,
+            declaredMediaType: req.headers["content-type"] ?? "",
+            bytes: req.iterator({ destroyOnReturn: false }),
+            signal: controller.signal,
+          });
+          break;
+        }
+      }
+      if (!isDeadResponse(req, res)) sendConnectResponse(res, json(200, { ok: true, result }));
+    } catch (cause) {
+      if (!isDeadResponse(req, res) && !controller.signal.aborted) {
+        const response = cause?.code === "BYTE_CAP_EXCEEDED"
+          ? errorResponse(413, "body-too-large", `Upload exceeds the ${maxBodyBytes}-byte limit. Choose a smaller file.`, operation)
+          : mediaOperationError(cause, operation);
+        sendConnectResponse(res, response);
+      }
+    } finally {
+      req.off("aborted", onAborted);
+    }
+  };
 }
 
 /** @param {DevRequest} req @param {string} expected */
@@ -463,9 +575,14 @@ export default function composerFileProviderPlugin() {
       }
       return `export const fileProviderConfig = ${JSON.stringify({
         endpoint: COMPOSER_FILE_PROVIDER_ENDPOINT,
+        mediaEndpoint: MEDIA_FILE_PROVIDER_ENDPOINT,
         capability,
         capabilityHeader: COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER,
         maxBodyBytes: COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES,
+        mediaMaxBodyBytes: MEDIA_UPLOAD_MAX_BYTES,
+        mediaOperationHeader: MEDIA_FILE_PROVIDER_OPERATION_HEADER,
+        mediaFileNameHeader: MEDIA_FILE_PROVIDER_FILE_NAME_HEADER,
+        mediaRecordIdHeader: MEDIA_FILE_PROVIDER_RECORD_ID_HEADER,
       })};\n`;
     },
     async configureServer(server) {
@@ -482,6 +599,15 @@ export default function composerFileProviderPlugin() {
           compositionsRoot: resolve(projectRoot, COMPOSER_FILE_PROVIDER_ROOT),
           provideJsx,
         }),
+      });
+      const { createFilesystemMediaStore } = await server.ssrLoadModule("/src/media/storage/file-provider/dev-server-entry.ts");
+      const mediaHandler = createMediaUploadMiddleware({
+        capability: activeCapability,
+        createStore: () => createFilesystemMediaStore({ mediaStoreRoot: resolve(projectRoot, MEDIA_FILE_PROVIDER_ROOT) }),
+      });
+      server.middlewares.use(async (req, res, next) => {
+        if (req.url !== MEDIA_FILE_PROVIDER_ENDPOINT) return next();
+        await mediaHandler(req, res);
       });
       server.middlewares.use(async (req, res, next) => {
         if (req.url !== COMPOSER_FILE_PROVIDER_ENDPOINT) return next();

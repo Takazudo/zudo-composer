@@ -1,7 +1,5 @@
-import { constants, type Stats } from "node:fs";
-import * as nodeFs from "node:fs/promises";
-import { randomBytes } from "node:crypto";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import type { Stats } from "node:fs";
+import { basename } from "node:path";
 import {
   COMPOSITION_PROVIDERS,
   CompositionPersistenceError,
@@ -23,31 +21,16 @@ import {
   type CompositionUnpublishOutcome,
 } from "../../library";
 import { cloneJson } from "../../../shared/json";
+import { SafeRootFilesystem } from "../../../shared/node-fs";
 import type {
   FilesystemCompositionStoreOptions,
   FilesystemDerivedOutputPlan,
   FilesystemDerivedOutputRequest,
-  FilesystemStoreOperations,
 } from "./types";
 
 const JSON_SUFFIX = ".composition.json";
 const JSX_SUFFIX = ".tsx";
 const OWNED_JSON_PATTERN = /^composition-([a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?)\.composition\.json$/;
-const MAX_TEMP_ATTEMPTS = 16;
-const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
-
-const defaultOperations: FilesystemStoreOperations = {
-  mkdir: (path, options) => nodeFs.mkdir(path, options),
-  lstat: (path) => nodeFs.lstat(path),
-  realpath: (path) => nodeFs.realpath(path),
-  readdir: (path, options) => nodeFs.readdir(path, options),
-  open: (path, flags, mode) => nodeFs.open(path, flags, mode),
-  rename: (oldPath, newPath) => nodeFs.rename(oldPath, newPath),
-  unlink: (path) => nodeFs.unlink(path),
-};
-
-const rootQueues = new Map<string, Promise<void>>();
-
 function errorCode(value: unknown): string | undefined {
   if (typeof value !== "object" || value === null || !("code" in value)) return undefined;
   return typeof value.code === "string" ? value.code : undefined;
@@ -86,25 +69,6 @@ function rethrow(
   throw operationError(operation, code, message, cause);
 }
 
-async function serialized<T>(root: string, task: () => Promise<T>): Promise<T> {
-  const previous = rootQueues.get(root) ?? Promise.resolve();
-  const run = previous.catch(() => undefined).then(task);
-  const settled = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  rootQueues.set(root, settled);
-  void settled.then(() => {
-    if (rootQueues.get(root) === settled) rootQueues.delete(root);
-  });
-  return run;
-}
-
-interface ReadFileResult {
-  text: string;
-  stats: Stats;
-}
-
 interface CanonicalResult {
   outcome: CompositionLoadOutcome;
   stats: Stats;
@@ -132,65 +96,41 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
   readonly provider = COMPOSITION_PROVIDERS.files;
 
   private constructor(
-    private readonly rootPath: string,
-    private readonly realRoot: string,
-    private readonly rootStats: Stats,
+    private readonly filesystem: SafeRootFilesystem<CompositionPersistenceOperation>,
     private readonly provideJsx: FilesystemCompositionStoreOptions["provideJsx"],
-    private readonly operations: FilesystemStoreOperations,
-    private readonly randomToken: () => string,
     private readonly now: () => string,
   ) {}
+
+  private get operations() {
+    return this.filesystem.operations;
+  }
+
+  private get realRoot(): string {
+    return this.filesystem.realRoot;
+  }
 
   static async create(
     options: FilesystemCompositionStoreOptions,
   ): Promise<FilesystemCompositionStore> {
-    const rootPath = resolve(options.compositionsRoot);
-    const operations = { ...defaultOperations, ...options.operations };
-
-    try {
-      await operations.mkdir(rootPath, { recursive: true });
-      const rootStats = await operations.lstat(rootPath);
-      if (rootStats.isSymbolicLink() || !rootStats.isDirectory()) {
-        throw operationError(
-          "initialize",
-          "blocked",
-          `Composer compositions root is not a real directory: ${rootPath}`,
-        );
-      }
-      const realRoot = await operations.realpath(rootPath);
-      if (!isAbsolute(realRoot)) {
-        throw operationError(
-          "initialize",
-          "blocked",
-          `Composer compositions root did not resolve to an absolute path: ${rootPath}`,
-        );
-      }
-      const realStats = await operations.lstat(realRoot);
-      if (realStats.isSymbolicLink() || !realStats.isDirectory() || !sameFile(rootStats, realStats)) {
-        throw operationError(
-          "initialize",
-          "blocked",
-          `Composer compositions root failed realpath verification: ${rootPath}`,
-        );
-      }
-      return new FilesystemCompositionStore(
-        rootPath,
-        realRoot,
-        rootStats,
-        options.provideJsx,
-        operations,
-        options.randomToken ?? (() => randomBytes(18).toString("base64url")),
-        options.now ?? (() => new Date().toISOString()),
-      );
-    } catch (cause) {
-      if (cause instanceof CompositionPersistenceError) throw cause;
-      throw operationError(
-        "initialize",
-        "read-failed",
-        `Could not initialize Composer compositions root: ${rootPath}`,
-        cause,
-      );
-    }
+    const filesystem = await SafeRootFilesystem.create({
+      root: options.compositionsRoot,
+      operations: options.operations,
+      randomToken: options.randomToken,
+      errors: {
+        isError: (value): value is CompositionPersistenceError => value instanceof CompositionPersistenceError,
+        create: operationError,
+        rethrow,
+      },
+      rootLabel: "Composer compositions root",
+      ownerLabel: "Composer",
+      recordLabel: "composition",
+      initializeOperation: "initialize",
+    });
+    return new FilesystemCompositionStore(
+      filesystem,
+      options.provideJsx,
+      options.now ?? (() => new Date().toISOString()),
+    );
   }
 
   async list(): Promise<readonly CompositionSummary[]> {
@@ -268,7 +208,7 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
     return this.run("put", async () => {
       await this.assertClosureUnchanged("put", closure, new Set([id]));
       await this.assertBindingTransition(snapshotValidation.record);
-      await this.atomicReplace("put", this.jsonPath(id), canonical);
+      await this.filesystem.atomicReplace("put", this.jsonPath(id), canonical);
       const outputs = await this.applyDerivedOutputs("put", closure, plans, targetIds);
       return {
         canonical: { status: "saved" },
@@ -344,8 +284,8 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
       if (!validation.ok) throw operationError("put", "validation", validation.issue.message);
       const snapshot = cloneJson(validation.record);
       const productionJsx = await this.getProductionJsx("put", snapshot);
-      await this.atomicReplace("put", this.jsxPath(id), productionJsx);
-      await this.atomicReplace("put", this.jsonPath(id), `${JSON.stringify(snapshot, null, 2)}\n`, canonical.stats);
+      await this.filesystem.atomicReplace("put", this.jsxPath(id), productionJsx);
+      await this.filesystem.atomicReplace("put", this.jsonPath(id), `${JSON.stringify(snapshot, null, 2)}\n`, canonical.stats);
       return { status: "unpublished" };
     });
   }
@@ -382,8 +322,8 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
         );
       }
       const productionJsx = await this.getProductionJsx("put", snapshotValidation.record);
-      await this.atomicReplace("put", this.jsxPath(id), productionJsx);
-      await this.atomicReplace("put", this.jsonPath(id), canonical, current.stats);
+      await this.filesystem.atomicReplace("put", this.jsxPath(id), productionJsx);
+      await this.filesystem.atomicReplace("put", this.jsonPath(id), canonical, current.stats);
     });
   }
 
@@ -392,7 +332,7 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
       let entries;
       try {
         entries = await this.operations.readdir(this.realRoot, { withFileTypes: true });
-        await this.assertRoot("clear");
+        await this.filesystem.assertRoot("clear");
       } catch (cause) {
         rethrow("clear", "read-failed", "Could not inspect Composer composition files.", cause);
       }
@@ -459,7 +399,7 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
     let directoryEntries;
     try {
       directoryEntries = await this.operations.readdir(this.realRoot, { withFileTypes: true });
-      await this.assertRoot(operation);
+      await this.filesystem.assertRoot(operation);
     } catch (cause) {
       rethrow(operation, "read-failed", "Could not read Composer canonical records for output planning.", cause);
     }
@@ -538,7 +478,7 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
         );
       }
     }
-    await this.assertRoot(operation);
+    await this.filesystem.assertRoot(operation);
   }
 
   private async assertBindingTransition(next: CompositionRecord): Promise<void> {
@@ -669,12 +609,12 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
       }
 
       try {
-        const existing = await this.readFileNoFollow(operation, path);
+        const existing = await this.filesystem.readFileNoFollow(operation, path);
         if (existing?.text === plan.code) {
           outcomes.set(id, { recordId: id, status: "current" });
           continue;
         }
-        await this.atomicReplace(operation, path, plan.code);
+        await this.filesystem.atomicReplace(operation, path, plan.code);
         outcomes.set(id, { recordId: id, status: "repaired" });
       } catch (cause) {
         const reason = `Generated output could not be written: ${cause instanceof Error ? cause.message : "unknown filesystem error"}`;
@@ -701,7 +641,7 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
         };
       }
       await this.operations.unlink(path);
-      await this.assertRoot(operation);
+      await this.filesystem.assertRoot(operation);
       return { recordId: id, status: "blocked", reason };
     } catch (cause) {
       if (errorCode(cause) === "ENOENT") return { recordId: id, status: "blocked", reason };
@@ -733,10 +673,7 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
     operation: CompositionPersistenceOperation,
     task: () => Promise<T>,
   ): Promise<T> {
-    return serialized(this.realRoot, async () => {
-      await this.assertRoot(operation);
-      return task();
-    });
+    return this.filesystem.run(operation, task);
   }
 
   private async findDependents(
@@ -746,7 +683,7 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
     let entries;
     try {
       entries = await this.operations.readdir(this.realRoot, { withFileTypes: true });
-      await this.assertRoot(operation);
+      await this.filesystem.assertRoot(operation);
     } catch (cause) {
       rethrow(operation, "read-failed", "Could not inspect Composition bindings before source mutation.", cause);
     }
@@ -781,107 +718,19 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
     }
   }
 
-  private async assertRoot(operation: CompositionPersistenceOperation): Promise<void> {
-    try {
-      const current = await this.operations.lstat(this.rootPath);
-      if (current.isSymbolicLink() || !current.isDirectory() || !sameFile(current, this.rootStats)) {
-        throw operationError(
-          operation,
-          "blocked",
-          `Composer compositions root was replaced or is no longer a real directory: ${this.rootPath}`,
-        );
-      }
-      const currentReal = await this.operations.realpath(this.rootPath);
-      if (currentReal !== this.realRoot) {
-        throw operationError(
-          operation,
-          "blocked",
-          `Composer compositions root now resolves outside its verified location: ${this.rootPath}`,
-        );
-      }
-    } catch (cause) {
-      if (cause instanceof CompositionPersistenceError) throw cause;
-      throw operationError(
-        operation,
-        "blocked",
-        `Could not verify Composer compositions root: ${this.rootPath}`,
-        cause,
-      );
-    }
-  }
-
-  private ownedPath(filename: string): string {
-    const path = join(this.realRoot, filename);
-    const fromRoot = relative(this.realRoot, path);
-    if (fromRoot.startsWith(`..${sep}`) || fromRoot === ".." || isAbsolute(fromRoot)) {
-      throw new Error("Internal Composer filename escaped its verified root.");
-    }
-    return path;
-  }
-
   private jsonPath(id: string): string {
-    return this.ownedPath(`composition-${id}${JSON_SUFFIX}`);
+    return this.filesystem.ownedPath(`composition-${id}${JSON_SUFFIX}`);
   }
 
   private jsxPath(id: string): string {
-    return this.ownedPath(`composition-${id}${JSX_SUFFIX}`);
-  }
-
-  private async readFileNoFollow(
-    operation: CompositionPersistenceOperation,
-    path: string,
-  ): Promise<ReadFileResult | undefined> {
-    await this.assertRoot(operation);
-    let before: Stats;
-    try {
-      before = await this.operations.lstat(path);
-    } catch (cause) {
-      if (errorCode(cause) === "ENOENT") return undefined;
-      rethrow(operation, "read-failed", `Could not inspect Composer file: ${basename(path)}`, cause);
-    }
-    if (before.isSymbolicLink() || !before.isFile()) {
-      throw operationError(
-        operation,
-        "blocked",
-        `Refusing to follow or replace non-regular Composer path: ${basename(path)}`,
-      );
-    }
-
-    let handle;
-    try {
-      handle = await this.operations.open(path, constants.O_RDONLY | NO_FOLLOW);
-      const opened = await handle.stat();
-      if (!opened.isFile() || !sameFile(before, opened)) {
-        throw operationError(
-          operation,
-          "blocked",
-          `Composer file changed while it was being opened: ${basename(path)}`,
-        );
-      }
-      const text = await handle.readFile({ encoding: "utf8" });
-      await this.assertRoot(operation);
-      return { text, stats: opened };
-    } catch (cause) {
-      if (errorCode(cause) === "ENOENT") return undefined;
-      if (errorCode(cause) === "ELOOP") {
-        throw operationError(
-          operation,
-          "blocked",
-          `Refusing to follow Composer symlink path: ${basename(path)}`,
-          cause,
-        );
-      }
-      rethrow(operation, "read-failed", `Could not read Composer file: ${basename(path)}`, cause);
-    } finally {
-      await handle?.close().catch(() => undefined);
-    }
+    return this.filesystem.ownedPath(`composition-${id}${JSX_SUFFIX}`);
   }
 
   private async readCanonical(
     operation: CompositionPersistenceOperation,
     expectedId: string,
   ): Promise<CanonicalResult | undefined> {
-    const file = await this.readFileNoFollow(operation, this.jsonPath(expectedId));
+    const file = await this.filesystem.readFileNoFollow(operation, this.jsonPath(expectedId));
     if (file === undefined) return undefined;
 
     let raw: unknown;
@@ -938,135 +787,18 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
     }
   }
 
-  private async assertReplaceablePath(
-    operation: CompositionPersistenceOperation,
-    path: string,
-    expectedStats?: Stats,
-  ): Promise<void> {
-    try {
-      const stats = await this.operations.lstat(path);
-      if (stats.isSymbolicLink() || !stats.isFile()) {
-        throw operationError(
-          operation,
-          "blocked",
-          `Refusing to replace non-regular Composer path: ${basename(path)}`,
-        );
-      }
-      if (expectedStats !== undefined && !sameFile(stats, expectedStats)) {
-        throw operationError(
-          operation,
-          "blocked",
-          `Composer file changed before it could be migrated: ${basename(path)}`,
-        );
-      }
-    } catch (cause) {
-      if (errorCode(cause) === "ENOENT" && expectedStats === undefined) return;
-      if (errorCode(cause) === "ENOENT") {
-        throw operationError(
-          operation,
-          "blocked",
-          `Composer file disappeared before it could be migrated: ${basename(path)}`,
-          cause,
-        );
-      }
-      if (cause instanceof CompositionPersistenceError) throw cause;
-      rethrow(operation, "write-failed", `Could not inspect Composer path: ${basename(path)}`, cause);
-    }
-  }
-
-  private async atomicReplace(
-    operation: CompositionPersistenceOperation,
-    finalPath: string,
-    contents: string,
-    expectedStats?: Stats,
-  ): Promise<void> {
-    await this.assertRoot(operation);
-    await this.assertReplaceablePath(operation, finalPath, expectedStats);
-
-    let temporaryPath: string | undefined;
-    let handle;
-    try {
-      for (let attempt = 0; attempt < MAX_TEMP_ATTEMPTS; attempt += 1) {
-        const token = this.randomToken();
-        if (!/^[A-Za-z0-9_-]{8,128}$/.test(token)) {
-          throw operationError(operation, "blocked", "Temporary filename source returned an unsafe token.");
-        }
-        const candidate = this.ownedPath(`.${basename(finalPath)}.${token}.tmp`);
-        try {
-          handle = await this.operations.open(
-            candidate,
-            constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | NO_FOLLOW,
-            0o600,
-          );
-          temporaryPath = candidate;
-          break;
-        } catch (cause) {
-          if (errorCode(cause) === "EEXIST") continue;
-          throw cause;
-        }
-      }
-      if (handle === undefined || temporaryPath === undefined) {
-        throw operationError(
-          operation,
-          "write-failed",
-          `Could not allocate an exclusive temporary file for ${basename(finalPath)}.`,
-        );
-      }
-
-      await handle.writeFile(contents, { encoding: "utf8" });
-      await handle.sync();
-      await handle.close();
-      handle = undefined;
-
-      await this.assertRoot(operation);
-      await this.assertReplaceablePath(operation, finalPath, expectedStats);
-      await this.operations.rename(temporaryPath, finalPath);
-      temporaryPath = undefined;
-      await this.assertRoot(operation);
-    } catch (cause) {
-      rethrow(operation, "write-failed", `Could not atomically replace ${basename(finalPath)}.`, cause);
-    } finally {
-      await handle?.close().catch(() => undefined);
-      if (temporaryPath !== undefined) {
-        await this.operations.unlink(temporaryPath).catch(() => undefined);
-      }
-    }
-  }
-
   private async deleteValidatedPair(
     operation: "delete" | "clear",
     id: string,
     canonicalStats: Stats,
   ): Promise<void> {
-    const jsxPath = this.jsxPath(id);
-    try {
-      await this.assertRoot(operation);
-      const jsxStats = await this.operations.lstat(jsxPath).catch((cause: unknown) => {
-        if (errorCode(cause) === "ENOENT") return undefined;
-        throw cause;
-      });
-      if (jsxStats?.isFile() && !jsxStats.isSymbolicLink()) {
-        await this.operations.unlink(jsxPath);
-      }
-
-      await this.assertRoot(operation);
-      const currentCanonical = await this.operations.lstat(this.jsonPath(id));
-      if (
-        currentCanonical.isSymbolicLink() ||
-        !currentCanonical.isFile() ||
-        !sameFile(currentCanonical, canonicalStats)
-      ) {
-        throw operationError(
-          operation,
-          "blocked",
-          `Canonical composition changed before deleting id "${id}".`,
-        );
-      }
-      await this.operations.unlink(this.jsonPath(id));
-      await this.assertRoot(operation);
-    } catch (cause) {
-      rethrow(operation, "write-failed", `Could not delete composition files for id "${id}".`, cause);
-    }
+    await this.filesystem.deleteValidatedPair(
+      operation,
+      id,
+      this.jsonPath(id),
+      this.jsxPath(id),
+      canonicalStats,
+    );
   }
 }
 
