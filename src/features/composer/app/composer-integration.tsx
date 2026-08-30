@@ -48,7 +48,6 @@ import type { UseComposerControllerOptions } from "../chrome/use-composer-contro
 import { ComposerTree } from "../ui/tree/composer-tree";
 import { ComposerChooser } from "../ui/chooser/composer-chooser";
 import { ComposerMenu } from "../ui/menu/composer-menu";
-import { SubtreeRemovalConfirm } from "../ui/tree/tree-row-actions";
 import { InspectorPanel } from "../ui/inspector/inspector-panel";
 import { ComposerExportDialog } from "../ui/export/export-dialog";
 import {
@@ -452,16 +451,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
         anchor={menus.anchor}
         onClose={menus.onClose}
         items={menus.items ?? undefined}
-      >
-        {menus.confirm && (
-          <SubtreeRemovalConfirm
-            nodeTitle={menus.confirm.nodeTitle}
-            descendantCount={menus.confirm.descendantCount}
-            onCancel={menus.onCancelConfirm}
-            onConfirm={menus.onConfirmDelete}
-          />
-        )}
-      </ComposerMenu>
+      />
 
       <ComposerExportDialog
         open={exportState.open}

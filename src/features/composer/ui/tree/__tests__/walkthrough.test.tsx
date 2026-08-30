@@ -178,10 +178,8 @@ describe("Structure rail + chooser — the A/B/C right-column walkthrough", () =
     ].map((el) => el.getAttribute("data-sg-tree-node-id"));
     expect(rightIdsRestored).toEqual([bId, cId]);
 
-    // 5) Remove the whole Split Layout subtree — requires explicit confirmation.
+    // 5) Remove the whole Split Layout subtree in one action.
     fireEvent.click(within(tree()).getByRole("button", { name: /^Remove Split Layout/ }));
-    expect(within(tree()).getByText(/Remove Split Layout and its 3 nested components\?/)).toBeInTheDocument();
-    fireEvent.click(within(tree()).getByRole("button", { name: "Confirm removal" }));
 
     // After removal, selection clears to the virtual-root context and the
     // document root is empty again.
