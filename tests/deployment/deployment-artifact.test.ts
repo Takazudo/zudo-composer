@@ -15,10 +15,19 @@ import {
 async function fixture() {
   const dist = await mkdtemp(join(tmpdir(), "zudo-composer-deploy-"));
   await mkdir(join(dist, "assets"));
+  await mkdir(join(dist, "uploaded-media"));
   await writeFile(join(dist, "index.html"), "<main>app</main>");
   await writeFile(join(dist, "assets/app.js"), "export const ready = true;");
   await writeFile(join(dist, "assets/app.css"), ".app{display:block}");
   await writeFile(join(dist, "assets/render.wasm"), Buffer.from([0, 97, 115, 109]));
+  await Promise.all([
+    ["sample.gif", Buffer.from("GIF89a")],
+    ["sample.jpeg", Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
+    ["sample.jpg", Buffer.from([0xff, 0xd8, 0xff, 0xd9])],
+    ["sample.pdf", Buffer.from("%PDF-1.4\n%%EOF\n")],
+    ["sample.png", Buffer.from([0x89, 0x50, 0x4e, 0x47])],
+    ["sample.webp", Buffer.from("RIFF0000WEBP")],
+  ].map(([name, bytes]) => writeFile(join(dist, "uploaded-media", name as string), bytes)));
   return dist;
 }
 
@@ -31,12 +40,24 @@ describe("deployment artifact contract", () => {
       "assets/app.js",
       "assets/render.wasm",
       "index.html",
+      "uploaded-media/sample.gif",
+      "uploaded-media/sample.jpeg",
+      "uploaded-media/sample.jpg",
+      "uploaded-media/sample.pdf",
+      "uploaded-media/sample.png",
+      "uploaded-media/sample.webp",
     ]);
     expect(manifest.files).toMatchObject([
       { mime: "text/css" },
       { mime: "text/javascript" },
       { mime: "application/wasm" },
       { mime: "text/html" },
+      { mime: "image/gif" },
+      { mime: "image/jpeg" },
+      { mime: "image/jpeg" },
+      { mime: "application/pdf" },
+      { mime: "image/png" },
+      { mime: "image/webp" },
     ]);
   });
 
@@ -48,10 +69,9 @@ describe("deployment artifact contract", () => {
     const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
       requestSignals.push(init?.signal as AbortSignal);
       const path = new URL(String(input)).pathname;
-      const file = byPath.get(path) ?? byPath.get("/index.html")!;
-      const bytes = path.startsWith("/assets/")
-        ? await readFile(join(dist, file.path))
-        : Buffer.from("<main>app</main>");
+      const requestedFile = byPath.get(path);
+      const file = requestedFile ?? byPath.get("/index.html")!;
+      const bytes = requestedFile ? await readFile(join(dist, file.path)) : Buffer.from("<main>app</main>");
       return new Response(bytes, { headers: { "content-type": `${file.mime}; charset=utf-8` } });
     };
     const proof = await verifyDeployment({ baseUrl: "https://example.test", distDirectory: dist, fetchImpl });
@@ -111,10 +131,9 @@ describe("deployment artifact contract", () => {
       requests += 1;
       if (requests === 1) throw new Error("DNS is not ready");
       const path = new URL(String(input)).pathname;
-      const file = byPath.get(path) ?? byPath.get("/index.html")!;
-      const bytes = path.startsWith("/assets/")
-        ? await readFile(join(dist, file.path))
-        : Buffer.from("<main>app</main>");
+      const requestedFile = byPath.get(path);
+      const file = requestedFile ?? byPath.get("/index.html")!;
+      const bytes = requestedFile ? await readFile(join(dist, file.path)) : Buffer.from("<main>app</main>");
       return new Response(bytes, { headers: { "content-type": file.mime } });
     };
     const proof = await verifyLiveDeployment({
