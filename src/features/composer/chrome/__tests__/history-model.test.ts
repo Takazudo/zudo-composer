@@ -8,11 +8,13 @@ import {
   canUndo,
   clearHistory,
   createHistory,
+  mergePropCoalescing,
   pushHistory,
   redoHistory,
   undoHistory,
   type CoalesceKey,
   type ComposerHistoryEntry,
+  type PropPath,
 } from "../history-model";
 
 function document(name: string): CompositionDocument {
@@ -28,8 +30,8 @@ function entry(name: string): ComposerHistoryEntry {
   return { document: document(name), selectedId: name === "empty" ? null : name };
 }
 
-function key(nodeId: string, ...propKeys: string[]): CoalesceKey {
-  return { kind: "updateProps", nodeId, propKeys: propKeys.sort() };
+function key(nodeId: string, ...propPaths: PropPath[]): CoalesceKey {
+  return { kind: "updateProps", nodeId, propPaths };
 }
 
 function names(history: { past: readonly { entry: ComposerHistoryEntry }[]; future: readonly ComposerHistoryEntry[] }) {
@@ -64,55 +66,70 @@ describe("pushHistory", () => {
 
   it("retains the earliest snapshot across a burst of three matching pushes and refreshes its timestamp", () => {
     const first = entry("before-1");
-    let history = pushHistory(createHistory(), first, { coalesceKey: key("A", "title"), atMs: 0 });
-    history = pushHistory(history, entry("before-2"), { coalesceKey: key("A", "title"), atMs: 400 });
-    history = pushHistory(history, entry("before-3"), { coalesceKey: key("A", "title"), atMs: 900 });
+    let history = pushHistory(createHistory(), first, { coalesceKey: key("A", ["title"]), atMs: 0 });
+    history = pushHistory(history, entry("before-2"), { coalesceKey: key("A", ["title"]), atMs: 400 });
+    history = pushHistory(history, entry("before-3"), { coalesceKey: key("A", ["title"]), atMs: 900 });
 
     expect(history.past).toHaveLength(1);
     expect(history.past[0]!.entry.document.name).toBe("before-1");
     expect(history.past[0]!.atMs).toBe(900);
-    expect(history.coalescing).toEqual(key("A", "title"));
+    expect(history.coalescing).toEqual(key("A", ["title"]));
   });
 
   it("matches only exact node and sorted patch-key sets", () => {
     let history = pushHistory(createHistory(), entry("title-before"), {
-      coalesceKey: key("A", "title"),
+      coalesceKey: key("A", ["title"]),
       atMs: 0,
     });
     history = pushHistory(history, entry("title-next"), {
-      coalesceKey: key("A", "title"),
+      coalesceKey: key("A", ["title"]),
       atMs: 100,
     });
     expect(history.past).toHaveLength(1);
 
     history = pushHistory(history, entry("subtitle-before"), {
-      coalesceKey: key("A", "subtitle"),
+      coalesceKey: key("A", ["subtitle"]),
       atMs: 200,
     });
     expect(history.past).toHaveLength(2);
 
     history = pushHistory(history, entry("both-before"), {
-      coalesceKey: key("A", "title", "subtitle"),
+      coalesceKey: key("A", ["title"], ["subtitle"]),
       atMs: 300,
     });
     expect(history.past).toHaveLength(3);
 
     history = pushHistory(history, entry("other-node-before"), {
-      coalesceKey: key("B", "title"),
+      coalesceKey: key("B", ["title"]),
       atMs: 400,
     });
     expect(history.past).toHaveLength(4);
   });
 
   it("sorts a key copy without mutating the caller and coalesces equivalent orderings", () => {
-    const firstKey: CoalesceKey = { kind: "updateProps", nodeId: "A", propKeys: ["subtitle", "title"] };
-    const secondKey: CoalesceKey = { kind: "updateProps", nodeId: "A", propKeys: ["title", "subtitle"] };
+    const firstKey: CoalesceKey = { kind: "updateProps", nodeId: "A", propPaths: [["subtitle"], ["title"]] };
+    const secondKey: CoalesceKey = { kind: "updateProps", nodeId: "A", propPaths: [["title"], ["subtitle"]] };
     const history = pushHistory(createHistory(), entry("before"), { coalesceKey: firstKey, atMs: 0 });
     const next = pushHistory(history, entry("ignored"), { coalesceKey: secondKey, atMs: 1 });
 
-    expect(firstKey.propKeys).toEqual(["subtitle", "title"]);
+    expect(firstKey.propPaths).toEqual([["subtitle"], ["title"]]);
     expect(next.past).toHaveLength(1);
-    expect(next.past[0]!.key).toEqual({ kind: "updateProps", nodeId: "A", propKeys: ["subtitle", "title"].sort() });
+    expect(next.past[0]!.key).toEqual({ kind: "updateProps", nodeId: "A", propPaths: [["subtitle"], ["title"]] });
+  });
+
+  it("compares exact nested paths and sorts strings before numeric segments", () => {
+    const unsorted = key("hero", ["actions", 1, "href"], ["actions", "meta"], ["actions", 0, "label"]);
+    const equivalent = key("hero", ["actions", 0, "label"], ["actions", 1, "href"], ["actions", "meta"]);
+    let history = pushHistory(createHistory(), entry("before"), { coalesceKey: unsorted, atMs: 0 });
+    history = pushHistory(history, entry("same paths"), { coalesceKey: equivalent, atMs: 100 });
+    expect(history.past).toHaveLength(1);
+    expect(history.past[0]!.key).toEqual(key("hero", ["actions", "meta"], ["actions", 0, "label"], ["actions", 1, "href"]));
+
+    history = pushHistory(history, entry("different leaf"), {
+      coalesceKey: key("hero", ["actions", 0, "href"]),
+      atMs: 200,
+    });
+    expect(history.past).toHaveLength(2);
   });
 
   it("starts a fresh entry for null keys and for gaps outside the inclusive window", () => {
@@ -120,16 +137,16 @@ describe("pushHistory", () => {
     history = pushHistory(history, entry("null-2"), { coalesceKey: null, atMs: 1 });
     expect(history.past).toHaveLength(2);
 
-    history = pushHistory(history, entry("keyed-1"), { coalesceKey: key("A", "title"), atMs: 10 });
+    history = pushHistory(history, entry("keyed-1"), { coalesceKey: key("A", ["title"]), atMs: 10 });
     history = pushHistory(history, entry("keyed-at-boundary"), {
-      coalesceKey: key("A", "title"),
+      coalesceKey: key("A", ["title"]),
       atMs: 10 + HISTORY_COALESCE_WINDOW_MS,
     });
     expect(history.past).toHaveLength(3);
     expect(history.past[2]!.entry.document.name).toBe("keyed-1");
 
     history = pushHistory(history, entry("keyed-after-window"), {
-      coalesceKey: key("A", "title"),
+      coalesceKey: key("A", ["title"]),
       atMs: 10 + 2 * HISTORY_COALESCE_WINDOW_MS + 1,
     });
     expect(history.past).toHaveLength(4);
@@ -167,9 +184,19 @@ describe("pushHistory", () => {
   });
 });
 
+describe("mergePropCoalescing", () => {
+  it("deduplicates leaf paths and preserves a structural null barrier in either position", () => {
+    expect(mergePropCoalescing([["actions", 0, "label"]], [["actions", 0, "label"]])).toEqual([
+      ["actions", 0, "label"],
+    ]);
+    expect(mergePropCoalescing(null, [["actions", 0, "label"]])).toBeNull();
+    expect(mergePropCoalescing([["actions", 0, "label"]], null)).toBeNull();
+  });
+});
+
 describe("undoHistory and redoHistory", () => {
   it("moves snapshots between stacks in undo then redo order and returns null at either end", () => {
-    const history = pushHistory(createHistory(), entry("before"), { coalesceKey: key("A", "title"), atMs: 1 });
+    const history = pushHistory(createHistory(), entry("before"), { coalesceKey: key("A", ["title"]), atMs: 1 });
     const current = entry("after");
     const undone = undoHistory(history, current);
     expect(undone).not.toBeNull();
@@ -205,19 +232,19 @@ describe("undoHistory and redoHistory", () => {
 
 describe("coalescing barriers", () => {
   it("breaks the group without changing either stack", () => {
-    const history = pushHistory(createHistory(), entry("before"), { coalesceKey: key("A", "title"), atMs: 0 });
+    const history = pushHistory(createHistory(), entry("before"), { coalesceKey: key("A", ["title"]), atMs: 0 });
     const broken = breakHistoryCoalescing(history);
     expect(broken.past).toBe(history.past);
     expect(broken.future).toBe(history.future);
     expect(broken.coalescing).toBeNull();
 
-    const next = pushHistory(broken, entry("new-group"), { coalesceKey: key("A", "title"), atMs: 1 });
+    const next = pushHistory(broken, entry("new-group"), { coalesceKey: key("A", ["title"]), atMs: 1 });
     expect(next.past).toHaveLength(2);
     expect(next.past[0]!.entry.document.name).toBe("before");
   });
 
   it("ends coalescing on undo, redo, and clear", () => {
-    const keyed = pushHistory(createHistory(), entry("before"), { coalesceKey: key("A", "title"), atMs: 0 });
+    const keyed = pushHistory(createHistory(), entry("before"), { coalesceKey: key("A", ["title"]), atMs: 0 });
     const undone = undoHistory(keyed, entry("after"))!;
     expect(undone.history.coalescing).toBeNull();
 
