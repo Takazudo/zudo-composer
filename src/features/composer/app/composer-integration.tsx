@@ -124,7 +124,20 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
     controllerOptions: props.controllerOptions,
     reuseResolution: effectiveReuseResolution,
   });
-  const { controller, manifestEntries, session, viewport, setViewport, chooser, exportState, titleFor } = api;
+  const {
+    controller,
+    manifestEntries,
+    session,
+    viewport,
+    setViewport,
+    chooser,
+    exportState,
+    titleFor,
+    handleUndo,
+    handleRedo,
+    canUndo,
+    canRedo,
+  } = api;
   const { state } = controller;
   const linkedView = useMemo(() => {
     if (!api.reuseResolution) return null;
@@ -282,6 +295,10 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
     selectedId: state.selectedId,
     onRemoveSelected: api.handleRemoveSelected,
     onEscape: api.handleEscape,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    canUndo,
+    canRedo,
     menuOpen: menus.open,
   });
 
@@ -337,6 +354,10 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
             onSetMode={controller.setMode}
             onSetViewport={setViewport}
             onRetrySave={controller.retrySave}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            canUndo={canUndo}
+            canRedo={canRedo}
             onExport={exportState.openExport}
             clipboard={state.clipboard}
             titleFor={titleFor}
@@ -378,6 +399,8 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
             onRequestInsertMenu={menus.openInsertMenu}
             onCommitInlineEdit={api.handleCommitInlineEdit}
             onDropNode={api.handleDropNode}
+            onRequestUndo={handleUndo}
+            onRequestRedo={handleRedo}
             createBridge={props.createBridge}
             location={props.previewLocation}
             hostWindow={props.hostWindow}

@@ -2,6 +2,7 @@
 /** @jsxImportSource preact */
 import "../../test-support/cleanup";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { act } from "preact/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IDBFactory as FDBFactory } from "fake-indexeddb";
 import {
@@ -15,14 +16,20 @@ import {
 import { fixtureComponentProvider, createFixtureSampleDocument } from "../../test-support/fixture-pack";
 import { createProductionComposerProviders } from "../../../../app/provider-integration";
 import {
+  readyMessage as protocolReadyMessage,
+  requestHistoryMessage as protocolRequestHistoryMessage,
+} from "../../preview/protocol";
+import {
   ProductionComposerApp,
   type ComposerBrowserNavigation,
 } from "../production-composer-app";
+import { makeTestBridge } from "../test-support/preview-harness";
 
 const TIMESTAMP = "2026-07-14T00:00:00.000Z";
 const PREVIEW = {
   previewLocation: { src: "about:blank", targetOrigin: "https://composer.test" },
 } as const;
+const PREVIEW_PACK = fixtureComponentProvider.manifest;
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -414,6 +421,56 @@ describe("ProductionComposerApp", () => {
     expect(within(refreshedInspector).getByLabelText("Label")).toHaveValue(
       "Persisted in IndexedDB",
     );
+  });
+
+  it("wires mounted toolbar, parent keyboard, and canvas history requests to one controller", async () => {
+    const initial = record("history", "History");
+    const indexeddb = memoryProvider("indexeddb", [initial]);
+    const navigation = new FakeNavigation("/composer#/composition/indexeddb/history");
+    const bridge = makeTestBridge(PREVIEW.previewLocation);
+    const view = render(
+      <ProductionComposerApp
+        componentProvider={fixtureComponentProvider}
+        providers={[indexeddb]}
+        navigation={navigation}
+        preview={{ ...PREVIEW, createBridge: bridge.createBridge }}
+      />,
+    );
+
+    await screen.findByRole("button", { name: "Library" });
+    act(() => bridge.deliver(protocolReadyMessage(PREVIEW_PACK)));
+    const toolbar = () => screen.getByRole("toolbar", { name: "Composer toolbar" });
+    const undo = () => within(toolbar()).getByRole("button", { name: "Undo" });
+    const redo = () => within(toolbar()).getByRole("button", { name: "Redo" });
+
+    expect(undo()).toBeDisabled();
+    expect(redo()).toBeDisabled();
+
+    const tree = view.container.querySelector("#sg-composer-tree") as HTMLElement;
+    const inspector = view.container.querySelector("#sg-composer-inspector") as HTMLElement;
+    fireEvent.click(within(tree).getByRole("button", { name: "Expand Section Product overview" }));
+    fireEvent.click(within(tree).getByRole("button", { name: /^Button/ }));
+    fireEvent.click(within(inspector).getByRole("button", { name: "Remove" }));
+    expect(undo()).toBeEnabled();
+    expect(redo()).toBeDisabled();
+
+    fireEvent.click(undo());
+    expect(undo()).toBeDisabled();
+    expect(redo()).toBeEnabled();
+
+    fireEvent.keyDown(document, { key: "y", ctrlKey: true });
+    expect(undo()).toBeEnabled();
+    expect(redo()).toBeDisabled();
+
+    act(() => bridge.deliver(protocolRequestHistoryMessage(PREVIEW_PACK, "undo")));
+    expect(undo()).toBeDisabled();
+    expect(redo()).toBeEnabled();
+
+    fireEvent.click(within(toolbar()).getByRole("button", { name: "Preview" }));
+    expect(undo()).toBeDisabled();
+    expect(redo()).toBeDisabled();
+
+    view.unmount();
   });
 
   it("lands a debounce-pending inspector value before the save queue is flushed", async () => {
