@@ -78,6 +78,7 @@ export function ReuseControls({
   const patternPublishedCopyId = useId();
   const globalTemplateCopyId = useId();
   const previewReasonId = useId();
+  // Publication clears are history barriers by design, so their confirmation remains necessary.
   const [confirmingClear, setConfirmingClear] = useState<ClearablePublication | null>(null);
   const [busy, setBusy] = useState(false);
   const [liveFeedback, setLiveFeedback] = useState<string | null>(null);

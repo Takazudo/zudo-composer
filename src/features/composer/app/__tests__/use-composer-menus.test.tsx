@@ -3,8 +3,7 @@
 import "../../test-support/cleanup";
 // Tests the context-menu orchestration hook (issue #256): item derivation per
 // context, disabled-paste + clipboard-name label, opaque-node item hiding,
-// the Delete subtree-removal confirmation hand-off (reusing #250's own
-// component), and which close path invokes `restoreFocus`.
+// single-action Delete behavior, and which close path invokes `restoreFocus`.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/preact";
@@ -51,7 +50,7 @@ describe("useComposerMenus — node menu (issue #256)", () => {
     expect(result.current.menus.items!.map((i) => i.id)).toEqual(["delete"]);
   });
 
-  it("Delete on a LEAF (no descendants) removes immediately and restores focus", () => {
+  it("Delete on a leaf removes immediately and restores focus", () => {
     const { result } = setup();
     const restoreFocus = vi.fn();
     act(() => result.current.menus.openNodeMenu("B", RECT, restoreFocus));
@@ -62,40 +61,13 @@ describe("useComposerMenus — node menu (issue #256)", () => {
     expect(restoreFocus).toHaveBeenCalledTimes(1);
   });
 
-  it("Delete on a POPULATED subtree shows the confirmation instead of removing, and stays open", () => {
+  it("Delete on a populated subtree removes immediately, closes, and restores focus", () => {
     const { result } = setup();
     const restoreFocus = vi.fn();
     act(() => result.current.menus.openNodeMenu("split", RECT, restoreFocus));
     act(() => result.current.menus.items!.find((i) => i.id === "delete")!.onSelect());
-
-    expect(result.current.menus.open).toBe(true);
-    expect(result.current.menus.items).toBeNull();
-    expect(result.current.menus.confirm).toEqual({ nodeTitle: "Split Layout", descendantCount: 3 });
-    expect(restoreFocus).not.toHaveBeenCalled();
-    // No mutation yet.
-    expect(result.current.api.controller.state.document.root).toHaveLength(1);
-  });
-
-  it("confirming removal removes the subtree and restores focus", () => {
-    const { result } = setup();
-    const restoreFocus = vi.fn();
-    act(() => result.current.menus.openNodeMenu("split", RECT, restoreFocus));
-    act(() => result.current.menus.items!.find((i) => i.id === "delete")!.onSelect());
-    act(() => result.current.menus.onConfirmDelete());
 
     expect(result.current.api.controller.state.document.root).toHaveLength(0);
-    expect(result.current.menus.open).toBe(false);
-    expect(restoreFocus).toHaveBeenCalledTimes(1);
-  });
-
-  it("cancelling the confirmation makes NO mutation but still restores focus", () => {
-    const { result } = setup();
-    const restoreFocus = vi.fn();
-    act(() => result.current.menus.openNodeMenu("split", RECT, restoreFocus));
-    act(() => result.current.menus.items!.find((i) => i.id === "delete")!.onSelect());
-    act(() => result.current.menus.onCancelConfirm());
-
-    expect(result.current.api.controller.state.document.root).toHaveLength(1);
     expect(result.current.menus.open).toBe(false);
     expect(restoreFocus).toHaveBeenCalledTimes(1);
   });

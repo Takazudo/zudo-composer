@@ -3,13 +3,9 @@
 // Structural actions for one structure-rail row (issue Takazudo/zudo-sg#250): sibling
 // move-up/move-down (within the node's current slot only — cross-slot
 // reparenting/drag-drop are explicitly out of scope, see Takazudo/zudo-sg#245's command
-// comments) and subtree removal. Removing a node with at least one descendant
-// requires an explicit inline confirmation step before `onRemove` fires;
-// removing an empty node (leaf, or a container with no children) fires
-// immediately. Kept as its own component so the confirmation's local state
-// doesn't live on the (already complex) recursive row renderer.
+// comments) and subtree removal. Removal is a single action because document
+// mutations can be recovered through Composer history.
 
-import { useState } from "preact/hooks";
 import type { JSX } from "preact";
 import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from "../../../../components/icons";
 import { InlineConfirm } from "../shared/inline-confirm";
@@ -63,7 +59,6 @@ export interface TreeRowActionsProps {
 
 export function TreeRowActions({
   nodeTitle,
-  descendantCount,
   canMoveUp,
   canMoveDown,
   readOnly = false,
@@ -71,23 +66,7 @@ export function TreeRowActions({
   onMoveDown,
   onRemove,
 }: TreeRowActionsProps): JSX.Element {
-  const [confirming, setConfirming] = useState(false);
-
   if (readOnly) return <></>;
-
-  if (confirming) {
-    return (
-      <SubtreeRemovalConfirm
-        nodeTitle={nodeTitle}
-        descendantCount={descendantCount}
-        onCancel={() => setConfirming(false)}
-        onConfirm={() => {
-          setConfirming(false);
-          onRemove();
-        }}
-      />
-    );
-  }
 
   return (
     <div class="sg-composer-tree-row-actions">
@@ -116,10 +95,7 @@ export function TreeRowActions({
         class="sg-composer-tree-action sg-composer-tree-action-danger"
         aria-label={`Remove ${nodeTitle}`}
         title="Remove"
-        onClick={() => {
-          if (descendantCount > 0) setConfirming(true);
-          else onRemove();
-        }}
+        onClick={onRemove}
       >
         <TrashIcon size="sm" />
       </button>

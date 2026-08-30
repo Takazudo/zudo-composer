@@ -553,6 +553,16 @@ describe("ComposerIntegration — replay + guarded keyboard (#251)", () => {
 });
 
 describe("ComposerIntegration — undo/redo app wiring (#74)", () => {
+  it("tree-row removal is one action and remains undoable by keyboard shortcut", () => {
+    const s = setup(undefined, makeAbcDocument());
+
+    fireEvent.click(within(s.tree()).getByRole("button", { name: "Remove Split Layout" }));
+    expect(s.canvasDoc().root).toHaveLength(0);
+
+    fireEvent.keyDown(document, { key: "z", ctrlKey: true });
+    expect(s.canvasDoc().root).toHaveLength(1);
+  });
+
   it("drives one controller from toolbar, parent shortcuts, and canvas relay", () => {
     const s = setup();
     const undo = () => within(s.toolbar()).getByRole("button", { name: "Undo" });
@@ -674,20 +684,16 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
     expect(within(s.menu()!).getAllByRole("menuitem").map((el) => el.textContent)).toEqual(["Delete"]);
   });
 
-  it("Delete on a populated subtree shows #250's exact subtree-removal confirmation instead of removing immediately, focused on Cancel (issue #260/#269)", () => {
+  it("Delete on a populated subtree removes in one action and remains undoable from the toolbar", () => {
     const s = setup(undefined, makeAbcDocument());
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Open menu for Split Layout" }));
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Delete" }));
 
-    expect(within(s.menu()!).getByText(/Remove Split Layout and its 3 nested components\?/)).toBeInTheDocument();
-    // Unified with the tree row's own inline confirmation (below): initial
-    // focus lands on the SAFE action, not the danger "Confirm removal" button.
-    expect(document.activeElement).toBe(within(s.menu()!).getByRole("button", { name: "Cancel" }));
-    expect(s.canvasDoc().root).toHaveLength(1); // no mutation yet
-
-    fireEvent.click(within(s.menu()!).getByRole("button", { name: "Confirm removal" }));
     expect(s.canvasDoc().root).toHaveLength(0);
     expect(s.menu()).toBeNull();
+
+    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Undo" }));
+    expect(s.canvasDoc().root).toHaveLength(1);
   });
 
   it("insert menu always offers BOTH Add component… and Paste here; paste disabled while clipboard is empty", () => {
