@@ -34,10 +34,10 @@ domains, credentials, or other infrastructure.
 Keep these domains distinct:
 
 - provider Git commit/tree:
-  `fe3fc62d3f677f321f5eb7814240d4a55dc92cd0` /
-  `96a42a59cf4d05078ba85e7a0ccdb7d7765d29cc`
+  `6b0826cdaa14d9888e58c795ee015f70e2c5cbdf` /
+  `1c3cbfd3a25d1425f447cdadd5ba538916394309`
 - exact provider spec:
-  `git+https://github.com/Takazudo/zudo-sg.git#fe3fc62d3f677f321f5eb7814240d4a55dc92cd0`
+  `git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf`
 - installed provider metadata: `@zudo-sg/ui@0.1.0`
 - component-pack protocol identity: `@zudo-sg/ui@1.0.0`
 - component-contract API/package version:

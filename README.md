@@ -74,8 +74,8 @@ The current UI provider identity has four distinct version/provenance domains:
 
 | Domain | Current value |
 |---|---|
-| Provider Git spec | `git+https://github.com/Takazudo/zudo-sg.git#fe3fc62d3f677f321f5eb7814240d4a55dc92cd0` |
-| Provider commit / root tree | `fe3fc62d3f677f321f5eb7814240d4a55dc92cd0` / `96a42a59cf4d05078ba85e7a0ccdb7d7765d29cc` |
+| Provider Git spec | `git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf` |
+| Provider commit / root tree | `6b0826cdaa14d9888e58c795ee015f70e2c5cbdf` / `1c3cbfd3a25d1425f447cdadd5ba538916394309` |
 | Installed package metadata | `@zudo-sg/ui@0.1.0` |
 | Component-pack protocol identity | `@zudo-sg/ui@1.0.0` |
 
