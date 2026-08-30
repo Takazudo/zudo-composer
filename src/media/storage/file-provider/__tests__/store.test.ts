@@ -17,7 +17,7 @@ beforeEach(() => { fetchMock = vi.fn<typeof fetch>(); });
 
 describe("browser media file provider", () => {
   it("uses the shared capability and bounded header metadata for raw uploads", async () => {
-    const record = { id: "media-1", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", document: { schemaVersion: 1, fileName: "hero image.png", mediaType: "image/png", byteLength: 8, checksum: "a".repeat(64) } };
+    const record = { id: "media-1", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", document: { schemaVersion: 1, id: "media-1", fileName: "hero image.png", mediaType: "image/png", byteLength: 8, checksum: "a".repeat(64) } };
     fetchMock.mockResolvedValue(response({ ok: true, result: record }));
     const provider = createFileProviderMediaProvider({ fetch: fetchMock })!;
     const file = new File([new Uint8Array(8)], "hero image.png", { type: "image/png" });
@@ -44,6 +44,13 @@ describe("browser media file provider", () => {
     const provider = createFileProviderMediaProvider({ fetch: fetchMock })!;
     await expect(provider.store.upload(new File([new Uint8Array(8)], "large.png", { type: "image/png" })))
       .rejects.toMatchObject({ code: "validation", operation: "put", retryable: false, message: "Choose a smaller file." });
+  });
+
+  it("rejects a malformed successful upload record at the browser boundary", async () => {
+    fetchMock.mockResolvedValue(response({ ok: true, result: { id: "../unsafe" } }));
+    const provider = createFileProviderMediaProvider({ fetch: fetchMock })!;
+    await expect(provider.store.upload(new File([new Uint8Array(8)], "hero.png", { type: "image/png" })))
+      .rejects.toMatchObject({ code: "validation", operation: "put", retryable: false });
   });
 
   it("adapts initialization, list, get, delete, clear and startFresh", async () => {

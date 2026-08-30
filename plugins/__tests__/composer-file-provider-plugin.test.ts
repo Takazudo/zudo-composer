@@ -427,6 +427,8 @@ describe("dev/build registration boundary", () => {
     const { source: dev, instance } = setupSource("serve");
     const config = JSON.parse(dev.match(/= (.*);/)?.[1] ?? "null");
     expect(config.endpoint).toBe(COMPOSER_FILE_PROVIDER_ENDPOINT);
+    expect(config.mediaEndpoint).toBe(MEDIA_FILE_PROVIDER_ENDPOINT);
+    expect(config.mediaMaxBodyBytes).toBe(MEDIA_UPLOAD_MAX_BYTES);
     expect(config.capability).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(config.capability).not.toBe(CAPABILITY);
     const nextDev = JSON.parse(setupSource("serve").source.match(/= (.*);/)?.[1] ?? "null");

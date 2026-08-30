@@ -52,7 +52,11 @@ class BrowserFileProviderMediaStore implements MediaFileProviderStore {
   async clear() { await this.request<null>("clear"); }
   upload(file: Blob & { name: string }) {
     if (file.size > this.config.mediaMaxBodyBytes) return Promise.reject(persistenceError("put", "validation", `Upload exceeds the ${this.config.mediaMaxBodyBytes}-byte limit. Choose a smaller file.`));
-    return this.request<MediaRecord>("upload", undefined, file, file.type || "application/octet-stream", file.name);
+    return this.request<MediaRecord>("upload", undefined, file, file.type || "application/octet-stream", file.name).then((record) => {
+      const decoded = loadMediaRecord(record);
+      if (decoded.status !== "loaded") throw persistenceError("put", "validation", "The development media provider returned an invalid uploaded record.");
+      return decoded.record;
+    });
   }
   private async request<T>(operation: WireOperation, id?: string, body: BodyInit = "", contentType = "application/json", fileName?: string): Promise<T> {
     let response: Response;
