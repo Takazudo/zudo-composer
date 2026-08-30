@@ -78,9 +78,11 @@ describe("isStructurallyValidDocument", () => {
   });
 
   it("accepts the exact source union and rejects Mapping nodes with authored children", () => {
-    const mapping = { kind: "mapping" as const, ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field" as const, fieldId: "slug" } };
+    const mapping = { kind: "mapping" as const, ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field" as const, fieldId: "slug", titleFieldId: "title" } };
     expect(code(document([{ ...node("articles"), source: mapping }]))).toBe("ok");
     expect(code(document([{ ...node("articles", [node("synthetic")]), source: mapping }]))).toBe("mapping-children");
     expect(code(document([{ ...node("articles"), source: { ...mapping, route: { kind: "single", fieldId: "slug" } } } as never]))).toBe("invalid-source");
+    expect(code(document([{ ...node("articles"), source: { ...mapping, route: { ...mapping.route, titleFieldId: "../bad" } } } as never]))).toBe("invalid-source");
+    expect(code(document([{ ...node("articles"), source: { ...mapping, route: { ...mapping.route, extra: true } } } as never]))).toBe("invalid-source");
   });
 });

@@ -343,6 +343,7 @@ export async function compileSiteProject(
     let localRecord: CompositionRecord | undefined;
     let localDocument: CompositionDocument | undefined;
     let selectedEntry: SiteProjectRecordRef | undefined;
+    let displayTitle = node.title;
 
     if (node.source.kind === "composition") {
       source = { kind: "composition", ref: { ...node.source.ref } };
@@ -382,6 +383,10 @@ export async function compileSiteProject(
         continue;
       }
       selectedEntry = { providerId: mapping.document.contentModel.providerId, recordId: entry.id };
+      if (node.source.route.kind === "entry-field" && node.source.route.titleFieldId !== undefined) {
+        const entryTitle = entry.values[node.source.route.titleFieldId];
+        if (typeof entryTitle === "string" && entryTitle.trim().length > 0) displayTitle = entryTitle;
+      }
       const evaluation = evaluateResolvedMapping(definition, entry);
       for (const item of evaluation.entryDiagnostics.filter((candidate) => candidate.severity === "blocking")) {
         diagnostics.push({ severity: "blocking", code: `mapping-${item.code}`, message: item.message, path: entrySelector(selectedEntry), pathname: expanded.pathname, nodeId: node.id, entry: selectedEntry });
@@ -462,6 +467,7 @@ export async function compileSiteProject(
     const modules = batch.records.filter((plan) => plan.status === "generated").map(asModule).sort(compareModules);
     routes.push({
       pathname: expanded.pathname,
+      displayTitle,
       sitemapNode: { id: node.id, path: indexed.path },
       source,
       ...(selectedEntry ? { selectedEntry } : {}),

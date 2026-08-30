@@ -338,6 +338,10 @@ export function createSiteProjectApiService(dependencies: SiteProjectApiDependen
       }
 
       case "activate": {
+        const stored = await getStored({ kind: "stored", projectId: request.projectId, revision: request.revision }, dependencies);
+        if ("ok" in stored) return stored;
+        const compilation = await compiler(stored.project, { componentCatalog: dependencies.componentCatalog });
+        if (compilation.status === "blocked") return compileFailure(compilation);
         const result = await dependencies.projectStore.activate({
           target: { projectId: request.projectId, revision: request.revision },
           expectedActive: normalizedActive(request.expectedActive),

@@ -47,6 +47,8 @@ export interface SiteCompiledRouteComposition {
 
 export interface SiteCompiledRoute {
   pathname: string;
+  /** Plain per-route title resolved during compilation; delivery never infers it from rendered content. */
+  displayTitle: string;
   sitemapNode: { id: string; path: string };
   source: SiteCompiledRouteSource;
   selectedEntry?: SiteProjectRecordRef;

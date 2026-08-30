@@ -495,7 +495,6 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
         input.build.modules.forEach((module, index) => outputs.set(`module-${String(index).padStart(4, "0")}.mjs`, module.code));
         const fileDigests = Object.fromEntries([...outputs].map(([name, text]) => [name, hash(text)]));
         const completeText = canonicalStringifyJson({ files: fileDigests });
-        const expectedOutputEntries = [...outputs.keys()].sort();
         const expectedEntries = [...outputs.keys(), "complete.json"].sort();
         if (await exists(revisionDir)) {
           const info = await lstat(revisionDir);
@@ -504,7 +503,6 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
           if (entries.some((entry) => !expectedEntries.includes(entry))) throw new Error("Immutable build contains unknown files.");
           const hasComplete = entries.includes("complete.json");
           if (hasComplete && entries.join(",") !== expectedEntries.join(",")) throw new Error("Immutable completed build is partial.");
-          if (!hasComplete && entries.join(",") !== expectedOutputEntries.join(",")) throw new Error("Immutable build is partial.");
           for (const name of entries) {
             const path = join(revisionDir, name);
             await this.verifyTarget(path, false);
@@ -514,6 +512,9 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
             }
           }
           if (!hasComplete) {
+            for (const [name, text] of outputs) {
+              if (!entries.includes(name)) await this.atomicWrite(join(revisionDir, name), text);
+            }
             await this.hit("build-files-durable");
             await this.atomicWrite(join(revisionDir, "complete.json"), completeText);
             await syncDirectory(revisionDir);

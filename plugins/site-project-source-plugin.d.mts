@@ -3,6 +3,7 @@ import type { SiteProject } from "../src/site-project/model/types";
 
 export interface SiteProjectSourcePluginOptions {
   bundledProject: SiteProject;
+  bundledRevision: string;
   readDevProject?: () => Promise<{ project: SiteProject; revision: string } | null>;
 }
 

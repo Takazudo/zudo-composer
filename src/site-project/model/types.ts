@@ -89,7 +89,9 @@ export type SiteProjectDiagnosticCode =
   | "dangling-mapping-target"
   | "dangling-sitemap-reference"
   | "wrong-sitemap-provider"
-  | "dangling-sitemap-route-field";
+  | "dangling-sitemap-route-field"
+  | "dangling-sitemap-title-field"
+  | "invalid-sitemap-title-field";
 
 export interface SiteProjectDiagnostic {
   severity: SiteProjectDiagnosticSeverity;

@@ -23,9 +23,17 @@ export interface MappingRef {
   recordId: RecordId;
 }
 
+/** Content field kinds that can be presented verbatim as a plain route title. */
+export const SITEMAP_DISPLAY_TITLE_FIELD_KINDS = ["text", "long-text", "slug"] as const;
+export type SitemapDisplayTitleFieldKind = (typeof SITEMAP_DISPLAY_TITLE_FIELD_KINDS)[number];
+
+export function isSitemapDisplayTitleFieldKind(kind: string): kind is SitemapDisplayTitleFieldKind {
+  return (SITEMAP_DISPLAY_TITLE_FIELD_KINDS as readonly string[]).includes(kind);
+}
+
 export type MappingRoute =
   | { kind: "single" }
-  | { kind: "entry-field"; fieldId: RecordId };
+  | { kind: "entry-field"; fieldId: RecordId; titleFieldId?: RecordId };
 
 /** Every authored page has one explicit, persisted source. */
 export type SitemapPageSource =

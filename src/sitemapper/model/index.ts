@@ -8,12 +8,13 @@ export type {
   CompositionRef,
   MappingRef,
   MappingRoute,
+  SitemapDisplayTitleFieldKind,
   SitemapPageSource,
   SitemapDocument,
   SitemapNode,
   SitemapSchemaVersion,
 } from "./types";
-export { SITEMAP_SCHEMA_VERSION } from "./types";
+export { isSitemapDisplayTitleFieldKind, SITEMAP_DISPLAY_TITLE_FIELD_KINDS, SITEMAP_SCHEMA_VERSION } from "./types";
 
 export type { SitemapDocumentIndex, SitemapNodeLocation } from "./index-model";
 export { findLocation, indexDocument, traversalOrder, traverse } from "./index-model";

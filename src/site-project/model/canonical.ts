@@ -16,20 +16,18 @@ function compareById(left: { id: string }, right: { id: string }): number {
   return compareUnicodeCodePoints(left.id, right.id);
 }
 
-function canonicalJson(value: JsonValue): JsonValue {
-  if (Array.isArray(value)) return value.map(canonicalJson);
+function canonicalJsonText(value: JsonValue): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJsonText).join(",")}]`;
   if (value !== null && typeof value === "object") {
-    const output = Object.create(null) as Record<string, JsonValue>;
     const record = value as Record<string, JsonValue>;
-    for (const key of Object.keys(record).sort(compareUnicodeCodePoints)) output[key] = canonicalJson(record[key]!);
-    return output;
+    return `{${Object.keys(record).sort(compareUnicodeCodePoints).map((key) => `${JSON.stringify(key)}:${canonicalJsonText(record[key]!)}`).join(",")}}`;
   }
-  return value;
+  return JSON.stringify(value);
 }
 
 /** Canonical JSON text for any already validated JSON-safe value. */
 export function canonicalStringifyJson(value: JsonValue): string {
-  return `${JSON.stringify(canonicalJson(value))}\n`;
+  return `${canonicalJsonText(value)}\n`;
 }
 
 /** Sort only set-like provider/record collections; authored tree/field order remains semantic. */

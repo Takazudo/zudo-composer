@@ -35,7 +35,10 @@ export function primaryNavigation(document: SitemapDocument, routes: readonly Si
 export function breadcrumbs(document: SitemapDocument, routes: readonly SiteCompiledRoute[], activeNodeId: string, activePathname?: string): readonly DeliveryChromeItem[] {
   return sitemapChain(document, activeNodeId).flatMap((node) => {
     const path = readyPath(routes, node.id, node.id === activeNodeId ? activePathname : undefined);
-    return path === undefined ? [] : [{ id: node.id, title: node.title, href: toSiteHref(path), active: node.id === activeNodeId, current: node.id === activeNodeId }];
+    const activeRoute = node.id === activeNodeId
+      ? routes.find((route) => route.sitemapNode.id === node.id && route.pathname === activePathname)
+      : undefined;
+    return path === undefined ? [] : [{ id: node.id, title: activeRoute?.displayTitle ?? node.title, href: toSiteHref(path), active: node.id === activeNodeId, current: node.id === activeNodeId }];
   });
 }
 

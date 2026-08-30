@@ -68,8 +68,9 @@ function validSource(value: unknown): boolean {
   if (!isPlainObject(route) || typeof route.kind !== "string") return false;
   return route.kind === "single"
     ? hasExactKeys(route, ["kind"])
-    : route.kind === "entry-field" && hasExactKeys(route, ["kind", "fieldId"])
-      && isSafeRecordId(route.fieldId);
+    : route.kind === "entry-field" && hasExactKeys(route, ["kind", "fieldId"], ["titleFieldId"])
+      && isSafeRecordId(route.fieldId)
+      && (!Object.hasOwn(route, "titleFieldId") || isSafeRecordId(route.titleFieldId));
 }
 
 function validateNode(

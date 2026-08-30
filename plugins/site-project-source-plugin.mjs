@@ -4,19 +4,21 @@ import { resolve } from "node:path";
 export const SITE_PROJECT_SOURCE_ID = "virtual:site-project-source";
 export const RESOLVED_SITE_PROJECT_SOURCE_ID = `\0${SITE_PROJECT_SOURCE_ID}`;
 
-/** @param {unknown} value */
-function serializedModule(value) {
-  return `export const siteProject = ${JSON.stringify(value)};\nexport default siteProject;\n`;
+/** @param {unknown} value @param {string | null} revision */
+function serializedModule(value, revision) {
+  return `export const siteProject = ${JSON.stringify(value)};\nexport const siteProjectRevision = ${JSON.stringify(revision)};\nexport default siteProject;\n`;
 }
 
 /**
  * Generic read-only SiteProject source. The bundled value is mandatory so a
  * production build is completely determined before Vite config evaluation.
  *
- * @param {{bundledProject: unknown, readDevProject?: () => Promise<unknown>}} options
+ * @param {{bundledProject: unknown, bundledRevision: string, readDevProject?: () => Promise<unknown>}} options
  */
 export function siteProjectSourcePlugin(options) {
-  if (!options || !("bundledProject" in options)) throw new TypeError("siteProjectSourcePlugin requires bundledProject.");
+  if (!options || !("bundledProject" in options) || !/^[a-f0-9]{64}$/.test(options.bundledRevision)) {
+    throw new TypeError("siteProjectSourcePlugin requires bundledProject and its canonical SHA-256 revision.");
+  }
   let command = "build";
   let server;
   let currentCanonical;
@@ -65,11 +67,11 @@ export function siteProjectSourcePlugin(options) {
     resolveId(id) { return id === SITE_PROJECT_SOURCE_ID ? RESOLVED_SITE_PROJECT_SOURCE_ID : undefined; },
     async load(id) {
       if (id !== RESOLVED_SITE_PROJECT_SOURCE_ID) return undefined;
-      if (command === "build") return serializedModule(options.bundledProject);
+      if (command === "build") return serializedModule(options.bundledProject, options.bundledRevision);
       const activated = options.readDevProject
         ? await options.readDevProject()
         : await server.ssrLoadModule("/server/site-project-local/dev-reader.ts").then((module) => module.readActivatedSiteProject());
-      return serializedModule(activated?.project ?? null);
+      return serializedModule(activated?.project ?? null, activated?.revision ?? null);
     },
   };
 }
