@@ -11,7 +11,7 @@
 
 import { useState } from "preact/hooks";
 import type { JSX } from "preact";
-import { ChevronDownIcon, ChevronUpIcon, XMarkIcon } from "../../../../components/icons";
+import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from "../../../../components/icons";
 import { InlineConfirm } from "../shared/inline-confirm";
 
 export interface SubtreeRemovalConfirmProps {
@@ -121,7 +121,7 @@ export function TreeRowActions({
           else onRemove();
         }}
       >
-        <XMarkIcon size="sm" />
+        <TrashIcon size="sm" />
       </button>
     </div>
   );

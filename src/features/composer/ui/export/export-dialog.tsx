@@ -19,6 +19,7 @@
 import type { JSX } from "preact";
 import { useEffect, useId, useLayoutEffect, useRef } from "preact/hooks";
 import type { BrowserJsxExportOutcome, JsxGenerationResult } from "../../../../composer/browser";
+import { ErrorIcon, XMarkIcon } from "../../../../components/icons";
 import { ComposerCopyButton } from "./copy-button";
 
 export interface ComposerExportDialogProps {
@@ -138,6 +139,7 @@ export function ComposerExportDialog({
               Export — {documentName}
             </h2>
             <button type="button" class="sg-composer-toolbar-button" onClick={onClose}>
+              <XMarkIcon size="sm" class="sg-composer-button-icon" />
               Close
             </button>
           </div>
@@ -147,7 +149,10 @@ export function ComposerExportDialog({
 
             {dependencyBlock !== null && (
               <div class="sg-composer-inspector-diagnostics" role="alert">
-                <p class="sg-composer-inspector-diagnostics-title">Copy JSX is blocked — the linked dependency is unavailable.</p>
+                <p class="sg-composer-inspector-diagnostics-title">
+                  <ErrorIcon size="sm" class="sg-composer-button-icon" />
+                  Copy JSX is blocked — the linked dependency is unavailable.
+                </p>
                 <p>{dependencyBlock.message}</p>
               </div>
             )}
@@ -155,6 +160,7 @@ export function ComposerExportDialog({
             {dependencyBlock === null && effectiveResult !== null && effectiveResult.blocked && (
               <div class="sg-composer-inspector-diagnostics" role="alert">
                 <p class="sg-composer-inspector-diagnostics-title">
+                  <ErrorIcon size="sm" class="sg-composer-button-icon" />
                   Export is blocked — one or more components can't be exported:
                 </p>
                 <ul>

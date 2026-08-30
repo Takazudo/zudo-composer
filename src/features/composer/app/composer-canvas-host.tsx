@@ -46,6 +46,7 @@ import type { JSX } from "preact";
 import type { CompositionDocument, InsertionTarget } from "../../../composer/browser";
 import type { ComposerCanvasViewport } from "../chrome/controller-model";
 import type { ComposerComponentProvider } from "../active-pack";
+import { ErrorIcon, InfoIcon, WarningIcon, XMarkIcon } from "../../../components/icons";
 import {
   buildComposerPreviewUrl,
   composerPreviewFrameProps,
@@ -287,29 +288,40 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
     <div class="sg-composer-canvas-host" data-sg-viewport={viewport}>
       {fatalError !== null && (
         <div class="sg-composer-canvas-error" role="alert" data-composer-preview-fatal="pack-mismatch">
-          <span>Preview cannot start: {fatalError}</span>
+          <span>
+            <ErrorIcon size="sm" class="sg-composer-canvas-error__icon" />
+            <span>Preview cannot start: {fatalError}</span>
+          </span>
         </div>
       )}
       {renderError !== null && (
         <div class="sg-composer-canvas-error" role="status">
-          <span>Preview error: {renderError}</span>
+          <span>
+            <WarningIcon size="sm" class="sg-composer-canvas-error__icon" />
+            <span>Preview error: {renderError}</span>
+          </span>
           <button
             type="button"
             class="sg-composer-toolbar-button"
             onClick={() => setRenderError(null)}
           >
+            <XMarkIcon size="sm" class="sg-composer-button-icon" />
             Dismiss
           </button>
         </div>
       )}
       {staleNotice !== null && (
         <div class="sg-composer-canvas-error" role="status">
-          <span>{staleNotice}</span>
+          <span>
+            <InfoIcon size="sm" class="sg-composer-canvas-error__icon" />
+            <span>{staleNotice}</span>
+          </span>
           <button
             type="button"
             class="sg-composer-toolbar-button"
             onClick={() => setStaleNotice(null)}
           >
+            <XMarkIcon size="sm" class="sg-composer-button-icon" />
             Dismiss
           </button>
         </div>

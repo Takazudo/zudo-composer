@@ -4,6 +4,7 @@
 import type { JSX } from "preact";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { ReuseCatalogEntry } from "../../../composer/browser";
+import { PlusIcon, RefreshIcon, XMarkIcon } from "../../../components/icons";
 import {
   ToolDialogResizeHandle,
   toolDialogStyle,
@@ -270,7 +271,7 @@ export function NewCompositionDialog({
   return (
     <dialog
       ref={dialogRef}
-      class="sg-composer-tool-dialog m-0 overflow-hidden rounded-none border-0 bg-surface p-0 text-fg backdrop:bg-overlay/45"
+      class="sg-composer-tool-dialog m-0 overflow-hidden bg-surface p-0 text-fg backdrop:bg-overlay/45"
       aria-modal={open ? "true" : undefined}
       aria-labelledby={open ? titleId : undefined}
       style={toolDialogStyle(geometry.rect)}
@@ -286,11 +287,12 @@ export function NewCompositionDialog({
       {open && providerId && (
         <div class="flex h-full min-h-0 flex-col overflow-hidden">
           <header class="flex flex-none items-center justify-between gap-hsp-sm border-b border-border px-hsp-lg py-vsp-xs">
-            <div class="min-w-0">
+            <div class="flex min-w-0 flex-1 flex-col gap-vsp-3xs">
               <h2 id={titleId} class="m-0 text-body font-semibold">New composition</h2>
               <p class="m-0 text-small text-muted">Create an empty composition or bind its outlet to a Global template.</p>
             </div>
             <button type="button" class="sg-composer-library-button" disabled={busy} onClick={close}>
+              <XMarkIcon size="sm" class="sg-composer-button-icon" />
               Cancel
             </button>
           </header>
@@ -320,6 +322,7 @@ export function NewCompositionDialog({
                   <p class="m-0">{submission.message}</p>
                   <div class="mt-vsp-xs flex flex-wrap gap-hsp-sm">
                     <button type="button" class="sg-composer-library-button" onClick={() => void retry()}>
+                      <RefreshIcon size="sm" class="sg-composer-button-icon" />
                       Retry
                     </button>
                   </div>
@@ -353,6 +356,7 @@ export function NewCompositionDialog({
                   <div class="mt-vsp-sm flex min-h-48 flex-1 flex-col items-center justify-center gap-vsp-sm border border-danger bg-danger/10 p-hsp-md text-center text-small" role="alert">
                     <p class="m-0">{catalog.message}</p>
                     <button type="button" class="sg-composer-library-button" disabled={formLocked} onClick={() => void loadTemplates()}>
+                      <RefreshIcon size="sm" class="sg-composer-button-icon" />
                       Retry templates
                     </button>
                   </div>
@@ -374,7 +378,10 @@ export function NewCompositionDialog({
                       ) : filteredTemplates.length === 0 ? (
                         <div class="p-hsp-sm text-small text-muted">
                           <p class="m-0">No Global templates match this search.</p>
-                          <button type="button" class="mt-vsp-xs sg-composer-library-button" onClick={() => setQuery("")}>Clear search</button>
+                          <button type="button" class="mt-vsp-xs sg-composer-library-button" onClick={() => setQuery("")}>
+                            <XMarkIcon size="sm" class="sg-composer-button-icon" />
+                            Clear search
+                          </button>
                         </div>
                       ) : (
                         <ul class="m-0 list-none p-0">
@@ -419,6 +426,7 @@ export function NewCompositionDialog({
                 {busy ? "Saving composition…" : selectedSource ? `Binding to ${selectedSource.summary.name}.` : "Creating an ordinary composition."}
               </p>
               <button type="submit" class="sg-composer-library-button sg-composer-library-button-primary" disabled={formLocked}>
+                <PlusIcon size="sm" class="sg-composer-button-icon" />
                 {busy ? "Creating…" : "Create composition"}
               </button>
               <ToolDialogResizeHandle geometry={geometry} class="absolute bottom-0 right-0 min-h-11 min-w-11" />

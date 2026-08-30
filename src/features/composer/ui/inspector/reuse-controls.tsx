@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from "preact/hooks";
 import type { JSX, Ref } from "preact";
 import type { ComponentCatalog, CompositionDocument } from "../../../../composer/browser";
 import { diagnoseDocument } from "../../../../composer/browser";
+import { PlusIcon, TrashIcon, XMarkIcon } from "../../../../components/icons";
 import type { ComposerMode } from "../../chrome/controller-model";
 import type { ReuseAuthoringActionResult } from "../shared/reuse-authoring-contract";
 
@@ -202,6 +203,7 @@ export function ReuseControls({
                   setConfirmingClear("pattern");
                 }}
               >
+                <TrashIcon size="sm" class="sg-composer-button-icon" />
                 Unpublish Pattern
               </button>
             )}
@@ -216,6 +218,7 @@ export function ReuseControls({
               aria-describedby={patternDescription}
               onClick={publishPattern}
             >
+              <PlusIcon size="sm" class="sg-composer-button-icon" />
               Publish as Pattern
             </button>
             {disabledPatternReasons.length > 0 && (
@@ -263,6 +266,7 @@ export function ReuseControls({
                   setConfirmingClear("global-template");
                 }}
               >
+                <TrashIcon size="sm" class="sg-composer-button-icon" />
                 Unpublish Global template
               </button>
             )}
@@ -313,6 +317,7 @@ function PublicationClearConfirmation({
       <p class="min-w-0 text-caption text-muted">{copy.message}</p>
       <div class="flex min-w-0 flex-col gap-hsp-2xs">
         <button ref={cancelRef} type="button" class="sg-composer-toolbar-button w-full justify-center" disabled={busy} onClick={onCancel}>
+          <XMarkIcon size="sm" class="sg-composer-button-icon" />
           Cancel
         </button>
         <button
@@ -321,6 +326,7 @@ function PublicationClearConfirmation({
           disabled={busy}
           onClick={onConfirm}
         >
+          <TrashIcon size="sm" class="sg-composer-button-icon" />
           {copy.label}
         </button>
       </div>

@@ -17,6 +17,7 @@ import type {
   ComposerMode,
   ComposerSaveStatus,
 } from "../chrome/controller-model";
+import { DuplicateIcon, LibraryIcon, PreviewIcon } from "../../../components/icons";
 import { ComposerModeToggle } from "../ui/toolbar/mode-toggle";
 import { ComposerStatusIndicator } from "../ui/toolbar/status-indicator";
 import { ComposerToolbarActions } from "../ui/toolbar/toolbar-actions";
@@ -67,10 +68,11 @@ export function ComposerToolbarBar({
 }: ComposerToolbarBarProps): JSX.Element {
   return (
     <>
-      <div class="flex items-center gap-hsp-md min-w-0">
+      <div class="sg-composer-toolbar-identity flex items-center gap-hsp-md min-w-0">
         {onNavigateToLibrary && (
           <button type="button" class="sg-composer-toolbar-button" onClick={onNavigateToLibrary}>
-            Library
+            <LibraryIcon size="sm" class="sg-composer-button-icon" />
+            <span>Library</span>
           </button>
         )}
         {onDuplicateComposition && (
@@ -80,7 +82,8 @@ export function ComposerToolbarBar({
             disabled={duplicatingComposition}
             onClick={onDuplicateComposition}
           >
-            {duplicatingComposition ? "Duplicating composition…" : "Duplicate composition"}
+            <DuplicateIcon size="sm" class="sg-composer-button-icon" />
+            <span>{duplicatingComposition ? "Duplicating composition…" : "Duplicate composition"}</span>
           </button>
         )}
         <div class="min-w-0">
@@ -99,11 +102,13 @@ export function ComposerToolbarBar({
         </ComposerStatusIndicator>
       </div>
 
-      <div class="flex flex-wrap items-center gap-hsp-sm">
-        <label class="flex items-center gap-hsp-2xs text-small text-muted">
-          <span class="sr-only">Canvas viewport</span>
+      <div class="sg-composer-toolbar-controls flex flex-wrap items-center gap-hsp-sm">
+        <label class="sg-composer-toolbar-field text-small text-muted">
+          <PreviewIcon size="sm" class="sg-composer-button-icon" />
+          <span class="sg-composer-toolbar-label">Viewport</span>
           <select
-            class="sg-composer-inspector-control border border-border rounded-md bg-surface px-hsp-xs py-vsp-3xs text-fg"
+            class="sg-composer-inspector-control text-fg"
+            aria-label="Canvas viewport"
             value={viewport}
             onChange={(e) => {
               if (e.target instanceof HTMLSelectElement) {

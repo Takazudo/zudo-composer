@@ -42,7 +42,7 @@ import type {
   LinkedEditorPresentation,
 } from "../../../../composer/browser";
 import { VIRTUAL_ROOT_SLOT_ID } from "../../../../composer/browser";
-import { EllipsisIcon, PageIcon } from "../../../../components/icons";
+import { ArrowRightIcon, EllipsisIcon, PageIcon, PlusIcon, RefreshIcon } from "../../../../components/icons";
 import type { ComponentDefinition } from "../../active-pack";
 import { buildCatalogById, buildDocumentIndex, countDescendants } from "./tree-helpers";
 import { TreeNode } from "./tree-node";
@@ -139,6 +139,7 @@ export function ComposerTree({
               class="sg-composer-tree-action sg-composer-linked-open"
               onClick={() => linkedActions.onOpenSource?.(linkedPresentation.sourceRecordId)}
             >
+              <ArrowRightIcon size="xs" class="sg-composer-button-icon" />
               Open source
             </button>
           )}
@@ -150,6 +151,7 @@ export function ComposerTree({
           <div>
             {linkedActions?.onRetry && (
               <button type="button" class="sg-composer-tree-action" onClick={() => linkedActions.onRetry?.()}>
+                <RefreshIcon size="xs" class="sg-composer-button-icon" />
                 Retry
               </button>
             )}
@@ -159,6 +161,7 @@ export function ComposerTree({
                 class="sg-composer-tree-action sg-composer-linked-open"
                 onClick={() => linkedActions.onOpenSource?.(linkedPresentation.sourceRecordId)}
               >
+                <ArrowRightIcon size="xs" class="sg-composer-button-icon" />
                 Open source
               </button>
             )}
@@ -193,7 +196,8 @@ export function ComposerTree({
                 onOpenChooser({ parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: document.root.length })
               }
             >
-              + Add
+              <PlusIcon size="xs" class="sg-composer-button-icon" />
+              <span>Add</span>
             </button>
             <button
               type="button"
