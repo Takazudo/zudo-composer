@@ -254,11 +254,11 @@ already-built `dist` through local Wrangler, proving that production still
 renders the bundled sample:
 
 ```sh
-bash /home/takazudo/.claude/scripts/playwright-guard.sh --wait 300 -- \
+bash "$HOME/.claude/scripts/playwright-guard.sh" --wait 300 -- \
   corepack pnpm test:browser:site-project
 
 # Run only after the one production build; this lane does not rebuild.
-bash /home/takazudo/.claude/scripts/playwright-guard.sh --wait 300 -- \
+bash "$HOME/.claude/scripts/playwright-guard.sh" --wait 300 -- \
   corepack pnpm test:browser:site-project:dist
 ```
 
