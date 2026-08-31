@@ -19,6 +19,11 @@ The `providers` object has four independent domains:
 - `sitemaps`: page trees whose sources are static Compositions or Mapping route
   families.
 
+Media records and bytes remain global filesystem/provider state in this
+milestone. They are not one of the four revision-scoped SiteProject domains and
+are outside SiteProject apply/CAS, snapshots, retention, and the JSON-stdin AI
+API graph.
+
 `activeSitemap` selects one Sitemap by provider-qualified identity. The
 component-pack requirement is checked against the active provider manifest
 before any graph is accepted. Validation checks the complete graph, including
@@ -52,8 +57,11 @@ fresh `list` result and retry with those exact values.
 Browser authoring storage is namespaced by the exact active project revision.
 Reopening the same revision therefore preserves its local Composer, Content,
 Mapping, and Sitemapper edits. Applying a changed snapshot and activating its
-new revision selects a clean browser namespace; the prior revision remains
-available for explicit inspection or discard.
+new revision selects a clean browser namespace. The local adapter retains only
+that current canonical project revision, so the replaced revision is no longer
+available through `list`, `get`, `activate`, or `discard`. Its browser namespace
+may remain temporarily so reapplying the same digest can recover local edits;
+automatic revision-retention cleanup eventually removes inactive namespaces.
 
 Builds are derived artifacts, not mutable project data. `build` reads one exact
 project revision, validates and compiles it, and publishes immutable route and
