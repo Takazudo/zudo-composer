@@ -1,6 +1,6 @@
 # zudo-composer
 
-`zudo-composer` is the permanent standalone home of four Preact authoring
+`zudo-composer` is the permanent standalone home of five Preact authoring
 products:
 
 - Composer owns its document model, source generation, reuse rules, storage,
@@ -10,6 +10,7 @@ products:
   and authoring UI.
 - Sitemapper owns its page-tree model, storage, library, authoring UI, and the
   catalog integration that resolves saved Composer records.
+- Media owns its metadata model, library route, and upload/delivery boundaries.
 
 The products do not depend on zudo-doc, a zfb application runtime/configuration,
 or a styleguide registry. `zudo-sg` has a narrower permanent role: its installed
@@ -28,15 +29,19 @@ The Vite application has base `/` and these exact SPA routes:
 - `/content` — Content model and Entry authoring
 - `/mapping` — Content-to-Composition Mapping authoring
 - `/sitemapper` — Sitemapper library and editor
+- `/media` — Media library and upload/delivery status
 - `/site` — bundled/published sample home
 - `/site/about`, `/site/services`, `/site/journal` — canonical nested sample pages
 - `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
   `/site/journal/start-with-the-question` — compiler-emitted Entry routes
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
+- `/uploaded-media/` — committed images and PDFs copied from `media-store/public`
 
 The preview route is an implementation boundary, not an independent public
 product. Cloudflare serves route fallbacks from the same immutable `dist` tree;
-all emitted assets remain rooted at `/assets/`.
+build-emitted assets remain rooted at `/assets/`, while committed media is
+delivered from `/uploaded-media/`. Upload authoring is available only in local
+development, but committed media delivery is part of the production artifact.
 
 The provider-scoped SiteProject graph, whole-project apply rule, active identity,
 JSON-stdin API, CAS revisions, immutable builds, diagnostics, local editing
@@ -75,14 +80,16 @@ corepack pnpm deployment:manifest
 corepack pnpm deployment:manifest:check
 corepack pnpm smoke:local
 corepack pnpm test:browser:dist
+corepack pnpm test:browser:dev
 corepack pnpm test:browser:site-project
 corepack pnpm test:browser:site-project:dist
 ```
 
 `test:browser` is the convenience command when no build exists; it builds and
-then delegates to `test:browser:dist`. The SiteProject helper adds an isolated
-CLI-activated dev lane and a local-Wrangler production lane that reuses that
-one build. CI deliberately builds exactly once.
+then delegates to `test:browser:dist`. The Media dev lane exercises upload
+transport without changing the production artifact. The SiteProject helper adds
+an isolated CLI-activated dev lane and a local-Wrangler production lane that
+reuses the one build. CI deliberately builds exactly once.
 
 ## Immutable UI-provider handoff
 

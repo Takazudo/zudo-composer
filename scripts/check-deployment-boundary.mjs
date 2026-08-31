@@ -31,7 +31,7 @@ assert.deepEqual(config.routes, [{
   pattern: "zudo-composer.zudolab.dev",
   custom_domain: true,
 }]);
-assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"]);
+assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/media"]);
 assert.deepEqual(SITE_ROUTES, [
   "/site",
   "/site/about",
@@ -44,6 +44,7 @@ assert.deepEqual(SITE_ROUTES, [
 assert.deepEqual(SPA_ROUTES, [...AUTHORING_ROUTES, ...SITE_ROUTES]);
 
 assert.equal((workflow.match(/run: pnpm build\s*$/gm) ?? []).length, 1, "CI must build exactly once");
+assert.ok(workflow.indexOf("- run: pnpm build\n") < workflow.indexOf("- run: pnpm test:browser:dist\n"), "CI must run the full dist browser lane after its single build");
 assert.ok(workflow.includes("group: ${{ github.workflow }}-${{ github.ref }}"), "CI must serialize each workflow ref");
 assert.ok(workflow.includes("cancel-in-progress: true"), "new pushes must cancel stale validation/deployment runs");
 for (const command of [
@@ -53,6 +54,7 @@ for (const command of [
   "pnpm deployment:boundary",
   "pnpm deploy:dry-run",
   "pnpm test:browser:dist",
+  "pnpm test:browser:dev",
   "pnpm test:browser:site-project",
   "pnpm test:browser:site-project:dist",
   "pnpm deployment:manifest",
@@ -60,6 +62,7 @@ for (const command of [
   "pnpm smoke:local",
   "pnpm smoke:live",
 ]) assert.ok(workflow.includes(command), `CI is missing ${command}`);
+assert.match(workflow, /- run: pnpm test:browser:dev\n {8}env:\n {10}CI: true/, "Media dev browser lane must run with CI=true");
 assert.ok(workflow.includes("CLOUDFLARE_API_TOKEN: \"\""), "dry-run must explicitly be unauthenticated");
 assert.ok(workflow.includes("check-deploy-credentials.mjs"), "deployment must classify absent/partial/complete credentials");
 assert.ok(workflow.includes("name: Production deploy or credential handoff"), "production job purpose must be explicit");

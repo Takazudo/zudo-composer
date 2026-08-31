@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
-const roots = ['src/shared', 'src/composer', 'src/content', 'src/mapping', 'src/site-project', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
+const roots = ['src/shared', 'src/composer', 'src/content', 'src/media', 'src/mapping', 'src/site-project', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
 const files = [];
 const violations = [];
 
@@ -34,7 +34,7 @@ for (const file of files) {
     const isRootConfig = file === path.join(repositoryRoot, 'package.json') || file === path.join(repositoryRoot, 'vite.config.ts');
     const applicablePattern = rule === 'provider application coupling' && isRootConfig
       // The standalone application intentionally installs its injected UI pack;
-      // headless isolation is enforced against src/composer, src/shared, and plugins.
+      // headless isolation is enforced against the production-domain roots above.
       ? /zudo-doc|@takazudo\/zfb(?!-md-wasm)|\bzfb\b(?!-md-wasm)/i
       : pattern;
     if (applicablePattern.test(content)) violations.push(`${path.relative(repositoryRoot, file)}: ${rule}`);

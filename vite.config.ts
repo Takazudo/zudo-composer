@@ -17,13 +17,12 @@ const productionSiteProjectRevision = createHash('sha256')
   .digest('hex');
 
 export default defineConfig({
+  publicDir: 'media-store/public',
   // zfb-md-wasm's browser entry imports its glue/wasm files with Vite's
-  // `?url` query. Keep that package in Vite's normal module graph: Rolldown's
-  // dependency optimizer cannot resolve those resource imports while scanning
-  // the package, whereas the asset pipeline handles them correctly on demand.
-  optimizeDeps: {
-    exclude: ['@takazudo/zfb-md-wasm'],
-  },
+  // `?url` query. Keep both dependency packages in Vite's normal module graph:
+  // Rolldown's dependency optimizer cannot resolve those resource imports while
+  // scanning the package, whereas the asset pipeline handles them on demand.
+  optimizeDeps: { exclude: ['@zudo-sg/ui', '@takazudo/zfb-md-wasm'] },
   plugins: [
     siteProjectSourcePlugin({
       bundledProject: productionSiteProject,

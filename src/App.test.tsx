@@ -20,26 +20,39 @@ describe('App', () => {
     ['/content', 'Content authoring'],
     ['/mapping', 'Mapping library'],
     ['/sitemapper', 'Sitemaps'],
+    ['/media', 'Media library'],
   ])('mounts the real product on direct refresh at %s', async (route, heading) => {
     vi.stubGlobal('indexedDB', new FDBFactory());
     window.history.replaceState(null, '', route);
     render(<App />);
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-    expect(nav.querySelectorAll('a')).toHaveLength(5);
-    expect(screen.getByRole('link', { name: heading === 'Composition library' ? 'Composer' : heading === 'Content authoring' ? 'Content' : heading === 'Mapping library' ? 'Mapping' : 'Sitemapper' })).toHaveAttribute('aria-current', 'page');
+    expect(nav.querySelectorAll('a')).toHaveLength(6);
+    expect(screen.getByRole('link', { name: heading === 'Composition library' ? 'Composer' : heading === 'Content authoring' ? 'Content' : heading === 'Mapping library' ? 'Mapping' : heading === 'Media library' ? 'Media' : 'Sitemapper' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('shows the shared route vocabulary with descriptions and icon support on Home', () => {
     render(<App />);
 
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-    expect(nav.querySelectorAll('a')).toHaveLength(5);
+    expect(nav.querySelectorAll('a')).toHaveLength(6);
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('heading', { name: 'Choose a tool' })).toBeInTheDocument();
     expect(screen.getByText('Build reusable page structures from components.')).toBeInTheDocument();
     expect(screen.getByText('Connect Content fields to Composition slots.')).toBeInTheDocument();
-    expect(document.querySelectorAll('.app-route-link svg')).toHaveLength(5);
+    expect(document.querySelectorAll('.app-route-link svg')).toHaveLength(6);
+  });
+
+  it('keeps the production Media state truthful without probing a provider', () => {
+    const request = vi.fn();
+    vi.stubGlobal('fetch', request);
+    window.history.replaceState(null, '', '/media');
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: 'Media library' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Media service not connected' })).toBeInTheDocument();
+    expect(screen.getByText(/no development media service is connected/i)).toBeInTheDocument();
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('supports theme selection, keyboard movement, Escape, outside close, and focus return', () => {

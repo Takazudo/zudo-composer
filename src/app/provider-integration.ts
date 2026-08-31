@@ -5,6 +5,7 @@ import { ContentPersistenceError, type ContentInitializationOutcome, type Conten
 import { createIndexedDbContentProvider } from "../content/storage/indexeddb";
 import { activeComponentProvider } from "../features/composer/active-pack";
 import { createContentPreviewSource, type ContentPreviewSource } from "../features/content/preview-source";
+import { createFileProviderMediaProvider, type MediaFileProvider } from "../media";
 import type { MappingContentEntryCatalog } from "../features/mapping";
 import { createCompositionCatalog as createMappingCompositionCatalog, createIndexedDbMappingProvider, createMappingCatalog, MappingPersistenceError, resolveMappingDefinition, type CompositionCatalog as MappingCompositionCatalog, type MappingCatalog, type MappingInitializationOutcome, type MappingProvider, type MappingRecord } from "../mapping";
 import { browserProviderIdFor, canonicalizeSiteProject, validateSiteProject, type SiteProject, type SiteProjectDomain } from "../site-project";
@@ -85,7 +86,9 @@ interface MappingSnapshotStore { readAll(): Promise<readonly MappingRecord[]> }
 export interface ProductionProviderIntegration {
   componentProvider: typeof activeComponentProvider;
   compositionProviders: readonly CompositionProvider[]; compositionCatalog: CompositionCatalog; mappingCompositionCatalog: MappingCompositionCatalog;
-  contentProviders: readonly ContentProvider[]; contentProvider: ContentProvider; contentCatalog: ContentCatalog; createContentPreviewSource(): ContentPreviewSource;
+  contentProviders: readonly ContentProvider[]; contentProvider: ContentProvider; contentCatalog: ContentCatalog;
+  mediaProvider: MediaFileProvider | undefined;
+  createContentPreviewSource(): ContentPreviewSource;
   mappingContentEntries: MappingContentEntryCatalog; mappingProviders: readonly MappingProvider[]; mappingProvider: MappingProvider; mappingCatalog: MappingCatalog;
   sitemapProvider: SitemapProvider; sitemapperMappingCatalog: MappingAssignmentCatalog;
   initialization: { initialize(): Promise<ProviderIntegrationOutcome>; retry(): Promise<ProviderIntegrationOutcome>; startFresh(): Promise<ProviderIntegrationOutcome> };
@@ -155,6 +158,7 @@ export function createInitializedCompositionCatalog(providers: readonly Composit
 }
 
 export function createProductionProviderIntegration(options: ProductionProviderIntegrationOptions = {}): ProductionProviderIntegration {
+  const mediaProvider = createFileProviderMediaProvider();
   const usesInjectedSource = options.project === undefined;
   const activated = activate(usesInjectedSource ? injectedSiteProject : options.project);
   let project = activated.project;
@@ -360,7 +364,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     resolveComposition: async (ref) => { try { await ensureReady(); return initializedCompositionCatalog.resolveComposition(ref); } catch { return { status: "provider-unavailable" }; } },
   };
 
-  return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle,
+  return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, mediaProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle,
     // IndexedDB cannot transact across four databases. Each provider read is atomic; the serialized lifecycle gate and final aggregate validation reject cross-database partial mixes.
     getCurrentSiteProject: async (): Promise<SiteProjectSnapshotOutcome> => { const ready = await lifecycle.initialize(); if (ready.status !== "ready") return ready; const result = tail.then(async () => ({ status: "ready" as const, project: await snapshotNow() })).catch((cause: unknown) => ({ status: "error" as const, error: cause instanceof ProviderIntegrationError ? cause : new ProviderIntegrationError("snapshot", cause instanceof Error ? cause.message : "Snapshot failed.", true, { cause }) })); tail = result; return result; },
   });

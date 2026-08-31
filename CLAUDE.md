@@ -5,7 +5,8 @@
 This repository is the standalone owner of Composer model/source/reuse/storage,
 chrome, preview rendering, and iframe protocol; Content model/storage/library/UI;
 Mapping model/storage/resolver/UI; and Sitemapper model/storage/library, UI, and
-Composer-catalog integration.
+Composer-catalog integration; and Media metadata, library, and upload/delivery
+boundaries.
 
 zudo-sg owns only the installed `@zudo-sg/ui` provider: typed component
 sidecars, runtime pack, and canonical Composer CSS. Its transitive focused
@@ -14,12 +15,14 @@ application runtime/config, virtual-zfb, or styleguide registry may enter this
 application. Never copy provider components or add a fallback registry.
 
 Exact routes are `/`, `/composer`, same-origin `/composer/preview`, `/content`,
-`/mapping`, `/sitemapper`, and the bundled SiteProject delivery routes `/site`,
+`/mapping`, `/sitemapper`, `/media`, and the bundled SiteProject delivery routes `/site`,
 `/site/about`, `/site/services`, `/site/journal`,
 `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
 and `/site/journal/start-with-the-question`; emitted files live under
-`/assets/`. Keep Vite base `/` and the preview graph isolated from the host
-application and filesystem provider.
+`/assets/`, while committed images and PDFs from `media-store/public` are
+delivered under `/uploaded-media/`. Upload authoring remains dev-only. Keep Vite
+base `/` and the preview graph isolated from the host application and filesystem
+provider.
 
 The SiteProject operator/API guide is [`docs/site-project.md`](./docs/site-project.md).
 It is the source for provider-scoped graph, whole-project apply, active
@@ -75,9 +78,10 @@ relationship for the external UI-provider dependency.
   --exact`.
 - Built artifact: `corepack pnpm deployment:manifest`, `corepack pnpm
   deployment:manifest:check`, `corepack pnpm smoke:local`, and `corepack pnpm
-  test:browser:dist`, `corepack pnpm test:browser:site-project`, and
-  `corepack pnpm test:browser:site-project:dist` after the one production
-  build. The SiteProject production lane must reuse `dist` and never rebuild.
+  test:browser:dist`, `corepack pnpm test:browser:dev`, `corepack pnpm
+  test:browser:site-project`, and `corepack pnpm
+  test:browser:site-project:dist` after the one production build. The
+  SiteProject production lane must reuse `dist` and never rebuild.
 
 Do not weaken frozen install, negative dependency scans, exact provider pin,
 12-component runtime/CSS/WASM proof, Wrangler dry-run, or all-route/all-asset

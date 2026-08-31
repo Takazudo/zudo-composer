@@ -20,7 +20,7 @@ const contractPackageSha = "9b774b827e9f6fec14379995ac2c691ccc3b7e5b";
 const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}`;
 const contractSpec = `git+https://github.com/Takazudo/zudo-composer.git#${contractPackageSha}`;
 
-assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"]);
+assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/media"]);
 assert.deepEqual(SITE_ROUTES, [
   "/site",
   "/site/about",

@@ -16,7 +16,7 @@ const browserRunner = read("scripts/run-site-project-browser.mjs");
 const browserConfig = read("playwright.site-project.config.ts");
 const browserDistConfig = read("playwright.site-project-dist.config.ts");
 
-assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"]);
+assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/media"]);
 assert.deepEqual(SITE_ROUTES, [
   "/site",
   "/site/about",
@@ -47,7 +47,8 @@ assert.ok(browserDistConfig.includes('CLOUDFLARE_API_TOKEN: ""'), "production br
 assert.ok(vite.includes("bundledProject"), "Vite config must inject an explicit bundled SiteProject");
 assert.ok(vite.includes("bundledRevision"), "Vite config must inject the bundled project's canonical revision");
 assert.ok(vite.includes("sample-site-project.json"), "Vite config must point at the checked-in sample");
-assert.ok(vite.includes("exclude: ['@takazudo/zfb-md-wasm']"), "Vite dev optimizer must leave the WASM resource package in the normal asset graph");
+assert.ok(vite.includes("publicDir: 'media-store/public'"), "Vite dev server must expose the Media public asset root");
+assert.ok(vite.includes("exclude: ['@zudo-sg/ui', '@takazudo/zfb-md-wasm']"), "Vite dev optimizer must leave provider and WASM resource packages in the normal asset graph");
 assert.match(plugin, /if \(command === "build"\) return serializedModule\(options\.bundledProject, options\.bundledRevision\)/);
 assert.match(plugin, /export const siteProjectRevision/);
 assert.match(plugin, /readActivatedSiteProject/);

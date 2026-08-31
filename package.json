@@ -33,7 +33,8 @@
     "test:browser": "pnpm build && pnpm test:browser:dist",
     "test:browser:dist": "playwright test",
     "test:browser:site-project": "node scripts/run-site-project-browser.mjs --dev",
-    "test:browser:site-project:dist": "node scripts/run-site-project-browser.mjs --dist"
+    "test:browser:site-project:dist": "node scripts/run-site-project-browser.mjs --dist",
+    "test:browser:dev": "playwright test --config=playwright.dev.config.ts"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",

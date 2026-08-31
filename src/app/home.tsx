@@ -10,7 +10,7 @@ export function Home(): JSX.Element {
         <div>
           <p class="eyebrow">Standalone authoring workspace</p>
           <h1 id="home-title">Build structures, not documents.</h1>
-          <p class="home-dashboard__lede">Composer, Content, Mapping, and Sitemapper are focused tools for shaping a reusable content system in your local browser.</p>
+          <p class="home-dashboard__lede">Composer, Content, Mapping, Sitemapper, and Media are focused tools for shaping a reusable content system in your local browser.</p>
           <a class="primary-link home-dashboard__primary" href="/composer">
             <ComposerIcon size="sm" />
             <span>Open Composer</span>
