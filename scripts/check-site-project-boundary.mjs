@@ -47,6 +47,7 @@ assert.ok(browserDistConfig.includes('CLOUDFLARE_API_TOKEN: ""'), "production br
 assert.ok(vite.includes("bundledProject"), "Vite config must inject an explicit bundled SiteProject");
 assert.ok(vite.includes("bundledRevision"), "Vite config must inject the bundled project's canonical revision");
 assert.ok(vite.includes("sample-site-project.json"), "Vite config must point at the checked-in sample");
+assert.ok(vite.includes("exclude: ['@takazudo/zfb-md-wasm']"), "Vite dev optimizer must leave the WASM resource package in the normal asset graph");
 assert.match(plugin, /if \(command === "build"\) return serializedModule\(options\.bundledProject, options\.bundledRevision\)/);
 assert.match(plugin, /export const siteProjectRevision/);
 assert.match(plugin, /readActivatedSiteProject/);
