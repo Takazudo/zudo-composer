@@ -85,8 +85,11 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   await canvasMenu.focus();
   await expect(canvasMenu).toBeFocused();
   await page.keyboard.press("Control+z");
-  await expect(canvasMenu).toBeFocused();
+  // Wait for the iframe to commit the restored snapshot before asserting the
+  // node-menu focus. The keyed node chrome should retain its DOM identity;
+  // this synchronization keeps the assertion on the settled render.
   await expect(canvas.getByText("A short supporting sentence.", { exact: true })).toBeVisible();
+  await expect(canvasMenu).toBeFocused();
   await expect(canvas.getByText("Keyboard history intro", { exact: true })).toHaveCount(0);
   await expect(redo).toBeEnabled();
 
