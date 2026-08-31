@@ -16,6 +16,8 @@ describe("trusted delivery props", () => {
     const cta = definition("ui.cta-button");
     const projected = projectTrustedProps(node(cta.id, { children: "Read", href: "/about", variant: "primary", arrow: true }), cta)!;
     expect(projected).toMatchObject({ children: "Read", href: "/site/about", variant: "primary", arrow: true });
+    const media = projectTrustedProps(node(cta.id, { children: "Download", href: "/uploaded-media/brief.pdf?download=1#file", variant: "secondary", arrow: false }), cta)!;
+    expect(media).toMatchObject({ children: "Download", href: "/uploaded-media/brief.pdf?download=1#file", variant: "secondary", arrow: false });
     expect(projectTrustedProps(node(cta.id, { ...cta.defaults, unknown: "no" }), cta)).toBeNull();
     expect(projectTrustedProps(node(cta.id, { ...cta.defaults, children: [], href: "/" }), cta)).toBeNull();
     expect(projectTrustedProps(node(cta.id, { ...cta.defaults, key: "unsafe" }), cta)).toBeNull();

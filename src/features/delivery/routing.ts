@@ -15,6 +15,18 @@ export function toSiteHref(pathname: string): string {
   return pathname.startsWith("/") ? `/site${pathname}` : pathname;
 }
 
+const DELIVERY_BASE_URL = "https://site-project.invalid/site/";
+
+function isCanonicalUploadedMediaHref(value: string): boolean {
+  if (!value.startsWith("/uploaded-media/")) return false;
+  try {
+    const parsed = new URL(value, DELIVERY_BASE_URL);
+    return parsed.origin === "https://site-project.invalid" && parsed.pathname.startsWith("/uploaded-media/");
+  } catch {
+    return false;
+  }
+}
+
 export function safeDeliveryHref(value: string): string | undefined {
   const unsafeCharacter = Array.from(value).some((character) => {
     const code = character.codePointAt(0)!;
@@ -22,9 +34,10 @@ export function safeDeliveryHref(value: string): string | undefined {
   });
   if (value !== value.trim() || unsafeCharacter || value.startsWith("//")) return undefined;
   if (value.startsWith("#")) return value;
+  if (isCanonicalUploadedMediaHref(value)) return value;
   if (value.startsWith("/")) return toSiteHref(value);
   let parsed: URL;
-  try { parsed = new URL(value, "https://site-project.invalid/site/"); } catch { return undefined; }
+  try { parsed = new URL(value, DELIVERY_BASE_URL); } catch { return undefined; }
   if (["http:", "https:", "mailto:", "tel:"].includes(parsed.protocol)) return value;
   return undefined;
 }
