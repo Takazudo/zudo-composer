@@ -14,6 +14,8 @@ import type { SiteProject } from "../../src/site-project/model/types";
 import { isSafeRecordId } from "../../src/shared/record-identity";
 
 export const SITE_PROJECT_LOCAL_ROOT_NAME = ".zudo-site-project";
+/** Optional disposable-root override used by isolated dev/browser acceptance runs. */
+export const SITE_PROJECT_LOCAL_ROOT_ENV = "ZUDO_SITE_PROJECT_ROOT";
 export const SITE_PROJECT_ACTIVE_FILENAME = "active.json";
 const PROJECTS = "projects";
 const BUILDS = "builds";
@@ -28,8 +30,13 @@ const PROJECT_SUFFIX = ".site-project.json";
 
 export const DEFAULT_SITE_PROJECT_LOCAL_ROOT = resolve(import.meta.dirname, "../..", SITE_PROJECT_LOCAL_ROOT_NAME);
 
+function configuredLocalRoot(): string {
+  const configured = process.env[SITE_PROJECT_LOCAL_ROOT_ENV]?.trim();
+  return configured ? resolve(configured) : DEFAULT_SITE_PROJECT_LOCAL_ROOT;
+}
+
 export interface LocalSiteProjectStoreOptions {
-  /** Internal test seam. Production callers must use the fixed repository-local root. */
+  /** Internal test seam. Normal callers use the fixed repository-local root; isolated dev runs may use the env override. */
   testRoot?: string;
   lockTimeoutMs?: number;
   fault?: (point: string) => void | Promise<void>;
@@ -85,7 +92,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
   private readonly fault?: (point: string) => void | Promise<void>;
 
   constructor(options: LocalSiteProjectStoreOptions = {}) {
-    this.root = resolve(options.testRoot ?? DEFAULT_SITE_PROJECT_LOCAL_ROOT);
+    this.root = resolve(options.testRoot ?? configuredLocalRoot());
     this.lockTimeoutMs = options.lockTimeoutMs ?? 10_000;
     this.fault = options.fault;
   }

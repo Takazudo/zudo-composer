@@ -13,11 +13,12 @@
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
     "test": "vitest run",
-    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm deployment:boundary && pnpm handoff:boundary && pnpm test && pnpm build && pnpm provider:boundary && pnpm deploy:dry-run",
+    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm site-project:boundary && pnpm deployment:boundary && pnpm handoff:boundary && pnpm test && pnpm build && pnpm provider:boundary && pnpm deploy:dry-run",
     "headless:negative-scan": "node scripts/check-headless-boundary.mjs",
     "contract:conformance": "node scripts/check-package-conformance.mjs",
     "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
     "contract:external-install": "node scripts/verify-contract-install.mjs",
+    "site-project:boundary": "node scripts/check-site-project-boundary.mjs",
     "provider:boundary": "node scripts/check-provider-boundary.mjs",
     "deployment:boundary": "node scripts/check-deployment-boundary.mjs",
     "handoff:boundary": "node scripts/check-standalone-handoff.mjs",
@@ -30,7 +31,9 @@
     "site-project:api": "tsx server/site-project-local/cli.ts",
     "site-project:check": "vitest run server/site-project-local plugins/__tests__/site-project-source-plugin.test.ts",
     "test:browser": "pnpm build && pnpm test:browser:dist",
-    "test:browser:dist": "playwright test"
+    "test:browser:dist": "playwright test",
+    "test:browser:site-project": "node scripts/run-site-project-browser.mjs --dev",
+    "test:browser:site-project:dist": "node scripts/run-site-project-browser.mjs --dist"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",

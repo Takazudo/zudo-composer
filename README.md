@@ -28,11 +28,23 @@ The Vite application has base `/` and these exact SPA routes:
 - `/content` — Content model and Entry authoring
 - `/mapping` — Content-to-Composition Mapping authoring
 - `/sitemapper` — Sitemapper library and editor
+- `/site` — bundled/published sample home
+- `/site/about`, `/site/services`, `/site/journal` — canonical nested sample pages
+- `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
+  `/site/journal/start-with-the-question` — compiler-emitted Entry routes
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
 
 The preview route is an implementation boundary, not an independent public
 product. Cloudflare serves route fallbacks from the same immutable `dist` tree;
 all emitted assets remain rooted at `/assets/`.
+
+The provider-scoped SiteProject graph, whole-project apply rule, active identity,
+JSON-stdin API, CAS revisions, immutable builds, diagnostics, local editing
+flow, and guarded browser acceptance commands are documented in
+[`docs/site-project.md`](./docs/site-project.md). Production
+uses the bundled sample; local project state is disposable and ignored.
+Cloudflare persistence, hosted API, and authentication are future adapter work;
+the assets-only Worker makes no such claim.
 
 ## Development and validation
 
@@ -63,10 +75,14 @@ corepack pnpm deployment:manifest
 corepack pnpm deployment:manifest:check
 corepack pnpm smoke:local
 corepack pnpm test:browser:dist
+corepack pnpm test:browser:site-project
+corepack pnpm test:browser:site-project:dist
 ```
 
 `test:browser` is the convenience command when no build exists; it builds and
-then delegates to `test:browser:dist`. CI deliberately builds exactly once.
+then delegates to `test:browser:dist`. The SiteProject helper adds an isolated
+CLI-activated dev lane and a local-Wrangler production lane that reuses that
+one build. CI deliberately builds exactly once.
 
 ## Immutable UI-provider handoff
 
@@ -155,7 +171,7 @@ enabled.
 
 The hostname above is the configured target, not a claim that this branch is
 deployed. Permanent `main` SHA, root-PR CI, post-merge CI, deployment success,
-and live six-route/all-asset smoke evidence are recorded only after merge.
+and live all-route/all-asset smoke evidence are recorded only after merge.
 
 ## Destructive current-only policy
 
@@ -180,4 +196,4 @@ After the Phase 3 root reaches `main`, the integration owner records one
 canonical evidence block on both Phase 3 and Phase 4 epics: root PR URL; full
 permanent `main` SHA; provider Git spec/SHA/tree and all version domains; green
 root-PR and post-merge CI URLs; and either the deployed URL with successful
-six-route/all-asset smoke or the exact credential-only handoff.
+all-route/all-asset smoke or the exact credential-only handoff.

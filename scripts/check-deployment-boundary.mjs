@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./deployment-artifact-lib.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -30,16 +31,30 @@ assert.deepEqual(config.routes, [{
   pattern: "zudo-composer.zudolab.dev",
   custom_domain: true,
 }]);
+assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"]);
+assert.deepEqual(SITE_ROUTES, [
+  "/site",
+  "/site/about",
+  "/site/services",
+  "/site/journal",
+  "/site/journal/map-the-moving-parts",
+  "/site/journal/review-in-small-loops",
+  "/site/journal/start-with-the-question",
+]);
+assert.deepEqual(SPA_ROUTES, [...AUTHORING_ROUTES, ...SITE_ROUTES]);
 
 assert.equal((workflow.match(/run: pnpm build\s*$/gm) ?? []).length, 1, "CI must build exactly once");
 assert.ok(workflow.includes("group: ${{ github.workflow }}-${{ github.ref }}"), "CI must serialize each workflow ref");
 assert.ok(workflow.includes("cancel-in-progress: true"), "new pushes must cancel stale validation/deployment runs");
 for (const command of [
   "pnpm headless:negative-scan",
+  "pnpm site-project:boundary",
   "pnpm provider:boundary",
   "pnpm deployment:boundary",
   "pnpm deploy:dry-run",
   "pnpm test:browser:dist",
+  "pnpm test:browser:site-project",
+  "pnpm test:browser:site-project:dist",
   "pnpm deployment:manifest",
   "pnpm deployment:manifest:check",
   "pnpm smoke:local",

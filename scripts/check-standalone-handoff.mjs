@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
-import { LIVE_ORIGIN, SPA_ROUTES } from "./deployment-artifact-lib.mjs";
+import { AUTHORING_ROUTES, LIVE_ORIGIN, SITE_ROUTES, SPA_ROUTES } from "./deployment-artifact-lib.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -20,7 +20,17 @@ const contractPackageSha = "9b774b827e9f6fec14379995ac2c691ccc3b7e5b";
 const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}`;
 const contractSpec = `git+https://github.com/Takazudo/zudo-composer.git#${contractPackageSha}`;
 
-assert.deepEqual(SPA_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"]);
+assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper"]);
+assert.deepEqual(SITE_ROUTES, [
+  "/site",
+  "/site/about",
+  "/site/services",
+  "/site/journal",
+  "/site/journal/map-the-moving-parts",
+  "/site/journal/review-in-small-loops",
+  "/site/journal/start-with-the-question",
+]);
+assert.deepEqual(SPA_ROUTES, [...AUTHORING_ROUTES, ...SITE_ROUTES]);
 assert.equal(LIVE_ORIGIN, "https://zudo-composer.zudolab.dev");
 assert.equal(wrangler.name, "zudo-composer");
 assert.deepEqual(wrangler.routes, [{ pattern: "zudo-composer.zudolab.dev", custom_domain: true }]);

@@ -21,7 +21,7 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
 
   await page.goto("/composer");
   await expect(page.getByRole("heading", { name: "Composition library" })).toBeVisible();
-  await page.getByRole("button", { name: "Open Product overview" }).click();
+  await page.getByRole("button", { name: "Open About page" }).click();
 
   const toolbar = page.getByRole("toolbar", { name: "Composer toolbar" });
   const undo = toolbar.getByRole("button", { name: "Undo" });
@@ -30,7 +30,7 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   const canvas = page.frameLocator('iframe[title="Composer preview canvas"]');
 
   await expect(toolbar).toBeVisible();
-  await expect(canvas.getByText("A real provider composition", { exact: true })).toBeVisible();
+  await expect(canvas.getByText("Static about heading", { exact: true })).toBeVisible();
   // A fresh controller is at both ends of an empty history stack.
   await expect(undo).toBeDisabled();
   await expect(redo).toBeDisabled();
@@ -134,7 +134,7 @@ test("Hero structured actions persist, render, export, and undo structural edits
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.goto("/composer");
-  await page.getByRole("button", { name: "Open Product overview" }).click();
+  await page.getByRole("button", { name: "Open About page" }).click();
   await page.getByRole("button", { name: "Add component to document root" }).click();
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await chooser.getByRole("button", { name: "Hero", exact: true }).click();
@@ -165,7 +165,7 @@ test("Hero structured actions persist, render, export, and undo structural edits
 
   await expect(hero.getByRole("link")).toHaveText([/^Read docs/, /^Contact us/]);
   await page.getByRole("button", { name: "Export JSX" }).click();
-  const exportDialog = page.getByRole("dialog", { name: /Export — Product overview/i });
+  const exportDialog = page.getByRole("dialog", { name: /Export — About page/i });
   await expect(exportDialog).toContainText("Read docs");
   await expect(exportDialog).toContainText("Contact us");
   await expect(exportDialog).toContainText("secondary");

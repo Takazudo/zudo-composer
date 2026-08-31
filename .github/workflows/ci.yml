@@ -31,6 +31,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm headless:negative-scan
+      - run: pnpm site-project:boundary
       - run: pnpm contract:conformance
       - run: pnpm contract:negative-scan
       - run: pnpm contract:external-install
@@ -48,6 +49,8 @@ jobs:
       - run: pnpm smoke:local
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:browser:dist
+      - run: pnpm test:browser:site-project
+      - run: pnpm test:browser:site-project:dist
       - run: pnpm deployment:manifest:check
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
