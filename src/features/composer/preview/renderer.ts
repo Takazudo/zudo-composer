@@ -90,6 +90,17 @@ export function focusByToken(token: string): void {
   document.querySelector<HTMLElement>(`[${FOCUS_TOKEN_ATTR}="${escapeAttrValue(token)}"]`)?.focus();
 }
 
+/**
+ * Read the deterministic token from the control currently focused in the
+ * preview document. `document.activeElement` remains populated after focus
+ * moves to the host page, so `hasFocus()` is part of this guard: without it a
+ * later host-driven render could steal focus back into this iframe.
+ */
+export function activeFocusToken(): string | null {
+  if (!document.hasFocus()) return null;
+  return document.activeElement?.getAttribute(FOCUS_TOKEN_ATTR) || null;
+}
+
 // ── Inline text editing (issue Takazudo/zudo-sg#257) ────────────────────────────────────────
 //
 // A flag alone can't target the right text node: real components render
