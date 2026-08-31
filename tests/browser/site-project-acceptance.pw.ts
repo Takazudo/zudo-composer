@@ -87,7 +87,7 @@ test("the activated graph appears in every authoring library", async ({ page }) 
 
   await page.goto("/sitemapper");
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Sample Studio sitemap/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sample Studio sitemap 5 pages", exact: true })).toBeVisible();
   expect(failures).toEqual([]);
 });
 

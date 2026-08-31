@@ -315,14 +315,14 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(inspector.getByText("Entry slug is missing or empty.", { exact: true }).first()).toBeVisible();
   await expect(inspector.getByText("Entry slug contains a forbidden route delimiter.", { exact: true })).toBeVisible();
   await expect(inspector.getByText(/Route \/news\/latest\/%E6%9D%B1%E4%BA%AC collides/).first()).toBeVisible();
-  await expect(page.getByText(/Mapping route family · 22 routes · blocked/)).toBeVisible();
+  await expect(page.getByText(/Mapping route family · 24 routes · blocked/)).toBeVisible();
   await expect(outline.locator(".sg-sitemapper-tree-row")).toHaveCount(1);
   await inspector.getByRole("textbox", { name: "Slug" }).fill("https://example.test/news");
   await inspector.getByRole("textbox", { name: "Slug" }).blur();
   await expect(page.getByText(/Mapping route family · 0 routes · blocked/)).toBeVisible();
   await inspector.getByRole("textbox", { name: "Slug" }).fill("news/latest");
   await inspector.getByRole("textbox", { name: "Slug" }).blur();
-  await expect(page.getByText(/Mapping route family · 22 routes · blocked/)).toBeVisible();
+  await expect(page.getByText(/Mapping route family · 24 routes · blocked/)).toBeVisible();
 
   await inspector.getByRole("button", { name: "Replace Mapping" }).click();
   await page.getByRole("dialog", { name: "Choose a Content Mapping" }).getByRole("button", { name: `Assign ${SINGLE_MAPPING}` }).click();
