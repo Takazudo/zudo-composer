@@ -37,6 +37,7 @@ assert.ok(browserRunner.includes('operation: "apply"'), "browser runner must app
 assert.ok(browserRunner.includes('operation: "activate"'), "browser runner must activate through the JSON CLI");
 assert.ok(browserRunner.includes('"dist", "index.html"'), "production browser runner must consume an existing build");
 assert.ok(browserRunner.includes('"playwright.site-project-dist.config.ts"'), "production browser runner must use the Wrangler config");
+assert.ok(browserRunner.includes("env: { ...process.env, ...environment }"), "browser runner must preserve the parent process environment");
 assert.doesNotMatch(browserRunner, /\b(?:pnpm|npm)\s+(?:run\s+)?build\b/, "browser lanes must not rebuild the production artifact");
 assert.ok(browserConfig.includes("reuseExistingServer: false"), "isolated dev browser config must own its server");
 assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must use one deterministic worker");

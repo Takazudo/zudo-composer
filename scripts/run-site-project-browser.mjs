@@ -71,7 +71,7 @@ try {
   const playwright = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   const config = mode === "dev" ? "playwright.site-project.config.ts" : "playwright.site-project-dist.config.ts";
   const result = await run(playwright, ["exec", "playwright", "test", "--config", config, "tests/browser/site-project-acceptance.pw.ts"], {
-    env: environment,
+    env: { ...process.env, ...environment },
     stdio: "inherit",
   });
   if (result.status !== 0) process.exitCode = result.status ?? 1;
