@@ -119,9 +119,10 @@ test("an authoring Entry edit survives reload and is reflected by SiteDelivery",
   test.skip(BROWSER_LANE !== "dev", "the production lane intentionally serves immutable bundled data");
   const failures = watchRuntimeFailures(page);
   await page.goto("/content");
-  await page.getByRole("button", { name: /^About content\s+Single$/ }).click();
-  await page.locator('.sg-content-library > li[data-selected="true"]').getByRole("button", { name: /^Entries/ }).click();
-  await page.getByRole("button", { name: /A studio built around useful clarity/ }).click();
+  const aboutCard = page.locator(".sg-content-library > li").filter({ hasText: "About content" });
+  await aboutCard.getByRole("button", { name: /^About content\s+Single$/ }).click();
+  await aboutCard.getByRole("button", { name: /^Entries/ }).click();
+  await aboutCard.getByRole("button", { name: /A studio built around useful clarity.*Complete/ }).click();
   const heading = page.getByRole("textbox", { name: "Heading (required)" });
   await heading.fill("A browser-edited studio");
   await heading.blur();
