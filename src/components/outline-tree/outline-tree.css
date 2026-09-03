@@ -396,12 +396,13 @@
   z-index: var(--tree-z-tile);
 }
 
+/* The prototype also carried a `[data-show="true"]` escape hatch, which its
+ * script set on touch devices; the coarse-pointer query below covers that here,
+ * and nothing in this module ever writes the attribute. */
 .cms-tree-insert:focus-within::before,
 .cms-tree-insert:focus-within .cms-tree-insert__btn,
 .cms-tree-insert.is-active::before,
-.cms-tree-insert.is-active .cms-tree-insert__btn,
-.cms-tree-insert[data-show="true"]::before,
-.cms-tree-insert[data-show="true"] .cms-tree-insert__btn { opacity: 1; pointer-events: auto; }
+.cms-tree-insert.is-active .cms-tree-insert__btn { opacity: 1; pointer-events: auto; }
 
 @media (hover: hover) {
   .cms-tree-insert:hover::before,
