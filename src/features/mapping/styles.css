@@ -1,167 +1,205 @@
-@import "@zudo-sg/ui/styles/tokens.css";
-@import "@zudo-sg/ui/styles/colors.css";
+/* ============================================================================
+ * Mapping route
+ *
+ * The chrome, controls, table, panes, menus and dialogs all come from
+ * `src/components/**`; this sheet only carries what is specific to a binding
+ * board — the two-line cells, the unbound-target chips, and the bind menu's
+ * second line. Everything reads the app tokens, so there is nothing to theme
+ * here either.
+ * ========================================================================== */
 
-.sg-mapping-app {
-  --sg-mapping-space-row-y: var(--spacing-vsp-2xs); /* 7: dense row */
-  --sg-mapping-space-group-y: var(--spacing-vsp-xs); /* 14: row group */
-  --sg-mapping-space-control-y: var(--spacing-vsp-10); /* 10: control */
-  --sg-mapping-space-section-y: var(--spacing-vsp-sm); /* 20: section */
-  --sg-mapping-space-inline: var(--spacing-hsp-sm); /* 8: inline */
-  --sg-mapping-space-region: var(--spacing-hsp-lg); /* 16: region */
+/* --------------------------------------------------------------------------
+ * Route surface
+ * -------------------------------------------------------------------------- */
+/* One row that fills `.cms-shell-main`, so the editor's `height: 100%` has
+ * something to measure against and the library scrolls inside the shell. */
+.cms-mapping-root {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
-  padding: var(--sg-mapping-space-region);
+  min-height: 100%;
   color: var(--color-fg);
   background: var(--color-bg);
 }
 
-.sg-mapping-app :where(h1, h2, h3, p) { margin: 0; }
-.sg-mapping-app h1 { font-size: var(--text-xl); line-height: var(--leading-tight); }
-.sg-mapping-app h2 { font-size: var(--text-lg); }
-.sg-mapping-app h3 { font-size: var(--text-base); }
-.sg-mapping-eyebrow { color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: .08em; }
-.sg-mapping-app__header, .sg-mapping-header-actions, .sg-mapping-actions, .sg-mapping-section-heading, .sg-mapping-pane__heading, .sg-mapping-binding__order { display: flex; align-items: center; justify-content: space-between; gap: var(--sg-mapping-space-inline); min-width: 0; }
-.sg-mapping-app__header { margin-block-end: var(--sg-mapping-space-section-y); }
-.sg-mapping-header-actions { justify-content: flex-end; }
-.sg-mapping-save { max-width: 24rem; color: var(--color-muted); font-size: var(--text-sm); text-align: end; }
+.cms-mapping-library { align-content: start; padding: var(--sp-3); }
 
-.sg-mapping-app :where(button, input, select) { border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); color: var(--color-fg); background: var(--color-surface); }
-.sg-mapping-app button { display: inline-flex; align-items: center; justify-content: center; gap: var(--sg-mapping-space-row-y); min-height: 2.25rem; padding: var(--spacing-vsp-3xs) var(--spacing-hsp-md); cursor: pointer; }
-.sg-mapping-app button:disabled { cursor: not-allowed; opacity: .55; }
-.sg-mapping-app button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-.sg-mapping-app :where(input, select):focus { outline: 2px solid var(--color-focus); outline-offset: 1px; }
-.sg-mapping-button--primary { border-color: var(--color-accent) !important; color: var(--color-on-accent) !important; background: var(--color-accent) !important; }
-.sg-mapping-button--secondary { border-color: var(--color-border); background: var(--color-surface); }
-.sg-mapping-button--danger, .sg-mapping-inline-error { color: var(--color-danger) !important; }
-.sg-mapping-app svg { flex: 0 0 auto; }
-.sg-mapping-title-block { min-width: 0; }
-.sg-mapping-heading-label, .sg-mapping-subheading, .sg-mapping-dialog-heading, .sg-mapping-field-name, .sg-mapping-card__open > span:not(.sg-mapping-card__title), .sg-mapping-card__status, .sg-mapping-notice, .sg-mapping-state, .sg-mapping-preview-status, .sg-mapping-diagnostics li { display: flex; align-items: center; gap: var(--sg-mapping-space-row-y); min-width: 0; }
-.sg-mapping-heading-label { margin-block-end: var(--spacing-vsp-3xs); color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: .08em; }
-.sg-mapping-subheading h3, .sg-mapping-dialog-heading h2 { margin: 0; }
-.sg-mapping-subheading > span { margin-inline-start: auto; color: var(--color-muted); font-size: var(--text-xs); }
-.sg-mapping-dialog-heading { justify-content: flex-start; }
+/* --------------------------------------------------------------------------
+ * Toolbar: the source/target pair
+ * -------------------------------------------------------------------------- */
+/* The two picker buttons share the centre slot, so each gives up width before
+ * the toolbar wraps; the arrow between them never shrinks. */
+.cms-mapping-pick__name {
+  overflow: hidden;
+  max-width: 12rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-mapping-pick__arrow { flex: 0 0 auto; color: var(--color-muted); }
+
+/* --------------------------------------------------------------------------
+ * Navigator: source fields
+ * -------------------------------------------------------------------------- */
+.cms-mapping-fields { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+
+.cms-mapping-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  align-items: center;
+  min-height: var(--row-chrome);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius);
+}
+
+.cms-mapping-field__glyph { color: var(--color-muted); }
+.cms-mapping-field__text { display: grid; min-width: 0; line-height: 1.35; }
+.cms-mapping-field__text strong { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+
+.cms-mapping-field__meta {
+  overflow: hidden;
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  font-size: .6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-mapping-field__chip { justify-self: end; }
+
+/* --------------------------------------------------------------------------
+ * Bindings table
+ * -------------------------------------------------------------------------- */
+/*
+ * `table-layout: fixed` is what keeps a long component title from starving the
+ * transform and status cells; the cells clip their own text instead.
+ */
+.cms-mapping-table .cms-table { table-layout: fixed; }
+.cms-mapping-table .cms-table td { overflow: hidden; }
+
+.cms-mapping-cell { display: flex; gap: var(--sp-1); align-items: center; min-width: 0; }
+.cms-mapping-cell__glyph { flex: 0 0 auto; color: var(--color-muted); }
+.cms-mapping-cell__text { display: grid; min-width: 0; line-height: 1.35; }
+.cms-mapping-cell__text strong { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+
+.cms-mapping-cell__meta {
+  overflow: hidden;
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  font-size: .6875rem;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-mapping-arrow { display: block; margin-inline: auto; color: var(--color-faint); }
+.cms-mapping-transform { display: grid; gap: var(--sp-1); min-width: 0; }
+.cms-mapping-transform .cms-select-wrap, .cms-mapping-transform .cms-input { width: 100%; }
+
+/* The inline diagnostic under a broken row. It is the row's own explanation,
+ * so it sits flush under it and carries the banner's tone, not a border. */
+.cms-mapping-row-banner { border-radius: var(--radius); }
+.cms-mapping-row-banner p { margin: 0; }
+.cms-mapping-row-banner p + p { margin-block-start: var(--sp-1); }
+
+/* --------------------------------------------------------------------------
+ * Unbound targets
+ * -------------------------------------------------------------------------- */
+.cms-mapping-unbound__chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+
+/* Dashed until bound: the chip is an invitation, not a state. */
+.cms-mapping-unbound__chip { border-style: dashed; font-family: var(--font-mono); font-size: .6875rem; }
+
+.cms-mapping-unbound__empty,
+.cms-mapping-unbound__help {
+  margin: var(--sp-1) 0 0;
+  color: var(--color-muted);
+  font-size: .75rem;
+}
+
+/* --------------------------------------------------------------------------
+ * Bind menu
+ * -------------------------------------------------------------------------- */
+/*
+ * The detail is a block, which is also what keeps it out of the item's
+ * accessible name as a run-on word: two inline spans with no whitespace
+ * between them concatenate into one.
+ */
+.cms-mapping-bind-menu__label { display: block; }
+
+.cms-mapping-bind-menu__detail {
+  display: block;
+  color: var(--color-faint);
+  font-size: .6875rem;
+  font-weight: 400;
+}
+
+/* --------------------------------------------------------------------------
+ * Inspector
+ * -------------------------------------------------------------------------- */
+.cms-mapping-context { display: grid; gap: var(--sp-2); margin: 0; }
+.cms-mapping-context > div { display: grid; gap: 2px; min-width: 0; }
+
+.cms-mapping-context dt {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--color-muted);
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.cms-mapping-context dd { display: grid; gap: 2px; min-width: 0; margin: 0; }
+.cms-mapping-context dd strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cms-mapping-context dd span {
+  overflow: hidden;
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  font-size: .6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-mapping-preview-status { justify-content: flex-start; }
+
+/* --------------------------------------------------------------------------
+ * Pickers
+ * -------------------------------------------------------------------------- */
+.cms-mapping-picker__list { display: grid; gap: var(--sp-1); margin: 0; padding: 0; list-style: none; }
+
+.cms-mapping-picker__list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.cms-mapping-picker__glyph { color: var(--color-muted); }
+.cms-mapping-picker__entry { display: grid; gap: 2px; min-width: 0; }
+.cms-mapping-picker__entry strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cms-mapping-picker__entry span {
+  overflow: hidden;
+  color: var(--color-faint);
+  font-size: .6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 @media (hover: hover) {
-  .sg-mapping-app button:not(:disabled):hover, .sg-mapping-dialog button:not(:disabled):hover { background: var(--color-surface-2); }
-  .sg-mapping-app .sg-mapping-button--primary:not(:disabled):hover, .sg-mapping-dialog .sg-mapping-button--primary:not(:disabled):hover { border-color: var(--color-border) !important; color: var(--color-fg) !important; background: var(--color-surface-2) !important; }
-}
-
-.sg-mapping-workspace { display: grid; grid-template-columns: minmax(15rem, .8fr) minmax(0, 1.35fr) minmax(18rem, 1fr); gap: var(--sg-mapping-space-inline); min-width: 0; height: calc(100vh - var(--sg-header-h) - 7rem); }
-.sg-mapping-pane { min-width: 0; overflow: auto; overscroll-behavior: contain; padding: var(--sg-mapping-space-region); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); box-shadow: none; }
-.sg-mapping-pane__heading { align-items: flex-start; margin-block-end: var(--sg-mapping-space-group-y); }
-.sg-mapping-pane__heading > .sg-mapping-pane__heading { flex: 1; margin-block-end: 0; }
-.sg-mapping-pane__heading-title { display: flex; align-items: flex-start; gap: var(--sg-mapping-space-row-y); min-width: 0; }
-.sg-mapping-pane__heading-title > div { min-width: 0; }
-.sg-mapping-pane__heading p, .sg-mapping-section-heading p { margin-block-start: var(--spacing-vsp-3xs); color: var(--color-muted); font-size: var(--text-xs); }
-.sg-mapping-tabs { display: none; }
-
-.sg-mapping-form { display: grid; gap: var(--sg-mapping-space-section-y); min-width: 0; }
-.sg-mapping-form label, .sg-mapping-add-binding label { display: grid; gap: var(--sg-mapping-space-row-y); min-width: 0; font-size: var(--text-sm); font-weight: var(--font-weight-semibold); }
-.sg-mapping-form :where(input, select), .sg-mapping-add-binding select { width: 100%; min-width: 0; padding: var(--sg-mapping-space-control-y) var(--spacing-hsp-md); font-weight: var(--font-weight-normal); }
-.sg-mapping-source-fields { display: grid; gap: var(--sg-mapping-space-group-y); margin-block-start: var(--sg-mapping-space-section-y); padding: var(--sg-mapping-space-group-y); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface-2); box-shadow: none; }
-.sg-mapping-source-fields ul { display: grid; gap: var(--sg-mapping-space-row-y); margin: 0; padding: 0; list-style: none; }
-.sg-mapping-source-fields li { display: grid; gap: var(--spacing-vsp-3xs); min-width: 0; }
-.sg-mapping-source-fields li span { overflow: hidden; color: var(--color-muted); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
-
-.sg-mapping-add-binding { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) auto; gap: var(--sg-mapping-space-inline); align-items: end; margin-block-end: var(--sg-mapping-space-group-y); padding: var(--sg-mapping-space-group-y); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface-2); box-shadow: none; }
-.sg-mapping-add-binding__heading { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sg-mapping-space-row-y); align-items: start; min-width: 0; }
-.sg-mapping-add-binding__heading > div { display: grid; gap: var(--spacing-vsp-3xs); min-width: 0; }
-.sg-mapping-add-binding__heading span { color: var(--color-muted); font-size: var(--text-xs); }
-.sg-mapping-bindings { display: grid; gap: var(--sg-mapping-space-group-y); margin: 0; padding: 0; list-style: none; }
-.sg-mapping-binding { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sg-mapping-space-inline); align-items: start; min-width: 0; padding: var(--sg-mapping-space-group-y); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); box-shadow: none; }
-.sg-mapping-binding[data-broken="true"] { border-color: var(--color-danger); }
-.sg-mapping-binding__order { grid-column: 1; grid-row: 1; justify-content: flex-start; }
-.sg-mapping-binding__number { color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--font-weight-bold); white-space: nowrap; }
-.sg-mapping-binding__order button { min-width: 2.25rem; padding-inline: var(--spacing-hsp-xs); }
-.sg-mapping-binding__flow { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); gap: var(--sg-mapping-space-row-y); align-items: stretch; min-width: 0; }
-.sg-mapping-binding__region { display: grid; gap: var(--sg-mapping-space-row-y); min-width: 0; padding: var(--sg-mapping-space-row-y); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface-2); }
-.sg-mapping-binding__region-heading { display: flex; align-items: flex-start; gap: var(--sg-mapping-space-row-y); min-width: 0; }
-.sg-mapping-binding__region-heading > div { display: grid; gap: var(--spacing-vsp-3xs); min-width: 0; }
-.sg-mapping-binding__region-heading :where(strong, span) { overflow-wrap: anywhere; }
-.sg-mapping-binding__region-heading span { color: var(--color-muted); font-size: var(--text-xs); }
-.sg-mapping-binding__connector { align-self: center; color: var(--color-muted); }
-.sg-mapping-binding__region label { display: grid; gap: var(--sg-mapping-space-row-y); min-width: 0; font-size: var(--text-sm); font-weight: var(--font-weight-semibold); }
-.sg-mapping-binding__region :where(input, select) { width: 100%; min-width: 0; padding: var(--sg-mapping-space-control-y) var(--spacing-hsp-sm); font-weight: var(--font-weight-normal); }
-.sg-mapping-binding__remove { grid-column: 2; grid-row: 1; align-self: start; }
-.sg-mapping-inline-error { grid-column: 1 / -1; font-size: var(--text-xs); }
-
-.sg-mapping-preview-stage { position: relative; min-height: 28rem; overflow: clip; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-bg); box-shadow: none; }
-.sg-mapping-preview-frame { display: block; width: 100%; min-width: 0; height: 100%; min-height: 28rem; border: 0; pointer-events: none; }
-.sg-mapping-preview-stage[aria-busy="true"]::after { content: "Updating preview…"; position: absolute; inset-block-start: var(--sg-mapping-space-inline); inset-inline-end: var(--sg-mapping-space-inline); padding: var(--spacing-vsp-3xs) var(--spacing-hsp-xs); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); color: var(--color-muted); background: var(--color-surface); font-size: var(--text-xs); }
-.sg-mapping-preview-context { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sg-mapping-space-inline); margin-block-end: var(--sg-mapping-space-group-y); }
-.sg-mapping-preview-context > div { display: grid; gap: var(--spacing-vsp-3xs); min-width: 0; padding: var(--sg-mapping-space-row-y) var(--sg-mapping-space-inline); border-inline-start: 3px solid var(--color-accent); background: var(--color-surface-2); }
-.sg-mapping-preview-context span { color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: .06em; }
-.sg-mapping-preview-context strong, .sg-mapping-preview-context small { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
-.sg-mapping-preview-context small { color: var(--color-muted); font-size: var(--text-xs); }
-.sg-mapping-preview-status { flex-wrap: wrap; margin-block-end: var(--sg-mapping-space-group-y); padding: var(--sg-mapping-space-row-y) var(--sg-mapping-space-inline); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); color: var(--color-muted); background: var(--color-surface-2); font-size: var(--text-xs); }
-.sg-mapping-preview-status strong { color: var(--color-fg); }
-.sg-mapping-preview-status > span:last-child { margin-inline-start: auto; }
-.sg-mapping-preview-status--current { border-color: var(--color-success, var(--color-border)); }
-.sg-mapping-preview-status--error { border-color: var(--color-danger); color: var(--color-danger); }
-.sg-mapping-preview-diagnostics { display: grid; gap: var(--sg-mapping-space-group-y); margin-block-start: var(--sg-mapping-space-section-y); padding-block-start: var(--sg-mapping-space-section-y); border-block-start: 1px solid var(--color-border); }
-.sg-mapping-diagnostics-empty { color: var(--color-muted); font-size: var(--text-sm); }
-.sg-mapping-preview-diagnostics .sg-mapping-diagnostics { margin: 0; }
-.sg-mapping-preview-diagnostics .sg-mapping-diagnostics li { align-items: flex-start; }
-.sg-mapping-preview-diagnostics .sg-mapping-diagnostics li > div { display: grid; gap: var(--spacing-vsp-3xs); min-width: 0; }
-.sg-mapping-preview-diagnostics .sg-mapping-diagnostics span { overflow-wrap: anywhere; }
-
-.sg-mapping-library { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr)); gap: var(--sg-mapping-space-region); margin: var(--sg-mapping-space-group-y) 0 0; padding: 0; list-style: none; }
-.sg-mapping-card { display: flex; align-items: stretch; min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); box-shadow: none; }
-.sg-mapping-card__open { flex: 1; display: grid; gap: var(--sg-mapping-space-row-y); min-width: 0; text-align: start; }
-.sg-mapping-card__open span { min-width: 0; overflow: hidden; color: var(--color-muted); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
-.sg-mapping-card__open > span { justify-content: flex-start; }
-.sg-mapping-card__title { display: flex; align-items: center; gap: var(--sg-mapping-space-row-y); color: var(--color-fg) !important; font-size: var(--text-sm) !important; }
-.sg-mapping-card__title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sg-mapping-card__status { flex-wrap: wrap; }
-.sg-mapping-card__delete { align-self: flex-start; margin: var(--sg-mapping-space-row-y); }
-
-.sg-mapping-state, .sg-mapping-empty, .sg-mapping-notice { display: grid; gap: var(--sg-mapping-space-row-y); padding: var(--sg-mapping-space-group-y); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface-2); box-shadow: none; }
-.sg-mapping-state { max-width: 42rem; margin-inline: auto; }
-.sg-mapping-state--link { align-items: flex-start; justify-items: start; margin-block-end: var(--sg-mapping-space-section-y); }
-.sg-mapping-state--link h2 { margin-block-start: calc(var(--sg-mapping-space-row-y) * -1); }
-.sg-mapping-notice { margin-block-end: var(--sg-mapping-space-group-y); }
-.sg-mapping-notice--error { border-color: var(--color-danger); }
-.sg-mapping-empty p { color: var(--color-muted); font-size: var(--text-sm); }
-.sg-mapping-empty .sg-mapping-button--primary { justify-self: start; }
-
-.sg-mapping-dialog { z-index: var(--z-index-modal); display: grid; gap: var(--sg-mapping-space-section-y, var(--spacing-vsp-sm)); width: min(32rem, calc(100% - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; overscroll-behavior: contain; margin: auto; padding: var(--sg-mapping-space-region, var(--spacing-hsp-lg)); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-fg); background: var(--color-surface); box-shadow: var(--shadow-overlay); }
-.sg-mapping-dialog::backdrop { background: color-mix(in oklch, var(--color-fg) 45%, transparent); }
-.sg-mapping-dialog--test { width: min(42rem, 100%); }
-.sg-mapping-dialog :where(h2, p) { margin: 0; }
-.sg-mapping-dialog button { min-height: 2.25rem; padding: var(--spacing-vsp-3xs) var(--spacing-hsp-md); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); color: var(--color-fg); background: var(--color-surface); }
-.sg-mapping-dialog button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-.sg-mapping-diagnostics { display: grid; gap: var(--sg-mapping-space-group-y); margin: 0; padding: 0; list-style: none; }
-.sg-mapping-diagnostics li { display: flex; align-items: flex-start; gap: var(--sg-mapping-space-row-y); padding: var(--sg-mapping-space-group-y); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface-2); }
-.sg-mapping-diagnostics li > div { display: grid; gap: var(--sg-mapping-space-row-y); min-width: 0; }
-.sg-mapping-diagnostics span { color: var(--color-muted); font-size: var(--text-sm); }
-
-@media (max-width: 63.999rem) {
-  .sg-mapping-app__header { align-items: flex-start; }
-  .sg-mapping-header-actions { flex-wrap: wrap; }
-  .sg-mapping-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sg-mapping-space-inline); margin-block-end: var(--sg-mapping-space-group-y); }
-  .sg-mapping-tabs button { min-width: 0; }
-  .sg-mapping-tabs [aria-selected="true"] { border-color: var(--color-accent); }
-  .sg-mapping-workspace { display: block; height: auto; }
-  .sg-mapping-pane { display: none; }
-  .sg-mapping-pane[data-active="true"] { display: block; }
-  .sg-mapping-add-binding, .sg-mapping-binding { grid-template-columns: minmax(0, 1fr); }
-  .sg-mapping-add-binding__heading, .sg-mapping-binding__order, .sg-mapping-binding__flow, .sg-mapping-binding__remove { grid-column: 1; grid-row: auto; }
-  .sg-mapping-binding__flow { grid-template-columns: minmax(0, 1fr); }
-  .sg-mapping-binding__connector { justify-self: center; transform: rotate(90deg); }
-  .sg-mapping-binding__remove { justify-self: start; }
-  .sg-mapping-preview-context { grid-template-columns: minmax(0, 1fr); }
-  .sg-mapping-preview-status > span:last-child { margin-inline-start: 0; }
-}
-
-@media (min-width: 64rem) {
-  .sg-mapping-tabs { display: none; }
-  .sg-mapping-pane { display: block; }
+  .cms-mapping-field:hover { background: var(--color-surface-2); }
+  .cms-mapping-picker__list li:hover { border-color: var(--color-accent-line); }
 }
 
 @media (pointer: coarse) {
-  .sg-mapping-app :is(button, input, select), .sg-mapping-dialog :is(button, input, select) { min-height: 44px; }
-  .sg-mapping-app button, .sg-mapping-dialog button { min-width: 44px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sg-mapping-app *, .sg-mapping-dialog * { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  /* The chip is a real target on touch, where there is no hover to reveal it. */
+  .cms-mapping-unbound__chip, .cms-mapping-field__chip { min-height: 44px; }
+  .cms-mapping-field { min-height: 44px; }
 }

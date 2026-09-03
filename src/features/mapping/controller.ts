@@ -17,13 +17,11 @@ import {
   type MappingTargetDescriptor,
   type MappingTransform,
 } from "../../mapping";
-import { createUuidIdFactory, isSafeRecordId, type IdFactory } from "../../shared";
+import { cloneJson, createUuidIdFactory, isSafeRecordId, type IdFactory } from "../../shared";
 import { type MappingDeepLinkRequest, type MappingDeepLinkState } from "./deep-link";
 
-export type MappingPane = "source" | "bindings" | "preview";
 export type MappingSaveStatus = "saved" | "dirty" | "saving" | "error";
 
-export interface MappingUsage { mappingId: string; sitemapNames: readonly string[] }
 export interface MappingLibraryDetail { record: MappingRecord; definition: MappingDefinitionResolution }
 export type MappingContentSnapshotOutcome =
   | { status: "resolved"; snapshot: ContentEntrySnapshot }
@@ -55,7 +53,6 @@ export interface MappingEditorState {
   evaluation: MappingEvaluationResult | null;
   previewDocument: CompositionDocument | null;
   previewStatus: "empty" | "loading" | "current" | "error";
-  activePane: MappingPane;
   saveStatus: MappingSaveStatus;
   message: string;
   recoveryMessage: string | null;
@@ -65,7 +62,7 @@ export interface MappingEditorState {
 const initialState: MappingEditorState = {
   phase: "idle", mappings: [], libraryDetails: {}, contentModels: [], compositions: [], catalogFailures: [], mapping: null,
   definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null,
-  previewStatus: "empty", activePane: "source", saveStatus: "saved", message: "", recoveryMessage: null,
+  previewStatus: "empty", saveStatus: "saved", message: "", recoveryMessage: null,
   deepLink: { status: "none" },
 };
 
@@ -108,14 +105,29 @@ export class MappingEditorController {
   async retryInitialization(): Promise<void> { await this.runInitialization(() => this.provider.initialization.retry()); }
   async startFresh(): Promise<void> { await this.runInitialization(() => this.provider.initialization.startFresh()); }
 
-  async create(name: string, contentModel: ContentCatalogEntry["ref"], composition: CompositionCatalogEntry["ref"]): Promise<void> {
+  /** Creates the record and returns its id; the route navigates to it. */
+  async create(name: string, contentModel: ContentCatalogEntry["ref"], composition: CompositionCatalogEntry["ref"]): Promise<string> {
     const trimmed = name.trim(); if (!trimmed) throw new Error("Mapping name is required.");
     await this.flush();
     const timestamp = this.now();
     const record = createMappingRecord({ id: this.idFactory("mapping"), name: trimmed, contentModel, composition, createdAt: timestamp });
     await this.provider.store.put(record);
     await this.refreshLibrary();
-    await this.open(record.id);
+    return record.id;
+  }
+
+  /** Copies a stored record under a fresh id and returns it. */
+  async duplicate(id: string): Promise<string> {
+    await this.flush();
+    const outcome = await this.provider.store.get(id);
+    if (outcome.status !== "loaded") throw new Error("This Mapping could not be duplicated.");
+    const source = outcome.record.document;
+    const duplicateId = this.idFactory(source.name);
+    const timestamp = this.now();
+    const record = createMappingRecord({ id: duplicateId, name: `${source.name} copy`, contentModel: source.contentModel, composition: source.composition, bindings: cloneJson(source.bindings), createdAt: timestamp });
+    await this.provider.store.put(record);
+    await this.refreshLibrary();
+    return duplicateId;
   }
 
   async open(id: string): Promise<void> {
@@ -126,7 +138,7 @@ export class MappingEditorController {
     await this.openLoadedRecord(outcome.record);
   }
 
-  async close(): Promise<void> { await this.flush(); this.refreshRevision += 1; this.set({ ...this.current, mapping: null, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null, previewStatus: "empty", activePane: "source", message: "Mapping library ready.", deepLink: { status: "none" } }); }
+  async close(): Promise<void> { await this.flush(); this.refreshRevision += 1; this.set({ ...this.current, mapping: null, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null, previewStatus: "empty", message: "Mapping library ready.", deepLink: { status: "none" } }); }
 
   /**
    * Resolve a route request against the named provider only. A provider
@@ -230,7 +242,6 @@ export class MappingEditorController {
   }
 
   async testDefinition(): Promise<void> { await this.refreshResolution(); }
-  setActivePane(activePane: MappingPane): void { this.set({ ...this.current, activePane }); }
   setPreviewError(message: string): void { this.set({ ...this.current, previewStatus: "error", message }); }
   setPreviewCurrent(): void { if (this.current.previewDocument) this.set({ ...this.current, previewStatus: "current", message: "Preview is current." }); }
 
@@ -279,7 +290,7 @@ export class MappingEditorController {
   private async openLoadedRecord(record: MappingRecord): Promise<void> {
     if (this.current.mapping?.id === record.id) return;
     await this.flush();
-    this.set({ ...this.current, mapping: record, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null, previewStatus: "loading", activePane: "source", saveStatus: "saved", message: "Mapping loaded." });
+    this.set({ ...this.current, mapping: record, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null, previewStatus: "loading", saveStatus: "saved", message: "Mapping loaded." });
     await this.refreshResolution();
   }
 
