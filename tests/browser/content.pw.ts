@@ -218,7 +218,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(mappingFrame.getByRole("heading", { name: "Browser journey studio", exact: true })).toBeVisible();
 
   await page.goto("/composer");
-  await page.getByRole("button", { name: "Open About page", exact: true }).click();
+  await page.getByRole("link", { name: "About page", exact: true }).click();
   const composerFrame = page.frameLocator('iframe[title="Composer preview canvas"]');
   await expect(composerFrame.getByRole("heading", { name: "Static about heading", exact: true })).toBeVisible();
 

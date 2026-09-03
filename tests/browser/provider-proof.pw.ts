@@ -46,15 +46,19 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/composer");
-  await expect(page.getByRole("heading", { name: "Composition library" })).toBeVisible();
-  await page.getByRole("button", { name: "Open About page" }).click();
-  await expect(page.getByRole("toolbar", { name: "Composer toolbar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
+  await page.getByRole("link", { name: "About page", exact: true }).click();
+  // The shared editor toolbar carries no role of its own, so it is scoped by
+  // class; "Undo" and "Add component" also exist inside the canvas iframe.
+  const toolbar = page.locator(".cms-editor__toolbar");
+  const structure = page.locator(".cms-editor__region--nav");
+  await expect(toolbar).toBeVisible();
 
   const canvas = page.frameLocator('iframe[title="Composer preview canvas"]');
   await expect(canvas.getByText("Static about heading", { exact: true })).toBeVisible();
   await expect(canvas.getByText("Static about body", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add component to document root" }).click();
+  await structure.getByRole("button", { name: "Add component to the document" }).click();
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await expect(chooser).toBeVisible();
   for (const title of COMPONENTS) {
@@ -63,7 +67,7 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   await expect(chooser.getByRole("button", { name: /^(Callout|Card|ProseMd|ProseP|PlaceholderBox|AutoGrid|Container|CtaButton|Hero|SectionHeading|SplitLayout|Stack)\b/i })).toHaveCount(12);
   await chooser.getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: /^ProseMd/ }).click();
+  await structure.getByRole("treeitem", { name: /^ProseMd/ }).click();
   const markdown = page.getByRole("textbox", { name: "Markdown" });
   const persistedMarkdown = [
     "## Browser proof",
@@ -95,13 +99,13 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   });
   expect(surfaceColors.foreground).not.toBe(surfaceColors.background);
 
-  await page.getByRole("button", { name: "Export JSX" }).click();
+  await toolbar.getByRole("button", { name: "Export JSX" }).click();
   const exportDialog = page.getByRole("dialog", { name: /Export — About page/i });
   await expect(exportDialog).toContainText('from "@zudo-sg/ui"');
   await exportDialog.getByRole("button", { name: "Close" }).click();
 
   await page.reload();
-  await page.getByRole("button", { name: /^ProseMd/ }).click();
+  await structure.getByRole("treeitem", { name: /^ProseMd/ }).click();
   await expect(page.getByRole("textbox", { name: "Markdown" })).toHaveValue(persistedMarkdown);
 
   const assetPath = (response: Response) => new URL(response.url()).pathname;
@@ -117,9 +121,9 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
     await useTheme(page, theme);
     await expect(canvas.locator("html")).toHaveAttribute("data-theme", theme);
   }
-  await page.getByRole("button", { name: "Add component to document root" }).click();
+  await structure.getByRole("button", { name: "Add component to the document" }).click();
   await page.setViewportSize({ width: 375, height: 812 });
-  await expect(page.getByRole("toolbar", { name: "Composer toolbar" })).toBeVisible();
+  await expect(toolbar).toBeVisible();
   const narrowChooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await expect(narrowChooser.getByText("12 of 12 components", { exact: true })).toBeVisible();
   await narrowChooser.getByRole("button", { name: "Cancel" }).click();

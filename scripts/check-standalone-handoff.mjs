@@ -176,16 +176,19 @@ for (const path of productionFiles) {
   assert.doesNotMatch(source, unqualifiedCopiedIssue, `${relative(root, path)} retained an unqualified copied zudo-sg issue reference`);
 }
 
+// The Composer's own toolbar bar, mode toggle, status indicator, rail resizers,
+// bespoke tree and movable tool-dialog geometry were retired when the editor
+// adopted the shared chrome (epic #156), so their entries are gone with them.
 for (const [path, stale] of [
   ["src/composer/index.ts", /Downstream waves/],
   ["src/composer/model/commands.ts", /reparenting and drag-and-drop are deferred/],
   ["src/features/composer/ui/toolbar/toolbar-actions.tsx", /Reset\/Export/],
-  ["src/features/composer/ui/toolbar/mode-toggle.tsx", /wave-5 integration/],
-  ["src/features/composer/ui/toolbar/status-indicator.tsx", /later status chip/],
-  ["src/features/composer/chrome/composer-workspace.tsx", /later Composer wave|once the isolated preview runtime|now-retired prototype/],
+  ["src/features/composer/ui/toolbar/view-controls.tsx", /later wave|wave-5 integration/],
+  ["src/features/composer/ui/tree/structure-pane.tsx", /later wave|placeholder rail/],
+  ["src/features/composer/chrome/composer-workspace.tsx", /later Composer wave|once the isolated preview runtime|now-retired prototype|five-track/],
   ["src/features/composer/chrome/composer-placeholder-pane.tsx", /does NOT implement|exclusive-ownership table/],
-  ["src/features/composer/ui/chooser/composer-chooser.tsx", /canvas insert points \(a later wave\)/],
-  ["src/features/composer/ui/shared/inline-confirm.tsx", /lands in a later wave|toolbar Reset/],
+  ["src/features/composer/ui/chooser/composer-chooser.tsx", /canvas insert points \(a later wave\)|movable tool shell/],
+  ["src/features/composer/ui/export/export-dialog.tsx", /later wave|own explicit JS/],
   ["src/features/sitemapper/app/sitemapper-integration.tsx", /later Sitemapper wave|once the Sitemapper controller is assembled|once the authoring controller is assembled|placeholder pane/],
 ]) assert.doesNotMatch(read(path), stale, `${path} retained a provisional copied/wave claim`);
 
