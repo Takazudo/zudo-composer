@@ -100,9 +100,12 @@ export function Shell({ children, path, themeController, themeSnapshot, summary 
   useEffect(() => {
     if (!summary) return undefined;
     let live = true;
-    void summary.counts().then((value) => {
-      if (live) setCounts(value);
-    });
+    // `counts()` degrades per source and only rejects when provider
+    // initialization itself failed; the rail then shows no counts at all,
+    // which is the same "omit rather than invent a zero" answer.
+    void summary.counts()
+      .then((value) => { if (live) setCounts(value); })
+      .catch(() => undefined);
     return () => { live = false; };
   }, [summary]);
 
