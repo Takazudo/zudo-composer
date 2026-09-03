@@ -38,6 +38,7 @@ function provider(initial: SitemapRecord[] = []): { provider: SitemapProvider; r
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     pageCount: 1,
+    unassignedCount: 1,
   }));
   return {
     records,

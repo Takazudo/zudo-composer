@@ -11,6 +11,20 @@ export function countSitemapPages(record: Pick<SitemapRecord, "document">): numb
   return countPages(record.document.root);
 }
 
+function countUnassigned(nodes: readonly SitemapNode[]): number {
+  let count = 0;
+  for (const node of nodes) {
+    if (node.source.kind === "unassigned") count += 1;
+    count += countUnassigned(node.children);
+  }
+  return count;
+}
+
+/** Pages still waiting for a Composition or a Mapping route family. */
+export function countUnassignedSitemapPages(record: Pick<SitemapRecord, "document">): number {
+  return countUnassigned(record.document.root);
+}
+
 /** The single provider-neutral summary builder. */
 export function summarizeSitemap(record: SitemapRecord): SitemapSummary {
   return {
@@ -19,6 +33,7 @@ export function summarizeSitemap(record: SitemapRecord): SitemapSummary {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     pageCount: countSitemapPages(record),
+    unassignedCount: countUnassignedSitemapPages(record),
   };
 }
 

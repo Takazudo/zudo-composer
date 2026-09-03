@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SITEMAP_SCHEMA_VERSION } from "../../model";
 import type { SitemapDocument } from "../../model";
 import {
+  countUnassignedSitemapPages,
   loadSitemapRecord,
   SitemapPersistenceError,
   summarizeSitemap,
@@ -72,7 +73,15 @@ describe("Sitemap library records", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-02T00:00:00.000Z",
       pageCount: 2,
+      unassignedCount: 2,
     });
+  });
+
+  it("counts only the pages with no Composition and no Mapping", () => {
+    const assigned = record();
+    assigned.document.root[0]!.source = { kind: "composition", ref: { providerId: "p", recordId: "c" } };
+    expect(countUnassignedSitemapPages(assigned)).toBe(1);
+    expect(summarizeSitemap(assigned).unassignedCount).toBe(1);
   });
 
   it("carries typed retryable operational failure metadata", () => {

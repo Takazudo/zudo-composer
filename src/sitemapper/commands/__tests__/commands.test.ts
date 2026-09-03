@@ -3,6 +3,7 @@ import { createSequentialIdFactory } from "../../../shared";
 import type { SitemapCommandResult } from "../commands";
 import {
   addChildPage,
+  addRootPage,
   addSiblingPage,
   cloneSubtreeWithNewIds,
   duplicatePage,
@@ -241,5 +242,28 @@ describe("movePage / reorderPage", () => {
     expect(movePage(fixture(), "b", "missing", 0)).toMatchObject({
       ok: false, code: "node-not-found",
     });
+  });
+});
+
+describe("addRootPage", () => {
+  const empty = (): SitemapDocument => ({ schemaVersion: SITEMAP_SCHEMA_VERSION, id: "map", name: "Map", root: [] });
+
+  it("gives an empty document its single root page", () => {
+    const result = success(addRootPage(empty(), "Home", createSequentialIdFactory("page")));
+    expect(result.document.root).toHaveLength(1);
+    expect(result.document.root[0]).toMatchObject({ title: "Home", source: { kind: "unassigned" }, children: [] });
+    expect(result.selectedId).toBe(result.document.root[0]!.id);
+    expect(result.insertedId).toBe(result.document.root[0]!.id);
+  });
+
+  it("refuses a second root page", () => {
+    expect(addRootPage(fixture(), "Second", createSequentialIdFactory("page"))).toMatchObject({
+      ok: false,
+      code: "root-cardinality",
+    });
+  });
+
+  it("refuses an id factory that returns an empty id", () => {
+    expect(addRootPage(empty(), "Home", () => "")).toMatchObject({ ok: false, code: "id-collision" });
   });
 });

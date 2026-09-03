@@ -72,6 +72,29 @@ function freshId(
   return id.length > 0 && !occupied.has(id) ? id : undefined;
 }
 
+/**
+ * Create the single root page of an empty document.
+ *
+ * `addChildPage` needs a parent and `addSiblingPage` refuses the root list, so
+ * without this an empty Sitemap could never gain its first page — which is what
+ * left the canvas's "Create Home page" action with nothing to call.
+ */
+export function addRootPage(
+  document: SitemapDocument,
+  title: string,
+  idFactory: IdFactory,
+): SitemapCommandResult {
+  if (document.root.length > 0) {
+    return failure("root-cardinality", "The current Sitemap schema allows exactly one root page");
+  }
+  const id = freshId(idFactory, title, indexDocument(document).byId);
+  if (!id) return failure("id-collision", "Id factory did not produce a fresh, non-empty page id");
+
+  const next = cloneJson(document);
+  next.root.push({ id, title, source: { kind: "unassigned" }, children: [] });
+  return { ok: true, document: next, selectedId: id, insertedId: id, changed: true };
+}
+
 /** Append a fresh page to `parentId`, or insert it at an explicit child index. */
 export function addChildPage(
   document: SitemapDocument,
