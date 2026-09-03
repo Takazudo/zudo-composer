@@ -34,7 +34,16 @@ export function Field({ label, required = false, kind, help, error, controlId, c
             *
           </span>
         ) : null}
-        {kind ? <span class="cms-field__kind">{kind}</span> : null}
+        {/* aria-hidden for the same reason as the required mark above: this sits
+            inside the <label>, so it joins the control's accessible name —
+            `<Field label="Title" kind="Short text">` computed as "TitleShort text",
+            and a separating space does not survive accname's per-node trim. The
+            control's own role already conveys the distinction the hint describes. */}
+        {kind ? (
+          <span class="cms-field__kind" aria-hidden="true">
+            {kind}
+          </span>
+        ) : null}
       </label>
       <FieldContext.Provider value={{ controlId: id, describedBy, invalid: Boolean(error), required }}>
         {children}

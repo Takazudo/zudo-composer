@@ -4,10 +4,11 @@
  * targets depend on it; without it callers hand-roll a raw `<button class="cms-btn">`
  * or wrap in a `<div ref>` and reach in with `querySelector`.
  */
-import { render } from "@testing-library/preact";
+import { render, within } from "@testing-library/preact";
 import { createRef } from "preact";
 import { describe, expect, it } from "vitest";
 import { Button } from "../button";
+import { Field } from "../field";
 import { Input } from "../form-controls";
 import { SearchIcon } from "../../icons";
 
@@ -46,5 +47,21 @@ describe("elementRef", () => {
     expect(node).toBeInstanceOf(HTMLInputElement);
     node?.focus();
     expect(document.activeElement).toBe(node);
+  });
+});
+
+describe("Field kind hint", () => {
+  it("keeps the kind hint out of the control's accessible name", () => {
+    // The hint renders inside the <label>, so without aria-hidden the name
+    // computes as "TitleShort text" — accname trims per node, so no separating
+    // space survives. Content was the first route to use the slot.
+    // Scoped to this render's container: `render`'s queries bind to document.body,
+    // which still holds the inputs the earlier cases in this file mounted.
+    const { container } = render(
+      <Field label="Title" kind="Short text">
+        <Input value="" onInput={() => undefined} />
+      </Field>,
+    );
+    expect(within(container).getByRole("textbox")).toHaveAccessibleName("Title");
   });
 });
