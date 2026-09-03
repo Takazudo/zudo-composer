@@ -2,7 +2,7 @@
 /** @jsxImportSource preact */
 
 import type { JSX } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { Dialog } from "../../../components/overlay";
 import { Banner, Field, Input } from "../../../components/ui";
 
@@ -48,11 +48,21 @@ export function SitemapNameDialog({
   const [value, setValue] = useState(initialValue);
   const [missing, setMissing] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    setValue(initialValue);
-    setMissing(false);
-  }, [open, initialValue]);
+  // Reset during the opening render, NOT in an effect. An effect runs after
+  // paint, so the dialog is visible and typeable for a frame before the reset
+  // lands — anything typed or pasted in that window is silently clobbered back
+  // to `initialValue`. Adjusting state during render re-renders before the
+  // commit, so no such window exists. (Found by the coarse-lane browser spec,
+  // which fills the field faster than the effect flushed; a fast typist hits
+  // the same window.)
+  const wasOpen = useRef(open);
+  if (open !== wasOpen.current) {
+    wasOpen.current = open;
+    if (open) {
+      setValue(initialValue);
+      setMissing(false);
+    }
+  }
 
   function submit(): void {
     if (busy) return;
