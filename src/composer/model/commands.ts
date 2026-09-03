@@ -32,12 +32,15 @@ import { cloneJson, isJsonSafe } from "../../shared/json";
 import { indexDocument } from "./index-model";
 import { isSafeRecordId } from "../../shared/record-identity";
 import {
+  canRepairNodeProps,
+  classifyNode,
   effectiveRootPolicy,
   isNodeOpaque,
   validateInsertionTarget,
   validateRootForest,
   validateRootInsertion,
 } from "./validate";
+import { validateNodeProps } from "./node-props";
 
 export type CommandResult =
   | {
@@ -199,15 +202,16 @@ export function addNode(
 
 /**
  * Merge a JSON-safe prop patch into a node's props. Rejects opaque nodes
- * (their props are read-only), non-JSON-safe values, values that violate a
+ * unless every diagnostic is a manifest prop-value issue that this command
+ * can fully repair. Also rejects non-JSON-safe values, values that violate a
  * declared field's kind/domain, any key in `RESERVED_PROP_KEYS` (issue Takazudo/zudo-sg#287 —
  * this is the model-layer counterpart of the preview protocol's wire-level
  * rejection; a direct model caller bypasses that boundary, so the model must
  * refuse it too), and any key that names a declared STRUCTURAL slot's `prop`
  * (that prop is reserved for the slot's rendered children — a scalar written
  * there would sit inert in storage yet claim the same prop the generator
- * binds structural children to). Props not described by a field are
- * otherwise still accepted as long as they are JSON-safe.
+ * binds structural children to). Every resulting scalar prop must satisfy the
+ * component manifest's field/static/default contract.
  */
 export function updateProps(
   document: CompositionDocument,
@@ -220,11 +224,13 @@ export function updateProps(
   const locate = nodeLookup(next, manifest);
   const node = locate(nodeId);
   if (!node) return { ok: false, error: `Node "${nodeId}" not found` };
-  if (isNodeOpaque(node, manifest)) {
+  const diagnostic = classifyNode(node, manifest);
+  if (diagnostic.opaque && !canRepairNodeProps(diagnostic)) {
     return { ok: false, error: `Node "${nodeId}" is opaque; its props are read-only` };
   }
 
-  const entry = manifest.get(node.componentId)!;
+  const entry = manifest.get(node.componentId);
+  if (!entry) return { ok: false, error: `Node "${nodeId}" is opaque; its props are read-only` };
   const fieldsByProp = new Map(entry.fields.map((f) => [f.prop, f]));
   const slotProps = new Set(entry.slots.map((s) => s.prop));
   const removeSet = new Set(removeProps);
@@ -283,6 +289,8 @@ export function updateProps(
 
   const nextProps = { ...node.props, ...(cloneJson(patch) as JsonObject) };
   for (const prop of removeProps) delete nextProps[prop];
+  const propsValidation = validateNodeProps({ componentId: node.componentId, props: nextProps }, entry);
+  if (!propsValidation.ok) return { ok: false, error: propsValidation.issues[0]!.message };
   const changed = Object.keys(patch).some((prop) => !Object.is(node.props[prop], patch[prop]))
     || removeProps.some((prop) => Object.hasOwn(node.props, prop));
   node.props = nextProps;

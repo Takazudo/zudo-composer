@@ -6,6 +6,7 @@ export type SitemapRouteDiagnosticCode =
   | "mapping-not-found" | "mapping-invalid" | "mapping-provider-failure"
   | "content-model-not-found" | "content-model-invalid" | "content-provider-failure"
   | "wrong-route-mode" | "route-field-missing" | "route-field-not-slug"
+  | "title-field-missing" | "title-field-not-textual"
   | "entry-slug-missing" | "entry-slug-invalid" | "incompatible-mapping"
   | "route-fragment-invalid" | "route-collision" | "unsupported-external-base";
 
@@ -46,6 +47,7 @@ export interface SitemapMappingRouteMetadata {
   kind: "single" | "collection";
   entryCount: number;
   slugFields: readonly { id: string; label: string }[];
+  titleFields: readonly { id: string; label: string }[];
 }
 
 export type MappingDefinitionReadiness =

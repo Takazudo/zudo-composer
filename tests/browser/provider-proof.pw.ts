@@ -46,13 +46,13 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/composer");
-  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
-  await page.getByRole("button", { name: "Open Product overview" }).click();
+  await expect(page.getByRole("heading", { name: "Composition library" })).toBeVisible();
+  await page.getByRole("button", { name: "Open About page" }).click();
   await expect(page.getByRole("toolbar", { name: "Composer toolbar" })).toBeVisible();
 
   const canvas = page.frameLocator('iframe[title="Composer preview canvas"]');
-  await expect(canvas.getByText("A real provider composition", { exact: true })).toBeVisible();
-  await expect(canvas.getByText("const ready = true;", { exact: false })).toBeVisible();
+  await expect(canvas.getByText("Static about heading", { exact: true })).toBeVisible();
+  await expect(canvas.getByText("Static about body", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Add component to document root" }).click();
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
@@ -63,7 +63,6 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   await expect(chooser.getByRole("button", { name: /^(Callout|Card|ProseMd|ProseP|PlaceholderBox|AutoGrid|Container|CtaButton|Hero|SectionHeading|SplitLayout|Stack)\b/i })).toHaveCount(12);
   await chooser.getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: /Expand Container/i }).click();
   await page.getByRole("button", { name: /^ProseMd/ }).click();
   const markdown = page.getByRole("textbox", { name: "Markdown" });
   const persistedMarkdown = [
@@ -97,13 +96,11 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   expect(surfaceColors.foreground).not.toBe(surfaceColors.background);
 
   await page.getByRole("button", { name: "Export JSX" }).click();
-  const exportDialog = page.getByRole("dialog", { name: /Export — Product overview/i });
+  const exportDialog = page.getByRole("dialog", { name: /Export — About page/i });
   await expect(exportDialog).toContainText('from "@zudo-sg/ui"');
   await exportDialog.getByRole("button", { name: "Close" }).click();
 
   await page.reload();
-  await expect(page.getByRole("button", { name: /Expand Container/i })).toBeVisible();
-  await page.getByRole("button", { name: /Expand Container/i }).click();
   await page.getByRole("button", { name: /^ProseMd/ }).click();
   await expect(page.getByRole("textbox", { name: "Markdown" })).toHaveValue(persistedMarkdown);
 
@@ -138,12 +135,11 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   expect(failures).toEqual([]);
 });
 
-test("clean Sitemapper assigns and resolves the seeded Product overview catalog entry", async ({ page }) => {
+test("clean Sitemapper assigns and resolves the seeded About page catalog entry", async ({ page }) => {
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/sitemapper");
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "No sitemaps yet" })).toBeVisible();
   await page.getByRole("button", { name: "New sitemap" }).click();
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Provider proof");
@@ -153,9 +149,9 @@ test("clean Sitemapper assigns and resolves the seeded Product overview catalog 
 
   await page.getByRole("button", { name: "Choose composition" }).click();
   const picker = page.getByRole("dialog", { name: "Choose a composition" });
-  await expect(picker.getByText("Product overview", { exact: true })).toBeVisible();
-  await picker.getByRole("button", { name: /Assign Product overview from Browser storage/i }).click();
-  await expect(page.getByText("Product overview", { exact: true })).toBeVisible();
+  await expect(picker.getByText("About page", { exact: true })).toBeVisible();
+  await picker.getByRole("button", { name: /Assign About page from Browser storage/i }).click();
+  await expect(page.getByText("About page", { exact: true })).toBeVisible();
   await expect(page.getByText("Browser storage", { exact: true })).toBeVisible();
 
   for (const theme of ["light", "dark"] as const) await useTheme(page, theme);

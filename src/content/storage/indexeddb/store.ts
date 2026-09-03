@@ -329,6 +329,18 @@ export class IndexedDbContentStore implements ContentStore {
     });
   }
 
+  /** One-database snapshot; callers must still validate coherence across other domain databases. */
+  async readAll(): Promise<{ models: readonly ContentModelRecord[]; entries: readonly ContentEntryRecord[] }> {
+    return this.run("list-models", "readonly", [CONTENT_MODELS_STORE_NAME, CONTENT_ENTRIES_STORE_NAME], async (tx) => {
+      const rawModels = await requestResult(tx.objectStore(CONTENT_MODELS_STORE_NAME).getAll()) as unknown[];
+      const rawEntries = await requestResult(tx.objectStore(CONTENT_ENTRIES_STORE_NAME).getAll()) as unknown[];
+      return {
+        models: rawModels.map((raw) => loadedModel(raw, "list-models")),
+        entries: loadedEntries(rawEntries, "list-models"),
+      };
+    });
+  }
+
   async clear(): Promise<void> {
     const scan = await this.scanForInitialization("initialize");
     if (scan.failures.length) throw contentPersistenceError("clear", "validation", "Content storage contains invalid data and was preserved. Use startFresh to discard it explicitly.", false);

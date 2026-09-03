@@ -106,6 +106,17 @@ describe("updatePageProps / renamePage", () => {
       source: { kind: "composition", ref: { recordId: "same", providerId: "indexeddb" } },
     });
     expect(equivalentRef).toEqual({ ok: true, document: withRef, selectedId: "b", changed: false });
+
+    const mapping = success(updatePageProps(before, "b", {
+      source: { kind: "mapping", ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug", titleFieldId: "title" } },
+    })).document;
+    const equivalentMapping = updatePageProps(mapping, "b", {
+      source: { kind: "mapping", ref: { recordId: "articles", providerId: "mapping" }, route: { titleFieldId: "title", fieldId: "slug", kind: "entry-field" } },
+    });
+    expect(equivalentMapping).toEqual({ ok: true, document: mapping, selectedId: "b", changed: false });
+    expect(success(updatePageProps(mapping, "b", {
+      source: { kind: "mapping", ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug", titleFieldId: "heading" } },
+    })).changed).toBe(true);
   });
 
   it("rejects unknown keys and malformed or non-JSON values", () => {
@@ -118,6 +129,9 @@ describe("updatePageProps / renamePage", () => {
     expect(updatePageProps(fixture(), "b", { notes: undefined } as never)).toMatchObject({
       ok: false, code: "invalid-patch",
     });
+    expect(updatePageProps(fixture(), "b", {
+      source: { kind: "mapping", ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug", titleFieldId: "../bad" } },
+    } as never)).toMatchObject({ ok: false, code: "invalid-patch" });
   });
 
   it("rejects authored children below Mapping sources and Mapping conversion of nonempty pages", () => {

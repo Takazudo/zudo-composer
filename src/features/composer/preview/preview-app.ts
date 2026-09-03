@@ -18,7 +18,7 @@
 
 import { h } from "preact";
 import type { JSX } from "preact";
-import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { InsertionTarget } from "../headless-api";
 import type { ComposerComponentProvider } from "../active-pack";
 import {
@@ -28,7 +28,7 @@ import {
 import { createPreviewClient, type PreviewClient } from "./client";
 import { INLINE_EDITING_ATTR } from "./inline-edit-dom";
 import type { GuardFailure, MessagePoster, MessageTarget, SerializedRect } from "./protocol";
-import { CompositionCanvas, focusByToken } from "./renderer";
+import { activeFocusToken, CompositionCanvas, focusByToken } from "./renderer";
 import { INITIAL_PREVIEW_STATE, type PreviewState } from "./snapshot-store";
 
 /**
@@ -64,6 +64,12 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [framed] = useState(isFramed);
   const clientRef = useRef<PreviewClient | null>(null);
+  // A valid parent snapshot may replace the selected node's DOM ancestry (the
+  // linked consumer/source view can revalidate while history is applying), so
+  // keyed chrome alone cannot guarantee that the focused control survives.
+  // Capture only immediately before accepting a newer snapshot and consume it
+  // once the corresponding Preact commit has completed.
+  const acceptedFocusTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!framed) return;
@@ -86,6 +92,11 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
         packVersion: provider.manifest.packVersion,
       },
       onState: (next) => {
+        // `onState` is called only after the client's strict revision guard
+        // accepts the message. If focus moved to the host while the message
+        // was in flight, this deliberately records no token and the layout
+        // effect below will not pull focus back into the iframe.
+        acceptedFocusTokenRef.current = activeFocusToken();
         setState(next);
         // A valid snapshot means the bridge is healthy again.
         setError(null);
@@ -122,6 +133,12 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
       clientRef.current = null;
     };
   }, [framed, provider.manifest.packId, provider.manifest.packVersion]);
+
+  useLayoutEffect(() => {
+    const focusToken = acceptedFocusTokenRef.current;
+    acceptedFocusTokenRef.current = null;
+    if (focusToken !== null) focusByToken(focusToken);
+  }, [state.revision]);
 
   // Mirror the host's active theme onto THIS document. `colors.css` keys
   // `color-scheme` off `:root[data-theme]`, which is what makes every

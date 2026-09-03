@@ -7,10 +7,10 @@ import { MappingField } from "../mapping-field";
 
 afterEach(cleanup);
 const stamp = "2026-08-29T00:00:00.000Z";
-const mappingMetadata = { name: "Article Mapping", model: "Articles", kind: "collection" as const, entryCount: 2, slugFields: [{ id: "slug", label: "URL slug" }] };
+const mappingMetadata = { name: "Article Mapping", model: "Articles", kind: "collection" as const, entryCount: 2, slugFields: [{ id: "slug", label: "URL slug" }, { id: "alternate-slug", label: "Alternate slug" }], titleFields: [{ id: "slug", label: "URL slug" }, { id: "title", label: "Title" }] };
 function catalog(): MappingAssignmentCatalog {
   const record = { id: "articles", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 1 as const, id: "articles", name: "Article Mapping", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "indexeddb" as const, recordId: "article" }, bindings: [] } };
-  const model = { id: "articles", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 1 as const, id: "articles", name: "Articles", kind: "collection" as const, fields: [{ id: "slug", key: "slug", label: "URL slug", required: true, kind: "slug" as const }] } };
+  const model = { id: "articles", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 1 as const, id: "articles", name: "Articles", kind: "collection" as const, fields: [{ id: "slug", key: "slug", label: "URL slug", required: true, kind: "slug" as const }, { id: "title", key: "title", label: "Title", required: false, kind: "text" as const }] } };
   return { list: vi.fn(async () => ({ entries: [{ ref: { providerId: "mapping", recordId: "articles" }, providerLabel: "Browser", summary: { id: "articles", name: "Article Mapping", createdAt: stamp, updatedAt: stamp, bindingCount: 0 } }], failures: [] })), routes: { list: vi.fn(), resolveMapping: vi.fn(async () => ({ status: "resolved" as const, record })), resolveDefinitionReadiness: vi.fn(async () => ({ status: "ready" as const })), resolveContentSnapshot: vi.fn(async () => ({ status: "resolved" as const, model, snapshot: { model, count: 2, diagnostics: [], entries: [{ schemaVersion: 1 as const, id: "one", modelId: "articles", createdAt: stamp, updatedAt: stamp, values: { slug: "one" } }, { schemaVersion: 1 as const, id: "two", modelId: "articles", createdAt: stamp, updatedAt: stamp, values: { slug: "two" } }] } })) } };
 }
 
@@ -24,6 +24,16 @@ describe("MappingField", () => {
     expect(screen.getAllByText("2")).toHaveLength(2);
     expect(sourceCatalog.routes.resolveMapping).not.toHaveBeenCalled();
     expect(sourceCatalog.routes.resolveContentSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("authors an explicit Entry title field and preserves it when the slug field changes", async () => {
+    const onChange = vi.fn();
+    const value = { kind: "mapping" as const, ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field" as const, fieldId: "slug", titleFieldId: "title" } };
+    render(<MappingField value={value} routeInfo={{ status: "ready", derivedRouteCount: 2, diagnostics: [], mapping: mappingMetadata }} catalog={catalog()} onChange={onChange} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Slug field" }), { target: { value: "alternate-slug" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ route: { kind: "entry-field", fieldId: "alternate-slug", titleFieldId: "title" } }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Entry title field" }), { target: { value: "" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ route: { kind: "entry-field", fieldId: "slug" } }));
   });
 
   it.each([
