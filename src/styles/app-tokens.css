@@ -56,6 +56,12 @@
   --color-accent-line: oklch(0.515 0.170 255 / 0.35);
   --color-on-accent: oklch(0.985 0.004 255);
   --color-focus: oklch(0.515 0.170 255);
+  /*
+   * State roles the CMS chrome speaks (epic #156). These names also feed the
+   * provider's `text-danger` / `bg-success` utilities, so each hue is matched to
+   * the provider rung it supersedes and only the lightness moves — one status
+   * vocabulary across the app without restyling provider components.
+   */
   --color-success: oklch(0.600 0.150 150);
   --color-success-soft: oklch(0.600 0.150 150 / 0.12);
   --color-warning: oklch(0.700 0.160 75);
