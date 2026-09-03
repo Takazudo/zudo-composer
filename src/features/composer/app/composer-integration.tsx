@@ -39,6 +39,7 @@ import {
   type LinkedEditorLifecycleActions,
   type ReuseCatalogOutcome,
   type ReuseSelectionOutcome,
+  type CompositionPublication,
   type CompositionRecordRef,
 } from "../../../composer/browser";
 import { useBreadcrumb, type EditorStatus } from "../../../app/chrome-context";
@@ -128,11 +129,12 @@ function statusOf(status: ComposerSaveStatus, onRetry: () => void): EditorStatus
   }
 }
 
-/** The Pattern / Global template chip that sits beside the breadcrumb. */
-function publicationChip(kind: string | undefined, label: string | undefined): ComponentChildren {
-  if (kind === "pattern") return <Chip tone="accent">Pattern</Chip>;
-  if (kind === "global-template") return <Chip tone="accent">{label ? `Global template · ${label}` : "Global template"}</Chip>;
-  return null;
+/** The Pattern / Global template chip that sits beside the record's name. */
+function publicationChip(publication: CompositionPublication | undefined): ComponentChildren {
+  if (publication === undefined) return null;
+  if (publication.kind === "pattern") return <Chip tone="accent">Pattern</Chip>;
+  const label = publication.outlet.label;
+  return <Chip tone="accent">{label ? `Global template · ${label}` : "Global template"}</Chip>;
 }
 
 export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Element {
@@ -356,7 +358,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
             disabled={readOnly}
             onCommit={(name) => controller.rename(name)}
           />
-          {publicationChip(publication?.kind, publication?.kind === "global-template" ? publication.outlet.label : undefined)}
+          {publicationChip(publication)}
         </>
       }
       status={statusOf(state.saveStatus, controller.retrySave)}

@@ -502,7 +502,7 @@ describe("InspectorPanel — field rendering + commits", () => {
     const { onUpdateProps } = renderPanel({ document: doc, selectedId: "w" });
     expect(screen.queryByLabelText("Note")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add Note" }));
-    expect(onUpdateProps).toHaveBeenCalledWith("w", { note: "" });
+    expect(onUpdateProps).toHaveBeenCalledWith("w", { note: "" }, null);
   });
 });
 

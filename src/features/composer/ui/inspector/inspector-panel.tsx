@@ -338,8 +338,10 @@ export function InspectorPanel({
                             : undefined
                         }
                         data-sg-inspector-optional-field={field.prop}
+                        // `null` coalescing: adding a prop is a structural
+                        // change, and its own point in the history stack.
                         onClick={() => {
-                          if (seed !== undefined) onUpdateProps(node.id, { [field.prop]: seed });
+                          if (seed !== undefined) onUpdateProps(node.id, { [field.prop]: seed }, null);
                         }}
                       >
                         <PlusIcon size="xs" />

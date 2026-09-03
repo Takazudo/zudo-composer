@@ -357,7 +357,9 @@ function ValueEditor({
           id={inputId}
           checked={value === true}
           disabled={disabled}
-          label={label ?? "Enabled"}
+          // An unlabelled boolean is a list or tuple item, which the composite
+          // editors name by position rather than by prop.
+          {...(label === undefined ? { "aria-label": "Value" } : { label })}
           onCheckedChange={(checked) => onLeafCommit(checked, path, "discrete")}
         />
       );

@@ -697,6 +697,11 @@ export function ProductionComposerApp({
 
     setDetailOperationError(null);
     try {
+      // Land anything in flight first: a debounced prop commit that resolved
+      // after the delete would put the record straight back.
+      const session = state.session as ProductionDetailSession;
+      await session.flushPendingProps(ref);
+      await session.queue.flush();
       await provider.store.delete(ref.recordId);
     } catch (reason) {
       setDetailOperationError(

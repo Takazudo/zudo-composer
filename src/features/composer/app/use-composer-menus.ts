@@ -21,13 +21,12 @@
 // menu showing stale affordances for a node that already changed.
 //
 // ── Two distinct "close" paths ──────────────────────────────────────────────
-// `close()` invokes the caller-supplied `restoreFocus` thunk: a structure
-// trigger's thunk focuses itself, the canvas relay's round-trips over the
-// bridge so the IFRAME restores focus to its own control. "Add component…" is
-// the exception — it hands off to the shared chooser, which owns its own focus
-// capture, so it closes SILENTLY rather than racing an asynchronous cross-frame
-// focus round-trip against the chooser's synchronous `document.activeElement`
-// capture.
+// Every close runs the subject's `restoreFocus` thunk: a structure trigger's
+// thunk focuses itself, the canvas relay's round-trips over the bridge so the
+// IFRAME restores focus to its own control. "Add component…" is the exception —
+// it hands off to the shared chooser, which owns its own focus capture, so it
+// closes SILENTLY rather than racing an asynchronous cross-frame focus round
+// trip against the chooser's synchronous `document.activeElement` capture.
 
 import { useCallback, useMemo, useRef, useState } from "preact/hooks";
 import type { InsertionTarget } from "../../../composer/browser";
@@ -79,7 +78,7 @@ export interface ComposerMenusApi {
   items: readonly ComposerMenuItemSpec[];
   /** Spread onto the host's single zero-size canvas anchor element. */
   anchorRef: (element: HTMLElement | null) => void;
-  /** Escape / outside click / an item choosing to dismiss — restores focus, then closes. */
+  /** Dismiss from an item. Every close restores focus to whatever opened it. */
   close: () => void;
 
   // ── Generic openers (rect + explicit restoreFocus — the canvas relay uses these) ──
@@ -105,25 +104,42 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
   // the canvas anchor parked at the relayed rect.
   const triggerRef = useRef<HTMLElement | null>(null);
   const canvasAnchor = useRef<HTMLElement | null>(null);
-  const menu = useMenu(triggerRef, { align: "start" });
+  const subjectRef = useRef<MenuSubject>(null);
+  /** Set only for the "Add component…" hand-off, which owns the focus itself. */
+  const skipRestore = useRef(false);
+
+  // Focus restoration hangs off the CLOSE, not off the caller, because the
+  // shared menu also closes itself — Escape, an outside pointer, a scroll. The
+  // canvas origin is why that matters: its control lives in the iframe, and a
+  // dismissal that skipped the round trip would strand focus in the host.
+  const menu = useMenu(triggerRef, {
+    align: "start",
+    onOpenChange: (open) => {
+      if (open) return;
+      const closing = subjectRef.current;
+      subjectRef.current = null;
+      setSubject(null);
+      if (skipRestore.current) {
+        skipRestore.current = false;
+        return;
+      }
+      closing?.restoreFocus();
+    },
+  });
   const { openMenu, closeMenu } = menu;
+  subjectRef.current = subject;
 
   const catalogById = useMemo(() => buildCatalogById(manifestEntries), [manifestEntries]);
 
-  const subjectRef = useRef<MenuSubject>(null);
-  subjectRef.current = subject;
-
   /** Clear the menu WITHOUT invoking `restoreFocus` — the "Add component…" hand-off. */
   const closeSilently = useCallback(() => {
+    skipRestore.current = true;
     closeMenu({ restoreFocus: false });
-    setSubject(null);
   }, [closeMenu]);
 
-  /** The normal close path: restore focus to the originating control, then clear. */
+  /** The normal close path: the open-change handler restores focus and clears. */
   const close = useCallback(() => {
     closeMenu({ restoreFocus: false });
-    subjectRef.current?.restoreFocus();
-    setSubject(null);
   }, [closeMenu]);
 
   const openAt = useCallback(
