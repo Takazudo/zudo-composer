@@ -22,7 +22,8 @@ export interface OverlayPortalProps {
 
 export function OverlayPortal({ hostClass, children }: OverlayPortalProps): null {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  if (hostRef.current === null) {
+  // Overlays are client-only; without a document there is nothing to portal to.
+  if (hostRef.current === null && typeof document !== "undefined") {
     hostRef.current = document.createElement("div");
     hostRef.current.className = hostClass;
   }

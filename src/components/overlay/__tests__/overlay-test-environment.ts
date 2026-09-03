@@ -1,9 +1,9 @@
 import { cleanup } from "@testing-library/preact";
 import { afterEach } from "vitest";
 
-// jsdom implements neither `<dialog>`'s modal methods nor the popover API, so
-// the overlay suite installs the smallest stand-ins that keep the component's
-// own branches — not weakened production code — under test.
+// jsdom has `<dialog>` but not its modal methods, so the overlay suite installs
+// the smallest stand-ins that keep the component's own branches — not weakened
+// production code — under test.
 afterEach(cleanup);
 
 if (typeof HTMLDialogElement !== "undefined") {

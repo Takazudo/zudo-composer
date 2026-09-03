@@ -3,11 +3,11 @@ import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { XMarkIcon } from "../icons";
 
 // The CMS modal (issue #159). Native `<dialog>` + `showModal()` so the browser
-// puts it in the real top layer, renders `::backdrop` and makes the rest of the
-// page inert. Everything the element gives us for free in a browser is also
-// implemented here, because environments without modal `<dialog>` support —
-// jsdom among them — still have to honour the same contract: focus trap,
-// Escape, focus restored to whatever opened the dialog.
+// puts it in the real top layer and makes the rest of the page inert.
+// Everything the element gives us for free in a browser is also implemented
+// here, because environments without modal `<dialog>` support — jsdom among
+// them — still have to honour the same contract: focus trap, Escape, and focus
+// restored to whatever opened the dialog.
 
 const FOCUSABLE_SELECTOR =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
