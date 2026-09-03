@@ -151,8 +151,12 @@ test("clean Sitemapper assigns and resolves the seeded About page catalog entry"
   const picker = page.getByRole("dialog", { name: "Choose a composition" });
   await expect(picker.getByText("About page", { exact: true })).toBeVisible();
   await picker.getByRole("button", { name: /Assign About page from Browser storage/i }).click();
-  await expect(page.getByText("About page", { exact: true })).toBeVisible();
-  await expect(page.getByText("Browser storage", { exact: true })).toBeVisible();
+  // Scoped to the Composition field: the shell rail also shows the active
+  // provider ("Browser storage") in its foot, so a page-wide text match is
+  // ambiguous and would pass on the rail rather than on the assignment.
+  const compositionField = page.getByLabel("Composition");
+  await expect(compositionField.getByText("About page", { exact: true })).toBeVisible();
+  await expect(compositionField.getByText("Browser storage", { exact: true })).toBeVisible();
 
   for (const theme of ["light", "dark"] as const) await useTheme(page, theme);
   await page.setViewportSize({ width: 375, height: 812 });
