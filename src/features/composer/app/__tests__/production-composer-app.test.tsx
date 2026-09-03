@@ -166,9 +166,10 @@ describe("ProductionComposerApp", () => {
       <ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />,
     );
 
-    expect(await screen.findByRole("heading", { name: "Compositions" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Browser copy" })).toBeInTheDocument();
     expect(navigation.replacements).toContain("/composer#/");
-    expect(screen.getByRole("option", { name: "Local files" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    expect(screen.getByRole("menuitemradio", { name: "Local files" })).toBeInTheDocument();
 
     view.unmount();
     navigation.visit("/composer#/composition/files/same");
@@ -192,7 +193,10 @@ describe("ProductionComposerApp", () => {
         preview={PREVIEW}
       />,
     );
-    await screen.findByRole("heading", { name: "Compositions" });
+    // Waiting for the static "Compositions" heading is not enough: the header's
+    // "New composition" button stays disabled while the initial load is still
+    // pending, so clicking it before the empty state settles is a silent no-op.
+    await screen.findByText("No compositions yet");
 
     fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
@@ -232,7 +236,7 @@ describe("ProductionComposerApp", () => {
         preview={PREVIEW}
       />,
     );
-    await screen.findByRole("heading", { name: "Compositions" });
+    await screen.findByRole("link", { name: "Site shell" });
     fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     fireEvent.click(within(dialog).getByRole("button", { name: /Site shell/ }));
@@ -315,7 +319,7 @@ describe("ProductionComposerApp", () => {
         preview={PREVIEW}
       />,
     );
-    await screen.findByRole("heading", { name: "Compositions" });
+    await screen.findByRole("link", { name: "Site shell" });
     fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     fireEvent.click(within(dialog).getByRole("button", { name: /Site shell/ }));
@@ -387,7 +391,13 @@ describe("ProductionComposerApp", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Open Product overview" }));
+    // The row's name links to the real detail route; a jsdom `fireEvent.click`
+    // on an `<a>` never drives the injected `FakeNavigation`, so opening the
+    // seeded sample is simulated the same way browser-driven navigation is
+    // elsewhere in this file: a real `navigation.visit` to its route, once the
+    // seeded row (not just the static page header) has actually loaded.
+    await screen.findByRole("link", { name: "Product overview" });
+    navigation.visit("/composer#/composition/indexeddb/real-composition");
     await screen.findByRole("button", { name: "Library" });
     const tree = first.container.querySelector("#sg-composer-tree") as HTMLElement;
     const inspector = first.container.querySelector("#sg-composer-inspector") as HTMLElement;
@@ -516,12 +526,12 @@ describe("ProductionComposerApp", () => {
         preview={PREVIEW}
       />,
     );
-    await screen.findByRole("heading", { name: "Compositions" });
-    fireEvent.change(screen.getByRole("combobox", { name: "Provider" }), {
-      target: { value: "files" },
-    });
-    await screen.findByRole("button", { name: "Open File copy" });
-    fireEvent.click(screen.getByRole("button", { name: "Duplicate File copy" }));
+    await screen.findByRole("link", { name: "Browser copy" });
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
+    await screen.findByRole("link", { name: "File copy" });
+    fireEvent.click(screen.getByRole("button", { name: "More actions for File copy" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
 
     expect(await screen.findByRole("button", { name: "Library" })).toBeInTheDocument();
     expect(files.records.get("file-copy")?.document.name).toBe("File copy copy");
@@ -615,14 +625,14 @@ describe("ProductionComposerApp", () => {
     const navigation = new FakeNavigation("/composer#/composition/indexeddb/future");
     render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb]} navigation={navigation} preview={PREVIEW} />);
 
-    expect(await screen.findByRole("heading", { name: "Recovery required" })).toBeInTheDocument();
-    expect(screen.getByText("Future source is quarantined unchanged.")).toBeInTheDocument();
-    expect(screen.getByText("The original source has been preserved.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Start fresh" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start fresh" }));
+    expect(await screen.findByText("Stored compositions need recovery.")).toBeInTheDocument();
+    expect(screen.getByText(/Future source is quarantined unchanged\./)).toBeInTheDocument();
+    expect(screen.getByText(/The original source has been preserved\./)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start fresh…" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Start fresh?" })).getByRole("button", { name: "Start fresh" }));
 
-    expect(await screen.findByRole("heading", { name: "Compositions" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Fresh sample" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Fresh sample" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Compositions" })).toBeInTheDocument();
     expect(navigation.replacements.at(-1)).toBe("/composer#/");
   });
 
@@ -642,7 +652,7 @@ describe("ProductionComposerApp", () => {
     );
 
     navigation.visit("/composer#/");
-    expect(await screen.findByRole("heading", { name: "Loading compositions…" })).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading compositions…");
     initialization.resolve(ready(indexeddb.records));
 
     expect(await screen.findByRole("heading", { name: "Compositions" })).toBeInTheDocument();
@@ -650,6 +660,46 @@ describe("ProductionComposerApp", () => {
     expect(navigation.read()).toEqual({ pathname: "/composer", hash: "#/" });
     expect(indexeddb.store.get).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Library" })).not.toBeInTheDocument();
+  });
+
+  it("opens the New-composition dialog once for the /composer?new=1 route intent", async () => {
+    const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
+    const navigation = new FakeNavigation();
+    render(
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
+        providers={[indexeddb]}
+        navigation={navigation}
+        preview={PREVIEW}
+        readIntentSearch={() => "?new=1"}
+      />,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "New composition" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "New composition" })).not.toBeInTheDocument());
+
+    // A one-shot intent: navigating away and back to the index (remounting
+    // CompositionLibrary) must not reopen the dialog a second time.
+    navigation.visit("/composer#/composition/indexeddb/alpha");
+    await screen.findByRole("button", { name: "Library" });
+    navigation.visit("/composer#/");
+    await screen.findByRole("link", { name: "Alpha" });
+    expect(screen.queryByRole("dialog", { name: "New composition" })).not.toBeInTheDocument();
+  });
+
+  it("reports a malformed /composer?new=0 route intent instead of silently opening the dialog", async () => {
+    const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
+    render(
+      <ProductionComposerApp componentProvider={fixtureComponentProvider}
+        providers={[indexeddb]}
+        navigation={new FakeNavigation()}
+        preview={PREVIEW}
+        readIntentSearch={() => "?new=0"}
+      />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("must be 1");
+    expect(screen.queryByRole("dialog", { name: "New composition" })).not.toBeInTheDocument();
   });
 
 });

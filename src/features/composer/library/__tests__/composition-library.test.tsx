@@ -221,7 +221,7 @@ describe("CompositionLibrary data and capability states", () => {
     });
     renderLibrary(intents);
     await screen.findByText("Stored compositions need recovery.");
-    expect(screen.getByText("This library was created by a newer Composer.")).toBeInTheDocument();
+    expect(screen.getByText(/This library was created by a newer Composer\./)).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Start fresh…" }));

@@ -60,6 +60,10 @@ export interface CompositionLibraryProps {
     providerId: CompositionProviderId,
     outcome: CompositionInitializationOutcome,
   ) => void;
+  /** Opens the New-composition dialog once, for the `/composer?new=1` route intent. */
+  openNewOnMount?: boolean;
+  /** Fired once `openNewOnMount` has been acted on, so the caller can drop it for later remounts. */
+  onOpenNewConsumed?: () => void;
 }
 
 type RenameDialogState = { id: string; name: string } | null;
@@ -244,6 +248,8 @@ export function CompositionLibrary({
   initialProviderId,
   intents,
   onInitializationApplied,
+  openNewOnMount = false,
+  onOpenNewConsumed,
 }: CompositionLibraryProps): JSX.Element {
   const availableProviders = useMemo(() => providers.filter((provider) => provider.available), [providers]);
   const [activeProviderId, setActiveProviderId] = useState<CompositionProviderId>(
@@ -317,6 +323,15 @@ export function CompositionLibrary({
     startedRef.current = true;
     void load(activeProviderId, "initialize");
     // Runs once, against the provider resolved at mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!openNewOnMount) return;
+    setOperationError(null);
+    setNewDialogOpen(true);
+    onOpenNewConsumed?.();
+    // Runs once: `openNewOnMount` is a one-shot route intent, not a toggle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -552,7 +567,7 @@ export function CompositionLibrary({
       {outcome?.status === "recovery-required" ? (
         <LibraryRecoveryBanner
           title="Stored compositions need recovery."
-          description={outcome.recovery.message}
+          description={`${outcome.recovery.message} The original source has been preserved.`}
           onRetry={() => void load(activeProviderId, "retry")}
           onStartFresh={() => confirm.request({
             title: "Start fresh?",
