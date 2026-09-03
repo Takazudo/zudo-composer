@@ -51,6 +51,8 @@ export interface ComposerStructurePaneProps {
   /** The richer catalog backing component titles — the same array `manifest` came from. */
   entries: readonly ComponentDefinition[];
   selectedId: string | null;
+  /** Bumped on every reveal, including a repeat of the current selection. */
+  revealEpoch?: number;
   selectedSlot: SelectedSlot | null;
   /** A component row was chosen; wire to `controller.reveal`. */
   onSelectNode: (nodeId: string) => void;
@@ -122,6 +124,7 @@ export function ComposerStructurePane({
   manifest,
   entries,
   selectedId,
+  revealEpoch = 0,
   selectedSlot,
   onSelectNode,
   onSelectSlot,
@@ -143,21 +146,24 @@ export function ComposerStructurePane({
   // What the author closed, not what is open: a composition the editor has just
   // loaded shows its whole structure.
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
-  const revealed = useRef<string | null>(null);
+  const documentRef = useRef(document);
+  documentRef.current = document;
+  const manifestRef = useRef(manifest);
+  manifestRef.current = manifest;
 
   useEffect(() => {
-    if (selectedId === null || revealed.current === selectedId) return;
-    revealed.current = selectedId;
-    const ancestors = ancestorRowIds(document, manifest, selectedId);
+    if (selectedId === null) return;
+    const ancestors = ancestorRowIds(documentRef.current, manifestRef.current, selectedId);
     setCollapsedIds((current) => {
       if (!ancestors.some((id) => current.has(id))) return current;
       const next = new Set(current);
       for (const id of ancestors) next.delete(id);
       return next;
     });
-    // Only a selection change reveals; re-running on every document edit would
-    // fight an author who deliberately closed the branch they are editing in.
-  }, [selectedId]);
+    // Keyed on the selection and the reveal epoch alone: re-running on every
+    // document edit would fight an author who deliberately closed the branch
+    // they are editing in.
+  }, [selectedId, revealEpoch]);
 
   const expandedIds = useMemo(
     () => outline.expandableIds.filter((id) => !collapsedIds.has(id)),
@@ -202,12 +208,16 @@ export function ComposerStructurePane({
     if (row === undefined) return null;
 
     if (row.kind === "component") {
+      // The title alone collides across duplicate component types (two Box
+      // leaves, say). The hint is the row's own distinguisher, so the action
+      // borrows it to stay uniquely nameable.
+      const displayName = node.hint === undefined ? node.title : `${node.title} ${node.hint}`;
       return (
         <Button
           variant="ghost"
           size="xs"
           iconOnly
-          aria-label={`Open menu for ${node.title}`}
+          aria-label={`Open menu for ${displayName}`}
           title="More actions"
           onClick={(event) => onOpenNodeMenu(row.nodeId, event.currentTarget as HTMLElement)}
         >

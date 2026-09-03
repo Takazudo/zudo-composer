@@ -427,8 +427,9 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
           manifest={controller.manifest}
           entries={manifestEntries}
           selectedId={state.selectedId}
+          revealEpoch={api.revealEpoch}
           selectedSlot={activeSlot}
-          onSelectNode={controller.reveal}
+          onSelectNode={api.revealNode}
           onSelectSlot={setSelectedSlot}
           onSelectDocument={() => controller.select(null)}
           onOpenChooser={api.openChooser}

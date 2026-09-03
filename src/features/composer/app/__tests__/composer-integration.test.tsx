@@ -31,6 +31,7 @@ import {
   selectMessage as protocolSelectMessage,
 } from "../../preview/protocol";
 import { INSPECTOR_COMMIT_DEBOUNCE_MS } from "../../chrome/use-composer-controller";
+import { ChromeContext, createChromeStore } from "../../../../app/chrome-context";
 import { ComposerIntegration } from "../composer-integration";
 import { makeTestBridge } from "../test-support/preview-harness";
 import { LS_COMPOSER_VIEWPORT } from "../viewport";
@@ -91,26 +92,47 @@ function setup(
 ) {
   if (seedViewport) localStorage.setItem(LS_COMPOSER_VIEWPORT, seedViewport);
   const bridge = makeTestBridge();
+  // The editor publishes its save state through `useEditorStatus` rather than
+  // drawing it, so the spec supplies the chrome store the app shell would.
+  const chrome = createChromeStore();
   const utils = render(
-    <ComposerIntegration
-      componentProvider={fixtureComponentProvider}
-      controllerOptions={controllerOptions(sample)}
-      createBridge={bridge.createBridge}
-      previewLocation={bridge.location}
-      getPublicationDependencies={getPublicationDependencies}
-      {...patternCallbacks}
-    />,
+    <ChromeContext.Provider value={chrome}>
+      <ComposerIntegration
+        componentProvider={fixtureComponentProvider}
+        controllerOptions={controllerOptions(sample)}
+        createBridge={bridge.createBridge}
+        previewLocation={bridge.location}
+        getPublicationDependencies={getPublicationDependencies}
+        {...patternCallbacks}
+      />
+    </ChromeContext.Provider>,
   );
   act(() => bridge.deliver(readyMessage()));
 
   const region = (selector: string) => utils.container.querySelector(selector) as HTMLElement;
-  const tree = () => region("#sg-composer-tree");
-  const inspector = () => region("#sg-composer-inspector");
+  const tree = () => region(".cms-editor__region--nav");
+  const inspector = () => region(".cms-editor__region--insp");
   const chooser = () => utils.container.querySelector("dialog.sg-composer-chooser") as HTMLElement;
-  const toolbar = () => screen.getByRole("toolbar", { name: "Composer toolbar" });
+  const toolbar = () => region(".cms-editor__toolbar");
   const frame = () => region(".sg-composer-canvas-frame");
   const iframe = () => utils.container.querySelector("iframe") as HTMLIFrameElement;
-  const menu = () => utils.container.querySelector(".sg-composer-menu") as HTMLElement | null;
+  // The shared menu paints in a body-level portal, not inside the editor.
+  const menu = () => document.querySelector(".cms-menu") as HTMLElement | null;
+
+  /** Every outline row currently rendered, in visual order. */
+  const treeRows = () => within(tree()).getAllByRole("treeitem");
+  // An outline row's accessible name is its spans run together — title, hint,
+  // slug and count with no separator between them ("BoxB", "Documentfixture(5)").
+  // Every row query here anchors on that prefix rather than on a spaced label.
+  const treeRow = (name: string) => within(tree()).getByRole("treeitem", { name: new RegExp(`^${name}`) });
+  const treeRowsNamed = (name: string) => within(tree()).getAllByRole("treeitem", { name: new RegExp(`^${name}`) });
+  const hasTreeRow = (name: string) =>
+    within(tree()).queryByRole("treeitem", { name: new RegExp(`^${name}`) }) !== null;
+
+  /** Open the inspector tab named `name`; Properties is what the panel opens on. */
+  function inspectorTab(name: "Properties" | "Slots" | "Reuse") {
+    fireEvent.click(within(inspector()).getByRole("tab", { name: new RegExp(`^${name}`) }));
+  }
 
   const renders = () => bridge.posts.filter((p) => asAny(p.message).type === "render");
   const canvasDoc = (): CompositionDocument => asAny(renders().at(-1)!.message).document;
@@ -124,6 +146,7 @@ function setup(
 
   return {
     bridge,
+    chrome,
     ...utils,
     tree,
     inspector,
@@ -135,6 +158,11 @@ function setup(
     canvasDoc,
     lastSentSession,
     addAt,
+    inspectorTab,
+    treeRows,
+    treeRow,
+    treeRowsNamed,
+    hasTreeRow,
   };
 }
 
@@ -148,10 +176,13 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     ]);
     const s = setup(undefined, source, dependencies);
 
-    fireEvent.click(within(s.tree()).getByRole("button", { name: /expand split layout/i }));
-    fireEvent.click(within(s.tree()).getByRole("button", { name: "Use Left as template outlet" }));
-    fireEvent.input(within(s.tree()).getByLabelText("Outlet label"), { target: { value: "Main content" } });
-    fireEvent.click(within(s.tree()).getByRole("button", { name: "Publish template" }));
+    // The outlet is published from the Reuse tab, for the slot selected in
+    // Structure — one selection, read by both panes.
+    fireEvent.click(s.treeRow("Left"));
+    s.inspectorTab("Reuse");
+    fireEvent.click(within(s.inspector()).getByRole("button", { name: "Use Left as outlet" }));
+    fireEvent.input(within(s.inspector()).getByLabelText("Outlet label"), { target: { value: "Main content" } });
+    fireEvent.click(within(s.inspector()).getByRole("button", { name: "Publish template" }));
 
     await waitFor(() => {
       expect(s.canvasDoc().publication).toMatchObject({
@@ -163,11 +194,15 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     const stableOutletId = publication?.kind === "global-template"
       ? publication.outlet.id
       : "";
-    expect(within(s.tree()).getByText("Template outlet: Main content")).toBeInTheDocument();
-    expect(within(s.tree()).queryByRole("button", { name: /Add component to Left/i })).not.toBeInTheDocument();
+    expect(within(s.inspector()).getByText(/Current outlet: Main content/)).toBeInTheDocument();
+    // A published outlet is reserved for its consumers, so Structure withdraws
+    // the Add affordance from it.
+    expect(within(s.tree()).queryByRole("button", { name: "Add component to Left" })).not.toBeInTheDocument();
 
-    fireEvent.click(within(s.tree()).getByRole("button", { name: "Reassign Right as template outlet" }));
-    fireEvent.click(within(s.tree()).getByRole("button", { name: "Save reassignment" }));
+    fireEvent.click(s.treeRow("Right"));
+    s.inspectorTab("Reuse");
+    fireEvent.click(within(s.inspector()).getByRole("button", { name: "Reassign outlet to Right" }));
+    fireEvent.click(within(s.inspector()).getByRole("button", { name: "Save reassignment" }));
     await waitFor(() => {
       const publication = s.canvasDoc().publication;
       expect(publication).toMatchObject({
@@ -176,7 +211,7 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
       });
     });
     expect(dependencies).toHaveBeenCalledOnce();
-    expect(within(s.tree()).getByRole("status")).toHaveTextContent(/2 existing consumers keep/i);
+    expect(s.inspector().querySelector("[data-sg-reuse-feedback]")).toHaveTextContent(/2 existing consumers keep/i);
   });
 
   it("does not clear a published Global template until the parent relationship query reports no consumers", async () => {
@@ -190,12 +225,17 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     };
     const s = setup(undefined, source, dependencies);
 
+    s.inspectorTab("Reuse");
     fireEvent.click(within(s.inspector()).getByRole("button", { name: "Unpublish Global template" }));
-    fireEvent.click(within(s.inspector()).getByRole("button", { name: "Unpublish Global template" }));
+    fireEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", { name: "Unpublish Global template" }),
+    );
 
     await waitFor(() => expect(dependencies).toHaveBeenCalledOnce());
     expect(s.canvasDoc().publication).toMatchObject({ kind: "global-template", outlet: { id: "outlet-main" } });
-    expect(within(s.inspector()).getByRole("status")).toHaveTextContent(/Cannot unpublish.*1 consumer/i);
+    await waitFor(() =>
+      expect(s.inspector().querySelector("[data-sg-reuse-feedback]")).toHaveTextContent(/Cannot unpublish.*1 consumer/i),
+    );
   });
 
   it("chooser add drives tree, canvas snapshot, inspector, and selection together", () => {
@@ -208,7 +248,8 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     // Canvas snapshot + selection reflect the new node.
     expect(s.lastSentSession().selectedId).toBe(boxId);
     // Tree shows it, inspector selected it.
-    expect(s.tree().querySelector(`[data-sg-tree-node-id="${boxId}"]`)).not.toBeNull();
+    expect(boxId).toBeTruthy();
+    expect(s.hasTreeRow("Box")).toBe(true);
     expect(within(s.inspector()).getByText("Box")).toBeInTheDocument();
   });
 
@@ -252,7 +293,7 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     const s = setup(undefined, emptyDoc(), undefined, { listPatternCatalog, loadPattern });
 
     act(() => s.bridge.deliver(requestAddMessage(rev++, ROOT)));
-    fireEvent.click(within(s.chooser()).getByRole("tab", { name: "Patterns" }));
+    fireEvent.click(within(s.chooser()).getByRole("button", { name: "Patterns" }));
 
     const patternRow = await within(s.chooser()).findByRole("button", { name: /Feature Pattern/i });
     expect(listPatternCatalog).toHaveBeenCalledOnce();
@@ -265,7 +306,7 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
 
     await waitFor(() => expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.stack, FIXTURE_IDS.box]));
     expect(s.canvasDoc().root.map((node) => node.id)).not.toEqual(["pattern-stack", "pattern-box"]);
-    expect(s.chooser().hasAttribute("open")).toBe(false);
+    await waitFor(() => expect(s.chooser().hasAttribute("open")).toBe(false));
   });
 
   it("derives one linked preview snapshot while the tree and inspector retain only local nodes", async () => {
@@ -329,14 +370,16 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
         outlet: { id: "main" },
       });
     });
-    const tree = view.container.querySelector("#sg-composer-tree") as HTMLElement;
-    expect(tree.querySelectorAll('[data-sg-tree-node-id="collision"]')).toHaveLength(1);
-    expect(within(tree).getByText("Site shell")).toBeInTheDocument();
+    const tree = view.container.querySelector(".cms-editor__region--nav") as HTMLElement;
+    // Structure lists only the consumer's own node, never the source's.
+    expect(within(tree).getAllByRole("treeitem", { name: /^Box/ })).toHaveLength(1);
+    expect(within(tree).getByText(/Site shell/)).toBeInTheDocument();
     fireEvent.click(within(tree).getByRole("button", { name: "Open source" }));
     expect(onOpenSource).toHaveBeenCalledWith("site-shell");
-    expect(within(view.container.querySelector("#sg-composer-inspector") as HTMLElement).getByRole("button", {
-      name: "Detach",
-    })).toBeInTheDocument();
+
+    const inspector = view.container.querySelector(".cms-editor__region--insp") as HTMLElement;
+    fireEvent.click(within(inspector).getByRole("tab", { name: /^Reuse/ }));
+    expect(within(inspector).getByRole("button", { name: "Detach" })).toBeInTheDocument();
   });
 
   it("a canvas selection reveals + expands the node's ancestors in the tree", () => {
@@ -347,12 +390,12 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     const boxId = s.canvasDoc().root[0]!.slots.left![0]!.id;
 
     // Collapse the split so the box row is not rendered.
-    fireEvent.click(within(s.tree()).getByRole("button", { name: /collapse split layout/i }));
-    expect(s.tree().querySelector(`[data-sg-tree-node-id="${boxId}"]`)).toBeNull();
+    fireEvent.click(within(s.tree()).getByRole("button", { name: "Collapse Split Layout" }));
+    expect(s.hasTreeRow("Box")).toBe(false);
 
     // A canvas click on the (hidden) box reveals it: selects + re-expands split.
     act(() => s.bridge.deliver(selectMessage(rev++, boxId)));
-    expect(s.tree().querySelector(`[data-sg-tree-node-id="${boxId}"]`)).not.toBeNull();
+    expect(s.hasTreeRow("Box")).toBe(true);
     // And the selection is mirrored back to the canvas snapshot.
     expect(s.lastSentSession().selectedId).toBe(boxId);
   });
@@ -381,15 +424,17 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
 
     // Canvas snapshot order.
     expect(s.canvasDoc().root.map((n) => n.componentId)).toEqual([FIXTURE_IDS.split, FIXTURE_IDS.stack]);
-    // Tree order.
-    const treeIds = [...s.tree().querySelectorAll("[data-sg-tree-node-id]")].map((el) =>
-      el.getAttribute("data-sg-tree-node-id"),
-    );
-    expect(treeIds.slice(0, 2)).toEqual([s.canvasDoc().root[0]!.id, s.canvasDoc().root[1]!.id]);
+    // Tree order: the two roots follow the document row, in document order.
+    const rowNames = s.treeRows().map((row) => row.textContent ?? "");
+    expect(rowNames[0]).toContain("Document");
+    const splitRow = rowNames.findIndex((name) => name.includes("Split Layout"));
+    const stackRow = rowNames.findIndex((name) => name.includes("Stack"));
+    expect(splitRow).toBeGreaterThan(0);
+    expect(splitRow).toBeLessThan(stackRow);
 
     // Export order (same document/manifest source).
     fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Export JSX" }));
-    const code = screen.getByRole("dialog").querySelector("pre")!.textContent ?? "";
+    const code = screen.getByRole("dialog", { name: /^Export —/ }).querySelector("pre")!.textContent ?? "";
     expect(code).toContain("SplitLayout");
     expect(code).toContain("Stack");
     expect(code.indexOf("SplitLayout")).toBeLessThan(code.indexOf("Stack"));
@@ -415,7 +460,7 @@ describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {
 
     expect(s.canvasDoc().root[0]!.props.label).toBe("Renamed");
     expect(s.canvasDoc().root[0]!.id).toBe(boxId); // same stable node, not a remount
-    await waitFor(() => expect(within(s.toolbar()).getByText("Saved")).toBeInTheDocument());
+    await waitFor(() => expect(s.chrome.getSnapshot().editorStatus).toEqual({ state: "saved" }));
   });
 
   it("a canvas inline-edit commit routes through updateProps; the inspector reflects it live (#257)", () => {
@@ -446,8 +491,9 @@ describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {
     s.addAt({ parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 1 }, "Stack");
     const [firstId, secondId] = s.canvasDoc().root.map((n) => n.id);
 
-    // Stack is selected (just added); move it up.
-    fireEvent.click(within(s.inspector()).getByRole("button", { name: "Move up" }));
+    // Stack is selected (just added); move it up from its own row menu.
+    fireEvent.click(within(s.tree()).getByRole("button", { name: "Open menu for Stack" }));
+    fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Move up" }));
     expect(s.canvasDoc().root.map((n) => n.id)).toEqual([secondId, firstId]);
   });
 
@@ -457,13 +503,12 @@ describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {
     const splitId = s.canvasDoc().root[0]!.id;
     s.addAt({ parentId: splitId, slotId: "left", index: 0 }, "Box");
 
-    // Select the split (its select button's accessible name is the bare title),
-    // then remove it via the inspector.
-    fireEvent.click(within(s.tree()).getByRole("button", { name: "Split Layout" }));
-    fireEvent.click(within(s.inspector()).getByRole("button", { name: "Remove" }));
+    // Select the split's row, then delete it from the inspector's Node section.
+    fireEvent.click(s.treeRow("Split Layout"));
+    fireEvent.click(within(s.inspector()).getByRole("button", { name: "Delete" }));
 
     expect(s.canvasDoc().root).toHaveLength(0);
-    expect(s.tree().querySelector("[data-sg-tree-node-id]")).toBeNull();
+    expect(s.hasTreeRow("Split Layout")).toBe(false);
   });
 });
 
@@ -472,14 +517,14 @@ describe("ComposerIntegration — mode, viewport, persistence, export (#251)", (
     const s = setup();
     s.addAt(ROOT, "Box");
     // Edit mode: the tree offers an Add affordance.
-    expect(within(s.tree()).getByRole("button", { name: /add component to document root/i })).toBeInTheDocument();
+    expect(within(s.tree()).getByRole("button", { name: "Add component to the document" })).toBeInTheDocument();
 
-    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Preview" }));
+    fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Preview" }));
 
     expect(s.lastSentSession().mode).toBe("preview");
-    expect(within(s.tree()).queryByRole("button", { name: /add component to document root/i })).toBeNull();
+    expect(within(s.tree()).queryByRole("button", { name: "Add component to the document" })).toBeNull();
     // Inspector controls are disabled but the selection/values are preserved.
-    expect((within(s.inspector()).getByRole("button", { name: "Remove" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(s.inspector()).getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(true);
     expect(within(s.inspector()).getByText("Box")).toBeInTheDocument();
   });
 
@@ -487,8 +532,8 @@ describe("ComposerIntegration — mode, viewport, persistence, export (#251)", (
     const s = setup();
     s.addAt(ROOT, "Box");
     const boxId = s.canvasDoc().root[0]!.id;
-    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Preview" }));
-    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Edit" }));
+    fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Preview" }));
+    fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Edit" }));
     expect(s.lastSentSession().mode).toBe("edit");
     expect(s.lastSentSession().selectedId).toBe(boxId);
     expect(s.canvasDoc().root).toHaveLength(1);
@@ -497,7 +542,9 @@ describe("ComposerIntegration — mode, viewport, persistence, export (#251)", (
   it("the viewport control resizes only the preview frame and persists the choice", () => {
     const s = setup();
     expect(s.frame().style.width).toBe(""); // fluid
-    fireEvent.change(within(s.toolbar()).getByLabelText("Canvas viewport"), { target: { value: "tablet" } });
+    fireEvent.click(
+      within(within(s.toolbar()).getByRole("radiogroup", { name: "Canvas viewport" })).getByRole("radio", { name: "768" }),
+    );
     expect(s.frame().style.width).toBe("768px");
     expect(localStorage.getItem(LS_COMPOSER_VIEWPORT)).toBe("tablet");
   });
@@ -511,8 +558,7 @@ describe("ComposerIntegration — mode, viewport, persistence, export (#251)", (
     const s = setup();
     s.addAt(ROOT, "Box");
     fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Export JSX" }));
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/Export — Integration Doc/)).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Export — Integration Doc" });
     expect(dialog.querySelector("pre")!.textContent).toContain("Box");
   });
 });
@@ -541,22 +587,23 @@ describe("ComposerIntegration — replay + guarded keyboard (#251)", () => {
     expect(s.canvasDoc().root).toHaveLength(1);
 
     // Guard 2: Preview mode never mutates.
-    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Preview" }));
+    fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Preview" }));
     fireEvent.keyDown(document.body, { key: "Delete" });
     expect(s.canvasDoc().root).toHaveLength(1);
 
     // Edit mode, focus outside an input → the selected node is removed.
-    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Edit" }));
+    fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Edit" }));
     fireEvent.keyDown(document.body, { key: "Delete" });
     expect(s.canvasDoc().root).toHaveLength(0);
   });
 });
 
 describe("ComposerIntegration — undo/redo app wiring (#74)", () => {
-  it("tree-row removal is one action and remains undoable by keyboard shortcut", () => {
+  it("row-menu removal is one action and remains undoable by keyboard shortcut", () => {
     const s = setup(undefined, makeAbcDocument());
 
-    fireEvent.click(within(s.tree()).getByRole("button", { name: "Remove Split Layout" }));
+    fireEvent.click(within(s.tree()).getByRole("button", { name: "Open menu for Split Layout" }));
+    fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Delete" }));
     expect(s.canvasDoc().root).toHaveLength(0);
 
     fireEvent.keyDown(document, { key: "z", ctrlKey: true });
@@ -605,7 +652,7 @@ describe("ComposerIntegration — undo/redo app wiring (#74)", () => {
     const redo = () => within(s.toolbar()).getByRole("button", { name: "Redo" });
 
     s.addAt(ROOT, "Box");
-    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Preview" }));
+    fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Preview" }));
 
     expect(undo()).toBeDisabled();
     expect(redo()).toBeDisabled();
@@ -617,7 +664,7 @@ describe("ComposerIntegration — undo/redo app wiring (#74)", () => {
     act(() => s.bridge.deliver(requestHistoryMessage("undo")));
     expect(s.canvasDoc().root).toHaveLength(1);
 
-    fireEvent.click(within(s.toolbar()).getByRole("button", { name: "Edit" }));
+    fireEvent.click(within(s.toolbar()).getByRole("radio", { name: "Edit" }));
     expect(undo()).toBeEnabled();
     expect(redo()).toBeDisabled();
     fireEvent.click(undo());
@@ -652,10 +699,8 @@ describe("ComposerIntegration — undo/redo app wiring (#74)", () => {
 describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
   beforeEach(() => resetFixtureIds());
 
-  it("tree node menu: Copy/Cut/Duplicate/Delete, Delete danger-styled, and closing restores focus to the trigger", () => {
+  it("structure node menu: Copy/Cut/Duplicate/Move/Delete, Delete danger-styled, and closing restores focus to the trigger", () => {
     const s = setup(undefined, makeAbcDocument());
-    // The tree is collapsed by default — expand Split Layout to reach B's row.
-    fireEvent.click(within(s.tree()).getByRole("button", { name: /expand split layout/i }));
     const trigger = within(s.tree()).getByRole("button", { name: "Open menu for Box B" });
 
     fireEvent.click(trigger);
@@ -663,10 +708,12 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
       "Copy",
       "Cut",
       "Duplicate",
+      "Move up",
+      "Move down",
       "Delete",
     ]);
     expect(within(s.menu()!).getByRole("menuitem", { name: "Delete" }).className).toContain(
-      "sg-composer-menu-item-danger",
+      "cms-menu__item--danger",
     );
 
     fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Copy" }));
@@ -675,13 +722,17 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("opaque nodes show NO Copy/Cut/Duplicate in the node menu — Delete remains", () => {
+  it("opaque nodes show NO Copy/Cut/Duplicate in the node menu — reorder and Delete remain", () => {
     const doc = makeAbcDocument();
     doc.root.push({ id: "ghost", componentId: "ghost.unknown", componentVersion: 1, props: {}, slots: {} });
     const s = setup(undefined, doc);
     const trigger = within(s.tree()).getByRole("button", { name: /open menu for ghost.unknown/i });
     fireEvent.click(trigger);
-    expect(within(s.menu()!).getAllByRole("menuitem").map((el) => el.textContent)).toEqual(["Delete"]);
+    expect(within(s.menu()!).getAllByRole("menuitem").map((el) => el.textContent)).toEqual([
+      "Move up",
+      "Move down",
+      "Delete",
+    ]);
   });
 
   it("Delete on a populated subtree removes in one action and remains undoable from the toolbar", () => {
@@ -698,7 +749,7 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
 
   it("insert menu always offers BOTH Add component… and Paste here; paste disabled while clipboard is empty", () => {
     const s = setup(undefined, makeAbcDocument());
-    fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert options for document root" }));
+    fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert options for the document" }));
     const items = within(s.menu()!).getAllByRole("menuitem");
     expect(items.map((el) => el.textContent)).toEqual(["Add component…", "Paste here"]);
     expect((within(s.menu()!).getByRole("menuitem", { name: "Paste here" }) as HTMLButtonElement).disabled).toBe(
@@ -708,7 +759,6 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
 
   it("PASTE INTO A NAMED SLOT end-to-end through the insert menu — the B/C right-slot fixture", () => {
     const s = setup(undefined, makeAbcDocument());
-    fireEvent.click(within(s.tree()).getByRole("button", { name: /expand split layout/i }));
 
     // Copy B via its node menu.
     fireEvent.click(within(s.tree()).getByRole("button", { name: "Open menu for Box B" }));
@@ -716,31 +766,28 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
     expect(s.menu()).toBeNull();
 
     // Open the RIGHT slot's insert menu (the companion "⋯" beside its own "+Add").
-    fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert options for Right in Split Layout" }));
+    fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert options for Right" }));
     const paste = within(s.menu()!).getByRole("menuitem", { name: 'Paste "Box" here' });
     expect((paste as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(paste);
 
-    const rightSlot = s.tree().querySelector('[data-sg-tree-slot-id="right"]')!;
-    const rightIds = [...rightSlot.querySelectorAll("[data-sg-tree-node-id]")].map((el) =>
-      el.getAttribute("data-sg-tree-node-id"),
-    );
-    expect(rightIds).toHaveLength(3);
-    expect(rightIds.slice(0, 2)).toEqual(["B", "C"]);
-    const pastedId = rightIds[2]!;
+    const right = s.canvasDoc().root[0]!.slots.right as { id: string; componentId: string }[];
+    expect(right.map((node) => node.id).slice(0, 2)).toEqual(["B", "C"]);
+    expect(right).toHaveLength(3);
+    const pastedId = right[2]!.id;
     expect(pastedId).not.toBe("B");
-    // Landed in the CANVAS snapshot too — one document, everywhere.
-    const pastedInCanvas = s.canvasDoc().root[0]!.slots.right.find((n: { id: string }) => n.id === pastedId);
-    expect(pastedInCanvas?.componentId).toBe(FIXTURE_IDS.box);
+    expect(right[2]!.componentId).toBe(FIXTURE_IDS.box);
+    // And the structure rail shows the third copy — one document, everywhere.
+    expect(s.treeRowsNamed("BoxB")).toHaveLength(2);
     expect(s.menu()).toBeNull();
   });
 
   it("Escape closes the tree-origin menu and returns focus to its trigger", () => {
     const s = setup(undefined, makeAbcDocument());
-    const trigger = within(s.tree()).getByRole("button", { name: "Insert options for document root" });
+    const trigger = within(s.tree()).getByRole("button", { name: "Insert options for the document" });
     fireEvent.click(trigger);
     expect(s.menu()).not.toBeNull();
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(s.menu()!, { key: "Escape" });
     expect(s.menu()).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
@@ -754,6 +801,8 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
       "Copy",
       "Cut",
       "Duplicate",
+      "Move up",
+      "Move down",
       "Delete",
     ]);
 
@@ -806,10 +855,13 @@ describe("ComposerIntegration — context menus + menu bridge (#256)", () => {
         requestInsertMenuMessage(rev++, { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 1 }, RECT, "t"),
       ),
     );
-    const panel = s.menu()!;
-    // anchorBelowRect: x unchanged, y = translated bottom + 4.
-    expect(panel.style.left).toBe(`${RECT.x + 100}px`);
-    expect(panel.style.top).toBe(`${RECT.y + 40 + RECT.height + 4}px`);
+    // The host translates the iframe-local rect and parks the menu's anchor
+    // there; where the panel then lands is the shared menu's own contract.
+    const anchor = s.container.querySelector(".sg-composer-menu-anchor") as HTMLElement;
+    expect(anchor.style.left).toBe(`${RECT.x + 100}px`);
+    expect(anchor.style.top).toBe(`${RECT.y + 40}px`);
+    expect(anchor.style.width).toBe(`${RECT.width}px`);
+    expect(anchor.style.height).toBe(`${RECT.height}px`);
   });
 });
 
@@ -827,7 +879,7 @@ describe("ComposerIntegration — canvas drag & drop end-to-end (#258)", () => {
     expect(doc.root[0]!.slots.right!.map((n) => n.id)).toEqual(["C", "B"]);
     expect(s.lastSentSession().selectedId).toBe("B");
     // The moved node is present + revealed in the tree.
-    expect(s.tree().querySelector('[data-sg-tree-node-id="B"]')).not.toBeNull();
+    expect(s.hasTreeRow("BoxB")).toBe(true);
   });
 
   it("an Alt-COPY keeps the source and selects the fully re-ID'd clone", () => {
@@ -845,7 +897,7 @@ describe("ComposerIntegration — canvas drag & drop end-to-end (#258)", () => {
     expect(right[0]!.props.label).toBe("B");
     // The new node is selected + revealed.
     expect(s.lastSentSession().selectedId).toBe(right[0]!.id);
-    expect(s.tree().querySelector(`[data-sg-tree-node-id="${right[0]!.id}"]`)).not.toBeNull();
+    expect(s.treeRowsNamed("BoxB")).toHaveLength(2);
   });
 
   it("an invalid drop (cycle) is rejected: no document change and an error surfaces", () => {
