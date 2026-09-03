@@ -240,7 +240,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // The reload lands on the record's own URL, so the model reopens itself.
   await expect(journalRow).toBeVisible();
   // A further page is one trailing row inside the tree, not a button beside it.
-  const moreEntries = contentTree(page).getByRole("treeitem", { name: /more entries/ });
+  const moreEntries = contentTree(page).getByRole("treeitem", { name: /\d+ more entr(y|ies)…/ });
   await expect(moreEntries).toBeVisible();
   await moreEntries.click();
   await expect(contentTree(page).getByRole("treeitem", { name: /^Browser journey article/ })).toBeVisible();
@@ -573,6 +573,13 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(deleteTrigger).toBeFocused();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const theme of ["light", "dark"] as const) {
+    await useTheme(page, theme);
+    await screenshot(page, testInfo, `content-narrow-${theme}`);
+  }
+  await expectNoHorizontalOverflow(page);
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   const motion = await page.locator(".sg-content-app button").first().evaluate((node) => {

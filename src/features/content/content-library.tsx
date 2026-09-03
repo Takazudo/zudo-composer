@@ -18,12 +18,10 @@ export interface ContentNavigatorProps {
   onCopyEntryId(id: string): void;
 }
 
-type RowKind = "model" | "entry" | "more";
-
 interface RowMenuProps {
   node: OutlineNode;
-  kind: RowKind;
-  canAddEntry: boolean;
+  kind: "model" | "entry";
+  canHoldAnotherEntry: boolean;
   onOpen(): void;
   onAddEntry(): void;
   onDuplicate(): void;
@@ -31,7 +29,7 @@ interface RowMenuProps {
   onDelete(): void;
 }
 
-function ContentRowMenu({ node, kind, canAddEntry, onOpen, onAddEntry, onDuplicate, onCopyId, onDelete }: RowMenuProps): JSX.Element {
+function ContentRowMenu({ node, kind, canHoldAnotherEntry, onOpen, onAddEntry, onDuplicate, onCopyId, onDelete }: RowMenuProps): JSX.Element {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menu = useMenu(triggerRef, { align: "end" });
   const noun = kind === "model" ? "model" : "entry";
@@ -50,9 +48,9 @@ function ContentRowMenu({ node, kind, canAddEntry, onOpen, onAddEntry, onDuplica
       <Menu controller={menu} label={`${node.title} actions`}>
         <MenuItem onSelect={onOpen}>Open {noun}</MenuItem>
         {kind === "model" ? (
-          <MenuItem icon={PlusIcon} disabled={!canAddEntry} onSelect={onAddEntry}>Add entry</MenuItem>
+          <MenuItem icon={PlusIcon} disabled={!canHoldAnotherEntry} onSelect={onAddEntry}>Add entry</MenuItem>
         ) : (
-          <MenuItem icon={DuplicateIcon} disabled={!canAddEntry} onSelect={onDuplicate}>Duplicate entry</MenuItem>
+          <MenuItem icon={DuplicateIcon} disabled={!canHoldAnotherEntry} onSelect={onDuplicate}>Duplicate entry</MenuItem>
         )}
         {kind === "entry" ? <MenuItem icon={CopyIcon} onSelect={onCopyId}>Copy entry ID</MenuItem> : null}
         <MenuSeparator />
@@ -164,7 +162,7 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
               <ContentRowMenu
                 node={node}
                 kind={model === null ? "entry" : "model"}
-                canAddEntry={rowCanAdd}
+                canHoldAnotherEntry={rowCanAdd}
                 onOpen={() => { selectRow(node.id); setActivePane("main"); }}
                 onAddEntry={() => run(async () => {
                   await controller.openModel(node.id);
