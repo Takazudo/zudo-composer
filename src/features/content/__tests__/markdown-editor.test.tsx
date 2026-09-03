@@ -27,9 +27,7 @@ describe("MarkdownEditor lifecycle", () => {
     const { container } = render(<MarkdownEditor identity="entry-1:body" label="Body" required value={"exact\n🙂"} onChange={onChange} />);
     const content = container.querySelector(".cm-content");
     expect(content).toHaveAttribute("aria-multiline", "true");
-    // The kind rides in the name the way `Field` puts its own kind hint inside
-    // the label, so the whole Entry form announces its controls the same way.
-    expect(content).toHaveAccessibleName("Body Rich text (Markdown)");
+    expect(content).toHaveAccessibleName("Body");
     expect(content).toHaveAttribute("aria-required", "true");
     expect(content).toHaveAttribute("contenteditable", "true");
     expect(onChange).not.toHaveBeenCalled();

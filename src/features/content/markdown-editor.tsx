@@ -176,10 +176,9 @@ export function MarkdownEditor({
   const theme = suppliedTheme ?? observedTheme;
   const uid = useId();
   const labelId = `sg-content-markdown-label-${uid}`;
-  const kindId = `sg-content-markdown-kind-${uid}`;
-  // The kind rides in the accessible name the way `Field` puts its own kind
-  // hint inside the label, so every control in this form announces the same way.
-  const labelledBy = `${labelId} ${kindId}`;
+  // Just the label, the way every `Field` in this form names its control: the
+  // kind hint beside it is a visual aid, not part of the control's name.
+  const labelledBy = labelId;
   const mountRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<MarkdownEditorController | null>(null);
   const callbackRef = useRef(onChange);
@@ -223,7 +222,7 @@ export function MarkdownEditor({
           {label}
           {required ? <span class="sg-content-req" aria-hidden="true"> *</span> : null}
         </span>
-        <span id={kindId} class="sg-content-markdown-editor__kind">
+        <span class="sg-content-markdown-editor__kind">
           <MarkdownIcon size="xs" />
           Rich text (Markdown)
         </span>

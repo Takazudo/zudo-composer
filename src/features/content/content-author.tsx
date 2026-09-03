@@ -286,7 +286,12 @@ export function ContentEntryAuthor({ state, controller }: ContentEntryAuthorProp
         const controlId = `content-entry-${field.id}`;
         const value = entry.values[field.id];
         const { label: kindLabel, icon: KindIcon } = contentFieldKindPresentation(field.kind);
-        const kind = <><KindIcon size="xs" />{kindLabel}</>;
+        // `Field` renders the kind hint inside the `<label>`, where it would
+        // otherwise join the accessible name with no separator between the two
+        // spans — "TitleShort text". It is a visual aid for a distinction the
+        // control already carries (a number announces as a spinbutton, a date as
+        // a date), so it is marked decorative and the name stays the label.
+        const kind = <span aria-hidden="true"><KindIcon size="xs" />{kindLabel}</span>;
         const commit = (next: ContentEntryRecord["values"][string] | undefined) => controller.updateEntryValue(field.id, next);
 
         if (field.kind === "markdown") {
