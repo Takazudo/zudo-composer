@@ -1,0 +1,485 @@
+/* ==========================================================================
+ * Outline tree — the zudo-doc outline style (epic #156, issue #162).
+ *
+ * Ported from the prototype contract in
+ * `_temp-resource/156-cms-ui-polish/proto.css` (comment block *Outline tree —
+ * the zudo-doc outline style*). The geometry is the contract: indent, vline
+ * offset, connector length and row heights are the numbers that make the
+ * dashed connectors meet, so they stay as named custom properties rather than
+ * being folded into the rules that read them.
+ *
+ * Rules this file keeps, matching `src/components/ui/ui.css`:
+ * - Every colour is a token from `src/styles/app-tokens.css` (plus the
+ *   provider's `--font-mono`). No literals — a literal would not follow the
+ *   light/dark theme attribute.
+ * - Every class carries the `cms-` prefix, because `src/base.css` has
+ *   `@source "./"` and Tailwind v4 would otherwise generate a colliding
+ *   utility from a bare prototype name (`.truncate` is the obvious one).
+ *   `is-last` / `is-active` stay bare: they are state hooks that only ever
+ *   appear compounded onto a `cms-tree-*` class, and neither matches a
+ *   Tailwind utility namespace.
+ * - The type ladder is written as literal rem values because `--text-*` is the
+ *   provider's Tailwind namespace and must not be redefined here:
+ *   .6875rem/11px, .75rem/12px, .8125rem/13px chrome default.
+ * ========================================================================== */
+
+.cms-tree {
+  --tree-indent: 16px;      /* per depth */
+  --tree-offset: 7px;       /* vline x inside the depth column */
+  --tree-connector: 10px;   /* hline length */
+  --tree-row: 28px;         /* leaf / group row height */
+  --tree-cat-row: 32px;     /* category row height */
+  --tree-base-pad: 10px;    /* category text inset */
+  /* Rows set their own `--depth` inline; the default keeps the connector
+   * calc() valid for anything that does not. */
+  --depth: 0;
+  /* Local stacking order: the group spine sits over its children, the
+   * zero-height insert container over the rows it straddles, the `+` tile
+   * over that container, and the floating editor over everything. */
+  --tree-z-spine: 1;
+  --tree-z-gap: 2;
+  --tree-z-tile: 3;
+  --tree-z-editor: 4;
+  /* The toolbar shortens its labels against the tree's own width, not the
+   * viewport's: the same tree sits in a wide pane and a narrow rail. */
+  container-type: inline-size;
+  color: var(--color-fg);
+  font-size: .8125rem;
+}
+
+/* Repeated rather than borrowed from `ui.css` so the sheet stands on its own
+ * wherever this module is imported. */
+.cms-tree-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+ * Toolbar
+ * -------------------------------------------------------------------------- */
+.cms-tree__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-b1);
+  min-height: 36px;
+  padding: 0 var(--sp-2) 0 var(--sp-1);
+  border-block-end: 1px solid var(--color-border);
+  background: color-mix(in oklch, var(--color-fg) 2.5%, var(--color-surface));
+  font-size: .75rem;
+}
+
+.cms-tree__spacer { flex: 1; }
+.cms-tree__toolbar .cms-btn--sm { padding-inline: var(--sp-b1); }
+.cms-tree__toolbar .cms-switch { gap: 5px; color: var(--color-muted); font-size: .75rem; white-space: nowrap; }
+
+/* Below 400px of tree width the optional halves of the labels drop:
+ * "Collapse all" -> "Collapse", "Show slug" -> "slug". */
+@container (max-width: 400px) {
+  .cms-tree__opt { display: none; }
+}
+
+/* --------------------------------------------------------------------------
+ * Category — the root level. A `»` mark, no connectors, and a 3-sided square
+ * caret sitting flush against the pane edge.
+ * -------------------------------------------------------------------------- */
+.cms-tree__nodes { display: block; }
+
+.cms-tree-cat { border-block-start: 1px solid var(--color-border); }
+.cms-tree-cat:first-of-type { border-block-start: 0; }
+
+.cms-tree-cat__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--tree-cat-row);
+  color: var(--color-fg);
+  font-weight: 650;
+}
+
+.cms-tree-cat__row:has(> [aria-selected="true"]) { background: var(--color-accent-soft); }
+
+.cms-tree-cat__link {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tree-cat-row);
+  padding: 0 4px 0 var(--tree-base-pad);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.cms-tree-mark {
+  width: 14px;
+  flex: none;
+  color: inherit;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cms-tree-toggle {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  margin-inline: 2px 4px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.cms-tree-cat__row > .cms-tree-toggle { margin-inline-end: 0; border-inline-end: 0; }
+.cms-tree-toggle svg { transition: rotate .12s; }
+.cms-tree-toggle[aria-expanded="false"] svg { rotate: -90deg; }
+.cms-tree-toggle:hover { color: var(--color-fg); background: var(--color-surface-2); }
+
+/* --------------------------------------------------------------------------
+ * Right-aligned mono metadata column, status dot, tag, and the hover-only
+ * actions slot — which reserves no width when it is hidden.
+ * -------------------------------------------------------------------------- */
+.cms-tree-slug {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-inline-start: auto;
+  padding-inline-start: var(--sp-2);
+  overflow: hidden;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: .75rem;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-tree-count {
+  flex: none;
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  font-size: .75rem;
+  font-weight: 400;
+}
+
+.cms-tree-slug + .cms-tree-count { padding-inline-start: 4px; }
+.cms-tree:not(.cms-tree--show-slug) .cms-tree-slug,
+.cms-tree:not(.cms-tree--show-count) .cms-tree-count { display: none; }
+
+.cms-tree-acts {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  width: 0;
+  padding: 0;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.cms-tree-cat__row:hover .cms-tree-acts,
+.cms-tree-cat__row:focus-within .cms-tree-acts,
+.cms-tree-leaf-wrap:hover .cms-tree-acts,
+.cms-tree-leaf-wrap:focus-within .cms-tree-acts,
+.cms-tree-group__header:hover .cms-tree-acts,
+.cms-tree-group__header:focus-within .cms-tree-acts { width: auto; padding-inline: 4px; opacity: 1; }
+
+.cms-tree-acts .cms-btn { color: var(--color-muted); }
+.cms-tree-acts .cms-btn:hover { color: var(--color-fg); }
+
+/* --------------------------------------------------------------------------
+ * Children lists and the dashed connectors.
+ *
+ * `--depth` is set inline per row; the vline sits one `--tree-offset` into
+ * that depth's column and the hline reaches `--tree-connector` towards the
+ * title. `is-last` stops the vline at the hline so the branch closes.
+ * -------------------------------------------------------------------------- */
+.cms-tree-children { position: relative; display: block; padding-block: 2px 4px; }
+
+.cms-tree-leaf-wrap,
+.cms-tree-group__header,
+.cms-tree-add-wrap { position: relative; display: flex; align-items: center; }
+
+.cms-tree-group { position: relative; }
+
+.cms-tree-vline,
+.cms-tree-hline,
+.cms-tree-spine {
+  position: absolute;
+  inset-inline-start: calc(var(--depth) * var(--tree-indent) + var(--tree-offset));
+  pointer-events: none;
+}
+
+.cms-tree-vline { inset-block: 0; border-inline-start: 1px dashed var(--color-border-strong); }
+/* The spine carries the parent's dashes past a group's whole subtree, so the
+ * next sibling still hangs off an unbroken line. */
+.cms-tree-spine { inset-block: 0; border-inline-start: 1px dashed var(--color-border-strong); z-index: var(--tree-z-spine); }
+.is-last > .cms-tree-vline { inset-block-end: calc(100% - var(--tree-row) / 2); }
+.cms-tree-hline {
+  inset-block-start: calc(var(--tree-row) / 2);
+  width: var(--tree-connector);
+  border-block-start: 1px dashed var(--color-border-strong);
+}
+
+.cms-tree-leaf,
+.cms-tree-group__row,
+.cms-tree-add {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tree-row);
+  padding: 0 4px 0 calc(var(--depth) * var(--tree-indent) + var(--tree-offset) + var(--tree-connector) + 8px);
+  border: 0;
+  background: none;
+  color: var(--color-fg);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.cms-tree-title {
+  flex: 0 1 auto;
+  min-width: min(100%, 10ch);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-tree-group__row { font-weight: 650; }
+.cms-tree-leaf:hover,
+.cms-tree-group__row:hover,
+.cms-tree-cat__link:hover { color: var(--color-accent); }
+.cms-tree-leaf[aria-selected="true"] { color: var(--color-accent); font-weight: 550; }
+.cms-tree-group__row[aria-selected="true"],
+.cms-tree-cat__link[aria-selected="true"] { color: var(--color-accent); }
+.cms-tree-leaf-wrap:has(> [aria-selected="true"]),
+.cms-tree-group__header:has(> [aria-selected="true"]) { background: var(--color-accent-soft); }
+.cms-tree-leaf-wrap:has(> [aria-selected="true"]) .cms-tree-slug,
+.cms-tree-group__header:has(> [aria-selected="true"]) .cms-tree-slug,
+.cms-tree-group__header:has(> [aria-selected="true"]) .cms-tree-count,
+.cms-tree-cat__row:has(> [aria-selected="true"]) .cms-tree-slug,
+.cms-tree-cat__row:has(> [aria-selected="true"]) .cms-tree-count { color: var(--color-accent); opacity: .8; }
+
+/* A slot is a quiet group: it names a hole in a composition rather than a page. */
+.cms-tree-group__row--slot { color: var(--color-muted); font-weight: 500; }
+.cms-tree-group__row--slot > .cms-tree-title { min-width: 0; }
+
+.cms-tree-group.is-last > .cms-tree-group__header > .cms-tree-vline { inset-block-end: calc(100% - var(--tree-row) / 2); }
+
+.cms-tree-hint { flex: none; color: var(--color-faint); font-size: .75rem; font-style: italic; }
+
+.cms-tree-leaf:focus-visible,
+.cms-tree-group__row:focus-visible,
+.cms-tree-cat__link:focus-visible,
+.cms-tree-toggle:focus-visible,
+.cms-tree-add:focus-visible,
+.cms-tree-add-root:focus-visible,
+.cms-tree-insert__btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+
+.cms-tree-dot { width: 8px; height: 8px; flex: none; margin-inline: 4px 2px; border-radius: 50%; }
+.cms-tree-dot--ok { background: var(--color-success); }
+.cms-tree-dot--warn { background: var(--color-warning); }
+.cms-tree-dot--accent { background: var(--color-accent); }
+
+.cms-tree-tag {
+  flex: none;
+  padding-inline: 5px;
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-fg);
+  font-size: .6875rem;
+  font-weight: 650;
+}
+
+/* --------------------------------------------------------------------------
+ * Add rows: one terminal row per children list, and the dashed root button.
+ * -------------------------------------------------------------------------- */
+.cms-tree-add { color: var(--color-muted); font-size: .75rem; gap: 8px; }
+.cms-tree-add:hover { color: var(--color-accent); }
+
+.cms-tree-add__btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+}
+
+.cms-tree-add:hover .cms-tree-add__btn { border-color: var(--color-accent-line); background: var(--color-accent-soft); color: var(--color-accent); }
+
+.cms-tree-add-root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: calc(100% - 2 * var(--sp-2));
+  min-height: 32px;
+  margin: var(--sp-2);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.cms-tree-add-root:hover { border-color: var(--color-accent-line); background: var(--color-accent-soft); color: var(--color-accent); }
+
+/* --------------------------------------------------------------------------
+ * Insert-between affordance.
+ *
+ * The container is 0px high at all times, so adding one between every pair of
+ * sibling rows moves nothing. A dedicated hit-zone element straddles the
+ * boundary (+/-0.55rem, +/-22px on coarse pointers) to make a zero-height
+ * target hoverable; it deliberately sits over the outer edges of the two
+ * neighbouring rows, which is the cost of the technique. The dashed line and
+ * the `+` tile are absolutely positioned on the boundary, and so is the inline
+ * editor — so neither hovering nor editing can shift a row.
+ * -------------------------------------------------------------------------- */
+.cms-tree-insert {
+  position: relative;
+  z-index: var(--tree-z-gap);
+  height: 0;
+  margin-inline: calc(var(--depth) * var(--tree-indent) + var(--tree-offset) + var(--tree-connector) + 8px) 8px;
+}
+
+/* Between two root categories there is no connector column to line up with, so
+ * the dashes follow the category text inset instead. */
+.cms-tree-insert--root { margin-inline: var(--tree-base-pad) var(--sp-2); }
+
+.cms-tree-insert__hit { position: absolute; inset-block: -0.55rem; inset-inline: 0; }
+
+.cms-tree-insert::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  border-block-start: 1px dashed var(--color-border-strong);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cms-tree-insert__btn {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 50%;
+  translate: -50% -50%;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+  box-shadow: 0 0 0 3px var(--color-bg);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  z-index: var(--tree-z-tile);
+}
+
+.cms-tree-insert:focus-within::before,
+.cms-tree-insert:focus-within .cms-tree-insert__btn,
+.cms-tree-insert.is-active::before,
+.cms-tree-insert.is-active .cms-tree-insert__btn,
+.cms-tree-insert[data-show="true"]::before,
+.cms-tree-insert[data-show="true"] .cms-tree-insert__btn { opacity: 1; pointer-events: auto; }
+
+@media (hover: hover) {
+  .cms-tree-insert:hover::before,
+  .cms-tree-insert:hover .cms-tree-insert__btn { opacity: 1; pointer-events: auto; }
+  .cms-tree-insert__btn:hover { background: var(--color-surface-3); color: var(--color-accent); }
+}
+
+/* --------------------------------------------------------------------------
+ * Inline title editor. Inside an insert point it floats on the boundary, so
+ * opening it shifts nothing; in place of an Add row it is in flow and keeps
+ * that row's height exactly.
+ * -------------------------------------------------------------------------- */
+.cms-tree-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tree-row);
+  padding: 0 8px 0 calc(var(--depth) * var(--tree-indent) + var(--tree-offset) + var(--tree-connector) + 8px);
+}
+
+.cms-tree-inline .cms-input { flex: 1 1 100px; width: 180px; min-width: 0; }
+
+.cms-tree-insert > .cms-tree-inline {
+  position: absolute;
+  z-index: var(--tree-z-editor);
+  inset-block-start: 0;
+  inset-inline: 22px 0;
+  translate: 0 -50%;
+  width: fit-content;
+  max-width: calc(100% - 22px);
+  min-height: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+}
+
+.cms-tree-insert > .cms-tree-inline .cms-input { width: 150px; }
+
+.cms-tree-inline--root {
+  width: calc(100% - 2 * var(--sp-2));
+  min-height: 32px;
+  margin: var(--sp-2);
+  padding-inline: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * Legend
+ * -------------------------------------------------------------------------- */
+.cms-tree__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-b2);
+  color: var(--color-muted);
+  font-size: .6875rem;
+}
+
+.cms-tree__legend span { display: inline-flex; align-items: center; gap: 4px; }
+.cms-tree__hint { flex: 1 0 100%; }
+
+/*
+ * Touch targets. Rows become 44px so the hover-only actions — which are
+ * `.cms-btn`s, and grow to 44px under the same query in `ui.css` — fit without
+ * changing a row's height when focus reveals them.
+ */
+@media (pointer: coarse) {
+  .cms-tree { --tree-row: 44px; --tree-cat-row: 44px; }
+  .cms-tree-toggle { width: 44px; height: 44px; }
+  .cms-tree-add__btn { width: 32px; height: 32px; }
+  .cms-tree-add-root { min-height: 44px; }
+  .cms-tree-inline--root { min-height: 44px; }
+  .cms-tree-insert__hit { inset-block: -22px; }
+  .cms-tree-insert::before,
+  .cms-tree-insert__btn { opacity: .55; pointer-events: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cms-tree-toggle svg { transition-duration: .01ms; }
+}
