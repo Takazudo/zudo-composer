@@ -178,7 +178,7 @@ function collectJsGraph(path) {
 }
 collectJsGraph(previewJs[0]);
 const previewText = [...previewGraph].map((path) => readFileSync(path, "utf8")).join("\n");
-for (const forbidden of ["Build structures, not documents.", "Composition library", "Content authoring", "Mapping library", "Add component…", "file-provider"]) {
+for (const forbidden of ["How the pieces connect", "Composition library", "Content authoring", "Mapping library", "Add component…", "file-provider"]) {
   assert.ok(!previewText.includes(forbidden), `preview graph leaked host marker: ${forbidden}`);
 }
 

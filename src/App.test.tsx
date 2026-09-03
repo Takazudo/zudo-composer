@@ -5,6 +5,9 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 
+/** The Dashboard heading follows the local clock, so match all three. */
+const GREETING = /^Good (morning|afternoon|evening)\.$/;
+
 describe('App', () => {
   afterEach(() => {
     cleanup();
@@ -34,15 +37,16 @@ describe('App', () => {
     expect(current[0]).toHaveTextContent(railLabel);
   });
 
-  it('shows the shared route vocabulary with descriptions and icon support on Home', () => {
+  it('renders the workspace Dashboard on Home', () => {
     render(<App />);
 
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
     expect(nav.querySelectorAll('a')).toHaveLength(7);
     expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('heading', { name: 'Choose a tool' })).toBeInTheDocument();
-    expect(screen.getByText('Build reusable page structures from components.')).toBeInTheDocument();
-    expect(screen.getByText('Connect Content fields to Composition slots.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: GREETING })).toBeInTheDocument();
+    // The explainer is the one Dashboard card that owes nothing to a provider,
+    // so it stands before the first read lands.
+    expect(screen.getByRole('region', { name: 'How the pieces connect' })).toBeInTheDocument();
     expect(document.querySelectorAll('.cms-rail__item svg')).toHaveLength(8);
   });
 
@@ -104,7 +108,7 @@ describe('App', () => {
     expect(trigger).toHaveFocus();
 
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByRole('heading', { name: 'Choose a tool' }));
+    fireEvent.click(screen.getByRole('heading', { name: GREETING }));
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).not.toBeInTheDocument();
   });
 
@@ -123,11 +127,12 @@ describe('App', () => {
     expect(main).not.toMatch(/^import .*\.\/App/m);
   });
 
-  it('identifies the standalone composer shell', () => {
+  it('opens the standalone routes from the Dashboard quick actions', () => {
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: /build structures/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Composer' })).toHaveAttribute('href', '/composer');
+    // Built through `route-intents`, never a hand-rolled query string.
+    expect(screen.getByRole('link', { name: 'New composition' })).toHaveAttribute('href', '/composer?new=1');
+    expect(screen.getByRole('link', { name: 'New entry' })).toHaveAttribute('href', '/content');
   });
 
   it('mounts the real Sitemapper with its host-injected Composer catalog', async () => {

@@ -1,7 +1,7 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
+import { Dashboard } from "./app/dashboard";
 import { createProductionProviderIntegration } from "./app/provider-integration";
-import { Home } from "./app/home";
 import { Shell } from "./app/shell";
 import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
@@ -47,7 +47,7 @@ export function App({ themeController }: AppProps = {}) {
   else if (path === "/mapping") content = <MappingRouteContent provider={providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
   else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} />;
-  else if (path === "/") content = <Home />;
+  else if (path === "/") content = <Dashboard summary={workspaceSummary} />;
   else content = <NotFound />;
   return <Shell path={path} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}>{content}</Shell>;
 }

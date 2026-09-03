@@ -5,9 +5,9 @@
 /* --------------------------------------------------------------------------
  * Route-level leftovers
  *
- * The shell moved to `src/app/shell.css`, which `shell.tsx` imports. What
- * remains here is the small amount of styling the provisional Home and the
- * not-found placeholder still need; the Dashboard task replaces both.
+ * The shell moved to `src/app/shell.css` and Home became the Dashboard, whose
+ * CSS travels with `src/app/dashboard/`. All that remains here is the
+ * not-found placeholder `App` renders for an unknown route.
  * -------------------------------------------------------------------------- */
 
 .route-placeholder {
@@ -19,28 +19,6 @@
 .route-placeholder h1 { margin-block: 0 .75rem; font-size: clamp(2rem, 5vw, 3.5rem); letter-spacing: -.04em; }
 .route-placeholder p { color: var(--color-muted); }
 .route-placeholder a { color: var(--color-accent); }
-
-.landing p { max-width: 38rem; }
-
-.primary-link {
-  display: inline-flex;
-  align-items: center;
-  gap: .5rem;
-  min-height: 2.75rem;
-  margin-top: 1.5rem;
-  padding: .625rem .875rem;
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius);
-  color: var(--color-on-accent);
-  background: var(--color-accent);
-  font-size: .875rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-@media (hover: hover) {
-  .primary-link:hover { color: var(--color-on-accent); background: var(--color-accent-hover); }
-}
 
 @media (max-width: 42rem) {
   .route-placeholder { width: min(100% - 2rem, 72rem); }
