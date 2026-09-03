@@ -108,7 +108,11 @@ export class MediaLibraryController {
     try {
       const records = await this.provider.store.list();
       if (!this.isCurrentList(requestId)) return;
-      this.set({ ...this.current, phase: "ready", errorMessage: null, records });
+      // A listing only reports the records that read correctly, so it is no
+      // answer to a quarantine: an upload must not silently dismiss the
+      // recovery banner. Only a fresh initialization can leave that phase.
+      const phase = this.current.phase === "recovery" ? "recovery" : "ready";
+      this.set({ ...this.current, phase, errorMessage: null, records });
     } catch (reason) {
       if (!this.isCurrentList(requestId)) return;
       this.set({ ...this.current, phase: "error", errorMessage: errorMessage(reason, "Media listing failed.") });

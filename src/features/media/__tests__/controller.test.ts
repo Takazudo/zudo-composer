@@ -98,7 +98,7 @@ describe("MediaLibraryController", () => {
 
     await controller.deleteMedia([byId.get("one")!, byId.get("two")!, byId.get("three")!]);
     // "one" is gone, "two" failed and stopped the run, so "three" was never tried.
-    expect(controller.state.records.map(({ id }) => id)).toEqual(["three", "two"].sort());
+    expect(controller.state.records.map(({ id }) => id)).toEqual(["three", "two"]);
     expect(controller.state.notice).toEqual({ tone: "err", text: "The store went away." });
   });
 
@@ -113,6 +113,24 @@ describe("MediaLibraryController", () => {
     await controller.deleteMedia([second!]);
     expect(controller.state.records).toEqual([]);
     expect(await provider.store.list()).toEqual([]);
+  });
+
+  it("keeps a quarantine visible across the refresh an upload triggers", async () => {
+    const provider = createMemoryMediaProvider({ records: [record("valid")] });
+    const valid = record("valid");
+    vi.spyOn(provider.initialization, "initialize").mockResolvedValue({
+      status: "recovery-required",
+      summaries: [{ ...valid, ...valid.document }],
+      recovery: { kind: "quarantined", reason: "future-schema", sourcePreserved: true, affectedRecordIds: ["future"], message: "A newer record was preserved." },
+    });
+    const controller = createMediaLibraryController(provider);
+    await controller.initialize();
+    expect(controller.state).toMatchObject({ phase: "recovery", recoveryMessage: "A newer record was preserved." });
+
+    // A listing reports only the records that read correctly, so it is no
+    // answer to the quarantine.
+    await controller.refresh();
+    expect(controller.state).toMatchObject({ phase: "recovery", records: [{ id: "valid" }] });
   });
 
   it("reports a failure raised by a caller-run action as an error notice", () => {

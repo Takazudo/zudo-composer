@@ -168,6 +168,7 @@
 /* Over a photograph the controls need their own ground to stay legible. */
 .sg-media-asset__check .cms-check,
 .sg-media-asset__acts .cms-btn { background: var(--color-surface); }
+.sg-media-asset__check .cms-check { padding: var(--sp-1); border-radius: var(--radius-sm); }
 
 .sg-media-asset__caption { display: grid; gap: 1px; min-width: 0; }
 
