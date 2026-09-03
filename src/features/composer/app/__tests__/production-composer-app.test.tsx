@@ -175,8 +175,8 @@ describe("ProductionComposerApp", () => {
     navigation.visit("/composer#/composition/files/same");
     render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
 
-    expect(await screen.findByRole("button", { name: "Library" })).toBeInTheDocument();
-    expect(screen.getAllByText("File copy").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Composition name")).toHaveValue("File copy");
     expect(indexeddb.store.get).not.toHaveBeenCalled();
     expect(files.store.get).toHaveBeenCalledWith("same");
   });
@@ -204,7 +204,7 @@ describe("ProductionComposerApp", () => {
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: " Ordinary page " } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
-    expect(await screen.findByRole("button", { name: "Library" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
     expect(indexeddb.records.get("ordinary")?.document).toMatchObject({
       schemaVersion: 2,
       id: "ordinary",
@@ -243,7 +243,7 @@ describe("ProductionComposerApp", () => {
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Bound page" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
-    expect(await screen.findByRole("button", { name: "Library" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
     expect(indexeddb.records.get("bound-page")?.document).toMatchObject({
       schemaVersion: 2,
       id: "bound-page",
@@ -281,8 +281,9 @@ describe("ProductionComposerApp", () => {
     );
 
     expect(await screen.findByText("Linked template")).toBeInTheDocument();
-    expect(view.container.querySelector('[data-sg-linked-frame="resolved"]')).not.toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "Detach" }));
+    const inspector = view.container.querySelector(".cms-editor__region--insp") as HTMLElement;
+    fireEvent.click(within(inspector).getByRole("tab", { name: /^Reuse/ }));
+    fireEvent.click(await within(inspector).findByRole("button", { name: "Detach" }));
 
     await waitFor(() => {
       const detached = indexeddb.records.get("bound-page")!;
@@ -355,8 +356,9 @@ describe("ProductionComposerApp", () => {
       />,
     );
 
+    fireEvent.click(await screen.findByRole("tab", { name: /^Reuse/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Unpublish Global template" }));
-    const confirm = screen.getByRole("group", { name: "Unpublish Global template?" });
+    const confirm = screen.getByRole("alertdialog", { name: "Unpublish Global template?" });
     fireEvent.click(within(confirm).getByRole("button", { name: "Unpublish Global template" }));
 
     await waitFor(() =>
@@ -398,15 +400,14 @@ describe("ProductionComposerApp", () => {
     // seeded row (not just the static page header) has actually loaded.
     await screen.findByRole("link", { name: "Product overview" });
     navigation.visit("/composer#/composition/indexeddb/real-composition");
-    await screen.findByRole("button", { name: "Library" });
-    const tree = first.container.querySelector("#sg-composer-tree") as HTMLElement;
-    const inspector = first.container.querySelector("#sg-composer-inspector") as HTMLElement;
-    fireEvent.click(within(tree).getByRole("button", { name: "Expand Section Product overview" }));
-    fireEvent.click(within(tree).getByRole("button", { name: /^Button/ }));
+    await screen.findByRole("link", { name: "Back to Compositions" });
+    const tree = first.container.querySelector(".cms-editor__region--nav") as HTMLElement;
+    const inspector = first.container.querySelector(".cms-editor__region--insp") as HTMLElement;
+    fireEvent.click(within(tree).getByRole("treeitem", { name: /^Button/ }));
     fireEvent.input(within(inspector).getByLabelText("Label"), {
       target: { value: "Persisted in IndexedDB" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+    navigation.visit("/composer#/");
     await screen.findByRole("heading", { name: "Compositions" });
     first.unmount();
 
@@ -419,15 +420,10 @@ describe("ProductionComposerApp", () => {
         preview={PREVIEW}
       />,
     );
-    await screen.findByRole("button", { name: "Library" });
-    const refreshedTree = refreshed.container.querySelector("#sg-composer-tree") as HTMLElement;
-    const refreshedInspector = refreshed.container.querySelector(
-      "#sg-composer-inspector",
-    ) as HTMLElement;
-    fireEvent.click(
-      within(refreshedTree).getByRole("button", { name: "Expand Section Product overview" }),
-    );
-    fireEvent.click(within(refreshedTree).getByRole("button", { name: /^Button/ }));
+    await screen.findByRole("link", { name: "Back to Compositions" });
+    const refreshedTree = refreshed.container.querySelector(".cms-editor__region--nav") as HTMLElement;
+    const refreshedInspector = refreshed.container.querySelector(".cms-editor__region--insp") as HTMLElement;
+    fireEvent.click(within(refreshedTree).getByRole("treeitem", { name: /^Button/ }));
     expect(within(refreshedInspector).getByLabelText("Label")).toHaveValue(
       "Persisted in IndexedDB",
     );
@@ -447,20 +443,19 @@ describe("ProductionComposerApp", () => {
       />,
     );
 
-    await screen.findByRole("button", { name: "Library" });
+    await screen.findByRole("link", { name: "Back to Compositions" });
     act(() => bridge.deliver(protocolReadyMessage(PREVIEW_PACK)));
-    const toolbar = () => screen.getByRole("toolbar", { name: "Composer toolbar" });
+    const toolbar = () => view.container.querySelector(".cms-editor__toolbar") as HTMLElement;
     const undo = () => within(toolbar()).getByRole("button", { name: "Undo" });
     const redo = () => within(toolbar()).getByRole("button", { name: "Redo" });
 
     expect(undo()).toBeDisabled();
     expect(redo()).toBeDisabled();
 
-    const tree = view.container.querySelector("#sg-composer-tree") as HTMLElement;
-    const inspector = view.container.querySelector("#sg-composer-inspector") as HTMLElement;
-    fireEvent.click(within(tree).getByRole("button", { name: "Expand Section Product overview" }));
-    fireEvent.click(within(tree).getByRole("button", { name: /^Button/ }));
-    fireEvent.click(within(inspector).getByRole("button", { name: "Remove" }));
+    const tree = view.container.querySelector(".cms-editor__region--nav") as HTMLElement;
+    const inspector = view.container.querySelector(".cms-editor__region--insp") as HTMLElement;
+    fireEvent.click(within(tree).getByRole("treeitem", { name: /^Button/ }));
+    fireEvent.click(within(inspector).getByRole("button", { name: "Delete" }));
     expect(undo()).toBeEnabled();
     expect(redo()).toBeDisabled();
 
@@ -476,7 +471,7 @@ describe("ProductionComposerApp", () => {
     expect(undo()).toBeDisabled();
     expect(redo()).toBeEnabled();
 
-    fireEvent.click(within(toolbar()).getByRole("button", { name: "Preview" }));
+    fireEvent.click(within(toolbar()).getByRole("radio", { name: "Preview" }));
     expect(undo()).toBeDisabled();
     expect(redo()).toBeDisabled();
 
@@ -494,15 +489,14 @@ describe("ProductionComposerApp", () => {
       />,
     );
 
-    await screen.findByRole("button", { name: "Library" });
-    const tree = view.container.querySelector("#sg-composer-tree") as HTMLElement;
-    const inspector = view.container.querySelector("#sg-composer-inspector") as HTMLElement;
-    fireEvent.click(within(tree).getByRole("button", { name: "Expand Section Product overview" }));
-    fireEvent.click(within(tree).getByRole("button", { name: /^Button/ }));
+    await screen.findByRole("link", { name: "Back to Compositions" });
+    const tree = view.container.querySelector(".cms-editor__region--nav") as HTMLElement;
+    const inspector = view.container.querySelector(".cms-editor__region--insp") as HTMLElement;
+    fireEvent.click(within(tree).getByRole("treeitem", { name: /^Button/ }));
     fireEvent.input(within(inspector).getByLabelText("Label"), {
       target: { value: "Last keystroke before leaving" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+    navigation.visit("/composer#/");
 
     await screen.findByRole("heading", { name: "Compositions" });
     const saved = indexeddb.records.get("alpha")!;
@@ -533,7 +527,7 @@ describe("ProductionComposerApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "More actions for File copy" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
 
-    expect(await screen.findByRole("button", { name: "Library" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
     expect(files.records.get("file-copy")?.document.name).toBe("File copy copy");
     expect(indexeddb.records.has("file-copy")).toBe(false);
     expect(navigation.pushes.at(-1)).toBe("/composer#/composition/files/file-copy");
@@ -555,16 +549,16 @@ describe("ProductionComposerApp", () => {
         preview={PREVIEW}
       />,
     );
-    await screen.findByRole("button", { name: "Duplicate composition" });
-    const tree = view.container.querySelector("#sg-composer-tree") as HTMLElement;
-    const inspector = view.container.querySelector("#sg-composer-inspector") as HTMLElement;
-    fireEvent.click(within(tree).getByRole("button", { name: "Expand Section Product overview" }));
-    fireEvent.click(within(tree).getByRole("button", { name: /^Button/ }));
+    await screen.findByRole("link", { name: "Back to Compositions" });
+    const tree = view.container.querySelector(".cms-editor__region--nav") as HTMLElement;
+    const inspector = view.container.querySelector(".cms-editor__region--insp") as HTMLElement;
+    fireEvent.click(within(tree).getByRole("treeitem", { name: /^Button/ }));
     fireEvent.input(within(inspector).getByLabelText("Label"), {
       target: { value: "Duplicated latest draft" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Duplicate composition" }));
+    fireEvent.click(screen.getByRole("button", { name: "More composition actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate composition" }));
 
     await waitFor(() =>
       expect(navigation.read()).toEqual({
@@ -572,7 +566,7 @@ describe("ProductionComposerApp", () => {
         hash: "#/composition/files/detail-copy",
       }),
     );
-    expect(screen.getAllByText("File copy copy").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Composition name")).toHaveValue("File copy copy");
     expect(files.records.get("detail-copy")?.document.name).toBe("File copy copy");
     expect(files.records.get("detail-copy")?.document.root[0].id).not.toBe("sample-section");
     expect(
@@ -593,8 +587,8 @@ describe("ProductionComposerApp", () => {
 
     navigation.visit("/composer#/composition/files/alpha");
 
-    expect(await screen.findByRole("button", { name: "Library" })).toBeInTheDocument();
-    expect(screen.getAllByText("File Alpha").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Composition name")).toHaveValue("File Alpha");
   });
 
   it("renders future-schema recovery on a direct detail load and returns safely after Start fresh", async () => {
@@ -659,7 +653,7 @@ describe("ProductionComposerApp", () => {
     await Promise.resolve();
     expect(navigation.read()).toEqual({ pathname: "/composer", hash: "#/" });
     expect(indexeddb.store.get).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "Library" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Back to Compositions" })).not.toBeInTheDocument();
   });
 
   it("opens the New-composition dialog once for the /composer?new=1 route intent", async () => {
@@ -681,7 +675,7 @@ describe("ProductionComposerApp", () => {
     // A one-shot intent: navigating away and back to the index (remounting
     // CompositionLibrary) must not reopen the dialog a second time.
     navigation.visit("/composer#/composition/indexeddb/alpha");
-    await screen.findByRole("button", { name: "Library" });
+    await screen.findByRole("link", { name: "Back to Compositions" });
     navigation.visit("/composer#/");
     await screen.findByRole("link", { name: "Alpha" });
     expect(screen.queryByRole("dialog", { name: "New composition" })).not.toBeInTheDocument();
