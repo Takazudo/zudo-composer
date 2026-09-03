@@ -92,9 +92,12 @@ export function FieldKindPicker({ value, locked = false, label, onChange }: Fiel
               key={kind}
               checked={kind === value}
               // The chosen kind stays selectable so the menu always has one
-              // focusable row; re-picking it is a no-op the controller ignores.
+              // focusable row; re-picking it is a no-op.
               disabled={locked && kind !== value}
-              onSelect={() => { if (kind !== value) onChange(kind); }}
+              // `disabled` stops a pointer, not a synthesised activation, and
+              // the controller answers a locked change by throwing — so the
+              // refusal is stated here too rather than left to the attribute.
+              onSelect={() => { if (!locked && kind !== value) onChange(kind); }}
             >
               <span class="sg-content-kind-option">
                 <Icon size="sm" class="sg-content-kind-option__icon" />

@@ -23,8 +23,22 @@ describe("Content styling contract", () => {
     const rooted = [...rules.matchAll(/\.sg-content-app[^{,]*/g)].map((match) => match[0].trim());
     expect(rooted.length).toBeGreaterThan(0);
     expect(rooted.filter((selector) => !/^\.sg-content-app(--state)?( \*)?$/.test(selector))).toEqual([]);
-    // The form's own resets carry their scope with them.
-    expect(rules).toContain(".sg-content-form :where(button, input, select, textarea)");
+    // Nothing here reaches into a foundation class either: the route styles the
+    // wrappers it renders, and the controls inside them arrive already styled.
+    const foreign = [...rules.matchAll(/\.(cms|cm)-[a-z0-9_-]*/g)].map((match) => match[0]);
+    expect(foreign).toEqual([]);
+  });
+
+  it("defers control resets and the coarse tap target to the foundation", () => {
+    // Issue #170 replaced every hand-rolled control in the author with a
+    // `src/components` one, so the route stopped resetting buttons and inputs
+    // and stopped repeating their 44px guard. A second copy is how the two
+    // drift apart, so the guard is asserted where it actually lives.
+    expect(rules).not.toMatch(/\.sg-content-form\s+:where\(/);
+    expect(rules).not.toContain("min-height: 44px");
+    const foundation = readFileSync(resolve(process.cwd(), "src/components/ui/ui.css"), "utf8");
+    expect(foundation).toContain("@media (pointer: coarse)");
+    expect(foundation).toContain("min-height: 44px");
   });
 
   it("locks the responsive seam, shrinking guards, and flat panels", () => {
@@ -32,15 +46,14 @@ describe("Content styling contract", () => {
     expect(css).toContain("overscroll-behavior: contain"); expect(css).toContain("box-shadow: none");
   });
 
-  it("guards neutral hover, coarse 44px targets, focus, radius, and reduced motion", () => {
+  it("guards neutral hover, focus, radius, and reduced motion", () => {
     expect(css).toContain("@media (hover: hover)"); expect(css).toContain("background: var(--color-surface-2)");
-    expect(css).toContain("@media (pointer: coarse)"); expect(css).toContain("min-height: 44px");
     expect(css).toContain("outline: 2px solid var(--color-focus)"); expect(css).toContain("var(--radius-DEFAULT)");
     expect(css).not.toMatch(/border-radius:\s*(?:999|[1-9]\d)px/); expect(css).toContain("@media (prefers-reduced-motion: reduce)");
   });
 
   it("uses the locked dense role pairs and no unguarded hover selectors", () => {
-    for (const value of ["--spacing-vsp-2xs", "--spacing-vsp-xs", "--spacing-vsp-10", "--spacing-vsp-sm", "--spacing-hsp-sm", "--spacing-hsp-lg"]) expect(css).toContain(value);
+    for (const value of ["--spacing-vsp-2xs", "--spacing-vsp-xs", "--spacing-vsp-sm", "--spacing-hsp-sm", "--spacing-hsp-lg"]) expect(css).toContain(value);
     expect(rules.slice(0, rules.indexOf("@media (hover: hover)"))).not.toContain(":hover");
     expect(css).not.toContain("word-break: break-all");
   });

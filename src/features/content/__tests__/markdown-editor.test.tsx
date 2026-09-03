@@ -24,10 +24,13 @@ function editorFrom(container: Element): EditorView {
 describe("MarkdownEditor lifecycle", () => {
   it("labels the multiline editor and does not echo the initial value", () => {
     const onChange = vi.fn();
-    const { container } = render(<MarkdownEditor identity="entry-1:body" label="Body" value={"exact\n🙂"} onChange={onChange} />);
+    const { container } = render(<MarkdownEditor identity="entry-1:body" label="Body" required value={"exact\n🙂"} onChange={onChange} />);
     const content = container.querySelector(".cm-content");
     expect(content).toHaveAttribute("aria-multiline", "true");
-    expect(content).toHaveAccessibleName("Body");
+    // The kind rides in the name the way `Field` puts its own kind hint inside
+    // the label, so the whole Entry form announces its controls the same way.
+    expect(content).toHaveAccessibleName("Body Rich text (Markdown)");
+    expect(content).toHaveAttribute("aria-required", "true");
     expect(content).toHaveAttribute("contenteditable", "true");
     expect(onChange).not.toHaveBeenCalled();
     expect(editorFrom(container).state.doc.toString()).toBe("exact\n🙂");
@@ -58,7 +61,7 @@ describe("MarkdownEditor lifecycle", () => {
   it("applies external bytes without echoing or resetting a valid selection", () => {
     const parent = document.createElement("div");
     const onChange = vi.fn();
-    const controller = createMarkdownEditor({ parent, value: "abcdef", labelId: "label", theme: "light", onChange });
+    const controller = createMarkdownEditor({ parent, value: "abcdef", labelledBy: "label", theme: "light", onChange });
     controller.view.dispatch({ selection: EditorSelection.single(2, 4) });
     controller.setValue("αβγδεζ\n<script>x</script>");
     expect(controller.view.state.doc.toString()).toBe("αβγδεζ\n<script>x</script>");
@@ -71,7 +74,7 @@ describe("MarkdownEditor lifecycle", () => {
   it("persists user edits as the exact Unicode, newline, and HTML-looking string", () => {
     const parent = document.createElement("div");
     const onChange = vi.fn();
-    const controller = createMarkdownEditor({ parent, value: "old", labelId: "label", theme: "light", onChange });
+    const controller = createMarkdownEditor({ parent, value: "old", labelledBy: "label", theme: "light", onChange });
     const exact = "一行目🙂\n\n<img src=\"x\" onerror=\"bad()\">\n";
     controller.view.dispatch({ changes: { from: 0, to: controller.view.state.doc.length, insert: exact } });
     expect(onChange).toHaveBeenCalledOnce();
@@ -82,7 +85,7 @@ describe("MarkdownEditor lifecycle", () => {
   it("reconfigures the dark facet without losing selection or scroll", () => {
     const parent = document.createElement("div");
     document.body.append(parent);
-    const controller = createMarkdownEditor({ parent, value: "line\n".repeat(80), labelId: "label", theme: "light", onChange() {} });
+    const controller = createMarkdownEditor({ parent, value: "line\n".repeat(80), labelledBy: "label", theme: "light", onChange() {} });
     controller.view.dispatch({ selection: EditorSelection.single(5, 9) });
     controller.view.scrollDOM.scrollTop = 37;
     controller.setTheme("dark");
@@ -127,18 +130,27 @@ describe("MarkdownEditor authoring surface", () => {
     expect(view.state.doc.toString()).toBe("- item\n- ");
   });
 
-  it("offers Edit, Preview, and responsive Split views with honest labels", () => {
+  it("offers Edit, Preview, and responsive Split views on the shared segmented control", () => {
     const { container } = render(<MarkdownEditor identity="entry-1:body" label="Story" value="## Title" onChange={() => undefined} />);
     const surface = within(container as HTMLElement);
     expect(surface.getByText("Rich text (Markdown)")).toBeInTheDocument();
     expect(surface.getByText("Formatted text")).toBeInTheDocument();
-    fireEvent.click(surface.getByRole("button", { name: "Preview" }));
+    const view = surface.getByRole("group", { name: "Markdown view" });
+    expect(within(view).getAllByRole("button").map((option) => option.textContent)).toEqual(["Edit", "Split", "Preview"]);
+    expect(within(view).getByRole("button", { name: "Split" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(within(view).getByRole("button", { name: "Preview" }));
     expect(container.querySelector(".sg-content-markdown-editor")).toHaveAttribute("data-mode", "preview");
     expect(container.querySelector(".sg-content-markdown-editor__source")).toHaveAttribute("hidden");
-    fireEvent.click(surface.getByRole("button", { name: "Edit" }));
+    // Preview hides the source, so formatting it would land out of sight.
+    expect(surface.getByRole("button", { name: "Bold" })).toBeDisabled();
+
+    fireEvent.click(within(view).getByRole("button", { name: "Edit" }));
     expect(container.querySelector(".sg-content-markdown-editor")).toHaveAttribute("data-mode", "edit");
     expect(container.querySelector(".sg-content-markdown-editor__preview")).toHaveAttribute("hidden");
-    fireEvent.click(surface.getByRole("button", { name: "Split" }));
+    expect(surface.getByRole("button", { name: "Bold" })).not.toBeDisabled();
+
+    fireEvent.click(within(view).getByRole("button", { name: "Split" }));
     expect(container.querySelector(".sg-content-markdown-editor")).toHaveAttribute("data-mode", "split");
   });
 });

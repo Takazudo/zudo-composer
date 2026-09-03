@@ -30,7 +30,8 @@ describe("Content chrome keyboard behavior", () => {
     fireEvent.keyDown(entry, { key: "ArrowRight" });
     expect(schema).toHaveFocus();
     await waitFor(() => expect(schema).toHaveAttribute("aria-checked", "true"));
-    expect(await screen.findByRole("textbox", { name: "Key" })).toBeInTheDocument();
+    // Schema is a table of fields now, so each cell names the field it edits.
+    expect(await screen.findByRole("textbox", { name: "Key for Title" })).toBeInTheDocument();
     expect(entry).toHaveAttribute("tabindex", "-1");
 
     fireEvent.keyDown(schema, { key: "ArrowLeft" });

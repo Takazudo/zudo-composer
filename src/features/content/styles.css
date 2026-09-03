@@ -17,7 +17,6 @@
 .sg-content-app {
   --sg-content-space-row-y: var(--spacing-vsp-2xs); /* 7 */
   --sg-content-space-group-y: var(--spacing-vsp-xs); /* 14 */
-  --sg-content-space-control-y: var(--spacing-vsp-10); /* 10 */
   --sg-content-space-section-y: var(--spacing-vsp-sm); /* 20 */
   --sg-content-space-inline: var(--spacing-hsp-sm); /* 8 */
   --sg-content-space-region: var(--spacing-hsp-lg); /* 16 */
