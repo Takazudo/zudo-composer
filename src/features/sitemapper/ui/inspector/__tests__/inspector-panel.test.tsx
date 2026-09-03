@@ -237,6 +237,33 @@ describe("Sitemapper InspectorPanel", () => {
     expect(changes).toEqual([FIRST.ref, SECOND.ref, null]);
   });
 
+  it("lands on the kind that was chosen when a switch clears the assigned source", () => {
+    function Harness() {
+      const [selected, setSelected] = useState<SitemapNode>(node("home", "Home", FIRST.ref));
+      return (
+        <InspectorPanel
+          {...panelProps(selected, {
+            document: documentOf(selected),
+            node: selected,
+            onConfirm: (request: { onConfirm: () => void }) => request.onConfirm(),
+            onUpdateSource: (_id: string, source: SitemapNode["source"]) =>
+              setSelected((current) => ({ ...current, source })),
+          })}
+        />
+      );
+    }
+    render(<Harness />);
+    openSourceTab();
+
+    const group = () => screen.getByRole("radiogroup", { name: "Page source type" });
+    fireEvent.click(within(group()).getByRole("radio", { name: "Mapping" }));
+
+    // Clearing the composition is the first half of the switch, not a reason to
+    // send the author back to None.
+    expect(within(group()).getByRole("radio", { name: "Mapping" })).toHaveAttribute("aria-checked", "true");
+    expect(within(group()).getByRole("radio", { name: "None" })).toHaveAttribute("aria-checked", "false");
+  });
+
   it("offers Delete page only below the root, and says what goes with it", () => {
     const child = node("child", "Child");
     const root = { ...node(), children: [child] };

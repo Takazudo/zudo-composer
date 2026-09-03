@@ -2,7 +2,7 @@
 /** @jsxImportSource preact */
 
 import type { JSX } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 import { RailCollapseButton } from "../../../../components/editor-chrome";
 import { PageIcon, TrashIcon } from "../../../../components/icons";
 import {
@@ -76,16 +76,22 @@ export function InspectorPanel({
   onConfirm,
 }: InspectorPanelProps): JSX.Element {
   const [tab, setTab] = useState<InspectorTab>("page");
-  const [kind, setKind] = useState<SourceKind>(node?.source.kind ?? "unassigned");
   const sourceKind = node?.source.kind;
   const pageId = node?.id;
 
-  // The segmented control can stand ahead of the document — "Composition" is
-  // chosen before one is picked — but a page change or an assignment made
-  // elsewhere resets it to what is actually persisted.
-  useEffect(() => {
-    setKind(sourceKind ?? "unassigned");
-  }, [pageId, sourceKind]);
+  // The segmented control stands ahead of the document only while the page has
+  // nothing assigned: "Composition" is chosen before one is picked, and
+  // switching away from an assigned source clears it first, so the chosen kind
+  // has to survive that clear or the author is sent back to None mid-switch.
+  //
+  // Derived rather than synchronised, because an effect that mirrors the
+  // document cannot tell the clear this control just performed from one made
+  // anywhere else. The moment anything is actually assigned — here or in
+  // another surface — the document wins.
+  const [chosen, setChosen] = useState<{ pageId: string; kind: SourceKind } | null>(null);
+  const kind: SourceKind = chosen !== null && chosen.pageId === pageId && sourceKind === "unassigned"
+    ? chosen.kind
+    : sourceKind ?? "unassigned";
 
   const index = useMemo(() => indexDocument(document), [document]);
   const parentOptions = useMemo(() => {
@@ -124,7 +130,7 @@ export function InspectorPanel({
     if (next === kind) return;
     const assigned = node!.source.kind;
     if (assigned === "unassigned" || assigned === next) {
-      setKind(next);
+      setChosen({ pageId: node!.id, kind: next });
       return;
     }
     onConfirm({
@@ -133,7 +139,7 @@ export function InspectorPanel({
       confirmLabel: "Clear",
       onConfirm: () => {
         onUpdateSource(node!.id, { kind: "unassigned" });
-        setKind(next);
+        setChosen({ pageId: node!.id, kind: next });
       },
     });
   }
