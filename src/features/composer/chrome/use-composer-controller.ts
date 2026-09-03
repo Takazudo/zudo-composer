@@ -7,7 +7,6 @@
 //   controller-model.ts  — the document + session-state reducer
 //   persistence/save-queue.ts — serialized, revision-aware record writes
 //   navigation-guard.ts   — the native beforeunload dirty-record guard
-//   resizer-contract.ts   — the vanilla-JS resizer script's width bridge
 //
 // A supported CompositionRecord is loaded before this hook is mounted; the
 // record-scoped path performs no provider read.
@@ -70,15 +69,6 @@ import {
   type PropPath,
 } from "./history-model";
 import { installComposerNavigationGuard } from "./navigation-guard";
-import {
-  LS_INSPECTOR_WIDTH,
-  LS_TREE_WIDTH,
-  MIN_RAIL_W,
-  WIDTH_CHANGE_EVENT,
-  getPersistedWidth,
-  setPersistedWidth,
-  type ComposerWidthChangeDetail,
-} from "./resizer-contract";
 
 type CompositionSaveQueue = SaveQueue<CompositionRecord, CompositionRecordRef, CompositionSaveOutcome>;
 type CompositionSaveQueueState = SaveQueueState<CompositionRecord, CompositionRecordRef, CompositionSaveOutcome>;
@@ -113,8 +103,8 @@ export interface ComposerController {
    * expensive commit path (reducer → immutable record snapshot + save queue
    * → preview-iframe re-render) runs once per pause instead of once per
    * keystroke — the same cheap-live-path / expensive-commit-point split the
-   * rail resizer documents (resizer-dom.ts). Deterministic flush
-   * guarantees (a pending patch can never be lost or reordered):
+   * shared rail resizers use. Deterministic flush guarantees (a pending patch
+   * can never be lost or reordered):
    *   - any OTHER controller action (select, remove, setMode, …) flushes the
    *     pending patch FIRST, so the reducer always sees events in user order;
    *   - `flushPropUpdates` is wired to field blur, export/JSX generation, the
@@ -173,8 +163,6 @@ export interface ComposerController {
   setExpanded: (nodeId: string, expanded: boolean) => void;
   setMode: (mode: ComposerMode) => void;
   setViewport: (viewport: ComposerCanvasViewport) => void;
-  setLeftWidth: (width: number) => void;
-  setRightWidth: (width: number) => void;
 }
 
 /** The chooser needs a synchronous command outcome so it never closes after a rejected atomic mutation. */
@@ -252,8 +240,6 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       rootPolicy: options.rootPolicy,
       saveStatus: saveStatusFromQueue(options.saveQueue.state),
       derivedOutput: derivedOutputFromQueue(options.saveQueue.state),
-      leftWidth: getPersistedWidth(LS_TREE_WIDTH, MIN_RAIL_W),
-      rightWidth: getPersistedWidth(LS_INSPECTOR_WIDTH, MIN_RAIL_W),
     });
   }
 
@@ -538,23 +524,6 @@ export function useComposerController(options: UseComposerControllerOptions): Co
     [flushPropUpdates],
   );
 
-  // Mirror the vanilla resizer script's committed widths into typed state
-  // (the drag/keyboard mechanics themselves run outside Preact for
-  // per-pixel performance — see resizer-dom.ts).
-  useEffect(() => {
-    function onWidthChange(event: Event): void {
-      const detail = (event as CustomEvent<ComposerWidthChangeDetail>).detail;
-      if (!detail) return;
-      dispatch(
-        detail.rail === "tree"
-          ? { type: "setLeftWidth", width: detail.width }
-          : { type: "setRightWidth", width: detail.width },
-      );
-    }
-    document.addEventListener(WIDTH_CHANGE_EVENT, onWidthChange);
-    return () => document.removeEventListener(WIDTH_CHANGE_EVENT, onWidthChange);
-  }, [dispatch]);
-
   return useMemo<ComposerController>(
     () => ({
       state,
@@ -598,14 +567,6 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       setExpanded: (nodeId, expanded) => dispatch({ type: "setExpanded", nodeId, expanded }),
       setMode: (mode) => dispatch({ type: "setMode", mode }),
       setViewport: (viewport) => dispatch({ type: "setViewport", viewport }),
-      setLeftWidth: (width) => {
-        setPersistedWidth(LS_TREE_WIDTH, width);
-        dispatch({ type: "setLeftWidth", width });
-      },
-      setRightWidth: (width) => {
-        setPersistedWidth(LS_INSPECTOR_WIDTH, width);
-        dispatch({ type: "setRightWidth", width });
-      },
     }),
     [
       state,

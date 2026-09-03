@@ -136,7 +136,7 @@ function InspectorShell({
   children,
 }: {
   title: ComponentChildren;
-  version?: string;
+  version?: string | number;
   tabs: readonly PaneTab<InspectorTab>[];
   activeTab: InspectorTab;
   onSelectTab: (tab: InspectorTab) => void;

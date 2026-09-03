@@ -688,6 +688,26 @@ export function ProductionComposerApp({
     }
   }, [duplicatingComposition, idFactory, navigate, nodeIdFactory, providersById, state]);
 
+  const deleteMountedComposition = useCallback(async () => {
+    if (state?.view !== "detail") return;
+    const ref = routeRef(state.route)!;
+    const provider = providersById.get(ref.providerId);
+    if (!provider) return;
+
+    setDetailOperationError(null);
+    try {
+      await provider.store.delete(ref.recordId);
+    } catch (reason) {
+      setDetailOperationError(
+        reason instanceof Error ? reason.message : "The composition could not be deleted.",
+      );
+      return;
+    }
+    // Replace history: the record this entry pointed at no longer exists, so
+    // Back must not return to an editor for it.
+    await navigate({ kind: "index" }, "replace", ref.providerId);
+  }, [navigate, providersById, state]);
+
   const availableProviders = useMemo(
     () => providers.map(({ descriptor }) => ({ descriptor, available: true })),
     [providers],
@@ -757,8 +777,8 @@ export function ProductionComposerApp({
             : {}),
         }}
         registerFlushPendingProps={session.registerFlushPendingProps}
-        onNavigateToLibrary={() => void navigate({ kind: "index" })}
         onDuplicateComposition={() => void duplicateMountedComposition()}
+        onDeleteComposition={() => void deleteMountedComposition()}
         duplicatingComposition={duplicatingComposition}
         getPublicationDependencies={(sourceRecordId) =>
           publicationDependencies(providersById.get(ref.providerId), sourceRecordId, reuseManifest)
