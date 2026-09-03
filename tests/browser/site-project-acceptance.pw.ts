@@ -87,7 +87,14 @@ test("the activated graph appears in every authoring library", async ({ page }) 
 
   await page.goto("/sitemapper");
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sample Studio sitemap 5 pages", exact: true })).toBeVisible();
+  // The Sitemap library became a `DataTable` in issue #165: the record is
+  // reached through the name link, and its page count is a column of its own
+  // rather than part of one button's accessible name.
+  const sitemapRow = page
+    .getByRole("row")
+    .filter({ has: page.getByRole("link", { name: "Sample Studio sitemap", exact: true }) });
+  await expect(sitemapRow).toHaveCount(1);
+  await expect(sitemapRow.getByRole("cell").filter({ hasText: /^5$/ })).toHaveCount(1);
   expect(failures).toEqual([]);
 });
 

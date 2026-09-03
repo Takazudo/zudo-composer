@@ -55,6 +55,34 @@ async function expectArrowTabs(page: Page, label: string, names: readonly string
   await expect(first).toBeFocused();
 }
 
+/**
+ * The narrow-screen pane switch `EditorChrome` gave every record editor is a
+ * `radiogroup`, not a tablist: selection follows focus, so one arrow moves the
+ * choice as well as the focus ring.
+ */
+async function expectArrowRadios(page: Page, group: Locator, names: readonly string[]) {
+  for (const name of names) await expect(group.getByRole("radio", { name, exact: true })).toBeVisible();
+  const first = group.getByRole("radio", { name: names[0]!, exact: true });
+  const second = group.getByRole("radio", { name: names[1]!, exact: true });
+  await first.focus();
+  await expect(first).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(second).toBeFocused();
+  await expect(second).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("ArrowLeft");
+  await expect(first).toBeFocused();
+  await expect(first).toHaveAttribute("aria-checked", "true");
+}
+
+/**
+ * One row of the Sitemap library table, found by the link that opens it. The
+ * page count is a column of its own since issue #165, so a row is identified by
+ * its name and then read for the rest.
+ */
+function sitemapRow(page: Page, name: string): Locator {
+  return page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
+}
+
 async function expectFlatPanels(locator: Locator) {
   const styles = await locator.evaluateAll((nodes) => nodes.map((node) => {
     const style = getComputedStyle(node);
@@ -100,9 +128,16 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(composerFrame.getByRole("heading", { name: "Static about heading", exact: true })).toBeVisible();
 
   await page.goto("/sitemapper");
-  await page.getByRole("button", { name: "Sample Studio sitemap 5 pages", exact: true }).click();
-  await expect(page.getByRole("toolbar", { name: "Sitemapper toolbar" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Sitemap outline" })).toBeVisible();
+  const sampleRow = sitemapRow(page, "Sample Studio sitemap");
+  await expect(sampleRow).toHaveCount(1);
+  await expect(sampleRow.getByRole("cell").filter({ hasText: /^5$/ })).toHaveCount(1);
+  await sampleRow.getByRole("link", { name: "Sample Studio sitemap", exact: true }).click();
+  // Opening a Sitemap is a real navigation to the record's own URL, and the
+  // editor chrome names the record it loaded.
+  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Sample Studio sitemap");
+  await expect(page.getByRole("button", { name: "Add page" })).toBeVisible();
+  await expect(page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /^Home\b/ })).toBeVisible();
   expect(failures).toEqual([]);
 });
 
@@ -301,46 +336,104 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Content Mapping journey");
   await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
-  const outline = page.getByRole("region", { name: "Sitemap outline" });
-  await outline.getByRole("button", { name: "Home", exact: true }).click();
-  const inspector = page.getByLabel("Inspector for Home");
-  await expect(inspector.getByText("Current: Unassigned", { exact: true })).toBeVisible();
-  await inspector.getByRole("textbox", { name: "Slug" }).fill("news/latest");
-  await inspector.getByRole("textbox", { name: "Slug" }).blur();
-  await inspector.getByRole("button", { name: "Choose Content Mapping" }).click();
-  await page.getByRole("dialog", { name: "Choose a Content Mapping" }).getByRole("button", { name: `Assign ${COLLECTION_MAPPING}` }).click();
-  await inspector.getByRole("combobox", { name: "Slug field" }).selectOption({ label: "Slug" });
-  await inspector.getByRole("combobox", { name: "Entry title field" }).selectOption({ label: "Heading" });
-  await expect(inspector.getByText("Current: Content Mapping", { exact: true })).toBeVisible();
-  await expect(inspector.getByText("Browser Journal articles · collection", { exact: true })).toBeVisible();
-  await expect(inspector.locator("dt", { hasText: /^Entries$/ }).locator("..")).toContainText("26");
-  await expect(inspector.getByText("/news/latest/browser-23", { exact: true })).toBeVisible();
-  await expect(inspector.getByText("Entry slug is missing or empty.", { exact: true }).first()).toBeVisible();
-  await expect(inspector.getByText("Entry slug contains a forbidden route delimiter.", { exact: true })).toBeVisible();
-  await expect(inspector.getByText(/Route \/news\/latest\/%E6%9D%B1%E4%BA%AC collides/).first()).toBeVisible();
-  await expect(page.getByText(/Mapping route family · 24 routes · blocked/)).toBeVisible();
-  await expect(outline.locator(".sg-sitemapper-tree-row")).toHaveCount(1);
-  await inspector.getByRole("textbox", { name: "Slug" }).fill("https://example.test/news");
-  await inspector.getByRole("textbox", { name: "Slug" }).blur();
-  await expect(page.getByText(/Mapping route family · 0 routes · blocked/)).toBeVisible();
-  await inspector.getByRole("textbox", { name: "Slug" }).fill("news/latest");
-  await inspector.getByRole("textbox", { name: "Slug" }).blur();
-  await expect(page.getByText(/Mapping route family · 24 routes · blocked/)).toBeVisible();
+  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
 
-  await inspector.getByRole("button", { name: "Replace Mapping" }).click();
-  await page.getByRole("dialog", { name: "Choose a Content Mapping" }).getByRole("button", { name: `Assign ${SINGLE_MAPPING}` }).click();
-  await expect(inspector.getByText("Browser Site settings · single", { exact: true })).toBeVisible();
-  await expect(inspector.getByText("single", { exact: true })).toBeVisible();
+  // Issue #165 moved the Sitemapper onto `OutlineTree` and `EditorChrome`: the
+  // outline is a real `tree` of `treeitem` rows, and the inspector is a pane
+  // with a Page / Source tab pair instead of one flat panel.
+  const pages = page.getByRole("tree", { name: "Pages" });
+  await pages.getByRole("treeitem", { name: /^Home\b/ }).click();
+  const inspector = page.getByRole("region", { name: "Inspector" });
+  // The chip beside the page name is what "Current: …" used to say.
+  const assignment = inspector.locator(".cms-pane__header .cms-chip");
+  await expect(inspector.locator(".sg-sitemapper-inspector__name")).toHaveText("Home");
+  await expect(assignment).toHaveText("Unassigned");
+
+  const pageTab = inspector.getByRole("tab", { name: "Page", exact: true });
+  const sourceTab = inspector.getByRole("tab", { name: "Source", exact: true });
+  const slug = inspector.getByRole("textbox", { name: "Slug", exact: true });
+  await slug.fill("news/latest");
+  await slug.blur();
   await expect(inspector.getByText("/news/latest", { exact: true })).toBeVisible();
-  await inspector.getByRole("button", { name: "Clear Mapping" }).click();
-  await expect(inspector.getByText("Current: Unassigned", { exact: true })).toBeVisible();
+
+  await sourceTab.click();
+  const sourceKind = inspector.getByRole("radiogroup", { name: "Page source type" });
+  await sourceKind.getByRole("radio", { name: "Mapping", exact: true }).click();
+  await inspector.getByRole("button", { name: "Choose mapping" }).click();
+  await page.getByRole("dialog", { name: "Choose a Content Mapping" }).getByRole("button", { name: `Assign ${COLLECTION_MAPPING}` }).click();
+  // Scoped to the Mapping group: the shell rail names the active provider in
+  // its foot, so a page-wide text match can pass on chrome rather than on the
+  // assignment under test.
+  const mappingField = inspector.getByRole("group", { name: "Mapping" });
+  const mappingCard = mappingField.locator(".sg-sitemapper-source__card");
+  await expect(mappingCard.getByText(COLLECTION_MAPPING, { exact: true })).toBeVisible();
+  // The two field pickers are built from the resolved Content model, so the
+  // field this journey added to it proves which model answered.
+  const slugField = mappingField.getByRole("combobox", { name: "Slug field" });
+  await expect(slugField.locator("option", { hasText: "Alternate route slug" })).toHaveCount(1);
+  await slugField.selectOption({ label: "Slug" });
+  await mappingField.getByRole("combobox", { name: "Entry title field" }).selectOption({ label: "Heading" });
+  await expect(assignment).toHaveText("Mapping");
+
+  // 26 Entries, two of which derive no route: one with an empty slug and one
+  // whose slug is a bare dot. The two that share 東京 collide but both resolve.
+  await expect(mappingCard).toContainText(/\b24 routes\b/);
+  await expect(mappingCard.getByText("Needs attention", { exact: true })).toBeVisible();
+  await expect(mappingField.getByText("Entry slug is missing or empty.", { exact: true }).first()).toBeVisible();
+  await expect(mappingField.getByText("Entry slug contains a forbidden route delimiter.", { exact: true })).toBeVisible();
+  await expect(mappingField.getByText(/Route \/news\/latest\/%E6%9D%B1%E4%BA%AC collides/).first()).toBeVisible();
+  // A Mapping route family owns its own routes and takes no authored children.
+  await expect(pages.getByRole("treeitem")).toHaveCount(1);
+
+  // An absolute base derives nothing at all, and the expansion says why rather
+  // than resolving the Mapping against it.
+  await pageTab.click();
+  await slug.fill("https://example.test/news");
+  await slug.blur();
+  await sourceTab.click();
+  await expect(mappingField.getByText("HTTP(S) Mapping route bases are unsupported.", { exact: true })).toBeVisible();
+  await expect(mappingCard).toHaveCount(0);
+  await pageTab.click();
+  await slug.fill("news/latest");
+  await slug.blur();
+  await sourceTab.click();
+  await expect(mappingCard).toContainText(/\b24 routes\b/);
+
+  await mappingField.getByRole("button", { name: "Change mapping" }).click();
+  await page.getByRole("dialog", { name: "Choose a Content Mapping" }).getByRole("button", { name: `Assign ${SINGLE_MAPPING}` }).click();
+  await expect(mappingCard.getByText(SINGLE_MAPPING, { exact: true })).toBeVisible();
+  // A single Content model derives one route from the page's own slug, so it
+  // offers no per-Entry slug field at all.
+  await expect(mappingField.getByRole("combobox", { name: "Slug field" })).toHaveCount(0);
+  await pageTab.click();
+  await expect(inspector.getByText("/news/latest", { exact: true })).toBeVisible();
+
+  // Switching away from an assigned source clears it, behind one confirmation.
+  await sourceTab.click();
+  await sourceKind.getByRole("radio", { name: "None", exact: true }).click();
+  await page.getByRole("alertdialog", { name: "Clear the assigned mapping?" }).getByRole("button", { name: "Clear", exact: true }).click();
+  await expect(assignment).toHaveText("Unassigned");
+  await expect(inspector.getByText("This page renders nothing until a source is assigned.", { exact: true })).toBeVisible();
+
+  await sourceKind.getByRole("radio", { name: "Composition", exact: true }).click();
   await inspector.getByRole("button", { name: "Choose composition" }).click();
   await page.getByRole("dialog", { name: "Choose a composition" }).getByRole("button", { name: /Assign Journal entry page from Browser storage/ }).click();
-  await expect(inspector.getByText("Current: Static Composition", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "All sitemaps" }).click();
-  await page.getByRole("button", { name: "Content Mapping journey 1 page" }).click();
-  await page.getByRole("region", { name: "Sitemap outline" }).getByRole("button", { name: /^Home\b/ }).click();
-  await expect(page.getByLabel("Inspector for Home").getByText("Current: Static Composition", { exact: true })).toBeVisible();
+  const compositionField = inspector.getByRole("group", { name: "Composition" });
+  await expect(compositionField.getByText("Journal entry page", { exact: true })).toBeVisible();
+  await expect(assignment).toHaveText("Composition");
+
+  // Leaving the record is a real navigation now, so the assignment has to be
+  // on disk before it happens rather than sitting in the debounced queue.
+  await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
+  await page.getByRole("link", { name: "Back to Sitemaps" }).click();
+  const journeyRow = sitemapRow(page, "Content Mapping journey");
+  await expect(journeyRow.getByRole("cell").filter({ hasText: /^1$/ })).toHaveCount(1);
+  await journeyRow.getByRole("link", { name: "Content Mapping journey", exact: true }).click();
+  const reopened = page.getByRole("region", { name: "Inspector" });
+  await page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /^Home\b/ }).click();
+  await expect(reopened.locator(".cms-pane__header .cms-chip")).toHaveText("Composition");
+  await reopened.getByRole("tab", { name: "Source", exact: true }).click();
+  await expect(reopened.getByRole("group", { name: "Composition" }).getByText("Journal entry page", { exact: true })).toBeVisible();
   await screenshot(page, testInfo, "journey-sitemapper-static-persisted");
 
   expect(failures).toEqual([]);
@@ -440,7 +533,15 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   const responsiveDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await responsiveDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Responsive panels");
   await responsiveDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expectArrowTabs(page, "Sitemapper panels", ["Outline", "Canvas", "Inspector"]);
+  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  // `EditorChrome` replaced the Sitemapper's own tablist with the shared pane
+  // switch, and the editor renames the three panes. Scoped to the group rather
+  // than matched page-wide: the toolbar's View control also offers a "Canvas",
+  // and it is only withdrawn here by a stylesheet rule below 64rem — a rule
+  // this spec must not silently depend on for its selectors to stay unique.
+  const paneSwitch = page.getByRole("radiogroup", { name: "Pane" });
+  await expectArrowRadios(page, paneSwitch, ["Pages", "Canvas", "Inspect"]);
+  await expect(page.getByRole("region", { name: "Pages" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   for (const theme of ["light", "dark"] as const) {
     await useTheme(page, theme);
