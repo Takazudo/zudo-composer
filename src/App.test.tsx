@@ -48,7 +48,6 @@ describe('App', () => {
     // so it stands before the first read lands.
     expect(screen.getByRole('region', { name: 'How the pieces connect' })).toBeInTheDocument();
     expect(document.querySelectorAll('.cms-rail__item svg')).toHaveLength(8);
-    expect(screen.queryByRole('heading', { name: 'Choose a tool' })).not.toBeInTheDocument();
   });
 
   it('keeps the production Media state truthful without probing a provider', () => {

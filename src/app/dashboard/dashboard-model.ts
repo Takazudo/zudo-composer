@@ -80,7 +80,7 @@ export function greeting(now: Date = new Date()): string {
   return "Good evening.";
 }
 
-interface RecordKindPresentation {
+export interface RecordKindPresentation {
   readonly label: string;
   readonly icon: IconComponent;
   /** `accent` marks a publication kind; everything else is a plain tag. */
@@ -193,7 +193,7 @@ export function isEmptyWorkspace(counts: WorkspaceCounts): boolean {
  * Needs attention
  * -------------------------------------------------------------------------- */
 
-interface AttentionPresentation {
+export interface AttentionPresentation {
   readonly icon: IconComponent;
   /** The verb on the row's link; it says what the target route is for. */
   readonly action: string;

@@ -49,12 +49,12 @@ const READY_TIMEOUT_MS = 60_000;
  * How each route says it has finished rendering, so nothing is measured early.
  *
  * `/` and `/sitemapper` name their own heading — the Dashboard greeting follows
- * the local clock, so it is matched as a pattern. `/composer` deliberately does
- * not name one: it still runs its pre-epic chrome, #167 replaces that wholesale, and a
- * spec an unrelated sub-issue has to edit is a spec that gets edited wrongly.
- * It gates on the shell instead — the route painted into the content area — and
- * `gotoRoute` then waits out any busy state, which is all this spec needs before
- * reading console errors and overflow.
+ * the local clock, so it is matched as a pattern. `/composer` deliberately
+ * names none: it still runs its pre-epic chrome, #167 replaces that wholesale,
+ * and a spec an unrelated sub-issue has to edit is a spec that gets edited
+ * wrongly. It gates on the shell instead — the route painted into the content
+ * area — and `gotoRoute` then waits out any busy state, which is all this spec
+ * needs before reading console errors and overflow.
  */
 const ROUTE_READY: Record<FoundationRoute, (page: Page) => Locator> = {
   "/": (page) => page.getByRole("heading", { name: /^Good (morning|afternoon|evening)\.$/ }),
