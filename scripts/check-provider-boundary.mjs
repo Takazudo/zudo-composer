@@ -230,8 +230,13 @@ assert.ok(/--sg-header-h:\s*var\(\s*--zc-topbar-h\s*\)/.test(combinedCss), "edit
 // utility rather than deleting them, or the proof silently becomes vacuous.
 // (`pr-[3.5rem]` held this role until epic #156 moved the dialog onto the
 // shared `cms-` controls.)
-assert.ok(readFileSync(join(root, "src/features/composer/library/new-composition-dialog.tsx"), "utf8").includes("min-w-48"), "local Tailwind source proof drifted");
-assert.ok(css.some((source) => source.includes(".min-w-48{")), "local-source Tailwind utility was not emitted");
+// `min-w-48` cannot hold this role: it generates no CSS at all under this
+// project's Tailwind theme, so the emission half could never pass. `min-h-0`
+// is verified local-only — no file under node_modules/@zudo-sg/ui/src uses it,
+// unlike flex-1 / w-full / min-w-0, whose emission would prove nothing about
+// whether local source is scanned.
+assert.ok(readFileSync(join(root, "src/features/composer/library/new-composition-dialog.tsx"), "utf8").includes("min-h-0"), "local Tailwind source proof drifted");
+assert.ok(css.some((source) => source.includes(".min-h-0{")), "local-source Tailwind utility was not emitted");
 assert.ok(readFileSync(join(root, "node_modules/@zudo-sg/ui/src/cards/callout/callout.tsx"), "utf8").includes("border-l-4"), "provider Tailwind source proof drifted");
 assert.ok(css.some((source) => source.includes(".border-l-4{")), "installed-provider Tailwind utility was not emitted");
 for (const [size, value] of Object.entries({ xs: ".75rem", sm: "1rem", md: "1.25rem", lg: "1.5rem" })) {
