@@ -1,110 +1,91 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// The Composer document shell's toolbar + five-track workspace.
+// The Composer document shell: the shared editor chrome, filled in.
 //
 // Purely presentational — no state of its own. `tree`, `canvas`, `inspector`,
-// `toolbar`, and `banner` are typed content seams driven by the app root.
+// `banner` and the toolbar slots are typed content seams driven by the app
+// root; the geometry, the persisted rail widths, the narrow-screen pane switch
+// and the save-status publication all belong to `EditorChrome`/`EditorBody`, so
+// this file owns none of them.
 //
-// Geometry lives entirely in src/features/composer/styles.css: below 64rem
-// this renders a single canvas-only column (tree/inspector/resizers hidden
-// via CSS, not omitted from the DOM — see that file's header for why: DOM
-// presence keeps the resizer script's `querySelector` wiring unconditional).
-// At >=64rem it becomes the five-track grid: tree rail | resizer | canvas
-// (minmax(0,1fr)) | resizer | inspector rail.
-//
-// The resizer `<div role="separator">` elements are inert markup here —
-// pointer/keyboard dragging and the ARIA `aria-valuenow`/`aria-valuemax`
-// live-updates are wired by the normal DOM hooks in `resizer-dom.ts`. The
-// initial `aria-value*` defaults match the CSS rail-width defaults.
+// The banner sits inside the main region rather than above the panes: a
+// provider or navigation failure is about what the canvas is showing, and a
+// full-width strip between the toolbar and the rails would push both rails down
+// every time one appeared.
 
 import type { ComponentChildren, JSX } from "preact";
-import {
-  ATTR_INSPECTOR_RESIZER,
-  ATTR_TREE_RESIZER,
-  ID_INSPECTOR_RAIL,
-  ID_TREE_RAIL,
-  MAX_RAIL_W,
-  MIN_RAIL_W,
-} from "./resizer-contract";
+import type { EditorStatus } from "../../../app/chrome-context";
+import { EditorBody, EditorChrome } from "../../../components/editor-chrome";
+import type { EditorChromeBackLink } from "../../../components/editor-chrome";
 import { ComposerPlaceholderPane } from "./composer-placeholder-pane";
 
+/** Fresh-session rail widths. The structure rail is wider: it holds nested rows. */
+const DEFAULT_TREE_WIDTH = 320;
+const DEFAULT_INSPECTOR_WIDTH = 320;
+
 export interface ComposerWorkspaceProps {
-  /** The Composer toolbar (document name, save status, mode, and viewport). */
-  toolbar: ComponentChildren;
-  /** Optional current provider/navigation status above the grid. */
+  back: EditorChromeBackLink;
+  /** The composition's name; normally a `<RecordTitle>`. */
+  title: ComponentChildren;
+  /** Mode and viewport controls, centred and withdrawn on narrow screens. */
+  center?: ComponentChildren;
+  /** History, Export and the overflow menu, pinned to the inline end. */
+  right?: ComponentChildren;
+  /** Published to the app chrome, which decides where the save state is drawn. */
+  status?: EditorStatus | null;
+  dirty?: boolean;
+  /** Current provider/navigation status, above the canvas. */
   banner?: ComponentChildren;
-  /** Structure tree region. Defaults to an explicit omitted-surface fallback. */
+  /** Structure rail. Defaults to an explicit omitted-surface fallback. */
   tree?: ComponentChildren;
   /** Canvas / preview region. Defaults to an explicit omitted-surface fallback. */
   canvas?: ComponentChildren;
-  /** Inspector region. Defaults to an explicit omitted-surface fallback. */
+  /** Inspector rail. Defaults to an explicit omitted-surface fallback. */
   inspector?: ComponentChildren;
-  /** SSR-default aria-valuenow for the tree resizer, in px. */
-  treeWidthPx?: number;
-  /** SSR-default aria-valuenow for the inspector resizer, in px. */
-  inspectorWidthPx?: number;
+  /** Dialogs and menus mounted inside the chrome, so they share its context. */
+  children?: ComponentChildren;
 }
 
 export function ComposerWorkspace({
-  toolbar,
+  back,
+  title,
+  center,
+  right,
+  status = null,
+  dirty = false,
   banner,
   tree,
   canvas,
   inspector,
-  treeWidthPx = 288,
-  inspectorWidthPx = 320,
+  children,
 }: ComposerWorkspaceProps): JSX.Element {
   return (
-    <div class="sg-composer-shell">
-      <div class="sg-composer-toolbar" role="toolbar" aria-label="Composer toolbar">
-        {toolbar}
-      </div>
-      {banner}
-      <div class="sg-composer-grid" data-sg-composer-grid>
-        <div class="sg-composer-tree-rail" id={ID_TREE_RAIL} aria-label="Structure">
-          {tree ?? <ComposerPlaceholderPane label="Structure" note="No structure surface was supplied." />}
-        </div>
-        <div
-          class="sg-composer-resizer"
-          {...{ [ATTR_TREE_RESIZER]: "" }}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize structure panel"
-          aria-controls={ID_TREE_RAIL}
-          aria-valuemin={MIN_RAIL_W}
-          aria-valuemax={MAX_RAIL_W}
-          aria-valuenow={treeWidthPx}
-          tabindex={0}
-        />
-        <div class="sg-composer-canvas" data-sg-composer-canvas>
-          {canvas ?? (
-            <ComposerPlaceholderPane
-              label="Canvas"
-              note="No preview surface was supplied."
-            />
-          )}
-        </div>
-        <div
-          class="sg-composer-resizer"
-          {...{ [ATTR_INSPECTOR_RESIZER]: "" }}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize inspector panel"
-          aria-controls={ID_INSPECTOR_RAIL}
-          aria-valuemin={MIN_RAIL_W}
-          aria-valuemax={MAX_RAIL_W}
-          aria-valuenow={inspectorWidthPx}
-          tabindex={0}
-        />
-        <div class="sg-composer-inspector" id={ID_INSPECTOR_RAIL} aria-label="Inspector">
-          {inspector ?? <ComposerPlaceholderPane label="Inspector" note="No inspector surface was supplied." />}
-        </div>
-      </div>
-      {/* CSS-only narrow-layout guidance, visible below the 64rem seam. */}
-      <div class="sg-composer-narrow-note" data-sg-composer-narrow-note>
-        <strong>Canvas-only view</strong>
-        <span>Use a wider window to edit the tree and properties.</span>
-      </div>
-    </div>
+    <EditorChrome
+      editorKey="composer"
+      class="sg-composer-editor"
+      back={back}
+      title={title}
+      center={center}
+      right={right}
+      status={status}
+      dirty={dirty}
+      paneLabels={{ nav: "Structure", main: "Canvas", insp: "Inspect" }}
+    >
+      <EditorBody
+        navLabel="Structure"
+        inspectorLabel="Inspector"
+        defaultNavWidth={DEFAULT_TREE_WIDTH}
+        defaultInspectorWidth={DEFAULT_INSPECTOR_WIDTH}
+        nav={tree ?? <ComposerPlaceholderPane label="Structure" note="No structure surface was supplied." />}
+        main={
+          <div class="sg-composer-main">
+            {banner}
+            {canvas ?? <ComposerPlaceholderPane label="Canvas" note="No preview surface was supplied." />}
+          </div>
+        }
+        inspector={inspector ?? <ComposerPlaceholderPane label="Inspector" note="No inspector surface was supplied." />}
+      />
+      {children}
+    </EditorChrome>
   );
 }

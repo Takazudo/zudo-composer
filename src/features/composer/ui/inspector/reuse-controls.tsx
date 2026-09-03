@@ -1,65 +1,169 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
+// The inspector's Reuse tab: one banner saying what this composition is right
+// now, then one card per reusable role.
+//
+// The essays this surface used to carry are gone. Reuse used to sit above the
+// props an author actually came to edit, and three paragraphs of scope rules
+// pushed them below the fold; each card now states its scope in one line and
+// keeps its own action, and the guidance that only matters when an action is
+// unavailable is attached to the disabled control instead.
 
-import { useEffect, useId, useRef, useState } from "preact/hooks";
-import type { JSX, Ref } from "preact";
-import type { ComponentCatalog, CompositionDocument } from "../../../../composer/browser";
+import type { JSX } from "preact";
+import { useId, useState } from "preact/hooks";
+import type {
+  ComponentCatalog,
+  CompositionDocument,
+  GlobalTemplateOutletTarget,
+  LinkedEditorLifecycleActions,
+  LinkedEditorPresentation,
+} from "../../../../composer/browser";
 import { diagnoseDocument } from "../../../../composer/browser";
-import { PlusIcon, TrashIcon, XMarkIcon } from "../../../../components/icons";
+import { ArrowRightIcon, ContainerIcon, RefreshIcon, SlotIcon, TrashIcon, XMarkIcon } from "../../../../components/icons";
+import { ConfirmDialog } from "../../../../components/overlay";
+import { Banner, Button, Field, Input, PaneSection } from "../../../../components/ui";
 import type { ComposerMode } from "../../chrome/controller-model";
+import type { SelectedSlot } from "../tree/structure-pane";
 import type { ReuseAuthoringActionResult } from "../shared/reuse-authoring-contract";
 
 export interface ReuseControlsProps {
   document: CompositionDocument;
   manifest: ComponentCatalog;
   mode: ComposerMode;
-  /** Latest synchronous controller rejection, kept visible beside the reuse controls. */
+  /** Latest synchronous controller rejection, kept visible beside the controls. */
   lastError?: string | null;
   onPublishPattern: () => void;
   /** Must wait for the provider-owned dependent query before invoking the command. */
   onClearPublication: () => Promise<ReuseAuthoringActionResult>;
+  /**
+   * The slot selected in Structure, which is what a Global template outlet is
+   * published from. Null disables the outlet action with a reason.
+   */
+  selectedSlot?: (SelectedSlot & { label: string; empty: boolean }) | null;
+  /** Provider-checked publish/reassign for one real empty component slot. */
+  onSetGlobalTemplateOutlet?: (
+    target: GlobalTemplateOutletTarget,
+    label: string,
+  ) => Promise<ReuseAuthoringActionResult>;
+  /** Document-level link state; selection and fields remain local-only. */
+  linkedPresentation?: LinkedEditorPresentation;
+  linkedActions?: LinkedEditorLifecycleActions;
 }
 
 type ClearablePublication = "pattern" | "global-template";
-type FocusTarget = "publish-pattern" | "unpublish-pattern" | "unpublish-global-template";
 
-const PATTERN_SCOPE_COPY =
-  "Whole-Composition scope: publishing immediately makes this entire Composition, including every root component, a reusable Pattern. It does not publish the selected subtree.";
-const PATTERN_PUBLISHED_COPY =
-  "Available as a reusable Pattern in this document. The Composer save status reports whether this change is durably saved.";
-const GLOBAL_TEMPLATE_COPY =
-  "Global templates are published from Structure by choosing a real empty component slot. That named outlet and its consumers are managed there; it is not an alternative Pattern radio choice.";
+const PATTERN_SCOPE = "Whole-composition scope. Publishing makes the entire document reusable, not the selected subtree.";
+const OUTLET_SCOPE = "Pick an empty slot and mark it as a named outlet. Consumers fill it from their own document.";
 
-function patternDisabledReasons(document: CompositionDocument): string[] {
-  const reasons: string[] = [];
+function patternDisabledReason(document: CompositionDocument): string | null {
   if (document.binding !== undefined) {
-    reasons.push("This Composition is bound to a Global template. Remove its binding before publishing it as a Pattern.");
-  } else if (document.root.length === 0) {
-    reasons.push("Add at least one root component before publishing a Pattern.");
-  } else if (document.publication?.kind === "global-template") {
-    reasons.push("This Composition is currently a Global template. Unpublish the Global template before publishing it as a Pattern.");
+    return "This composition is bound to a Global template and cannot republish itself. Remove its binding first.";
   }
-  return reasons;
+  if (document.root.length === 0) return "Add at least one root component before publishing a Pattern.";
+  if (document.publication?.kind === "global-template") {
+    return "This composition is a Global template. Unpublish it before publishing it as a Pattern.";
+  }
+  return null;
 }
 
-function clearConfirmationCopy(kind: ClearablePublication): { heading: string; message: string; label: string } {
-  if (kind === "pattern") {
-    return {
-      heading: "Unpublish Pattern?",
-      message: "This immediately removes this Composition’s reusable Pattern status. It does not delete the Composition.",
+function clearCopy(kind: ClearablePublication): { title: string; message: string; label: string } {
+  return kind === "pattern"
+    ? {
+      title: "Unpublish Pattern?",
+      message: "This removes the composition’s reusable Pattern status. It does not delete the composition.",
       label: "Unpublish Pattern",
+    }
+    : {
+      title: "Unpublish Global template?",
+      message: "This removes the composition’s Global template status. It does not delete the composition.",
+      label: "Unpublish Global template",
     };
-  }
-  return {
-    heading: "Unpublish Global template?",
-    message: "This immediately removes this Composition’s Global template status. It does not delete the Composition.",
-    label: "Unpublish Global template",
-  };
 }
 
-function mutationMessage(kind: ClearablePublication, action: "published" | "unpublished"): string {
-  const subject = kind === "pattern" ? "Pattern" : "Global template";
-  return `${subject} ${action} in this document. Check the Composer save status for persistence.`;
+/** What this composition is right now, as one line. */
+function StatusBanner({
+  document,
+  presentation,
+  actions,
+}: {
+  document: CompositionDocument;
+  presentation: LinkedEditorPresentation;
+  actions?: LinkedEditorLifecycleActions;
+}): JSX.Element {
+  if (presentation.state === "blocked") {
+    return (
+      <Banner
+        tone="err"
+        title="Linked template unavailable"
+        action={
+          <>
+            {actions?.onRetry && (
+              <Button size="sm" onClick={() => actions.onRetry?.()}>
+                <RefreshIcon size="sm" />
+                Retry
+              </Button>
+            )}
+            {actions?.onRemoveBrokenBinding && (
+              <Button size="sm" variant="danger" onClick={() => actions.onRemoveBrokenBinding?.()}>
+                <TrashIcon size="sm" />
+                Remove broken binding
+              </Button>
+            )}
+          </>
+        }
+      >
+        {presentation.message}
+      </Banner>
+    );
+  }
+
+  if (presentation.state === "resolved") {
+    return (
+      <Banner
+        tone="info"
+        title="This composition consumes a Global template."
+        action={
+          <>
+            {actions?.onOpenSource && (
+              <Button size="sm" onClick={() => actions.onOpenSource?.(presentation.sourceRecordId)}>
+                <ArrowRightIcon size="sm" />
+                Open source
+              </Button>
+            )}
+            {actions?.onDetach && (
+              <Button size="sm" onClick={() => actions.onDetach?.()}>
+                <XMarkIcon size="sm" />
+                Detach
+              </Button>
+            )}
+          </>
+        }
+      >
+        {presentation.sourceName} · Outlet: {presentation.outletLabel || presentation.outletId} · Locked
+      </Banner>
+    );
+  }
+
+  const publication = document.publication;
+  if (publication?.kind === "pattern") {
+    return (
+      <Banner tone="info" title="This composition is a Pattern.">
+        Other compositions can insert it as a linked block. Edits here update every use.
+      </Banner>
+    );
+  }
+  if (publication?.kind === "global-template") {
+    return (
+      <Banner tone="info" title="This composition is a Global template.">
+        Outlet {publication.outlet.label || "Untitled outlet"} (id {publication.outlet.id}) is filled by each consumer.
+      </Banner>
+    );
+  }
+  return (
+    <Banner tone="info" title="This composition is not reusable yet.">
+      Publish it as a Pattern, or mark an empty slot as a Global template outlet.
+    </Banner>
+  );
 }
 
 export function ReuseControls({
@@ -69,268 +173,208 @@ export function ReuseControls({
   lastError = null,
   onPublishPattern,
   onClearPublication,
+  selectedSlot = null,
+  onSetGlobalTemplateOutlet,
+  linkedPresentation = { state: "local" },
+  linkedActions,
 }: ReuseControlsProps): JSX.Element {
   const readOnly = mode === "preview";
   const diagnostics = diagnoseDocument(document, manifest);
   const publication = document.publication;
-  const patternScopeId = useId();
   const patternReasonId = useId();
-  const patternPublishedCopyId = useId();
-  const globalTemplateCopyId = useId();
-  const previewReasonId = useId();
-  // Publication clears are history barriers by design, so their confirmation remains necessary.
+  const outletReasonId = useId();
+
   const [confirmingClear, setConfirmingClear] = useState<ClearablePublication | null>(null);
   const [busy, setBusy] = useState(false);
-  const [liveFeedback, setLiveFeedback] = useState<string | null>(null);
-  const [patternPublicationRequested, setPatternPublicationRequested] = useState(false);
-  const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
-  const publishPatternRef = useRef<HTMLButtonElement | null>(null);
-  const unpublishPatternRef = useRef<HTMLButtonElement | null>(null);
-  const unpublishGlobalTemplateRef = useRef<HTMLButtonElement | null>(null);
-  const cancelConfirmRef = useRef<HTMLButtonElement | null>(null);
-  const disabledPatternReasons = patternDisabledReasons(document);
-  const patternDisabled = readOnly || disabledPatternReasons.length > 0;
-  const globalTemplateDisabledReason = readOnly ? "Reuse actions are unavailable in preview." : null;
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [outletDraft, setOutletDraft] = useState<string | null>(null);
+  const [outletError, setOutletError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!patternPublicationRequested) return;
-    if (publication?.kind === "pattern") {
-      setLiveFeedback(mutationMessage("pattern", "published"));
-      setPatternPublicationRequested(false);
-    } else if (lastError) {
-      setFocusTarget(null);
-      setPatternPublicationRequested(false);
-    }
-  }, [lastError, patternPublicationRequested, publication?.kind]);
-
-  useEffect(() => {
-    if (confirmingClear !== null) cancelConfirmRef.current?.focus();
-  }, [confirmingClear]);
-
-  useEffect(() => {
-    if (busy || confirmingClear !== null || focusTarget === null) return;
-    if (focusTarget === "publish-pattern" && publication === undefined) {
-      publishPatternRef.current?.focus();
-      setFocusTarget(null);
-    } else if (focusTarget === "unpublish-pattern" && publication?.kind === "pattern") {
-      unpublishPatternRef.current?.focus();
-      setFocusTarget(null);
-    } else if (focusTarget === "unpublish-global-template" && publication?.kind === "global-template") {
-      unpublishGlobalTemplateRef.current?.focus();
-      setFocusTarget(null);
-    }
-  }, [busy, confirmingClear, focusTarget, publication?.kind]);
-
-  function publishPattern(): void {
-    setLiveFeedback(null);
-    setFocusTarget("unpublish-pattern");
-    setPatternPublicationRequested(true);
-    onPublishPattern();
-  }
-
-  function cancelClear(): void {
-    const cancelled = confirmingClear;
-    setConfirmingClear(null);
-    if (cancelled === "pattern") setFocusTarget("unpublish-pattern");
-    if (cancelled === "global-template") setFocusTarget("unpublish-global-template");
-  }
+  const isGlobalTemplate = publication?.kind === "global-template";
+  const patternReason = readOnly ? "Reuse actions are unavailable in preview." : patternDisabledReason(document);
+  const outletReason = readOnly
+    ? "Reuse actions are unavailable in preview."
+    : !onSetGlobalTemplateOutlet
+      ? "This editor cannot change the outlet."
+      : document.binding !== undefined
+        ? "A bound composition cannot publish an outlet of its own."
+        : publication?.kind === "pattern"
+          ? "This composition is a Pattern. Unpublish it before choosing an outlet."
+          : selectedSlot === null
+            ? "Select a slot in Structure first."
+            : !selectedSlot.empty
+              ? `${selectedSlot.label} already has a component. Choose an empty slot.`
+              : null;
 
   async function clearPublication(): Promise<void> {
     const clearing = confirmingClear;
     if (clearing === null) return;
     setBusy(true);
-    setLiveFeedback(null);
+    setFeedback(null);
     try {
       const result = await onClearPublication();
-      if (result.status === "applied") {
-        setLiveFeedback(mutationMessage(clearing, "unpublished"));
-        setFocusTarget("publish-pattern");
-      } else {
-        setLiveFeedback(result.message);
-        setFocusTarget(clearing === "pattern" ? "unpublish-pattern" : "unpublish-global-template");
-      }
+      setFeedback(
+        result.status === "applied"
+          ? `${clearing === "pattern" ? "Pattern" : "Global template"} unpublished. Check the save status for persistence.`
+          : result.message,
+      );
     } catch (reason) {
-      setLiveFeedback(reason instanceof Error ? reason.message : "Publication could not be removed.");
-      setFocusTarget(clearing === "pattern" ? "unpublish-pattern" : "unpublish-global-template");
+      setFeedback(reason instanceof Error ? reason.message : "Publication could not be removed.");
     } finally {
       setBusy(false);
       setConfirmingClear(null);
     }
   }
 
-  const patternDescription = [
-    patternScopeId,
-    disabledPatternReasons.length > 0 ? patternReasonId : null,
-    globalTemplateDisabledReason ? previewReasonId : null,
-  ].filter(Boolean).join(" ");
-  const globalDescription = [globalTemplateCopyId, globalTemplateDisabledReason ? previewReasonId : null]
-    .filter(Boolean)
-    .join(" ");
+  async function saveOutlet(): Promise<void> {
+    if (!onSetGlobalTemplateOutlet || selectedSlot === null || outletDraft === null) return;
+    const label = outletDraft.trim();
+    if (label.length === 0) {
+      setOutletError("Enter an outlet label before publishing.");
+      return;
+    }
+    setBusy(true);
+    setOutletError(null);
+    try {
+      const target: GlobalTemplateOutletTarget = { parentId: selectedSlot.parentId, slotId: selectedSlot.slotId };
+      const result = await onSetGlobalTemplateOutlet(target, label);
+      if (result.status === "applied") {
+        setOutletDraft(null);
+        setFeedback(result.message ?? "Global template outlet published. Check the save status for persistence.");
+      } else {
+        setOutletError(result.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <section class="sg-composer-inspector-section flex min-w-0 flex-col gap-vsp-xs" aria-labelledby="sg-composer-reuse-title">
-      <div class="flex min-w-0 flex-col gap-vsp-3xs">
-        <h2 id="sg-composer-reuse-title" class="text-small font-semibold text-fg">Reuse</h2>
-        <p class="text-caption text-muted">
-          Choose how this Composition can be reused. Reuse changes apply to this Composition record.
+    <>
+      <PaneSection title="Reuse">
+        <StatusBanner document={document} presentation={linkedPresentation} actions={linkedActions} />
+      </PaneSection>
+
+      <PaneSection title="Pattern" class="sg-composer-reuse-option">
+        <p class="sg-composer-reuse-scope">
+          <ContainerIcon size="sm" />
+          {PATTERN_SCOPE}
         </p>
-      </div>
-
-      <section class="flex min-w-0 flex-col gap-vsp-3xs rounded-md border border-border p-hsp-sm" aria-labelledby="sg-composer-pattern-title">
-        <h3 id="sg-composer-pattern-title" class="text-small font-semibold text-fg">Pattern</h3>
-        <p id={patternScopeId} class="min-w-0 text-caption text-muted">{PATTERN_SCOPE_COPY}</p>
-
         {publication?.kind === "pattern" ? (
-          <>
-            <p class="text-small font-semibold text-fg">Published as Pattern</p>
-            <p id={patternPublishedCopyId} class="min-w-0 text-caption text-muted">{PATTERN_PUBLISHED_COPY}</p>
-            {confirmingClear === "pattern" ? (
-              <PublicationClearConfirmation
-                kind="pattern"
-                busy={busy}
-                cancelRef={cancelConfirmRef}
-                onCancel={cancelClear}
-                onConfirm={() => void clearPublication()}
-              />
-            ) : (
-              <button
-                ref={unpublishPatternRef}
-                type="button"
-                class="sg-composer-toolbar-button sg-composer-inspector-remove w-full justify-center"
-                disabled={readOnly}
-                aria-describedby={[patternPublishedCopyId, globalTemplateDisabledReason ? previewReasonId : null].filter(Boolean).join(" ")}
-                onClick={() => {
-                  setLiveFeedback(null);
-                  setConfirmingClear("pattern");
-                }}
-              >
-                <TrashIcon size="sm" class="sg-composer-button-icon" />
-                Unpublish Pattern
-              </button>
-            )}
-          </>
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={readOnly || busy}
+            aria-describedby={readOnly ? patternReasonId : undefined}
+            onClick={() => setConfirmingClear("pattern")}
+          >
+            <TrashIcon size="sm" />
+            Unpublish Pattern
+          </Button>
         ) : (
-          <>
-            <button
-              ref={publishPatternRef}
-              type="button"
-              class="sg-composer-toolbar-button w-full justify-center"
-              disabled={patternDisabled}
-              aria-describedby={patternDescription}
-              onClick={publishPattern}
+          <Button
+            size="sm"
+            disabled={patternReason !== null}
+            aria-describedby={patternReason ? patternReasonId : undefined}
+            onClick={onPublishPattern}
+          >
+            Publish as Pattern
+          </Button>
+        )}
+        {patternReason && (
+          <p id={patternReasonId} class="sg-composer-reuse-reason" data-sg-reuse-pattern-reason>
+            {patternReason}
+          </p>
+        )}
+      </PaneSection>
+
+      <PaneSection title="Global template outlet" class="sg-composer-reuse-option">
+        <p class="sg-composer-reuse-scope">
+          <SlotIcon size="sm" />
+          {OUTLET_SCOPE}
+        </p>
+        {isGlobalTemplate && (
+          <p class="sg-composer-reuse-reason" data-sg-reuse-outlet-status>
+            Current outlet: {publication.outlet.label || "Untitled outlet"} (id {publication.outlet.id}).
+          </p>
+        )}
+        {outletDraft === null ? (
+          <div class="sg-composer-reuse-actions">
+            <Button
+              size="sm"
+              disabled={outletReason !== null || busy}
+              aria-describedby={outletReason ? outletReasonId : undefined}
+              onClick={() => {
+                setOutletError(null);
+                setOutletDraft(isGlobalTemplate ? publication.outlet.label : (selectedSlot?.label ?? ""));
+              }}
             >
-              <PlusIcon size="sm" class="sg-composer-button-icon" />
-              Publish as Pattern
-            </button>
-            {disabledPatternReasons.length > 0 && (
-              <p id={patternReasonId} class="min-w-0 text-caption text-muted" data-sg-reuse-pattern-reason>
-                {disabledPatternReasons.map((reason) => <span key={reason} class="block">{reason}</span>)}
-                {document.binding !== undefined && (
-                  <span class="block">This Composition is a consumer and cannot republish itself.</span>
-                )}
-              </p>
-            )}
-          </>
-        )}
-      </section>
-
-      <section class="flex min-w-0 flex-col gap-vsp-3xs rounded-md border border-border p-hsp-sm" aria-labelledby="sg-composer-global-template-title">
-        <h3 id="sg-composer-global-template-title" class="text-small font-semibold text-fg">Global template</h3>
-        <p id={globalTemplateCopyId} class="min-w-0 text-caption text-muted">{GLOBAL_TEMPLATE_COPY}</p>
-
-        {publication?.kind === "global-template" && (
-          <>
-            <p class="text-small font-semibold text-fg">Published as Global template</p>
-            <p class="min-w-0 text-caption text-muted" data-sg-reuse-outlet-status>
-              Template outlet: {publication.outlet.label || "Untitled outlet"}. Managed from Structure.
-            </p>
-            <p class="min-w-0 text-caption text-muted">
-              Outlet ID: {publication.outlet.id}. Renaming or reassigning its target keeps this consumer-facing identity.
-            </p>
-            {confirmingClear === "global-template" ? (
-              <PublicationClearConfirmation
-                kind="global-template"
-                busy={busy}
-                cancelRef={cancelConfirmRef}
-                onCancel={cancelClear}
-                onConfirm={() => void clearPublication()}
-              />
-            ) : (
-              <button
-                ref={unpublishGlobalTemplateRef}
-                type="button"
-                class="sg-composer-toolbar-button sg-composer-inspector-remove w-full justify-center"
-                disabled={readOnly}
-                aria-describedby={globalDescription}
-                onClick={() => {
-                  setLiveFeedback(null);
-                  setConfirmingClear("global-template");
-                }}
-              >
-                <TrashIcon size="sm" class="sg-composer-button-icon" />
+              {selectedSlot === null
+                ? "Select a slot first"
+                : isGlobalTemplate
+                  ? `Reassign outlet to ${selectedSlot.label}`
+                  : `Use ${selectedSlot.label} as outlet`}
+            </Button>
+            {isGlobalTemplate && (
+              <Button variant="danger" size="sm" disabled={readOnly || busy} onClick={() => setConfirmingClear("global-template")}>
+                <TrashIcon size="sm" />
                 Unpublish Global template
-              </button>
+              </Button>
             )}
-          </>
+          </div>
+        ) : (
+          <div class="sg-composer-reuse-actions" data-sg-template-outlet-control>
+            <Field label="Outlet label" error={outletError ?? undefined}>
+              <Input
+                size="sm"
+                value={outletDraft}
+                disabled={busy}
+                onInput={(event) => {
+                  setOutletError(null);
+                  setOutletDraft(event.currentTarget.value);
+                }}
+              />
+            </Field>
+            <Button variant="primary" size="sm" disabled={busy} onClick={() => void saveOutlet()}>
+              {busy ? "Saving outlet…" : isGlobalTemplate ? "Save reassignment" : "Publish template"}
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => { setOutletDraft(null); setOutletError(null); }}>
+              Cancel
+            </Button>
+          </div>
         )}
-      </section>
-
-      {globalTemplateDisabledReason && (
-        <p id={previewReasonId} class="text-caption text-muted">{globalTemplateDisabledReason}</p>
-      )}
+        {outletReason && outletDraft === null && (
+          <p id={outletReasonId} class="sg-composer-reuse-reason">
+            {outletReason}
+          </p>
+        )}
+      </PaneSection>
 
       {diagnostics.reuseReasons.length > 0 && (
-        <div class="sg-composer-inspector-diagnostics" role="alert" data-sg-reuse-diagnostics>
-          <p class="sg-composer-inspector-diagnostics-title">Reuse needs attention.</p>
-          <ul class="list-disc pl-hsp-md">
+        <PaneSection title="Reuse needs attention">
+          <ul class="sg-composer-reuse-diagnostics" data-sg-reuse-diagnostics>
             {diagnostics.reuseReasons.map((reason) => <li key={reason.code}>{reason.message}</li>)}
           </ul>
           {diagnostics.reuseReasons.some((reason) => reason.code === "stale-outlet-target") && (
-            <p class="mt-vsp-3xs">Choose another valid empty slot in Structure, or unpublish this Composition.</p>
+            <p class="sg-composer-reuse-reason">Choose another valid empty slot in Structure, or unpublish this composition.</p>
           )}
-        </div>
+        </PaneSection>
       )}
 
-      <p class="text-caption text-muted" role="status" aria-live="polite" aria-atomic="true" data-sg-reuse-feedback>
-        {liveFeedback ?? lastError ?? ""}
+      <p class="sg-composer-reuse-reason" role="status" aria-live="polite" aria-atomic="true" data-sg-reuse-feedback>
+        {feedback ?? lastError ?? ""}
       </p>
-    </section>
-  );
-}
 
-function PublicationClearConfirmation({
-  kind,
-  busy,
-  cancelRef,
-  onCancel,
-  onConfirm,
-}: {
-  kind: ClearablePublication;
-  busy: boolean;
-  cancelRef: Ref<HTMLButtonElement>;
-  onCancel: () => void;
-  onConfirm: () => void;
-}): JSX.Element {
-  const copy = clearConfirmationCopy(kind);
-  return (
-    <div class="flex min-w-0 flex-col gap-vsp-3xs rounded-md bg-surface-2 p-hsp-sm" role="group" aria-labelledby={`sg-composer-${kind}-clear-title`}>
-      <p id={`sg-composer-${kind}-clear-title`} class="text-small font-semibold text-fg">{copy.heading}</p>
-      <p class="min-w-0 text-caption text-muted">{copy.message}</p>
-      <div class="flex min-w-0 flex-col gap-hsp-2xs">
-        <button ref={cancelRef} type="button" class="sg-composer-toolbar-button w-full justify-center" disabled={busy} onClick={onCancel}>
-          <XMarkIcon size="sm" class="sg-composer-button-icon" />
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="sg-composer-toolbar-button sg-composer-inspector-remove w-full justify-center"
-          disabled={busy}
-          onClick={onConfirm}
-        >
-          <TrashIcon size="sm" class="sg-composer-button-icon" />
-          {copy.label}
-        </button>
-      </div>
-    </div>
+      <ConfirmDialog
+        open={confirmingClear !== null}
+        title={confirmingClear ? clearCopy(confirmingClear).title : ""}
+        message={confirmingClear ? clearCopy(confirmingClear).message : ""}
+        confirmLabel={confirmingClear ? clearCopy(confirmingClear).label : "Confirm"}
+        tone="danger"
+        busy={busy}
+        onConfirm={() => void clearPublication()}
+        onClose={() => setConfirmingClear(null)}
+      />
+    </>
   );
 }
