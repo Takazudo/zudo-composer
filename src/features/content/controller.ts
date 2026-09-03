@@ -16,7 +16,6 @@ import { createUuidIdFactory, type IdFactory } from "../../shared";
 import { createSaveQueue, type SaveQueue, type SaveQueueState } from "../../shared/persistence";
 
 export const CONTENT_ENTRY_PAGE_SIZE = 25;
-export type ContentPane = "library" | "author" | "preview";
 export type ContentWorkMode = "entries" | "model-fields";
 export type ContentSaveStatus = "saved" | "dirty" | "saving" | "error";
 
@@ -24,12 +23,18 @@ export interface ContentAuthoringState {
   phase: "idle" | "loading" | "ready" | "recovery" | "error";
   models: readonly ContentModelSummary[];
   entryCounts: Readonly<Record<string, number>>;
+  /**
+   * Entries missing a required value, per model — what the navigator's warn
+   * dots read. A model is absent until it has been scanned, and stays absent
+   * when its scan fails: the dot is a claim about the whole model, so an
+   * unknown model shows none rather than an invented "complete".
+   */
+  incompleteCounts: Readonly<Record<string, number>>;
   model: ContentModelRecord | null;
   entries: readonly ContentEntryRecord[];
   usedFieldIds: readonly string[];
   entry: ContentEntryRecord | null;
   nextCursor?: string;
-  activePane: ContentPane;
   workMode: ContentWorkMode;
   saveStatus: ContentSaveStatus;
   message: string;
@@ -37,8 +42,8 @@ export interface ContentAuthoringState {
 }
 
 const initialState: ContentAuthoringState = {
-  phase: "idle", models: [], entryCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
-  activePane: "library", workMode: "entries", saveStatus: "saved", message: "", recoveryMessage: null,
+  phase: "idle", models: [], entryCounts: {}, incompleteCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
+  workMode: "entries", saveStatus: "saved", message: "", recoveryMessage: null,
 };
 
 function queueStatus(state: SaveQueueState<ContentModelRecord> | SaveQueueState<ContentEntryRecord>): ContentSaveStatus {
@@ -54,6 +59,8 @@ export class ContentAuthoringController {
   private entryQueue: SaveQueue<ContentEntryRecord> | null = null;
   private unsubscribeModel: (() => void) | null = null;
   private unsubscribeEntry: (() => void) | null = null;
+  /** Invalidates an in-flight completeness sweep when the library reloads under it. */
+  private scanGeneration = 0;
 
   constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string } = {}) {
     this.idFactory = options.idFactory ?? createUuidIdFactory();
@@ -91,7 +98,9 @@ export class ContentAuthoringController {
     ]);
     this.installModelQueue(outcome.record);
     this.set({ ...this.current, phase: "ready", model: outcome.record, entries: page.entries, entry: null,
-      usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, activePane: "library", workMode: "entries", message: "Model loaded." });
+      usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, workMode: "entries", message: "Model loaded.",
+      entryCounts: { ...this.current.entryCounts, [id]: snapshot.count },
+      incompleteCounts: { ...this.current.incompleteCounts, [id]: incompleteEntryCount(outcome.record, snapshot.entries) } });
     if (outcome.record.document.kind === "single" && page.entries[0]) await this.openEntry(page.entries[0].id);
   }
 
@@ -110,7 +119,7 @@ export class ContentAuthoringController {
       this.provider.store.pageEntries(model.id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
       this.provider.store.scanEntries(model.id),
     ]);
-    this.set({ ...this.current, entries: page.entries, usedFieldIds: usedFields(snapshot.entries), entry: null, nextCursor: page.nextCursor, entryCounts: { ...this.current.entryCounts, [model.id]: snapshot.count }, message: "Entries reloaded." });
+    this.set({ ...this.current, entries: page.entries, usedFieldIds: usedFields(snapshot.entries), entry: null, nextCursor: page.nextCursor, entryCounts: { ...this.current.entryCounts, [model.id]: snapshot.count }, incompleteCounts: { ...this.current.incompleteCounts, [model.id]: incompleteEntryCount(snapshot.model, snapshot.entries) }, message: "Entries reloaded." });
     if (selectedId && page.entries.some((entry) => entry.id === selectedId)) await this.openEntry(selectedId);
   }
 
@@ -161,7 +170,7 @@ export class ContentAuthoringController {
       this.provider.store.pageEntries(model.id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
       this.provider.store.scanEntries(model.id),
     ]);
-    this.set({ ...this.current, model: outcome.record, entries: page.entries, usedFieldIds: usedFields(snapshot.entries), entry: null, nextCursor: page.nextCursor, message: "Field removed and stored values scrubbed." });
+    this.set({ ...this.current, model: outcome.record, entries: page.entries, usedFieldIds: usedFields(snapshot.entries), entry: null, nextCursor: page.nextCursor, incompleteCounts: { ...this.current.incompleteCounts, [model.id]: incompleteEntryCount(outcome.record, snapshot.entries) }, message: "Field removed and stored values scrubbed." });
   }
 
   async createEntry(): Promise<void> {
@@ -170,8 +179,24 @@ export class ContentAuthoringController {
     await this.flushSessions();
     const entry = createContentEntryRecord(model.id, {}, { idFactory: this.idFactory, now: this.now });
     await this.provider.store.putEntry(entry);
-    this.set({ ...this.current, entries: [entry, ...this.current.entries], entryCounts: { ...this.current.entryCounts, [model.id]: (this.current.entryCounts[model.id] ?? 0) + 1 } });
+    this.admitEntry(model, entry);
     await this.openEntry(entry.id);
+  }
+
+  /**
+   * A Collection Entry copied whole, minus its identity. Creation prepends, so
+   * the copy lands at the head of the list beside the Entry it came from.
+   */
+  async duplicateEntry(id: string): Promise<void> {
+    const model = this.requireModel();
+    if (model.document.kind === "single") throw new Error("A Single model has exactly one Entry workspace.");
+    await this.flushSessions();
+    const outcome = await this.provider.store.getEntry(id);
+    if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Entry was not found." : "This Entry is unreadable and has been preserved.");
+    const copy = createContentEntryRecord(model.id, structuredClone(outcome.record.values), { idFactory: this.idFactory, now: this.now });
+    await this.provider.store.putEntry(copy);
+    this.admitEntry(model, copy);
+    await this.openEntry(copy.id);
   }
 
   async openEntry(id: string): Promise<void> {
@@ -183,17 +208,17 @@ export class ContentAuthoringController {
       write: ({ record }) => this.provider.store.putEntry(record) });
     this.unsubscribeEntry = this.entryQueue.subscribe((state) => this.set({ ...this.current, saveStatus: queueStatus(state),
       message: state.status === "error" ? state.error.message : state.status === "saved" ? "All changes saved." : state.status === "saving" ? "Saving changes…" : "Unsaved changes." }));
-    this.set({ ...this.current, entry: outcome.record, activePane: "author", workMode: "entries" });
+    this.set({ ...this.current, entry: outcome.record, workMode: "entries" });
   }
 
   async inspectSchema(): Promise<void> {
     if (this.entryQueue) { await this.entryQueue.flush(); await this.entryQueue.close(); this.unsubscribeEntry?.(); }
     this.entryQueue = null; this.unsubscribeEntry = null;
-    this.set({ ...this.current, entry: null, activePane: "author", workMode: "model-fields", message: "Model fields ready." });
+    this.set({ ...this.current, entry: null, workMode: "model-fields", message: "Model fields ready." });
   }
 
-  browseEntries(activePane: ContentPane = "library"): void {
-    this.set({ ...this.current, workMode: "entries", activePane, message: "Entries ready." });
+  browseEntries(): void {
+    this.set({ ...this.current, workMode: "entries", message: "Entries ready." });
   }
 
   updateEntryValue(fieldId: string, value: ContentEntryRecord["values"][string] | undefined): void {
@@ -201,40 +226,50 @@ export class ContentAuthoringController {
     const values = { ...entry.values }; if (value === undefined || value === "") delete values[fieldId]; else values[fieldId] = value;
     const updated = { ...entry, updatedAt: this.now(), values };
     this.entryQueue.edit(this.entryQueue.ref, updated);
+    // The model's warn dot is a running total rather than a rescan: an edit can
+    // only change this one Entry's completeness, so the delta is exact.
+    const model = this.current.model;
+    const delta = model ? Number(this.completeness(updated).length > 0) - Number(this.completeness(entry).length > 0) : 0;
     this.set({ ...this.current, entry: updated, entries: this.current.entries.map((item) => item.id === updated.id ? updated : item),
+      ...(model && delta !== 0 ? { incompleteCounts: shiftCount(this.current.incompleteCounts, model.id, delta) } : {}),
       usedFieldIds: value === undefined || value === "" ? this.current.usedFieldIds : [...new Set([...this.current.usedFieldIds, fieldId])] });
   }
 
   async deleteEntry(id: string): Promise<void> {
     if (this.current.entry?.id === id && this.entryQueue) { await this.entryQueue.flush(); await this.entryQueue.close(); this.entryQueue = null; this.unsubscribeEntry?.(); }
     await this.provider.store.deleteEntry(id);
-    const modelId = this.current.model?.id;
-    const usedFieldIds = modelId ? usedFields((await this.provider.store.scanEntries(modelId)).entries) : this.current.usedFieldIds;
+    const model = this.current.model;
+    const snapshot = model ? await this.provider.store.scanEntries(model.id) : null;
     this.set({ ...this.current, entries: this.current.entries.filter((entry) => entry.id !== id), entry: this.current.entry?.id === id ? null : this.current.entry,
-      usedFieldIds, entryCounts: modelId ? { ...this.current.entryCounts, [modelId]: Math.max(0, (this.current.entryCounts[modelId] ?? 1) - 1) } : this.current.entryCounts, message: "Entry deleted." });
+      usedFieldIds: snapshot ? usedFields(snapshot.entries) : this.current.usedFieldIds,
+      entryCounts: model ? { ...this.current.entryCounts, [model.id]: Math.max(0, (this.current.entryCounts[model.id] ?? 1) - 1) } : this.current.entryCounts,
+      incompleteCounts: model && snapshot ? { ...this.current.incompleteCounts, [model.id]: incompleteEntryCount(model, snapshot.entries) } : this.current.incompleteCounts,
+      message: "Entry deleted." });
   }
 
   async deleteModel(id: string): Promise<void> {
     if (this.current.model?.id === id) { await this.flushSessions(); await this.closeQueues(); }
     await this.provider.store.deleteModel(id); await this.refreshModels();
     const entryCounts = { ...this.current.entryCounts }; delete entryCounts[id];
+    const incompleteCounts = { ...this.current.incompleteCounts }; delete incompleteCounts[id];
     const deletingCurrentModel = this.current.model?.id === id;
-    this.set({ ...this.current, entryCounts, model: deletingCurrentModel ? null : this.current.model, entries: deletingCurrentModel ? [] : this.current.entries, usedFieldIds: deletingCurrentModel ? [] : this.current.usedFieldIds, entry: deletingCurrentModel ? null : this.current.entry, activePane: "library", workMode: "entries", message: "Model and its Entries deleted." });
+    this.set({ ...this.current, entryCounts, incompleteCounts, model: deletingCurrentModel ? null : this.current.model, entries: deletingCurrentModel ? [] : this.current.entries, usedFieldIds: deletingCurrentModel ? [] : this.current.usedFieldIds, entry: deletingCurrentModel ? null : this.current.entry, workMode: "entries", message: "Model and its Entries deleted." });
   }
 
-  setActivePane(activePane: ContentPane): void { this.set({ ...this.current, activePane }); }
   retrySave(): void { (this.entryQueue ?? this.modelQueue)?.retry(); }
   async flushSessions(): Promise<void> { await this.entryQueue?.flush(); await this.modelQueue?.flush(); }
 
   completeness(entry = this.current.entry) { return entry && this.current.model ? diagnoseContentEntryCompleteness(this.current.model, entry) : []; }
 
   private async runInitialization(load: () => Promise<ContentInitializationOutcome>): Promise<void> {
+    this.scanGeneration += 1;
     this.set({ ...this.current, phase: "loading", message: "Loading Content library…" });
     try {
       const outcome = await load();
       if (outcome.status === "ready") {
         const counts = await Promise.all(outcome.models.map(async (model) => [model.id, await this.provider.store.countEntries(model.id)] as const));
         this.set({ ...initialState, phase: "ready", models: outcome.models, entryCounts: Object.fromEntries(counts), message: "Content library ready." });
+        void this.sweepIncompleteCounts(outcome.models);
       }
       else if (outcome.status === "recovery-required") this.set({ ...initialState, phase: "recovery", models: outcome.models, recoveryMessage: outcome.recovery.message, message: "Recovery required. Source data was preserved." });
       else this.set({ ...initialState, phase: "error", message: outcome.error.message });
@@ -253,6 +288,41 @@ export class ContentAuthoringController {
     await this.entryQueue?.close(); await this.modelQueue?.close(); this.unsubscribeEntry?.(); this.unsubscribeModel?.();
     this.entryQueue = null; this.modelQueue = null; this.unsubscribeEntry = null; this.unsubscribeModel = null;
   }
+  /**
+   * Fill in the navigator's warn dots after the library is already usable.
+   *
+   * Counting Entries is an index count; deciding whether any of them is
+   * incomplete means reading them all, so this runs model by model *after*
+   * `phase: "ready"` rather than holding the route behind a full scan. It is
+   * best effort in both directions: a stale sweep stops as soon as the library
+   * reloads under it, and a model that cannot be scanned simply keeps no dot
+   * instead of failing the route the way a blocking scan would.
+   */
+  private async sweepIncompleteCounts(models: readonly ContentModelSummary[]): Promise<void> {
+    const generation = this.scanGeneration;
+    for (const summary of models) {
+      let count: number;
+      try {
+        const snapshot = await this.provider.store.scanEntries(summary.id);
+        count = incompleteEntryCount(snapshot.model, snapshot.entries);
+      } catch { continue; }
+      if (generation !== this.scanGeneration) return;
+      this.set({ ...this.current, incompleteCounts: { ...this.current.incompleteCounts, [summary.id]: count } });
+    }
+  }
+
+  /** Records a freshly stored Entry in the open model's list and its counts. */
+  private admitEntry(model: ContentModelRecord, entry: ContentEntryRecord): void {
+    this.set({
+      ...this.current,
+      entries: [entry, ...this.current.entries],
+      entryCounts: { ...this.current.entryCounts, [model.id]: (this.current.entryCounts[model.id] ?? 0) + 1 },
+      ...(diagnoseContentEntryCompleteness(model, entry).length > 0
+        ? { incompleteCounts: shiftCount(this.current.incompleteCounts, model.id, 1) }
+        : {}),
+    });
+  }
+
   private requireModel(): ContentModelRecord { if (!this.current.model) throw new Error("No Content model is open."); return this.current.model; }
   private uniqueFieldKey(base: string): string { const keys = new Set(this.requireModel().document.fields.map((field) => field.key)); let key = base; let i = 2; while (keys.has(key)) key = `${base}${i++}`; return key; }
   private async refreshModels(): Promise<void> { const models = await this.provider.store.listModels(); const counts = await Promise.all(models.map(async (model) => [model.id, await this.provider.store.countEntries(model.id)] as const)); this.set({ ...this.current, models, entryCounts: Object.fromEntries(counts) }); }
@@ -261,6 +331,15 @@ export class ContentAuthoringController {
 
 function usedFields(entries: readonly ContentEntryRecord[]): string[] {
   return [...new Set(entries.flatMap((entry) => Object.keys(entry.values)))].sort();
+}
+
+function incompleteEntryCount(model: ContentModelRecord, entries: readonly ContentEntryRecord[]): number {
+  return entries.reduce((total, entry) => total + Number(diagnoseContentEntryCompleteness(model, entry).length > 0), 0);
+}
+
+/** Moves one model's tally by an exactly known delta, clamped at zero. */
+function shiftCount(counts: Readonly<Record<string, number>>, modelId: string, delta: number): Record<string, number> {
+  return { ...counts, [modelId]: Math.max(0, (counts[modelId] ?? 0) + delta) };
 }
 
 export function createContentAuthoringController(provider: ContentProvider, options?: { idFactory?: IdFactory; now?: () => string }): ContentAuthoringController {
