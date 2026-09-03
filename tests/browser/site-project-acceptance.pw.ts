@@ -70,9 +70,9 @@ async function expectRouteContent(page: Page, route: string) {
 test("the activated graph appears in every authoring library", async ({ page }) => {
   const failures = watchRuntimeFailures(page);
   await page.goto("/composer");
-  await expect(page.getByRole("heading", { name: "Composition library" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
   for (const name of ["About page", "Home page", "Journal entry page", "Journal index page", "Services page", "Site frame"]) {
-    await expect(page.getByRole("button", { name: `Open ${name}`, exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   }
 
   await page.goto("/content");

@@ -20,8 +20,8 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.goto("/composer");
-  await expect(page.getByRole("heading", { name: "Composition library" })).toBeVisible();
-  await page.getByRole("button", { name: "Open About page" }).click();
+  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
+  await page.getByRole("link", { name: "About page", exact: true }).click();
 
   const toolbar = page.getByRole("toolbar", { name: "Composer toolbar" });
   const undo = toolbar.getByRole("button", { name: "Undo" });
@@ -137,7 +137,7 @@ test("Hero structured actions persist, render, export, and undo structural edits
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.goto("/composer");
-  await page.getByRole("button", { name: "Open About page" }).click();
+  await page.getByRole("link", { name: "About page", exact: true }).click();
   await page.getByRole("button", { name: "Add component to document root" }).click();
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await chooser.getByRole("button", { name: "Hero", exact: true }).click();

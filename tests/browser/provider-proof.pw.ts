@@ -46,8 +46,8 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/composer");
-  await expect(page.getByRole("heading", { name: "Composition library" })).toBeVisible();
-  await page.getByRole("button", { name: "Open About page" }).click();
+  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
+  await page.getByRole("link", { name: "About page", exact: true }).click();
   await expect(page.getByRole("toolbar", { name: "Composer toolbar" })).toBeVisible();
 
   const canvas = page.frameLocator('iframe[title="Composer preview canvas"]');

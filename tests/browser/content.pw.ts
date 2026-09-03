@@ -218,7 +218,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(mappingFrame.getByRole("heading", { name: "Browser journey studio", exact: true })).toBeVisible();
 
   await page.goto("/composer");
-  await page.getByRole("button", { name: "Open About page", exact: true }).click();
+  await page.getByRole("link", { name: "About page", exact: true }).click();
   const composerFrame = page.frameLocator('iframe[title="Composer preview canvas"]');
   await expect(composerFrame.getByRole("heading", { name: "Static about heading", exact: true })).toBeVisible();
 
@@ -446,7 +446,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
 
   await page.goto("/composer");
-  await page.getByRole("button", { name: "Open Journal entry page", exact: true }).click();
+  await page.getByRole("link", { name: "Journal entry page", exact: true }).click();
   const composerFrame = page.frameLocator('iframe[title="Composer preview canvas"]');
   await expect(composerFrame.getByRole("heading", { name: "Static journal heading", exact: true })).toBeVisible();
   await expect(composerFrame.getByRole("heading", { name: "Map the moving parts", exact: true })).toHaveCount(0);
