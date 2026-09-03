@@ -49,18 +49,14 @@ export function ComposerExportDialog({
       title={`Export — ${documentName}`}
       class="sg-composer-export"
       onClose={onClose}
+      // Only the copy action; the header's own close control is the way out.
       footer={
-        <>
-          <button type="button" class="cms-dialog__action" onClick={onClose}>
-            Close
-          </button>
-          {ready && (
-            <ComposerCopyButton
-              text={effectiveResult.code}
-              label={isSnapshot ? "Copy resolved standalone snapshot" : "Copy JSX"}
-            />
-          )}
-        </>
+        ready ? (
+          <ComposerCopyButton
+            text={effectiveResult.code}
+            label={isSnapshot ? "Copy resolved standalone snapshot" : "Copy JSX"}
+          />
+        ) : undefined
       }
     >
       {effectiveResult === null && dependencyBlock === null && <p class="sg-composer-export__note">Generating…</p>}

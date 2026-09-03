@@ -34,7 +34,7 @@
 // `ChooserPreviewHost` owns the actual second bridge + iframe (see that
 // module's header for the ephemeral create/dispose contract).
 
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
 import type {
   ComponentCatalog,
@@ -178,7 +178,7 @@ export function ComposerChooser({
   // what makes a later selection-change prop update unable to redirect an
   // in-flight chooser (see this module's header + the "capture survives a
   // selection change" test).
-  const [capturedTarget, setCapturedTarget] = useState<InsertionTarget | null>(null);
+  const capturedRef = useRef<InsertionTarget | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>(ALL_CATEGORY);
   const [activeTab, setActiveTab] = useState<ChooserTab>("components");
@@ -196,25 +196,31 @@ export function ComposerChooser({
 
   const catalogById = useMemo(() => buildCatalogById(entries), [entries]);
 
-  useEffect(() => {
-    if (open && capturedTarget === null) {
-      setCapturedTarget(target);
-      setQuery("");
-      setCategory(ALL_CATEGORY);
-      setActiveTab("components");
-      setStatus("");
-      setPreviewedComponentId(null);
-      setSelectedPatternKey(null);
-      setLoadedPattern(null);
-      setPatternLoadError(null);
-      setPatternLoading(false);
-      setPatternInsertError(null);
-      setInsertingPattern(false);
-    } else if (!open && capturedTarget !== null) {
-      patternRequestGeneration.current += 1;
-      setCapturedTarget(null);
-    }
-  }, [open, target, capturedTarget]);
+  // Captured DURING RENDER, not in an effect: an effect runs after paint, so
+  // the dialog would open one frame before it knew where it was adding, and the
+  // shared `Dialog` would have already given initial focus to the close button
+  // rather than to a search input that did not exist yet. A ref read back in the
+  // same render is enough — no second render is needed to show the capture.
+  // Seeded closed rather than from `open`, so a chooser whose first render is
+  // already open still captures.
+  const wasOpen = useRef(false);
+  if (open !== wasOpen.current) {
+    wasOpen.current = open;
+    capturedRef.current = open ? target : null;
+    if (!open) patternRequestGeneration.current += 1;
+    setQuery("");
+    setCategory(ALL_CATEGORY);
+    setActiveTab("components");
+    setStatus("");
+    setPreviewedComponentId(null);
+    setSelectedPatternKey(null);
+    setLoadedPattern(null);
+    setPatternLoadError(null);
+    setPatternLoading(false);
+    setPatternInsertError(null);
+    setInsertingPattern(false);
+  }
+  const capturedTarget = capturedRef.current;
 
   const { entries: eligible, blockedReason } = useMemo(() => {
     if (!capturedTarget) return { entries: [] as ComponentDefinition[], blockedReason: null as string | null };
