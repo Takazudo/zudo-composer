@@ -13,8 +13,11 @@ import {
   cssVarForRail,
   getPersistedWidth,
   maxRailWidth,
+  railCollapsedStorageKey,
   railStorageKey,
+  readEditorCollapsed,
   readEditorWidths,
+  setPersistedCollapsed,
   setPersistedWidth,
 } from "../resizer-contract";
 
@@ -119,5 +122,45 @@ describe("readEditorWidths", () => {
     const widths = readEditorWidths("composer", { viewportWidth: 1024 });
     expect(widths.nav).toBeLessThan(520);
     expect(1024 - widths.nav - widths.insp - RESIZER_TRACK_W).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("readEditorCollapsed / setPersistedCollapsed", () => {
+  it("keys the collapse state per editor and per rail, beside the widths", () => {
+    expect(railCollapsedStorageKey("composer", "nav")).toBe("zudo-composer:editor:composer:nav-collapsed");
+    expect(railCollapsedStorageKey("sitemapper", "insp")).toBe("zudo-composer:editor:sitemapper:insp-collapsed");
+  });
+
+  it("starts both rails open, which is what an editor is designed around", () => {
+    expect(readEditorCollapsed("composer")).toEqual({ nav: false, insp: false });
+  });
+
+  it("restores each editor's own collapse state", () => {
+    setPersistedCollapsed(railCollapsedStorageKey("composer", "nav"), true);
+    setPersistedCollapsed(railCollapsedStorageKey("sitemapper", "insp"), true);
+
+    expect(readEditorCollapsed("composer")).toEqual({ nav: true, insp: false });
+    expect(readEditorCollapsed("sitemapper")).toEqual({ nav: false, insp: true });
+  });
+
+  it("reads anything that is not the collapsed marker as open", () => {
+    localStorage.setItem(railCollapsedStorageKey("composer", "nav"), "yes please");
+
+    expect(readEditorCollapsed("composer").nav).toBe(false);
+  });
+
+  it("degrades to open rails when storage throws, and never throws itself", () => {
+    const getSpy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const setSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+
+    expect(() => setPersistedCollapsed(railCollapsedStorageKey("composer", "nav"), true)).not.toThrow();
+    expect(readEditorCollapsed("composer")).toEqual({ nav: false, insp: false });
+
+    getSpy.mockRestore();
+    setSpy.mockRestore();
   });
 });

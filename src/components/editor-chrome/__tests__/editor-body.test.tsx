@@ -13,12 +13,16 @@ import {
   MAX_RAIL_W,
   MIN_RAIL_W,
   RAIL_STEP_W,
+  railCollapsedStorageKey,
   railStorageKey,
+  readEditorCollapsed,
+  setPersistedCollapsed,
 } from "../resizer-contract";
 
 const EDITOR_KEY = "composer";
 
 interface HarnessProps {
+  editorKey?: string;
   activePane?: EditorPane;
   nav?: ComponentChildren;
   inspector?: ComponentChildren;
@@ -28,13 +32,14 @@ interface HarnessProps {
 }
 
 function Harness({
+  editorKey = EDITOR_KEY,
   activePane = "main",
   nav = <RailCollapseButton rail="nav" />,
   inspector = <RailCollapseButton rail="insp" />,
   ...rest
 }: HarnessProps) {
   return (
-    <EditorChromeContext.Provider value={{ editorKey: EDITOR_KEY, activePane, setActivePane: () => {} }}>
+    <EditorChromeContext.Provider value={{ editorKey, activePane, setActivePane: () => {} }}>
       <EditorBody
         navLabel="Structure"
         inspectorLabel="Inspector"
@@ -226,5 +231,47 @@ describe("EditorBody collapse", () => {
 
     rerender(<Harness navCollapsed onNavCollapsedChange={onNavCollapsedChange} />);
     expect(body()).toHaveClass("nav-collapsed");
+  });
+
+  it("remembers a self-owned collapse, so a rail put away stays away across a reload", () => {
+    const first = render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Hide Structure" }));
+    expect(readEditorCollapsed(EDITOR_KEY)).toEqual({ nav: true, insp: false });
+    first.unmount();
+
+    render(<Harness />);
+
+    expect(body()).toHaveClass("nav-collapsed");
+    expect(screen.getByRole("button", { name: "Show Structure" })).toBeInTheDocument();
+  });
+
+  it("restores a rail again, so the collapse is remembered in both directions", () => {
+    setPersistedCollapsed(railCollapsedStorageKey(EDITOR_KEY, "nav"), true);
+    const first = render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Show Structure" }));
+    expect(readEditorCollapsed(EDITOR_KEY).nav).toBe(false);
+    first.unmount();
+
+    render(<Harness />);
+
+    expect(body()).not.toHaveClass("nav-collapsed");
+  });
+
+  it("leaves persistence to a route that drives the collapse itself", () => {
+    render(<Harness navCollapsed={false} onNavCollapsedChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide Structure" }));
+
+    expect(readEditorCollapsed(EDITOR_KEY).nav).toBe(false);
+  });
+
+  it("re-reads the collapse state when the editor identity changes", () => {
+    setPersistedCollapsed(railCollapsedStorageKey("mapping", "insp"), true);
+    const { rerender } = render(<Harness />);
+    expect(body()).not.toHaveClass("insp-collapsed");
+
+    rerender(<Harness editorKey="mapping" />);
+
+    expect(body()).toHaveClass("insp-collapsed");
   });
 });
