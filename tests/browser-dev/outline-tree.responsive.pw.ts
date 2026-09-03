@@ -122,6 +122,15 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
     (await page.locator(TREE).count()) === 0,
     "The Sitemapper route has not adopted OutlineTree yet (issue #165).",
   );
+  // Below 64rem `EditorChrome` shows one pane at a time behind a "Pane" switch,
+  // and the navigator is not the default — so the tree is in the DOM but hidden
+  // on the coarse lane. Select the first pane (the navigator) by position rather
+  // than by label: the host names its panes freely (Sitemapper calls them
+  // Pages / Canvas / Inspect), and this spec covers the component, not the route.
+  const paneSwitch = page.getByRole("radiogroup", { name: "Pane" });
+  if (await paneSwitch.isVisible().catch(() => false)) {
+    await paneSwitch.getByRole("radio").first().click();
+  }
   await expect(tree).toBeVisible();
 
   // A coarse project that is not actually coarse would make the second half of
@@ -152,7 +161,16 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
     if (coarseLane) expect(await opacityOf(tile)).toBeGreaterThan(0);
     else expect(await opacityOf(tile)).toBe(0);
 
-    await hit.hover();
+    // force: true is required and is not a workaround for a defect. The reveal is
+    // keyed on the container (`.cms-tree-insert:hover`), so the hover paints the
+    // `+` tile over the boundary and gives it `pointer-events: auto` — the tile
+    // then occupies the hit zone's centre point. Playwright's actionability check
+    // sees a different hit target and retries until the test times out, even
+    // though the hover has already succeeded and the container stays hovered
+    // (which is exactly why the affordance remains visible when the pointer
+    // travels onto the tile to click it). The mouse still moves, so `:hover`
+    // applies and the opacity assertion below is meaningful.
+    await hit.hover({ force: true });
     expect(await opacityOf(tile)).toBeGreaterThan(0);
     expect(await readGeometry(page)).toEqual(baseline);
   });
