@@ -18,8 +18,11 @@
 .app-shell {
   display: grid;
   grid-template-columns: var(--zc-rail-w) minmax(0, 1fr);
-  grid-template-rows: 100vh;
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
+  /* The shell owns the viewport: the rail and topbar stay put and the route
+   * workspace scrolls inside `.cms-shell-main`. */
+  height: 100vh;
   overflow-x: clip;
   color: var(--color-fg);
   background: var(--color-bg);
@@ -145,7 +148,9 @@
 }
 
 .cms-rail__status strong { color: var(--color-rail-fg); font-weight: 600; }
-.cms-rail__collapse { justify-self: end; color: var(--color-rail-muted); border-color: transparent; background: transparent; }
+/* Outranks the shared ghost button, which paints in the app palette rather
+ * than the rail's. */
+.cms-rail .cms-rail__collapse { justify-self: end; color: var(--color-rail-muted); }
 
 /* Collapsed rail: a 56px icon column. Names stay in the accessibility tree —
  * hidden, not removed — so no rail item becomes an unlabelled icon. */
@@ -171,7 +176,7 @@
   display: grid;
   grid-template-rows: var(--zc-topbar-h) minmax(0, 1fr);
   min-width: 0;
-  height: 100vh;
+  min-height: 0;
 }
 
 .cms-topbar {
@@ -215,7 +220,6 @@
 
 .cms-topbar__status { flex: 0 1 auto; min-width: 0; }
 .cms-topbar__right { flex: 0 0 auto; display: flex; align-items: center; gap: var(--sp-1); margin-inline-start: auto; }
-.cms-topbar__control { color: var(--color-muted); }
 .cms-topbar__control-label { font-size: .75rem; }
 .cms-topbar__control[aria-expanded="true"] { color: var(--color-fg); border-color: var(--color-border); background: var(--color-surface-2); }
 
@@ -393,7 +397,6 @@
   .app-shell .cms-rail__count,
   .app-shell .cms-rail__external { display: none; }
 
-  .cms-frame { height: 100%; min-height: 0; }
   .cms-topbar { padding-inline: var(--sp-2); gap: var(--sp-1); }
   .cms-crumbs { flex: 1 1 auto; overflow: hidden; }
   .cms-topbar__control-label { display: none; }

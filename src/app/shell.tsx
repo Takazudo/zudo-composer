@@ -106,15 +106,13 @@ export function Shell({ children, path, themeController, themeSnapshot, summary 
     return () => { live = false; };
   }, [summary]);
 
+  const collapsed = railState === "collapsed";
   const toggleRail = (): void => {
-    setRailState((current) => {
-      const next: RailState = current === "collapsed" ? "expanded" : "collapsed";
-      persistRailState(next);
-      return next;
-    });
+    const next: RailState = collapsed ? "expanded" : "collapsed";
+    setRailState(next);
+    persistRailState(next);
   };
 
-  const collapsed = railState === "collapsed";
   const rail: RailCounts = useMemo(() => railCounts(counts), [counts]);
 
   return (

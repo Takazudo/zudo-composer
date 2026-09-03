@@ -6,9 +6,9 @@ import {
   ContentIcon,
   ExternalLinkIcon,
   FolderIcon,
-  GlobeAltIcon,
   HomeIcon,
   MappingIcon,
+  PageIcon,
   SitemapperIcon,
   type IconComponent,
 } from "../components/icons";
@@ -69,7 +69,7 @@ export const RAIL_GROUPS: readonly RailGroup[] = [
         id: "site",
         label: "Site",
         href: "/site",
-        icon: GlobeAltIcon,
+        icon: PageIcon,
         external: true,
         accessibleName: "Site — open the delivered site",
       },
@@ -106,7 +106,7 @@ function isRailState(value: unknown): value is RailState {
 }
 
 /** `localStorage`, or `null` where a document denies it (privacy modes, sandboxes). */
-export function defaultRailStorage(): Storage | null {
+function defaultRailStorage(): Storage | null {
   try {
     return typeof window === "undefined" ? null : window.localStorage;
   } catch {
@@ -153,7 +153,7 @@ const NAV_ID = "cms-rail-nav";
 export function Rail({ path, collapsed, onToggleCollapsed, counts = {} }: RailProps): JSX.Element {
   const current = currentRailItem(path);
   return (
-    <aside class="cms-rail">
+    <div class="cms-rail">
       <a class="cms-rail__brand" href="/">
         <span class="cms-rail__logo" aria-hidden="true">Z</span>
         <span class="cms-rail__brand-name">zudo-composer</span>
@@ -217,6 +217,6 @@ export function Rail({ path, collapsed, onToggleCollapsed, counts = {} }: RailPr
           {collapsed ? <ArrowRightIcon size="sm" /> : <ArrowLeftIcon size="sm" />}
         </Button>
       </div>
-    </aside>
+    </div>
   );
 }

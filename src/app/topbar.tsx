@@ -30,7 +30,7 @@ const THEME_OPTIONS: readonly {
   { preference: "dark", label: "Dark", icon: DarkThemeIcon },
 ] as const;
 
-export function Breadcrumb({ items }: { items: readonly BreadcrumbItem[] }): JSX.Element | null {
+function Breadcrumb({ items }: { items: readonly BreadcrumbItem[] }): JSX.Element | null {
   if (items.length === 0) return null;
   return (
     <nav class="cms-crumbs" aria-label="Breadcrumb">
@@ -61,6 +61,9 @@ function ThemeMenu({ controller, snapshot }: { controller: ThemeController; snap
 
   return (
     <>
+      {/* The shared `Button` takes no ref (Preact forwards none), and `useMenu`
+          needs one to anchor and restore focus, so the trigger wears its
+          classes directly. */}
       <button
         ref={triggerRef}
         type="button"
