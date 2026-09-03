@@ -1,0 +1,267 @@
+/* ==========================================================================
+ * Dashboard route (issue #173).
+ *
+ * Imported by `dashboard.tsx`, not by `src/style.css`, so the page and its CSS
+ * travel together — the same rule the shell and the control library follow.
+ *
+ * Rules this file keeps:
+ * - Every colour is a token from `src/styles/app-tokens.css`.
+ * - Every class carries the `cms-` prefix: `src/base.css` scans this tree with
+ *   `@source "./"`, so a bare name would collide with a Tailwind utility.
+ * - The type ladder is written as literal rem values because `--text-*` is the
+ *   provider's Tailwind namespace: .6875rem/11px, .75rem/12px, .8125rem/13px
+ *   chrome default, .875rem/14px body.
+ * ========================================================================== */
+
+.cms-dash {
+  display: grid;
+  gap: var(--sp-b3);
+  align-content: start;
+  padding: var(--sp-b3) var(--sp-4) var(--sp-b4);
+  font-size: .8125rem;
+}
+
+.cms-dash > * { width: 100%; max-width: 1160px; margin-inline: auto; }
+
+/* --------------------------------------------------------------------------
+ * Hero
+ * -------------------------------------------------------------------------- */
+
+.cms-dash__hero { display: flex; align-items: flex-end; gap: var(--sp-3); }
+.cms-dash__greeting { flex: 1 1 auto; min-width: 0; }
+
+.cms-dash__greeting h1 {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -.02em;
+}
+
+.cms-dash__greeting p { margin: 2px 0 0; color: var(--color-muted); }
+.cms-dash__quick { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+/* --------------------------------------------------------------------------
+ * Stat cards
+ * -------------------------------------------------------------------------- */
+
+.cms-dash__stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sp-b2); }
+
+.cms-dash-stat {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: inherit;
+  background: var(--color-surface);
+  text-decoration: none;
+}
+
+.cms-dash-stat__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: .75rem;
+  font-weight: 650;
+}
+
+.cms-dash-stat__num {
+  color: var(--color-fg);
+  font-size: 1.75rem;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.cms-dash-stat__num small {
+  margin-inline-start: 4px;
+  color: var(--color-muted);
+  font-size: .75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.cms-dash-stat__foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  min-height: 1rem;
+  color: var(--color-muted);
+  font-size: .75rem;
+}
+
+/* The failed card carries an error sentence, so its chip wraps instead of
+   forcing the five-column grid wider. */
+.cms-dash-stat--unavailable .cms-status { align-items: flex-start; flex-wrap: wrap; }
+.cms-dash-stat--unavailable .cms-status__label { white-space: normal; }
+
+.cms-dash-stat--skeleton { gap: var(--sp-b2); }
+
+.cms-dash-stat__bar {
+  height: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+}
+
+.cms-dash-stat__bar--head { width: 55%; }
+.cms-dash-stat__bar--num { width: 40%; height: 22px; }
+
+.cms-dash__start { display: grid; }
+
+.cms-dash__start .cms-empty {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+/* --------------------------------------------------------------------------
+ * Two-column body
+ * -------------------------------------------------------------------------- */
+
+.cms-dash__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--sp-b2);
+  align-items: start;
+}
+
+.cms-dash__side { display: grid; gap: var(--sp-b2); align-content: start; min-width: 0; }
+
+.cms-dash-card {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.cms-dash-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-b2) var(--sp-3);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.cms-dash-card__head h2 { margin: 0; color: var(--color-fg); font-size: .8125rem; font-weight: 650; }
+.cms-dash-card__note { color: var(--color-muted); font-size: .75rem; }
+.cms-dash-card__pad { display: grid; gap: var(--sp-2); padding: var(--sp-3); }
+.cms-dash__placeholder { margin: 0; color: var(--color-muted); font-size: .75rem; }
+
+.cms-dash-tile {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  background: var(--color-surface-2);
+}
+
+/* --------------------------------------------------------------------------
+ * Recent activity
+ * -------------------------------------------------------------------------- */
+
+.cms-dash-recent__row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-b2);
+  min-height: 48px;
+  padding-inline: var(--sp-3);
+  border-block-start: 1px solid var(--color-border);
+  color: inherit;
+  text-decoration: none;
+}
+
+.cms-dash-recent__row:first-child { border-block-start: 0; }
+.cms-dash-recent__text { display: grid; min-width: 0; }
+.cms-dash-recent__text strong { min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+
+.cms-dash-recent__id {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  font-size: .6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-dash-recent__row time { color: var(--color-muted); font-size: .75rem; white-space: nowrap; }
+
+/* --------------------------------------------------------------------------
+ * Needs attention
+ * -------------------------------------------------------------------------- */
+
+.cms-dash-attention__row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-b2); }
+.cms-dash-attention__text { display: grid; min-width: 0; }
+.cms-dash-attention__text strong { color: var(--color-fg); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cms-dash-attention__text span { color: var(--color-muted); font-size: .75rem; }
+
+/* --------------------------------------------------------------------------
+ * How the pieces connect
+ * -------------------------------------------------------------------------- */
+
+.cms-dash-pipeline__stage {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-b2);
+  padding: var(--sp-b2) var(--sp-3);
+  color: inherit;
+  text-decoration: none;
+}
+
+.cms-dash-pipeline__text { display: grid; min-width: 0; }
+.cms-dash-pipeline__text strong { color: var(--color-fg); font-weight: 600; }
+.cms-dash-pipeline__text span { color: var(--color-muted); font-size: .75rem; }
+.cms-dash-pipeline__count { color: var(--color-muted); font-size: .75rem; white-space: nowrap; }
+.cms-dash-pipeline__arrow { display: grid; place-items: center; height: 12px; margin-inline-start: 30px; color: var(--color-faint); }
+
+/* --------------------------------------------------------------------------
+ * Storage
+ * -------------------------------------------------------------------------- */
+
+.cms-dash-storage__row { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; min-height: 24px; }
+.cms-dash-storage__icon { flex: 0 0 auto; color: var(--color-faint); }
+.cms-dash-storage__label { flex: 1 1 auto; min-width: 0; color: var(--color-fg); }
+.cms-dash-storage__value { flex: 0 0 auto; color: var(--color-muted); font-size: .75rem; }
+
+/* --------------------------------------------------------------------------
+ * Interaction and layout adaptation
+ * -------------------------------------------------------------------------- */
+
+@media (hover: hover) {
+  .cms-dash-stat:hover { border-color: var(--color-accent-line); }
+  .cms-dash-recent__row:hover,
+  .cms-dash-pipeline__stage:hover { background: var(--color-surface-2); }
+}
+
+:is(.cms-dash-stat, .cms-dash-recent__row, .cms-dash-pipeline__stage):focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+@media (max-width: 64rem) {
+  .cms-dash { padding: var(--sp-3) var(--sp-3) var(--sp-b3); gap: var(--sp-b2); }
+  .cms-dash__hero { flex-wrap: wrap; align-items: flex-start; }
+  .cms-dash__greeting { flex-basis: 100%; }
+  .cms-dash__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cms-dash__columns { grid-template-columns: minmax(0, 1fr); }
+  .cms-dash-recent__row { grid-template-columns: 28px minmax(0, 1fr) auto; }
+  .cms-dash-recent__row time { display: none; }
+}
+
+@media (pointer: coarse) {
+  /* Touch targets follow the shell's 44px floor. */
+  .cms-dash-recent__row { min-height: 52px; }
+  .cms-dash-pipeline__stage { padding-block: var(--sp-3); }
+}
