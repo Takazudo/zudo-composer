@@ -235,7 +235,13 @@ export function BindingsPane({
         )}
         <PaneSection title="Unbound targets" class="cms-mapping-unbound">
           {unbound.length === 0 ? (
-            <p class="cms-mapping-unbound__empty">Every bindable prop of this Composition has a binding.</p>
+            <p class="cms-mapping-unbound__empty">
+              {/* Nothing left to bind and nothing bindable at all look the same
+               * from the list alone, and they need opposite answers. */}
+              {(state.definition?.targets.length ?? 0) > 0
+                ? "Every bindable prop of this Composition has a binding."
+                : "This Composition offers no bindable props. Check the Diagnostics tab."}
+            </p>
           ) : (
             <>
               <div class="cms-mapping-unbound__chips">

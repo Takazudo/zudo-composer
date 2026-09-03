@@ -83,7 +83,14 @@ export function InspectorPane({
         ]}
       />
       <PaneBody>
-        {tab === "preview" ? (
+        {/*
+         * Both panels stay mounted and the inactive one is `hidden`, which is
+         * what keeps the preview iframe alive: unmounting it on every tab
+         * switch would tear down the bridge and reload the frame, and Test
+         * switches tabs by design. `hidden` also takes the inactive panel out
+         * of the accessibility tree, which is what an inactive tab wants.
+         */}
+        <div hidden={tab !== "preview"}>
           <PaneSection title="Preview">
             <dl class="cms-mapping-context">
               <div>
@@ -120,7 +127,8 @@ export function InspectorPane({
               onError={onPreviewError}
             />
           </PaneSection>
-        ) : (
+        </div>
+        <div hidden={tab !== "diagnostics"}>
           <PaneSection title="Diagnostics">
             {count === 0 ? (
               <EmptyState
@@ -144,7 +152,7 @@ export function InspectorPane({
               </Banner>
             ))}
           </PaneSection>
-        )}
+        </div>
       </PaneBody>
     </Pane>
   );

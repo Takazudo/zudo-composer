@@ -196,7 +196,6 @@ export function targetLabel(target: MappingTargetDescriptor): string {
 export function fieldKindLabel(kind: ContentFieldKind): string {
   switch (kind) {
     case "long-text": return "Long text";
-    case "markdown": return "Markdown";
     default: return kind.charAt(0).toUpperCase() + kind.slice(1);
   }
 }

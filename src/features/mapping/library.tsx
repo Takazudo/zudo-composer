@@ -19,6 +19,7 @@ import {
   useLibraryQuery,
   useLibrarySelection,
   type LibraryFacet,
+  type LibraryKindTag,
   type LibraryRowContract,
   type LibrarySort,
 } from "../../components/library-page";
@@ -46,7 +47,7 @@ export interface MappingLibraryProps {
 }
 
 /** Readiness of one library row, from its resolved definition. */
-function readiness(detail: MappingLibraryDetail | undefined): { label: string; tone: "ok" | "err" | "neutral" } {
+function readiness(detail: MappingLibraryDetail | undefined): LibraryKindTag {
   if (!detail) return { label: "Checking…", tone: "neutral" };
   const blocking = detail.definition.diagnostics.length;
   return blocking === 0 ? { label: "Ready", tone: "ok" } : { label: `${blocking} blocking`, tone: "err" };
@@ -90,10 +91,7 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
     name: (row) => row.name,
     icon: () => MappingIcon,
     href: (row) => mappingDeepLinkHref({ providerId, mappingId: row.id }),
-    kind: (row) => {
-      const status = readiness(details[row.id]);
-      return { label: status.label, tone: status.tone === "neutral" ? "neutral" : status.tone };
-    },
+    kind: (row) => readiness(details[row.id]),
     updatedAt: (row) => row.updatedAt,
   };
 

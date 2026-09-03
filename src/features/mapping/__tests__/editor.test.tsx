@@ -113,13 +113,19 @@ describe("Mapping editor", () => {
     const diagnostics = screen.getByRole("tab", { name: /^Diagnostics/ });
     expect(diagnostics).toHaveAttribute("aria-selected", "false");
 
+    const frame = screen.getByTitle("Resolved Mapping preview");
     fireEvent.click(screen.getByRole("button", { name: "Test" }));
     await waitFor(() => expect(diagnostics).toHaveAttribute("aria-selected", "true"));
+    // The preview panel is hidden, not unmounted: remounting would tear down
+    // the bridge and reload the frame on every tab switch.
+    expect(screen.getByTitle("Resolved Mapping preview")).toBe(frame);
     expect(screen.queryByRole("dialog", { name: "Mapping test" })).toBeNull();
     // The same message is also inline on the row, which is the point: two
     // surfaces, not the three that used to disagree with each other.
     const inspector = screen.getByRole("region", { name: "Inspector" });
-    expect(within(inspector).getByText(/boolean/i)).toBeInTheDocument();
+    // Both panels are mounted, so this has to assert visibility rather than
+    // presence — otherwise it passes with the Preview tab still selected.
+    expect(within(inspector).getByText(/boolean/i)).toBeVisible();
   });
 
   it("keeps a drifted binding's stored ids on screen rather than dropping the row", async () => {

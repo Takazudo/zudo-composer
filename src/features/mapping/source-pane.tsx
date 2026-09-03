@@ -6,7 +6,7 @@ import { RailCollapseButton } from "../../components/editor-chrome";
 import { ContentIcon } from "../../components/icons";
 import { Banner, Chip, EmptyState, Field, Pane, PaneBody, PaneHeader, PaneSection, Select } from "../../components/ui";
 import type { ContentFieldDefinition } from "../../content";
-import type { MappingTarget } from "../../mapping";
+import type { MappingTarget, MappingTargetDescriptor } from "../../mapping";
 import type { MappingEditorState } from "./controller";
 import { BindMenu } from "./bind-menu";
 import {
@@ -38,7 +38,21 @@ function boundChip(rows: readonly MappingBindingRow[], field: ContentFieldDefini
   const bindings = rows.filter((row) => row.binding.sourceFieldId === field.id);
   if (bindings.length === 0) return null;
   const broken = bindings.some((row) => row.status !== "ready");
-  return <Chip tone={broken ? "err" : "ok"} class="cms-mapping-field__chip">bound</Chip>;
+  return <Chip tone={broken ? "err" : "ok"} class="cms-mapping-field__chip">Bound</Chip>;
+}
+
+/** The targets this field can drive, as bind-menu rows grouped by node. */
+function targetMenuGroups(field: ContentFieldDefinition, targets: readonly MappingTargetDescriptor[]) {
+  return compatibleTargetGroups(field, targets).map((group) => ({
+    id: group.id,
+    label: group.label,
+    items: group.items.map((target) => ({
+      id: targetKey(target.target),
+      label: targetLabel(target),
+      detail: target.kind,
+      icon: targetKindIcon(target.kind),
+    })),
+  }));
 }
 
 export function SourcePane({ state, rows, onBind, onSelectEntry }: SourcePaneProps): JSX.Element {
@@ -86,16 +100,7 @@ export function SourcePane({ state, rows, onBind, onSelectEntry }: SourcePanePro
                         menuLabel={`Bind ${field.label} to…`}
                         triggerLabel={`Bind ${field.label}`}
                         emptyLabel={`No ${fieldKindLabel(field.kind).toLowerCase()} target is compatible`}
-                        groups={compatibleTargetGroups(field, targets).map((group) => ({
-                          id: group.id,
-                          label: group.label,
-                          items: group.items.map((target) => ({
-                            id: targetKey(target.target),
-                            label: targetLabel(target),
-                            detail: target.kind,
-                            icon: targetKindIcon(target.kind),
-                          })),
-                        }))}
+                        groups={targetMenuGroups(field, targets)}
                         onSelect={(key) => onBind(field.id, parseTargetKey(key))}
                       />
                     )}

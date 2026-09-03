@@ -66,7 +66,7 @@ test("provider-qualified Journal Mapping evaluates each seeded Entry", async ({ 
   await expect(diagnostics).toHaveAttribute("aria-selected", "false");
   await page.getByRole("button", { name: "Test", exact: true }).click();
   await expect(diagnostics).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("region", { name: "Inspector" })).toContainText("No diagnostics");
+  await expect(page.getByRole("region", { name: "Inspector" }).getByText("No diagnostics")).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Mapping test" })).toHaveCount(0);
 
   expect(failures).toEqual([]);
@@ -96,7 +96,7 @@ test("focused Mapping source and target drift remains visible and can be repaire
   await expect(blockedRows(page)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Test", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Inspector" })).toContainText("No diagnostics");
+  await expect(page.getByRole("region", { name: "Inspector" }).getByText("No diagnostics")).toBeVisible();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   expect(failures).toEqual([]);
 });
