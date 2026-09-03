@@ -16,6 +16,20 @@
  *   .6875rem/11px, .75rem/12px, .8125rem/13px chrome default, .875rem/14px forms.
  * ========================================================================== */
 
+/*
+ * The sheet repeats the shell's visually-hidden utility and focus ring rather
+ * than leaning on `src/base.css`: it must stand on its own wherever the module
+ * is imported.
+ */
+.cms-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* --------------------------------------------------------------------------
  * Button
  * -------------------------------------------------------------------------- */
@@ -39,11 +53,18 @@
 
 .cms-btn:disabled,
 .cms-btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
-.cms-btn[aria-pressed="true"] { color: var(--color-fg); border-color: var(--color-border-strong); background: var(--color-surface-2); }
+/* Scoped away from --primary: the attribute selector would otherwise outrank
+ * the variant class and strip a pressed primary button of its accent fill. */
+.cms-btn:not(.cms-btn--primary)[aria-pressed="true"] { color: var(--color-fg); border-color: var(--color-border-strong); background: var(--color-surface-2); }
 
 .cms-btn--primary { color: var(--color-on-accent); border-color: var(--color-accent); background: var(--color-accent); }
 .cms-btn--ghost { color: var(--color-muted); border-color: transparent; background: transparent; }
 .cms-btn--danger { color: var(--color-danger); }
+
+.cms-btn:focus-visible,
+.cms-seg__option:focus-visible,
+.cms-pane__tab:focus-visible,
+.cms-check__input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 
 .cms-btn--icon { width: var(--control-h); padding-inline: 0; }
 .cms-btn--sm { height: 26px; padding-inline: var(--sp-2); font-size: .75rem; }
@@ -551,16 +572,16 @@
  * Input modalities
  * -------------------------------------------------------------------------- */
 @media (hover: hover) {
-  .cms-btn:hover { background: var(--color-surface-2); }
-  .cms-btn--primary:hover { border-color: var(--color-accent-hover); background: var(--color-accent-hover); }
-  .cms-btn--ghost:hover { color: var(--color-fg); background: var(--color-surface-2); }
-  .cms-btn--danger:hover { border-color: var(--color-danger); background: var(--color-danger-soft); }
-  .cms-btn:disabled:hover,
-  .cms-btn[aria-disabled="true"]:hover { background: var(--color-surface); }
+  /* Every hover rule excludes the disabled forms: a later reset rule would have
+   * to outrank each variant, and would repaint a disabled primary button. */
+  .cms-btn:not(:disabled, [aria-disabled="true"]):hover { background: var(--color-surface-2); }
+  .cms-btn--primary:not(:disabled, [aria-disabled="true"]):hover { border-color: var(--color-accent-hover); background: var(--color-accent-hover); }
+  .cms-btn--ghost:not(:disabled, [aria-disabled="true"]):hover { color: var(--color-fg); background: var(--color-surface-2); }
+  .cms-btn--danger:not(:disabled, [aria-disabled="true"]):hover { border-color: var(--color-danger); background: var(--color-danger-soft); }
   .cms-seg__option:not(:disabled):hover { color: var(--color-fg); }
-  .cms-input:hover,
-  .cms-select:hover,
-  .cms-textarea:hover { border-color: var(--color-border-strong); }
+  .cms-input:not(:disabled):hover,
+  .cms-select:not(:disabled):hover,
+  .cms-textarea:not(:disabled):hover { border-color: var(--color-border-strong); }
   .cms-table tbody tr:hover td { background: color-mix(in oklch, var(--color-fg) 3%, var(--color-surface)); }
   .cms-table tbody tr:hover .cms-table__actions > * { opacity: 1; }
 }

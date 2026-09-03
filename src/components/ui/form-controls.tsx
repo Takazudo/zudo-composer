@@ -15,6 +15,7 @@ export interface InputProps extends WithPlainClass<Omit<JSX.IntrinsicElements["i
   icon?: IconComponent;
 }
 
+/** `class` lands on the outermost node: the input, or the wrapper an icon adds. */
 export function Input({ size = "md", icon: Icon, class: className, ...rest }: InputProps) {
   const field = useFieldControl();
   const input = (
@@ -129,10 +130,13 @@ export function Checkbox(props: CheckboxProps) {
   const { checked, onCheckedChange, disabled, name, id, class: className, label, indeterminate = false, ...aria } = props;
   const field = useFieldControl();
   const inputRef = useRef<HTMLInputElement>(null);
-  // `indeterminate` is a DOM property with no attribute counterpart.
+  // `indeterminate` is a DOM property with no attribute counterpart, and the
+  // browser clears it the moment the box is clicked. Reapplying on every render
+  // — not on a dependency change — is what keeps a still-mixed box mixed after a
+  // click the parent answers without changing either prop.
   useEffect(() => {
     if (inputRef.current) inputRef.current.indeterminate = indeterminate;
-  }, [indeterminate, checked]);
+  });
 
   return (
     <label class={cx("cms-check", disabled && "cms-check--disabled", className)}>

@@ -59,7 +59,7 @@ export function DataTable<Row>({
       {bulkBar ? <div class="cms-table__bulk">{bulkBar}</div> : null}
       <div class="cms-table-wrap">
         <table class={cx("cms-table", density === "compact" && "cms-table--compact")}>
-          <caption class="sr-only">{caption}</caption>
+          <caption class="cms-sr-only">{caption}</caption>
           <thead>
             <tr>
               {selection ? (
@@ -84,7 +84,7 @@ export function DataTable<Row>({
               ))}
               {rowActions ? (
                 <th scope="col" class="cms-table__actions">
-                  <span class="sr-only">Row actions</span>
+                  <span class="cms-sr-only">Row actions</span>
                 </th>
               ) : null}
             </tr>
