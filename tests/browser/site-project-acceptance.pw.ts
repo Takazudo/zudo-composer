@@ -87,8 +87,12 @@ test("the activated graph appears in every authoring library", async ({ page }) 
 
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mapping library" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /About page mapping.*Ready/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Journal entry mapping.*Ready/ })).toBeVisible();
+  // Issue #171 put the Mapping library on `LibraryPage`: the name is a link and
+  // readiness is a column, so each row is found by its link and then read.
+  for (const name of ["About page mapping", "Journal entry mapping"]) {
+    const row = page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
+    await expect(row.getByText("Ready", { exact: true })).toBeVisible();
+  }
 
   await page.goto("/sitemapper");
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
