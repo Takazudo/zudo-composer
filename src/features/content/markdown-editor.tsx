@@ -14,8 +14,10 @@ import {
   ItalicIcon,
   LinkIcon,
   ListIcon,
+  MarkdownIcon,
   QuoteIcon,
 } from "../../components/icons";
+import { Button, SegmentedControl } from "../../components/ui";
 import type { ResolvedTheme } from "../../theme/theme";
 import { useResolvedTheme } from "../../theme/use-resolved-theme";
 import { applyMarkdownFormat, type MarkdownFormat } from "./markdown-formatting";
@@ -66,7 +68,9 @@ export interface MarkdownEditorController {
 export interface CreateMarkdownEditorOptions {
   parent: HTMLElement;
   value: string;
-  labelId: string;
+  /** Space-separated ids naming the editor — its label, and its kind hint. */
+  labelledBy: string;
+  required?: boolean;
   theme: ResolvedTheme;
   onChange(value: string): void;
 }
@@ -84,8 +88,9 @@ export function createMarkdownEditor(options: CreateMarkdownEditorOptions): Mark
       editorTheme,
       themeCompartment.of(EditorView.darkTheme.of(options.theme === "dark")),
       EditorView.contentAttributes.of({
-        "aria-labelledby": options.labelId,
+        "aria-labelledby": options.labelledBy,
         "aria-multiline": "true",
+        ...(options.required ? { "aria-required": "true" } : {}),
         autocorrect: "off",
         autocomplete: "off",
         autocapitalize: "off",
@@ -152,6 +157,12 @@ const actions: readonly {
   { format: "list", label: "List", icon: ListIcon },
 ];
 
+const MODE_OPTIONS = [
+  { value: "edit" as const, label: "Edit" },
+  { value: "split" as const, label: "Split" },
+  { value: "preview" as const, label: "Preview" },
+];
+
 export function MarkdownEditor({
   identity,
   value,
@@ -163,7 +174,12 @@ export function MarkdownEditor({
 }: MarkdownEditorProps): JSX.Element {
   const observedTheme = useResolvedTheme();
   const theme = suppliedTheme ?? observedTheme;
-  const labelId = `sg-content-markdown-label-${useId()}`;
+  const uid = useId();
+  const labelId = `sg-content-markdown-label-${uid}`;
+  const kindId = `sg-content-markdown-kind-${uid}`;
+  // The kind rides in the accessible name the way `Field` puts its own kind
+  // hint inside the label, so every control in this form announces the same way.
+  const labelledBy = `${labelId} ${kindId}`;
   const mountRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<MarkdownEditorController | null>(null);
   const callbackRef = useRef(onChange);
@@ -176,7 +192,8 @@ export function MarkdownEditor({
     const controller = createMarkdownEditor({
       parent,
       value,
-      labelId,
+      labelledBy,
+      required,
       theme,
       onChange: (next) => callbackRef.current(next),
     });
@@ -187,7 +204,9 @@ export function MarkdownEditor({
     };
     // One editor/history lifetime belongs to exactly one Entry/field identity;
     // value, callback, and theme updates flow through the refs/effects below.
-  }, [identity, labelId]);
+    // `required` joins them because it is a static content attribute — and it
+    // can only change in Schema mode, which closes the Entry this editor is on.
+  }, [identity, labelledBy, required]);
 
   useEffect(() => controllerRef.current?.setValue(value), [identity, value]);
   useEffect(() => controllerRef.current?.setTheme(theme), [identity, theme]);
@@ -201,39 +220,51 @@ export function MarkdownEditor({
     <section class="sg-content-markdown-editor" data-mode={mode}>
       <div class="sg-content-markdown-editor__heading">
         <span id={labelId} class="sg-content-markdown-editor__label">
-          {label}{required ? " (required)" : ""}
+          {label}
+          {required ? <span class="sg-content-req" aria-hidden="true"> *</span> : null}
         </span>
-        <span class="sg-content-markdown-editor__kind">Rich text (Markdown)</span>
+        <span id={kindId} class="sg-content-markdown-editor__kind">
+          <MarkdownIcon size="xs" />
+          Rich text (Markdown)
+        </span>
       </div>
-      <div class="sg-content-markdown-editor__mode" role="group" aria-label="Markdown view">
-        {(["edit", "preview", "split"] as const).map((candidate) => (
-          <button key={candidate} type="button" aria-pressed={mode === candidate} onClick={() => setMode(candidate)}>
-            {candidate[0]!.toUpperCase() + candidate.slice(1)}
-          </button>
-        ))}
-      </div>
-      <div class="sg-content-markdown-editor__workspace">
-        <div class="sg-content-markdown-editor__source" hidden={mode === "preview"}>
-          <div class="sg-content-markdown-editor__toolbar" role="toolbar" aria-label="Format Markdown">
-            {actions.map(({ format, label: actionLabel, icon: Icon }) => (
-              <button
-                key={format}
-                type="button"
-                aria-label={actionLabel}
-                title={actionLabel}
-                onPointerDown={(event) => event.preventDefault()}
-                onClick={() => runFormat(format)}
-              >
-                <Icon size="sm" />
-                <span>{actionLabel}</span>
-              </button>
-            ))}
-          </div>
-          <div class="sg-content-markdown-editor__mount" ref={mountRef} />
+      <div class="sg-content-markdown-editor__frame">
+        <div class="sg-content-markdown-editor__toolbar" role="toolbar" aria-label="Format Markdown">
+          {actions.map(({ format, label: actionLabel, icon: Icon }) => (
+            <Button
+              key={format}
+              variant="ghost"
+              size="xs"
+              iconOnly
+              aria-label={actionLabel}
+              title={actionLabel}
+              // Preview hides the source, so a formatting edit would land where
+              // the author cannot see it happen.
+              disabled={mode === "preview"}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => runFormat(format)}
+            >
+              <Icon size="sm" />
+            </Button>
+          ))}
+          <span class="sg-content-markdown-editor__toolbar-gap" />
+          <SegmentedControl<MarkdownEditorMode>
+            label="Markdown view"
+            mode="pressed"
+            size="sm"
+            value={mode}
+            options={MODE_OPTIONS}
+            onChange={setMode}
+          />
         </div>
-        <div class="sg-content-markdown-editor__preview" hidden={mode === "edit"} aria-label={`${label} formatted preview`}>
-          <div class="sg-content-markdown-editor__preview-label">Formatted text</div>
-          <ProseMd markdown={value} />
+        <div class="sg-content-markdown-editor__workspace">
+          <div class="sg-content-markdown-editor__source" hidden={mode === "preview"}>
+            <div class="sg-content-markdown-editor__mount" ref={mountRef} />
+          </div>
+          <div class="sg-content-markdown-editor__preview" hidden={mode === "edit"} aria-label={`${label} formatted preview`}>
+            <div class="sg-content-markdown-editor__preview-label">Formatted text</div>
+            <ProseMd markdown={value} />
+          </div>
         </div>
       </div>
     </section>

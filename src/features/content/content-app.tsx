@@ -3,10 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../app/chrome-context";
 import { formatIntent, parseIntent } from "../../app/route-intents";
 import { EditorBody, EditorChrome, RecordTitle, readEditorCollapsed, writeEditorCollapsed } from "../../components/editor-chrome";
-import { CheckIcon, CopyIcon, DuplicateIcon, EllipsisIcon, EyeIcon, FileIcon, SettingsIcon, TrashIcon } from "../../components/icons";
+import { CheckCircleIcon, CheckIcon, CopyIcon, DuplicateIcon, EllipsisIcon, EyeIcon, FileIcon, SettingsIcon, TrashIcon, WarningIcon } from "../../components/icons";
 import { useLibraryConfirm } from "../../components/library-page";
 import { ConfirmDialog, Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay";
-import { Banner, Button, Chip, EmptyState, Pane, PaneBody, PaneHeader, SegmentedControl } from "../../components/ui";
+import { Banner, Button, Chip, EmptyState, Pane, PaneBody, PaneHeader, SegmentedControl, StatusChip } from "../../components/ui";
 import type { ContentProvider } from "../../content";
 import type { ComposerComponentProvider } from "../composer/component-provider";
 import { ContentAddModelDialog } from "./add-model-dialog";
@@ -108,6 +108,10 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   const entryName = state.entry ? contentEntryLabel(state.entry, fields) : "";
   const titleField = contentEntryTitleField(fields);
   const schemaMode = state.workMode === "model-fields";
+  // Completeness is a claim about the open Entry, so it belongs beside the
+  // record's own chips in the pane header rather than being re-drawn as a panel
+  // at the top of the form the author is filling in.
+  const missing = state.entry ? controller.completeness().length : 0;
 
   useBreadcrumb([
     { label: "Content", href: CONTENT_ROUTE },
@@ -286,7 +290,19 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
         }
         main={
           <Pane variant="main" label="Editor">
-            <PaneHeader title={schemaMode ? "Schema" : "Entry"}>
+            <PaneHeader
+              title={schemaMode ? "Schema" : "Entry"}
+              actions={state.entry ? (
+                <StatusChip
+                  class="sg-content-completeness"
+                  state="custom"
+                  tone={missing === 0 ? "ok" : "warn"}
+                  icon={missing === 0 ? CheckCircleIcon : WarningIcon}
+                  label={missing === 0 ? "Complete" : "Incomplete draft"}
+                  detail={missing === 0 ? undefined : `${missing} required value${missing === 1 ? "" : "s"} missing`}
+                />
+              ) : null}
+            >
               {state.model ? <Chip tone="plain">{state.model.document.name} · {state.model.document.kind}</Chip> : null}
             </PaneHeader>
             <PaneBody padded>
