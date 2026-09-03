@@ -1,16 +1,89 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-import type { JSX } from "preact";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
-import type { MappingAssignmentCatalog } from "../../../../sitemapper/routes";
-import type { MappingRef } from "../../../../sitemapper/model";
 
-export function MappingPickerDialog({ open, catalog, onSelect, onClose }: { open: boolean; catalog: MappingAssignmentCatalog; onSelect: (ref: MappingRef) => void; onClose: () => void }): JSX.Element {
-  const ref = useRef<HTMLDialogElement>(null); const trigger = useRef<HTMLElement | null>(null); const titleId = useId();
-  const [state, setState] = useState<{ loading: boolean; entries: Awaited<ReturnType<MappingAssignmentCatalog["list"]>>["entries"]; failures: Awaited<ReturnType<MappingAssignmentCatalog["list"]>>["failures"]; error?: string }>({ loading: false, entries: [], failures: [] });
-  useLayoutEffect(() => { if (open) trigger.current = document.activeElement as HTMLElement | null; }, [open]);
-  useEffect(() => { if (!open) return; setState((value) => ({ ...value, loading: true, error: undefined })); void catalog.list().then((outcome) => setState({ loading: false, ...outcome }), (error) => setState({ loading: false, entries: [], failures: [], error: error instanceof Error ? error.message : "Mapping catalog failed." })); }, [open, catalog]);
-  useLayoutEffect(() => { const dialog = ref.current; if (!dialog) return; if (open && !dialog.open) { if (typeof dialog.showModal === "function") dialog.showModal(); else dialog.setAttribute("open", ""); } else if (!open && dialog.open) { if (typeof dialog.close === "function") dialog.close(); else dialog.removeAttribute("open"); } }, [open]);
-  const close = (): void => { const dialog = ref.current; if (dialog && typeof dialog.close === "function") dialog.close(); else dialog?.removeAttribute("open"); onClose(); setTimeout(() => trigger.current?.focus(), 0); };
-  return <dialog ref={ref} class="sg-sitemapper-picker" aria-labelledby={open ? titleId : undefined} aria-busy={state.loading} onCancel={(event) => { event.preventDefault(); close(); }}>{open && <div class="sg-sitemapper-picker__surface"><header class="sg-sitemapper-picker__header"><div><h2 id={titleId}>Choose a Content Mapping</h2><p>Assign one Mapping route family to this authored page.</p></div><button type="button" class="sg-sitemapper-picker__button" onClick={close}>Close</button></header>{state.loading && <p role="status">Loading Mappings…</p>}{state.error && <p role="alert">{state.error}</p>}{state.failures.map((failure) => <p role="status" key={failure.providerId}>{failure.providerLabel}: {failure.reason}</p>)}{!state.loading && !state.error && state.entries.length === 0 && <p class="sg-sitemapper-picker__empty">No saved Mappings are available.</p>}<ul class="sg-sitemapper-picker__list" aria-label="Saved Content Mappings">{state.entries.map((entry) => <li key={`${entry.ref.providerId}:${entry.ref.recordId}`}><div class="sg-sitemapper-picker__entry"><strong>{entry.summary.name}</strong><span>{entry.providerLabel}</span><span>{entry.summary.bindingCount} bindings</span></div><button type="button" class="sg-sitemapper-picker__button sg-sitemapper-picker__button--primary" aria-label={`Assign ${entry.summary.name}`} onClick={() => { onSelect(entry.ref); close(); }}>Assign</button></li>)}</ul></div>}</dialog>;
+import type { JSX } from "preact";
+import { useEffect, useState } from "preact/hooks";
+import { MappingIcon } from "../../../../components/icons";
+import { Dialog } from "../../../../components/overlay";
+import { Banner, Button, EmptyState } from "../../../../components/ui";
+import type { MappingRef } from "../../../../sitemapper/model";
+import type { MappingAssignmentCatalog } from "../../../../sitemapper/routes";
+
+type MappingListOutcome = Awaited<ReturnType<MappingAssignmentCatalog["list"]>>;
+
+export interface MappingPickerDialogProps {
+  open: boolean;
+  catalog: MappingAssignmentCatalog;
+  onSelect: (ref: MappingRef) => void;
+  onClose: () => void;
 }
+
+export function MappingPickerDialog({ open, catalog, onSelect, onClose }: MappingPickerDialogProps): JSX.Element {
+  const [state, setState] = useState<{ loading: boolean; outcome: MappingListOutcome; error?: string }>({
+    loading: false,
+    outcome: { entries: [], failures: [] },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    setState((current) => ({ ...current, loading: true, error: undefined }));
+    void catalog.list().then(
+      (outcome) => setState({ loading: false, outcome }),
+      (error: unknown) => setState({
+        loading: false,
+        outcome: { entries: [], failures: [] },
+        error: error instanceof Error ? error.message : "The Mapping catalog could not be loaded.",
+      }),
+    );
+  }, [open, catalog]);
+
+  const { entries, failures } = state.outcome;
+
+  return (
+    <Dialog
+      open={open}
+      title="Choose a Content Mapping"
+      class="sg-sitemapper-picker"
+      onClose={onClose}
+      footer={<button type="button" class="cms-dialog__action" onClick={onClose}>Cancel</button>}
+    >
+      <p class="cms-dialog__message">Assign one Mapping route family to this authored page.</p>
+      {state.error ? <Banner tone="err">{state.error}</Banner> : null}
+      {failures.map((failure) => (
+        <Banner key={failure.providerId} tone="warn" title={`${failure.providerLabel} could not be loaded.`}>
+          {failure.reason}
+        </Banner>
+      ))}
+      {state.loading && entries.length === 0 ? <p role="status">Loading Mappings…</p> : null}
+      {!state.loading && !state.error && entries.length === 0 ? (
+        <EmptyState inline icon={MappingIcon} title="No saved Mappings are available." />
+      ) : null}
+      {entries.length > 0 ? (
+        <ul class="sg-sitemapper-picker__list" aria-label="Saved Content Mappings">
+          {entries.map((entry) => (
+            <li key={`${entry.ref.providerId}:${entry.ref.recordId}`}>
+              <MappingIcon size="sm" class="sg-sitemapper-picker__glyph" />
+              <span class="sg-sitemapper-picker__entry">
+                <strong>{entry.summary.name}</strong>
+                <span>{entry.summary.bindingCount} bindings · {entry.providerLabel}</span>
+              </span>
+              <Button
+                variant="primary"
+                size="sm"
+                aria-label={`Assign ${entry.summary.name} from ${entry.providerLabel}`}
+                onClick={() => {
+                  onSelect(entry.ref);
+                  onClose();
+                }}
+              >
+                Assign
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Dialog>
+  );
+}
+
+export default MappingPickerDialog;

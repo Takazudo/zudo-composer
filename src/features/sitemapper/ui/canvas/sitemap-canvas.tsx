@@ -5,8 +5,9 @@
 
 import type { JSX } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { SitemapperIcon } from "../../../../components/icons";
+import { Button, EmptyState } from "../../../../components/ui";
 import type { SitemapDocument, SitemapNode as SitemapNodeModel } from "../../../../sitemapper/model";
-import type { SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
 import SitemapConnectors from "./connectors";
 import {
   buildLogicalTree,
@@ -16,15 +17,22 @@ import {
   type CanvasLayoutMode,
   type NodeHeights,
 } from "./layout";
+import type { PageSourceLabels } from "./page-source";
 import SitemapNode from "./sitemap-node";
+
+export const MIN_CANVAS_ZOOM = 0.4;
+export const MAX_CANVAS_ZOOM = 1.5;
 
 export interface SitemapCanvasProps {
   document: SitemapDocument;
-  routeInfo?: ReadonlyMap<string, SitemapNodeRouteInfo>;
+  /** Authored route per page id. */
+  routes: ReadonlyMap<string, string>;
+  sources: PageSourceLabels;
   selectedId: string | null;
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
   onSelect: (id: string) => void;
   onAddChild: (id: string) => void;
-  onAddSibling: (id: string) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onCreateRoot: () => void;
@@ -58,22 +66,27 @@ function nodeMap(document: SitemapDocument): ReadonlyMap<string, SitemapNodeMode
   return result;
 }
 
+export function clampCanvasZoom(zoom: number): number {
+  return Math.min(MAX_CANVAS_ZOOM, Math.max(MIN_CANVAS_ZOOM, Math.round(zoom * 100) / 100));
+}
+
 export function SitemapCanvas({
   document,
-  routeInfo,
+  routes,
+  sources,
   selectedId,
+  zoom,
+  onZoomChange,
   onSelect,
   onAddChild,
-  onAddSibling,
   onDuplicate,
   onDelete,
   onCreateRoot,
   class: className,
 }: SitemapCanvasProps): JSX.Element {
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const nodeRefs = useRef(new Map<string, HTMLDivElement>());
   const frameRef = useRef<number | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [measurements, setMeasurements] = useState<Measurements>({ viewportWidth: 0, heights: new Map() });
   const [layoutMode, setLayoutMode] = useState<CanvasLayoutMode>(() => modeFromMediaQuery(
     typeof globalThis.matchMedia === "function" ? globalThis.matchMedia(DESKTOP_MEDIA_QUERY) : undefined,
@@ -83,6 +96,7 @@ export function SitemapCanvas({
   // reference for no-ops and replace it for real mutations.
   const logicalTree = useMemo(() => buildLogicalTree(document), [document]);
   const nodesById = useMemo(() => nodeMap(document), [document]);
+  const rootId = document.root[0]?.id ?? null;
   const layout = useMemo(() => document.root.length === 0
     ? null
     : layoutSitemap(logicalTree, measurements.heights, measurements.viewportWidth, layoutMode),
@@ -98,16 +112,17 @@ export function SitemapCanvas({
   }, []);
 
   const measure = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const scroller = scrollRef.current;
+    if (!scroller) return;
 
-    // Complete every DOM read before the single state write. React applies the
-    // resulting node-position writes in the following render.
-    const viewportWidth = canvas.clientWidth;
+    // `offsetHeight` rather than `getBoundingClientRect()`: the stage carries a
+    // zoom transform, and a transformed rect would feed a scaled height back
+    // into the layout that produced it.
+    const viewportWidth = scroller.clientWidth;
     const heights = new Map<string, number>();
     for (const logical of logicalTree.nodes) {
       const element = nodeRefs.current.get(logical.node.id);
-      if (element) heights.set(logical.node.id, Math.max(NODE_MIN_HEIGHT, element.getBoundingClientRect().height));
+      if (element) heights.set(logical.node.id, Math.max(NODE_MIN_HEIGHT, element.offsetHeight));
     }
     setMeasurements((previous) => sameMeasurements(previous, viewportWidth, heights)
       ? previous
@@ -127,7 +142,7 @@ export function SitemapCanvas({
     measure();
     if (typeof ResizeObserver === "undefined") return undefined;
     const observer = new ResizeObserver(scheduleMeasure);
-    if (canvasRef.current) observer.observe(canvasRef.current);
+    if (scrollRef.current) observer.observe(scrollRef.current);
     for (const element of nodeRefs.current.values()) observer.observe(element);
     return () => {
       observer.disconnect();
@@ -136,74 +151,89 @@ export function SitemapCanvas({
     };
   }, [document, logicalTree, measure, scheduleMeasure]);
 
+  const centerOnSelection = useCallback(() => {
+    const scroller = scrollRef.current;
+    const element = selectedId ? nodeRefs.current.get(selectedId) : undefined;
+    if (!scroller || !element) return;
+    scroller.scrollLeft = Math.max(0, (element.offsetLeft + element.offsetWidth / 2) * zoom - scroller.clientWidth / 2);
+    scroller.scrollTop = Math.max(0, (element.offsetTop + element.offsetHeight / 2) * zoom - scroller.clientHeight / 2);
+  }, [selectedId, zoom]);
+
   useEffect(() => {
     if (!selectedId) return;
     nodeRefs.current.get(selectedId)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [selectedId, layout]);
 
-  const selected = selectedId ? nodesById.get(selectedId) : undefined;
-  const selectedIsRoot = selectedId === document.root[0]?.id;
-  const rootHelpPrefix = selected ? `${selected.id}-tray` : "selected-tray";
+  const fit = useCallback(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || !layout || layout.width === 0) return;
+    onZoomChange(clampCanvasZoom(scroller.clientWidth / layout.width));
+  }, [layout, onZoomChange]);
 
   if (document.root.length === 0) {
     return (
-      <section ref={canvasRef} class={`sg-sitemapper-canvas${className ? ` ${className}` : ""}`} aria-label="Sitemap canvas">
-        <div class="sg-sitemapper-canvas__empty">
-          <h2>No sitemap yet</h2>
-          <p>Create a Home page to start mapping this site.</p>
-          <button type="button" onClick={onCreateRoot}>Create Home page</button>
-        </div>
-      </section>
+      <div class={`sg-sitemapper-canvas${className ? ` ${className}` : ""}`}>
+        <EmptyState
+          icon={SitemapperIcon}
+          title="No pages yet"
+          description="Create the Home page to start mapping this site."
+          action={<Button variant="primary" onClick={onCreateRoot}>Create Home page</Button>}
+        />
+      </div>
     );
   }
 
-  // Non-empty documents always produce measured or provisional geometry.
-  if (!layout) return <section class="sg-sitemapper-canvas" aria-label="Sitemap canvas" />;
-
   return (
-    <section ref={canvasRef} class={`sg-sitemapper-canvas${className ? ` ${className}` : ""}`} aria-label="Sitemap canvas">
-      <div
-        class="sg-sitemapper-canvas__stage"
-        data-sg-layout={layout.mode}
-        style={{ width: `${layout.width}px`, height: `${layout.height}px` }}
-      >
-        <SitemapConnectors layout={layout} />
-        {layout.nodes.map((rectangle) => {
-          const node = nodesById.get(rectangle.id);
-          if (!node) return null;
-          return (
-            <SitemapNode
-              key={node.id}
-              node={node}
-              routeInfo={routeInfo?.get(node.id)}
-              rectangle={rectangle}
-              selected={selectedId === node.id}
-              menuOpen={openMenuId === node.id}
-              nodeRef={(element) => {
-                if (element) nodeRefs.current.set(node.id, element);
-                else nodeRefs.current.delete(node.id);
-              }}
-              onSelect={onSelect}
-              onToggleMenu={(id) => setOpenMenuId((current) => current === id ? null : id)}
-              onAddChild={onAddChild}
-              onAddSibling={onAddSibling}
-              onDuplicate={onDuplicate}
-              onDelete={onDelete}
-            />
-          );
-        })}
+    <div class={`sg-sitemapper-canvas${className ? ` ${className}` : ""}`}>
+      <div class="sg-sitemapper-canvas__controls cms-seg cms-seg--sm" role="group" aria-label="Canvas view controls">
+        <button type="button" class="cms-seg__option" onClick={fit}>Fit</button>
+        <button type="button" class="cms-seg__option" disabled={selectedId === null} onClick={centerOnSelection}>Center on selection</button>
       </div>
-      {selected && (
-        <div class="sg-sitemapper-canvas__action-tray" aria-label={`Actions for ${selected.title}`}>
-          <button type="button" onClick={() => onAddChild(selected.id)}>Add child</button>
-          <button type="button" disabled={selectedIsRoot} aria-describedby={selectedIsRoot ? `${rootHelpPrefix}-sibling-help` : undefined} onClick={() => onAddSibling(selected.id)}>Add sibling</button>
-          <button type="button" onClick={() => onDuplicate(selected.id)}>Duplicate</button>
-          <button type="button" class="sg-sitemapper-danger" disabled={selectedIsRoot} aria-describedby={selectedIsRoot ? `${rootHelpPrefix}-delete-help` : undefined} onClick={() => onDelete(selected.id)}>Delete</button>
-          {selectedIsRoot && <span id={`${rootHelpPrefix}-sibling-help`} class="sg-sitemapper-sr-only">The root page cannot have a sibling.</span>}
-          {selectedIsRoot && <span id={`${rootHelpPrefix}-delete-help`} class="sg-sitemapper-sr-only">The root page cannot be deleted.</span>}
-        </div>
-      )}
-    </section>
+      <div class="sg-sitemapper-canvas__legend">
+        <span><span class="sg-sitemapper-dot sg-sitemapper-dot--ok" />Composition</span>
+        <span><span class="sg-sitemapper-dot sg-sitemapper-dot--accent" />Mapping route family</span>
+        <span><span class="sg-sitemapper-dot sg-sitemapper-dot--warn" />Unassigned</span>
+      </div>
+      <div ref={scrollRef} class="sg-sitemapper-canvas__scroll">
+        {layout ? (
+          <div
+            class="sg-sitemapper-canvas__viewport"
+            style={{ width: `${layout.width * zoom}px`, height: `${layout.height * zoom}px` }}
+          >
+            <div
+              class="sg-sitemapper-canvas__stage"
+              data-sg-layout={layout.mode}
+              style={{ width: `${layout.width}px`, height: `${layout.height}px`, transform: `scale(${zoom})` }}
+            >
+              <SitemapConnectors layout={layout} />
+              {layout.nodes.map((rectangle) => {
+                const node = nodesById.get(rectangle.id);
+                if (!node) return null;
+                return (
+                  <SitemapNode
+                    key={node.id}
+                    node={node}
+                    route={routes.get(node.id) ?? "/"}
+                    source={sources.get(node.id)}
+                    rectangle={rectangle}
+                    selected={selectedId === node.id}
+                    isRoot={node.id === rootId}
+                    nodeRef={(element) => {
+                      if (element) nodeRefs.current.set(node.id, element);
+                      else nodeRefs.current.delete(node.id);
+                    }}
+                    onSelect={onSelect}
+                    onAddChild={onAddChild}
+                    onDuplicate={onDuplicate}
+                    onDelete={onDelete}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

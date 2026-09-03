@@ -1,6 +1,7 @@
 import type { IdFactory } from "../../../shared";
 import {
   addChildPage,
+  addRootPage,
   addSiblingPage,
   duplicatePage,
   movePage,
@@ -10,6 +11,7 @@ import {
   type SitemapCommandResult,
   type SitemapPagePropsPatch,
 } from "../../../sitemapper/commands";
+import { traversalOrder } from "../../../sitemapper/model";
 import type { SitemapDocument } from "../../../sitemapper/model";
 
 export type SitemapperSaveStatus =
@@ -27,6 +29,8 @@ export interface SitemapperControllerState {
 
 export type SitemapperAction =
   | { type: "addChild"; parentId: string; title: string; atIndex?: number }
+  | { type: "addRoot"; title: string }
+  | { type: "rename"; name: string }
   | { type: "addSibling"; pageId: string; title: string; atIndex?: number }
   | { type: "updateProps"; pageId: string; patch: SitemapPagePropsPatch }
   | { type: "remove"; pageId: string }
@@ -35,7 +39,8 @@ export type SitemapperAction =
   | { type: "reorder"; pageId: string; direction: "up" | "down" }
   | { type: "select"; pageId: string | null }
   | { type: "toggleExpanded"; pageId: string }
-  | { type: "setExpanded"; pageId: string; expanded: boolean };
+  | { type: "setExpanded"; pageId: string; expanded: boolean }
+  | { type: "setExpandedIds"; pageIds: readonly string[] };
 
 export interface SitemapperReducerResult {
   state: SitemapperControllerState;
@@ -50,7 +55,9 @@ export function createInitialSitemapperControllerState(
   return {
     document,
     selectedId: document.root[0]?.id ?? null,
-    expandedIds: new Set<string>(),
+    // A freshly opened outline shows the whole tree; a collapsed-by-default
+    // rail would hide every page an author is about to work on.
+    expandedIds: new Set(traversalOrder(document)),
     saveStatus,
   };
 }
@@ -84,6 +91,16 @@ export function applySitemapperAction(
   switch (action.type) {
     case "addChild":
       return commandResult(state, addChildPage(state.document, action.parentId, action.title, idFactory, action.atIndex));
+    case "addRoot":
+      return commandResult(state, addRootPage(state.document, action.title, idFactory));
+    case "rename":
+      return action.name === state.document.name
+        ? { state, error: null, documentChanged: false }
+        : {
+            state: { ...state, document: { ...state.document, name: action.name } },
+            error: null,
+            documentChanged: true,
+          };
     case "addSibling":
       return commandResult(state, addSiblingPage(state.document, action.pageId, action.title, idFactory, action.atIndex));
     case "updateProps":
@@ -111,6 +128,12 @@ export function applySitemapperAction(
     case "setExpanded":
       return {
         state: { ...state, expandedIds: expanded(state.expandedIds, action.pageId, action.expanded) },
+        error: null,
+        documentChanged: false,
+      };
+    case "setExpandedIds":
+      return {
+        state: { ...state, expandedIds: new Set(action.pageIds) },
         error: null,
         documentChanged: false,
       };

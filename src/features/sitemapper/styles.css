@@ -7,7 +7,6 @@
  * ========================================================================== */
 
 @import "./styles/tokens.css";
-@import "./styles/library.css";
 @import "./styles/shell.css";
 @import "./styles/canvas.css";
 @import "./styles/tree.css";

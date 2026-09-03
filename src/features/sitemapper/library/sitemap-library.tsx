@@ -3,12 +3,33 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 
-import type { JSX } from "preact";
+import type { ComponentChildren, JSX } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
-import { DuplicateIcon, EditIcon, LibraryIcon, PlusIcon, RefreshIcon, TrashIcon } from "../../../components/icons";
+import { DuplicateIcon, EditIcon, PlusIcon, SitemapperIcon, TrashIcon } from "../../../components/icons";
+import {
+  BulkBar,
+  LibraryEmpty,
+  LibraryNoMatch,
+  LibraryPage,
+  LibraryPagination,
+  LibraryRecoveryBanner,
+  LibrarySkeleton,
+  LibraryTable,
+  LibraryToolbar,
+  LibraryUnavailableBanner,
+  useLibraryConfirm,
+  useLibraryQuery,
+  useLibrarySelection,
+  type LibraryFacet,
+  type LibraryRowContract,
+  type LibrarySort,
+} from "../../../components/library-page";
+import { ConfirmDialog } from "../../../components/overlay";
+import { Banner, Button, type DataTableColumn } from "../../../components/ui";
 import { cloneJson, createUuidIdFactory, type IdFactory } from "../../../shared";
 import {
   compareSitemapSummariesNewestFirst,
+  SITEMAP_PROVIDERS,
   summarizeSitemap,
   type SitemapInitializationOutcome,
   type SitemapProvider,
@@ -16,11 +37,17 @@ import {
   type SitemapSummary,
 } from "../../../sitemapper/library";
 import { SITEMAP_SCHEMA_VERSION } from "../../../sitemapper/model";
-import { SitemapLibraryDialog, type SitemapLibraryDialogState } from "./sitemap-library-dialog";
+import { sitemapperHref } from "../app/sitemapper-intent";
+import { SitemapNameDialog } from "./name-dialog";
+
+type NameDialogState = { kind: "create" } | { kind: "rename"; id: string; name: string };
 
 export interface SitemapLibraryProps {
   provider: SitemapProvider;
-  onOpen: (record: SitemapRecord) => void | Promise<void>;
+  /** Opens a Sitemap; the route drives this as a real `/sitemapper?sitemap=` navigation. */
+  navigate: (href: string) => void;
+  /** A malformed deep link, reported above the table rather than silently ignored. */
+  notice?: ComponentChildren;
   idFactory?: IdFactory;
   now?: () => string;
 }
@@ -54,37 +81,92 @@ async function requireFreshRecordId(provider: SitemapProvider, id: string): Prom
   }
 }
 
-export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory, now: suppliedNow }: SitemapLibraryProps): JSX.Element {
+const CONTRACT: LibraryRowContract<SitemapSummary> = {
+  id: (row) => row.id,
+  name: (row) => row.name,
+  icon: () => SitemapperIcon,
+  href: (row) => sitemapperHref(row.id),
+  kind: (row) => (row.unassignedCount === 0
+    ? { label: "All assigned", tone: "ok" }
+    : { label: `${row.unassignedCount} unassigned`, tone: "warn" }),
+  updatedAt: (row) => row.updatedAt,
+};
+
+const COLUMNS: readonly DataTableColumn<SitemapSummary>[] = [
+  {
+    key: "pages",
+    header: "Pages",
+    variant: "num",
+    cell: (row) => row.pageCount,
+  },
+];
+
+const FACETS: readonly LibraryFacet<SitemapSummary>[] = [
+  {
+    id: "assignment",
+    label: "Assignment",
+    options: [
+      { id: "all", label: "All" },
+      { id: "complete", label: "Fully assigned", match: (row) => row.unassignedCount === 0 },
+      { id: "incomplete", label: "Has unassigned pages", match: (row) => row.unassignedCount > 0 },
+    ],
+  },
+];
+
+const SORTS: readonly LibrarySort<SitemapSummary>[] = [
+  { id: "updated", label: "Updated", compare: compareSitemapSummariesNewestFirst },
+  { id: "name", label: "Name", compare: (a, b) => a.name.localeCompare(b.name) },
+  { id: "pages", label: "Pages", compare: (a, b) => b.pageCount - a.pageCount },
+];
+
+export function SitemapLibrary({
+  provider,
+  navigate,
+  notice,
+  idFactory: suppliedIdFactory,
+  now: suppliedNow,
+}: SitemapLibraryProps): JSX.Element {
   const idFactoryRef = useRef(suppliedIdFactory ?? createUuidIdFactory());
   const nowRef = useRef(suppliedNow ?? (() => new Date().toISOString()));
-  const primaryActionRef = useRef<HTMLButtonElement>(null);
   const [outcome, setOutcome] = useState<SitemapInitializationOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<SitemapLibraryDialogState | null>(null);
-
-  const apply = useCallback((next: SitemapInitializationOutcome) => {
-    setOutcome(next);
-    setOperationError(null);
-  }, []);
+  const [dialog, setDialog] = useState<NameDialogState | null>(null);
 
   const initialize = useCallback(async (mode: "initialize" | "retry" | "startFresh") => {
     setBusy(true);
     try {
-      apply(await provider.initialization[mode]());
+      setOutcome(await provider.initialization[mode]());
+      setOperationError(null);
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap library could not be initialized."));
     } finally {
       setBusy(false);
     }
-  }, [apply, provider]);
+  }, [provider]);
 
   useEffect(() => { void initialize("initialize"); }, [initialize]);
 
   const summaries = outcome && outcome.status !== "error" ? outcome.summaries : [];
+  const query = useLibraryQuery({
+    rows: summaries,
+    searchText: (row) => `${row.name} ${row.id}`,
+    facets: FACETS,
+    sorts: SORTS,
+  });
+  const selection = useLibrarySelection({ rows: summaries, visibleRows: query.rows, rowId: CONTRACT.id });
+  const confirm = useLibraryConfirm();
+
   const commitSummary = (summary: SitemapSummary): void => {
-    if (!outcome || outcome.status === "error" || outcome.status === "recovery-required") return;
-    setOutcome({ ...outcome, summaries: sort([summary, ...outcome.summaries.filter((item) => item.id !== summary.id)]) });
+    setOutcome((current) => (current && current.status !== "error"
+      ? { ...current, summaries: sort([summary, ...current.summaries.filter((item) => item.id !== summary.id)]) }
+      : current));
+  };
+
+  const dropSummaries = (ids: ReadonlySet<string>): void => {
+    setOutcome((current) => (current && current.status !== "error"
+      ? { ...current, summaries: current.summaries.filter((item) => !ids.has(item.id)) }
+      : current));
   };
 
   const create = async (requested: string): Promise<void> => {
@@ -97,7 +179,7 @@ export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory,
       await provider.store.put(record);
       commitSummary(summarizeSitemap(record));
       setDialog(null);
-      await onOpen(cloneJson(record));
+      navigate(sitemapperHref(record.id));
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap could not be created."));
     } finally {
@@ -122,21 +204,6 @@ export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory,
       setDialog(null);
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap could not be renamed."));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const open = async (id: string): Promise<void> => {
-    if (busy) return;
-    setBusy(true);
-    setOperationError(null);
-    try {
-      const loaded = await provider.store.get(id);
-      if (loaded.status !== "loaded") throw new Error(`Sitemap “${id}” could not be opened (${loaded.status}).`);
-      await onOpen(cloneJson(loaded.record));
-    } catch (reason) {
-      setOperationError(message(reason, "The Sitemap could not be opened."));
     } finally {
       setBusy(false);
     }
@@ -167,16 +234,14 @@ export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory,
     }
   };
 
-  const remove = async (id: string): Promise<void> => {
+  const remove = async (ids: readonly string[]): Promise<void> => {
     if (busy) return;
     setBusy(true);
     setOperationError(null);
     try {
-      await provider.store.delete(id);
-      if (outcome && outcome.status !== "error") {
-        setOutcome({ ...outcome, summaries: outcome.summaries.filter((item) => item.id !== id) });
-      }
-      setDialog(null);
+      for (const id of ids) await provider.store.delete(id);
+      dropSummaries(new Set(ids));
+      selection.clear();
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap could not be deleted."));
     } finally {
@@ -184,45 +249,136 @@ export function SitemapLibrary({ provider, onOpen, idFactory: suppliedIdFactory,
     }
   };
 
-  if (!outcome) {
-    return (
-      <main class="sg-sitemapper-library" aria-busy={busy}>
-        <header class="sg-sitemapper-library__header"><span class="sg-sitemapper-library__mark"><LibraryIcon size="lg" /></span><div><p class="sg-sitemapper-library__eyebrow">Sitemapper</p><h1>Sitemaps</h1></div></header>
-        {operationError ? (
-          <div class="sg-sitemapper-library-notice" role="alert">
-            <p>{operationError}</p>
-            <button type="button" class="sg-sitemapper-library-button" disabled={busy} onClick={() => void initialize("retry")}><RefreshIcon size="sm" />Retry</button>
-          </div>
-        ) : <p class="sg-sitemapper-library-notice" role="status">Loading Sitemaps…</p>}
-      </main>
-    );
-  }
-  if (outcome.status === "error") {
-    return <main class="sg-sitemapper-library"><header class="sg-sitemapper-library__header"><div><p class="sg-sitemapper-library__eyebrow">Sitemapper</p><h1>Sitemaps</h1></div></header><div class="sg-sitemapper-library-notice" role="alert"><p>{outcome.error.message}</p><button type="button" class="sg-sitemapper-library-button" disabled={busy} onClick={() => void initialize("retry")}><RefreshIcon size="sm" />Retry</button></div></main>;
-  }
-  if (outcome.status === "recovery-required") {
-    return (
-      <main class="sg-sitemapper-library"><header class="sg-sitemapper-library__header"><div><p class="sg-sitemapper-library__eyebrow">Sitemapper</p><h1>Sitemaps</h1></div></header><div class="sg-sitemapper-library-notice sg-sitemapper-library-notice--danger" role="alert"><h2>Recovery required</h2><p>{outcome.recovery.message}</p><p>Starting fresh permanently deletes every stored Sitemap.</p><div class="sg-sitemapper-library-notice__actions"><button type="button" class="sg-sitemapper-library-button" disabled={busy} onClick={() => void initialize("retry")}><RefreshIcon size="sm" />Retry</button><button type="button" class="sg-sitemapper-library-button sg-sitemapper-library-button--danger" disabled={busy} onClick={() => void initialize("startFresh")}><TrashIcon size="sm" />Start fresh</button></div></div></main>
-    );
-  }
+  const askDelete = (names: readonly string[], ids: readonly string[]): void => {
+    confirm.request({
+      title: ids.length === 1 ? `Delete ${names[0]}?` : `Delete ${ids.length} sitemaps?`,
+      message: "The pages and their source assignments are deleted with it. This cannot be undone.",
+      confirmLabel: "Delete",
+      tone: "danger",
+      onConfirm: () => void remove(ids),
+    });
+  };
+
+  const startCreate = (): void => {
+    setOperationError(null);
+    setDialog({ kind: "create" });
+  };
+
+  // The header action and the empty state's call to action are the same
+  // command, but they are not the same control: two buttons reading
+  // "New sitemap" on one screen is an ambiguity for pointer and screen-reader
+  // users alike.
+  const newSitemap = (
+    <Button variant="primary" disabled={busy} onClick={startCreate}>
+      <PlusIcon size="sm" />
+      New sitemap
+    </Button>
+  );
+
+  const storageLabel = (provider.descriptor ?? SITEMAP_PROVIDERS.indexeddb).label;
+  const ready = outcome !== null && outcome.status !== "error";
 
   return (
-    <main class="sg-sitemapper-library">
-      <header class="sg-sitemapper-library__header"><div class="sg-sitemapper-library__heading"><span class="sg-sitemapper-library__mark"><LibraryIcon size="lg" /></span><div><p class="sg-sitemapper-library__eyebrow">Sitemapper</p><h1>Sitemaps</h1><p>Open an existing sitemap or start a new site structure.</p></div></div><button ref={primaryActionRef} type="button" class="sg-sitemapper-library-button sg-sitemapper-library-button--primary" disabled={busy} onClick={() => { setOperationError(null); setDialog({ kind: "create" }); }}><PlusIcon size="sm" />New sitemap</button></header>
-      {operationError && !dialog && <p class="sg-sitemapper-library-notice" role="alert">{operationError}</p>}
-      {summaries.length === 0 ? <section class="sg-sitemapper-library-empty"><LibraryIcon size="lg" /><h2>No sitemaps yet</h2><p>Create a sitemap to organize pages, routes, and content assignments.</p><button type="button" class="sg-sitemapper-library-button sg-sitemapper-library-button--primary" disabled={busy} onClick={() => { setOperationError(null); setDialog({ kind: "create" }); }}><PlusIcon size="sm" />Create your first sitemap</button></section> : (
-        <ul class="sg-sitemapper-library-list">{summaries.map((summary) => <li key={summary.id} class="sg-sitemapper-library-card"><button type="button" class="sg-sitemapper-library-card__open" disabled={busy} onClick={() => void open(summary.id)}><span class="sg-sitemapper-library-card__icon"><LibraryIcon size="md" /></span><span><strong>{summary.name}</strong><small>{summary.pageCount} {summary.pageCount === 1 ? "page" : "pages"}</small></span></button><div class="sg-sitemapper-library-card__actions"><button type="button" class="sg-sitemapper-library-button" disabled={busy} aria-label={`Rename ${summary.name}`} onClick={() => { setOperationError(null); setDialog({ kind: "rename", id: summary.id, name: summary.name }); }}><EditIcon size="sm" />Rename</button><button type="button" class="sg-sitemapper-library-button" disabled={busy} aria-label={`Duplicate ${summary.name}`} onClick={() => void duplicate(summary.id)}><DuplicateIcon size="sm" />Duplicate</button><button type="button" class="sg-sitemapper-library-button sg-sitemapper-library-button--danger" disabled={busy} aria-label={`Delete ${summary.name}`} onClick={() => { setOperationError(null); setDialog({ kind: "delete", id: summary.id, name: summary.name }); }}><TrashIcon size="sm" />Delete</button></div></li>)}</ul>
-      )}
-      <SitemapLibraryDialog
-        state={dialog}
+    <LibraryPage
+      class="sg-sitemapper-library"
+      icon={SitemapperIcon}
+      title="Sitemaps"
+      purpose="Organize Compositions and Mapping route families into a navigable site structure."
+      primaryAction={newSitemap}
+    >
+      {notice}
+      {operationError && dialog === null ? <Banner tone="err">{operationError}</Banner> : null}
+      {outcome?.status === "error" ? (
+        <LibraryUnavailableBanner
+          title="Sitemap library unavailable."
+          description={outcome.error.message}
+          onRetry={() => void initialize("retry")}
+        />
+      ) : null}
+      {outcome?.status === "recovery-required" ? (
+        <LibraryRecoveryBanner
+          title="Stored sitemaps need recovery."
+          description={outcome.recovery.message}
+          onRetry={() => void initialize("retry")}
+          onStartFresh={() => confirm.request({
+            title: "Start fresh?",
+            message: "Every stored Sitemap is permanently deleted, including the ones that still read correctly.",
+            confirmLabel: "Start fresh",
+            tone: "danger",
+            onConfirm: () => void initialize("startFresh"),
+          })}
+        />
+      ) : null}
+      {outcome === null ? <LibrarySkeleton columns={4} label="Loading sitemaps…" /> : null}
+      {ready && summaries.length === 0 ? (
+        <LibraryEmpty
+          icon={SitemapperIcon}
+          title="No sitemaps yet"
+          description="A sitemap holds the page tree, the routes it derives, and what renders each page."
+          action={
+            <Button variant="primary" disabled={busy} onClick={startCreate}>
+              <PlusIcon size="sm" />
+              Create your first sitemap
+            </Button>
+          }
+        />
+      ) : null}
+      {ready && summaries.length > 0 ? (
+        <>
+          <LibraryToolbar query={query} searchLabel="Filter sitemaps" searchPlaceholder="Filter by name or ID" />
+          <LibraryTable
+            caption="Sitemaps"
+            rows={query.rows}
+            contract={CONTRACT}
+            columns={COLUMNS}
+            selection={selection}
+            kindHeader="Assignment"
+            empty={<LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} />}
+            bulkBar={selection.selectedCount > 0 ? (
+              <BulkBar
+                count={selection.selectedCount}
+                describeCount={(count) => `${count} ${count === 1 ? "sitemap" : "sitemaps"} selected`}
+                actions={[{
+                  id: "delete",
+                  label: "Delete",
+                  icon: TrashIcon,
+                  tone: "danger",
+                  onSelect: () => askDelete(selection.selectedRows.map((row) => row.name), selection.selectedRows.map((row) => row.id)),
+                }]}
+                onClear={selection.clear}
+              />
+            ) : undefined}
+            rowMenu={(row) => ({
+              label: row.name,
+              open: { id: "open", label: "Open", kbd: "↵", href: sitemapperHref(row.id) },
+              actions: [
+                { id: "rename", label: "Rename…", icon: EditIcon, onSelect: () => { setOperationError(null); setDialog({ kind: "rename", id: row.id, name: row.name }); } },
+                { id: "duplicate", label: "Duplicate", icon: DuplicateIcon, onSelect: () => void duplicate(row.id) },
+              ],
+              destructive: [
+                { id: "delete", label: "Delete…", icon: TrashIcon, onSelect: () => askDelete([row.name], [row.id]) },
+              ],
+            })}
+          />
+          <LibraryPagination summary={`${query.rows.length} of ${summaries.length} sitemaps · ${storageLabel}`} />
+        </>
+      ) : null}
+      <SitemapNameDialog
+        open={dialog !== null}
+        title={dialog?.kind === "rename" ? "Rename sitemap" : "Create sitemap"}
+        description={dialog?.kind === "rename"
+          ? `Choose a new name for ${dialog.name}.`
+          : "Name the sitemap you want to start."}
+        label="Sitemap name"
+        submitLabel={dialog?.kind === "rename" ? "Save name" : "Create sitemap"}
+        initialValue={dialog?.kind === "rename" ? dialog.name : "Untitled sitemap"}
         busy={busy}
-        error={dialog ? operationError : null}
-        fallbackFocusRef={primaryActionRef}
+        error={dialog === null ? null : operationError}
+        onSubmit={(value) => { void (dialog?.kind === "rename" ? rename(dialog.id, value) : create(value)); }}
         onClose={() => { setDialog(null); setOperationError(null); }}
-        onSubmitName={(name) => dialog?.kind === "rename" ? rename(dialog.id, name) : create(name)}
-        onConfirmDelete={() => dialog?.kind === "delete" ? remove(dialog.id) : undefined}
       />
-    </main>
+      <ConfirmDialog {...confirm.dialogProps} />
+    </LibraryPage>
   );
 }
 

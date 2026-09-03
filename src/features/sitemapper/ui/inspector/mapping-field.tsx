@@ -1,41 +1,142 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
+
 import type { JSX } from "preact";
 import { useState } from "preact/hooks";
-import type { MappingAssignmentCatalog, SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
+import { EditIcon, MappingIcon } from "../../../../components/icons";
+import { Banner, Button, Chip, EmptyState, Field, Select } from "../../../../components/ui";
 import type { MappingRef, SitemapPageSource } from "../../../../sitemapper/model";
+import type { MappingAssignmentCatalog, SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
+import { describeRouteStatus } from "../canvas/page-source";
 import { MappingPickerDialog } from "../picker/mapping-picker-dialog";
 
 type MappingSource = Extract<SitemapPageSource, { kind: "mapping" }>;
 
-export interface MappingFieldProps { value?: MappingSource; routeInfo?: SitemapNodeRouteInfo; catalog: MappingAssignmentCatalog; onChange: (source: SitemapPageSource) => void }
+export interface MappingFieldProps {
+  value?: MappingSource;
+  routeInfo?: SitemapNodeRouteInfo;
+  catalog: MappingAssignmentCatalog;
+  onChange: (source: SitemapPageSource) => void;
+}
 
 export function MappingField({ value, routeInfo, catalog, onChange }: MappingFieldProps): JSX.Element {
-  const [picker, setPicker] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const detail = routeInfo?.mapping;
-  const brokenReason = routeInfo?.diagnostics[0]?.message ?? "Mapping details are unavailable.";
 
   const assign = async (ref: MappingRef): Promise<void> => {
     const mapping = await catalog.routes.resolveMapping(ref);
     if (mapping.status !== "resolved") return;
     const content = await catalog.routes.resolveContentSnapshot(mapping.record);
     if (content.status !== "resolved") return;
-    const route = content.model.document.kind === "single" ? { kind: "single" as const } : { kind: "entry-field" as const, fieldId: content.model.document.fields.find((field) => field.kind === "slug")?.id ?? "missing-slug-field" };
+    const route = content.model.document.kind === "single"
+      ? { kind: "single" as const }
+      : { kind: "entry-field" as const, fieldId: content.model.document.fields.find((field) => field.kind === "slug")?.id ?? "missing-slug-field" };
     onChange({ kind: "mapping", ref, route });
   };
 
-  return <section class="sg-sitemapper-composition" aria-labelledby="sg-sitemapper-mapping-label">
-    <h3 id="sg-sitemapper-mapping-label">Content Mapping</h3>
-    {!value ? <div class="sg-sitemapper-composition__state"><p>No Content Mapping assigned.</p><button type="button" onClick={() => setPicker(true)}>Choose Content Mapping</button></div> :
-      <div class={`sg-sitemapper-composition__state${routeInfo && !detail ? " sg-sitemapper-composition__state--broken" : ""}`} aria-busy={!routeInfo}>
-        {!routeInfo && <p role="status">Resolving Mapping…</p>}
-        {routeInfo && !detail && <p role="alert">Broken reference: {brokenReason}</p>}
-        {routeInfo && detail && <><p><strong>{detail.name}</strong><span>{detail.model} · {detail.kind}</span></p><dl><div><dt>Readiness</dt><dd>{routeInfo.status === "ready" ? "Ready" : "Needs repair"}</dd></div><div><dt>Entries</dt><dd>{detail.entryCount}</dd></div><div><dt>Derived routes</dt><dd>{routeInfo.derivedRouteCount}</dd></div><div><dt>Sample path</dt><dd>{routeInfo.samplePath ?? "None"}</dd></div><div><dt>Route mode</dt><dd>{value.route.kind}</dd></div></dl>{routeInfo.diagnostics.map((diagnostic, index) => <p key={`${diagnostic.code}:${diagnostic.entryId ?? ""}:${index}`} role="alert">{diagnostic.message}</p>)}{detail.kind === "collection" && <>
-          <label>Slug field<select value={value.route.kind === "entry-field" ? value.route.fieldId : ""} onChange={(event) => onChange({ ...value, route: { kind: "entry-field", fieldId: event.currentTarget.value, ...(value.route.kind === "entry-field" && value.route.titleFieldId ? { titleFieldId: value.route.titleFieldId } : {}) } })}>{detail.slugFields.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}</select></label>
-          <label>Entry title field<select value={value.route.kind === "entry-field" ? value.route.titleFieldId ?? "" : ""} onChange={(event) => { const titleFieldId = event.currentTarget.value; onChange({ ...value, route: { kind: "entry-field", fieldId: value.route.kind === "entry-field" ? value.route.fieldId : detail.slugFields[0]?.id ?? "missing-slug-field", ...(titleFieldId ? { titleFieldId } : {}) } }); }}><option value="">Use page title</option>{detail.titleFields.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}</select></label>
-        </>}</>}
-        <div class="sg-sitemapper-composition__actions"><button type="button" onClick={() => setPicker(true)}>Replace Mapping</button><button type="button" class="sg-sitemapper-danger" onClick={() => onChange({ kind: "unassigned" })}>Clear Mapping</button></div>
-      </div>}
-    <MappingPickerDialog open={picker} catalog={catalog} onSelect={(ref) => void assign(ref)} onClose={() => setPicker(false)} />
-  </section>;
+  const routeFieldId = value !== undefined && value.route.kind === "entry-field" ? value.route.fieldId : null;
+  const slugFieldLabel = routeFieldId === null
+    ? null
+    : detail?.slugFields.find((field) => field.id === routeFieldId)?.label ?? routeFieldId;
+
+  return (
+    <div class="sg-sitemapper-source" role="group" aria-label="Mapping">
+      {!value ? (
+        <EmptyState
+          inline
+          icon={MappingIcon}
+          title="No mapping assigned"
+          action={<Button variant="primary" size="sm" onClick={() => setPickerOpen(true)}>Choose mapping…</Button>}
+        />
+      ) : (
+        <>
+          {!routeInfo ? <p role="status">Resolving mapping…</p> : null}
+          {routeInfo && !detail ? (
+            <Banner
+              tone="err"
+              title="Broken reference"
+              action={<Button size="sm" onClick={() => setPickerOpen(true)}>Change…</Button>}
+            >
+              {routeInfo.diagnostics[0]?.message ?? "Mapping details are unavailable."}
+            </Banner>
+          ) : null}
+          {routeInfo && detail ? (
+            <>
+              <div class="sg-sitemapper-source__card">
+                <MappingIcon size="sm" class="sg-sitemapper-source__glyph" />
+                <span class="sg-sitemapper-source__text">
+                  <strong>{detail.name}</strong>
+                  <span>
+                    {slugFieldLabel ? `slug field: ${slugFieldLabel} · ` : ""}
+                    {routeInfo.derivedRouteCount} {routeInfo.derivedRouteCount === 1 ? "route" : "routes"}
+                  </span>
+                </span>
+                <Chip tone={routeInfo.status === "ready" ? "ok" : "warn"} dot>{describeRouteStatus(routeInfo.status)}</Chip>
+                <Button size="xs" variant="ghost" iconOnly aria-label="Change mapping" onClick={() => setPickerOpen(true)}>
+                  <EditIcon size="xs" />
+                </Button>
+              </div>
+              {detail.kind === "collection" ? (
+                <>
+                  <Field label="Slug field">
+                    <Select
+                      size="sm"
+                      value={value.route.kind === "entry-field" ? value.route.fieldId : ""}
+                      onChange={(event) => onChange({
+                        ...value,
+                        route: {
+                          kind: "entry-field",
+                          fieldId: event.currentTarget.value,
+                          ...(value.route.kind === "entry-field" && value.route.titleFieldId ? { titleFieldId: value.route.titleFieldId } : {}),
+                        },
+                      })}
+                    >
+                      {detail.slugFields.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label="Entry title field">
+                    <Select
+                      size="sm"
+                      value={value.route.kind === "entry-field" ? value.route.titleFieldId ?? "" : ""}
+                      onChange={(event) => {
+                        const titleFieldId = event.currentTarget.value;
+                        onChange({
+                          ...value,
+                          route: {
+                            kind: "entry-field",
+                            fieldId: value.route.kind === "entry-field" ? value.route.fieldId : detail.slugFields[0]?.id ?? "missing-slug-field",
+                            ...(titleFieldId ? { titleFieldId } : {}),
+                          },
+                        });
+                      }}
+                    >
+                      <option value="">Use page title</option>
+                      {detail.titleFields.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}
+                    </Select>
+                  </Field>
+                </>
+              ) : null}
+              {routeInfo.diagnostics.map((diagnostic, index) => (
+                <Banner
+                  key={`${diagnostic.code}:${diagnostic.entryId ?? ""}:${index}`}
+                  tone={routeInfo.status === "blocked" ? "err" : "warn"}
+                >
+                  {diagnostic.message}
+                </Banner>
+              ))}
+            </>
+          ) : null}
+        </>
+      )}
+
+      <MappingPickerDialog
+        open={pickerOpen}
+        catalog={catalog}
+        onSelect={(ref) => void assign(ref)}
+        onClose={() => setPickerOpen(false)}
+      />
+    </div>
+  );
 }
+
+export default MappingField;

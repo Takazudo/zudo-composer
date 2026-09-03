@@ -2,10 +2,14 @@
 /** @jsxImportSource preact */
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/preact";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CatalogEntry } from "../../../../../sitemapper/catalog";
 import { CompositionPickerDialog } from "../composition-picker-dialog";
 
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function showModal() { this.setAttribute("open", ""); };
+  HTMLDialogElement.prototype.close = function close() { this.removeAttribute("open"); };
+});
 afterEach(cleanup);
 
 function entry(providerId: string, providerLabel: string): CatalogEntry {
@@ -35,32 +39,43 @@ describe("CompositionPickerDialog", () => {
     const list = await screen.findByRole("list", { name: "Saved compositions" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     expect(within(list).getByText("This browser layout")).toBeInTheDocument();
-    expect(within(list).getByText("Project files layout")).toBeInTheDocument();
     fireEvent.click(within(list).getByRole("button", { name: /Assign Project files layout/ }));
     expect(onSelect).toHaveBeenCalledWith(files.ref);
   });
 
-  it("shows surviving entries alongside a notice for each failed provider", async () => {
-    const browser = entry("browser", "This browser");
+  it("filters the list without hiding the providers that failed", async () => {
     render(
       <CompositionPickerDialog
         open
         listCompositions={async () => ({
-          entries: [browser],
-          failures: [
-            { providerId: "files", providerLabel: "Project files", reason: "One record is unreadable." },
-            { providerId: "remote", providerLabel: "Remote", reason: "Offline." },
-          ],
+          entries: [entry("browser", "This browser"), entry("files", "Project files")],
+          failures: [{ providerId: "remote", providerLabel: "Remote", reason: "Offline." }],
         })}
         onSelect={() => {}}
         onClose={() => {}}
       />,
     );
 
+    await screen.findByRole("list", { name: "Saved compositions" });
+    expect(screen.getByRole("status")).toHaveTextContent("Remote could not be loaded.");
+
+    fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), { target: { value: "project" } });
+    expect(screen.queryByText("This browser layout")).toBeNull();
+    expect(screen.getByText("Project files layout")).toBeInTheDocument();
+
+    fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), { target: { value: "nothing" } });
+    expect(screen.getByText("No matches for “nothing”")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Remote could not be loaded.");
+  });
+
+  it("offers a retry when the catalog itself fails", async () => {
+    const listCompositions = vi.fn()
+      .mockRejectedValueOnce(new Error("Catalog offline."))
+      .mockResolvedValue({ entries: [entry("browser", "This browser")], failures: [] });
+    render(<CompositionPickerDialog open listCompositions={listCompositions} onSelect={() => {}} onClose={() => {}} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Catalog offline.");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("This browser layout")).toBeInTheDocument();
-    const notices = screen.getByLabelText("Provider notices");
-    const messages = within(notices).getAllByRole("status");
-    expect(messages[0]).toHaveTextContent("Project files could not be loaded: One record is unreadable.");
-    expect(messages[1]).toHaveTextContent("Remote could not be loaded: Offline.");
   });
 });
