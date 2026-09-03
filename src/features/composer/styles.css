@@ -1728,10 +1728,14 @@
   background: var(--color-surface);
 }
 
-/* ── Composition library (issue Takazudo/zudo-sg#301) ──────────────────────────────────────
- * Presentational index chrome only. Provider implementations and route
- * composition intentionally live outside this selector family.
- * Mobile-first: groups stack until their content has room to share a row. */
+/* ── Composer chrome outside the library index (issue Takazudo/zudo-sg#301, trimmed for #167) ──
+ * The index view itself now composes `src/components/library-page` (its own
+ * stylesheet) instead of this selector family. What remains here is the
+ * small set of `.sg-composer-library-*` classes still used OUTSIDE the index
+ * view — the boot-loading placeholder and the route-error/recovery/detail
+ * banners in production-composer-app.tsx and composer-integration.tsx — so
+ * deleting the rest of the old bespoke list/toolbar/row CSS could not also
+ * silently unstyle those unrelated, out-of-scope screens. */
 
 .sg-composer-library {
   box-sizing: border-box;
@@ -1748,118 +1752,32 @@
   margin: 0;
 }
 
-.sg-composer-library-header,
-.sg-composer-library-storage,
-.sg-composer-library-collection-tools,
 .sg-composer-library-alert,
-.sg-composer-library-row,
-.sg-composer-library-actions,
-.sg-composer-library-row-actions {
+.sg-composer-library-actions {
   display: flex;
   flex-direction: column;
   min-width: 0;
   gap: var(--spacing-vsp-sm);
 }
 
-.sg-composer-library-heading {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-hsp-md);
-  min-width: 0;
-}
-
-.sg-composer-library-heading-mark {
-  display: grid;
-  flex: 0 0 auto;
-  width: 3rem;
-  height: 3rem;
-  place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-2);
-  color: var(--color-muted);
-}
-
-.sg-composer-library-heading-copy {
-  min-width: 0;
-}
-
-.sg-composer-library-heading h1 {
-  font-size: clamp(1.75rem, 5vw, 2.5rem);
-  line-height: 1.1;
-}
-
-.sg-composer-library-heading-copy > :last-child,
-.sg-composer-library-collection-tools p,
 .sg-composer-library-state p,
-.sg-composer-library-storage-identity,
 .sg-composer-library-alert p {
   color: var(--color-muted);
 }
 
-.sg-composer-library-eyebrow {
-  color: var(--color-accent);
-  font-size: var(--text-small);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.sg-composer-library-heading-copy > * + * {
-  margin-block-start: var(--spacing-vsp-3xs);
-}
-
-.sg-composer-library-storage,
-.sg-composer-library-collection,
 .sg-composer-library-alert,
 .sg-composer-library-state {
   margin-block-start: var(--spacing-vsp-lg);
+  padding: var(--spacing-vsp-md) var(--spacing-hsp-md);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
 }
 
-.sg-composer-library-storage,
-.sg-composer-library-alert,
-.sg-composer-library-state,
-.sg-composer-library-collection-tools {
-  padding: var(--spacing-vsp-md) var(--spacing-hsp-md);
-}
-
-.sg-composer-library-provider,
-.sg-composer-library-filter {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: var(--spacing-vsp-3xs);
-  color: var(--color-muted);
-  font-size: var(--text-small);
-  font-weight: 600;
-}
-
-.sg-composer-library-provider :where(select),
-.sg-composer-library-filter :where(input) {
-  box-sizing: border-box;
-  inline-size: 100%;
-  min-width: 0;
-  min-height: 2.75rem;
-  padding-inline: var(--spacing-hsp-sm);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-  color: var(--color-fg);
-  font: inherit;
-}
-
-.sg-composer-library-button,
-.sg-composer-library-open,
-.sg-composer-library .sg-composer-toolbar-confirm .sg-composer-toolbar-button {
+.sg-composer-library-button {
   box-sizing: border-box;
   min-width: 2.75rem;
   min-height: 2.75rem;
-}
-
-.sg-composer-library-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1874,17 +1792,6 @@
   cursor: pointer;
 }
 
-.sg-composer-library-button-primary {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-}
-
-.sg-composer-library-button-danger {
-  border-color: var(--color-danger);
-  color: var(--color-danger);
-}
-
 .sg-composer-library :where(button, input, select):focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
@@ -1896,17 +1803,8 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .sg-composer-library-button:hover:not(:disabled),
-  .sg-composer-library-open:hover:not(:disabled) {
+  .sg-composer-library-button:hover:not(:disabled) {
     background: color-mix(in oklch, var(--color-fg) 8%, var(--color-bg));
-  }
-
-  .sg-composer-library-button-primary:hover:not(:disabled) {
-    background: color-mix(in oklch, var(--color-accent) 88%, var(--color-fg));
-  }
-
-  .sg-composer-library-button-danger:hover:not(:disabled) {
-    background: color-mix(in oklch, var(--color-danger) 12%, var(--color-bg));
   }
 }
 
@@ -1927,104 +1825,6 @@
   background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
 }
 
-.sg-composer-library-collection {
-  overflow: hidden;
-}
-
-.sg-composer-library-collection-tools {
-  border-bottom: 1px solid var(--color-border);
-}
-
-.sg-composer-library-list {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.sg-composer-library-row {
-  padding: var(--spacing-vsp-md) var(--spacing-hsp-md);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.sg-composer-library-row:last-child {
-  border-bottom: 0;
-}
-
-.sg-composer-library-row-main {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.sg-composer-library-open {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  inline-size: 100%;
-  min-width: 0;
-  padding: var(--spacing-vsp-2xs) var(--spacing-hsp-sm);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-fg);
-  text-align: start;
-  cursor: pointer;
-}
-
-.sg-composer-library-open:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.sg-composer-library-row-name-line,
-.sg-composer-library-row-name,
-.sg-composer-library-row-id {
-  max-inline-size: 100%;
-}
-
-.sg-composer-library-row-name-line {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--spacing-hsp-xs);
-}
-
-.sg-composer-library-row-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 700;
-}
-
-.sg-composer-library-row-id {
-  color: var(--color-muted);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: var(--text-micro);
-}
-
-.sg-composer-library-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-vsp-xs) var(--spacing-hsp-lg);
-  padding: var(--spacing-vsp-xs) var(--spacing-hsp-sm) 0;
-}
-
-.sg-composer-library-meta div {
-  min-width: 0;
-}
-
-.sg-composer-library-meta dt {
-  color: var(--color-muted);
-  font-size: var(--text-micro);
-  font-weight: 600;
-}
-
-.sg-composer-library-meta dd {
-  font-size: var(--text-small);
-}
-
 .sg-composer-library-state {
   text-align: center;
 }
@@ -2033,35 +1833,15 @@
   margin-block-start: var(--spacing-vsp-sm);
 }
 
-.sg-composer-library .sg-composer-toolbar-confirm {
-  flex-wrap: wrap;
-  gap: var(--spacing-vsp-xs) var(--spacing-hsp-xs);
-}
-
 @media (min-width: 48rem) {
   .sg-composer-library {
     padding-inline: var(--spacing-hsp-xl);
   }
 
-  .sg-composer-library-header,
-  .sg-composer-library-storage,
-  .sg-composer-library-alert,
-  .sg-composer-library-collection-tools,
-  .sg-composer-library-row {
+  .sg-composer-library-alert {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
     gap: var(--spacing-hsp-lg);
-  }
-
-  .sg-composer-library-provider,
-  .sg-composer-library-filter {
-    flex: 0 1 20rem;
-  }
-
-  .sg-composer-library-row-actions {
-    flex: 0 0 auto;
-    flex-direction: row;
-    gap: var(--spacing-hsp-xs);
   }
 }
