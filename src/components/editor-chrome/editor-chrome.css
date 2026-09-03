@@ -1,0 +1,212 @@
+/* ==========================================================================
+ * Shared editor chrome (epic #156).
+ *
+ * Imported by `src/components/editor-chrome/index.ts`, so a route that never
+ * opens an editor never pays for this sheet. It follows the same rules as
+ * `src/components/ui/ui.css`: every colour is a token from
+ * `src/styles/app-tokens.css`, every class carries the `cms-` prefix so it
+ * cannot collide with a Tailwind utility generated from the same source scan,
+ * and the type ladder is written as literal rem values because `--text-*` is
+ * the provider's namespace.
+ *
+ * The two exceptions to the prefix are `nav-collapsed` and `insp-collapsed`,
+ * which the epic fixes as the editor's public state names. Both are only ever
+ * used compounded onto `.cms-editor__body`, so nothing global answers to them.
+ *
+ * Layout contract:
+ *   .cms-editor        grid: toolbar / body
+ *   .cms-editor__body  nav | resizer | main | resizer | inspector
+ * ========================================================================== */
+
+.cms-editor {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * Toolbar
+ * -------------------------------------------------------------------------- */
+.cms-editor__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 44px;
+  min-width: 0;
+  padding-inline: var(--sp-2);
+  border-block-end: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.cms-editor__center {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.cms-editor__right {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-inline-start: auto;
+}
+
+/* Three columns are always visible on a wide editor, so the switch is dead
+ * weight until the body folds to one. */
+.cms-editor__pane-switch { display: none; }
+
+/* --------------------------------------------------------------------------
+ * RecordTitle
+ * -------------------------------------------------------------------------- */
+.cms-record-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.cms-record-title__input {
+  width: 240px;
+  min-width: 0;
+  height: 28px;
+  padding-inline: var(--sp-b1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-fg);
+  background: transparent;
+  font-size: .875rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.cms-record-title__input:focus {
+  border-color: var(--color-focus);
+  background: var(--color-surface);
+  outline: 0;
+}
+
+.cms-record-title__input:disabled { opacity: .6; cursor: not-allowed; }
+
+/* --------------------------------------------------------------------------
+ * Body grid
+ *
+ * The tracks are named so the collapsed and narrow states only ever redefine a
+ * custom property; `grid-template-columns` itself is declared once, and the
+ * narrow override does not have to outrank a compound state class.
+ * -------------------------------------------------------------------------- */
+.cms-editor__body {
+  --nav-track: var(--nav-w, 280px);
+  --insp-track: var(--insp-w, 300px);
+  --nav-resizer-track: 1px;
+  --insp-resizer-track: 1px;
+  display: grid;
+  grid-template-columns:
+    var(--nav-track) var(--nav-resizer-track)
+    minmax(0, 1fr)
+    var(--insp-resizer-track) var(--insp-track);
+  min-width: 0;
+  min-height: 0;
+}
+
+.cms-editor__body--no-nav { --nav-track: 0px; --nav-resizer-track: 0px; }
+.cms-editor__body--no-insp { --insp-track: 0px; --insp-resizer-track: 0px; }
+
+/* A collapsed rail keeps a stub column wide enough for its restore button, so
+ * the state is always reversible without the pane header it just hid. */
+.cms-editor__body.nav-collapsed { --nav-track: 34px; --nav-resizer-track: 0px; }
+.cms-editor__body.insp-collapsed { --insp-track: 34px; --insp-resizer-track: 0px; }
+
+.cms-editor__region {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cms-editor__region--nav { grid-column: 1; }
+.cms-editor__region--main { grid-column: 3; }
+.cms-editor__region--insp { grid-column: 5; }
+
+.cms-editor__body.nav-collapsed .cms-editor__region--nav,
+.cms-editor__body.insp-collapsed .cms-editor__region--insp { display: none; }
+
+.cms-editor__stub {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  padding-block-start: var(--sp-1);
+  background: var(--color-surface);
+}
+
+.cms-editor__stub--nav { grid-column: 1; border-inline-end: 1px solid var(--color-border); }
+.cms-editor__stub--insp { grid-column: 5; border-inline-start: 1px solid var(--color-border); }
+
+/* --------------------------------------------------------------------------
+ * Resizers
+ * -------------------------------------------------------------------------- */
+.cms-editor__resizer {
+  position: relative;
+  z-index: var(--z-index-local-1);
+  background: var(--color-border);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+/* A 1px track is not a pointer target; the pseudo-element widens the grab area
+ * without widening the line. */
+.cms-editor__resizer::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline: -4px;
+}
+
+.cms-editor__resizer--nav { grid-column: 2; }
+.cms-editor__resizer--insp { grid-column: 4; }
+.cms-editor__resizer:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+
+/* --------------------------------------------------------------------------
+ * Narrow screens: one column, and the toolbar's pane switch chooses it.
+ * -------------------------------------------------------------------------- */
+@media (max-width: 64rem) {
+  .cms-editor__toolbar {
+    height: auto;
+    min-height: 44px;
+    padding-block: var(--sp-1);
+    flex-wrap: wrap;
+  }
+
+  .cms-editor__center { display: none; }
+  .cms-record-title { flex: 1 1 auto; }
+  .cms-record-title__input { width: 100%; }
+  .cms-editor__right { flex: 0 0 auto; }
+
+  .cms-editor__pane-switch {
+    display: flex;
+    order: 10;
+    flex: 1 1 100%;
+  }
+
+  .cms-editor__pane-switch .cms-seg { flex: 1; }
+  .cms-editor__pane-switch .cms-seg__option { flex: 1; justify-content: center; }
+
+  .cms-editor__body { grid-template-columns: minmax(0, 1fr); }
+  .cms-editor__region { grid-column: auto; }
+  .cms-editor__body .cms-editor__region[data-pane-active="true"] { display: grid; }
+  .cms-editor__body .cms-editor__region[data-pane-active="false"] { display: none; }
+  .cms-editor__resizer,
+  .cms-editor__stub { display: none; }
+}
+
+@media (hover: hover) {
+  .cms-record-title__input:not(:disabled):hover { border-color: var(--color-border); background: var(--color-surface); }
+  .cms-editor__resizer:hover { background: var(--color-accent); }
+}
+
+@media (pointer: coarse) {
+  .cms-record-title__input { height: auto; min-height: 44px; }
+}
