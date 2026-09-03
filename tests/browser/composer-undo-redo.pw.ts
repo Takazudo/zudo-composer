@@ -1,4 +1,17 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+
+/**
+ * `.cms-tree-acts` is `width: 0; opacity: 0` until its row is hovered or
+ * focus-within, so an OutlineTree row action is in the accessibility tree but
+ * has no box — Playwright's actionability check waits on it forever. Focus the
+ * owning row first; focus-within is deterministic where hover is not.
+ */
+async function treeRowAction(structure: Locator, action: string): Promise<void> {
+  const button = structure.getByRole("button", { name: action, exact: true });
+  await structure.getByRole("treeitem").filter({ has: button }).first().focus();
+  await button.click();
+}
+
 
 function watchRuntimeFailures(page: Page) {
   const failures: string[] = [];
@@ -41,7 +54,7 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   await expect(redo).toBeDisabled();
 
   // Compose a real provider node through the production chooser.
-  await structure.getByRole("button", { name: "Add component to the document" }).click();
+  await treeRowAction(structure, "Add component to the document");
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await expect(chooser).toBeVisible();
   await chooser.getByRole("button", { name: "SectionHeading", exact: true }).click();
@@ -143,7 +156,7 @@ test("Hero structured actions persist, render, export, and undo structural edits
   await page.goto("/composer");
   await page.getByRole("link", { name: "About page", exact: true }).click();
   const structure = page.locator(".cms-editor__region--nav");
-  await structure.getByRole("button", { name: "Add component to the document" }).click();
+  await treeRowAction(structure, "Add component to the document");
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await chooser.getByRole("button", { name: "Hero", exact: true }).click();
 

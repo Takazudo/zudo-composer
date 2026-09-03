@@ -115,6 +115,13 @@ function schemaRow(page: Page, label: string): Locator {
 }
 
 /** Choose a field's type from its popover, which replaced nine inline cards. */
+/**
+ * The kind rows render `<strong>{label}</strong><small>{explanation}</small>`
+ * with no separator, so the accessible name runs together as
+ * "SlugURL-friendly text…". A `\b` after the label cannot match — the next
+ * character is a word character. Anchor on the prefix only until the shared
+ * component gives the name a separator (tracked for #174).
+ */
 async function chooseFieldKind(page: Page, label: string, kind: RegExp) {
   await schemaRow(page, label).getByRole("button", { name: `Type for ${label}`, exact: true }).click();
   await page.getByRole("menu", { name: `Type for ${label}`, exact: true }).getByRole("menuitemradio", { name: kind }).click();
@@ -292,7 +299,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await schemaRow(page, "Heading").getByRole("button", { name: "Type for Heading", exact: true }).click();
   const lockedKinds = page.getByRole("menu", { name: "Type for Heading", exact: true });
   await expect(lockedKinds.getByText("Type locked · stored Entries use it")).toBeVisible();
-  await expect(lockedKinds.getByRole("menuitemradio", { name: /^Date\b/ })).toBeDisabled();
+  await expect(lockedKinds.getByRole("menuitemradio", { name: /^Date/ })).toBeDisabled();
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Add field" }).click();
@@ -304,14 +311,14 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(addedField.getByText(/Start with a lowercase letter/)).toBeVisible();
   await addedField.getByRole("textbox", { name: /^Key for / }).fill("alternateRouteSlug");
   await expect(addedField.getByText(/Start with a lowercase letter/)).toHaveCount(0);
-  await chooseFieldKind(page, "Alternate route slug", /^Slug\b/);
+  await chooseFieldKind(page, "Alternate route slug", /^Slug/);
   await fieldAction(page, "Alternate route slug", "Move up");
 
   await page.getByRole("button", { name: "Add field" }).click();
   const reviewDateField = schemaTable.getByRole("row").last();
   await reviewDateField.getByRole("textbox", { name: /^Label for / }).fill("Review date");
   await reviewDateField.getByRole("textbox", { name: /^Key for / }).fill("reviewDate");
-  await chooseFieldKind(page, "Review date", /^Date\b/);
+  await chooseFieldKind(page, "Review date", /^Date/);
   await expect(saveStatus(page)).toContainText("Saved");
   // Autosave stays authoritative, so Save is inert once the queue has drained.
   await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();

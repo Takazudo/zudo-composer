@@ -1,4 +1,17 @@
-import { expect, test, type Page, type Response } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
+
+/**
+ * `.cms-tree-acts` is `width: 0; opacity: 0` until its row is hovered or
+ * focus-within, so an OutlineTree row action is in the accessibility tree but
+ * has no box — Playwright's actionability check waits on it forever. Focus the
+ * owning row first; focus-within is deterministic where hover is not.
+ */
+async function treeRowAction(structure: Locator, action: string): Promise<void> {
+  const button = structure.getByRole("button", { name: action, exact: true });
+  await structure.getByRole("treeitem").filter({ has: button }).first().focus();
+  await button.click();
+}
+
 
 const COMPONENTS = [
   "Callout",
@@ -58,7 +71,7 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   await expect(canvas.getByText("Static about heading", { exact: true })).toBeVisible();
   await expect(canvas.getByText("Static about body", { exact: true })).toBeVisible();
 
-  await structure.getByRole("button", { name: "Add component to the document" }).click();
+  await treeRowAction(structure, "Add component to the document");
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await expect(chooser).toBeVisible();
   for (const title of COMPONENTS) {
@@ -121,7 +134,7 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
     await useTheme(page, theme);
     await expect(canvas.locator("html")).toHaveAttribute("data-theme", theme);
   }
-  await structure.getByRole("button", { name: "Add component to the document" }).click();
+  await treeRowAction(structure, "Add component to the document");
   await page.setViewportSize({ width: 375, height: 812 });
   await expect(toolbar).toBeVisible();
   const narrowChooser = page.getByRole("dialog", { name: /Add to Document root/i });
