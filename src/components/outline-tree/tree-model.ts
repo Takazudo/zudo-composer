@@ -64,6 +64,23 @@ export function collectExpandableIds(nodes: readonly OutlineNode[]): string[] {
   return ids;
 }
 
+/**
+ * Every id in tree order, whatever the node's kind. An expansion list is
+ * filtered through this, so an id survives exactly as long as its node does —
+ * a branch that is momentarily empty keeps its place.
+ */
+export function collectNodeIds(nodes: readonly OutlineNode[]): string[] {
+  const ids: string[] = [];
+  const walk = (list: readonly OutlineNode[]) => {
+    for (const node of list) {
+      ids.push(node.id);
+      walk(childrenOf(node));
+    }
+  };
+  walk(nodes);
+  return ids;
+}
+
 export function findRowIndex(rows: readonly OutlineRowPosition[], id: string): number {
   return rows.findIndex((row) => row.node.id === id);
 }

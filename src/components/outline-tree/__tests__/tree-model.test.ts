@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   childrenOf,
   collectExpandableIds,
+  collectNodeIds,
   findRowIndex,
   flattenVisibleRows,
   insertTargetAfter,
@@ -70,6 +71,12 @@ describe("isExpandable", () => {
 describe("collectExpandableIds", () => {
   it("lists every branch depth-first, which is the order Open all restores", () => {
     expect(collectExpandableIds(NODES)).toEqual(["home", "products", "docs"]);
+  });
+});
+
+describe("collectNodeIds", () => {
+  it("lists every node in tree order, branch or not", () => {
+    expect(collectNodeIds(NODES)).toEqual(["home", "products", "overview", "pricing", "about", "docs", "started", "settings"]);
   });
 });
 

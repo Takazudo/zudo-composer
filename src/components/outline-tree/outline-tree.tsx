@@ -8,7 +8,13 @@ import { OutlineAddRoot, OutlineInsertGap } from "./outline-insert";
 import { OutlineNodeRow } from "./outline-rows";
 import { readOutlinePrefs, writeOutlinePrefs } from "./prefs";
 import type { OutlinePrefs } from "./prefs";
-import { collectExpandableIds, flattenVisibleRows, insertTargetAfter, isLastInList } from "./tree-model";
+import {
+  collectExpandableIds,
+  collectNodeIds,
+  flattenVisibleRows,
+  insertTargetAfter,
+  isLastInList,
+} from "./tree-model";
 import type { OutlineInsertTarget, OutlineTreeProps } from "./types";
 
 /** Keys the roving helper answers here; Left/Right belong to the tree itself. */
@@ -64,6 +70,7 @@ export function OutlineTree(props: OutlineTreeProps) {
   } = props;
 
   const expandableIds = useMemo(() => collectExpandableIds(nodes), [nodes]);
+  const nodeIds = useMemo(() => collectNodeIds(nodes), [nodes]);
   const [ownExpandedIds, setOwnExpandedIds] = useState<readonly string[] | null>(null);
   const currentExpandedIds = expandedIds ?? ownExpandedIds ?? expandableIds;
   const expandedSet = useMemo(() => new Set(currentExpandedIds), [currentExpandedIds]);
@@ -95,9 +102,12 @@ export function OutlineTree(props: OutlineTreeProps) {
 
   function applyExpanded(nextIds: readonly string[]) {
     // Ordered by the tree itself and filtered to nodes that still exist, so the
-    // list a host stores never drifts as the outline changes.
+    // list a host stores never drifts as the outline changes. The filter is
+    // every node rather than every branch: a node with no children yet is not
+    // expandable, and dropping it here would silently close it again the moment
+    // it is given one.
     const wanted = new Set(nextIds);
-    const ordered = expandableIds.filter((id) => wanted.has(id));
+    const ordered = nodeIds.filter((id) => wanted.has(id));
     if (expandedIds === undefined) setOwnExpandedIds(ordered);
     onExpandedChange?.(ordered);
   }
@@ -135,6 +145,10 @@ export function OutlineTree(props: OutlineTreeProps) {
   }
 
   function commitAdd(target: OutlineInsertTarget, title: string) {
+    // An empty branch is not expandable, so nothing holds it open; without this
+    // the child about to arrive would make it expandable-and-collapsed and the
+    // node the user just added would never appear.
+    if (target.parentId !== null && !expandedSet.has(target.parentId)) setExpanded(target.parentId, true);
     onAdd?.({ ...target, title });
     closeEdit();
   }
@@ -143,6 +157,9 @@ export function OutlineTree(props: OutlineTreeProps) {
     const index = rows.findIndex((row) => row.node.id === id);
     if (index === -1) return;
     const row = rows[index];
+    // A shortcut of the host or the browser — Cmd+A, Ctrl+Home — is not a tree
+    // key. `a` in particular would otherwise open an insert editor on Select all.
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
 
     if (event.key === "ArrowRight") {
       if (row.expandable && !row.expanded) {

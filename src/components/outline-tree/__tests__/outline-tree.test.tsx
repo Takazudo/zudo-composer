@@ -86,6 +86,15 @@ describe("structure", () => {
     expect(withStatus.container.querySelector(".cms-tree-tag")?.textContent).toBe("single");
   });
 
+  it("keeps every row's own metadata inside the treeitem, where it is announced", () => {
+    render(<OutlineTree nodes={NODES} />);
+    // Only the treeitem is in the accessibility tree, so the slug, the count and
+    // the status label have to be part of its name on a category too.
+    for (const name of [/\(11\)/, /Composition assigned/]) expect(item("home")).toHaveAccessibleName(name);
+    for (const name of [/site-settings/, /single/]) expect(item("settings")).toHaveAccessibleName(name);
+    for (const name of [/\/about/, /Unassigned/]) expect(item("about")).toHaveAccessibleName(name);
+  });
+
   it("renders the hover-only actions slot only when the host fills it", () => {
     const { container, rerender } = render(<OutlineTree nodes={NODES} />);
     expect(container.querySelectorAll(".cms-tree-acts")).toHaveLength(0);
@@ -148,6 +157,48 @@ describe("expansion", () => {
     fireEvent.click(screen.getByRole("button", { name: "Expand Products" }));
     expect(onExpandedChange).toHaveBeenCalledWith(["home", "products"]);
     expect(screen.queryByRole("treeitem", { name: /Product overview/ })).toBeNull();
+  });
+
+  it("keeps an id whose node is momentarily childless, and opens a branch it fills", () => {
+    const onExpandedChange = vi.fn();
+    const onAdd = vi.fn();
+    // "settings" has no children, so it is not expandable — an expansion list
+    // that only kept branches would quietly drop it here.
+    render(
+      <OutlineTree
+        nodes={NODES}
+        expandedIds={["home", "settings"]}
+        onExpandedChange={onExpandedChange}
+        onAdd={onAdd}
+        addLabel={addLabel}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Expand Products" }));
+    expect(onExpandedChange).toHaveBeenLastCalledWith(["home", "products", "settings"]);
+
+    onExpandedChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Add under Site settings" }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Add under Site settings" }), { target: { value: "Domains" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Add under Site settings" }), { key: "Enter" });
+    expect(onAdd).toHaveBeenCalledWith({ parentId: "settings", index: 0, title: "Domains" });
+    expect(onExpandedChange).not.toHaveBeenCalled();
+  });
+
+  it("opens the branch it just filled, so the new node is not added out of sight", () => {
+    const onExpandedChange = vi.fn();
+    render(
+      <OutlineTree
+        nodes={NODES}
+        expandedIds={["home"]}
+        onExpandedChange={onExpandedChange}
+        onAdd={vi.fn()}
+        addLabel={addLabel}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add under Site settings" }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Add under Site settings" }), { target: { value: "Domains" } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Add under Site settings" }), { key: "Enter" });
+    expect(onExpandedChange).toHaveBeenCalledWith(["home", "settings"]);
   });
 
   it("reports Collapse all and Open all in the tree's own order", () => {
@@ -300,6 +351,20 @@ describe("keyboard", () => {
     focus(item("overview"));
     fireEvent.keyDown(item("overview"), { key: "a" });
     expect(screen.getByRole("textbox", { name: "Insert before Pricing" })).toBeInTheDocument();
+  });
+
+  it("leaves a modified key to the browser, so Select all is not an insert", () => {
+    const onRequestInsert = vi.fn();
+    const onOpen = vi.fn();
+    render(<OutlineTree nodes={NODES} onRequestInsert={onRequestInsert} onOpen={onOpen} />);
+    focus(item("overview"));
+    fireEvent.keyDown(item("overview"), { key: "a", metaKey: true });
+    fireEvent.keyDown(item("overview"), { key: "a", ctrlKey: true });
+    fireEvent.keyDown(item("overview"), { key: "Enter", metaKey: true });
+    fireEvent.keyDown(item("overview"), { key: "End", ctrlKey: true });
+    expect(onRequestInsert).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(item("overview"));
   });
 
   it("ignores keys it does not own", () => {

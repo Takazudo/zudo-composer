@@ -42,7 +42,14 @@ function useTreeItemProps(node: OutlineNode, placement: RowPlacement, expandable
   } as const;
 }
 
-/** Right-aligned mono slug and count — both hidden by the toolbar preferences. */
+/**
+ * Right-aligned mono slug and count — both hidden by the toolbar preferences.
+ *
+ * It renders inside the row's own button on every kind of row: only the
+ * `treeitem` is in the accessibility tree, so metadata left beside it would be
+ * announced to nobody. The actions and the caret cannot follow it in, being
+ * buttons themselves.
+ */
 function RowMeta({ node }: { node: OutlineNode }) {
   return (
     <Fragment>
@@ -113,8 +120,8 @@ function CategoryRow({ node, placement, expanded }: { node: OutlineNode; placeme
           </span>
           <span class="cms-tree-title">{node.title}</span>
           <RowHint node={node} />
+          <RowMeta node={node} />
         </button>
-        <RowMeta node={node} />
         <RowActions node={node} />
         {expandable ? <RowToggle node={node} expanded={expanded} /> : null}
       </div>

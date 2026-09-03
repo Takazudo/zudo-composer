@@ -18,6 +18,7 @@ export type {
 } from "./types";
 export {
   collectExpandableIds,
+  collectNodeIds,
   childrenOf,
   findRowIndex,
   flattenVisibleRows,
