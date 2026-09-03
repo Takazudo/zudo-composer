@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,7 +11,9 @@ import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV } from "../sto
 
 const roots: string[] = [];
 async function root(): Promise<string> {
-  const path = await mkdtemp(join(tmpdir(), "zudo-site-project-"));
+  // realpath is required: on macOS tmpdir() is /var/folders/... which symlinks to
+  // /private/var/..., and the store's ensureRoot guard demands realpath(root) === root.
+  const path = await realpath(await mkdtemp(join(tmpdir(), "zudo-site-project-")));
   roots.push(path);
   return join(path, ".zudo-site-project");
 }
