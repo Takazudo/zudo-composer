@@ -1,4 +1,4 @@
-import type { JSX } from "preact";
+import type { JSX, Ref } from "preact";
 import { cx } from "./class-names";
 import type { WithPlainClass } from "./class-names";
 
@@ -11,6 +11,15 @@ interface ButtonBaseProps extends NativeButtonProps {
   variant?: ButtonVariant;
   /** `md` 30px (default), `sm` 26px, `xs` 22px — the chrome control ladder. */
   size?: ButtonSize;
+  /**
+   * Ref onto the rendered `<button>`. Preact strips `ref` from a function
+   * component rather than forwarding it, and `preact/compat`'s `forwardRef` is
+   * not available here — importing compat rewires option hooks bundle-wide,
+   * including the React-flavoured `onChange` this app does not use. Menu
+   * triggers (`useMenu`) and focus targets need the element, so they take it
+   * through this prop instead of hand-rolling a raw `<button class="cms-btn">`.
+   */
+  elementRef?: Ref<HTMLButtonElement>;
 }
 
 /**
@@ -22,9 +31,10 @@ export type ButtonProps =
   | (ButtonBaseProps & { iconOnly?: false });
 
 export function Button(props: ButtonProps) {
-  const { variant = "default", size = "md", iconOnly = false, class: className, type = "button", ...rest } = props;
+  const { variant = "default", size = "md", iconOnly = false, class: className, type = "button", elementRef, ...rest } = props;
   return (
     <button
+      ref={elementRef}
       type={type}
       class={cx(
         "cms-btn",

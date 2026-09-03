@@ -1,4 +1,4 @@
-import type { ComponentChildren, JSX } from "preact";
+import type { ComponentChildren, JSX, Ref } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import { ChevronDownIcon } from "../icons";
 import type { IconComponent } from "../icons";
@@ -13,14 +13,22 @@ export interface InputProps extends WithPlainClass<Omit<JSX.IntrinsicElements["i
   size?: ControlSize;
   /** Decorative leading icon; the input reserves its inline start padding. */
   icon?: IconComponent;
+  /**
+   * Ref onto the rendered `<input>`. Preact strips `ref` from a function
+   * component rather than forwarding it, so callers that must focus or select
+   * the control take it through this prop rather than wrapping the component in
+   * a `<div ref>` and reaching in with `querySelector("input")`.
+   */
+  elementRef?: Ref<HTMLInputElement>;
 }
 
 /** `class` lands on the outermost node: the input, or the wrapper an icon adds. */
-export function Input({ size = "md", icon: Icon, class: className, ...rest }: InputProps) {
+export function Input({ size = "md", icon: Icon, class: className, elementRef, ...rest }: InputProps) {
   const field = useFieldControl();
   const input = (
     <input
       {...rest}
+      ref={elementRef}
       class={cx("cms-input", size === "sm" && "cms-input--sm", !Icon && className)}
       id={rest.id ?? field?.controlId}
       aria-describedby={rest["aria-describedby"] ?? field?.describedBy}
