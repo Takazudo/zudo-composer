@@ -31,10 +31,11 @@ export type { ComposerToolbarBarProps } from "./composer-toolbar-bar";
 
 export {
   useComposerKeyboard,
-  isEditableEventTarget,
   type ComposerKeyboardOptions,
   type KeyboardHost,
 } from "./use-composer-keyboard";
+
+export { isEditableEventTarget, matchesUndoRedoShortcut } from "../keyboard-shortcuts";
 
 export { useHostTheme, resolveHostTheme } from "./use-host-theme";
 

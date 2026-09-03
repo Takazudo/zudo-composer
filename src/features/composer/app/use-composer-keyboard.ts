@@ -13,9 +13,10 @@
 // undo/redo never mutate in Preview mode (Preview has no mutation
 // affordances). Escape is allowed in Preview — it only closes transient UI.
 //
-// Kept as a tiny hook with a pure detector so the whole guard matrix is
-// unit-testable without a full app render; the canvas iframe shares the
-// detector rather than maintaining a second shortcut matrix.
+// Kept as a tiny hook over the pure detectors in `../keyboard-shortcuts` so
+// the whole guard matrix is unit-testable without a full app render; the
+// canvas iframe imports the same detectors rather than maintaining a second
+// shortcut matrix, and reaches them without this hook's Preact dependency.
 //
 // ── `menuOpen` (issue Takazudo/zudo-sg#256) ──────────────────────────────────────────────────
 // A `ComposerMenu` owns its OWN Escape/outside/scroll/resize dismissal (see
@@ -33,6 +34,7 @@
 
 import { useEffect } from "preact/hooks";
 import type { ComposerMode } from "../chrome/controller-model";
+import { isEditableEventTarget, matchesUndoRedoShortcut } from "../keyboard-shortcuts";
 
 /** A minimal event-target surface, so tests can drive a stand-in element. */
 export interface KeyboardHost {
@@ -60,38 +62,6 @@ export interface ComposerKeyboardOptions {
   menuOpen?: boolean;
   /** Test seam — defaults to `document`. */
   host?: KeyboardHost;
-}
-
-/** True when a keystroke is being typed into an editable control. */
-export function isEditableEventTarget(target: EventTarget | null): boolean {
-  if (target === null || typeof (target as Element).tagName !== "string") return false;
-  const el = target as HTMLElement;
-  if (el.isContentEditable) return true;
-  const tag = el.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-}
-
-/**
- * Match the Composer's cross-platform undo/redo shortcuts without changing
- * the event or consulting any application state.
- *
- * `Ctrl+Y` is retained as the Windows/Linux redo spelling; on macOS the
- * standard spelling is `Cmd+Shift+Z`, just as it is for the corresponding
- * Ctrl shortcut on other platforms.
- */
-export function matchesUndoRedoShortcut(event: KeyboardEvent): "undo" | "redo" | null {
-  // Alt changes the meaning of these combinations in browser/platform
-  // shortcuts, so it must never be treated as a Composer command modifier.
-  if (event.altKey || !(event.metaKey || event.ctrlKey)) return null;
-
-  switch (event.key.toLowerCase()) {
-    case "z":
-      return event.shiftKey ? "redo" : "undo";
-    case "y":
-      return event.ctrlKey && !event.shiftKey ? "redo" : null;
-    default:
-      return null;
-  }
 }
 
 export function useComposerKeyboard(options: ComposerKeyboardOptions): void {
