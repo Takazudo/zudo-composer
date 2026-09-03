@@ -130,7 +130,10 @@ function markdownFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
-      if ([".git", ".artifacts", "coverage", "dist", "node_modules", "test-results"].includes(entry.name)) return [];
+      // `worktrees` holds nested git checkouts, not repository content: scanning it
+      // asserts this repo's rules against a second copy of the tree (and against any
+      // untracked scratch markdown left there), which fails on files that are not ours.
+      if ([".git", ".artifacts", "coverage", "dist", "node_modules", "test-results", "worktrees"].includes(entry.name)) return [];
       return markdownFiles(path);
     }
     return extname(path) === ".md" ? [path] : [];
