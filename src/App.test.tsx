@@ -17,7 +17,7 @@ describe('App', () => {
   });
 
   it.each([
-    ['/composer', 'Composition library', 'Compositions'],
+    ['/composer', 'Compositions', 'Compositions'],
     ['/content', 'Content authoring', 'Content'],
     ['/mapping', 'Mapping library', 'Mappings'],
     ['/sitemapper', 'Sitemaps', 'Sitemaps'],
