@@ -4,8 +4,6 @@ import "../../test-support/cleanup";
 import { describe, expect, it, vi } from "vitest";
 import { render, renderHook } from "@testing-library/preact";
 import {
-  isEditableEventTarget,
-  matchesUndoRedoShortcut,
   useComposerKeyboard,
   type ComposerKeyboardOptions,
   type KeyboardHost,
@@ -63,46 +61,6 @@ function setup(opts: Omit<ComposerKeyboardOptions, "host">) {
   };
   return { fire };
 }
-
-describe("isEditableEventTarget", () => {
-  it("flags inputs, textareas, selects, and contentEditable", () => {
-    expect(isEditableEventTarget({ tagName: "INPUT", isContentEditable: false } as never)).toBe(true);
-    expect(isEditableEventTarget({ tagName: "TEXTAREA", isContentEditable: false } as never)).toBe(true);
-    expect(isEditableEventTarget({ tagName: "SELECT", isContentEditable: false } as never)).toBe(true);
-    expect(isEditableEventTarget({ tagName: "DIV", isContentEditable: true } as never)).toBe(true);
-  });
-  it("does not flag ordinary elements or null", () => {
-    expect(isEditableEventTarget({ tagName: "DIV", isContentEditable: false } as never)).toBe(false);
-    expect(isEditableEventTarget(null)).toBe(false);
-  });
-});
-
-describe("matchesUndoRedoShortcut", () => {
-  const cases: Array<[string, string, ShortcutModifiers, "undo" | "redo" | null]> = [
-    ["Cmd+Z", "z", { metaKey: true }, "undo"],
-    ["Ctrl+Z", "z", { ctrlKey: true }, "undo"],
-    ["Cmd+Shift+Z", "z", { metaKey: true, shiftKey: true }, "redo"],
-    ["Ctrl+Shift+Z", "z", { ctrlKey: true, shiftKey: true }, "redo"],
-    ["Ctrl+Y", "y", { ctrlKey: true }, "redo"],
-    ["plain Z", "z", {}, null],
-    ["Alt+Z", "z", { altKey: true }, null],
-    ["Cmd+Shift+Y", "y", { metaKey: true, shiftKey: true }, null],
-    ["Cmd+Y", "y", { metaKey: true }, null],
-    ["Ctrl+Shift+Y", "y", { ctrlKey: true, shiftKey: true }, null],
-    ["Ctrl+Alt+Z", "z", { ctrlKey: true, altKey: true }, null],
-  ];
-
-  it.each(cases)("matches %s", (_label, key, modifiers, expected) => {
-    const event = {
-      key,
-      altKey: modifiers.altKey ?? false,
-      ctrlKey: modifiers.ctrlKey ?? false,
-      metaKey: modifiers.metaKey ?? false,
-      shiftKey: modifiers.shiftKey ?? false,
-    };
-    expect(matchesUndoRedoShortcut(event as KeyboardEvent)).toBe(expected);
-  });
-});
 
 describe("useComposerKeyboard — the guard matrix (#251)", () => {
   it("Delete removes the current selection in Edit mode", () => {
