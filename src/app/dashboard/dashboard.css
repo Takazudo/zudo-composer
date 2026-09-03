@@ -100,8 +100,8 @@
 
 /* The failed card carries an error sentence, so its chip wraps instead of
    forcing the five-column grid wider. */
-.cms-dash-stat--unavailable .cms-status { align-items: flex-start; flex-wrap: wrap; }
-.cms-dash-stat--unavailable .cms-status__label { white-space: normal; }
+.cms-dash-stat--unavailable .cms-status { align-items: flex-start; flex-wrap: wrap; max-width: 100%; }
+.cms-dash-stat--unavailable .cms-status__label { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 
 .cms-dash-stat--skeleton { gap: var(--sp-b2); }
 
@@ -206,7 +206,7 @@
 .cms-dash-attention__row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-b2); }
 .cms-dash-attention__text { display: grid; min-width: 0; }
 .cms-dash-attention__text strong { color: var(--color-fg); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cms-dash-attention__text span { color: var(--color-muted); font-size: .75rem; }
+.cms-dash-attention__text span { color: var(--color-muted); font-size: .75rem; overflow-wrap: anywhere; }
 
 /* --------------------------------------------------------------------------
  * How the pieces connect
