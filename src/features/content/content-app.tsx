@@ -299,7 +299,9 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
                   tone={missing === 0 ? "ok" : "warn"}
                   icon={missing === 0 ? CheckCircleIcon : WarningIcon}
                   label={missing === 0 ? "Complete" : "Incomplete draft"}
-                  detail={missing === 0 ? undefined : `${missing} required value${missing === 1 ? "" : "s"} missing`}
+                  // Short on purpose: the header is a fixed-height row that
+                  // already carries the record's own chips beside it.
+                  detail={missing === 0 ? undefined : `${missing} missing`}
                 />
               ) : null}
             >

@@ -81,6 +81,9 @@
  * ------------------------------------------------------------------------ */
 .sg-content-form { display: grid; align-content: start; gap: var(--sg-content-space-section-y); min-width: 0; max-width: 48rem; }
 .sg-content-mono { font-family: var(--font-mono, ui-monospace, monospace); }
+/* The header is a fixed-height row, so a long completeness sentence shrinks
+ * rather than pushing the record's own chips out of the pane. */
+.sg-content-completeness { min-width: 0; overflow: hidden; }
 .sg-content-hint { margin: 0; color: var(--color-muted); font-size: var(--text-xs); line-height: var(--leading-normal); }
 .sg-content-req { color: var(--color-danger); }
 

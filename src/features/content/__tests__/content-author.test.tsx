@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import type { JSX } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createContentEntryRecord, createContentModelRecord, type ContentFieldDefinition } from "../../../content";
+import { createContentEntryRecord, createContentModelRecord, type ContentEntryRecord, type ContentFieldDefinition } from "../../../content";
 import { ContentApp } from "../content-app";
 import { ContentEntryAuthor, ContentSchemaAuthor, contentFieldKeyError } from "../content-author";
 import { createContentAuthoringController, type ContentAuthoringController } from "../controller";
@@ -35,7 +35,7 @@ function authorModel() {
   }, { id: "journal", timestamp: STAMP });
 }
 
-async function openAuthoring(values: Record<string, unknown> = {}): Promise<ContentAuthoringController> {
+async function openAuthoring(values: ContentEntryRecord["values"] = {}): Promise<ContentAuthoringController> {
   const model = authorModel();
   const entry = createContentEntryRecord(model.id, values, { id: "entry-1", timestamp: STAMP });
   const controller = createContentAuthoringController(createMemoryContentProvider({ models: [model], entries: [entry] }));
@@ -301,7 +301,7 @@ describe("Content pane header", () => {
     expect(completeness.closest(".cms-pane__header")).not.toBeNull();
 
     fireEvent.input(screen.getByRole("textbox", { name: "Title" }), { target: { value: "" } });
-    await waitFor(() => expect(document.querySelector(".sg-content-completeness")).toHaveTextContent("Incomplete draft · 1 required value missing"));
+    await waitFor(() => expect(document.querySelector(".sg-content-completeness")).toHaveTextContent("Incomplete draft · 1 missing"));
   });
 
   it("names the model exactly once in Schema mode", async () => {

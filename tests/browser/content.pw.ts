@@ -105,6 +105,27 @@ function bindingRow(page: Page, pair: string): Locator {
   });
 }
 
+/**
+ * One row of the schema table. Its Label and Key cells are inputs whose values
+ * would join a row's accessible name, so the row is found by the one control
+ * named after the field it edits: its type popover's trigger.
+ */
+function schemaRow(page: Page, label: string): Locator {
+  return page.getByRole("row").filter({ has: page.getByRole("button", { name: `Type for ${label}`, exact: true }) });
+}
+
+/** Choose a field's type from its popover, which replaced nine inline cards. */
+async function chooseFieldKind(page: Page, label: string, kind: RegExp) {
+  await schemaRow(page, label).getByRole("button", { name: `Type for ${label}`, exact: true }).click();
+  await page.getByRole("menu", { name: `Type for ${label}`, exact: true }).getByRole("menuitemradio", { name: kind }).click();
+}
+
+/** A schema field's own `⋯` menu: Move up, Move down, Remove…. */
+async function fieldAction(page: Page, label: string, action: string) {
+  await schemaRow(page, label).getByRole("button", { name: `Field actions for ${label}`, exact: true }).click();
+  await page.getByRole("menuitem", { name: action, exact: true }).click();
+}
+
 /** A binding's own `⋯` menu: Move up, Move down, Remove binding. */
 async function bindingAction(page: Page, pair: string, action: string) {
   await bindingRow(page, pair).getByRole("button", { name: /^Binding actions for / }).click();
@@ -198,8 +219,11 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(about).toContainText("single");
   await about.click();
   await contentTree(page).getByRole("treeitem", { name: /^A studio built around useful clarity/ }).click();
-  await page.getByRole("textbox", { name: "Heading (required)" }).fill("Browser journey studio");
-  await page.getByRole("textbox", { name: "Heading (required)" }).blur();
+  // Required is an attribute on the control now, not a suffix on its name, and
+  // the kind hint beside the label is decorative rather than part of it.
+  await expect(page.getByRole("textbox", { name: "Heading", exact: true })).toBeRequired();
+  await page.getByRole("textbox", { name: "Heading", exact: true }).fill("Browser journey studio");
+  await page.getByRole("textbox", { name: "Heading", exact: true }).blur();
   await expect(saveStatus(page)).toContainText("Saved");
   // Opening a record is a deep link the author can copy.
   await expect(page).toHaveURL(/\/content\?model=about-content&entry=/);
@@ -252,21 +276,42 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // Entry | Schema replaces the per-model Entries / Model fields buttons.
   const mode = page.getByRole("radiogroup", { name: "Editor mode" });
   await mode.getByRole("radio", { name: "Schema" }).click();
-  // Scoped to the form: the toolbar's inline record title is called
-  // "Model name" too, and it edits the same name from the other end.
-  await page.locator(".sg-content-form").getByRole("textbox", { name: "Model name" }).fill("Browser Journal articles");
-  await expect(page.getByRole("textbox", { name: "Model name" }).first()).toHaveValue("Browser Journal articles");
+  // #170 removed the form's own "Model name" input, so the toolbar's record
+  // title is the single control that names the model in Schema mode.
+  await expect(page.getByRole("textbox", { name: "Model name" })).toHaveCount(1);
+  await page.getByRole("textbox", { name: "Model name" }).fill("Browser Journal articles");
+  await expect(page.getByRole("textbox", { name: "Model name" })).toHaveValue("Browser Journal articles");
+  // Model kind is a locked chip carrying its reason, not an editable control.
+  await expect(page.getByText("Collection · locked after creation")).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Model kind" })).toHaveCount(0);
+
+  const schemaTable = page.getByRole("table", { name: /^Fields of / });
+  await expect(schemaTable.getByRole("row")).toHaveCount(6);
+  // Every seeded field already has stored values, so its type is locked — and
+  // the popover says so instead of offering eight unreachable cards.
+  await schemaRow(page, "Heading").getByRole("button", { name: "Type for Heading", exact: true }).click();
+  const lockedKinds = page.getByRole("menu", { name: "Type for Heading", exact: true });
+  await expect(lockedKinds.getByText("Type locked · stored Entries use it")).toBeVisible();
+  await expect(lockedKinds.getByRole("menuitemradio", { name: /^Date\b/ })).toBeDisabled();
+  await page.keyboard.press("Escape");
+
   await page.getByRole("button", { name: "Add field" }).click();
-  const alternateSlugField = page.locator(".sg-content-field").last();
-  await alternateSlugField.getByRole("textbox", { name: "Label" }).fill("Alternate route slug");
-  await alternateSlugField.getByRole("textbox", { name: "Key" }).fill("alternateRouteSlug");
-  await alternateSlugField.getByRole("radiogroup", { name: "Type for Alternate route slug" }).getByRole("radio", { name: /^Slug\b/ }).click();
-  await alternateSlugField.getByRole("button", { name: "Move up" }).click();
+  const addedField = schemaTable.getByRole("row").last();
+  await addedField.getByRole("textbox", { name: /^Label for / }).fill("Alternate route slug");
+  // An unfinished key is held back rather than failing the save queue, which
+  // is what the store does with one — it validates the whole model on write.
+  await addedField.getByRole("textbox", { name: /^Key for / }).fill("Alternate");
+  await expect(addedField.getByText(/Start with a lowercase letter/)).toBeVisible();
+  await addedField.getByRole("textbox", { name: /^Key for / }).fill("alternateRouteSlug");
+  await expect(addedField.getByText(/Start with a lowercase letter/)).toHaveCount(0);
+  await chooseFieldKind(page, "Alternate route slug", /^Slug\b/);
+  await fieldAction(page, "Alternate route slug", "Move up");
+
   await page.getByRole("button", { name: "Add field" }).click();
-  const reviewDateField = page.locator(".sg-content-field").last();
-  await reviewDateField.getByRole("textbox", { name: "Label" }).fill("Review date");
-  await reviewDateField.getByRole("textbox", { name: "Key" }).fill("reviewDate");
-  await reviewDateField.getByRole("radiogroup", { name: "Type for Review date" }).getByRole("radio", { name: /^Date\b/ }).click();
+  const reviewDateField = schemaTable.getByRole("row").last();
+  await reviewDateField.getByRole("textbox", { name: /^Label for / }).fill("Review date");
+  await reviewDateField.getByRole("textbox", { name: /^Key for / }).fill("reviewDate");
+  await chooseFieldKind(page, "Review date", /^Date\b/);
   await expect(saveStatus(page)).toContainText("Saved");
   // Autosave stays authoritative, so Save is inert once the queue has drained.
   await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -274,24 +319,27 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
 
   await mode.getByRole("radio", { name: "Entry" }).click();
   await contentNav(page).getByRole("button", { name: "Add entry" }).click();
-  await expect(page.locator(".sg-content-completeness")).toContainText("Incomplete draft");
-  await page.getByRole("textbox", { name: "Heading (required)" }).fill("Browser journey article");
-  await page.getByRole("textbox", { name: "Introduction (required)" }).fill("Saved Content drives the Mapping preview.");
-  await page.getByLabel("Published on (required)").fill("2026-08-29");
-  await page.getByRole("textbox", { name: "Body (required)" }).fill("## Browser journey\n\nSaved Content drives the Mapping preview.");
-  await page.getByRole("textbox", { name: "Slug (required)" }).fill("東京");
+  // Completeness moved out of the form and into the pane header, beside the
+  // record's own chips; it names how many values are missing now.
+  await expect(page.locator(".sg-content-completeness")).toContainText(/Incomplete draft · \d+ missing/);
+  await page.getByRole("textbox", { name: "Heading", exact: true }).fill("Browser journey article");
+  await page.getByRole("textbox", { name: "Introduction", exact: true }).fill("Saved Content drives the Mapping preview.");
+  await page.getByLabel("Published on").fill("2026-08-29");
+  await page.getByRole("textbox", { name: "Body", exact: true }).fill("## Browser journey\n\nSaved Content drives the Mapping preview.");
+  // The model now holds two slug fields, so this one is named exactly.
+  await page.getByRole("textbox", { name: "Slug", exact: true }).fill("東京");
   await page.getByLabel("Review date").fill("2026-08-30");
   await expect(page.locator(".sg-content-completeness")).toContainText("Complete");
 
   const additionalSlugs = ["東京", ".", "", ...Array.from({ length: 19 }, (_, index) => `browser-${index + 5}`)];
   for (const [index, routeSlug] of additionalSlugs.entries()) {
     await contentNav(page).getByRole("button", { name: "Add entry" }).click();
-    await expect(page.getByRole("textbox", { name: "Heading (required)" })).toHaveValue("");
-    await page.getByRole("textbox", { name: "Heading (required)" }).fill(`Browser article ${index + 2}`);
-    await page.getByRole("textbox", { name: "Introduction (required)" }).fill(`Introduction ${index + 2}`);
-    await page.getByLabel("Published on (required)").fill("2026-08-29");
-    await page.getByRole("textbox", { name: "Body (required)" }).fill(`Body ${index + 2}`);
-    if (routeSlug) await page.getByRole("textbox", { name: "Slug (required)" }).fill(routeSlug);
+    await expect(page.getByRole("textbox", { name: "Heading", exact: true })).toHaveValue("");
+    await page.getByRole("textbox", { name: "Heading", exact: true }).fill(`Browser article ${index + 2}`);
+    await page.getByRole("textbox", { name: "Introduction", exact: true }).fill(`Introduction ${index + 2}`);
+    await page.getByLabel("Published on").fill("2026-08-29");
+    await page.getByRole("textbox", { name: "Body", exact: true }).fill(`Body ${index + 2}`);
+    if (routeSlug) await page.getByRole("textbox", { name: "Slug", exact: true }).fill(routeSlug);
     await expect(saveStatus(page)).toContainText("Saved");
   }
   // Metadata is read off the row rather than matched inside its accessible
