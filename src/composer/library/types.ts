@@ -217,6 +217,17 @@ export interface CompositionStore {
   clear(): Promise<void>;
 }
 
+/** Optional atomic collection capability used by project import/export adapters. */
+export interface CompositionCollectionStore extends CompositionStore {
+  seed(records: readonly CompositionRecord[]): Promise<void>;
+  readAll(): Promise<readonly CompositionRecord[]>;
+}
+
+export function isCompositionCollectionStore(store: CompositionStore): store is CompositionCollectionStore {
+  return "seed" in store && typeof store.seed === "function"
+    && "readAll" in store && typeof store.readAll === "function";
+}
+
 /**
  * Optional capability implemented by providers that can make the dependency
  * scan and source mutation one provider-owned operation. Do not emulate this

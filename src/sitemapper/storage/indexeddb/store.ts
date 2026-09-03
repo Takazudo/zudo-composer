@@ -52,6 +52,34 @@ export class IndexedDbSitemapStore implements SitemapStore {
     return raw === undefined ? { status: "not-found", id } : loadSitemapRecord(raw);
   }
 
+  async readAll(): Promise<readonly SitemapRecord[]> {
+    const records = await this.run("list", "readonly", (store) => requestResult(store.getAll()) as Promise<unknown[]>);
+    return records.map((raw) => {
+      const loaded = loadSitemapRecord(raw);
+      if (loaded.status !== "loaded") throw sitemapPersistenceError("list", "validation", "Sitemapper storage contains a record that cannot be snapshotted safely.", false);
+      return structuredClone(loaded.record);
+    });
+  }
+
+  async seed(records: readonly SitemapRecord[]): Promise<void> {
+    const validated: SitemapRecord[] = [];
+    const ids = new Set<string>();
+    for (const record of records) {
+      const result = validateSitemapRecord(record);
+      if (!result.ok) throw sitemapPersistenceError("put", "validation", result.issue.message, false);
+      if (ids.has(result.record.id)) throw sitemapPersistenceError("put", "validation", `Duplicate seed Sitemap id "${result.record.id}".`, false);
+      ids.add(result.record.id);
+      validated.push(result.record);
+    }
+    await this.run("put", "readwrite", async (store) => {
+      for (const record of validated) {
+        const existing = await requestResult(store.get(record.id));
+        if (existing === undefined) await requestResult(store.add(structuredClone(record)));
+        else if (loadSitemapRecord(existing).status !== "loaded") throw sitemapPersistenceError("put", "validation", "Invalid Sitemap data was preserved. Use startFresh to discard it explicitly.", false);
+      }
+    });
+  }
+
   async put(record: SitemapRecord): Promise<void> {
     const validation = validateSitemapRecord(record);
     if (!validation.ok) {

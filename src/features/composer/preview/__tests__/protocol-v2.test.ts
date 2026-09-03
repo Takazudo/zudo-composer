@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fixtureComponentManifest, createFixtureSampleDocument } from "../../test-support/fixture-pack";
 import {
   COMPOSER_PREVIEW_PROTOCOL_VERSION,
@@ -8,6 +8,7 @@ import {
   requestHistoryMessage,
   renderMessage,
 } from "../protocol";
+import { activeFocusToken } from "../renderer";
 import { canvasHistoryRequest } from "../preview-app";
 
 const source = {};
@@ -92,5 +93,40 @@ describe("Composer preview history requests", () => {
 
   it("suppresses history requests in preview mode", () => {
     expect(canvasHistoryRequest(keyEvent("z", { ctrlKey: true }), "preview", false)).toBeNull();
+  });
+});
+
+describe("Composer preview focus preservation", () => {
+  it("captures a deterministic canvas token only while the iframe document has focus", () => {
+    const trigger = document.createElement("button");
+    trigger.setAttribute("data-zc-focus-token", "node-menu:sample-section");
+    document.body.append(trigger);
+    const hasFocus = vi.spyOn(document, "hasFocus");
+
+    try {
+      trigger.focus();
+      hasFocus.mockReturnValue(true);
+      expect(activeFocusToken()).toBe("node-menu:sample-section");
+
+      hasFocus.mockReturnValue(false);
+      expect(activeFocusToken()).toBeNull();
+    } finally {
+      hasFocus.mockRestore();
+      trigger.remove();
+    }
+  });
+
+  it("ignores focused elements without a canvas token", () => {
+    const input = document.createElement("input");
+    document.body.append(input);
+    const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
+
+    try {
+      input.focus();
+      expect(activeFocusToken()).toBeNull();
+    } finally {
+      hasFocus.mockRestore();
+      input.remove();
+    }
   });
 });

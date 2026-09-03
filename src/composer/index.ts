@@ -54,9 +54,12 @@ export type {
   DocumentDiagnostics,
   TargetValidation,
 } from "./model/validate";
+export type { NodePropIssueCode, NodePropIssue, NodePropValidation } from "./model/node-props";
+export { validateNodeProps } from "./model/node-props";
 export {
   isStructurallyValidDocument,
   classifyNode,
+  canRepairNodeProps,
   diagnoseDocument,
   isNodeOpaque,
   UNRESTRICTED_ROOT_POLICY,

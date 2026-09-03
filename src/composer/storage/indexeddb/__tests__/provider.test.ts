@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createFixtureDocument } from "../../../__tests__/fixtures";
 import { createSequentialIdFactory } from "../../../../shared/id-factory";
 import { cloneJson } from "../../../../shared/json";
-import { isCompositionLifecycleStore, type CompositionRecord } from "../../../library";
+import { isCompositionCollectionStore, isCompositionLifecycleStore, type CompositionRecord } from "../../../library";
 import { COMPOSITION_SCHEMA_VERSION } from "../../../model/types";
 import { createIndexedDbCompositionProvider } from "../provider";
 import { COMPOSER_DATABASE_NAME, COMPOSER_DATABASE_VERSION, COMPOSER_META_KEYS, COMPOSITIONS_STORE_NAME, META_STORE_NAME } from "../types";
@@ -44,6 +44,26 @@ function record(id: string): CompositionRecord {
 }
 
 describe("IndexedDB composition provider", () => {
+  it("atomically seeds a source-last batch, preserves existing ids, and snapshots all records", async () => {
+    const source = record("source");
+    source.document.publication = { kind: "global-template", outlet: { id: "main", label: "Main", target: { parentId: source.document.root[0]!.id, slotId: "content" } } };
+    const consumer = record("consumer"); consumer.document.binding = { sourceRecordId: source.id, outletId: "main" };
+    const current = createIndexedDbCompositionProvider({ idbFactory: new FDBFactory(), seed: [consumer, source] });
+    expect(await current.initialization.initialize()).toMatchObject({ status: "ready", summaries: expect.any(Array) });
+    expect(isCompositionCollectionStore(current.store)).toBe(true);
+    if (!isCompositionCollectionStore(current.store)) return;
+    expect((await current.store.readAll()).map(({ id }) => id).sort()).toEqual(["consumer", "source"]);
+    await current.store.put({ ...consumer, updatedAt: "2026-01-03T00:00:00.000Z", document: { ...consumer.document, name: "edited" } });
+    await current.store.seed([consumer, source]);
+    expect((await current.store.get("consumer"))).toMatchObject({ status: "loaded", record: { document: { name: "edited" } } });
+  });
+
+  it("rejects a duplicate batch before writing any seed record", async () => {
+    const factory = new FDBFactory(); const duplicate = record("duplicate");
+    const current = createIndexedDbCompositionProvider({ idbFactory: factory, seed: [duplicate, duplicate] });
+    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { code: "validation" } });
+    expect((await inspect(factory)).records).toEqual([]);
+  });
   it("creates only the clean current database and seeds the injected document", async () => {
     const factory = new FDBFactory();
     const currentProvider = provider(factory);

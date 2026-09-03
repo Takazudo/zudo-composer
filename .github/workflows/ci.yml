@@ -16,7 +16,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
@@ -31,6 +31,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm headless:negative-scan
+      - run: pnpm site-project:boundary
       - run: pnpm contract:conformance
       - run: pnpm contract:negative-scan
       - run: pnpm contract:external-install
@@ -51,6 +52,8 @@ jobs:
       - run: pnpm test:browser:dev
         env:
           CI: true
+      - run: pnpm test:browser:site-project
+      - run: pnpm test:browser:site-project:dist
       - run: pnpm deployment:manifest:check
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -58,6 +58,14 @@ describe("provider CSS graph", () => {
     expect(sitemapperTokens).toContain("--sg-header-h:");
   });
 
+  it("keeps provider WASM resources out of Vite's dev dependency optimizer", () => {
+    const vite = readFileSync(resolve("vite.config.ts"), "utf8");
+    expect(vite).toContain("publicDir: 'media-store/public'");
+    expect(vite).toMatch(
+      /optimizeDeps\s*:\s*\{\s*exclude\s*:\s*\[\s*["']@zudo-sg\/ui["']\s*,\s*["']@takazudo\/zfb-md-wasm["']\s*\]\s*,?\s*\}/s,
+    );
+  });
+
   it("shares a responsive header height and accessible neutral navigation states", () => {
     const tokens = readFileSync(resolve("src/styles/app-tokens.css"), "utf8");
     const app = readFileSync(resolve("src/style.css"), "utf8");

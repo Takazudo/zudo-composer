@@ -75,6 +75,12 @@ export function applyMappingTransform(value: string | number | boolean, transfor
     case "identity": return value;
     case "prefix": return transform.prefix + String(value);
     case "truncate-160": { const points = Array.from(String(value)); return points.length > 160 ? `${points.slice(0, 160).join("")}…` : String(value); }
-    case "date-medium": { const date = new Date(`${String(value)}T00:00:00.000Z`); return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(date); }
+    case "date-medium": {
+      const source = String(value);
+      if (!isCanonicalDate(source)) throw new RangeError("date-medium requires a canonical calendar date.");
+      const [year, month, day] = source.split("-");
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+      return `${months[Number(month) - 1]} ${Number(day)}, ${Number(year)}`;
+    }
   }
 }

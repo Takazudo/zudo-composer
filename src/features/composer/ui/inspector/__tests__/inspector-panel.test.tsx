@@ -438,6 +438,15 @@ describe("InspectorPanel — opaque nodes", () => {
     expect(screen.getByRole("button", { name: "Move down" })).toBeDisabled();
   });
 
+  it("keeps declared fields hidden for a known component with an unsupported version", () => {
+    const versioned = makeNode(TEST_COMPONENT_IDS.label, { text: "Preserved" }, {}, "future");
+    versioned.componentVersion = 2;
+    renderPanel({ document: makeDocument([versioned]), selectedId: "future" });
+    expect(screen.getByText(/can't be edited/i, { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText(/manifest provides v1/i, { selector: "li" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Text")).not.toBeInTheDocument();
+  });
+
   it("enables sibling move for an opaque node with siblings", () => {
     const doc = makeDocument([
       makeNode(TEST_COMPONENT_IDS.label, { text: "A" }, {}, "a"),

@@ -18,6 +18,7 @@ export type {
   CompositionPersistenceOperation,
   CompositionPersistenceErrorCode,
   CompositionStore,
+  CompositionCollectionStore,
   CompositionLifecycleStore,
   CompositionRecoveryOutcome,
   CompositionInitializationOutcome,
@@ -29,6 +30,7 @@ export {
   COMPOSITION_PROVIDERS,
   CompositionPersistenceError,
   isCompositionLifecycleStore,
+  isCompositionCollectionStore,
 } from "./types";
 
 export {
