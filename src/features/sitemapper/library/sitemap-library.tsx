@@ -81,6 +81,9 @@ async function requireFreshRecordId(provider: SitemapProvider, id: string): Prom
   }
 }
 
+/** One stable empty list, so the query and selection hooks see a stable input. */
+const NO_SUMMARIES: readonly SitemapSummary[] = [];
+
 const CONTRACT: LibraryRowContract<SitemapSummary> = {
   id: (row) => row.id,
   name: (row) => row.name,
@@ -147,7 +150,7 @@ export function SitemapLibrary({
 
   useEffect(() => { void initialize("initialize"); }, [initialize]);
 
-  const summaries = outcome && outcome.status !== "error" ? outcome.summaries : [];
+  const summaries = outcome && outcome.status !== "error" ? outcome.summaries : NO_SUMMARIES;
   const query = useLibraryQuery({
     rows: summaries,
     searchText: (row) => `${row.name} ${row.id}`,
@@ -238,13 +241,21 @@ export function SitemapLibrary({
     if (busy) return;
     setBusy(true);
     setOperationError(null);
+    // Deletions are reported one by one: a bulk delete that fails halfway must
+    // still drop the records that are actually gone, or the list lies.
+    const deleted = new Set<string>();
     try {
-      for (const id of ids) await provider.store.delete(id);
-      dropSummaries(new Set(ids));
-      selection.clear();
+      for (const id of ids) {
+        await provider.store.delete(id);
+        deleted.add(id);
+      }
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap could not be deleted."));
     } finally {
+      if (deleted.size > 0) {
+        dropSummaries(deleted);
+        selection.clear();
+      }
       setBusy(false);
     }
   };
@@ -252,7 +263,9 @@ export function SitemapLibrary({
   const askDelete = (names: readonly string[], ids: readonly string[]): void => {
     confirm.request({
       title: ids.length === 1 ? `Delete ${names[0]}?` : `Delete ${ids.length} sitemaps?`,
-      message: "The pages and their source assignments are deleted with it. This cannot be undone.",
+      message: ids.length === 1
+        ? "Its pages and their source assignments go with it. This cannot be undone."
+        : "Their pages and source assignments go with them. This cannot be undone.",
       confirmLabel: "Delete",
       tone: "danger",
       onConfirm: () => void remove(ids),
@@ -309,7 +322,7 @@ export function SitemapLibrary({
           })}
         />
       ) : null}
-      {outcome === null ? <LibrarySkeleton columns={4} label="Loading sitemaps…" /> : null}
+      {outcome === null ? <LibrarySkeleton columns={5} label="Loading sitemaps…" /> : null}
       {ready && summaries.length === 0 ? (
         <LibraryEmpty
           icon={SitemapperIcon}

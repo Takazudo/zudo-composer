@@ -5,11 +5,12 @@
 
 import type { JSX } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { Banner, Button } from "../../../components/ui";
+import { Banner } from "../../../components/ui";
 import type { IdFactory } from "../../../shared";
 import type { CompositionCatalog } from "../../../sitemapper/catalog";
-import type { SitemapProvider, SitemapRecord } from "../../../sitemapper/library";
+import type { SitemapProvider, SitemapRecord, SitemapRecordLoadOutcome } from "../../../sitemapper/library";
 import type { MappingAssignmentCatalog } from "../../../sitemapper/routes";
+import { SitemapperLoadNoticeBanner, type SitemapperLoadNotice } from "../chrome/load-notice";
 import { SitemapLibrary } from "../library/sitemap-library";
 import { readSitemapperIntent, SITEMAPPER_ROUTE, type SitemapperIntent } from "./sitemapper-intent";
 import { SitemapperIntegration } from "./sitemapper-integration";
@@ -35,35 +36,25 @@ export interface ProductionSitemapperAppProps {
 type RecordState =
   | { status: "loading" }
   | { status: "loaded"; record: SitemapRecord }
-  | { status: "unreadable"; message: string };
+  | { status: "unreadable"; notice: SitemapperLoadNotice };
 
 function defaultNavigate(href: string): void {
   window.location.assign(href);
 }
 
-function describeLoadFailure(status: string, sitemapId: string): string {
-  switch (status) {
+/** Everything `store.get` can answer that is not a record to edit. */
+function loadNotice(
+  outcome: Exclude<SitemapRecordLoadOutcome, { status: "loaded" }>,
+  sitemapId: string,
+): SitemapperLoadNotice {
+  switch (outcome.status) {
     case "not-found":
-      return `Sitemap “${sitemapId}” no longer exists.`;
+      return { kind: "missing", sitemapId };
     case "future-schema":
-      return `Sitemap “${sitemapId}” was written by a newer build and is held back rather than rewritten.`;
+      return { kind: "future-schema", sitemapId, foundSchemaVersion: outcome.foundSchemaVersion };
     default:
-      return `Sitemap “${sitemapId}” could not be read and was left untouched.`;
+      return { kind: "unreadable", sitemapId, reason: outcome.issue.message };
   }
-}
-
-function OpenFailure({ message, navigate }: { message: string; navigate: (href: string) => void }): JSX.Element {
-  return (
-    <div class="sg-sitemapper-open-failure">
-      <Banner
-        tone="err"
-        title="This sitemap could not be opened."
-        action={<Button size="sm" onClick={() => navigate(SITEMAPPER_ROUTE)}>Back to Sitemaps</Button>}
-      >
-        {message}
-      </Banner>
-    </div>
-  );
 }
 
 function SitemapperRecord({
@@ -96,20 +87,26 @@ function SitemapperRecord({
         if (!live) return;
         setState(loaded.status === "loaded"
           ? { status: "loaded", record: loaded.record }
-          : { status: "unreadable", message: describeLoadFailure(loaded.status, sitemapId) });
+          : { status: "unreadable", notice: loadNotice(loaded, sitemapId) });
       })
       .catch((reason: unknown) => {
         if (!live) return;
         setState({
           status: "unreadable",
-          message: reason instanceof Error ? reason.message : `Sitemap “${sitemapId}” could not be read.`,
+          notice: {
+            kind: "unreadable",
+            sitemapId,
+            ...(reason instanceof Error ? { reason: reason.message } : {}),
+          },
         });
       });
     return () => { live = false; };
   }, [provider, sitemapId]);
 
   if (state.status === "loading") return <p class="sg-sitemapper-loading" role="status">Loading sitemap…</p>;
-  if (state.status === "unreadable") return <OpenFailure message={state.message} navigate={navigate} />;
+  if (state.status === "unreadable") {
+    return <SitemapperLoadNoticeBanner notice={state.notice} onBack={() => navigate(SITEMAPPER_ROUTE)} />;
+  }
   return (
     <SitemapperIntegration
       key={state.record.id}
