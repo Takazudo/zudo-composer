@@ -43,7 +43,7 @@ async function screenshot(page: Page, testInfo: TestInfo, name: string) {
   await page.screenshot({ path: testInfo.outputPath(`${name}.png`), fullPage: true });
 }
 
-async function expectArrowTabs(page: Page, label: string, names: readonly string[]) {
+async function expectArrowTabs(page: Page, label: string, names: readonly (string | RegExp)[]) {
   const tabs = page.getByRole("tablist", { name: label });
   for (const name of names) await expect(tabs.getByRole("tab", { name, exact: true })).toBeVisible();
   const first = tabs.getByRole("tab", { name: names[0]!, exact: true });
@@ -81,6 +81,63 @@ async function expectArrowRadios(page: Page, group: Locator, names: readonly str
  */
 function sitemapRow(page: Page, name: string): Locator {
   return page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
+}
+
+/**
+ * One row of the Mapping library table, found by the link that opens it. Since
+ * issue #171 the library is `LibraryPage`, so the name is a link and the
+ * binding count and readiness are columns — there is no single button carrying
+ * all three in its accessible name any more.
+ */
+function mappingRow(page: Page, name: string): Locator {
+  return page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
+}
+
+/**
+ * One row of the bindings table. Each row names its transform control after the
+ * pair it joins — `Transform for Heading → SectionHeading.heading` — which is
+ * the only text in the row unique to it. Pass the source alone where that is
+ * already unambiguous, or the whole pair where one field drives two props.
+ */
+function bindingRow(page: Page, pair: string): Locator {
+  return page.getByRole("row").filter({
+    has: page.getByRole("combobox", { name: new RegExp(`^Transform for ${pair}`) }),
+  });
+}
+
+/** A binding's own `⋯` menu: Move up, Move down, Remove binding. */
+async function bindingAction(page: Page, pair: string, action: string) {
+  await bindingRow(page, pair).getByRole("button", { name: /^Binding actions for / }).click();
+  await page.getByRole("menuitem", { name: action, exact: true }).click();
+}
+
+/**
+ * Bind an unbound Composition prop from its `+` chip. The menu offers only
+ * sources compatible with that prop, so choosing one is also an assertion that
+ * it was on offer at all.
+ */
+async function bindTarget(page: Page, target: string, nodeId: string, source: RegExp) {
+  await page.getByRole("button", { name: `Bind ${target} on ${nodeId}`, exact: true }).click();
+  await page.getByRole("menu", { name: `Bind ${target} to…`, exact: true })
+    .getByRole("menuitem").filter({ hasText: source }).click();
+}
+
+/** The Mapping editor's inspector, which is where diagnostics live since #171. */
+function mappingInspector(page: Page): Locator {
+  return page.getByRole("region", { name: "Inspector" });
+}
+
+/**
+ * Run Test and read the Diagnostics tab it brings forward. The Test modal is
+ * gone, so this also asserts the tab actually took over — both inspector
+ * panels stay mounted with the inactive one hidden, and a presence assertion
+ * would pass with the Preview tab still selected.
+ */
+async function expectTestReports(page: Page, expected: RegExp) {
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  const inspector = mappingInspector(page);
+  await expect(inspector.getByRole("tab", { name: /^Diagnostics/ })).toHaveAttribute("aria-selected", "true");
+  await expect(inspector.getByText(expected)).toBeVisible();
 }
 
 async function expectFlatPanels(locator: Locator) {
@@ -149,7 +206,13 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
 
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mapping library" })).toBeVisible();
-  await page.getByRole("button", { name: /^About page mapping.*3 bindings.*Ready/ }).click();
+  // The card's composite name became a row: three bindings and Ready are two
+  // columns now, and opening the record is a real navigation to its own URL.
+  const aboutMapping = mappingRow(page, "About page mapping");
+  await expect(aboutMapping.getByRole("cell").filter({ hasText: /^3$/ })).toHaveCount(1);
+  await expect(aboutMapping.getByText("Ready", { exact: true })).toBeVisible();
+  await aboutMapping.getByRole("link", { name: "About page mapping", exact: true }).click();
+  await expect(page).toHaveURL(/\/mapping\?provider=.*&mapping=about-page-mapping/);
   await selectOptionMatching(page.getByRole("combobox", { name: "Sample Entry" }), /Browser journey studio.*about-entry/);
   const mappingFrame = page.frameLocator('iframe[title="Resolved Mapping preview"]');
   await expect(mappingFrame.getByRole("heading", { name: "Browser journey studio", exact: true })).toBeVisible();
@@ -295,87 +358,92 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mapping library" })).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: /^Journal entry mapping.*4 bindings.*Ready/ }).click();
+  const journalMapping = mappingRow(page, COLLECTION_MAPPING);
+  await expect(journalMapping.getByRole("cell").filter({ hasText: /^4$/ })).toHaveCount(1);
+  await expect(journalMapping.getByText("Ready", { exact: true })).toBeVisible();
+  await journalMapping.getByRole("link", { name: COLLECTION_MAPPING, exact: true }).click();
   const mappingFrame = page.frameLocator('iframe[title="Resolved Mapping preview"]');
   await selectEntry(page, /Start with the question.*article-first-question/);
   await expect(mappingFrame.getByRole("heading", { name: "Start with the question" })).toBeVisible();
   await selectEntry(page, /Map the moving parts.*article-moving-parts/);
   await expect(mappingFrame.getByRole("heading", { name: "Map the moving parts" })).toBeVisible();
 
-  const firstBinding = page.locator(".sg-mapping-binding").first();
-  expect(await firstBinding.locator(".sg-mapping-binding__region-heading").evaluateAll((nodes) =>
-    nodes.map((node) => node.scrollWidth <= node.clientWidth),
-  )).toEqual([true, true, true]);
-  const transform = firstBinding.getByRole("combobox", { name: "Transform" });
-  await expect(transform.locator("option")).toHaveText(["Use value", "Truncate to 160", "Add prefix"]);
-  await expect(transform.locator("option", { hasText: "Format date" })).toHaveCount(0);
-  await firstBinding.getByRole("button", { name: "Move binding 1 down" }).click();
-  await page.locator(".sg-mapping-binding").nth(1).getByRole("button", { name: "Move binding 2 up" }).click();
-  await page.getByRole("button", { name: "Test Mapping" }).click();
-  const testDialog = page.getByRole("dialog", { name: "Mapping test" });
-  await expect(testDialog).toContainText("Ready");
-  await expect(testDialog.getByText("No diagnostics.")).toBeVisible();
-  await expect(testDialog.getByRole("button", { name: "Close" })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Test Mapping" })).toBeFocused();
+  // Issue #171 made a binding one table row instead of three stacked cards, so
+  // "the three region headings are not clipped" became "the fixed-layout table
+  // fits its pane and ellipsises inside its cells rather than widening".
+  const bindingsTable = page.getByRole("table", { name: "Bindings" });
+  expect(await page.locator(".cms-mapping-table .cms-table-wrap").evaluate(
+    (node) => node.scrollWidth <= node.clientWidth,
+  )).toBe(true);
+  await expect(bindingsTable.getByRole("row")).toHaveCount(5);
 
-  const selectedSources = await page.locator(".sg-mapping-binding").evaluateAll((nodes) => nodes.map((node) =>
-    (node.querySelector(".sg-mapping-binding__region--source select") as HTMLSelectElement | null)?.selectedOptions[0]?.textContent?.trim(),
-  ));
-  const seededDateIndex = selectedSources.indexOf("Published on · date");
-  expect(seededDateIndex).toBeGreaterThanOrEqual(0);
-  const seededDateBinding = page.locator(".sg-mapping-binding").nth(seededDateIndex);
-  await seededDateBinding.getByRole("button", { name: "Remove" }).click();
-  const addBinding = page.locator(".sg-mapping-add-binding");
-  await addBinding.getByRole("combobox", { name: "Source field" }).selectOption({ label: "Review date · date" });
-  await selectOptionMatching(addBinding.getByRole("combobox", { name: "Target field" }), /ProseP.*journal-entry-date.*\/ Text · text/);
-  await addBinding.getByRole("button", { name: "Add binding" }).click();
-  const reviewDateBinding = page.locator(".sg-mapping-binding").last();
-  await expect(reviewDateBinding.getByRole("combobox", { name: "Transform" }).locator("option")).toHaveText(["Use value", "Format date (medium)", "Truncate to 160", "Add prefix"]);
-  await reviewDateBinding.getByRole("combobox", { name: "Transform" }).selectOption({ label: "Format date (medium)" });
+  const headingBinding = bindingRow(page, "Heading → SectionHeading.heading");
+  const headingTransform = headingBinding.getByRole("combobox", { name: /^Transform for / });
+  await expect(headingTransform.locator("option")).toHaveText(["Pass through", "Truncate to 160", "Add prefix"]);
+  await expect(headingTransform.locator("option", { hasText: "Format date" })).toHaveCount(0);
+
+  // Reordering moved from a pair of arrow buttons to the row's own `⋯` menu.
+  // Down then up is a round trip, so the authored order is what it started as.
+  await bindingAction(page, "Heading → SectionHeading.heading", "Move down");
+  await bindingAction(page, "Heading → SectionHeading.heading", "Move up");
+  await expect(page.getByRole("combobox", { name: /^Transform for / }).first())
+    .toHaveAccessibleName(/^Transform for Heading → SectionHeading\.heading/);
+
+  // The Test modal is gone: Test re-runs the evaluation and brings the
+  // Diagnostics tab forward. Its focus-restore contract went with the dialog —
+  // there is no longer anything to escape from.
+  await expectTestReports(page, /No diagnostics/);
+  await expect(page.getByRole("dialog", { name: "Mapping test" })).toHaveCount(0);
+
+  // The seeded date binding is addressable by its source directly now; it used
+  // to be found by scanning every binding's source `<select>` for a match.
+  await expect(bindingRow(page, "Published on")).toHaveCount(1);
+  await bindingAction(page, "Published on", "Remove binding");
+  await expect(bindingRow(page, "Published on")).toHaveCount(0);
+
+  // Binding starts from the freed prop's own chip, which offers only the
+  // sources compatible with it — the add-binding form's two `<select>`s are
+  // gone, and with them the chance of choosing an incompatible pair at all.
+  await bindTarget(page, "ProseP.children", "journal-entry-date", /Review date/);
+  const reviewDateTransform = bindingRow(page, "Review date").getByRole("combobox", { name: /^Transform for / });
+  await expect(reviewDateTransform.locator("option")).toHaveText(["Pass through", "Format date", "Truncate to 160", "Add prefix"]);
+  await reviewDateTransform.selectOption({ label: "Format date" });
   await selectEntry(page, /Start with the question.*article-first-question/);
-  await page.getByRole("button", { name: "Test Mapping" }).click();
-  await expect(page.getByRole("dialog", { name: "Mapping test" })).toContainText("Blocked");
-  await expect(page.getByRole("dialog", { name: "Mapping test" })).toContainText("not canonical YYYY-MM-DD");
-  await page.getByRole("dialog", { name: "Mapping test" }).getByRole("button", { name: "Close" }).click();
+  await expectTestReports(page, /not canonical YYYY-MM-DD/);
   await selectEntry(page, /Map the moving parts.*article-moving-parts/);
-  await page.getByRole("button", { name: "Test Mapping" }).click();
-  await expect(page.getByRole("dialog", { name: "Mapping test" })).toContainText("Optional source field \"Review date\" has no value");
-  await expect(page.getByRole("dialog", { name: "Mapping test" })).toContainText("Ready");
-  await page.getByRole("dialog", { name: "Mapping test" }).getByRole("button", { name: "Close" }).click();
-  await reviewDateBinding.getByRole("button", { name: "Remove" }).click();
+  await expectTestReports(page, /Optional source field "Review date" has no value/);
+  // "Ready" was the modal's own word for it; the tab says it by carrying no
+  // blocking diagnostic beside the nonblocking one.
+  await expect(mappingInspector(page).getByText("Entry · nonblocking")).toBeVisible();
+  await expect(mappingInspector(page).getByText(/· blocking/)).toHaveCount(0);
+  await bindingAction(page, "Review date", "Remove binding");
 
-  await addBinding.getByRole("combobox", { name: "Source field" }).selectOption({ label: "Heading · text" });
-  await selectOptionMatching(addBinding.getByRole("combobox", { name: "Target field" }), /SectionHeading.*journal-entry-heading.*\/ Heading level · select/);
-  await addBinding.getByRole("button", { name: "Add binding" }).click();
-  const selectBinding = page.locator(".sg-mapping-binding").last();
-  await page.getByRole("button", { name: "Test Mapping" }).click();
-  await expect(page.getByRole("dialog", { name: "Mapping test" })).toContainText("Blocked");
-  await expect(page.getByRole("dialog", { name: "Mapping test" })).toContainText("is not a current option");
-  await page.getByRole("dialog", { name: "Mapping test" }).getByRole("button", { name: "Close" }).click();
-  await selectBinding.getByRole("button", { name: "Remove" }).click();
+  await bindTarget(page, "SectionHeading.as", "journal-entry-heading", /Heading/);
+  await expectTestReports(page, /is not a current option/);
+  await bindingAction(page, "Heading → SectionHeading.as", "Remove binding");
 
-  await addBinding.getByRole("combobox", { name: "Source field" }).selectOption({ label: "Published on · date" });
-  await selectOptionMatching(addBinding.getByRole("combobox", { name: "Target field" }), /ProseP.*journal-entry-date.*\/ Text · text/);
-  await addBinding.getByRole("button", { name: "Add binding" }).click();
-  await page.locator(".sg-mapping-binding").last().getByRole("combobox", { name: "Transform" }).selectOption({ label: "Format date (medium)" });
-  await page.getByRole("button", { name: "Test Mapping" }).click();
-  await expect(page.getByRole("dialog", { name: "Mapping test" })).toContainText("Ready");
-  await page.getByRole("dialog", { name: "Mapping test" }).getByRole("button", { name: "Close" }).click();
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.locator(".sg-mapping-save")).toContainText("saved", { ignoreCase: true });
+  await bindTarget(page, "ProseP.children", "journal-entry-date", /Published on/);
+  await bindingRow(page, "Published on").getByRole("combobox", { name: /^Transform for / })
+    .selectOption({ label: "Format date" });
+  await expectTestReports(page, /No diagnostics/);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // The route publishes its save state through `useEditorStatus` now, so the
+  // shell draws it — the editor has no status line of its own.
+  await expect(saveStatus(page)).toContainText("Saved");
+
+  // A record is its own URL since #171, so a reload lands back in the editor
+  // rather than on the library.
   await page.reload();
-  await page.getByRole("button", { name: /^Journal entry mapping/ }).click();
-  await expect(page.getByRole("heading", { name: COLLECTION_MAPPING })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(COLLECTION_MAPPING);
 
-  await page.getByRole("button", { name: "Library" }).click();
+  await page.getByRole("link", { name: "Back to Mappings" }).click();
   await page.getByRole("button", { name: "New Mapping" }).click();
   const createMappingDialog = page.getByRole("dialog", { name: "Create Mapping" });
   await createMappingDialog.getByRole("textbox", { name: "Name" }).fill(SINGLE_MAPPING);
   await selectOptionMatching(createMappingDialog.getByRole("combobox", { name: "Content model" }), /Browser Site settings · single/);
   await createMappingDialog.getByRole("button", { name: "Create" }).click();
-  await expect(page.getByRole("heading", { name: SINGLE_MAPPING })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+  await expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(SINGLE_MAPPING);
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
 
   await page.goto("/composer");
   await page.getByRole("button", { name: "Open Journal entry page", exact: true }).click();
@@ -591,10 +659,28 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   expect(milliseconds(motion.transition)).toBeLessThanOrEqual(0.01);
 
   await page.goto("/mapping");
-  await page.getByRole("button", { name: /^Journal entry mapping.*Ready/ }).click();
-  await expectArrowTabs(page, "Mapping workspace", ["Source", "Bindings", "Preview"]);
+  await mappingRow(page, COLLECTION_MAPPING).getByRole("link", { name: COLLECTION_MAPPING, exact: true }).click();
+  // `EditorChrome` replaced the route's own tablist with the shared pane
+  // switch, and the Mapping editor names its three panes Fields / Bindings /
+  // Inspector. Scoped to the group, which is the habit the other two editors
+  // already keep here.
+  const mappingPaneSwitch = page.getByRole("radiogroup", { name: "Pane" });
+  await expectArrowRadios(page, mappingPaneSwitch, ["Fields", "Bindings", "Inspector"]);
   await expectNoHorizontalOverflow(page);
-  await expectFlatPanels(page.locator(".sg-mapping-pane"));
+
+  await mappingPaneSwitch.getByRole("radio", { name: "Bindings", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Bindings" })).toBeVisible();
+  // The panes stopped being the surface that carries the rounding — `.cms-pane`
+  // is a grid region with no radius of its own — so the flat-panel rule is read
+  // where it now lives, on the bindings table's frame.
+  await expectFlatPanels(page.locator(".cms-mapping-table .cms-table-wrap"));
+  await expectNoHorizontalOverflow(page);
+
+  // The route's arrow-navigable tablist survived the rewrite; it moved from the
+  // workspace to the inspector, where the Diagnostics tab carries a count badge
+  // that its accessible name has to tolerate.
+  await mappingPaneSwitch.getByRole("radio", { name: "Inspector", exact: true }).click();
+  await expectArrowTabs(page, "Inspector", [/^Preview$/, /^Diagnostics/]);
   const mappingFrame = page.frameLocator('iframe[title="Resolved Mapping preview"]');
   for (const theme of ["light", "dark"] as const) {
     await useTheme(page, theme);
