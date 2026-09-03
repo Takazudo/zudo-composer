@@ -233,7 +233,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             // Autosave stays authoritative; Save is the explicit flush for an
             // author who wants the pending write to land now.
             title={state.saveStatus === "saved" ? "All changes saved" : "Save now"}
-            onClick={() => run(() => controller.flushSessions())}
+            onClick={() => run(() => (state.saveStatus === "error" ? controller.retrySave() : controller.flushSessions()))}
           >
             <CheckIcon size="sm" />
             Save
@@ -262,7 +262,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
                 else if (state.model) confirmDeleteModel(state.model.id, state.model.document.name);
               }}
             >
-              Delete…
+              Delete {state.entry ? "entry" : "model"}…
             </MenuItem>
           </Menu>
         </>

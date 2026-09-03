@@ -301,12 +301,17 @@ export class ContentAuthoringController {
   private async sweepIncompleteCounts(models: readonly ContentModelSummary[]): Promise<void> {
     const generation = this.scanGeneration;
     for (const summary of models) {
+      // Opening a model and editing an Entry both keep an exact tally, so a
+      // model that already has one is skipped — checked again after the scan,
+      // because an author can open a model while this loop is awaiting.
+      if (this.current.incompleteCounts[summary.id] !== undefined) continue;
       let count: number;
       try {
         const snapshot = await this.provider.store.scanEntries(summary.id);
         count = incompleteEntryCount(snapshot.model, snapshot.entries);
       } catch { continue; }
       if (generation !== this.scanGeneration) return;
+      if (this.current.incompleteCounts[summary.id] !== undefined) continue;
       this.set({ ...this.current, incompleteCounts: { ...this.current.incompleteCounts, [summary.id]: count } });
     }
   }

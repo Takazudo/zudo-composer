@@ -123,7 +123,7 @@ export function ContentPreviewPane({ providerId, model, entry, entryName, compon
       />
       <PaneBody>
         {tab === "preview" ? (
-          <div id="sg-content-inspector-preview" role="tabpanel" class="sg-content-inspector">
+          <div id="sg-content-inspector-preview" role="tabpanel" aria-label="Preview" class="sg-content-inspector">
             <div class="sg-content-inspector__pad">
               <Field label="Render through" help={`${entryName} · ${providerId} / ${entry.id}`}>
                 <Select
@@ -171,7 +171,7 @@ export function ContentPreviewPane({ providerId, model, entry, entryName, compon
         ) : null}
 
         {tab === "mapping" ? (
-          <div id="sg-content-inspector-mapping" role="tabpanel" class="sg-content-inspector">
+          <div id="sg-content-inspector-mapping" role="tabpanel" aria-label="Mapping" class="sg-content-inspector">
             <PaneSection
               title="Bindings"
               action={preview.selectedRef ? <a class="sg-content-link" href={mappingHref(preview.selectedRef)}>Open Mapping</a> : null}
@@ -204,7 +204,7 @@ export function ContentPreviewPane({ providerId, model, entry, entryName, compon
         ) : null}
 
         {tab === "usage" ? (
-          <div id="sg-content-inspector-usage" role="tabpanel" class="sg-content-inspector">
+          <div id="sg-content-inspector-usage" role="tabpanel" aria-label="Usage" class="sg-content-inspector">
             <PaneSection title="Referenced by">
               {preview.candidates.length === 0 ? (
                 <EmptyState icon={MappingIcon} title="No Mapping references this model" description="A Mapping naming this Content model appears here." inline />
