@@ -1,0 +1,618 @@
+/* ==========================================================================
+ * CMS chrome controls (epic #156).
+ *
+ * This sheet is imported by `src/components/ui/index.ts`, not by
+ * `src/style.css`: the controls travel with the module that renders them, so a
+ * route that never imports the library never pays for its CSS.
+ *
+ * Rules this file keeps:
+ * - Every colour is a token from `src/styles/app-tokens.css`. No literals — a
+ *   literal here would not follow the light/dark theme attribute.
+ * - Every class carries the `cms-` prefix. Bare prototype names (`.btn`,
+ *   `.table`, `.chip`) would collide with the Tailwind utilities the provider
+ *   generates from the same source scan (`.table` is `display: table`).
+ * - The type ladder is written as literal rem values because `--text-*` is the
+ *   provider's Tailwind namespace and must not be redefined here:
+ *   .6875rem/11px, .75rem/12px, .8125rem/13px chrome default, .875rem/14px forms.
+ * ========================================================================== */
+
+/*
+ * The sheet repeats the shell's visually-hidden utility and focus ring rather
+ * than leaning on `src/base.css`: it must stand on its own wherever the module
+ * is imported.
+ */
+.cms-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+ * Button
+ * -------------------------------------------------------------------------- */
+.cms-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-b1);
+  height: var(--control-h);
+  padding-inline: var(--sp-b2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  font-size: .8125rem;
+  font-weight: 550;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cms-btn:disabled,
+.cms-btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+/* Scoped away from --primary: the attribute selector would otherwise outrank
+ * the variant class and strip a pressed primary button of its accent fill. */
+.cms-btn:not(.cms-btn--primary)[aria-pressed="true"] { color: var(--color-fg); border-color: var(--color-border-strong); background: var(--color-surface-2); }
+
+.cms-btn--primary { color: var(--color-on-accent); border-color: var(--color-accent); background: var(--color-accent); }
+.cms-btn--ghost { color: var(--color-muted); border-color: transparent; background: transparent; }
+.cms-btn--danger { color: var(--color-danger); }
+
+.cms-btn:focus-visible,
+.cms-seg__option:focus-visible,
+.cms-pane__tab:focus-visible,
+.cms-check__input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+.cms-btn--icon { width: var(--control-h); padding-inline: 0; }
+.cms-btn--sm { height: 26px; padding-inline: var(--sp-2); font-size: .75rem; }
+.cms-btn--sm.cms-btn--icon { width: 26px; }
+.cms-btn--xs { height: 22px; padding-inline: var(--sp-b1); font-size: .6875rem; }
+.cms-btn--xs.cms-btn--icon { width: 22px; }
+
+/* --------------------------------------------------------------------------
+ * SegmentedControl
+ * -------------------------------------------------------------------------- */
+.cms-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.cms-seg__option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-b1);
+  height: calc(var(--control-h) - 6px);
+  padding-inline: var(--sp-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  background: transparent;
+  font-size: .75rem;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cms-seg__option[aria-checked="true"],
+.cms-seg__option[aria-pressed="true"] {
+  color: var(--color-fg);
+  background: var(--color-surface-2);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.cms-seg__option:disabled { opacity: .5; cursor: not-allowed; }
+.cms-seg--sm .cms-seg__option { height: 22px; padding-inline: var(--sp-b1); }
+
+/* --------------------------------------------------------------------------
+ * Input, Select, Textarea
+ * -------------------------------------------------------------------------- */
+.cms-input,
+.cms-select,
+.cms-textarea {
+  width: 100%;
+  height: var(--control-h);
+  padding-inline: var(--sp-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  font-size: .875rem;
+}
+
+/* The ring sits inside the border so a focused control never nudges its row. */
+.cms-input:focus,
+.cms-select:focus,
+.cms-textarea:focus {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -1px;
+  border-color: var(--color-focus);
+}
+
+.cms-input::placeholder,
+.cms-textarea::placeholder { color: var(--color-faint); }
+
+.cms-input:disabled,
+.cms-select:disabled,
+.cms-textarea:disabled { color: var(--color-muted); background: var(--color-surface-2); cursor: not-allowed; }
+
+.cms-input[aria-invalid="true"],
+.cms-select[aria-invalid="true"],
+.cms-textarea[aria-invalid="true"] { border-color: var(--color-danger); }
+
+.cms-input--sm,
+.cms-select--sm { height: 26px; font-size: .75rem; }
+
+.cms-textarea {
+  height: auto;
+  min-height: 84px;
+  padding-block: var(--sp-b1);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.cms-select { appearance: none; padding-inline-end: 28px; }
+
+.cms-select-wrap,
+.cms-input-wrap { position: relative; display: block; }
+
+.cms-select__caret,
+.cms-input__icon {
+  position: absolute;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  color: var(--color-faint);
+  pointer-events: none;
+}
+
+.cms-select__caret { inset-inline-end: var(--sp-2); }
+.cms-input__icon { inset-inline-start: var(--sp-2); }
+.cms-input-wrap > .cms-input { padding-inline-start: 30px; }
+
+/* --------------------------------------------------------------------------
+ * Field
+ * -------------------------------------------------------------------------- */
+.cms-field { display: grid; gap: var(--sp-1); }
+
+.cms-field__label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--color-fg);
+  font-size: .75rem;
+  font-weight: 600;
+}
+
+.cms-field__required { color: var(--color-danger); }
+
+.cms-field__kind {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-inline-start: auto;
+  color: var(--color-faint);
+  font-size: .6875rem;
+  font-weight: 500;
+}
+
+.cms-field__help { margin: 0; color: var(--color-muted); font-size: .75rem; }
+
+.cms-field__error {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0;
+  color: var(--color-danger);
+  font-size: .75rem;
+}
+
+.cms-field__error-icon { flex: 0 0 auto; }
+
+/* --------------------------------------------------------------------------
+ * Switch and Checkbox
+ * -------------------------------------------------------------------------- */
+.cms-switch,
+.cms-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: .875rem;
+  cursor: pointer;
+}
+
+.cms-switch--disabled,
+.cms-check--disabled { color: var(--color-muted); cursor: not-allowed; }
+
+.cms-switch { position: relative; }
+.cms-switch__input { position: absolute; opacity: 0; margin: 0; }
+
+.cms-switch__track {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-3);
+  transition: background .15s;
+}
+
+.cms-switch__track::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  transition: translate .15s;
+}
+
+.cms-switch__input:checked + .cms-switch__track { border-color: var(--color-accent); background: var(--color-accent); }
+.cms-switch__input:checked + .cms-switch__track::after { translate: 12px 0; }
+.cms-switch__input:focus-visible + .cms-switch__track { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.cms-switch__input:disabled + .cms-switch__track { opacity: .5; }
+
+.cms-check__input { width: 15px; height: 15px; margin: 0; accent-color: var(--color-accent); }
+
+/* --------------------------------------------------------------------------
+ * Chip, CountBadge, Kbd
+ * -------------------------------------------------------------------------- */
+.cms-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 20px;
+  padding-inline: 7px;
+  /* Rectangular by contract: 3px, never a pill. */
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  background: var(--color-surface);
+  font-size: .6875rem;
+  font-weight: 650;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+
+.cms-chip__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+.cms-chip--ok { color: var(--color-success); border-color: color-mix(in oklch, var(--color-success) 40%, var(--color-border)); background: var(--color-success-soft); }
+.cms-chip--warn { color: var(--color-warning-fg); border-color: color-mix(in oklch, var(--color-warning) 50%, var(--color-border)); background: var(--color-warning-soft); }
+.cms-chip--err { color: var(--color-danger); border-color: color-mix(in oklch, var(--color-danger) 40%, var(--color-border)); background: var(--color-danger-soft); }
+.cms-chip--accent { color: var(--color-accent); border-color: var(--color-accent-line); background: var(--color-accent-soft); }
+.cms-chip--plain { color: var(--color-muted); border-color: transparent; background: var(--color-surface-2); }
+
+.cms-count-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 5px;
+  border-radius: 999px;
+  color: var(--color-muted);
+  background: var(--color-surface-2);
+  font-size: .6875rem;
+  font-weight: 650;
+}
+
+.cms-kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding-inline: 5px;
+  border: 1px solid var(--color-border);
+  border-block-end-width: 2px;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  background: var(--color-surface);
+  font-family: inherit;
+  font-size: .6875rem;
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+ * StatusChip
+ * -------------------------------------------------------------------------- */
+.cms-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-b1);
+  color: var(--color-muted);
+  font-size: .75rem;
+  white-space: nowrap;
+}
+
+.cms-status__icon { flex: 0 0 auto; }
+.cms-status--ok { color: var(--color-success); }
+.cms-status--warn { color: var(--color-warning-fg); }
+.cms-status--err { color: var(--color-danger); }
+.cms-status__spinner { animation: cms-spin 1s linear infinite; }
+
+@keyframes cms-spin { to { rotate: 360deg; } }
+
+/* --------------------------------------------------------------------------
+ * Banner
+ * -------------------------------------------------------------------------- */
+.cms-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-b2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  font-size: .8125rem;
+}
+
+.cms-banner__icon { margin-block-start: 1px; flex: 0 0 auto; }
+.cms-banner__text { display: grid; gap: 2px; min-width: 0; }
+.cms-banner__title { color: var(--color-fg); font-weight: 650; }
+.cms-banner__body { color: var(--color-muted); font-size: .75rem; }
+
+.cms-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-inline-start: auto;
+  padding-inline-start: var(--sp-2);
+}
+
+.cms-banner--info { border-color: var(--color-accent-line); background: var(--color-accent-soft); }
+.cms-banner--info .cms-banner__icon { color: var(--color-accent); }
+.cms-banner--warn { border-color: color-mix(in oklch, var(--color-warning) 50%, var(--color-border)); background: var(--color-warning-soft); }
+.cms-banner--warn .cms-banner__icon { color: var(--color-warning-fg); }
+.cms-banner--err { border-color: color-mix(in oklch, var(--color-danger) 40%, var(--color-border)); background: var(--color-danger-soft); }
+.cms-banner--err .cms-banner__icon { color: var(--color-danger); }
+
+/* --------------------------------------------------------------------------
+ * EmptyState
+ * -------------------------------------------------------------------------- */
+.cms-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-b4) var(--sp-3);
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.cms-empty--inline { padding: var(--sp-b3) var(--sp-3); }
+.cms-empty__icon { color: var(--color-faint); }
+.cms-empty__title { color: var(--color-fg); font-size: .875rem; }
+.cms-empty__description { max-width: 36ch; margin: 0; font-size: .8125rem; }
+.cms-empty__actions { display: flex; align-items: center; gap: var(--sp-2); margin-block-start: var(--sp-1); }
+
+/* --------------------------------------------------------------------------
+ * DataTable
+ * -------------------------------------------------------------------------- */
+.cms-table-frame { display: grid; gap: var(--sp-2); min-width: 0; }
+
+.cms-table__bulk {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--row-chrome);
+  padding: var(--sp-1) var(--sp-b2);
+  border: 1px solid var(--color-accent-line);
+  border-radius: var(--radius);
+  background: var(--color-accent-soft);
+  font-size: .8125rem;
+}
+
+/*
+ * The border, radius and clipping live on the scroll wrapper rather than the
+ * table: `overflow: hidden` on the table would make it the sticky header's
+ * scrollport and silently kill `position: sticky`.
+ */
+.cms-table-wrap {
+  overflow: auto;
+  max-width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.cms-table {
+  width: 100%;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: .8125rem;
+}
+
+.cms-table th,
+.cms-table td {
+  height: 40px;
+  padding: 0 var(--sp-b2);
+  border-block-end: 1px solid var(--color-border);
+  text-align: start;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.cms-table th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  height: 34px;
+  color: var(--color-muted);
+  background: var(--color-surface-2);
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.cms-table tbody tr:last-child td { border-block-end: 0; }
+.cms-table tbody tr[aria-selected="true"] td { background: var(--color-accent-soft); }
+
+.cms-table__cell--name { font-weight: 600; }
+.cms-table__cell--muted { color: var(--color-muted); }
+.cms-table__cell--num { text-align: end; font-variant-numeric: tabular-nums; }
+.cms-table th.cms-table__cell--num { text-align: end; }
+
+.cms-table__cb { width: 1%; padding-inline-end: 0; }
+.cms-table__cb .cms-check__input { display: block; width: 14px; height: 14px; }
+
+.cms-table__actions { width: 1%; text-align: end; }
+.cms-table__actions > * { opacity: 0; }
+.cms-table tbody tr:focus-within .cms-table__actions > *,
+.cms-table__actions > [aria-expanded="true"] { opacity: 1; }
+
+.cms-table__empty-row td { height: auto; padding: 0; border-block-end: 0; white-space: normal; }
+.cms-table--compact th { height: 30px; }
+.cms-table--compact td { height: 36px; }
+
+/* --------------------------------------------------------------------------
+ * Pane
+ * -------------------------------------------------------------------------- */
+.cms-pane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.cms-pane:has(> .cms-pane__tabs) { grid-template-rows: auto auto minmax(0, 1fr); }
+.cms-pane--main { background: var(--color-bg); }
+.cms-pane--canvas { background: var(--sg-composer-canvas-backdrop); }
+
+.cms-pane__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 36px;
+  padding-inline: var(--sp-b2) var(--sp-b1);
+  border-block-end: 1px solid var(--color-border);
+  color: var(--color-muted);
+  background: var(--color-surface);
+  font-size: .75rem;
+  font-weight: 650;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.cms-pane__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cms-pane__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-inline-start: auto;
+  padding-inline-start: var(--sp-1);
+}
+
+.cms-pane__body { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.cms-pane__body--pad { padding: var(--sp-3); }
+
+.cms-pane__tabs {
+  display: flex;
+  height: 36px;
+  padding-inline: var(--sp-2);
+  border-block-end: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.cms-pane__tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-b1);
+  padding-inline: var(--sp-2);
+  border: 0;
+  color: var(--color-muted);
+  background: transparent;
+  font-size: .75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cms-pane__tab[aria-selected="true"] { color: var(--color-fg); }
+
+.cms-pane__tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset-inline: var(--sp-2);
+  inset-block-end: -1px;
+  height: 2px;
+  background: var(--color-accent);
+}
+
+.cms-pane__tab:disabled { opacity: .5; cursor: not-allowed; }
+
+.cms-pane__section { padding: var(--sp-b2) var(--sp-3); }
+.cms-pane__section + .cms-pane__section { border-block-start: 1px solid var(--color-border); }
+
+.cms-pane__section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0 0 var(--sp-2);
+  color: var(--color-muted);
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.cms-pane__section-action { margin-inline-start: auto; }
+
+/* --------------------------------------------------------------------------
+ * Input modalities
+ * -------------------------------------------------------------------------- */
+@media (hover: hover) {
+  /* Every hover rule excludes the disabled forms: a later reset rule would have
+   * to outrank each variant, and would repaint a disabled primary button. */
+  .cms-btn:not(:disabled, [aria-disabled="true"]):hover { background: var(--color-surface-2); }
+  .cms-btn--primary:not(:disabled, [aria-disabled="true"]):hover { border-color: var(--color-accent-hover); background: var(--color-accent-hover); }
+  .cms-btn--ghost:not(:disabled, [aria-disabled="true"]):hover { color: var(--color-fg); background: var(--color-surface-2); }
+  .cms-btn--danger:not(:disabled, [aria-disabled="true"]):hover { border-color: var(--color-danger); background: var(--color-danger-soft); }
+  .cms-seg__option:not(:disabled):hover { color: var(--color-fg); }
+  .cms-input:not(:disabled):hover,
+  .cms-select:not(:disabled):hover,
+  .cms-textarea:not(:disabled):hover { border-color: var(--color-border-strong); }
+  .cms-table tbody tr:hover td { background: color-mix(in oklch, var(--color-fg) 3%, var(--color-surface)); }
+  .cms-table tbody tr:hover .cms-table__actions > * { opacity: 1; }
+}
+
+/*
+ * Touch targets. Heights become minimums so a 30px control grows to 44px
+ * without the fixed-height rules above clamping it back.
+ */
+@media (pointer: coarse) {
+  .cms-btn,
+  .cms-seg__option,
+  .cms-pane__tab,
+  .cms-input,
+  .cms-select,
+  .cms-switch,
+  .cms-check { height: auto; min-height: 44px; }
+  .cms-btn--icon { width: auto; min-width: 44px; }
+  .cms-pane__header,
+  .cms-pane__tabs { height: auto; min-height: 44px; }
+  /* `height` is already a minimum for table cells; `min-height` does not apply. */
+  .cms-table th,
+  .cms-table td,
+  .cms-table--compact th,
+  .cms-table--compact td { height: 44px; }
+  .cms-table__actions > * { opacity: 1; }
+  .cms-check__input,
+  .cms-table__cb .cms-check__input { width: 20px; height: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cms-switch__track,
+  .cms-switch__track::after { transition-duration: .01ms; }
+  .cms-status__spinner { animation-duration: .01ms; animation-iteration-count: 1; }
+}

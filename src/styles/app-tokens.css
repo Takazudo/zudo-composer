@@ -1,6 +1,33 @@
 :root {
   --zudo-composer-header-height: 3.5rem;
   --sg-header-h: var(--zudo-composer-header-height);
+
+  /*
+   * CMS chrome geometry (epic #156). Two interleaved x2 spacing ladders keep
+   * the chrome on a small set of values: A = 4/8/16/32, B = 6/12/24/48.
+   */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 16px;
+  --sp-4: 32px;
+  --sp-b1: 6px;
+  --sp-b2: 12px;
+  --sp-b3: 24px;
+  --sp-b4: 48px;
+
+  /* Toolbars, tree rows and table rows all sit on one row height. */
+  --row-chrome: 32px;
+  /* Picker and entry-list rows are one step taller. */
+  --row-pick: 36px;
+  --control-h: 30px;
+  --radius: 5px;
+  /*
+   * The installed provider also names `--radius-sm` (4px, feeding its
+   * `rounded-sm` utility). The CMS chrome deliberately supersedes it with a
+   * tighter 3px so chips and segment thumbs never read as pills; no provider
+   * component ships `rounded-sm`, so nothing of theirs changes.
+   */
+  --radius-sm: 3px;
 }
 
 /*
@@ -18,13 +45,36 @@
   --color-bg: oklch(0.972 0.004 255);
   --color-surface: oklch(0.992 0.002 255);
   --color-surface-2: oklch(0.938 0.007 255);
+  --color-surface-3: oklch(0.905 0.008 255);
   --color-border: oklch(0.845 0.012 255);
   --color-fg: oklch(0.235 0.018 255);
   --color-muted: oklch(0.455 0.020 255);
+  --color-faint: oklch(0.600 0.018 255);
   --color-accent: oklch(0.515 0.170 255);
   --color-accent-hover: oklch(0.455 0.165 255);
+  --color-accent-soft: oklch(0.515 0.170 255 / 0.10);
+  --color-accent-line: oklch(0.515 0.170 255 / 0.35);
   --color-on-accent: oklch(0.985 0.004 255);
   --color-focus: oklch(0.515 0.170 255);
+  /*
+   * State roles the CMS chrome speaks (epic #156). These names also feed the
+   * provider's `text-danger` / `bg-success` utilities, so each hue is matched to
+   * the provider rung it supersedes and only the lightness moves — one status
+   * vocabulary across the app without restyling provider components.
+   */
+  --color-success: oklch(0.600 0.150 150);
+  --color-success-soft: oklch(0.600 0.150 150 / 0.12);
+  --color-warning: oklch(0.700 0.160 75);
+  --color-warning-soft: oklch(0.700 0.160 75 / 0.14);
+  /*
+   * Warning text needs a darker rung than the border/background warning hue:
+   * oklch 0.70 on a light surface does not carry small bold chrome text.
+   */
+  --color-warning-fg: oklch(0.550 0.140 75);
+  --color-danger: oklch(0.550 0.190 25);
+  --color-danger-soft: oklch(0.550 0.190 25 / 0.10);
+  --shadow-pop: 0 1px 2px oklch(0 0 0 / .08), 0 8px 24px oklch(0 0 0 / .12);
+  --shadow-modal: 0 2px 6px oklch(0 0 0 / .12), 0 24px 64px oklch(0 0 0 / .22);
   --color-rail-bg: oklch(0.205 0.018 255);
   --color-rail-bg-strong: oklch(0.170 0.016 255);
   --color-rail-fg: oklch(0.925 0.008 255);
@@ -41,13 +91,30 @@
   --color-bg: oklch(0.170 0.016 255);
   --color-surface: oklch(0.205 0.018 255);
   --color-surface-2: oklch(0.260 0.020 255);
+  --color-surface-3: oklch(0.300 0.020 255);
   --color-border: oklch(0.340 0.022 255);
   --color-fg: oklch(0.925 0.008 255);
   --color-muted: oklch(0.690 0.015 255);
+  --color-faint: oklch(0.560 0.015 255);
   --color-accent: oklch(0.710 0.135 255);
   --color-accent-hover: oklch(0.770 0.115 255);
+  --color-accent-soft: oklch(0.710 0.135 255 / 0.16);
+  --color-accent-line: oklch(0.710 0.135 255 / 0.45);
   --color-on-accent: oklch(0.175 0.024 255);
   --color-focus: oklch(0.710 0.135 255);
+  /*
+   * State hues are lifted in dark exactly as the accent is (0.515 -> 0.710):
+   * the light-theme rungs are too dark to read on the dark surfaces.
+   */
+  --color-success: oklch(0.700 0.150 150);
+  --color-success-soft: oklch(0.700 0.150 150 / 0.16);
+  --color-warning: oklch(0.700 0.160 75);
+  --color-warning-soft: oklch(0.700 0.160 75 / 0.18);
+  --color-warning-fg: oklch(0.700 0.160 75);
+  --color-danger: oklch(0.680 0.170 25);
+  --color-danger-soft: oklch(0.680 0.170 25 / 0.16);
+  --shadow-pop: 0 1px 2px oklch(0 0 0 / .4), 0 8px 24px oklch(0 0 0 / .5);
+  --shadow-modal: 0 2px 6px oklch(0 0 0 / .5), 0 24px 64px oklch(0 0 0 / .6);
   --color-rail-bg: oklch(0.145 0.014 255);
   --color-rail-bg-strong: oklch(0.125 0.012 255);
   --color-rail-fg: oklch(0.925 0.008 255);
