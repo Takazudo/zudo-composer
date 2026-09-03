@@ -204,8 +204,12 @@
   .cms-editor__region { grid-column: auto; }
   .cms-editor__body .cms-editor__region[data-pane-active="true"] { display: grid; }
   .cms-editor__body .cms-editor__region[data-pane-active="false"] { display: none; }
+  /* One column collapses nothing, and the stub that would restore a rail is
+   * hidden here too — so the in-pane collapse control goes with them rather
+   * than stranding an author on a rail they cannot bring back. */
   .cms-editor__resizer,
-  .cms-editor__stub { display: none; }
+  .cms-editor__stub,
+  .cms-editor__rail-toggle { display: none; }
 }
 
 @media (hover: hover) {

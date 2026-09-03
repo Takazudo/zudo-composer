@@ -14,8 +14,9 @@ export function useBeforeUnloadGuard(dirty: boolean): void {
     if (!dirty) return undefined;
     const beforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
-      // Legacy browsers ignore preventDefault and need a non-empty returnValue.
-      event.returnValue = "";
+      // Chrome/Edge < 119 and legacy Firefox ignore preventDefault and gate the
+      // dialog on a non-empty `returnValue`; the string itself is never shown.
+      event.returnValue = true;
     };
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);

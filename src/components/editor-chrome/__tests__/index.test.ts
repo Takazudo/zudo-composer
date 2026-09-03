@@ -50,6 +50,16 @@ describe("editor-chrome module contract", () => {
     );
   });
 
+  it("withdraws the rail controls at one column, where a collapse cannot be undone", () => {
+    const sheet = readFileSync(resolve("src/components/editor-chrome/editor-chrome.css"), "utf8");
+    // The narrow block only, so a rule in a later @media cannot stand in for it.
+    const narrow = (sheet.split("@media (max-width: 64rem)")[1] ?? "").split("@media")[0];
+
+    expect(narrow).toMatch(
+      /\.cms-editor__resizer,\s*\.cms-editor__stub,\s*\.cms-editor__rail-toggle\s*\{\s*display:\s*none/,
+    );
+  });
+
   it("styles every class it renders with the cms- prefix the chrome agreed on", () => {
     const sheet = readFileSync(resolve("src/components/editor-chrome/editor-chrome.css"), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "");

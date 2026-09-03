@@ -57,6 +57,10 @@ export interface RailCollapseButtonProps {
  * by then, and the collapsed rail's stub owns the restore control. A surface
  * that needs a toggle regardless of state (an overflow menu, a shortcut) calls
  * `useEditorRails().toggleRail` instead.
+ *
+ * `cms-editor__rail-toggle` is the hook the stylesheet uses to withdraw the
+ * control at one column, where the stub that would restore the rail is hidden
+ * too — offering a collapse with no way back is a dead end at phone width.
  */
 export function RailCollapseButton({ rail, class: className }: RailCollapseButtonProps) {
   const { navCollapsed, inspCollapsed, navLabel, inspLabel, toggleRail } = useEditorRails();
@@ -67,7 +71,7 @@ export function RailCollapseButton({ rail, class: className }: RailCollapseButto
       collapsed={false}
       label={rail === "nav" ? navLabel : inspLabel}
       onToggle={() => toggleRail(rail)}
-      class={className}
+      class={cx("cms-editor__rail-toggle", className)}
     />
   );
 }

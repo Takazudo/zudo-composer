@@ -187,6 +187,15 @@ describe("EditorBody collapse", () => {
     expect(screen.getAllByRole("separator")).toHaveLength(2);
   });
 
+  it("marks the in-pane control so the one-column layout can withdraw it", () => {
+    render(<Harness />);
+
+    // At one column there is nothing to collapse and the stub that restores a
+    // rail is hidden, so the stylesheet hides this control by the same class.
+    expect(screen.getByRole("button", { name: "Hide Structure" })).toHaveClass("cms-editor__rail-toggle");
+    expect(screen.getByRole("button", { name: "Hide Inspector" })).toHaveClass("cms-editor__rail-toggle");
+  });
+
   it("collapses the two rails independently", () => {
     render(<Harness />);
 
