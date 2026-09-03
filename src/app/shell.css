@@ -416,6 +416,9 @@
 @media (pointer: coarse) {
   .cms-rail__item,
   .cms-topbar :is(a, button) { min-height: 44px; }
+  /* A breadcrumb link is an inline box until it is told not to be, and
+   * `min-height` does nothing to one — so the rule above passes it by. */
+  .cms-crumbs__link { display: inline-flex; align-items: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
