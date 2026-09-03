@@ -62,6 +62,6 @@ describe("Field kind hint", () => {
         <Input value="" onInput={() => undefined} />
       </Field>,
     );
-    expect(within(container).getByRole("textbox")).toHaveAccessibleName("Title");
+    expect(within(container as HTMLElement).getByRole("textbox")).toHaveAccessibleName("Title");
   });
 });
