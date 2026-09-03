@@ -1,4 +1,5 @@
 import type {
+  BrowserJsxExportOutcome,
   CompositionInitializationOutcome,
   CompositionProviderDescriptor,
   CompositionProviderId,
@@ -16,6 +17,12 @@ export interface CompositionLibraryProviderCapability {
 export type CompositionLibraryOpenOutcome =
   | { status: "opened" }
   | { status: "not-found" };
+
+/** Standalone JSX generated for one library record, outside the mounted editor. */
+export interface CompositionLibraryExportOutcome {
+  documentName: string;
+  outcome: BrowserJsxExportOutcome;
+}
 
 /**
  * The New-composition dialog always creates an empty local document. A source
@@ -42,8 +49,12 @@ export interface CompositionLibraryIntents {
   /** Reusable sources available to the active provider's New dialog. */
   listTemplates(providerId: CompositionProviderId): Promise<ReuseCatalogOutcome>;
   create(intent: CompositionLibraryCreateIntent): Promise<CompositionSummary>;
+  /** Used only by the New-dialog's post-create step; existing rows link straight to their route. */
   open(ref: CompositionRecordRef): Promise<CompositionLibraryOpenOutcome>;
+  rename(ref: CompositionRecordRef, name: string): Promise<CompositionSummary>;
   duplicate(ref: CompositionRecordRef): Promise<CompositionSummary>;
   delete(ref: CompositionRecordRef): Promise<boolean>;
   clear(providerId: CompositionProviderId): Promise<void>;
+  /** Generates JSX for a stored record without mounting the editor. */
+  exportJsx(ref: CompositionRecordRef): Promise<CompositionLibraryExportOutcome>;
 }

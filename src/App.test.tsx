@@ -23,7 +23,7 @@ describe('App', () => {
   // route names the landmark that proves the real product mounted rather than
   // assuming every one of them opens on a heading.
   it.each([
-    ['/composer', 'heading', 'Composition library', 'Compositions'],
+    ['/composer', 'heading', 'Compositions', 'Compositions'],
     ['/content', 'tree', 'Content', 'Content'],
     ['/mapping', 'heading', 'Mapping library', 'Mappings'],
     ['/sitemapper', 'heading', 'Sitemaps', 'Sitemaps'],

@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
 import {
+  cloneJson,
   COMPOSITION_PROVIDERS,
   COMPOSITION_SCHEMA_VERSION,
   createCompositionRecord,
@@ -13,7 +14,9 @@ import {
   createCompositionReuseService,
   createUuidIdFactory,
   duplicateCompositionRecord,
+  generateBrowserJsxExport,
   isCompositionLifecycleStore,
+  resolveGlobalTemplateLoad,
   summarizeComposition,
   type CompositionDocument,
   type ComponentCatalog,
@@ -25,10 +28,12 @@ import {
   type CompositionRecordRef,
   type CompositionRecoveryOutcome,
   type CompositionSaveOutcome,
+  type GlobalTemplateResolutionOutcome,
   type SaveQueue,
   type IdFactory,
   type ReuseConsumerLifecycleOutcome,
 } from "../../../composer/browser";
+import { parseIntent } from "../../../app/route-intents";
 import type { ComposerComponentProvider } from "../active-pack";
 import { CompositionLibrary } from "../library";
 import type { CompositionLibraryIntents } from "../library";
@@ -67,6 +72,8 @@ export interface ProductionComposerAppProps {
   now?: () => string;
   /** Existing preview bridge seams, forwarded for focused integration tests. */
   preview?: Pick<ComposerIntegrationProps, "createBridge" | "previewLocation" | "hostWindow">;
+  /** Test seam for the `/composer?new=1` route-intent's query string. */
+  readIntentSearch?: () => string;
 }
 
 interface ProductionDetailSession extends ComposerDetailSession {
@@ -194,11 +201,22 @@ export function ProductionComposerApp({
   nodeIdFactory: injectedNodeIdFactory,
   now: injectedNow,
   preview,
+  readIntentSearch,
 }: ProductionComposerAppProps): JSX.Element {
   const reuseManifest = componentProvider.catalog;
   const navigation = useMemo(
     () => injectedNavigation ?? browserNavigation(),
     [injectedNavigation],
+  );
+  // Read once per load, mirroring the Sitemapper intent's own "a re-read
+  // would only ever agree with it" reasoning: the query string never changes
+  // underneath a mounted app except through this component's own navigation.
+  const intentOutcome = useMemo(
+    () => parseIntent({
+      pathname: COMPOSER_DOCUMENT_PATH,
+      search: (readIntentSearch ?? (() => (typeof window === "undefined" ? "" : window.location.search)))(),
+    }),
+    [],
   );
   const routeConfig = useMemo<ComposerRouteConfig>(
     () => ({
@@ -234,6 +252,12 @@ export function ProductionComposerApp({
   const [detailOperationError, setDetailOperationError] = useState<string | null>(null);
   const [duplicatingComposition, setDuplicatingComposition] = useState(false);
   const [bootProviderId, setBootProviderId] = useState<CompositionProviderId | null>(null);
+  // Consumed once for the whole app session, not once per CompositionLibrary
+  // mount — a plain mount-effect flag would reopen the dialog every time the
+  // index view remounts after a detour through a detail route.
+  const [pendingNewIntent, setPendingNewIntent] = useState(
+    () => intentOutcome.status === "matched" && intentOutcome.intent.route === "composer" && intentOutcome.intent.action === "new",
+  );
   const [initializationNotice, setInitializationNotice] =
     useState<CompositionRecoveryOutcome | null>(null);
   const [retryingRecovery, setRetryingRecovery] = useState(false);
@@ -528,10 +552,35 @@ export function ProductionComposerApp({
         await provider(ref.providerId).store.put(record);
         return summarizeComposition(record);
       },
+      rename: async (ref, name) => {
+        const activeProvider = provider(ref.providerId);
+        const loaded = await activeProvider.store.get(ref.recordId);
+        if (loaded.status !== "loaded") throw new Error(failedLoadMessage(loaded));
+        const record: CompositionRecord = {
+          ...cloneJson(loaded.record),
+          updatedAt: nowRef.current(),
+          document: { ...cloneJson(loaded.record.document), name },
+        };
+        await activeProvider.store.put(record);
+        return summarizeComposition(record);
+      },
       delete: (ref) => provider(ref.providerId).store.delete(ref.recordId),
       clear: (providerId) => provider(providerId).store.clear(),
+      exportJsx: async (ref) => {
+        const activeProvider = provider(ref.providerId);
+        const loaded = await activeProvider.store.get(ref.recordId);
+        if (loaded.status !== "loaded") throw new Error(failedLoadMessage(loaded));
+        const record = loaded.record;
+        let resolution: GlobalTemplateResolutionOutcome | undefined;
+        if (record.document.binding) {
+          const sourceLoad = await activeProvider.store.get(record.document.binding.sourceRecordId);
+          resolution = resolveGlobalTemplateLoad(record, sourceLoad, reuseManifest);
+        }
+        const outcome = generateBrowserJsxExport({ record, manifest: reuseManifest, resolution });
+        return { documentName: record.document.name, outcome };
+      },
     };
-  }, [idFactory, navigate, nodeIdFactory, providersById]);
+  }, [idFactory, navigate, nodeIdFactory, providersById, reuseManifest]);
 
   const handleInitializationApplied = useCallback(
     (providerId: CompositionProviderId, outcome: CompositionInitializationOutcome) => {
@@ -658,11 +707,18 @@ export function ProductionComposerApp({
             <p>{errorText(transitionError)}</p>
           </div>
         )}
+        {intentOutcome.status === "invalid" && (
+          <div class="sg-composer-library-alert sg-composer-library-alert-error" role="alert">
+            <p>{intentOutcome.message}</p>
+          </div>
+        )}
         <CompositionLibrary
           providers={availableProviders}
           initialProviderId={preferredProviderId}
           intents={libraryIntents}
           onInitializationApplied={handleInitializationApplied}
+          openNewOnMount={pendingNewIntent}
+          onOpenNewConsumed={() => setPendingNewIntent(false)}
         />
       </>
     );

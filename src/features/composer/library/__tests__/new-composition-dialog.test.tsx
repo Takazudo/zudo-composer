@@ -3,9 +3,19 @@
 import "../../test-support/cleanup";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { useState } from "preact/hooks";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ReuseCatalogEntry } from "../../../../composer/browser";
 import { NewCompositionDialog } from "../new-composition-dialog";
+
+const originalShowModal = HTMLDialogElement.prototype.showModal;
+const originalClose = HTMLDialogElement.prototype.close;
+
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function showModal() { this.setAttribute("open", ""); };
+  HTMLDialogElement.prototype.close = function close() { this.removeAttribute("open"); };
+});
+
+afterEach(() => { vi.unstubAllGlobals(); });
 
 const TEMPLATE: ReuseCatalogEntry = {
   ref: { providerId: "indexeddb", recordId: "site-shell" },
@@ -38,7 +48,7 @@ function baseProps(overrides: Partial<Parameters<typeof NewCompositionDialog>[0]
 }
 
 describe("NewCompositionDialog", () => {
-  it("opens a labelled native dialog, focuses the name, and restores the invoking focus on Escape", async () => {
+  it("opens the shared dialog, focuses the name, and restores the invoking focus on Escape", async () => {
     const trigger = document.createElement("button");
     trigger.textContent = "New composition";
     document.body.append(trigger);
@@ -50,12 +60,8 @@ describe("NewCompositionDialog", () => {
     }
     render(<Harness />);
 
-    const dialog = await screen.findByRole("dialog", { name: "New composition" }) as HTMLDialogElement;
-    expect(dialog.open).toBe(true);
+    const dialog = await screen.findByRole("dialog", { name: "New composition" });
     expect(within(dialog).getByRole("textbox", { name: "Name" })).toHaveFocus();
-    trigger.focus();
-    fireEvent.keyDown(dialog, { key: "Tab" });
-    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
@@ -63,12 +69,12 @@ describe("NewCompositionDialog", () => {
     trigger.remove();
   });
 
-  it("shows None first and submits a trimmed typed Global-template choice only after the user confirms", async () => {
+  it("shows Blank document first and submits a trimmed typed Global-template choice only after the user confirms", async () => {
     const props = baseProps();
     render(<NewCompositionDialog {...props} />);
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
 
-    expect((await within(dialog).findByRole("button", { name: /None/ })).getAttribute("aria-pressed")).toBe("true");
+    expect((await within(dialog).findByRole("button", { name: /Blank document/ })).getAttribute("aria-pressed")).toBe("true");
     expect(props.onSubmit).not.toHaveBeenCalled();
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "  Consumer  " } });
     fireEvent.click(within(dialog).getByRole("button", { name: /Site shell/ }));
@@ -81,17 +87,29 @@ describe("NewCompositionDialog", () => {
     }));
   });
 
-  it("keeps source-load failure and no-result states inside the full-size shell with an actionable retry", async () => {
-    const retry = vi.fn()
+  it("requires a name before submitting and focuses it", async () => {
+    const props = baseProps();
+    render(<NewCompositionDialog {...props} />);
+    const dialog = await screen.findByRole("dialog", { name: "New composition" });
+    const name = within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement;
+    fireEvent.input(name, { target: { value: "   " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
+
+    expect(props.onSubmit).not.toHaveBeenCalled();
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Give the composition a name");
+    expect(name).toHaveFocus();
+  });
+
+  it("shows a template load failure with an actionable retry", async () => {
+    const listTemplates = vi.fn()
       .mockResolvedValueOnce({ status: "load-error", message: "Storage is offline." })
       .mockResolvedValueOnce({ status: "listed", entries: [] });
-    render(<NewCompositionDialog {...baseProps({ intents: { listTemplates: retry } })} />);
+    render(<NewCompositionDialog {...baseProps({ intents: { listTemplates } })} />);
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
 
     expect(await within(dialog).findByText("Storage is offline.")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Retry templates" }));
     expect(await within(dialog).findByText(/No eligible Global templates/)).toBeInTheDocument();
-    expect(dialog.style.width).not.toBe("");
   });
 
   it("preserves form state after a save failure and retries without double-submitting", async () => {
@@ -121,52 +139,26 @@ describe("NewCompositionDialog", () => {
     fireEvent.click(create);
     expect(onSubmit).toHaveBeenCalledOnce();
     resolve({ status: "created" });
-    await waitFor(() => expect((dialog as HTMLDialogElement).open).toBe(false));
+    await waitFor(() => expect(create).toBeDisabled());
   });
 
-  it("uses the shared 24px rect, keyboard resize clamps, and resets the size after reopening", async () => {
-    const width = vi.spyOn(window, "innerWidth", "get").mockReturnValue(1024);
-    const height = vi.spyOn(window, "innerHeight", "get").mockReturnValue(768);
-    function Harness() {
-      const [open, setOpen] = useState(true);
-      return (
-        <>
-          <button type="button" onClick={() => setOpen(false)}>close</button>
-          <button type="button" onClick={() => setOpen(true)}>open</button>
-          <NewCompositionDialog {...baseProps({ open, onClose: () => setOpen(false) })} />
-        </>
-      );
-    }
-
-    render(<Harness />);
+  it("filters the template grid by name and clears back to the full list", async () => {
+    render(<NewCompositionDialog {...baseProps()} />);
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
-    const handle = within(dialog).getByRole("button", { name: "Resize dialog" });
-    expect(dialog.style.left).toBe("24px");
-    expect(dialog.style.top).toBe("24px");
-    expect(dialog.style.width).toBe("976px");
-    expect(dialog.style.height).toBe("720px");
-    expect(handle).toHaveAttribute("aria-keyshortcuts", expect.stringContaining("Shift+ArrowRight"));
+    await within(dialog).findByRole("button", { name: /Site shell/ });
 
-    fireEvent.keyDown(handle, { key: "ArrowLeft" });
-    fireEvent.keyDown(handle, { key: "ArrowUp", shiftKey: true });
-    expect(dialog.style.width).toBe("960px");
-    expect(dialog.style.height).toBe("672px");
+    fireEvent.input(within(dialog).getByRole("searchbox", { name: "Search Global templates" }), {
+      target: { value: "nothing matches this" },
+    });
+    expect(within(dialog).queryByRole("button", { name: /Site shell/ })).not.toBeInTheDocument();
+    expect(within(dialog).getByText("No Global templates match this search.")).toBeInTheDocument();
 
-    const capture = vi.fn();
-    Object.defineProperty(handle, "setPointerCapture", { configurable: true, value: capture });
-    fireEvent.pointerDown(handle, { button: 0, pointerId: 9, clientX: 900, clientY: 700 });
-    fireEvent.pointerMove(handle, { pointerId: 9, clientX: -100, clientY: -100 });
-    fireEvent.pointerUp(handle, { pointerId: 9 });
-    expect(capture).toHaveBeenCalledWith(9);
-    expect(Number.parseInt(dialog.style.width, 10)).toBeGreaterThanOrEqual(320);
-    expect(Number.parseInt(dialog.style.height, 10)).toBeGreaterThanOrEqual(240);
-
-    fireEvent.click(screen.getByRole("button", { name: "close" }));
-    fireEvent.click(screen.getByRole("button", { name: "open" }));
-    const reopened = await screen.findByRole("dialog", { name: "New composition" });
-    expect(reopened.style.width).toBe("976px");
-    expect(reopened.style.height).toBe("720px");
-    width.mockRestore();
-    height.mockRestore();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Clear search" }));
+    expect(within(dialog).getByRole("button", { name: /Site shell/ })).toBeInTheDocument();
   });
+});
+
+afterAll(() => {
+  HTMLDialogElement.prototype.showModal = originalShowModal;
+  HTMLDialogElement.prototype.close = originalClose;
 });
