@@ -1,259 +1,96 @@
-/* Sitemapper inspector and composition picker — issue Takazudo/zudo-sg#411. */
+/* ==========================================================================
+ * Sitemapper page source.
+ *
+ * The inspector itself is `Pane` + `PaneTabs` + `Field`; what is left is the
+ * card that names the assigned Composition or Mapping, and the picker list the
+ * shared `Dialog` wraps.
+ * ========================================================================== */
 
-.sg-sitemapper-inspector {
-  min-width: 0;
-  overflow: auto;
-  padding: 1rem;
-  background: var(--color-surface);
-  color: var(--color-fg);
-}
+.sg-sitemapper-source { display: grid; gap: var(--sp-2); }
 
-.sg-sitemapper-inspector__header {
-  padding-block-end: 1rem;
-  border-bottom: 1px solid var(--color-border);
-}
+.sg-sitemapper-source__switch { width: 100%; }
+.sg-sitemapper-source__switch .cms-seg__option { flex: 1; justify-content: center; }
 
-.sg-sitemapper-inspector__header p,
-.sg-sitemapper-inspector__header h2,
-.sg-sitemapper-composition h3,
-.sg-sitemapper-composition p,
-.sg-sitemapper-picker h2,
-.sg-sitemapper-picker p {
-  margin: 0;
-}
-
-.sg-sitemapper-inspector__header p,
-.sg-sitemapper-inspector__field label {
-  color: var(--color-muted);
-  font-size: 0.75rem;
-  font-weight: 650;
-}
-
-.sg-sitemapper-inspector__header h2 {
-  margin-block-start: 0.25rem;
-  font-size: 1rem;
-}
-
-.sg-sitemapper-inspector__fields,
-.sg-sitemapper-inspector__field,
-.sg-sitemapper-composition,
-.sg-sitemapper-composition__state,
-.sg-sitemapper-picker__notices {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.sg-sitemapper-inspector__fields,
-.sg-sitemapper-composition {
-  margin-block-start: 1rem;
-  gap: 1rem;
-}
-
-.sg-sitemapper-inspector__control {
-  width: 100%;
-  min-width: 0;
-  padding: 0.5rem 0.625rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.25rem;
-  background: var(--color-bg);
-  color: var(--color-fg);
-  caret-color: var(--color-accent);
-  font: inherit;
-}
-
-textarea.sg-sitemapper-inspector__control {
-  min-height: 5rem;
-  resize: vertical;
-}
-
-.sg-sitemapper-inspector__control:focus {
-  border-color: var(--color-focus);
-  outline: 2px solid var(--color-focus);
-  outline-offset: 1px;
-}
-
-.sg-sitemapper-composition {
-  padding-block-start: 1rem;
-  border-top: 1px solid var(--color-border);
-}
-
-.sg-sitemapper-composition h3 {
-  font-size: 0.875rem;
-}
-
-.sg-sitemapper-composition__state {
-  padding: 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.25rem;
-  background: var(--color-bg);
-}
-
-.sg-sitemapper-composition__state p > span,
-.sg-sitemapper-picker__entry span {
-  display: block;
-  color: var(--color-muted);
-  font-size: 0.75rem;
-}
-
-.sg-sitemapper-composition__state--broken {
-  border-color: var(--color-danger);
-}
-
-.sg-sitemapper-composition__badge {
-  display: inline-block;
-  padding: 0.125rem 0.375rem;
-  border: 1px solid var(--color-danger);
-  border-radius: 0.25rem;
-  color: var(--color-danger);
-  font-size: 0.75rem;
-}
-
-.sg-sitemapper-composition dl,
-.sg-sitemapper-composition dd {
-  margin: 0;
-}
-
-.sg-sitemapper-composition dl > div {
-  display: grid;
-  grid-template-columns: 6rem minmax(0, 1fr);
-  gap: 0.5rem;
-}
-
-.sg-sitemapper-composition dd {
-  overflow-wrap: anywhere;
-}
-
-.sg-sitemapper-composition__actions,
-.sg-sitemapper-picker__header {
+.sg-sitemapper-source__card {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-b2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-2);
 }
 
-.sg-sitemapper-composition button,
-.sg-sitemapper-picker__button {
-  min-height: 2.5rem;
-  padding-inline: 0.75rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 0.25rem;
-  background: var(--color-surface);
-  color: var(--color-fg);
-  cursor: pointer;
-}
+.sg-sitemapper-source__glyph { flex: none; color: var(--color-muted); }
 
-.sg-sitemapper-composition button.sg-sitemapper-danger {
-  color: var(--color-danger);
-}
-
-.sg-sitemapper-composition button:focus-visible,
-.sg-sitemapper-picker__button:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.sg-sitemapper-picker {
-  z-index: var(--z-index-modal);
-  width: min(42rem, calc(100% - 2rem));
-  max-height: calc(100% - 2rem);
-  padding: 0;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 0.5rem;
-  background: var(--color-surface);
-  color: var(--color-fg);
-  box-shadow: var(--shadow-overlay);
-}
-
-.sg-sitemapper-picker::backdrop {
-  z-index: var(--z-index-modal-backdrop);
-  background: color-mix(in oklch, var(--color-bg) 60%, transparent);
-}
-
-.sg-sitemapper-picker__surface {
+.sg-sitemapper-source__text {
   display: grid;
-  gap: 1rem;
-  padding: 1rem;
+  flex: 1 1 auto;
+  gap: 1px;
+  min-width: 0;
 }
 
-.sg-sitemapper-picker__header {
-  padding-block-end: 1rem;
-  border-bottom: 1px solid var(--color-border);
+.sg-sitemapper-source__text strong {
+  overflow: hidden;
+  font-size: .8125rem;
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.sg-sitemapper-picker__header h2 {
-  font-size: 1.125rem;
+.sg-sitemapper-source__text span {
+  overflow: hidden;
+  color: var(--color-faint);
+  font-size: .6875rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.sg-sitemapper-picker__header p {
-  margin-block-start: 0.25rem;
-  color: var(--color-muted);
-  font-size: 0.875rem;
-}
-
-.sg-sitemapper-picker__notices {
-  padding: 0.75rem;
-  border: 1px solid var(--color-danger);
-  border-radius: 0.25rem;
-  color: var(--color-danger);
-}
-
+/* --------------------------------------------------------------------------
+ * Picker list
+ * -------------------------------------------------------------------------- */
 .sg-sitemapper-picker__list {
   display: grid;
-  gap: 0.5rem;
-  max-height: 24rem;
+  gap: 2px;
+  max-height: 22rem;
   margin: 0;
   padding: 0;
   overflow: auto;
-  overscroll-behavior: contain;
   list-style: none;
 }
 
 .sg-sitemapper-picker__list li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.25rem;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-b1) var(--sp-2);
+  border-radius: var(--radius-sm);
 }
 
+.sg-sitemapper-picker__glyph { flex: none; color: var(--color-muted); }
+
 .sg-sitemapper-picker__entry {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 1px;
   min-width: 0;
 }
 
-.sg-sitemapper-picker__button--primary {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+.sg-sitemapper-picker__entry strong {
+  overflow: hidden;
+  font-size: .8125rem;
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.sg-sitemapper-picker__button:disabled {
-  border-color: var(--color-border);
-  background: var(--color-surface-2);
-  color: var(--color-muted);
-  cursor: not-allowed;
-}
-
-.sg-sitemapper-picker__empty,
-.sg-sitemapper-inspector__empty {
-  color: var(--color-muted);
+.sg-sitemapper-picker__entry span {
+  color: var(--color-faint);
+  font-size: .6875rem;
 }
 
 @media (hover: hover) {
-  .sg-sitemapper-composition button:not(:disabled):hover,
-  .sg-sitemapper-picker__button:not(:disabled):hover {
-    background: var(--color-surface-2);
-  }
-
-  .sg-sitemapper-picker__button--primary:not(:disabled):hover {
-    background: var(--color-accent-hover);
-  }
-}
-
-@media (pointer: coarse) {
-  .sg-sitemapper-composition button,
-  .sg-sitemapper-picker__button,
-  .sg-sitemapper-inspector__control { min-height: 44px; }
+  .sg-sitemapper-picker__list li:hover { background: var(--color-surface-2); }
 }

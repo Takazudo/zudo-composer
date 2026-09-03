@@ -1,8 +1,12 @@
+/** @jsxRuntime automatic */
+/** @jsxImportSource preact */
+
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SitemapDocument, SitemapNode } from "../../../../../sitemapper/model";
 import { SITEMAP_SCHEMA_VERSION } from "../../../../../sitemapper/model";
-import SitemapCanvas from "../sitemap-canvas";
+import type { PageSourceLabel } from "../page-source";
+import SitemapCanvas, { clampCanvasZoom, MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM } from "../sitemap-canvas";
 
 class ResizeObserverStub {
   observe(): void {}
@@ -29,13 +33,16 @@ const doc = (root: SitemapNode[] = [page("Home", [page("Child")])]): SitemapDocu
   root,
 });
 
-function props(document = doc()) {
+function props(document = doc(), sources: ReadonlyMap<string, PageSourceLabel> = new Map()) {
   return {
     document,
+    routes: new Map([["Home", "/"], ["Child", "/child"]]),
+    sources,
     selectedId: null,
+    zoom: 1,
+    onZoomChange: vi.fn(),
     onSelect: vi.fn(),
     onAddChild: vi.fn(),
-    onAddSibling: vi.fn(),
     onDuplicate: vi.fn(),
     onDelete: vi.fn(),
     onCreateRoot: vi.fn(),
@@ -72,41 +79,56 @@ describe("SitemapCanvas", () => {
     matchMedia.mockRestore();
   });
 
-  it("renders real node controls and a non-interactive connector overlay", () => {
-    render(<SitemapCanvas {...props()} />);
-    expect(screen.getByRole("button", { name: "Home" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Child" })).toBeInTheDocument();
-    const svg = document.querySelector(".sg-sitemapper-connectors");
-    expect(svg).toHaveAttribute("aria-hidden", "true");
-    expect(screen.getByRole("button", { name: "Actions for Home" })).toHaveAttribute("data-sg-depth", "0");
+  it("puts each node's route and source on the node, and Unassigned where there is none", () => {
+    const sources = new Map<string, PageSourceLabel>([["Home", { kind: "composition", name: "Landing hero" }]]);
+    const { container } = render(<SitemapCanvas {...props(doc(), sources)} />);
+    expect(screen.getByText("Landing hero")).toBeInTheDocument();
+    expect(screen.getByText("/child")).toBeInTheDocument();
+    // The legend carries the same three words, so the chip is read off the node.
+    expect(container.querySelectorAll(".sg-sitemapper-node__chip")).toHaveLength(1);
+    expect(container.querySelector(".sg-sitemapper-node__chip")).toHaveTextContent("Unassigned");
+    expect(container.querySelector(".sg-sitemapper-connectors")).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("dispatches controlled selection and node actions", () => {
+  it("dispatches controlled selection and node actions through the shared menu", () => {
     const callbacks = props();
     render(<SitemapCanvas {...callbacks} />);
-    fireEvent.click(screen.getByRole("button", { name: "Child" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Child/ }));
     fireEvent.click(screen.getByRole("button", { name: "Actions for Child" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Add child" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Add child page" }));
     expect(callbacks.onSelect).toHaveBeenCalledWith("Child");
     expect(callbacks.onAddChild).toHaveBeenCalledWith("Child");
   });
 
-  it("shows all selected narrow editing actions and explains protected root actions", () => {
-    render(<SitemapCanvas {...props()} selectedId="Home" />);
-    const tray = screen.getByRole("region", { name: "Sitemap canvas" })
-      .querySelector(".sg-sitemapper-canvas__action-tray")!;
-    expect(tray.querySelectorAll("button")).toHaveLength(4);
-    expect(screen.getByRole("button", { name: "Add sibling" })).toBeDisabled();
-    expect(screen.getByText("The root page cannot have a sibling.")).toBeInTheDocument();
+  it("keeps the root page out of the destructive menu items", () => {
+    render(<SitemapCanvas {...props()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Home" }));
+    const menu = screen.getByRole("menu", { name: "Home actions" });
+    expect(menu.querySelector('[role="menuitem"][disabled]')).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Delete…" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeDisabled();
   });
 
-  it("renders the specified empty state without an SVG", () => {
+  it("dismisses a node menu on Escape", () => {
+    render(<SitemapCanvas {...props()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Child" }));
+    const menu = screen.getByRole("menu", { name: "Child actions" });
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Child actions" })).toBeNull();
+  });
+
+  it("clamps zoom to the canvas range", () => {
+    expect(clampCanvasZoom(5)).toBe(MAX_CANVAS_ZOOM);
+    expect(clampCanvasZoom(0)).toBe(MIN_CANVAS_ZOOM);
+    expect(clampCanvasZoom(0.7549)).toBe(0.75);
+  });
+
+  it("wires Create Home page on an empty document", () => {
     const callbacks = props(doc([]));
     const { container } = render(<SitemapCanvas {...callbacks} />);
-    expect(screen.getByRole("heading", { name: "No sitemap yet" })).toBeInTheDocument();
-    expect(screen.getByText("Create a Home page to start mapping this site.")).toBeInTheDocument();
+    expect(screen.getByText("No pages yet")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create Home page" }));
     expect(callbacks.onCreateRoot).toHaveBeenCalledOnce();
-    expect(container.querySelector("svg")).toBeNull();
+    expect(container.querySelector(".sg-sitemapper-connectors")).toBeNull();
   });
 });

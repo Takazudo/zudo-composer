@@ -2,13 +2,11 @@
  * Sitemapper feature CSS aggregator
  *
  * This file intentionally contains imports only. Keep the import order stable:
- * tokens must exist before the shell and the three editor surfaces consume
- * them.
+ * tokens must exist before the editor chrome and the two editor surfaces
+ * consume them.
  * ========================================================================== */
 
 @import "./styles/tokens.css";
-@import "./styles/library.css";
 @import "./styles/shell.css";
 @import "./styles/canvas.css";
-@import "./styles/tree.css";
 @import "./styles/inspector.css";

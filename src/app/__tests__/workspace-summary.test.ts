@@ -131,7 +131,7 @@ function createFakeIntegration(options: FakeOptions = {}) {
   const sitemapStore = {
     list: async () => {
       if (sitemaps instanceof Error) throw sitemaps;
-      return sitemaps.map((record) => ({ id: record.id, name: record.document.name, createdAt: record.createdAt, updatedAt: record.updatedAt, pageCount: 1 }));
+      return sitemaps.map((record) => ({ id: record.id, name: record.document.name, createdAt: record.createdAt, updatedAt: record.updatedAt, pageCount: 1, unassignedCount: 0 }));
     },
     get: async (id: string) => {
       if (sitemaps instanceof Error) throw sitemaps;

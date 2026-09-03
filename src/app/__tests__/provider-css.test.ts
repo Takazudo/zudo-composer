@@ -55,7 +55,11 @@ describe("provider CSS graph", () => {
       expect(sitemapperTokens).not.toContain(`${providerToken}:`);
     }
     expect(sitemapperTokens).not.toMatch(/--spacing-(?:hsp|vsp)-[^:]+:/);
-    expect(sitemapperTokens).toContain("--sg-header-h:");
+    // Since issue #165 the Sitemapper takes its height from the shell's grid
+    // instead of re-deriving one, so it neither redefines nor reads the
+    // header-height token the other route editors still subtract.
+    expect(sitemapperTokens).not.toContain("--sg-header-h");
+    expect(sitemapperTokens).not.toContain("100vh");
   });
 
   it("keeps provider WASM resources out of Vite's dev dependency optimizer", () => {

@@ -144,26 +144,33 @@ test("clean Sitemapper assigns and resolves the seeded About page catalog entry"
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Provider proof");
   await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page.getByRole("toolbar", { name: "Sitemapper toolbar" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
 
+  // Creating navigates to the record's own URL: `/sitemapper` is the library
+  // and `/sitemapper?sitemap=` is one Sitemap, so the editor is a real route.
+  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Provider proof");
+  await expect(page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /Home/ })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Source" }).click();
+  await page.getByRole("radio", { name: "Composition", exact: true }).click();
   await page.getByRole("button", { name: "Choose composition" }).click();
   const picker = page.getByRole("dialog", { name: "Choose a composition" });
   await expect(picker.getByText("About page", { exact: true })).toBeVisible();
   await picker.getByRole("button", { name: /Assign About page from Browser storage/i }).click();
-  // Scoped to the Composition field: the shell rail also shows the active
+  // Scoped to the Composition group: the shell rail also shows the active
   // provider ("Browser storage") in its foot, so a page-wide text match is
   // ambiguous and would pass on the rail rather than on the assignment.
-  const compositionField = page.getByLabel("Composition");
+  const compositionField = page.getByRole("group", { name: "Composition" });
   await expect(compositionField.getByText("About page", { exact: true })).toBeVisible();
   await expect(compositionField.getByText("Browser storage", { exact: true })).toBeVisible();
 
   for (const theme of ["light", "dark"] as const) await useTheme(page, theme);
   await page.setViewportSize({ width: 375, height: 812 });
-  const canvasTab = page.getByRole("tab", { name: "Canvas" });
-  await canvasTab.click();
-  await expect(canvasTab).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tabpanel", { name: "Canvas" })).toBeVisible();
+  // Below 64rem the toolbar's centre controls are withdrawn, so the only
+  // "Canvas" control left is the pane switch this asserts on.
+  const canvasPane = page.getByRole("radio", { name: "Canvas" });
+  await canvasPane.click();
+  await expect(canvasPane).toHaveAttribute("aria-checked", "true");
   await expect(page.getByRole("region", { name: "Sitemap canvas" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   expect(failures).toEqual([]);
