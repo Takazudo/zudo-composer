@@ -16,7 +16,12 @@ import type { CompositionCatalog } from "../../../sitemapper/catalog";
 import type { SitemapRecord, SitemapStore } from "../../../sitemapper/library";
 import type { SitemapNode } from "../../../sitemapper/model";
 import { indexDocument } from "../../../sitemapper/model";
-import { expandSitemapRoutes, type MappingAssignmentCatalog, type SitemapRouteExpansion } from "../../../sitemapper/routes";
+import {
+  expandSitemapRoutes,
+  type MappingAssignmentCatalog,
+  type SitemapNodeRouteInfo,
+  type SitemapRouteExpansion,
+} from "../../../sitemapper/routes";
 import { SitemapNameDialog } from "../library/name-dialog";
 import { CanvasPane, type SitemapView } from "../ui/canvas/canvas-pane";
 import type { PageSourceLabel } from "../ui/canvas/page-source";
@@ -30,6 +35,9 @@ import { sitemapperHref, SITEMAPPER_ROUTE } from "./sitemapper-intent";
 import { useSitemapperController } from "./use-sitemapper-controller";
 
 const ZOOM_STEP = 0.1;
+
+/** One stable empty map, so a Sitemap with no Mapping never rerenders on it. */
+const NO_ROUTE_INFO: ReadonlyMap<string, SitemapNodeRouteInfo> = new Map();
 
 export interface SitemapperIntegrationProps {
   record: SitemapRecord;
@@ -78,7 +86,7 @@ export function SitemapperIntegration({
   const [zoom, setZoom] = useState(1);
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
-  const [sourceNames, setSourceNames] = useState<ReadonlyMap<string, string>>(new Map());
+  const [compositions, setCompositions] = useState<ReadonlyMap<string, { name: string; providerLabel: string }>>(new Map());
   const [routeExpansionState, setRouteExpansionState] = useState<{ document: typeof document; expansion: SitemapRouteExpansion } | null>(null);
   const confirm = useLibraryConfirm();
   const overflowRef = useRef<HTMLButtonElement | null>(null);
@@ -128,7 +136,10 @@ export function SitemapperIntegration({
     void catalog.listCompositions()
       .then((outcome) => {
         if (!active) return;
-        setSourceNames(new Map(outcome.entries.map((entry) => [`${entry.ref.providerId}:${entry.ref.recordId}`, entry.name])));
+        setCompositions(new Map(outcome.entries.map((entry) => [
+          `${entry.ref.providerId}:${entry.ref.recordId}`,
+          { name: entry.name, providerLabel: entry.providerLabel },
+        ])));
       })
       .catch(() => undefined);
     return () => { active = false; };
@@ -139,8 +150,14 @@ export function SitemapperIntegration({
     for (const location of index.byId.values()) {
       const { source } = location.node;
       if (source.kind === "composition") {
-        const key = `${source.ref.providerId}:${source.ref.recordId}`;
-        labels.set(location.node.id, { kind: "composition", name: sourceNames.get(key) ?? source.ref.recordId, detail: source.ref.providerId });
+        // An unlisted reference is a broken one; the raw record id is the
+        // honest label until the inspector says why it could not be resolved.
+        const entry = compositions.get(`${source.ref.providerId}:${source.ref.recordId}`);
+        labels.set(location.node.id, {
+          kind: "composition",
+          name: entry?.name ?? source.ref.recordId,
+          ...(entry === undefined ? {} : { detail: entry.providerLabel }),
+        });
         continue;
       }
       if (source.kind !== "mapping") continue;
@@ -152,7 +169,7 @@ export function SitemapperIntegration({
       });
     }
     return labels;
-  }, [index, routeExpansion, sourceNames]);
+  }, [compositions, index, routeExpansion]);
 
   const addChild = useCallback((parentId: string) => {
     dispatch({ type: "setExpanded", pageId: parentId, expanded: true });
@@ -214,6 +231,8 @@ export function SitemapperIntegration({
   const addTargetId = selectedNode !== null && selectedNode.source.kind === "mapping"
     ? index.byId.get(selectedNode.id)?.parentId ?? null
     : selectedId ?? document.root[0]?.id ?? null;
+  // The one case with nowhere to go: the single root page is itself a Mapping.
+  const canAddPage = addTargetId !== null || document.root.length === 0;
 
   return (
     <EditorChrome
@@ -247,6 +266,8 @@ export function SitemapperIntegration({
       right={
         <>
           <Button
+            disabled={!canAddPage}
+            title={canAddPage ? undefined : "The root page is a Mapping route family, which takes no authored children."}
             onClick={() => {
               if (addTargetId === null) dispatch({ type: "addRoot", title: "Home" });
               else addChild(addTargetId);
@@ -293,6 +314,7 @@ export function SitemapperIntegration({
         nav={
           <PagesPane
             document={document}
+            outline={outline}
             selectedId={selectedId}
             expandedIds={controller.state.expandedIds}
             onSelect={(pageId) => dispatch({ type: "select", pageId })}
@@ -316,7 +338,7 @@ export function SitemapperIntegration({
             document={document}
             routes={outline.routes}
             sources={sources}
-            routeInfo={routeExpansion?.nodes ?? new Map()}
+            routeInfo={routeExpansion?.nodes ?? NO_ROUTE_INFO}
             view={view}
             selectedId={selectedId}
             zoom={zoom}

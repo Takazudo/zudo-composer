@@ -7,11 +7,13 @@ import { RailCollapseButton, useEditorChrome } from "../../../../components/edit
 import { OutlineTree, type OutlineAddRequest, type OutlineInsertTarget } from "../../../../components/outline-tree";
 import { Pane, PaneBody, PaneHeader } from "../../../../components/ui";
 import { indexDocument, type SitemapDocument } from "../../../../sitemapper/model";
-import { buildSitemapOutline } from "./outline-model";
+import type { SitemapOutline } from "./outline-model";
 import { PageRowActions } from "./page-row-actions";
 
 export interface PagesPaneProps {
   document: SitemapDocument;
+  /** The document as outline rows; the editor builds it once for every surface. */
+  outline: SitemapOutline;
   selectedId: string | null;
   expandedIds: ReadonlySet<string>;
   onSelect: (pageId: string) => void;
@@ -37,6 +39,7 @@ function Legend(): JSX.Element {
 
 export function PagesPane({
   document,
+  outline,
   selectedId,
   expandedIds,
   onSelect,
@@ -49,7 +52,6 @@ export function PagesPane({
   onDelete,
 }: PagesPaneProps): JSX.Element {
   const { setActivePane } = useEditorChrome();
-  const outline = useMemo(() => buildSitemapOutline(document), [document]);
   const index = useMemo(() => indexDocument(document), [document]);
   const expanded = useMemo(() => [...expandedIds], [expandedIds]);
   const rootId = document.root[0]?.id ?? null;

@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SitemapDocument, SitemapNode } from "../../../../../sitemapper/model";
 import { SITEMAP_SCHEMA_VERSION } from "../../../../../sitemapper/model";
+import { buildSitemapOutline } from "../outline-model";
 import { PagesPane } from "../pages-pane";
 
 afterEach(cleanup);
@@ -19,6 +20,7 @@ const page = (id: string, title = id, children: SitemapNode[] = []): SitemapNode
 function paneProps(document: SitemapDocument, overrides: Record<string, unknown> = {}) {
   return {
     document,
+    outline: buildSitemapOutline(document),
     selectedId: null,
     expandedIds: new Set(["home"]),
     onSelect: vi.fn(),

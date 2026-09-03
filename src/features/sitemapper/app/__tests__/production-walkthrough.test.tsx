@@ -59,7 +59,9 @@ describe("production Sitemapper walkthrough", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Create your first sitemap" }));
+    // A real IndexedDB provider under a loaded suite can take well over the
+    // default second to finish initializing.
+    fireEvent.click(await screen.findByRole("button", { name: "Create your first sitemap" }, { timeout: 10_000 }));
     const createDialog = screen.getByRole("dialog", { name: "Create sitemap" });
     fireEvent.input(within(createDialog).getByRole("textbox", { name: "Sitemap name" }), { target: { value: "Product map" } });
     fireEvent.click(within(createDialog).getByRole("button", { name: "Create sitemap" }));
@@ -78,7 +80,7 @@ describe("production Sitemapper walkthrough", () => {
       />,
     );
 
-    expect(await screen.findByRole("textbox", { name: "Sitemap name" })).toHaveValue("Product map");
+    expect(await screen.findByRole("textbox", { name: "Sitemap name" }, { timeout: 10_000 })).toHaveValue("Product map");
     expect(screen.getByRole("tree", { name: "Pages" })).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: /Home/ })).toBeInTheDocument();
   });
@@ -108,7 +110,7 @@ describe("production Sitemapper walkthrough", () => {
       />,
     );
 
-    await screen.findByRole("tree", { name: "Pages" });
+    await screen.findByRole("tree", { name: "Pages" }, { timeout: 10_000 });
     // The tree's terminal row is called "Add page" too; this is the toolbar's.
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Pane" }).closest(".cms-editor__toolbar")!)
       .getByRole("button", { name: "Add page" }));
@@ -145,7 +147,7 @@ describe("production Sitemapper walkthrough", () => {
       />,
     );
 
-    expect(await screen.findByText(/no longer exists/)).toBeInTheDocument();
+    expect(await screen.findByText(/no longer exists/, undefined, { timeout: 10_000 })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back to Sitemaps" }));
     expect(navigate).toHaveBeenCalledWith("/sitemapper");
   });
@@ -162,6 +164,6 @@ describe("production Sitemapper walkthrough", () => {
     );
 
     expect(await screen.findByText("The Sitemap id is malformed.")).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "New sitemap" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "New sitemap" }, { timeout: 10_000 })).toBeInTheDocument();
   });
 });
