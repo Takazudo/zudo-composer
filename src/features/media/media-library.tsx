@@ -1,6 +1,6 @@
 import type { JSX } from "preact";
 import type { MediaSummary } from "../../media";
-import { CopyIcon, FileIcon, MarkdownIcon, PreviewIcon, TrashIcon } from "../../components/icons";
+import { CopyIcon, MarkdownIcon, PreviewIcon, TrashIcon } from "../../components/icons";
 import {
   LibraryNoMatch,
   LibraryPagination,
@@ -9,6 +9,7 @@ import {
   LibraryToolbar,
   LibraryViewToggle,
   RowMenu,
+  type LibraryFacet,
   type LibraryQueryController,
   type LibraryRowContract,
   type LibrarySelectionController,
@@ -18,9 +19,9 @@ import {
 } from "../../components/library-page";
 import { Button, Checkbox, SegmentedControl, type DataTableColumn } from "../../components/ui";
 import { compareMediaSummariesNewestFirst } from "../../media";
-import { mediaUrl } from "./controller";
 import type { MediaDimensionStore } from "./media-dimensions";
 import { formatBytes, isMediaImage, mediaCaption, mediaTypeLabel } from "./media-format";
+import { MediaThumb } from "./media-thumb";
 
 export type MediaTypeFilter = "all" | "images" | "pdfs";
 
@@ -31,14 +32,25 @@ export const MEDIA_SORTS: readonly LibrarySort<MediaSummary>[] = [
   { id: "size", label: "Size", compare: (a, b) => b.byteLength - a.byteLength },
 ];
 
-/** The filter is a `SegmentedControl` with counts, so it lives outside the toolbar's facet menus. */
-export const MEDIA_TYPE_FILTER_ID = "type";
+/**
+ * The type filter.
+ *
+ * It is a facet as far as `useLibraryQuery` is concerned — that is what makes
+ * filtering and the no-match state work — but the toolbar renders facets as
+ * menus, and the prototype's control is a `SegmentedControl` carrying counts.
+ * The definition and the control therefore live together here.
+ */
+const MEDIA_TYPE_FILTER_ID = "type";
 
-export function mediaMatchesTypeFilter(record: MediaSummary, filter: MediaTypeFilter): boolean {
-  if (filter === "images") return isMediaImage(record);
-  if (filter === "pdfs") return !isMediaImage(record);
-  return true;
-}
+export const MEDIA_TYPE_FACET: LibraryFacet<MediaSummary> = {
+  id: MEDIA_TYPE_FILTER_ID,
+  label: "Type",
+  options: [
+    { id: "all", label: "All" },
+    { id: "images", label: "Images", match: isMediaImage },
+    { id: "pdfs", label: "PDFs", match: (row) => !isMediaImage(row) },
+  ],
+};
 
 export interface MediaLibraryProps {
   /** Every asset in the library, for the filter counts and the pager total. */
@@ -231,41 +243,5 @@ function MediaTile({ record, dimensions, active, selected, onToggleSelected, onA
         <span class="sg-media-asset__meta">{mediaCaption(record, dimensions.get(record.id))}</span>
       </div>
     </li>
-  );
-}
-
-export interface MediaThumbProps {
-  record: MediaSummary;
-  dimensions: MediaDimensionStore;
-  /** The larger preview in the detail panel. */
-  detail?: boolean;
-}
-
-/**
- * The asset itself for an image, a page-shaped tile for a PDF. The image is the
- * public URL the rest of the app references, so a thumbnail that renders is
- * also proof the delivered bytes decode.
- */
-export function MediaThumb({ record, dimensions, detail = false }: MediaThumbProps): JSX.Element {
-  if (!isMediaImage(record)) {
-    return (
-      <span class={`sg-media-pdf${detail ? " sg-media-pdf--detail" : ""}`} aria-hidden="true">
-        <FileIcon size={detail ? "lg" : "md"} />
-        <span class="sg-media-pdf__label">PDF</span>
-      </span>
-    );
-  }
-  return (
-    <img
-      class="sg-media-image"
-      src={mediaUrl(record)}
-      alt=""
-      loading={detail ? undefined : "lazy"}
-      decoding="async"
-      // A cached image can already be decoded before `load` would fire, so the
-      // ref reports too; both paths are idempotent in the store.
-      ref={(element) => dimensions.record(record.id, element)}
-      onLoad={(event) => dimensions.record(record.id, event.currentTarget)}
-    />
   );
 }

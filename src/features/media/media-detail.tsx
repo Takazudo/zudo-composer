@@ -5,8 +5,8 @@ import { formatLibraryTimestamp, formatLibraryTimestampFull, toLibraryDate } fro
 import { Button, EmptyState, Field, Input, Pane, PaneBody, PaneHeader } from "../../components/ui";
 import { mediaMarkdown, mediaUrl } from "./controller";
 import type { MediaDimensionStore } from "./media-dimensions";
-import { MediaThumb } from "./media-library";
 import { formatBytes, formatPixelSize, isMediaImage, mediaTypeLabel } from "./media-format";
+import { MediaThumb } from "./media-thumb";
 
 export interface MediaDetailPanelProps {
   record: MediaSummary | null;

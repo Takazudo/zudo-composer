@@ -4,6 +4,7 @@ export * from "./media-detail";
 export * from "./media-dimensions";
 export * from "./media-format";
 export * from "./media-library";
+export * from "./media-thumb";
 export * from "./media-upload";
 export * from "./upload-input";
 export * from "./upload-reducer";

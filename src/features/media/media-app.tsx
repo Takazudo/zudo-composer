@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { parseIntent, type RouteIntentParseOutcome } from "../../app/route-intents";
 import { CheckCircleIcon, FolderIcon, InfoIcon, TrashIcon, UploadIcon } from "../../components/icons";
 import {
@@ -12,7 +12,6 @@ import {
   useLibraryConfirm,
   useLibraryQuery,
   useLibrarySelection,
-  type LibraryFacet,
   type LibraryView,
 } from "../../components/library-page";
 import { ConfirmDialog } from "../../components/overlay";
@@ -27,12 +26,7 @@ import {
 } from "./controller";
 import { MediaDetailPanel } from "./media-detail";
 import { useMediaDimensions } from "./media-dimensions";
-import {
-  MediaLibrary,
-  MEDIA_SORTS,
-  MEDIA_TYPE_FILTER_ID,
-  mediaMatchesTypeFilter,
-} from "./media-library";
+import { MediaLibrary, MEDIA_SORTS, MEDIA_TYPE_FACET } from "./media-library";
 import { MediaUploadPanel, useMediaUpload, type MediaUploadStore } from "./media-upload";
 
 export interface MediaRouteContentProps {
@@ -41,21 +35,9 @@ export interface MediaRouteContentProps {
   controllerOptions?: MediaLibraryControllerOptions;
   /** The `/media?asset=` deep link; the address bar is read when omitted. */
   intent?: RouteIntentParseOutcome;
-  /** Seeds the persisted grid/list choice in tests. */
-  initialView?: LibraryView;
 }
 
 const VIEW_STORAGE_KEY = "zudo-composer.media.view";
-
-const TYPE_FACET: LibraryFacet<MediaSummary> = {
-  id: MEDIA_TYPE_FILTER_ID,
-  label: "Type",
-  options: [
-    { id: "all", label: "All" },
-    { id: "images", label: "Images", match: (row) => mediaMatchesTypeFilter(row, "images") },
-    { id: "pdfs", label: "PDFs", match: (row) => mediaMatchesTypeFilter(row, "pdfs") },
-  ],
-};
 
 const ADVISORY =
   "Not authoritative: references may also exist as opaque URL text in browser Content or filesystem compositions. A clear scan does not prove this media is unused.";
@@ -86,17 +68,9 @@ function writeStoredView(view: LibraryView): void {
   }
 }
 
-export function MediaApp({ provider, controller, controllerOptions, intent, initialView }: MediaRouteContentProps): JSX.Element {
+export function MediaApp({ provider, controller, controllerOptions, intent }: MediaRouteContentProps): JSX.Element {
   if (!provider) return <DisconnectedMedia />;
-  return (
-    <ConnectedMedia
-      provider={provider}
-      supplied={controller}
-      controllerOptions={controllerOptions}
-      intent={intent}
-      initialView={initialView}
-    />
-  );
+  return <ConnectedMedia provider={provider} supplied={controller} controllerOptions={controllerOptions} intent={intent} />;
 }
 
 interface ConnectedMediaProps {
@@ -104,16 +78,15 @@ interface ConnectedMediaProps {
   supplied?: MediaLibraryController;
   controllerOptions?: MediaLibraryControllerOptions;
   intent?: RouteIntentParseOutcome;
-  initialView?: LibraryView;
 }
 
-function ConnectedMedia({ provider, supplied, controllerOptions, intent, initialView }: ConnectedMediaProps): JSX.Element {
+function ConnectedMedia({ provider, supplied, controllerOptions, intent }: ConnectedMediaProps): JSX.Element {
   const controller = useMemo(
     () => supplied ?? createMediaLibraryController(provider, controllerOptions),
     [provider, supplied, controllerOptions],
   );
   const [state, setState] = useState<MediaLibraryState>(controller.state);
-  const [view, setView] = useState<LibraryView>(() => initialView ?? readStoredView());
+  const [view, setView] = useState<LibraryView>(readStoredView);
   const [activeId, setActiveId] = useState<string | null>(null);
   const parsedIntent = useMemo(() => intent ?? parseIntent(), [intent]);
   const [linkNotice, setLinkNotice] = useState<string | null>(
@@ -140,13 +113,14 @@ function ConnectedMedia({ provider, supplied, controllerOptions, intent, initial
   const query = useLibraryQuery<MediaSummary>({
     rows: records,
     searchText: (row) => `${row.fileName} ${row.id}`,
-    facets: [TYPE_FACET],
+    facets: [MEDIA_TYPE_FACET],
     sorts: MEDIA_SORTS,
   });
   const selection = useLibrarySelection({ rows: records, visibleRows: query.rows, rowId: (row) => row.id });
 
   const uploadStore = isMediaUploadStore(provider.store) ? provider.store : undefined;
-  const upload = useMediaUpload({ store: uploadStore ?? NO_UPLOAD_STORE, refresh: () => controller.refresh() });
+  const refresh = useCallback(() => controller.refresh(), [controller]);
+  const upload = useMediaUpload({ store: uploadStore ?? NO_UPLOAD_STORE, refresh });
 
   // The deep link selects once, and only when it names an asset that is here.
   const appliedIntent = useRef(false);
@@ -348,13 +322,11 @@ function DisconnectedMedia(): JSX.Element {
       purpose="Images and PDFs delivered from /uploaded-media/."
       actions={<StatusChip state="custom" label="file provider not connected" tone="neutral" icon={InfoIcon} />}
     >
-      <div data-media-provider-state="unavailable">
-        <LibraryEmpty
-          icon={FolderIcon}
-          title="Media file provider not connected"
-          description="Browsing and uploading media both need the development file provider, which only runs under `pnpm dev`. This standalone build still delivers committed assets from /uploaded-media/, but it cannot list or change them."
-        />
-      </div>
+      <LibraryEmpty
+        icon={FolderIcon}
+        title="Media file provider not connected"
+        description="Browsing and uploading media both need the development file provider, which only runs under pnpm dev. This standalone build still delivers the committed assets under /uploaded-media/, but it cannot list or change them."
+      />
     </LibraryPage>
   );
 }
