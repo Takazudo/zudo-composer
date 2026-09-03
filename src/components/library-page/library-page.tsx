@@ -21,7 +21,7 @@ export interface LibraryPageProps {
 }
 
 export function LibraryPage({ icon: Icon, title, purpose, actions, primaryAction, children, class: className }: LibraryPageProps) {
-  const hasActions = actions !== undefined || primaryAction !== undefined;
+  const hasActions = Boolean(actions) || Boolean(primaryAction);
   return (
     <div class={cx("cms-library", className)}>
       <header class="cms-library__header">

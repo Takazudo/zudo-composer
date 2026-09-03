@@ -1,6 +1,6 @@
 import type { ComponentChildren } from "preact";
 import type { IconComponent } from "../icons";
-import type { ChipTone } from "../ui/chip";
+import type { ChipTone } from "../ui";
 import type { LibraryTimestamp } from "./library-format";
 
 // The row contract every library route implements (issue #164).

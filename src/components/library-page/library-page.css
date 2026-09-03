@@ -11,6 +11,8 @@
  * literal rem values because `--text-*` is the provider's namespace.
  * ========================================================================== */
 
+/* One 12px gap down the whole page; the header takes the extra 4px that makes
+ * it the 16px step of the prototype. */
 .cms-library {
   display: grid;
   gap: var(--sp-b2);
@@ -138,6 +140,10 @@ a.cms-library-name__label:hover { text-decoration: underline; }
   border-radius: var(--radius);
   background: var(--color-surface);
 }
+
+/* The no-match state renders inside the table's empty row, which already sits
+ * in the bordered scroll wrapper — a box here would draw a second frame. */
+.cms-library-state--inline { border: 0; border-radius: 0; background: transparent; }
 
 .cms-library-skeleton {
   display: grid;

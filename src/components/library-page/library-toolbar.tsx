@@ -36,7 +36,7 @@ function ChoiceMenu({ label, icon: Icon, options, value, onChange, prefixTrigger
     <Fragment>
       {/* Raw button: the menu measures its trigger through a ref, which Preact
        * does not forward to a function component. */}
-      <button type="button" ref={triggerRef} class="cms-btn cms-btn--sm cms-library-toolbar__menu" {...menu.triggerProps}>
+      <button type="button" ref={triggerRef} class="cms-btn cms-btn--sm" {...menu.triggerProps}>
         {Icon ? <Icon size="sm" /> : null}
         <span>{prefixTrigger ? `${label}: ${selectedLabel}` : selectedLabel}</span>
         <ChevronDownIcon size="xs" class="cms-library-toolbar__caret" />

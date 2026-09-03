@@ -173,7 +173,7 @@ describe("a route wearing the library pattern", () => {
     render(<FakeRoute />);
     fireEvent.input(screen.getByRole("searchbox", { name: "Filter records" }), { target: { value: "nothing here" } });
 
-    expect(dataRows()).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: "Blog post" })).toBeNull();
     expect(screen.getByText("No matches for “nothing here”")).toBeInTheDocument();
     expect(screen.getByText("0 of 4 records · Browser storage")).toBeInTheDocument();
 
