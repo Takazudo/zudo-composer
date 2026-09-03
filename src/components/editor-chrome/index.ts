@@ -52,11 +52,19 @@ export {
   cssVarForRail,
   getPersistedWidth,
   maxRailWidth,
+  railCollapsedStorageKey,
   railStorageKey,
+  readEditorCollapsed,
   readEditorWidths,
   setPersistedWidth,
+  writeEditorCollapsed,
 } from "./resizer-contract";
-export type { EditorRail, EditorRailWidths, EditorWidthChangeDetail } from "./resizer-contract";
+export type {
+  EditorRail,
+  EditorRailCollapse,
+  EditorRailWidths,
+  EditorWidthChangeDetail,
+} from "./resizer-contract";
 
 export { installRailResizer } from "./resizer-dom";
 export type { RailResizerOptions } from "./resizer-dom";

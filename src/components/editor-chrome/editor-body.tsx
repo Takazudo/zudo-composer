@@ -10,7 +10,9 @@ import {
   CSS_VAR_NAV_W,
   MAX_RAIL_W,
   MIN_RAIL_W,
+  readEditorCollapsed,
   readEditorWidths,
+  writeEditorCollapsed,
 } from "./resizer-contract";
 import type { EditorRail, EditorRailWidths } from "./resizer-contract";
 import { installRailResizer } from "./resizer-dom";
@@ -100,22 +102,6 @@ function hasSlot(children: ComponentChildren): boolean {
   return children !== undefined && children !== null && children !== false;
 }
 
-/** Controlled when the caller passes a value, self-owned otherwise. */
-function useRailCollapse(
-  controlled: boolean | undefined,
-  onChange: ((collapsed: boolean) => void) | undefined,
-): readonly [boolean, () => void] {
-  const [internal, setInternal] = useState(false);
-  const collapsed = controlled ?? internal;
-  return [
-    collapsed,
-    () => {
-      if (controlled === undefined) setInternal(!collapsed);
-      onChange?.(!collapsed);
-    },
-  ];
-}
-
 /**
  * The three-pane editor body: `nav | resizer | main | resizer | inspector`.
  *
@@ -157,8 +143,38 @@ export function EditorBody({
   }
   const widths = geometry.current.widths;
 
-  const [navOff, toggleNav] = useRailCollapse(navCollapsed, onNavCollapsedChange);
-  const [inspOff, toggleInsp] = useRailCollapse(inspectorCollapsed, onInspectorCollapsedChange);
+  // Collapse is persisted per editor and per rail, exactly as the widths above
+  // are: a rail an author put away is still away after a reload. A route that
+  // drives the collapse itself owns its own persistence, so nothing is written
+  // for a controlled rail.
+  const [collapse, setCollapse] = useState(() => readEditorCollapsed(editorKey));
+  const collapseKey = useRef(editorKey);
+  useEffect(() => {
+    if (collapseKey.current === editorKey) return;
+    collapseKey.current = editorKey;
+    setCollapse(readEditorCollapsed(editorKey));
+  }, [editorKey]);
+
+  function railCollapse(
+    rail: EditorRail,
+    controlled: boolean | undefined,
+    onChange: ((collapsed: boolean) => void) | undefined,
+  ): readonly [boolean, () => void] {
+    const collapsed = controlled ?? collapse[rail];
+    return [
+      collapsed,
+      () => {
+        if (controlled === undefined) {
+          setCollapse((current) => ({ ...current, [rail]: !collapsed }));
+          writeEditorCollapsed(editorKey, rail, !collapsed);
+        }
+        onChange?.(!collapsed);
+      },
+    ];
+  }
+
+  const [navOff, toggleNav] = railCollapse("nav", navCollapsed, onNavCollapsedChange);
+  const [inspOff, toggleInsp] = railCollapse("insp", inspectorCollapsed, onInspectorCollapsedChange);
   // The resizers are installed once per rail, so they reach the current toggle
   // through a ref instead of re-installing on every render.
   const toggles = useRef({ nav: toggleNav, insp: toggleInsp });
