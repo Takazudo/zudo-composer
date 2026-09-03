@@ -136,7 +136,9 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   // editor chrome names the record it loaded.
   await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Sample Studio sitemap");
-  await expect(page.getByRole("button", { name: "Add page" })).toBeVisible();
+  // Scoped to the editor toolbar: the tree's terminal "Add page" rows share this
+  // accessible name, so a page-wide match is a strict-mode violation.
+  await expect(page.locator(".cms-editor__toolbar").getByRole("button", { name: "Add page" })).toBeVisible();
   await expect(page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /^Home\b/ })).toBeVisible();
   expect(failures).toEqual([]);
 });
@@ -377,7 +379,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
 
   // 26 Entries, two of which derive no route: one with an empty slug and one
   // whose slug is a bare dot. The two that share 東京 collide but both resolve.
-  await expect(mappingCard).toContainText(/\b24 routes\b/);
+  await expect(mappingCard).toContainText(/·\s*24 routes/);
   await expect(mappingCard.getByText("Needs attention", { exact: true })).toBeVisible();
   await expect(mappingField.getByText("Entry slug is missing or empty.", { exact: true }).first()).toBeVisible();
   await expect(mappingField.getByText("Entry slug contains a forbidden route delimiter.", { exact: true })).toBeVisible();
@@ -397,7 +399,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await slug.fill("news/latest");
   await slug.blur();
   await sourceTab.click();
-  await expect(mappingCard).toContainText(/\b24 routes\b/);
+  await expect(mappingCard).toContainText(/·\s*24 routes/);
 
   await mappingField.getByRole("button", { name: "Change mapping" }).click();
   await page.getByRole("dialog", { name: "Choose a Content Mapping" }).getByRole("button", { name: `Assign ${SINGLE_MAPPING}` }).click();
