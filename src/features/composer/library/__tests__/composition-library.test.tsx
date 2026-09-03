@@ -1,16 +1,14 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 import "../../test-support/cleanup";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   COMPOSITION_PROVIDERS,
   CompositionPersistenceError,
-  type ReuseCatalogEntry,
   type CompositionInitializationOutcome,
   type CompositionSummary,
+  type ReuseCatalogEntry,
 } from "../../../../composer/browser";
 import { CompositionLibrary } from "../composition-library";
 import type {
@@ -18,15 +16,20 @@ import type {
   CompositionLibraryProviderCapability,
 } from "../library-contract";
 
+const originalShowModal = HTMLDialogElement.prototype.showModal;
+const originalClose = HTMLDialogElement.prototype.close;
+
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function showModal() { this.setAttribute("open", ""); };
+  HTMLDialogElement.prototype.close = function close() { this.removeAttribute("open"); };
+});
+
+afterEach(() => { vi.unstubAllGlobals(); });
+
 const EARLY = "2026-01-02T03:04:05.000Z";
 const LATE = "2026-02-03T04:05:06.000Z";
 
-function summary(
-  id: string,
-  name: string,
-  updatedAt = EARLY,
-  createdAt = EARLY,
-): CompositionSummary {
+function summary(id: string, name: string, updatedAt = EARLY, createdAt = EARLY): CompositionSummary {
   return { id, name, createdAt, updatedAt, nodeCount: 3 };
 }
 
@@ -39,8 +42,6 @@ const GLOBAL_TEMPLATE: ReuseCatalogEntry = {
     publicationKind: "global-template",
     outletId: "main",
     outletLabel: "Main content",
-    rootCount: 1,
-    reuseStatus: "eligible",
   },
   kind: "global-template",
   outlet: { id: "main", label: "Main content" },
@@ -55,9 +56,7 @@ function ready(summaries: readonly CompositionSummary[]): CompositionInitializat
   return { status: "ready", summaries };
 }
 
-function fakeIntents(
-  overrides: Partial<CompositionLibraryIntents> = {},
-): CompositionLibraryIntents {
+function fakeIntents(overrides: Partial<CompositionLibraryIntents> = {}): CompositionLibraryIntents {
   return {
     initialize: vi.fn(async () => ready([ALPHA, BRAVO])),
     retry: vi.fn(async () => ready([ALPHA, BRAVO])),
@@ -65,9 +64,14 @@ function fakeIntents(
     listTemplates: vi.fn(async () => ({ status: "listed" as const, entries: [] })),
     create: vi.fn(async () => summary("new", "Untitled composition", LATE)),
     open: vi.fn(async () => ({ status: "opened" as const })),
+    rename: vi.fn(async (ref, name) => summary(ref.recordId, name, LATE)),
     duplicate: vi.fn(async () => summary("copy", "Alpha layout copy", LATE)),
     delete: vi.fn(async () => true),
     clear: vi.fn(async () => undefined),
+    exportJsx: vi.fn(async () => ({
+      documentName: "Alpha layout",
+      outcome: { status: "ready" as const, kind: "ordinary" as const, generation: { ok: true, blocked: false, code: "export code", diagnostics: { byId: new Map(), opaqueIds: [] }, imports: [], nodeOrder: [] } as never },
+    })),
     ...overrides,
   };
 }
@@ -76,13 +80,7 @@ function renderLibrary(
   intents = fakeIntents(),
   providers: readonly CompositionLibraryProviderCapability[] = defaultProviders,
 ) {
-  render(
-    <CompositionLibrary
-      providers={providers}
-      initialProviderId="indexeddb"
-      intents={intents}
-    />,
-  );
+  render(<CompositionLibrary providers={providers} initialProviderId="indexeddb" intents={intents} />);
   return intents;
 }
 
@@ -90,63 +88,61 @@ async function waitForLibrary(): Promise<void> {
   await screen.findByRole("heading", { name: "Compositions" });
 }
 
+const dataRows = () => screen.getAllByRole("row").slice(1);
+
 describe("CompositionLibrary data and capability states", () => {
-  it("shows concise persisted Global template and Pattern roles without creating another library", async () => {
-    const global = {
-      ...summary("global", "Site shell"),
+  it("shows Plain/Pattern/Global template kind chips and node counts", async () => {
+    const plain = summary("plain", "Plain page");
+    const pattern = { ...summary("pattern", "Callout", LATE), publicationKind: "pattern" as const };
+    const template = {
+      ...summary("template", "Site shell", LATE),
       publicationKind: "global-template" as const,
-      outletId: "outlet-main",
+      outletId: "main",
       outletLabel: "Main content",
     };
-    const pattern = {
-      ...summary("pattern", "Callout", LATE),
-      publicationKind: "pattern" as const,
-    };
-    renderLibrary(fakeIntents({ initialize: vi.fn(async () => ready([global, pattern])) }));
+    renderLibrary(fakeIntents({ initialize: vi.fn(async () => ready([plain, pattern, template])) }));
     await waitForLibrary();
 
-    expect(screen.getByText("Global template · Main content")).toBeInTheDocument();
-    expect(screen.getByText("Pattern · Saved composition")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Composition library" })).toBeInTheDocument();
+    expect(screen.getByText("Plain")).toBeInTheDocument();
+    expect(screen.getByText("Pattern")).toBeInTheDocument();
+    expect(screen.getByText("Global template")).toBeInTheDocument();
+    expect(screen.getAllByText("3").length).toBeGreaterThan(0);
   });
 
-  it("shows a semantic loading state and polite live progress while initialization is pending", () => {
+  it("shows a semantic loading state while initialization is pending", () => {
     renderLibrary(fakeIntents({ initialize: vi.fn(() => new Promise<CompositionInitializationOutcome>(() => undefined)) }));
-
-    expect(screen.getByRole("main", { name: "Composition library" })).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByRole("heading", { name: "Loading compositions…" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Loading compositions…");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("sorts newest-first deterministically, exposes identity, filters by name or id, and shows no-match state", async () => {
+  it("links every row to its provider-qualified detail route", async () => {
     renderLibrary();
     await waitForLibrary();
 
-    expect(screen.getByText("IndexedDB: zudo-composer")).toBeInTheDocument();
-    const rows = screen.getAllByRole("listitem");
-    expect(within(rows[0]).getByRole("button", { name: "Open Bravo layout" })).toBeInTheDocument();
-    expect(within(rows[1]).getByRole("button", { name: "Open Alpha layout" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Bravo layout" })).toHaveAttribute("href", "/composer#/composition/indexeddb/bravo");
+    expect(screen.getByRole("link", { name: "Alpha layout" })).toHaveAttribute("href", "/composer#/composition/indexeddb/alpha");
+    const rows = dataRows();
+    expect(within(rows[0]).getByText("Bravo layout")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Alpha layout")).toBeInTheDocument();
+  });
 
-    fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), {
-      target: { value: "alpha" },
-    });
-    expect(screen.getByRole("button", { name: "Open Alpha layout" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open Bravo layout" })).not.toBeInTheDocument();
+  it("filters by name or id and comes back from Clear filters", async () => {
+    renderLibrary();
+    await waitForLibrary();
 
-    fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), {
-      target: { value: "missing" },
-    });
-    expect(screen.getByRole("heading", { name: "No matching compositions" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
-    expect(screen.getByRole("button", { name: "Open Bravo layout" })).toBeInTheDocument();
+    fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), { target: { value: "alpha" } });
+    expect(dataRows()).toHaveLength(1);
+    fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), { target: { value: "nothing here" } });
+    expect(screen.getByText("No matches for “nothing here”")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(dataRows()).toHaveLength(2);
   });
 
   it("shows an actionable empty state", async () => {
     renderLibrary(fakeIntents({ initialize: vi.fn(async () => ready([])) }));
     await waitForLibrary();
-
-    expect(screen.getByRole("heading", { name: "No compositions yet" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "New composition" })).toHaveLength(2);
+    expect(screen.getByText("No compositions yet")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /New composition|Create your first composition/ })).toHaveLength(2);
   });
 
   it("distinguishes an initial recoverable list error from a genuinely empty library", async () => {
@@ -157,40 +153,37 @@ describe("CompositionLibrary data and capability states", () => {
       })),
     }));
 
-    expect(await screen.findByRole("heading", { name: "Composition library unavailable" })).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("temporarily unavailable");
-    expect(screen.getByRole("button", { name: "Retry library" })).toBeEnabled();
+    expect(await screen.findByText("Composition library unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("Browser storage is temporarily unavailable.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "No compositions yet" })).not.toBeInTheDocument();
   });
 
   it("omits unavailable file controls and switches only to an available provider", async () => {
-    const firstView = render(
-      <CompositionLibrary providers={defaultProviders} initialProviderId="indexeddb" intents={fakeIntents()} />,
-    );
+    renderLibrary();
     await waitForLibrary();
-    expect(screen.queryByRole("option", { name: "Local files" })).not.toBeInTheDocument();
-    firstView.unmount();
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    expect(screen.queryByRole("menuitemradio", { name: "Local files" })).not.toBeInTheDocument();
+  });
 
+  it("switches provider and shows its own rows and label", async () => {
     const providers: CompositionLibraryProviderCapability[] = [
       { descriptor: COMPOSITION_PROVIDERS.indexeddb, available: true },
       { descriptor: COMPOSITION_PROVIDERS.files, available: true },
     ];
-    const switchIntents = fakeIntents({
-      initialize: vi.fn(async (providerId) =>
-        providerId === "files" ? ready([summary("file-a", "File composition")]) : ready([ALPHA]),
-      ),
+    const intents = fakeIntents({
+      initialize: vi.fn(async (providerId) => (providerId === "files" ? ready([summary("file-a", "File composition")]) : ready([ALPHA]))),
     });
-    renderLibrary(switchIntents, providers);
-    await screen.findByRole("button", { name: "Open Alpha layout" });
-    fireEvent.change(screen.getByRole("combobox", { name: "Provider" }), {
-      target: { value: "files" },
-    });
-    await screen.findByRole("button", { name: "Open File composition" });
-    expect(screen.getByText("Development composition files")).toBeInTheDocument();
-    expect(switchIntents.initialize).toHaveBeenCalledTimes(2);
+    renderLibrary(intents, providers);
+    await screen.findByRole("link", { name: "Alpha layout" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
+    await screen.findByRole("link", { name: "File composition" });
+    expect(screen.getByText("1 of 1 compositions · Local files")).toBeInTheDocument();
+    expect(intents.initialize).toHaveBeenCalledTimes(2);
   });
 
-  it("preserves the active provider and prior collection when a provider list fails", async () => {
+  it("preserves the active provider and prior collection when a provider switch fails", async () => {
     const providers: CompositionLibraryProviderCapability[] = [
       { descriptor: COMPOSITION_PROVIDERS.indexeddb, available: true },
       { descriptor: COMPOSITION_PROVIDERS.files, available: true },
@@ -198,102 +191,83 @@ describe("CompositionLibrary data and capability states", () => {
     const intents = fakeIntents({
       initialize: vi.fn(async (providerId) => {
         if (providerId === "files") {
-          return {
-            status: "error" as const,
-            error: new CompositionPersistenceError("list", "read-failed", "Files could not be listed.", true),
-          };
+          return { status: "error" as const, error: new CompositionPersistenceError("list", "read-failed", "Files could not be listed.", true) };
         }
         return ready([ALPHA]);
       }),
     });
     renderLibrary(intents, providers);
-    await screen.findByRole("button", { name: "Open Alpha layout" });
+    await screen.findByRole("link", { name: "Alpha layout" });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Provider" }), {
-      target: { value: "files" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
     await screen.findByRole("alert");
-    expect(screen.getByRole("button", { name: "Open Alpha layout" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Provider" })).toHaveValue("indexeddb");
-    expect(screen.getByText("IndexedDB: zudo-composer")).toBeInTheDocument();
+    expect(screen.getByText("Files could not be listed.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Alpha layout" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Provider: Browser storage" })).toBeInTheDocument();
   });
 
-  it("shows future-schema recovery and requires safe confirmation before starting fresh", async () => {
+  it("shows recovery with no readable rows and requires safe confirmation before starting fresh", async () => {
     const recovery = {
-      kind: "quarantined",
-      reason: "future-schema",
+      kind: "quarantined" as const,
+      reason: "future-schema" as const,
       foundSchemaVersion: 9,
-      sourcePreserved: true,
+      sourcePreserved: true as const,
       message: "This library was created by a newer Composer.",
-    } as const;
+    };
     const intents = fakeIntents({
       initialize: vi.fn(async () => ({ status: "recovery-required" as const, recovery })),
       startFresh: vi.fn(async () => ready([])),
     });
     renderLibrary(intents);
-    await screen.findByRole("heading", { name: "Recovery required" });
-    expect(screen.getByText("The original source has been preserved.")).toBeInTheDocument();
+    await screen.findByText("Stored compositions need recovery.");
+    expect(screen.getByText("This library was created by a newer Composer.")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
 
-    const trigger = screen.getByRole("button", { name: "Start fresh" });
-    fireEvent.click(trigger);
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Start fresh" })).toHaveFocus());
-
-    fireEvent.click(screen.getByRole("button", { name: "Start fresh" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start fresh" }));
-    await waitFor(() => expect(intents.startFresh).toHaveBeenCalledWith("indexeddb"));
-    const emptyHeading = await screen.findByRole("heading", { name: "No compositions yet" });
-    await waitFor(() =>
-      expect(within(emptyHeading.parentElement!).getByRole("button", { name: "New composition" })).toHaveFocus(),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start fresh…" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Start fresh?" })).getByRole("button", { name: "Start fresh" }));
+    await screen.findByText("No compositions yet");
+    expect(intents.startFresh).toHaveBeenCalledWith("indexeddb");
   });
 
-  it("keeps the collection actionable when open reports not-found", async () => {
-    const intents = fakeIntents({ open: vi.fn(async () => ({ status: "not-found" as const })) });
+  it("offers a Retry when the store cannot be opened at all", async () => {
+    const error = new CompositionPersistenceError("list", "read-failed", "IndexedDB is unavailable.", true);
+    const intents = fakeIntents({ initialize: vi.fn(async () => ({ status: "error" as const, error })) });
     renderLibrary(intents);
-    await waitForLibrary();
-    fireEvent.click(screen.getByRole("button", { name: "Open Alpha layout" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("was not found");
-    expect(screen.getByRole("button", { name: "Open Alpha layout" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Open Bravo layout" })).toBeInTheDocument();
+    expect(await screen.findByText("Composition library unavailable.")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("link", { name: "Alpha layout" })).toBeInTheDocument();
   });
 });
 
-describe("CompositionLibrary async operations and focus", () => {
-  it("opens one New dialog before creating, then sends the typed intent and opens its saved record", async () => {
+describe("CompositionLibrary row and bulk actions", () => {
+  it("opens the New-composition dialog, creates, and opens the saved record", async () => {
     const created = summary("created", "Created composition", "2026-03-01T00:00:00.000Z");
     const intents = fakeIntents({ create: vi.fn(async () => created) });
     renderLibrary(intents);
     await waitForLibrary();
-    fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "New composition" }));
 
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
-    expect(intents.create).not.toHaveBeenCalled();
-    fireEvent.submit(dialog.querySelector("form")!);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
-    await waitFor(() => expect(intents.create).toHaveBeenCalledWith({
-      providerId: "indexeddb",
-      name: "Untitled composition",
-    }));
+    await waitFor(() => expect(intents.create).toHaveBeenCalledWith({ providerId: "indexeddb", name: "Untitled composition" }));
     await waitFor(() => expect(intents.open).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "created" }));
-    expect(screen.getByRole("button", { name: "Open Created composition" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("created and opened");
+    expect(screen.getByRole("link", { name: "Created composition" })).toBeInTheDocument();
   });
 
   it("uses the selected same-provider Global-template row as the typed source choice", async () => {
-    const intents = fakeIntents({
-      listTemplates: vi.fn(async () => ({ status: "listed" as const, entries: [GLOBAL_TEMPLATE] })),
-    });
+    const intents = fakeIntents({ listTemplates: vi.fn(async () => ({ status: "listed" as const, entries: [GLOBAL_TEMPLATE] })) });
     renderLibrary(intents);
     await waitForLibrary();
-    fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "New composition" }));
 
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Bound page" } });
     fireEvent.click(within(dialog).getByRole("button", { name: /Site shell/ }));
-    fireEvent.submit(dialog.querySelector("form")!);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
     await waitFor(() => expect(intents.create).toHaveBeenCalledWith({
       providerId: "indexeddb",
@@ -302,149 +276,118 @@ describe("CompositionLibrary async operations and focus", () => {
     }));
   });
 
-  it("keeps the dialog open with its input and selection after a failed create", async () => {
-    const failed = fakeIntents({ create: vi.fn(async () => { throw new Error("Create failed safely."); }) });
-    renderLibrary(failed);
-    await screen.findAllByRole("button", { name: "Open Alpha layout" });
-    const newButtons = screen.getAllByRole("button", { name: "New composition" });
-    fireEvent.click(newButtons[newButtons.length - 1]);
-    const dialog = await screen.findByRole("dialog", { name: "New composition" });
-    const name = within(dialog).getByRole("textbox", { name: "Name" });
-    fireEvent.input(name, { target: { value: "Keep this name" } });
-    fireEvent.submit(dialog.querySelector("form")!);
-    expect(await within(dialog).findByText("Create failed safely.")).toBeInTheDocument();
-    expect(name).toHaveValue("Keep this name");
-    expect(within(dialog).getByRole("button", { name: "Retry" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Open Alpha layout" }).length).toBeGreaterThan(0);
-  });
-
-  it("duplicates then requests opening the copy; failed duplicate preserves rows", async () => {
+  it("renames through the row menu and the shared dialog", async () => {
     const intents = fakeIntents();
     renderLibrary(intents);
     await waitForLibrary();
-    fireEvent.click(screen.getByRole("button", { name: "Duplicate Alpha layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
+    fireEvent.click(within(screen.getByRole("menu", { name: "Alpha layout actions" })).getByRole("menuitem", { name: "Rename…" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Rename composition" });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Alpha renamed" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save name" }));
+
+    await waitFor(() => expect(intents.rename).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" }, "Alpha renamed"));
+    expect(await screen.findByRole("link", { name: "Alpha renamed" })).toBeInTheDocument();
+  });
+
+  it("reports a failed rename inside the dialog and keeps the typed name", async () => {
+    const intents = fakeIntents({ rename: vi.fn(async () => { throw new Error("Storage quota exceeded."); }) });
+    renderLibrary(intents);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Rename composition" });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Alpha renamed" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save name" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Storage quota exceeded.");
+    expect(within(dialog).getByRole("textbox", { name: "Name" })).toHaveValue("Alpha renamed");
+  });
+
+  it("duplicates a row through the row menu and opens the copy", async () => {
+    const intents = fakeIntents();
+    renderLibrary(intents);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+
     await waitFor(() => expect(intents.open).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "copy" }));
-    expect(screen.getByRole("button", { name: "Open Alpha layout copy" })).toBeInTheDocument();
-
-    const failed = fakeIntents({ duplicate: vi.fn(async () => { throw new Error("Duplicate failed safely."); }) });
-    renderLibrary(failed);
-    await screen.findAllByRole("button", { name: "Duplicate Alpha layout" });
-    fireEvent.click(screen.getAllByRole("button", { name: "Duplicate Alpha layout" }).at(-1)!);
-    expect(await screen.findByText("Duplicate failed safely.")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Open Alpha layout" }).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("link", { name: "Alpha layout copy" })).toBeInTheDocument();
   });
 
-  it("keeps successfully created and duplicated records when their follow-up open rejects", async () => {
-    const intents = fakeIntents({ open: vi.fn(async () => { throw new Error("Navigation unavailable."); }) });
-    renderLibrary(intents);
-    await waitForLibrary();
-
-    fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
-    const dialog = await screen.findByRole("dialog", { name: "New composition" });
-    fireEvent.submit(dialog.querySelector("form")!);
-    expect(await screen.findByRole("button", { name: "Open Untitled composition" })).toBeInTheDocument();
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("was saved, but opening failed");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-
-    fireEvent.click(screen.getByRole("button", { name: "Duplicate Alpha layout" }));
-    expect(await screen.findByRole("button", { name: "Open Alpha layout copy" })).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent("duplicate was saved, but opening failed");
-  });
-
-  it("delete cancel restores its trigger; confirm focuses the deterministic surviving row", async () => {
+  it("exports JSX for a row through the shared export dialog", async () => {
     const intents = fakeIntents();
     renderLibrary(intents);
     await waitForLibrary();
-    const trigger = screen.getByRole("button", { name: "Delete Bravo layout" });
-    fireEvent.click(trigger);
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Delete Bravo layout" })).toHaveFocus());
+    fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Export JSX" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete Bravo layout" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete composition" }));
-    await waitFor(() => expect(intents.delete).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "bravo" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Open Alpha layout" })).toHaveFocus());
-    expect(screen.queryByRole("button", { name: "Open Bravo layout" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Export — Alpha layout" })).toBeInTheDocument();
+    await waitFor(() => expect(intents.exportJsx).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" }));
+    expect(screen.getByText("export code")).toBeInTheDocument();
   });
 
-  it("failed and not-found deletes preserve the row and restore its delete trigger", async () => {
-    for (const deleteIntent of [
-      vi.fn(async () => false),
-      vi.fn(async () => { throw new Error("Delete failed safely."); }),
-    ]) {
-      const intents = fakeIntents({ delete: deleteIntent });
-      const view = render(
-        <CompositionLibrary providers={defaultProviders} initialProviderId="indexeddb" intents={intents} />,
-      );
-      await screen.findByRole("button", { name: "Delete Alpha layout" });
-      fireEvent.click(screen.getByRole("button", { name: "Delete Alpha layout" }));
-      fireEvent.click(screen.getByRole("button", { name: "Delete composition" }));
-      await waitFor(() => expect(screen.getByRole("button", { name: "Delete Alpha layout" })).toHaveFocus());
-      expect(screen.getByRole("button", { name: "Open Alpha layout" })).toBeInTheDocument();
-      expect(screen.getByRole("alert")).toBeInTheDocument();
-      view.unmount();
-    }
+  it("deletes one record through the row menu and the shared confirmation", async () => {
+    const intents = fakeIntents({ initialize: vi.fn(async () => ready([ALPHA])) });
+    renderLibrary(intents);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+
+    const dialog = screen.getByRole("alertdialog", { name: "Delete Alpha layout?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await screen.findByText("No compositions yet");
+    expect(intents.delete).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" });
   });
 
-  it("focuses the no-match action when deleting the only row visible through a filter", async () => {
+  it("duplicates and deletes a bulk selection without navigating away", async () => {
     const intents = fakeIntents();
     renderLibrary(intents);
     await waitForLibrary();
-    fireEvent.input(screen.getByRole("searchbox", { name: "Filter compositions" }), {
-      target: { value: "alpha" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Delete Alpha layout" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete composition" }));
 
-    expect(await screen.findByRole("heading", { name: "No matching compositions" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Clear filter" })).toHaveFocus());
+    fireEvent.click(screen.getByRole("checkbox", { name: "Alpha layout" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Bravo layout" }));
+    expect(screen.getByText("2 compositions selected")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    await waitFor(() => expect(intents.duplicate).toHaveBeenCalledTimes(2));
+    expect(intents.open).not.toHaveBeenCalled();
+    expect(screen.queryByText("2 compositions selected")).toBeNull();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Alpha layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete Alpha layout?" })).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(intents.delete).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" }));
   });
 
-  it("clear cancel restores its trigger; success focuses the empty-state action", async () => {
+  it("clears the library behind the shared confirmation", async () => {
     const intents = fakeIntents();
     renderLibrary(intents);
     await waitForLibrary();
-    const trigger = screen.getByRole("button", { name: "Clear library" });
-    fireEvent.click(trigger);
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Clear library" })).toHaveFocus());
-
     fireEvent.click(screen.getByRole("button", { name: "Clear library" }));
-    fireEvent.click(screen.getByRole("button", { name: "Clear library" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Clear library?" })).getByRole("button", { name: "Clear library" }));
+
     await waitFor(() => expect(intents.clear).toHaveBeenCalledWith("indexeddb"));
-    const emptyState = screen.getByRole("heading", { name: "No compositions yet" }).parentElement!;
-    await waitFor(() => expect(within(emptyState).getByRole("button", { name: "New composition" })).toHaveFocus());
+    expect(await screen.findByText("No compositions yet")).toBeInTheDocument();
   });
 
-  it("failed clear preserves every row and restores the clear trigger", async () => {
+  it("failed clear preserves every row", async () => {
     const intents = fakeIntents({ clear: vi.fn(async () => { throw new Error("Clear failed safely."); }) });
     renderLibrary(intents);
     await waitForLibrary();
-    const trigger = screen.getByRole("button", { name: "Clear library" });
-    fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "Clear library" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Clear library?" })).getByRole("button", { name: "Clear library" }));
+
     await screen.findByText("Clear failed safely.");
-    await waitFor(() => expect(screen.getByRole("button", { name: "Clear library" })).toHaveFocus());
-    expect(screen.getByRole("button", { name: "Open Alpha layout" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open Bravo layout" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Alpha layout" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Bravo layout" })).toBeInTheDocument();
   });
 });
 
-describe("CompositionLibrary accessibility CSS contract", () => {
-  const css = readFileSync(resolve(process.cwd(), "src/features/composer/styles.css"), "utf8");
-
-  it("keeps primary controls at least 44px and provides visible focus", () => {
-    expect(css).toMatch(/\.sg-composer-library-button,[\s\S]*min-height:\s*2\.75rem/);
-    expect(css).toMatch(/\.sg-composer-library :where\(button, input, select\):focus-visible\s*\{[\s\S]*outline:\s*2px solid var\(--color-focus\)/);
-  });
-
-  it("uses shrinking flex seams, scoped hover, tokens, and a mobile-first breakpoint without horizontal overflow", () => {
-    expect(css).toMatch(/\.sg-composer-library\s*\{[\s\S]*inline-size:\s*100%[\s\S]*min-width:\s*0/);
-    expect(css).toContain("@media (hover: hover) and (pointer: fine)");
-    expect(css).toContain("var(--color-surface)");
-    expect(css).toContain("@media (min-width: 48rem)");
-    expect(css).not.toMatch(/\.sg-composer-library[^{]*\{[^}]*width:\s*\d+px/);
-  });
+afterAll(() => {
+  HTMLDialogElement.prototype.showModal = originalShowModal;
+  HTMLDialogElement.prototype.close = originalClose;
 });

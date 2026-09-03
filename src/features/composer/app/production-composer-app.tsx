@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
 import {
+  cloneJson,
   COMPOSITION_PROVIDERS,
   COMPOSITION_SCHEMA_VERSION,
   createCompositionRecord,
@@ -13,7 +14,9 @@ import {
   createCompositionReuseService,
   createUuidIdFactory,
   duplicateCompositionRecord,
+  generateBrowserJsxExport,
   isCompositionLifecycleStore,
+  resolveGlobalTemplateLoad,
   summarizeComposition,
   type CompositionDocument,
   type ComponentCatalog,
@@ -25,6 +28,7 @@ import {
   type CompositionRecordRef,
   type CompositionRecoveryOutcome,
   type CompositionSaveOutcome,
+  type GlobalTemplateResolutionOutcome,
   type SaveQueue,
   type IdFactory,
   type ReuseConsumerLifecycleOutcome,
@@ -528,10 +532,35 @@ export function ProductionComposerApp({
         await provider(ref.providerId).store.put(record);
         return summarizeComposition(record);
       },
+      rename: async (ref, name) => {
+        const activeProvider = provider(ref.providerId);
+        const loaded = await activeProvider.store.get(ref.recordId);
+        if (loaded.status !== "loaded") throw new Error(failedLoadMessage(loaded));
+        const record: CompositionRecord = {
+          ...cloneJson(loaded.record),
+          updatedAt: nowRef.current(),
+          document: { ...cloneJson(loaded.record.document), name },
+        };
+        await activeProvider.store.put(record);
+        return summarizeComposition(record);
+      },
       delete: (ref) => provider(ref.providerId).store.delete(ref.recordId),
       clear: (providerId) => provider(providerId).store.clear(),
+      exportJsx: async (ref) => {
+        const activeProvider = provider(ref.providerId);
+        const loaded = await activeProvider.store.get(ref.recordId);
+        if (loaded.status !== "loaded") throw new Error(failedLoadMessage(loaded));
+        const record = loaded.record;
+        let resolution: GlobalTemplateResolutionOutcome | undefined;
+        if (record.document.binding) {
+          const sourceLoad = await activeProvider.store.get(record.document.binding.sourceRecordId);
+          resolution = resolveGlobalTemplateLoad(record, sourceLoad, reuseManifest);
+        }
+        const outcome = generateBrowserJsxExport({ record, manifest: reuseManifest, resolution });
+        return { documentName: record.document.name, outcome };
+      },
     };
-  }, [idFactory, navigate, nodeIdFactory, providersById]);
+  }, [idFactory, navigate, nodeIdFactory, providersById, reuseManifest]);
 
   const handleInitializationApplied = useCallback(
     (providerId: CompositionProviderId, outcome: CompositionInitializationOutcome) => {
