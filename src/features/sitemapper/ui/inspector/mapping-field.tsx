@@ -12,6 +12,23 @@ import { MappingPickerDialog } from "../picker/mapping-picker-dialog";
 
 type MappingSource = Extract<SitemapPageSource, { kind: "mapping" }>;
 
+/** Everything the two resolvers can answer that is not something to assign. */
+type ResolveFailure =
+  | { status: "not-found" }
+  | { status: "invalid"; reason: string }
+  | { status: "provider-error"; reason: string };
+
+/**
+ * Why an assignment was abandoned, said in the field rather than swallowed.
+ * Picking a Mapping the catalog can list but the resolver cannot read used to
+ * close the dialog and change nothing at all.
+ */
+function describeAssignFailure(subject: string, outcome: ResolveFailure): string {
+  return outcome.status === "not-found"
+    ? `${subject} no longer exists, so nothing was assigned.`
+    : `${subject} could not be read (${outcome.reason}), so nothing was assigned.`;
+}
+
 export interface MappingFieldProps {
   value?: MappingSource;
   routeInfo?: SitemapNodeRouteInfo;
@@ -21,17 +38,38 @@ export interface MappingFieldProps {
 
 export function MappingField({ value, routeInfo, catalog, onChange }: MappingFieldProps): JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
   const detail = routeInfo?.mapping;
 
   const assign = async (ref: MappingRef): Promise<void> => {
-    const mapping = await catalog.routes.resolveMapping(ref);
-    if (mapping.status !== "resolved") return;
-    const content = await catalog.routes.resolveContentSnapshot(mapping.record);
-    if (content.status !== "resolved") return;
-    const route = content.model.document.kind === "single"
-      ? { kind: "single" as const }
-      : { kind: "entry-field" as const, fieldId: content.model.document.fields.find((field) => field.kind === "slug")?.id ?? "missing-slug-field" };
-    onChange({ kind: "mapping", ref, route });
+    setAssignError(null);
+    try {
+      const mapping = await catalog.routes.resolveMapping(ref);
+      if (mapping.status !== "resolved") {
+        setAssignError(describeAssignFailure("That Mapping", mapping));
+        return;
+      }
+      const content = await catalog.routes.resolveContentSnapshot(mapping.record);
+      if (content.status !== "resolved") {
+        setAssignError(describeAssignFailure("That Mapping's content model", content));
+        return;
+      }
+      if (content.model.document.kind === "single") {
+        onChange({ kind: "mapping", ref, route: { kind: "single" } });
+        return;
+      }
+      // A collection derives one route per entry from a slug field. Without one
+      // there is no route family to author, and a placeholder field id would
+      // only persist an assignment that can never resolve.
+      const slugField = content.model.document.fields.find((field) => field.kind === "slug");
+      if (!slugField) {
+        setAssignError(`“${content.model.document.name}” has no slug field, so it derives no routes.`);
+        return;
+      }
+      onChange({ kind: "mapping", ref, route: { kind: "entry-field", fieldId: slugField.id } });
+    } catch (reason) {
+      setAssignError(reason instanceof Error ? reason.message : "That Mapping could not be assigned.");
+    }
   };
 
   const routeFieldId = value !== undefined && value.route.kind === "entry-field" ? value.route.fieldId : null;
@@ -41,12 +79,13 @@ export function MappingField({ value, routeInfo, catalog, onChange }: MappingFie
 
   return (
     <div class="sg-sitemapper-source" role="group" aria-label="Mapping">
+      {assignError ? <Banner tone="err">{assignError}</Banner> : null}
       {!value ? (
         <EmptyState
           inline
           icon={MappingIcon}
           title="No mapping assigned"
-          action={<Button variant="primary" size="sm" onClick={() => setPickerOpen(true)}>Choose mapping…</Button>}
+          action={<Button variant="primary" size="sm" onClick={() => { setAssignError(null); setPickerOpen(true); }}>Choose mapping…</Button>}
         />
       ) : (
         <>
@@ -55,7 +94,7 @@ export function MappingField({ value, routeInfo, catalog, onChange }: MappingFie
             <Banner
               tone="err"
               title="Broken reference"
-              action={<Button size="sm" onClick={() => setPickerOpen(true)}>Change…</Button>}
+              action={<Button size="sm" onClick={() => { setAssignError(null); setPickerOpen(true); }}>Change…</Button>}
             >
               {routeInfo.diagnostics[0]?.message ?? "Mapping details are unavailable."}
             </Banner>
@@ -72,7 +111,7 @@ export function MappingField({ value, routeInfo, catalog, onChange }: MappingFie
                   </span>
                 </span>
                 <Chip tone={routeInfo.status === "ready" ? "ok" : "warn"} dot>{describeRouteStatus(routeInfo.status)}</Chip>
-                <Button size="xs" variant="ghost" iconOnly aria-label="Change mapping" onClick={() => setPickerOpen(true)}>
+                <Button size="xs" variant="ghost" iconOnly aria-label="Change mapping" onClick={() => { setAssignError(null); setPickerOpen(true); }}>
                   <EditIcon size="xs" />
                 </Button>
               </div>

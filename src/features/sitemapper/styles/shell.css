@@ -88,8 +88,7 @@
 /* --------------------------------------------------------------------------
  * Route-level notices
  * -------------------------------------------------------------------------- */
-.sg-sitemapper-load-notice,
-.sg-sitemapper-open-failure { padding: var(--sp-3); }
+.sg-sitemapper-load-notice { padding: var(--sp-3); }
 
 .sg-sitemapper-loading { padding: var(--sp-3); color: var(--color-muted); }
 

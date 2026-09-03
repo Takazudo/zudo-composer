@@ -1,6 +1,6 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MappingAssignmentCatalog } from "../../../../../sitemapper/routes";
 import { MappingField } from "../mapping-field";
@@ -68,6 +68,43 @@ describe("MappingField", () => {
     render(<MappingField value={{ kind: "mapping", ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "single" } }} routeInfo={{ status: "blocked", derivedRouteCount: 0, diagnostics: [diagnostic] }} catalog={sourceCatalog} onChange={() => {}} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Content provider offline");
     expect(sourceCatalog.routes.resolveContentSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("says why an assignment was abandoned instead of closing the dialog on nothing", async () => {
+    const sourceCatalog = catalog();
+    vi.mocked(sourceCatalog.routes.resolveMapping).mockResolvedValue({ status: "not-found" });
+    render(<MappingField catalog={sourceCatalog} onChange={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Choose a Content Mapping" });
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Assign Article Mapping/ }));
+
+    expect(await screen.findByText("That Mapping no longer exists, so nothing was assigned."))
+      .toBeInTheDocument();
+  });
+
+  it("refuses a collection with no slug field rather than persisting a placeholder route", async () => {
+    const sourceCatalog = catalog();
+    const onChange = vi.fn();
+    vi.mocked(sourceCatalog.routes.resolveContentSnapshot).mockImplementation(async () => {
+      const resolved = await catalog().routes.resolveContentSnapshot({} as never);
+      if (resolved.status !== "resolved") throw new Error("fixture");
+      return {
+        ...resolved,
+        model: {
+          ...resolved.model,
+          document: { ...resolved.model.document, fields: resolved.model.document.fields.filter((field) => field.kind !== "slug") },
+        },
+      };
+    });
+    render(<MappingField catalog={sourceCatalog} onChange={onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Choose a Content Mapping" });
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Assign Article Mapping/ }));
+
+    expect(await screen.findByText("“Articles” has no slug field, so it derives no routes.")).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("loads one injected catalog in the labelled assignment dialog", async () => {
