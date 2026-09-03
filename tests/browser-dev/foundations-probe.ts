@@ -20,14 +20,27 @@
  * navigates to and never comes back to the library for the record it made.
  *
  * The proofs that genuinely need a populated library therefore live on the
- * dist lane, in `tests/browser/library-chrome.pw.ts`. The alternative —
- * giving `playwright.dev.config.ts` the `ZUDO_SITE_PROJECT_ROOT` treatment
- * that `playwright.site-project.config.ts` already has, provisioned the way
- * `scripts/run-site-project-browser.mjs` provisions its disposable root — is a
- * better long-term answer and would unblock every library-dependent dev-lane
- * proof at once. It also changes what this lane means and changes the shape of
- * a named completion gate, so it wants its own decision rather than being a
- * side effect of one spec.
+ * dist lane, in `tests/browser/library-chrome.pw.ts`.
+ *
+ * The alternative is worth writing down for whoever needs it next, because the
+ * recipe already exists and is proven: `pnpm test:browser:site-project --dev`
+ * drives exactly this shape against a Vite dev server. Its runner
+ * (`scripts/run-site-project-browser.mjs`) mkdtemps a disposable root, applies
+ * the sample project and activates it through `server/site-project-local/cli.ts`,
+ * passes the root down as `ZUDO_SITE_PROJECT_ROOT`, and removes it afterwards;
+ * `playwright.site-project.config.ts` then forwards it into `webServer.env`.
+ * Giving this lane the same treatment would unblock every library-dependent
+ * dev-lane proof at once — including the one gap left below.
+ *
+ * Its cost is that a config cannot mkdtemp and still be a plain config, so the
+ * dev lane would need a runner in front of it, which changes the shape of
+ * `pnpm test:browser:dev` — a named completion gate. That is a decision about
+ * what this lane means, not a side effect of one spec, so it is left to be
+ * taken deliberately.
+ *
+ * **Known gap while it stands:** `.cms-table th/td { height: 44px }` from the
+ * coarse block in `ui.css` is unproven anywhere. Only this lane has a coarse
+ * project, and only a lane with a listing has a table.
  */
 
 import { expect } from "@playwright/test";
