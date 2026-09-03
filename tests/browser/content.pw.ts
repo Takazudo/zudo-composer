@@ -283,7 +283,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(page.getByRole("textbox", { name: "Model name" })).toHaveValue("Browser Journal articles");
   // Model kind is a locked chip carrying its reason, not an editable control.
   await expect(page.getByText("Collection · locked after creation")).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Model kind" })).toHaveCount(0);
+  await expect(page.locator(".sg-content-form").getByRole("combobox")).toHaveCount(0);
 
   const schemaTable = page.getByRole("table", { name: /^Fields of / });
   await expect(schemaTable.getByRole("row")).toHaveCount(6);

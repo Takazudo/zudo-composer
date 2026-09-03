@@ -138,7 +138,9 @@ test("an authoring Entry edit survives reload and is reflected by SiteDelivery",
   const contentTree = page.getByRole("tree", { name: "Content" });
   await contentTree.getByRole("treeitem", { name: /^About content/ }).click();
   await contentTree.getByRole("treeitem", { name: /^A studio built around useful clarity/ }).click();
-  const heading = page.getByRole("textbox", { name: "Heading (required)" });
+  // #170 moved "required" onto the control as an attribute; the field's name
+  // is its label alone, and the kind hint beside it is decorative.
+  const heading = page.getByRole("textbox", { name: "Heading", exact: true });
   await heading.fill("A browser-edited studio");
   await heading.blur();
   // The route publishes its save state through `useEditorStatus`; the shell

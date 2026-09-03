@@ -319,15 +319,14 @@ export function ContentEntryAuthor({ state, controller, run }: ContentEntryAutho
 
         if (field.kind === "boolean") {
           return (
-            <div key={field.id} class="sg-content-toggle">
-              <Switch
-                id={controlId}
-                class="sg-content-toggle__switch"
-                label={<>{field.label}{field.required ? <span class="sg-content-req" aria-hidden="true"> *</span> : null}</>}
-                checked={value === true}
-                onCheckedChange={(checked) => commit(checked)}
-              />
-            </div>
+            <Switch
+              key={field.id}
+              id={controlId}
+              class="sg-content-toggle"
+              label={<>{field.label}{field.required ? <span class="sg-content-req" aria-hidden="true"> *</span> : null}</>}
+              checked={value === true}
+              onCheckedChange={(checked) => commit(checked)}
+            />
           );
         }
 
@@ -348,9 +347,9 @@ export function ContentEntryAuthor({ state, controller, run }: ContentEntryAutho
                   class="sg-content-mono"
                   value={asText(value)}
                   onInput={(event) => {
-                    // Typing the slug by hand is what retires the derivation —
-                    // both in the same handler, so the effect below sees the
-                    // switch already off and leaves the typed value alone.
+                    // Typing the slug by hand is what retires the derivation.
+                    // Both happen in this one handler, so the effect above sees
+                    // the switch already off and leaves the typed value alone.
                     if (auto) setAutoSlug({ ...autoSlug, [field.id]: false });
                     commit(event.currentTarget.value);
                   }}

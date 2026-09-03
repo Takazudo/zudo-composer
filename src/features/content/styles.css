@@ -118,10 +118,9 @@
  * ------------------------------------------------------------------------ */
 .sg-content-slug { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sg-content-space-inline) var(--sg-content-space-region); min-width: 0; }
 .sg-content-slug > :first-child { flex: 1 1 14rem; min-width: 0; }
-.sg-content-toggle { display: flex; min-width: 0; }
 /* The track renders before the label, so the row is reversed to read
  * "Published … [toggle]" the way every other field reads label-first. */
-.sg-content-toggle__switch { flex-direction: row-reverse; justify-content: space-between; width: 100%; }
+.sg-content-toggle { flex-direction: row-reverse; justify-content: space-between; width: 100%; min-width: 0; }
 
 .sg-content-meta { display: grid; gap: var(--sg-content-space-row-y); min-width: 0; margin: 0; padding: var(--sg-content-space-group-y) var(--sg-content-space-region); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); box-shadow: none; }
 .sg-content-meta__row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sg-content-space-inline); min-width: 0; font-size: var(--text-sm); }
