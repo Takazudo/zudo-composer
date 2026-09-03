@@ -333,7 +333,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
                   })}
                 />
               ) : state.entry ? (
-                <ContentEntryAuthor state={state} controller={controller} />
+                <ContentEntryAuthor state={state} controller={controller} run={run} />
               ) : (
                 <EmptyState title="Choose an Entry" description="Select an Entry in the navigator, or add one with its model's Add entry row." inline />
               )}

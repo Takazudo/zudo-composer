@@ -51,9 +51,12 @@ function useControllerState(controller: ContentAuthoringController) {
   return state;
 }
 
+/** Mirrors the route's own reporter: a failed action is caught, never thrown. */
+const run = (action: () => void | Promise<void>) => void Promise.resolve(action()).catch(() => undefined);
+
 function EntryHarness({ controller }: { controller: ContentAuthoringController }): JSX.Element | null {
   const state = useControllerState(controller);
-  return state.model && state.entry ? <ContentEntryAuthor state={state} controller={controller} /> : null;
+  return state.model && state.entry ? <ContentEntryAuthor state={state} controller={controller} run={run} /> : null;
 }
 
 function SchemaHarness({ controller, onRemove }: { controller: ContentAuthoringController; onRemove?: (field: ContentFieldDefinition) => void }): JSX.Element | null {
@@ -62,7 +65,7 @@ function SchemaHarness({ controller, onRemove }: { controller: ContentAuthoringC
     <ContentSchemaAuthor
       state={state}
       controller={controller}
-      run={(action) => void Promise.resolve(action()).catch(() => undefined)}
+      run={run}
       onRemove={onRemove ?? (() => undefined)}
     />
   ) : null;

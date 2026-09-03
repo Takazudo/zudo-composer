@@ -1,6 +1,6 @@
 import type { JSX } from "preact";
 import { useEffect, useId, useRef, useState } from "preact/hooks";
-import { ArrowDownIcon, ErrorIcon, InfoIcon, PlusIcon, TrashIcon, ArrowUpIcon, EllipsisIcon } from "../../components/icons";
+import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, ErrorIcon, InfoIcon, PlusIcon, TrashIcon } from "../../components/icons";
 import { formatLibraryTimestampFull } from "../../components/library-page";
 import { Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay";
 import { Button, Chip, DataTable, Field, Input, Switch, Textarea, type DataTableColumn } from "../../components/ui";
@@ -10,10 +10,11 @@ import { FieldKindPicker, contentFieldKindPresentation } from "./field-kind-pick
 import { MarkdownEditor } from "./markdown-editor";
 import { deriveSlug } from "./slug";
 
-type Run = (action: () => void | Promise<void>) => void;
+/** The route's reporter: it runs an action and shows what it failed with. */
+export type ContentAuthorRun = (action: () => void | Promise<void>) => void;
 
 /** An Entry value read as the string a text-shaped control can hold. */
-function text(value: ContentEntryRecord["values"][string] | undefined): string {
+function asText(value: ContentEntryRecord["values"][string] | undefined): string {
   return typeof value === "string" ? value : typeof value === "number" ? String(value) : "";
 }
 
@@ -122,7 +123,7 @@ function SchemaFieldMenu({ field, index, count, onMove, onRemove }: SchemaFieldM
 export interface ContentSchemaAuthorProps {
   state: ContentAuthoringState;
   controller: ContentAuthoringController;
-  run: Run;
+  run: ContentAuthorRun;
   onRemove(field: ContentFieldDefinition): void;
 }
 
@@ -137,6 +138,8 @@ export function ContentSchemaAuthor({ state, controller, run, onRemove }: Conten
   const model = state.model!;
   const fields = model.document.fields;
   const collection = model.document.kind === "collection";
+  const order = new Map(fields.map((field, index) => [field.id, index]));
+
 
   const columns: DataTableColumn<ContentFieldDefinition>[] = [
     {
@@ -210,7 +213,6 @@ export function ContentSchemaAuthor({ state, controller, run, onRemove }: Conten
         <h3 class="sg-content-group__title">Fields</h3>
         <DataTable<ContentFieldDefinition>
           caption={`Fields of ${model.document.name}`}
-          class="sg-content-schema-table"
           density="compact"
           columns={columns}
           rows={fields}
@@ -218,7 +220,7 @@ export function ContentSchemaAuthor({ state, controller, run, onRemove }: Conten
           rowActions={(field) => (
             <SchemaFieldMenu
               field={field}
-              index={fields.indexOf(field)}
+              index={order.get(field.id) ?? 0}
               count={fields.length}
               onMove={(direction) => run(() => controller.moveField(field.id, direction))}
               onRemove={() => onRemove(field)}
@@ -241,6 +243,7 @@ export function ContentSchemaAuthor({ state, controller, run, onRemove }: Conten
 export interface ContentEntryAuthorProps {
   state: ContentAuthoringState;
   controller: ContentAuthoringController;
+  run: ContentAuthorRun;
 }
 
 /**
@@ -250,12 +253,17 @@ export interface ContentEntryAuthorProps {
  * Entry's "used by" is resolved by the Mapping catalogue, which the inspector's
  * Usage tab owns; inventing a count here would mean guessing.
  */
-export function ContentEntryAuthor({ state, controller }: ContentEntryAuthorProps): JSX.Element {
+export function ContentEntryAuthor({ state, controller, run }: ContentEntryAuthorProps): JSX.Element {
   const entry = state.entry!;
   const fields = state.model!.document.fields;
   // The auto-slug source is the field the spec names, not whatever happens to
   // be first: a `text` field keyed `title`.
   const titleField = fields.find((field) => field.kind === "text" && field.key === "title") ?? null;
+
+  // The host rebuilds `run` every render; the effect below reaches it through a
+  // ref so its dependency list stays a statement about the Entry, not the host.
+  const runRef = useRef(run);
+  runRef.current = run;
 
   const [autoSlug, setAutoSlug] = useState<Readonly<Record<string, boolean>>>({});
   const lastEntryId = useRef<string | null>(null);
@@ -264,17 +272,19 @@ export function ContentEntryAuthor({ state, controller }: ContentEntryAuthorProp
     // Auto-derivation starts on for a slug this Entry has not filled in — which
     // is every slug of a new Entry, and none of an Entry that already has one.
     setAutoSlug(Object.fromEntries(
-      fields.filter((field) => field.kind === "slug").map((field) => [field.id, titleField !== null && text(entry.values[field.id]) === ""]),
+      fields.filter((field) => field.kind === "slug").map((field) => [field.id, titleField !== null && asText(entry.values[field.id]) === ""]),
     ));
   }
 
-  const titleText = titleField ? text(entry.values[titleField.id]) : "";
+  const titleText = titleField ? asText(entry.values[titleField.id]) : "";
   useEffect(() => {
     if (titleField === null) return;
+    const derived = deriveSlug(titleText);
     for (const field of fields) {
       if (field.kind !== "slug" || !autoSlug[field.id]) continue;
-      const derived = deriveSlug(titleText);
-      if (derived !== text(entry.values[field.id])) controller.updateEntryValue(field.id, derived);
+      // The only write here that no keystroke asked for, so it goes through the
+      // route's reporter rather than throwing out of an effect.
+      if (derived !== asText(entry.values[field.id])) runRef.current(() => controller.updateEntryValue(field.id, derived));
     }
     // The write lands back here as a fresh Entry, so the guard above — not the
     // dependency list — is what stops this from looping.
@@ -292,14 +302,14 @@ export function ContentEntryAuthor({ state, controller }: ContentEntryAuthorProp
         // control already carries (a number announces as a spinbutton, a date as
         // a date), so it is marked decorative and the name stays the label.
         const kind = <span aria-hidden="true"><KindIcon size="xs" />{kindLabel}</span>;
-        const commit = (next: ContentEntryRecord["values"][string] | undefined) => controller.updateEntryValue(field.id, next);
+        const commit = (next: ContentEntryRecord["values"][string] | undefined) => run(() => controller.updateEntryValue(field.id, next));
 
         if (field.kind === "markdown") {
           return (
             <MarkdownEditor
               key={field.id}
               identity={`${entry.id}/${field.id}`}
-              value={text(value)}
+              value={asText(value)}
               label={field.label}
               required={field.required}
               onChange={commit}
@@ -324,7 +334,7 @@ export function ContentEntryAuthor({ state, controller }: ContentEntryAuthorProp
         if (field.kind === "long-text") {
           return (
             <Field key={field.id} controlId={controlId} label={field.label} required={field.required} kind={kind}>
-              <Textarea rows={6} value={text(value)} onInput={(event) => commit(event.currentTarget.value)} />
+              <Textarea rows={6} value={asText(value)} onInput={(event) => commit(event.currentTarget.value)} />
             </Field>
           );
         }
@@ -336,7 +346,7 @@ export function ContentEntryAuthor({ state, controller }: ContentEntryAuthorProp
               <div class="sg-content-slug">
                 <Input
                   class="sg-content-mono"
-                  value={text(value)}
+                  value={asText(value)}
                   onInput={(event) => {
                     // Typing the slug by hand is what retires the derivation —
                     // both in the same handler, so the effect below sees the
@@ -363,7 +373,7 @@ export function ContentEntryAuthor({ state, controller }: ContentEntryAuthorProp
             <Field key={field.id} controlId={controlId} label={field.label} required={field.required} kind={kind}>
               <Input
                 type="number"
-                value={text(value)}
+                value={asText(value)}
                 onInput={(event) => {
                   const numeric = event.currentTarget.valueAsNumber;
                   commit(event.currentTarget.value === "" || !Number.isFinite(numeric) ? undefined : numeric);
@@ -378,7 +388,7 @@ export function ContentEntryAuthor({ state, controller }: ContentEntryAuthorProp
             <Input
               type={field.kind === "date" ? "date" : field.kind === "color" ? "color" : field.kind === "url" ? "url" : "text"}
               class={field.kind === "url" ? "sg-content-mono" : undefined}
-              value={text(value)}
+              value={asText(value)}
               onInput={(event) => commit(event.currentTarget.value)}
             />
           </Field>

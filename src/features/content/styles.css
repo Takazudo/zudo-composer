@@ -98,12 +98,14 @@
 /* ---------------------------------------------------------------------------
  * Schema fields: one compact table row per field.
  * ------------------------------------------------------------------------ */
-.sg-content-schema-table { min-width: 0; }
 .sg-content-cell { display: grid; gap: var(--spacing-vsp-3xs); min-width: 9rem; padding-block: var(--spacing-vsp-3xs); white-space: normal; }
 .sg-content-cell__error { display: flex; align-items: start; gap: var(--spacing-hsp-xs); margin: 0; color: var(--color-danger); font-size: var(--text-xs); line-height: var(--leading-normal); }
 .sg-content-cell__error svg { flex: 0 0 auto; margin-block-start: 2px; }
 
 .sg-content-kind-trigger { max-width: 100%; }
+/* A locked type still opens its popover — that is where the reason is — but it
+ * wears the filled, bordered shape of a badge so the row says so first. */
+.sg-content-kind-trigger[data-locked] { border-color: var(--color-border); background: var(--color-surface-2); }
 .sg-content-kind-trigger__caret { color: var(--color-muted); }
 .sg-content-kind-menu { width: 18rem; }
 .sg-content-kind-option { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--sg-content-space-inline); min-width: 0; padding-block: var(--spacing-vsp-3xs); white-space: normal; }

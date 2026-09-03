@@ -175,10 +175,9 @@ export function MarkdownEditor({
   const observedTheme = useResolvedTheme();
   const theme = suppliedTheme ?? observedTheme;
   const uid = useId();
-  const labelId = `sg-content-markdown-label-${uid}`;
   // Just the label, the way every `Field` in this form names its control: the
   // kind hint beside it is a visual aid, not part of the control's name.
-  const labelledBy = labelId;
+  const labelId = `sg-content-markdown-label-${uid}`;
   const mountRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<MarkdownEditorController | null>(null);
   const callbackRef = useRef(onChange);
@@ -191,7 +190,7 @@ export function MarkdownEditor({
     const controller = createMarkdownEditor({
       parent,
       value,
-      labelledBy,
+      labelledBy: labelId,
       required,
       theme,
       onChange: (next) => callbackRef.current(next),
@@ -205,7 +204,7 @@ export function MarkdownEditor({
     // value, callback, and theme updates flow through the refs/effects below.
     // `required` joins them because it is a static content attribute — and it
     // can only change in Schema mode, which closes the Entry this editor is on.
-  }, [identity, labelledBy, required]);
+  }, [identity, labelId, required]);
 
   useEffect(() => controllerRef.current?.setValue(value), [identity, value]);
   useEffect(() => controllerRef.current?.setTheme(theme), [identity, theme]);
