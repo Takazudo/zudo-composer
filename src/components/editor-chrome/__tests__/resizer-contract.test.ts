@@ -17,8 +17,8 @@ import {
   railStorageKey,
   readEditorCollapsed,
   readEditorWidths,
-  setPersistedCollapsed,
   setPersistedWidth,
+  writeEditorCollapsed,
 } from "../resizer-contract";
 
 beforeEach(() => {
@@ -125,7 +125,7 @@ describe("readEditorWidths", () => {
   });
 });
 
-describe("readEditorCollapsed / setPersistedCollapsed", () => {
+describe("readEditorCollapsed / writeEditorCollapsed", () => {
   it("keys the collapse state per editor and per rail, beside the widths", () => {
     expect(railCollapsedStorageKey("composer", "nav")).toBe("zudo-composer:editor:composer:nav-collapsed");
     expect(railCollapsedStorageKey("sitemapper", "insp")).toBe("zudo-composer:editor:sitemapper:insp-collapsed");
@@ -136,8 +136,8 @@ describe("readEditorCollapsed / setPersistedCollapsed", () => {
   });
 
   it("restores each editor's own collapse state", () => {
-    setPersistedCollapsed(railCollapsedStorageKey("composer", "nav"), true);
-    setPersistedCollapsed(railCollapsedStorageKey("sitemapper", "insp"), true);
+    writeEditorCollapsed("composer", "nav", true);
+    writeEditorCollapsed("sitemapper", "insp", true);
 
     expect(readEditorCollapsed("composer")).toEqual({ nav: true, insp: false });
     expect(readEditorCollapsed("sitemapper")).toEqual({ nav: false, insp: true });
@@ -157,7 +157,7 @@ describe("readEditorCollapsed / setPersistedCollapsed", () => {
       throw new Error("blocked");
     });
 
-    expect(() => setPersistedCollapsed(railCollapsedStorageKey("composer", "nav"), true)).not.toThrow();
+    expect(() => writeEditorCollapsed("composer", "nav", true)).not.toThrow();
     expect(readEditorCollapsed("composer")).toEqual({ nav: false, insp: false });
 
     getSpy.mockRestore();

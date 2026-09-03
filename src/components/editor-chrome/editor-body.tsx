@@ -10,10 +10,9 @@ import {
   CSS_VAR_NAV_W,
   MAX_RAIL_W,
   MIN_RAIL_W,
-  railCollapsedStorageKey,
   readEditorCollapsed,
   readEditorWidths,
-  setPersistedCollapsed,
+  writeEditorCollapsed,
 } from "./resizer-contract";
 import type { EditorRail, EditorRailWidths } from "./resizer-contract";
 import { installRailResizer } from "./resizer-dom";
@@ -167,7 +166,7 @@ export function EditorBody({
       () => {
         if (controlled === undefined) {
           setCollapse((current) => ({ ...current, [rail]: !collapsed }));
-          setPersistedCollapsed(railCollapsedStorageKey(editorKey, rail), !collapsed);
+          writeEditorCollapsed(editorKey, rail, !collapsed);
         }
         onChange?.(!collapsed);
       },

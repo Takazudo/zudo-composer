@@ -13,10 +13,9 @@ import {
   MAX_RAIL_W,
   MIN_RAIL_W,
   RAIL_STEP_W,
-  railCollapsedStorageKey,
   railStorageKey,
   readEditorCollapsed,
-  setPersistedCollapsed,
+  writeEditorCollapsed,
 } from "../resizer-contract";
 
 const EDITOR_KEY = "composer";
@@ -246,7 +245,7 @@ describe("EditorBody collapse", () => {
   });
 
   it("restores a rail again, so the collapse is remembered in both directions", () => {
-    setPersistedCollapsed(railCollapsedStorageKey(EDITOR_KEY, "nav"), true);
+    writeEditorCollapsed(EDITOR_KEY, "nav", true);
     const first = render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "Show Structure" }));
     expect(readEditorCollapsed(EDITOR_KEY).nav).toBe(false);
@@ -266,7 +265,7 @@ describe("EditorBody collapse", () => {
   });
 
   it("re-reads the collapse state when the editor identity changes", () => {
-    setPersistedCollapsed(railCollapsedStorageKey("mapping", "insp"), true);
+    writeEditorCollapsed("mapping", "insp", true);
     const { rerender } = render(<Harness />);
     expect(body()).not.toHaveClass("insp-collapsed");
 

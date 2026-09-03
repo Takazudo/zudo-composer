@@ -16,17 +16,13 @@
 
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-
-const ROUTES = ["/", "/sitemapper", "/composer"] as const;
-
-/** The heading each route is finished rendering by, so nothing is measured early. */
-const ROUTE_HEADINGS: Record<(typeof ROUTES)[number], string> = {
-  "/": "Build structures, not documents.",
-  "/sitemapper": "Sitemaps",
-  "/composer": "Composition library",
-};
-
-const SAMPLE_SITEMAP = "Sample Studio sitemap";
+import {
+  expectNoHorizontalOverflow,
+  gotoRoute,
+  ROUTES,
+  SAMPLE_SITEMAP,
+  watchRuntimeFailures,
+} from "./foundations-probe";
 
 /**
  * Shell-only paths. In the dev lane every module and stylesheet keeps its
@@ -43,41 +39,8 @@ const SHELL_MODULES = [
   "/src/components/outline-tree",
 ] as const;
 
-function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => {
-    const errorText = request.failure()?.errorText;
-    if (errorText === "net::ERR_ABORTED") return;
-    failures.push(`request: ${request.url()} (${errorText})`);
-  });
-  return failures;
-}
-
-/**
- * A horizontal-overflow failure that names the elements sticking out, rather
- * than a bare `false`: the culprit is what the next person needs.
- */
-async function expectNoHorizontalOverflow(page: Page, label: string) {
-  const overflow = await page.evaluate(() => {
-    const root = document.documentElement;
-    if (root.scrollWidth <= root.clientWidth) return null;
-    const limit = root.clientWidth;
-    const culprits = [...document.querySelectorAll<HTMLElement>("body *")]
-      .filter((element) => Math.round(element.getBoundingClientRect().right) > limit + 1)
-      .slice(0, 6)
-      .map((element) => `${element.tagName.toLowerCase()}${[...element.classList].map((name) => `.${name}`).join("")}`);
-    return { scrollWidth: root.scrollWidth, clientWidth: limit, culprits };
-  });
-  expect(overflow, `${label} scrolls horizontally`).toBeNull();
-}
-
 async function openSampleSitemap(page: Page): Promise<void> {
-  await page.goto("/sitemapper");
-  await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: 30_000 });
+  await gotoRoute(page, "/sitemapper");
   await page.getByRole("link", { name: SAMPLE_SITEMAP, exact: true }).click();
   await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(SAMPLE_SITEMAP);
@@ -120,8 +83,7 @@ test("every CMS route loads clean and never scrolls sideways", async ({ page }) 
     for (const route of ROUTES) {
       const label = `${route} at ${size.width}x${size.height}`;
       failures.length = 0;
-      await page.goto(route);
-      await expect(page.getByRole("heading", { name: ROUTE_HEADINGS[route], exact: true })).toBeVisible({ timeout: 30_000 });
+      await gotoRoute(page, route);
       await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
       await expectNoHorizontalOverflow(page, label);
       expect(failures, label).toEqual([]);
@@ -146,6 +108,7 @@ test("the editor remembers its rail widths and collapse across a reload", async 
   for (let step = 0; step < 4; step += 1) await page.keyboard.press("ArrowRight");
 
   const widened = await readRailGeometry(page);
+  expect(widened.navWidth).not.toBeNull();
   const widenedNav = Number.parseFloat(widened.navVar);
   expect(widenedNav).toBeGreaterThan(Number.parseFloat(start.navVar));
   await expect(navResizer).toHaveAttribute("aria-valuenow", String(Math.round(widenedNav)));
@@ -179,8 +142,7 @@ test("the editor remembers its rail widths and collapse across a reload", async 
 test("a row menu opens outside the library table's scrollport, unclipped", async ({ page }) => {
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/sitemapper");
-  await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: 30_000 });
+  await gotoRoute(page, "/sitemapper");
 
   // The wrapper is the sticky header's scrollport, so it clips its content
   // whether or not the table currently overflows. If that ever stops being
@@ -242,8 +204,7 @@ test("a row menu opens outside the library table's scrollport, unclipped", async
 test("focus returns to the trigger when a menu or a dialog closes", async ({ page }) => {
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/sitemapper");
-  await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: 30_000 });
+  await gotoRoute(page, "/sitemapper");
 
   const newSitemap = page.getByRole("button", { name: "New sitemap" });
   await newSitemap.click();

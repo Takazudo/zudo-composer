@@ -56,8 +56,8 @@ export {
   railStorageKey,
   readEditorCollapsed,
   readEditorWidths,
-  setPersistedCollapsed,
   setPersistedWidth,
+  writeEditorCollapsed,
 } from "./resizer-contract";
 export type {
   EditorRail,

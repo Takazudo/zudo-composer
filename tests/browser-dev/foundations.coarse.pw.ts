@@ -14,16 +14,13 @@
 
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-
-const ROUTES = ["/", "/sitemapper", "/composer"] as const;
-
-const ROUTE_HEADINGS: Record<(typeof ROUTES)[number], string> = {
-  "/": "Build structures, not documents.",
-  "/sitemapper": "Sitemaps",
-  "/composer": "Composition library",
-};
-
-const SAMPLE_SITEMAP = "Sample Studio sitemap";
+import {
+  expectNoHorizontalOverflow,
+  gotoRoute,
+  ROUTES,
+  SAMPLE_SITEMAP,
+  watchRuntimeFailures,
+} from "./foundations-probe";
 
 /**
  * Every control the coarse stylesheet blocks promise 44px to — the rail and
@@ -53,34 +50,6 @@ const TOUCH_TARGETS = [
 const SQUARE_TARGETS = [".cms-btn--icon", ".cms-dialog__close", ".cms-tree-toggle"];
 
 const MIN_TARGET = 44;
-
-function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => {
-    const errorText = request.failure()?.errorText;
-    if (errorText === "net::ERR_ABORTED") return;
-    failures.push(`request: ${request.url()} (${errorText})`);
-  });
-  return failures;
-}
-
-async function expectNoHorizontalOverflow(page: Page, label: string) {
-  const overflow = await page.evaluate(() => {
-    const root = document.documentElement;
-    if (root.scrollWidth <= root.clientWidth) return null;
-    const limit = root.clientWidth;
-    const culprits = [...document.querySelectorAll<HTMLElement>("body *")]
-      .filter((element) => Math.round(element.getBoundingClientRect().right) > limit + 1)
-      .slice(0, 6)
-      .map((element) => `${element.tagName.toLowerCase()}${[...element.classList].map((name) => `.${name}`).join("")}`);
-    return { scrollWidth: root.scrollWidth, clientWidth: limit, culprits };
-  });
-  expect(overflow, `${label} scrolls horizontally`).toBeNull();
-}
 
 interface TargetAudit {
   counted: number;
@@ -119,8 +88,7 @@ async function auditTouchTargets(page: Page): Promise<TargetAudit> {
 }
 
 test("the coarse lane is genuinely coarse, or nothing below proves anything", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: ROUTE_HEADINGS["/"], exact: true })).toBeVisible({ timeout: 30_000 });
+  await gotoRoute(page, "/");
   expect(
     await page.evaluate(() => ({
       coarse: window.matchMedia("(pointer: coarse)").matches,
@@ -136,8 +104,7 @@ test("no CMS route scrolls sideways on a 390px touch screen", async ({ page }) =
   const failures = watchRuntimeFailures(page);
   for (const route of ROUTES) {
     failures.length = 0;
-    await page.goto(route);
-    await expect(page.getByRole("heading", { name: ROUTE_HEADINGS[route], exact: true })).toBeVisible({ timeout: 30_000 });
+    await gotoRoute(page, route);
     await expectNoHorizontalOverflow(page, route);
     expect(failures, route).toEqual([]);
   }
@@ -147,16 +114,14 @@ test("every control the coarse stylesheet promises 44px to gets it", async ({ pa
   test.setTimeout(120_000);
   const failures = watchRuntimeFailures(page);
 
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: ROUTE_HEADINGS["/"], exact: true })).toBeVisible({ timeout: 30_000 });
+  await gotoRoute(page, "/");
   const dashboard = await auditTouchTargets(page);
   expect(dashboard.undersized, "dashboard touch targets").toEqual([]);
   // The rail alone contributes seven links, so a probe that found almost
   // nothing means the selectors have drifted, not that the screen is clean.
   expect(dashboard.counted).toBeGreaterThan(7);
 
-  await page.goto("/sitemapper");
-  await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: 30_000 });
+  await gotoRoute(page, "/sitemapper");
   expect((await auditTouchTargets(page)).undersized, "sitemap library touch targets").toEqual([]);
 
   // The library's row menu and the create dialog are only in the DOM while

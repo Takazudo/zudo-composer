@@ -78,48 +78,6 @@ export function setPersistedWidth(storageKey: string, px: number): void {
   }
 }
 
-/** Per-editor, per-rail collapse key, stored beside that rail's width. */
-export function railCollapsedStorageKey(editorKey: string, rail: EditorRail): string {
-  return `zudo-composer:editor:${editorKey}:${rail}-collapsed`;
-}
-
-/** Only the exact marker collapses a rail; anything else reads as open. */
-function getPersistedCollapsed(storageKey: string): boolean {
-  try {
-    return localStorage.getItem(storageKey) === COLLAPSED_MARKER;
-  } catch {
-    return false;
-  }
-}
-
-export function setPersistedCollapsed(storageKey: string, collapsed: boolean): void {
-  try {
-    localStorage.setItem(storageKey, collapsed ? COLLAPSED_MARKER : OPEN_MARKER);
-  } catch {
-    /* private mode / disabled storage */
-  }
-}
-
-const COLLAPSED_MARKER = "collapsed";
-const OPEN_MARKER = "open";
-
-export interface EditorRailCollapse {
-  nav: boolean;
-  insp: boolean;
-}
-
-/**
- * The persisted collapse state for one editor. A rail an author put away stays
- * away across a reload, the same promise its width already made — reaching for
- * the same control twice after every refresh is the bug this closes.
- */
-export function readEditorCollapsed(editorKey: string): EditorRailCollapse {
-  return {
-    nav: getPersistedCollapsed(railCollapsedStorageKey(editorKey, "nav")),
-    insp: getPersistedCollapsed(railCollapsedStorageKey(editorKey, "insp")),
-  };
-}
-
 /**
  * The joint clamp: the most a rail may grow to, given how much width the OTHER
  * rail currently occupies, so the main column never shrinks below `MIN_MAIN_W`
@@ -158,4 +116,47 @@ export function readEditorWidths(editorKey: string, options: ReadEditorWidthsOpt
   nav = clampRailWidth(nav, insp, viewportWidth);
   insp = clampRailWidth(insp, nav, viewportWidth);
   return { nav, insp };
+}
+
+/* --------------------------------------------------------------------------
+ * Rail collapse
+ *
+ * The other half of an editor's geometry, kept here for the same reason the
+ * widths are: a rail an author put away stays away across a reload, and both
+ * halves answer to one `editorKey`.
+ * -------------------------------------------------------------------------- */
+
+/** Only the exact marker collapses a rail; anything else reads as open. */
+const COLLAPSED_MARKER = "collapsed";
+const OPEN_MARKER = "open";
+
+export interface EditorRailCollapse {
+  nav: boolean;
+  insp: boolean;
+}
+
+/** Per-editor, per-rail collapse key, stored beside that rail's width. */
+export function railCollapsedStorageKey(editorKey: string, rail: EditorRail): string {
+  return `zudo-composer:editor:${editorKey}:${rail}-collapsed`;
+}
+
+/** Persist one rail's collapse, never throwing — the pane still hides either way. */
+export function writeEditorCollapsed(editorKey: string, rail: EditorRail, collapsed: boolean): void {
+  try {
+    localStorage.setItem(railCollapsedStorageKey(editorKey, rail), collapsed ? COLLAPSED_MARKER : OPEN_MARKER);
+  } catch {
+    /* private mode / disabled storage */
+  }
+}
+
+/** Both rails' persisted collapse; unreadable storage degrades to both open. */
+export function readEditorCollapsed(editorKey: string): EditorRailCollapse {
+  const read = (rail: EditorRail): boolean => {
+    try {
+      return localStorage.getItem(railCollapsedStorageKey(editorKey, rail)) === COLLAPSED_MARKER;
+    } catch {
+      return false;
+    }
+  };
+  return { nav: read("nav"), insp: read("insp") };
 }
