@@ -192,14 +192,16 @@ export function ReuseControls({
 
   const isGlobalTemplate = publication?.kind === "global-template";
   const patternReason = readOnly ? "Reuse actions are unavailable in preview." : patternDisabledReason(document);
+  // Ordered by what an author most needs to know: a document-level conflict
+  // outranks a missing capability, which outranks "you have not picked a slot".
   const outletReason = readOnly
     ? "Reuse actions are unavailable in preview."
-    : !onSetGlobalTemplateOutlet
-      ? "This editor cannot change the outlet."
-      : document.binding !== undefined
-        ? "A bound composition cannot publish an outlet of its own."
-        : publication?.kind === "pattern"
-          ? "This composition is a Pattern. Unpublish it before choosing an outlet."
+    : document.binding !== undefined
+      ? "A bound composition cannot publish an outlet of its own."
+      : publication?.kind === "pattern"
+        ? "This composition is a Pattern. Unpublish it before choosing an outlet."
+        : !onSetGlobalTemplateOutlet
+          ? "This editor cannot change the outlet."
           : selectedSlot === null
             ? "Select a slot in Structure first."
             : !selectedSlot.empty

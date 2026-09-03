@@ -107,7 +107,6 @@ function renderInspector(props: JsonObject = { actions: [{ label: "Get started",
       mode="edit"
       onUpdateProps={onUpdateProps}
       onUpdatePropsDebounced={onUpdatePropsDebounced}
-      onReorder={() => undefined}
       onRemove={() => undefined}
     />,
   );
@@ -163,7 +162,7 @@ describe("recursive contract-v2 inspector fields", () => {
 
   it("keeps invalid values blocked but exposes declared fields as an accessible recovery path", () => {
     const { onUpdateProps } = renderInspector({ actions: [{ label: "A", href: "#", variant: "tertiary" }], settings: { enabled: true }, layout: ["row", 2] });
-    expect(screen.getByText(/invalid properties/i, { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText("This component has invalid properties.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "A" }));
     const variant = screen.getByLabelText("Variant");
     expect(variant).toHaveAttribute("aria-invalid", "true");

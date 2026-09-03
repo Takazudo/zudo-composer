@@ -214,16 +214,11 @@ export function InspectorPanel({
   // paint, so a tab that no longer exists for the new selection would be shown
   // for a frame before it moved.
   const tabs: PaneTab<InspectorTab>[] = [
-    { id: "props", label: "Properties", disabled: node === undefined },
+    { id: "props", label: "Properties" },
     { id: "slots", label: "Slots", count: slotIds.length, disabled: slotIds.length === 0 },
     { id: "reuse", label: "Reuse" },
   ];
-  const activeTab: InspectorTab =
-    requestedTab === "slots" && slotIds.length === 0
-      ? "props"
-      : requestedTab === "props" && node === undefined
-        ? "reuse"
-        : requestedTab;
+  const activeTab: InspectorTab = requestedTab === "slots" && slotIds.length === 0 ? "props" : requestedTab;
 
   if (!node || !location) {
     return (

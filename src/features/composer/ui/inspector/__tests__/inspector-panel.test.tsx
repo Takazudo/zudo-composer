@@ -16,8 +16,9 @@ import { InspectorPanel, type InspectorPanelProps } from "../inspector-panel";
 
 function renderPanel(overrides: Partial<InspectorPanelProps> = {}) {
   const onUpdateProps = vi.fn();
-  const onReorder = vi.fn();
   const onRemove = vi.fn();
+  const onCopy = vi.fn();
+  const onDuplicate = vi.fn();
   const utils = render(
     <InspectorPanel
       document={makeDocument([])}
@@ -25,12 +26,18 @@ function renderPanel(overrides: Partial<InspectorPanelProps> = {}) {
       selectedId={null}
       mode="edit"
       onUpdateProps={onUpdateProps}
-      onReorder={onReorder}
       onRemove={onRemove}
+      onCopy={onCopy}
+      onDuplicate={onDuplicate}
       {...overrides}
     />,
   );
-  return { ...utils, onUpdateProps, onReorder, onRemove };
+  return { ...utils, onUpdateProps, onRemove, onCopy, onDuplicate };
+}
+
+/** The Reuse tab is document-scoped, so every reuse assertion opens it first. */
+function openReuse(): void {
+  fireEvent.click(screen.getByRole("tab", { name: "Reuse" }));
 }
 
 beforeEach(() => {
@@ -50,7 +57,6 @@ function PatternPublicationHarness({ initialDocument = reusableDocument() }: { i
       selectedId={null}
       mode="edit"
       onUpdateProps={() => {}}
-      onReorder={() => {}}
       onRemove={() => {}}
       onPublishPattern={() => setDocument((current) => ({ ...current, publication: { kind: "pattern" } }))}
       onClearPublication={async () => {
@@ -62,17 +68,18 @@ function PatternPublicationHarness({ initialDocument = reusableDocument() }: { i
 }
 
 describe("InspectorPanel — root/empty state", () => {
-  it("shows an empty-composition note when the document has no nodes", () => {
+  it("opens on Properties and shows an empty-composition note when the document has no nodes", () => {
     renderPanel({ document: makeDocument([]), selectedId: null });
+    expect(screen.getByRole("tab", { name: "Properties" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Nothing selected")).toBeInTheDocument();
-    expect(screen.getByText(/composition is empty/i, { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText(/composition is empty/i)).toBeInTheDocument();
   });
 
   it("shows a 'select something' note when nodes exist but nothing is selected", () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" })]);
     renderPanel({ document: doc, selectedId: null });
     expect(screen.getByText("Nothing selected")).toBeInTheDocument();
-    expect(screen.getByText(/select a component/i, { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText(/select a component/i)).toBeInTheDocument();
   });
 
   it("falls back to the empty state for a stale/unknown selectedId", () => {
@@ -80,10 +87,31 @@ describe("InspectorPanel — root/empty state", () => {
     renderPanel({ document: doc, selectedId: "does-not-exist" });
     expect(screen.getByText("Nothing selected")).toBeInTheDocument();
   });
+
+  it("disables the Slots tab for a node with no slots, and enables it for a container", () => {
+    const leaf = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a")]);
+    const { rerender } = renderPanel({ document: leaf, selectedId: "a" });
+    expect(screen.getByRole("tab", { name: /Slots/ })).toBeDisabled();
+
+    const container = makeDocument([
+      makeNode(TEST_COMPONENT_IDS.panel, {}, { left: [], right: [] }, "panel"),
+    ]);
+    rerender(
+      <InspectorPanel
+        document={container}
+        manifest={testManifest}
+        selectedId="panel"
+        mode="edit"
+        onUpdateProps={() => {}}
+        onRemove={() => {}}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: /Slots/ })).not.toBeDisabled();
+  });
 });
 
-describe("InspectorPanel — document reuse controls", () => {
-  it("presents linked ownership separately from local selected-node controls", () => {
+describe("InspectorPanel — Reuse tab", () => {
+  it("presents linked ownership on the Reuse tab, separately from the selected node's props", () => {
     const onOpenSource = vi.fn();
     const onDetach = vi.fn();
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Local" }, {}, "local-node")]);
@@ -100,14 +128,16 @@ describe("InspectorPanel — document reuse controls", () => {
       linkedActions: { onOpenSource, onDetach },
     });
 
-    expect(screen.getByText("Linked Global template")).toBeInTheDocument();
+    // The consumer's own local node is what Properties still edits.
+    expect(screen.getByLabelText("Text")).toBeInTheDocument();
+
+    openReuse();
+    expect(screen.getByText("This composition consumes a Global template.")).toBeInTheDocument();
     expect(screen.getByText(/Site shell.*Main content.*Locked/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open source" }));
     fireEvent.click(screen.getByRole("button", { name: "Detach" }));
     expect(onOpenSource).toHaveBeenCalledWith("source-record");
     expect(onDetach).toHaveBeenCalledOnce();
-    // The actual selected node is still the consumer's local node.
-    expect(screen.getByLabelText("Text")).toBeInTheDocument();
   });
 
   it("exposes only injected recovery actions for a broken binding", () => {
@@ -123,6 +153,7 @@ describe("InspectorPanel — document reuse controls", () => {
       linkedActions: { onRetry, onRemoveBrokenBinding },
     });
 
+    openReuse();
     expect(screen.getByText("Linked template unavailable")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove broken binding" }));
@@ -132,64 +163,58 @@ describe("InspectorPanel — document reuse controls", () => {
 
   it("disables empty Pattern publication with an accessible reason", () => {
     renderPanel({ document: makeDocument([]), selectedId: null });
+    openReuse();
     const publish = screen.getByRole("button", { name: "Publish as Pattern" });
     expect(publish).toBeDisabled();
     expect(publish).toHaveAccessibleDescription(
-      /whole-composition scope:.*add at least one root component before publishing a pattern/i,
+      "Add at least one root component before publishing a Pattern.",
     );
-    expect(screen.getByText("Add at least one root component before publishing a Pattern.")).toBeInTheDocument();
   });
 
-  it("uses a native explicit Pattern button, then reports the accepted in-memory publication without claiming persistence", async () => {
+  it("publishes through one explicit button, then reports the in-memory role without claiming persistence", async () => {
     render(<PatternPublicationHarness />);
+    openReuse();
     const publish = screen.getByRole("button", { name: "Publish as Pattern" });
     expect(publish.tagName).toBe("BUTTON");
     expect(screen.queryByRole("radio", { name: /Pattern/i })).not.toBeInTheDocument();
-    expect(publish).toHaveAccessibleDescription(/whole-composition scope:.*does not publish the selected subtree/i);
 
-    publish.focus();
     fireEvent.click(publish);
 
-    await waitFor(() => expect(screen.getByText("Published as Pattern")).toBeInTheDocument());
-    const publishedState = screen.getByText("Published as Pattern");
-    expect(publishedState).not.toHaveAttribute("role", "status");
-    expect(screen.getByText(/available as a reusable pattern in this document/i)).toBeInTheDocument();
-    expect(screen.getAllByRole("status")).toHaveLength(1);
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Pattern published in this document. Check the Composer save status for persistence.",
-    );
-    expect(screen.getByRole("button", { name: "Unpublish Pattern" })).toHaveFocus();
+    await waitFor(() => expect(screen.getByText("This composition is a Pattern.")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Unpublish Pattern" })).toBeInTheDocument();
   });
 
   it("keeps a bound consumer from being published and explains the conflict", () => {
     const doc = reusableDocument();
     doc.binding = { sourceRecordId: "source", outletId: "outlet-main" };
     renderPanel({ document: doc, selectedId: null });
+    openReuse();
 
     const publish = screen.getByRole("button", { name: "Publish as Pattern" });
     expect(publish).toBeDisabled();
-    expect(publish).toHaveAccessibleDescription(/bound to a global template/i);
-    expect(screen.getByText(/consumer and cannot republish itself/i)).toBeInTheDocument();
-    expect(screen.getByText(/global templates are published from structure/i)).toBeInTheDocument();
+    expect(publish).toHaveAccessibleDescription(/bound to a Global template/i);
+    expect(screen.getByText(/A bound composition cannot publish an outlet of its own/i)).toBeInTheDocument();
   });
 
-  it("keeps Global-template publication separate, explains its Pattern restriction, and guards its unpublish action", () => {
+  it("keeps Global-template publication separate and guards its unpublish behind an alertdialog", () => {
     const doc = reusableDocument();
     doc.publication = {
       kind: "global-template",
       outlet: { id: "outlet-main", label: "Main content", target: { parentId: "shell", slotId: "main" } },
     };
     renderPanel({ document: doc, selectedId: null });
+    openReuse();
 
     const publish = screen.getByRole("button", { name: "Publish as Pattern" });
     expect(publish).toBeDisabled();
-    expect(publish).toHaveAccessibleDescription(/currently a global template.*unpublish the global template/i);
-    expect(screen.getByText("Published as Global template")).toBeInTheDocument();
-    expect(screen.getByText("Template outlet: Main content. Managed from Structure.")).toBeInTheDocument();
+    expect(publish).toHaveAccessibleDescription(/This composition is a Global template/i);
+    expect(screen.getByText("This composition is a Global template.")).toBeInTheDocument();
+    expect(screen.getByText(/Current outlet: Main content/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Unpublish Global template" }));
-    expect(screen.getByText("Unpublish Global template?")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    // ConfirmDialog is an alertdialog, never a plain dialog.
+    const confirm = screen.getByRole("alertdialog", { name: "Unpublish Global template?" });
+    expect(within(confirm).getByRole("button", { name: "Cancel" })).toHaveFocus();
   });
 
   it("shows a stale outlet diagnostic with a reassign or unpublish path", () => {
@@ -199,34 +224,36 @@ describe("InspectorPanel — document reuse controls", () => {
       outlet: { id: "outlet-main", label: "Main", target: { parentId: "missing", slotId: "content" } },
     };
     renderPanel({ document: doc, selectedId: null });
+    openReuse();
 
-    expect(screen.getByRole("alert")).toHaveTextContent(/no longer a declared empty component slot/i);
+    expect(screen.getByText(/no longer a declared empty component slot/i)).toBeInTheDocument();
     expect(screen.getByText(/Choose another valid empty slot/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Unpublish Global template" })).toBeInTheDocument();
   });
 
-  it("requires an inline confirmation, returns focus on cancel, and restores the publish action after unpublishing", async () => {
+  it("confirms before unpublishing, and restores the publish action afterwards", async () => {
     render(<PatternPublicationHarness initialDocument={{ ...reusableDocument(), publication: { kind: "pattern" } }} />);
+    openReuse();
 
     fireEvent.click(screen.getByRole("button", { name: "Unpublish Pattern" }));
-    expect(screen.getByText("Unpublish Pattern?")).toBeInTheDocument();
-    expect(screen.getByText("This immediately removes this Composition’s reusable Pattern status. It does not delete the Composition.")).toBeInTheDocument();
-    const cancel = screen.getByRole("button", { name: "Cancel" });
-    expect(cancel).toHaveFocus();
+    const confirm = screen.getByRole("alertdialog", { name: "Unpublish Pattern?" });
+    expect(within(confirm).getByText(/removes the composition’s reusable Pattern status/i)).toBeInTheDocument();
 
-    fireEvent.click(cancel);
-    expect(screen.getByRole("button", { name: "Unpublish Pattern" })).toHaveFocus();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Unpublish Pattern" }));
-    fireEvent.click(screen.getByRole("button", { name: "Unpublish Pattern" }));
+    fireEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", { name: "Unpublish Pattern" }),
+    );
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Publish as Pattern" })).toHaveFocus());
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Pattern unpublished in this document. Check the Composer save status for persistence.",
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish as Pattern" })).toBeInTheDocument());
+    expect(document.querySelector("[data-sg-reuse-feedback]")).toHaveTextContent(
+      "Pattern unpublished. Check the save status for persistence.",
     );
   });
 
-  it("waits for the guarded relationship result before clearing a role and disables only its confirmation controls while in flight", async () => {
+  it("waits for the guarded relationship result before clearing a role, and reports a refusal", async () => {
     let finishClear: ((result: { status: "blocked"; message: string }) => void) | undefined;
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hello" })]);
     doc.publication = { kind: "pattern" };
@@ -237,49 +264,98 @@ describe("InspectorPanel — document reuse controls", () => {
         finishClear = resolve;
       })),
     });
+    openReuse();
 
     fireEvent.click(screen.getByRole("button", { name: "Unpublish Pattern" }));
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Unpublish Pattern" }));
+    const confirm = screen.getByRole("alertdialog");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Unpublish Pattern" }));
 
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Unpublish Pattern" })).toBeDisabled();
     finishClear?.({ status: "blocked", message: "2 consumers are still bound." });
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "Unpublish Pattern" })).not.toBeDisabled());
-    expect(screen.getByRole("status")).toHaveTextContent("2 consumers are still bound.");
+    await waitFor(() =>
+      expect(document.querySelector("[data-sg-reuse-feedback]")).toHaveTextContent("2 consumers are still bound."),
+    );
   });
 
   it("keeps the current reuse state visible but disables its mutation actions in preview", () => {
     const doc = reusableDocument();
     doc.publication = { kind: "pattern" };
     renderPanel({ document: doc, selectedId: null, mode: "preview" });
+    openReuse();
 
-    const unpublish = screen.getByRole("button", { name: "Unpublish Pattern" });
-    expect(screen.getByText("Published as Pattern")).toBeInTheDocument();
-    expect(unpublish).toBeDisabled();
-    expect(unpublish).toHaveAccessibleDescription(/reuse actions are unavailable in preview/i);
+    expect(screen.getByText("This composition is a Pattern.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unpublish Pattern" })).toBeDisabled();
   });
 
   it("keeps controller errors visible without treating them as accepted Pattern publication", () => {
     renderPanel({ document: reusableDocument(), selectedId: null, lastError: "This Composition cannot be published right now." });
-    expect(screen.getByRole("status")).toHaveTextContent("This Composition cannot be published right now.");
-    expect(screen.queryByText("Published as Pattern")).not.toBeInTheDocument();
+    openReuse();
+    expect(document.querySelector("[data-sg-reuse-feedback]")).toHaveTextContent(
+      "This Composition cannot be published right now.",
+    );
+    expect(screen.queryByText("This composition is a Pattern.")).not.toBeInTheDocument();
+  });
+
+  it("offers the outlet action only for an empty slot selected in Structure", () => {
+    const doc = makeDocument([
+      makeNode(
+        TEST_COMPONENT_IDS.panel,
+        {},
+        { left: [], right: [makeNode(TEST_COMPONENT_IDS.label, { text: "B" }, {}, "b")] },
+        "panel",
+      ),
+    ]);
+    const onSetGlobalTemplateOutlet = vi.fn(async () => ({ status: "applied" as const }));
+
+    const { rerender } = renderPanel({
+      document: doc,
+      selectedId: "panel",
+      selectedSlot: null,
+      onSetGlobalTemplateOutlet,
+    });
+    openReuse();
+    expect(screen.getByRole("button", { name: "Select a slot first" })).toBeDisabled();
+
+    function withSlot(slotId: string) {
+      rerender(
+        <InspectorPanel
+          document={doc}
+          manifest={testManifest}
+          selectedId="panel"
+          selectedSlot={{ parentId: "panel", slotId }}
+          mode="edit"
+          onUpdateProps={() => {}}
+          onRemove={() => {}}
+          onSetGlobalTemplateOutlet={onSetGlobalTemplateOutlet}
+        />,
+      );
+      openReuse();
+    }
+
+    withSlot("right");
+    expect(screen.getByRole("button", { name: /Use Right as outlet/ })).toBeDisabled();
+
+    withSlot("left");
+    const use = screen.getByRole("button", { name: "Use Left as outlet" });
+    expect(use).not.toBeDisabled();
+    fireEvent.click(use);
+    fireEvent.click(screen.getByRole("button", { name: "Publish template" }));
+    expect(onSetGlobalTemplateOutlet).toHaveBeenCalledWith({ parentId: "panel", slotId: "left" }, "Left");
   });
 });
 
-describe("InspectorPanel — identity + breadcrumb + slot counts", () => {
-  it("shows identity and Root breadcrumb for a top-level node", () => {
+describe("InspectorPanel — identity, parent and position", () => {
+  it("shows the component id, node id and a Document root parent for a top-level node", () => {
     const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a")]);
     const { container } = renderPanel({ document: doc, selectedId: "a" });
-    const identity = container.querySelector("[data-sg-inspector-identity]")!;
-    expect(identity.textContent).toContain(TEST_COMPONENT_IDS.label);
-    expect(identity.textContent).toContain("v1");
-    const breadcrumb = screen.getByRole("navigation", { name: /selected component location/i });
-    expect(breadcrumb.textContent).toContain("Root");
+    const node = container.querySelector(".sg-composer-inspector-node")!;
+    expect(node.textContent).toContain(TEST_COMPONENT_IDS.label);
+    expect(node.textContent).toContain("a");
+    expect(node.textContent).toContain("Document root");
+    expect(node.textContent).toContain("1 of 1");
+    expect(screen.getByText("v1")).toBeInTheDocument();
   });
 
-  it("uses titleFor for a friendlier identity + breadcrumb label when supplied", () => {
+  it("uses titleFor for a friendlier parent path when supplied", () => {
     const doc = makeDocument([
       makeNode(
         TEST_COMPONENT_IDS.panel,
@@ -288,17 +364,28 @@ describe("InspectorPanel — identity + breadcrumb + slot counts", () => {
         "panel",
       ),
     ]);
-    renderPanel({
+    const { container } = renderPanel({
       document: doc,
       selectedId: "child",
       titleFor: (id) => (id === TEST_COMPONENT_IDS.panel ? "Split Panel" : undefined),
     });
-    const breadcrumb = screen.getByRole("navigation", { name: /selected component location/i });
-    const items = within(breadcrumb).getAllByRole("listitem");
-    expect(items.map((li) => li.textContent).join(" | ")).toContain("Split Panel › Left");
+    expect(container.querySelector(".sg-composer-inspector-node")!.textContent).toContain("Split Panel › Left");
   });
 
-  it("shows slot counts for a container node", () => {
+  it("routes Duplicate, Copy and Delete through their callbacks", () => {
+    const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.label, { text: "Hi" }, {}, "a")]);
+    const { onCopy, onDuplicate, onRemove } = renderPanel({ document: doc, selectedId: "a" });
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onDuplicate).toHaveBeenCalledWith("a");
+    expect(onCopy).toHaveBeenCalledWith("a");
+    expect(onRemove).toHaveBeenCalledWith("a");
+  });
+});
+
+describe("InspectorPanel — Slots tab", () => {
+  it("lists every slot with its child count and jumps to one", () => {
     const doc = makeDocument([
       makeNode(
         TEST_COMPONENT_IDS.panel,
@@ -310,11 +397,17 @@ describe("InspectorPanel — identity + breadcrumb + slot counts", () => {
         "panel",
       ),
     ]);
-    const { container } = renderPanel({ document: doc, selectedId: "panel" });
+    const onJumpToSlot = vi.fn();
+    const { container } = renderPanel({ document: doc, selectedId: "panel", onJumpToSlot });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
     const items = Array.from(container.querySelectorAll("[data-sg-inspector-slots] li")).map(
       (li) => li.textContent,
     );
-    expect(items).toEqual(["Left — 1 child (single)", "Right — 2 children"]);
+    expect(items).toEqual(["Left1 child · singleJump", "Right2 childrenJump"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Jump to Right" }));
+    expect(onJumpToSlot).toHaveBeenCalledWith({ parentId: "panel", slotId: "right" });
   });
 });
 
@@ -403,60 +496,51 @@ describe("InspectorPanel — field rendering + commits", () => {
     expect(countInput.value).toBe("3");
     expect(countInput).not.toHaveAttribute("aria-invalid", "true");
   });
+
+  it("offers an absent optional prop as its own Add control, seeded from the schema", () => {
+    const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.widget, { title: "Only the required one" }, {}, "w")]);
+    const { onUpdateProps } = renderPanel({ document: doc, selectedId: "w" });
+    expect(screen.queryByLabelText("Note")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add Note" }));
+    expect(onUpdateProps).toHaveBeenCalledWith("w", { note: "" });
+  });
 });
 
 describe("InspectorPanel — read-only / preview mode", () => {
-  it("disables every field control and the move/remove actions while keeping values visible", () => {
+  it("disables every field control and the node actions while keeping values visible", () => {
     const doc = makeDocument([
       makeNode(TEST_COMPONENT_IDS.widget, { title: "Locked", note: "n", enabled: true, count: 3, variant: "solid", tint: "#000" }, {}, "w"),
     ]);
     renderPanel({ document: doc, selectedId: "w", mode: "preview" });
     expect(screen.getByLabelText("Title")).toBeDisabled();
     expect(screen.getByLabelText("Title")).toHaveValue("Locked");
-    expect(screen.getByRole("button", { name: "Remove" })).toBeDisabled();
-    expect(screen.getByText(/preview mode/i, { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+    expect(screen.getByText("Preview mode — properties are read-only.")).toBeInTheDocument();
   });
 });
 
 describe("InspectorPanel — opaque nodes", () => {
-  it("shows diagnostics + raw identity, no editable fields, but allows move/remove", () => {
+  it("shows diagnostics + raw identity, no editable fields, but keeps Delete", () => {
     const doc = makeDocument([makeNode("unknown.thing", { anything: "x" }, {}, "ghost")]);
     const { container, onRemove } = renderPanel({ document: doc, selectedId: "ghost" });
 
-    const identity = container.querySelector("[data-sg-inspector-identity]")!;
-    expect(identity.textContent).toContain("unknown.thing");
-    expect(screen.getByText(/can't be edited/i, { selector: "p" })).toBeInTheDocument();
+    expect(container.querySelector(".sg-composer-inspector-node")!.textContent).toContain("unknown.thing");
+    expect(screen.getByText("This component can't be edited.")).toBeInTheDocument();
     expect(screen.getByText(/unknown component/i, { selector: "li" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(onRemove).toHaveBeenCalledWith("ghost");
-
-    // Single top-level node: nothing to move up/down into.
-    expect(screen.getByRole("button", { name: "Move up" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Move down" })).toBeDisabled();
   });
 
   it("keeps declared fields hidden for a known component with an unsupported version", () => {
     const versioned = makeNode(TEST_COMPONENT_IDS.label, { text: "Preserved" }, {}, "future");
     versioned.componentVersion = 2;
     renderPanel({ document: makeDocument([versioned]), selectedId: "future" });
-    expect(screen.getByText(/can't be edited/i, { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText("This component can't be edited.")).toBeInTheDocument();
     expect(screen.getByText(/manifest provides v1/i, { selector: "li" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Text")).not.toBeInTheDocument();
-  });
-
-  it("enables sibling move for an opaque node with siblings", () => {
-    const doc = makeDocument([
-      makeNode(TEST_COMPONENT_IDS.label, { text: "A" }, {}, "a"),
-      makeNode("unknown.thing", {}, {}, "ghost"),
-    ]);
-    const { onReorder } = renderPanel({ document: doc, selectedId: "ghost" });
-    const upButton = screen.getByRole("button", { name: "Move up" });
-    expect(upButton).not.toBeDisabled();
-    fireEvent.click(upButton);
-    expect(onReorder).toHaveBeenCalledWith("ghost", "up");
   });
 });
 

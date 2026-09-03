@@ -530,7 +530,9 @@ function ScalarNumberEditor({
         step={step}
         disabled={disabled}
         aria-invalid={error !== null ? "true" : undefined}
-        aria-describedby={error !== null ? errorId : undefined}
+        // A labelled field is described by `Field`'s own error element; only the
+        // unlabelled case (a list item's scalar) needs its own wiring.
+        aria-describedby={label === undefined && error !== null ? errorId : undefined}
         onInput={(event) => {
           if (event.currentTarget instanceof HTMLInputElement) onInput(event.currentTarget.value);
         }}
