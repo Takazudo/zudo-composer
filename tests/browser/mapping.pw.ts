@@ -71,7 +71,7 @@ test("direct preview is refreshable and isolated from every host product", async
   await page.goto("/composer/preview");
   await expect(page.locator("#app")).toBeAttached();
   await expect(page.getByRole("navigation", { name: "Main navigation" })).toHaveCount(0);
-  await expect(page.locator(".app-header, .sg-content-app, .sg-mapping-app, .sg-sitemapper-root")).toHaveCount(0);
+  await expect(page.locator(".app-shell, .cms-rail, .cms-topbar, .sg-content-app, .sg-mapping-app, .sg-sitemapper-root")).toHaveCount(0);
   await page.reload();
   await expect(page.locator("#app")).toBeAttached();
   await expect(page.getByText(/Content authoring|Mapping library|Sitemaps/)).toHaveCount(0);

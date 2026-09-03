@@ -12,35 +12,38 @@ describe('App', () => {
     document.documentElement.removeAttribute('data-theme-preference');
     document.documentElement.removeAttribute('data-theme');
     window.localStorage.removeItem('zudo-composer-theme');
+    window.localStorage.removeItem('zudo-composer-rail');
     vi.unstubAllGlobals();
   });
 
   it.each([
-    ['/composer', 'Composition library'],
-    ['/content', 'Content authoring'],
-    ['/mapping', 'Mapping library'],
-    ['/sitemapper', 'Sitemaps'],
-    ['/media', 'Media library'],
-  ])('mounts the real product on direct refresh at %s', async (route, heading) => {
+    ['/composer', 'Composition library', 'Compositions'],
+    ['/content', 'Content authoring', 'Content'],
+    ['/mapping', 'Mapping library', 'Mappings'],
+    ['/sitemapper', 'Sitemaps', 'Sitemaps'],
+    ['/media', 'Media library', 'Media'],
+  ])('mounts the real product on direct refresh at %s', async (route, heading, railLabel) => {
     vi.stubGlobal('indexedDB', new FDBFactory());
     window.history.replaceState(null, '', route);
     render(<App />);
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-    expect(nav.querySelectorAll('a')).toHaveLength(6);
-    expect(screen.getByRole('link', { name: heading === 'Composition library' ? 'Composer' : heading === 'Content authoring' ? 'Content' : heading === 'Mapping library' ? 'Mapping' : heading === 'Media library' ? 'Media' : 'Sitemapper' })).toHaveAttribute('aria-current', 'page');
+    expect(nav.querySelectorAll('a')).toHaveLength(7);
+    const current = nav.querySelectorAll('a[aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveTextContent(railLabel);
   });
 
   it('shows the shared route vocabulary with descriptions and icon support on Home', () => {
     render(<App />);
 
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-    expect(nav.querySelectorAll('a')).toHaveLength(6);
-    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+    expect(nav.querySelectorAll('a')).toHaveLength(7);
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('heading', { name: 'Choose a tool' })).toBeInTheDocument();
     expect(screen.getByText('Build reusable page structures from components.')).toBeInTheDocument();
     expect(screen.getByText('Connect Content fields to Composition slots.')).toBeInTheDocument();
-    expect(document.querySelectorAll('.app-route-link svg')).toHaveLength(6);
+    expect(document.querySelectorAll('.cms-rail__item svg')).toHaveLength(8);
   });
 
   it('keeps the production Media state truthful without probing a provider', () => {
@@ -60,25 +63,25 @@ describe('App', () => {
 
     const trigger = screen.getByRole('button', { name: 'Theme: System' });
     fireEvent.click(trigger);
-    expect(screen.getByRole('menu', { name: 'Theme preference' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitemradio', { name: /System/ })).toHaveAttribute('aria-checked', 'true');
+    const menu = screen.getByRole('menu', { name: 'Theme preference' });
+    expect(screen.getByRole('menuitemradio', { name: 'System' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('menuitemradio', { name: 'System' })).toHaveFocus();
 
-    const system = screen.getByRole('menuitemradio', { name: /System/ });
-    fireEvent.keyDown(system, { key: 'ArrowDown' });
-    expect(screen.getByRole('menuitemradio', { name: /Light/ })).toHaveFocus();
-    fireEvent.keyDown(screen.getByRole('menuitemradio', { name: /Light/ }), { key: 'ArrowDown' });
-    fireEvent.keyDown(screen.getByRole('menuitemradio', { name: /Dark/ }), { key: 'Enter' });
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(screen.getByRole('menuitemradio', { name: 'Light' })).toHaveFocus();
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(screen.getByRole('menuitemradio', { name: 'Dark' })).toHaveFocus();
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
     expect(document.documentElement.dataset.themePreference).toBe('dark');
     expect(screen.queryByRole('menu', { name: 'Theme preference' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Theme: Dark' })).toHaveFocus();
 
     fireEvent.click(screen.getByRole('button', { name: 'Theme: Dark' }));
-    fireEvent.mouseDown(document.body);
+    fireEvent.pointerDown(document.body);
     expect(screen.queryByRole('menu', { name: 'Theme preference' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Theme: Dark' })).toHaveFocus();
 
     fireEvent.click(screen.getByRole('button', { name: 'Theme: Dark' }));
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('menu', { name: 'Theme preference' }), { key: 'Escape' });
     expect(screen.queryByRole('menu', { name: 'Theme preference' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Theme: Dark' })).toHaveFocus();
   });
@@ -140,6 +143,7 @@ describe('App', () => {
     const { container } = render(<App />);
     expect(await screen.findByRole('heading', { name: 'Clear ideas, carefully shaped' })).toBeInTheDocument();
     expect(container.querySelector('.app-shell')).not.toBeInTheDocument();
+    expect(container.querySelector('.cms-rail')).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
   });

@@ -1,5 +1,5 @@
 .sg-sitemapper-root {
-  --sg-header-h: var(--zudo-composer-header-height, 0px);
+  --sg-header-h: var(--zc-topbar-h, 0px);
   color: var(--color-fg);
   background: var(--color-bg);
 }

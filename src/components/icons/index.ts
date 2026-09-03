@@ -30,6 +30,7 @@
  * | Icon(s)                                      | Surface / meaning                                      |
  * | -------------------------------------------- | ----------------------------------------------------- |
  * | HomeIcon, ComposerIcon, ContentIcon         | Shared shell route navigation                          |
+ * | ExternalLinkIcon                             | Rail entry that leaves the CMS for the delivered site   |
  * | MappingIcon, SitemapperIcon                  | Mapping and Sitemapper route navigation                |
  * | SystemThemeIcon, LightThemeIcon, DarkThemeIcon | Theme choice control                                  |
  * | TextIcon, LongTextIcon, MarkdownIcon         | Content field cards: text, long text, Markdown         |
@@ -383,6 +384,13 @@ export const ComposerRouteIcon = ComposerIcon;
 export const ContentRouteIcon = ContentIcon;
 export const MappingRouteIcon = MappingIcon;
 export const SitemapperRouteIcon = SitemapperIcon;
+
+/** A destination outside the CMS chrome — currently the delivered `/site` routes. */
+export const ExternalLinkIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M9.75 2.75h3.5v3.5" }),
+  h("path", { d: "M13.25 2.75 7.75 8.25" }),
+  h("path", { d: "M11.75 9.5v2.75a1.5 1.5 0 0 1-1.5 1.5h-6.5a1.5 1.5 0 0 1-1.5-1.5v-6.5a1.5 1.5 0 0 1 1.5-1.5H6.5" }),
+]);
 
 // ── Theme choices ────────────────────────────────────────────────────────────
 
