@@ -7,6 +7,7 @@ import {
   HEADING_TARGET,
   NOW,
   READY_BINDING,
+  RESOLVED_ENTRIES,
   harness,
   mappingRecord,
   model,
@@ -52,6 +53,18 @@ describe("MappingEditorController", () => {
     expect(copy.document.bindings).toEqual(source.document.bindings);
     expect(h.records.get(source.id)!.document.name).toBe("Article Mapping");
     expect(h.controller.state.mappings.map((summary) => summary.id).sort()).toEqual([duplicateId, source.id].sort());
+  });
+
+  it("refuses to create or duplicate onto an id that already exists", async () => {
+    const existing = mappingRecord([], "taken", "Already here");
+    // An id factory that collides is the whole hazard: `put` overwrites.
+    const h = harness([existing], RESOLVED_ENTRIES, { idFactory: () => "taken" });
+    await h.controller.initialize();
+
+    await expect(h.controller.create("Colliding", CONTENT_REF, COMPOSITION_REF)).rejects.toThrow(/already exists/);
+    await expect(h.controller.duplicate(existing.id)).rejects.toThrow(/already exists/);
+    expect(h.records.size).toBe(1);
+    expect(h.records.get("taken")!.document.name).toBe("Already here");
   });
 
   it("preserves broken references until explicitly repaired", async () => {

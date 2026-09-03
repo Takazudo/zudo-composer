@@ -21,7 +21,7 @@ import {
 } from "../../../mapping";
 import { createSequentialIdFactory } from "../../../shared";
 import { activeComponentProvider } from "../../composer/active-pack";
-import { MappingEditorController, type MappingContentEntryCatalog } from "../controller";
+import { MappingEditorController, type MappingContentEntryCatalog, type MappingEditorControllerOptions } from "../controller";
 
 export const NOW = "2026-01-02T03:04:05.000Z";
 
@@ -134,6 +134,7 @@ export interface MappingHarness {
 export function harness(
   seed: readonly MappingRecord[] = [],
   contentEntries: MappingContentEntryCatalog = RESOLVED_ENTRIES,
+  options: MappingEditorControllerOptions = {},
 ): MappingHarness {
   const records = new Map(seed.map((record) => [record.id, structuredClone(record)]));
   const provider: MappingProvider = {
@@ -204,7 +205,7 @@ export function harness(
     { content, compositions },
     contentEntries,
     activeComponentProvider.catalog,
-    { idFactory: createSequentialIdFactory("test"), now: () => NOW },
+    { idFactory: createSequentialIdFactory("test"), now: () => NOW, ...options },
   );
 
   return { controller, provider, records, content, compositions, contentEntries };

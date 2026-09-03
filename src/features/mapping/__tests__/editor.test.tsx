@@ -138,6 +138,15 @@ describe("Mapping editor", () => {
     expect(within(row).getByText("Blocked")).toBeInTheDocument();
   });
 
+  it("keeps both record pickers reachable from the always-visible overflow menu", async () => {
+    // The toolbar centre that normally holds them is hidden below 64rem.
+    await editor([READY_BINDING]);
+
+    fireEvent.click(screen.getByRole("button", { name: "More Mapping actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Change Composition…" }));
+    expect(await screen.findByRole("dialog", { name: "Choose a Composition" })).toBeInTheDocument();
+  });
+
   it("confirms a delete on the alertdialog and returns to the library", async () => {
     const { workspace, navigate } = await editor([]);
 

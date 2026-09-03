@@ -111,6 +111,7 @@ export class MappingEditorController {
     await this.flush();
     const timestamp = this.now();
     const record = createMappingRecord({ id: this.idFactory("mapping"), name: trimmed, contentModel, composition, createdAt: timestamp });
+    await this.requireFreshRecordId(record.id);
     await this.provider.store.put(record);
     await this.refreshLibrary();
     return record.id;
@@ -125,6 +126,7 @@ export class MappingEditorController {
     const duplicateId = this.idFactory(source.name);
     const timestamp = this.now();
     const record = createMappingRecord({ id: duplicateId, name: `${source.name} copy`, contentModel: source.contentModel, composition: source.composition, bindings: cloneJson(source.bindings), createdAt: timestamp });
+    await this.requireFreshRecordId(duplicateId);
     await this.provider.store.put(record);
     await this.refreshLibrary();
     return duplicateId;
@@ -347,6 +349,14 @@ export class MappingEditorController {
       details[summary.id] = { record: outcome.record, definition: await resolveMappingDefinition(outcome.record, this.catalogs, this.manifest) };
     }));
     this.set({ ...this.current, libraryDetails: details });
+  }
+  /**
+   * A new record must not land on an id that already exists: `put` overwrites,
+   * so a colliding id factory would silently destroy a stored Mapping.
+   */
+  private async requireFreshRecordId(id: string): Promise<void> {
+    const existing = await this.provider.store.get(id);
+    if (existing.status !== "not-found") throw new Error(`Mapping "${id}" already exists; no data was overwritten.`);
   }
   private requireMapping(): MappingRecord { if (!this.current.mapping) throw new Error("No Mapping is open."); return this.current.mapping; }
   private set(state: MappingEditorState): void { this.current = state; for (const listener of [...this.listeners]) listener(state); }

@@ -161,6 +161,12 @@ export function MappingEditor({
             <EllipsisIcon size="sm" />
           </Button>
           <Menu controller={overflow} label="Mapping actions">
+            {/* `.cms-editor__center` is hidden below 64rem, so the two picker
+             * buttons are unreachable there. Repairing a drifted Mapping is
+             * exactly what a narrow screen must still be able to do. */}
+            <MenuItem icon={ContentIcon} onSelect={() => setPicker("content")}>Change Content model…</MenuItem>
+            <MenuItem icon={ComposerIcon} onSelect={() => setPicker("composition")}>Change Composition…</MenuItem>
+            <MenuSeparator />
             <MenuItem
               icon={DuplicateIcon}
               onSelect={() => run(async () => {
