@@ -3,272 +3,26 @@
 @import "./features/delivery/styles.css";
 
 /* --------------------------------------------------------------------------
- * Shared application chrome
+ * Route-level leftovers
  *
- * The provider owns feature surfaces; this file owns only the standalone
- * header, Home, and its floating disclosures. The shell deliberately uses a
- * small, consistent radius and hairline borders. Elevation is reserved for
- * the two floating surfaces so the route workspaces remain flat.
+ * The shell moved to `src/app/shell.css`, which `shell.tsx` imports. What
+ * remains here is the small amount of styling the provisional Home and the
+ * not-found placeholder still need; the Dashboard task replaces both.
  * -------------------------------------------------------------------------- */
 
-.app-shell {
-  --app-radius: 5px;
-  min-height: 100vh;
-  min-width: 0;
-  overflow-x: clip;
-  color: var(--color-fg);
-  background: var(--color-bg);
-}
-
-.app-header {
-  position: relative;
-  /* App-level disclosures must clear sticky toolbars owned by every route. */
-  z-index: var(--z-index-popover);
-  min-height: var(--sg-header-h);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: .25rem 1rem;
-  padding-inline: clamp(.75rem, 3vw, 1.5rem);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
-}
-
-.app-brand {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  min-height: 2.75rem;
-  color: var(--color-fg);
-  font-size: .9375rem;
-  font-weight: 750;
-  letter-spacing: -.02em;
-  text-decoration: none;
-}
-
-.app-header__nav {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: .125rem;
-  font-size: .8125rem;
-}
-
-.app-route-link {
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  justify-content: center;
-  gap: .375rem;
-  min-width: 0;
-  min-height: 2.75rem;
-  padding-inline: .625rem;
-  border-block-end: 2px solid transparent;
-  border-radius: var(--app-radius);
-  color: var(--color-muted);
-  text-decoration: none;
-}
-
-.app-route-link[aria-current="page"] {
-  color: var(--color-fg);
-  background: var(--color-surface-2);
-  border-block-end-color: var(--color-accent);
-}
-
-.app-route-icon { color: currentColor; }
-.app-route-label { min-width: 0; white-space: nowrap; }
-
-.app-header__controls {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: .375rem;
-}
-
-.app-disclosure { position: relative; }
-
-.app-header-control,
-.app-icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: .375rem;
-  min-width: 2.75rem;
-  min-height: 2.75rem;
-  padding: .375rem .625rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--app-radius);
-  color: var(--color-muted);
-  background: var(--color-surface);
-  cursor: pointer;
-}
-
-.app-header-control__label { color: var(--color-fg); font-size: .75rem; font-weight: 650; }
-.app-theme-trigger__current { font-size: .75rem; }
-
-.app-header-control[aria-expanded="true"] {
-  color: var(--color-fg);
-  border-color: var(--color-border-strong);
-  background: var(--color-surface-2);
-}
-
-.app-header :is(a, button):focus-visible,
-.app-popover :is(a, button, input):focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-/* Explicit route-link selector keeps the focus contract inspectable to host CSS checks. */
-.app-header nav a:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-
-.app-popover {
-  position: absolute;
-  z-index: var(--z-index-popover);
-  inset-block-start: calc(100% + .5rem);
-  inset-inline-end: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--app-radius);
-  color: var(--color-fg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-overlay);
-}
-
-.app-theme-menu {
-  display: grid;
-  gap: .125rem;
-  width: min(14rem, calc(100vw - 2rem));
-  padding: .375rem;
-}
-
-.app-theme-option {
-  display: grid;
-  grid-template-columns: 1.25rem minmax(0, 1fr);
-  align-items: center;
-  gap: .5rem;
-  min-width: 0;
-  min-height: 2.75rem;
-  padding: .375rem .5rem;
-  border: 1px solid transparent;
-  border-radius: var(--app-radius);
-  color: var(--color-muted);
-  text-align: start;
-  background: transparent;
-  cursor: pointer;
-}
-
-.app-theme-option[data-selected="true"] {
-  border-color: var(--color-border);
-  color: var(--color-fg);
-  background: var(--color-surface-2);
-  font-weight: 650;
-}
-
-.app-notification-panel {
-  display: grid;
-  gap: .875rem;
-  width: min(23rem, calc(100vw - 2rem));
-  padding: 1rem;
-}
-
-.app-notification-panel__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: .75rem;
-  padding-block-end: .75rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.app-notification-panel__header h2,
-.app-notification-panel__header p,
-.app-notification-panel__intro,
-.app-notification-channel p { margin: 0; }
-.app-notification-panel__header h2 { font-size: 1rem; line-height: 1.3; }
-.app-notification-panel__eyebrow { margin-block-end: .125rem !important; color: var(--color-muted); font-size: .6875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.app-notification-panel__intro { color: var(--color-muted); font-size: .8125rem; line-height: 1.5; }
-.app-icon-button { flex: 0 0 auto; padding: .5rem; }
-
-.app-notification-channel {
-  display: grid;
-  gap: .625rem;
-  padding-block-start: .125rem;
-}
-
-.app-notification-channel__heading {
-  display: flex;
-  align-items: center;
-  gap: .5rem;
-  min-width: 0;
-}
-
-.app-status-label {
-  margin-inline-start: auto;
-  padding: .125rem .375rem;
-  border: 1px solid var(--color-border);
-  border-radius: 2px;
-  color: var(--color-muted);
-  font-size: .6875rem;
-  font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-
-.app-notification-channel > p { color: var(--color-muted); font-size: .8125rem; line-height: 1.5; }
-
-.app-disabled-control {
-  display: flex;
-  align-items: center;
-  gap: .5rem;
-  min-height: 2.75rem;
-  color: var(--color-muted);
-  cursor: not-allowed;
-  opacity: .58;
-}
-
-.app-disabled-control input { width: 1rem; height: 1rem; accent-color: var(--color-muted); }
-.app-notification-configure { justify-content: flex-start; padding-inline: .625rem; border: 1px solid var(--color-border); border-radius: var(--app-radius); background: var(--color-surface-2); }
-.app-notification-configure:disabled { color: var(--color-muted); cursor: not-allowed; }
-
-/* --------------------------------------------------------------------------
- * Home dashboard
- * -------------------------------------------------------------------------- */
-
-.home-dashboard,
 .route-placeholder {
   width: min(72rem, calc(100% - 3rem));
   margin-inline: auto;
+  padding-block: clamp(3rem, 12vh, 8rem);
 }
 
-.home-dashboard { padding-block: clamp(2.5rem, 8vh, 6rem) 4rem; }
+.route-placeholder h1 { margin-block: 0 .75rem; font-size: clamp(2rem, 5vw, 3.5rem); letter-spacing: -.04em; }
+.route-placeholder p { color: var(--color-muted); }
+.route-placeholder a { color: var(--color-accent); }
 
-.home-dashboard__hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(15rem, .75fr);
-  gap: clamp(2rem, 7vw, 7rem);
-  align-items: end;
-  padding-block-end: clamp(2.5rem, 7vh, 5rem);
-  border-bottom: 1px solid var(--color-border);
-}
+.landing p { max-width: 38rem; }
 
-.home-dashboard h1 {
-  max-width: 12ch;
-  margin: .375rem 0 1rem;
-  font-size: clamp(2.75rem, 7vw, 5.5rem);
-  line-height: .95;
-  letter-spacing: -.055em;
-  text-wrap: balance;
-}
-
-.home-dashboard h2 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.625rem); line-height: 1.2; letter-spacing: -.025em; }
-.home-dashboard h3 { margin: 0; font-size: 1rem; line-height: 1.3; }
-.home-dashboard p { line-height: 1.6; }
-.home-dashboard .eyebrow { margin: 0; color: var(--color-muted); font-size: .6875rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
-.home-dashboard__lede { max-width: 38rem; margin: 0; color: var(--color-muted); font-size: 1rem; }
-
-.primary-link,
-.home-dashboard__primary {
+.primary-link {
   display: inline-flex;
   align-items: center;
   gap: .5rem;
@@ -276,7 +30,7 @@
   margin-top: 1.5rem;
   padding: .625rem .875rem;
   border: 1px solid var(--color-accent);
-  border-radius: var(--app-radius);
+  border-radius: var(--radius);
   color: var(--color-on-accent);
   background: var(--color-accent);
   font-size: .875rem;
@@ -284,122 +38,10 @@
   text-decoration: none;
 }
 
-.home-dashboard__local-note {
-  padding-inline-start: 1rem;
-  border-inline-start: 2px solid var(--color-border-strong);
-}
-
-.home-dashboard__local-note h2 { margin-block: .5rem; }
-.home-dashboard__local-note p:last-child { margin: 0; color: var(--color-muted); font-size: .875rem; }
-
-.home-dashboard__workspaces { padding-block-start: clamp(2.5rem, 6vh, 4rem); }
-.home-dashboard__section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-block-end: 1rem; }
-.home-dashboard__section-heading > p { max-width: 24rem; margin: 0; color: var(--color-muted); font-size: .8125rem; text-align: end; }
-
-.home-route-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: var(--app-radius);
-  background: var(--color-border);
-}
-
-.home-route-card {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: .875rem;
-  min-width: 0;
-  min-height: 12rem;
-  padding: 1.25rem;
-  color: var(--color-fg);
-  background: var(--color-surface);
-  text-decoration: none;
-}
-
-.home-route-card__heading { display: flex; align-items: center; gap: .625rem; min-width: 0; }
-.home-route-card__heading svg { color: var(--color-muted); }
-.home-route-card p { margin: 0; color: var(--color-muted); font-size: .8125rem; line-height: 1.55; }
-.home-route-card__action { display: inline-flex; align-items: center; gap: .375rem; color: var(--color-muted); font-size: .75rem; font-weight: 650; }
-
-.landing p { max-width: 38rem; }
-.route-placeholder { padding-block: clamp(3rem, 12vh, 8rem); }
-.route-placeholder h1 { margin-block: 0 .75rem; font-size: clamp(2rem, 5vw, 3.5rem); letter-spacing: -.04em; }
-.route-placeholder p { color: var(--color-muted); }
-.route-placeholder a { color: var(--color-accent); }
-
 @media (hover: hover) {
-  .app-route-link:hover,
-  .app-header-control:hover,
-  .app-icon-button:hover { color: var(--color-fg); background: var(--color-surface-2); }
-  /* Keep the broad selector as a stable shell contract for host integrations. */
-  .app-header nav a:hover { color: var(--color-fg); background: var(--color-surface-2); }
-  .app-route-link[aria-current="page"]:hover { background: var(--color-surface-2); }
-  .app-theme-option:not([data-selected="true"]):hover { color: var(--color-fg); background: var(--color-surface-2); }
-  .primary-link:hover,
-  .home-dashboard__primary:hover { color: var(--color-on-accent); background: var(--color-accent-hover); }
-  .home-route-card:hover { background: var(--color-surface-2); }
-  .home-route-card:hover .home-route-card__action { color: var(--color-fg); }
-}
-
-@media (max-width: 60rem) {
-  .home-route-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .primary-link:hover { color: var(--color-on-accent); background: var(--color-accent-hover); }
 }
 
 @media (max-width: 42rem) {
-  .app-header {
-    align-content: center;
-    gap: .25rem .5rem;
-    padding-inline: .5rem;
-    padding-block: .25rem;
-  }
-  .app-header__nav {
-    flex: 0 0 100%;
-    order: 3;
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: .125rem;
-    width: 100%;
-  }
-  .app-route-link {
-    flex-direction: column;
-    gap: .0625rem;
-    min-width: 0;
-    padding-inline: .125rem;
-    font-size: .6875rem;
-    line-height: 1.1;
-  }
-  .app-route-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-  .app-header__controls { margin-inline-start: auto; gap: .25rem; }
-  .app-header-control { gap: .25rem; padding-inline: .375rem; }
-  .app-header-control__label,
-  .app-theme-trigger__current { font-size: .6875rem; }
-  .home-dashboard,
   .route-placeholder { width: min(100% - 2rem, 72rem); }
-  .home-dashboard { padding-block-start: 2rem; }
-  .home-dashboard__hero { grid-template-columns: 1fr; gap: 2rem; padding-block-end: 2rem; }
-  .home-dashboard h1 { font-size: clamp(2.75rem, 14vw, 4.5rem); }
-  .home-dashboard__section-heading { align-items: flex-start; flex-direction: column; }
-  .home-dashboard__section-heading > p { text-align: start; }
-}
-
-@media (max-width: 24rem) {
-  .app-brand { font-size: .875rem; }
-  .app-header-control__label { display: none; }
-  .app-theme-trigger__current { display: none; }
-  .app-route-link { padding-inline: 0; }
-  .home-route-grid { grid-template-columns: 1fr; }
-  .home-route-card { min-height: 10rem; }
-}
-
-@media (pointer: coarse) {
-  .app-header :is(a, button),
-  .home-dashboard__primary,
-  .home-route-card { min-height: 44px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-shell *,
-  .home-dashboard * { scroll-behavior: auto; transition-duration: .01ms; animation-duration: .01ms; animation-iteration-count: 1; }
 }

@@ -3,7 +3,7 @@
 // Mapping-owned coverage lives in `mapping.pw.ts`.
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 
-const PRODUCT_LINKS = ["Composer", "Content", "Mapping", "Sitemapper", "Media"] as const;
+const PRODUCT_LINKS = ["Compositions", "Content", "Mappings", "Sitemaps", "Media"] as const;
 const COLLECTION_MAPPING = "Journal entry mapping";
 const SINGLE_MAPPING = "Browser Site settings mapping";
 
@@ -362,7 +362,7 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   expect(paneGeometry.every(({ bottom, overflowY }) => bottom <= 900 && overflowY === "auto")).toBe(true);
   expect(paneGeometry[0]!.right).toBeLessThanOrEqual(paneGeometry[1]!.left);
   expect(paneGeometry[1]!.right).toBeLessThanOrEqual(paneGeometry[2]!.left);
-  await expect(page.locator(".app-header")).toHaveCSS("min-height", "56px");
+  await expect(page.locator(".cms-topbar")).toHaveCSS("height", "48px");
 
   const themeColors: string[] = [];
   for (const theme of ["light", "dark"] as const) {
@@ -373,7 +373,9 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   expect(themeColors[0]).not.toBe(themeColors[1]);
 
   await page.setViewportSize({ width: 375, height: 812 });
-  await expect(page.locator(".app-header")).toHaveCSS("min-height", "112px");
+  // Below 64rem the rail leaves the side and becomes the bottom tab strip.
+  await expect(page.locator(".cms-topbar")).toHaveCSS("height", "48px");
+  await expect(page.locator(".cms-rail")).toHaveCSS("height", "56px");
   const navigation = page.getByRole("navigation", { name: "Main navigation" });
   for (const product of PRODUCT_LINKS) await expect(navigation.getByRole("link", { name: product, exact: true })).toBeVisible();
   await expectArrowTabs(page, "Content workspace", ["Library", "Author", "Preview"]);

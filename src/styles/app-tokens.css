@@ -1,6 +1,18 @@
 :root {
-  --zudo-composer-header-height: 3.5rem;
-  --sg-header-h: var(--zudo-composer-header-height);
+  /*
+   * Shell geometry (issue #161). The topbar is one height at every width; below
+   * 64rem the rail leaves the side and becomes a bottom tab strip.
+   */
+  --zc-topbar-h: 48px;
+  --zc-bottom-strip-h: 56px;
+  --zc-rail-w: 220px;
+  --zc-rail-w-collapsed: 56px;
+  /*
+   * Route editors still size themselves with `calc(100vh - var(--sg-header-h))`.
+   * Aliasing the topbar height keeps that arithmetic correct while they are
+   * untouched; Wave 4 moves them onto the shell's own content row.
+   */
+  --sg-header-h: var(--zc-topbar-h);
 
   /*
    * CMS chrome geometry (epic #156). Two interleaved x2 spacing ladders keep
@@ -124,10 +136,6 @@
   --sg-composer-panel-bg: var(--color-surface);
   --sg-composer-canvas-backdrop: oklch(0.125 0.012 255);
   --sg-composer-guide: oklch(0.550 0.020 255);
-}
-
-@media (max-width: 42rem) {
-  :root { --zudo-composer-header-height: 7rem; }
 }
 
 @theme {

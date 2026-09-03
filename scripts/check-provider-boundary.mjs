@@ -207,7 +207,9 @@ for (const source of jsFiles.map((path) => readFileSync(path, "utf8"))) {
 const cssFiles = assetFiles.filter((path) => extname(path) === ".css");
 const css = cssFiles.map((path) => readFileSync(path, "utf8"));
 const combinedCss = css.join("\n");
-assert.ok(css.some((source) => source.includes(".app-header{")), "local app CSS was not emitted");
+assert.ok(css.some((source) => source.includes(".cms-rail{")), "local app shell CSS was not emitted");
+assert.ok(combinedCss.includes("--zc-topbar-h:48px"), "shell topbar height contract was not emitted");
+assert.ok(/--sg-header-h:\s*var\(\s*--zc-topbar-h\s*\)/.test(combinedCss), "editor height alias was not emitted");
 assert.ok(readFileSync(join(root, "src/features/composer/library/new-composition-dialog.tsx"), "utf8").includes("pr-[3.5rem]"), "local Tailwind source proof drifted");
 assert.ok(css.some((source) => source.includes(".pr-\\[3\\.5rem\\]{")), "local-source Tailwind utility was not emitted");
 assert.ok(readFileSync(join(root, "node_modules/@zudo-sg/ui/src/cards/callout/callout.tsx"), "utf8").includes("border-l-4"), "provider Tailwind source proof drifted");
