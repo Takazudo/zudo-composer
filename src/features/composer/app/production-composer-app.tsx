@@ -216,7 +216,6 @@ export function ProductionComposerApp({
       pathname: COMPOSER_DOCUMENT_PATH,
       search: (readIntentSearch ?? (() => (typeof window === "undefined" ? "" : window.location.search)))(),
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
   const routeConfig = useMemo<ComposerRouteConfig>(

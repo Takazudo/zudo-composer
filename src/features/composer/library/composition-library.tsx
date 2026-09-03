@@ -323,7 +323,6 @@ export function CompositionLibrary({
     startedRef.current = true;
     void load(activeProviderId, "initialize");
     // Runs once, against the provider resolved at mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -332,7 +331,6 @@ export function CompositionLibrary({
     setNewDialogOpen(true);
     onOpenNewConsumed?.();
     // Runs once: `openNewOnMount` is a one-shot route intent, not a toggle.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const summaries = outcome?.status === "ready" ? outcome.summaries : NO_SUMMARIES;
