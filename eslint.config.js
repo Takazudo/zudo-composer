@@ -2,7 +2,10 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', '**/dist', 'coverage', '_temp-resource/**'] },
+  // `worktrees/` holds nested git checkouts of this same repo, on other branches.
+  // Linting them reports another branch's in-progress errors as this tree's, and
+  // re-lints every file once per worktree.
+  { ignores: ['dist', '**/dist', 'coverage', '_temp-resource/**', 'worktrees/**'] },
   {
     files: ['scripts/**/*.mjs', 'plugins/**/*.mjs'],
     languageOptions: {
