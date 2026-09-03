@@ -31,7 +31,7 @@ interface ViewData {
 
 const IDLE: ViewData = { counts: null, recent: null, attention: null, loading: false, error: null };
 
-export function useWorkspaceView(summary: WorkspaceSummary | undefined, recentLimit?: number): WorkspaceView {
+export function useWorkspaceView(summary: WorkspaceSummary | undefined): WorkspaceView {
   // Bumped by `reload`; `refresh()` has already cleared the memoised reads by
   // the time the effect re-runs, so the next read reaches the providers.
   const [generation, setGeneration] = useState(0);
@@ -44,7 +44,7 @@ export function useWorkspaceView(summary: WorkspaceSummary | undefined, recentLi
     }
     let live = true;
     setData((previous) => ({ ...previous, loading: true }));
-    void Promise.all([summary.counts(), summary.recent(recentLimit), summary.attention()])
+    void Promise.all([summary.counts(), summary.recent(), summary.attention()])
       .then(([counts, recent, attention]) => {
         if (live) setData({ counts, recent, attention, loading: false, error: null });
       })
@@ -58,7 +58,7 @@ export function useWorkspaceView(summary: WorkspaceSummary | undefined, recentLi
     return () => {
       live = false;
     };
-  }, [summary, recentLimit, generation]);
+  }, [summary, generation]);
 
   const reload = useCallback(() => {
     summary?.refresh();

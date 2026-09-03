@@ -13,7 +13,7 @@ import {
 // ships the whole library pattern and its stylesheet, and the Dashboard needs
 // only this pure timestamp vocabulary.
 import { formatLibraryTimestamp, formatLibraryTimestampFull } from "../../components/library-page/library-format";
-import { Banner, Button, Chip, CountBadge, EmptyState, StatusChip } from "../../components/ui";
+import { Banner, Button, Chip, CountBadge, EmptyState, StatusChip, cx } from "../../components/ui";
 import { formatIntent } from "../route-intents";
 import type {
   WorkspaceAttention,
@@ -23,7 +23,6 @@ import type {
   WorkspaceSummary,
 } from "../workspace-summary";
 import {
-  ATTENTION_ROW_LIMIT,
   SOURCE_LABELS,
   attentionPresentation,
   attentionView,
@@ -64,6 +63,10 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
   const { counts, recent, attention, loading, error, reload } = view;
   const mediaReady = counts?.media.status === "ok";
   const empty = counts !== null && isEmptyWorkspace(counts);
+  // Recent activity and the attention list are answers about records. With no
+  // summary mounted, or after one that rejected, there is no answer to give —
+  // and an empty card would read as "nothing has changed", which is a claim.
+  const answered = loading || counts !== null;
 
   return (
     <main class="cms-dash" aria-label="Dashboard">
@@ -93,11 +96,11 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
         </section>
       )}
 
-      <div class="cms-dash__columns">
-        {empty ? null : (
+      <div class={cx("cms-dash__columns", empty && "cms-dash__columns--single")}>
+        {empty || !answered ? null : (
           <DashCard title="Recent activity" titleId="cms-dash-recent" note="across all workspaces">
             {recent === null ? (
-              <p class="cms-dash__placeholder">{loading ? "Reading the workspace…" : "No activity to show."}</p>
+              <p class="cms-dash__placeholder">Reading the workspace…</p>
             ) : (
               <>
                 {recent.unavailable.length > 0 ? (
@@ -112,7 +115,7 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
                 {recent.records.length > 0 ? (
                   <div class="cms-dash-recent">
                     {recent.records.map((record) => (
-                      <RecentRow key={`${record.kind}:${record.id}`} record={record} />
+                      <RecentRow key={`${record.kind}:${record.href}:${record.id}`} record={record} />
                     ))}
                   </div>
                 ) : recent.unavailable.length > 0 ? null : (
@@ -128,7 +131,7 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
         )}
 
         <div class="cms-dash__side">
-          {empty ? null : <AttentionCard attention={attention} loading={loading} onRetry={reload} />}
+          {empty || !answered ? null : <AttentionCard attention={attention} onRetry={reload} />}
 
           <DashCard title="How the pieces connect" titleId="cms-dash-pipeline">
             <div class="cms-dash-pipeline">
@@ -269,21 +272,13 @@ function RecentRow({ record }: { record: WorkspaceRecord }): JSX.Element {
   );
 }
 
-function AttentionCard({
-  attention,
-  loading,
-  onRetry,
-}: {
-  attention: WorkspaceAttention | null;
-  loading: boolean;
-  onRetry: () => void;
-}): JSX.Element {
-  const view = attention === null ? null : attentionView(attention, ATTENTION_ROW_LIMIT);
+function AttentionCard({ attention, onRetry }: { attention: WorkspaceAttention | null; onRetry: () => void }): JSX.Element {
+  const view = attention === null ? null : attentionView(attention);
   return (
     <DashCard title="Needs attention" titleId="cms-dash-attention" count={view?.total}>
       <div class="cms-dash-card__pad cms-dash-attention">
         {view === null ? (
-          <p class="cms-dash__placeholder">{loading ? "Reading the workspace…" : "Nothing to show."}</p>
+          <p class="cms-dash__placeholder">Reading the workspace…</p>
         ) : (
           <>
             {view.unavailable.length > 0 ? (
@@ -294,10 +289,10 @@ function AttentionCard({
               />
             ) : null}
             {view.rows.map((item) => (
-              <AttentionRow key={`${item.kind}:${item.id}`} item={item} />
+              <AttentionRow key={`${item.kind}:${item.href}:${item.id}`} item={item} />
             ))}
             {view.hidden > 0 ? (
-              <p class="cms-dash__placeholder">{view.hidden} more need attention.</p>
+              <p class="cms-dash__placeholder">{`${view.hidden} more ${view.hidden === 1 ? "needs" : "need"} attention.`}</p>
             ) : null}
             {view.total === 0 && view.unavailable.length === 0 ? (
               <EmptyState inline title="Nothing needs attention" description="Blocked Mappings, unassigned pages and incomplete Entries appear here." />

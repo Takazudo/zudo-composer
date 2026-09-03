@@ -133,6 +133,11 @@
   align-items: start;
 }
 
+/* With no records there is no recent-activity column, so the two remaining
+   cards share the row instead of leaving its wider track empty. */
+.cms-dash__columns--single { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cms-dash__columns--single .cms-dash__side { display: contents; }
+
 .cms-dash__side { display: grid; gap: var(--sp-b2); align-content: start; min-width: 0; }
 
 .cms-dash-card {
@@ -226,7 +231,8 @@
 .cms-dash-pipeline__text strong { color: var(--color-fg); font-weight: 600; }
 .cms-dash-pipeline__text span { color: var(--color-muted); font-size: .75rem; }
 .cms-dash-pipeline__count { color: var(--color-muted); font-size: .75rem; white-space: nowrap; }
-.cms-dash-pipeline__arrow { display: grid; place-items: center; height: 12px; margin-inline-start: 30px; color: var(--color-faint); }
+/* Aligned under the centre of the 28px tile, not the centre of the row. */
+.cms-dash-pipeline__arrow { display: grid; place-items: center start; height: 12px; margin-inline-start: 24px; color: var(--color-faint); }
 
 /* --------------------------------------------------------------------------
  * Storage

@@ -299,6 +299,10 @@ describe("Dashboard", () => {
     expect(screen.getByRole("heading", { name: "Good morning." })).toBeInTheDocument();
     expect(screen.getByText("Everything in this workspace lives in this browser.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Workspace status" })).not.toBeInTheDocument();
+    // Cards that answer "what changed" say nothing at all rather than reading
+    // as "nothing has changed".
+    expect(screen.queryByRole("region", { name: "Recent activity" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Needs attention" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "How the pieces connect" })).toBeInTheDocument();
   });
 
