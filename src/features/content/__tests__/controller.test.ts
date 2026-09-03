@@ -90,7 +90,7 @@ describe("ContentAuthoringController", () => {
     const provider = createMemoryContentProvider(); const controller = createContentAuthoringController(provider);
     await controller.initialize(); await controller.openModel("articles"); await controller.openEntry("entry-1");
     controller.updateEntryValue("title", "Saved before schema"); await controller.inspectSchema();
-    expect(controller.state.entry).toBeNull(); expect(controller.state.activePane).toBe("author"); expect(controller.state.workMode).toBe("model-fields");
+    expect(controller.state.entry).toBeNull(); expect(controller.state.workMode).toBe("model-fields");
     const saved = await provider.store.getEntry("entry-1"); expect(saved.status === "loaded" && saved.record.values.title).toBe("Saved before schema");
   });
 

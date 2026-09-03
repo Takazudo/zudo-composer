@@ -100,20 +100,52 @@ async function selectEntry(page: Page, label: RegExp) {
   await selectOptionMatching(page.getByRole("combobox", { name: "Sample Entry" }), label);
 }
 
+/**
+ * The Content navigator. `role="tree"` sits on the rows alone, so the root
+ * `Add model` button and the toolbar live in the pane around it — which is why
+ * the pane region, not the tree, is the scope every Content lookup starts from.
+ */
+function contentNav(page: Page): Locator {
+  return page.getByRole("region", { name: "Content" });
+}
+
+function contentTree(page: Page): Locator {
+  return contentNav(page).getByRole("tree", { name: "Content" });
+}
+
+/** The save state the route publishes through `useEditorStatus`, as the shell draws it. */
+function saveStatus(page: Page): Locator {
+  return page.locator(".cms-topbar__status");
+}
+
+/** The one row-level overflow menu the navigator gives every model and Entry. */
+async function openRowMenu(page: Page, name: string) {
+  const row = contentTree(page).getByRole("treeitem", { name: new RegExp(`^${name}`) });
+  // Revealing the actions can move them under the cursor, and the row itself is
+  // the hit target Playwright then sees; the reveal is `:focus-within` as well
+  // as hover, so focusing the row is the stable way in.
+  await row.focus();
+  await contentNav(page).getByRole("button", { name: `More actions for ${name}` }).click();
+}
+
 test("same-context Content to Mapping to Composer preview to Sitemapper journey", async ({ page }) => {
   test.setTimeout(120_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.goto("/content");
-  await expect(page.getByRole("heading", { name: "Content authoring" })).toBeVisible();
-  const aboutCard = page.locator(".sg-content-library > li").filter({ hasText: "About content" });
-  await aboutCard.getByRole("button", { name: /^About content\s+Single$/ }).click();
-  await aboutCard.getByRole("button", { name: /^Entries/ }).click();
-  await aboutCard.getByRole("button", { name: /A studio built around useful clarity.*Complete/ }).click();
+  // The navigator IS the library: a model is a category and its Entries hang
+  // off it, so choosing what to author takes two clicks from the bare route.
+  const about = contentTree(page).getByRole("treeitem", { name: /^About content/ });
+  await expect(about).toBeVisible();
+  await expect(about).toContainText("single");
+  await about.click();
+  await contentTree(page).getByRole("treeitem", { name: /^A studio built around useful clarity/ }).click();
   await page.getByRole("textbox", { name: "Heading (required)" }).fill("Browser journey studio");
   await page.getByRole("textbox", { name: "Heading (required)" }).blur();
-  await expect(page.locator(".sg-content-save")).toContainText("All changes saved.");
+  await expect(saveStatus(page)).toContainText("Saved");
+  // Opening a record is a deep link the author can copy.
+  await expect(page).toHaveURL(/\/content\?model=about-content&entry=/);
 
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mapping library" })).toBeVisible();
@@ -150,13 +182,17 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.goto("/content");
-  await expect(page.getByRole("heading", { name: "Content authoring" })).toBeVisible();
+  await expect(contentTree(page)).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Content authoring" })).toBeVisible();
-  const journalCard = page.locator(".sg-content-library > li").filter({ hasText: "Journal articles" });
-  await journalCard.getByRole("button", { name: /^Journal articles\s+Collection$/ }).click();
-  await journalCard.getByRole("button", { name: /^Model fields/ }).click();
-  await page.getByRole("textbox", { name: "Model name" }).fill("Browser Journal articles");
+  await expect(contentTree(page)).toBeVisible();
+  await contentTree(page).getByRole("treeitem", { name: /^Journal articles/ }).click();
+  // Entry | Schema replaces the per-model Entries / Model fields buttons.
+  const mode = page.getByRole("radiogroup", { name: "Editor mode" });
+  await mode.getByRole("radio", { name: "Schema" }).click();
+  // Scoped to the form: the toolbar's inline record title is called
+  // "Model name" too, and it edits the same name from the other end.
+  await page.locator(".sg-content-form").getByRole("textbox", { name: "Model name" }).fill("Browser Journal articles");
+  await expect(page.getByRole("textbox", { name: "Model name" }).first()).toHaveValue("Browser Journal articles");
   await page.getByRole("button", { name: "Add field" }).click();
   const alternateSlugField = page.locator(".sg-content-field").last();
   await alternateSlugField.getByRole("textbox", { name: "Label" }).fill("Alternate route slug");
@@ -168,10 +204,13 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await reviewDateField.getByRole("textbox", { name: "Label" }).fill("Review date");
   await reviewDateField.getByRole("textbox", { name: "Key" }).fill("reviewDate");
   await reviewDateField.getByRole("radiogroup", { name: "Type for Review date" }).getByRole("radio", { name: /^Date\b/ }).click();
-  await expect(page.locator(".sg-content-save")).toContainText("All changes saved.");
+  await expect(saveStatus(page)).toContainText("Saved");
+  // Autosave stays authoritative, so Save is inert once the queue has drained.
+  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save" })).toHaveAttribute("title", "All changes saved");
 
-  await journalCard.getByRole("button", { name: /^Entries/ }).click();
-  await journalCard.getByRole("button", { name: "New Entry" }).click();
+  await mode.getByRole("radio", { name: "Entry" }).click();
+  await contentNav(page).getByRole("button", { name: "Add entry" }).click();
   await expect(page.locator(".sg-content-completeness")).toContainText("Incomplete draft");
   await page.getByRole("textbox", { name: "Heading (required)" }).fill("Browser journey article");
   await page.getByRole("textbox", { name: "Introduction (required)" }).fill("Saved Content drives the Mapping preview.");
@@ -183,32 +222,43 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
 
   const additionalSlugs = ["東京", ".", "", ...Array.from({ length: 19 }, (_, index) => `browser-${index + 5}`)];
   for (const [index, routeSlug] of additionalSlugs.entries()) {
-    await journalCard.getByRole("button", { name: "New Entry" }).click();
+    await contentNav(page).getByRole("button", { name: "Add entry" }).click();
     await expect(page.getByRole("textbox", { name: "Heading (required)" })).toHaveValue("");
     await page.getByRole("textbox", { name: "Heading (required)" }).fill(`Browser article ${index + 2}`);
     await page.getByRole("textbox", { name: "Introduction (required)" }).fill(`Introduction ${index + 2}`);
     await page.getByLabel("Published on (required)").fill("2026-08-29");
     await page.getByRole("textbox", { name: "Body (required)" }).fill(`Body ${index + 2}`);
     if (routeSlug) await page.getByRole("textbox", { name: "Slug (required)" }).fill(routeSlug);
-    await expect(page.locator(".sg-content-save")).toContainText("All changes saved.");
+    await expect(saveStatus(page)).toContainText("Saved");
   }
-  await expect(journalCard.getByRole("button", { name: /^Entries.*26/ })).toBeVisible();
+  // Metadata is read off the row rather than matched inside its accessible
+  // name: the title, slug, count and status are separate elements, and a name
+  // regex spanning them would depend on how they happen to be concatenated.
+  const journalRow = contentTree(page).getByRole("treeitem", { name: /^Browser Journal articles/ });
+  await expect(journalRow).toContainText("(26)");
   await page.reload();
-  const browserJournalCard = page.locator(".sg-content-library > li").filter({ hasText: "Browser Journal articles" });
-  await browserJournalCard.getByRole("button", { name: /^Entries/ }).click();
-  await expect(page.getByRole("button", { name: "Load more Entries" })).toBeVisible();
-  await page.getByRole("button", { name: "Load more Entries" }).click();
-  await expect(page.getByRole("list", { name: "Entries" }).getByRole("button", { name: /Browser journey article.*Complete/ })).toBeVisible();
+  // The reload lands on the record's own URL, so the model reopens itself.
+  await expect(journalRow).toBeVisible();
+  // A further page is one trailing row inside the tree, not a button beside it.
+  const moreEntries = contentTree(page).getByRole("treeitem", { name: /\d+ more entr(y|ies)…/ });
+  await expect(moreEntries).toBeVisible();
+  await moreEntries.click();
+  await expect(contentTree(page).getByRole("treeitem", { name: /^Browser journey article/ })).toBeVisible();
 
-  await page.getByRole("button", { name: "New Single" }).click();
-  const singleCard = page.locator(".sg-content-library > li").filter({ hasText: "Untitled single" });
-  await singleCard.getByRole("button", { name: /^Model fields/ }).click();
-  await page.getByRole("textbox", { name: "Model name" }).fill("Browser Site settings");
-  const selectedSingleCard = page.locator(".sg-content-library > li[data-selected=true]");
-  await selectedSingleCard.getByRole("button", { name: /^Entries/ }).click();
-  await selectedSingleCard.getByRole("button", { name: "New Entry" }).click();
-  await expect(selectedSingleCard.getByRole("button", { name: "New Entry" })).toHaveCount(0);
-  await expect(selectedSingleCard.getByRole("button", { name: /^Entries.*1/ })).toBeVisible();
+  // `Add model` asks name and kind once, instead of two New buttons creating
+  // an "Untitled" record the author then has to find and rename.
+  await contentNav(page).getByRole("button", { name: "Add model" }).click();
+  const addModel = page.getByRole("dialog", { name: "Add Content model" });
+  await addModel.getByRole("textbox", { name: "Model name" }).fill("Browser Site settings");
+  await addModel.getByRole("radio", { name: "Single" }).click();
+  await addModel.getByRole("button", { name: "Add model" }).click();
+  const siteSettingsRow = contentTree(page).getByRole("treeitem", { name: /^Browser Site settings/ });
+  await expect(siteSettingsRow).toContainText("single");
+  await expect(contentTree(page).getByRole("treeitem", { name: /Untitled/ })).toHaveCount(0);
+  await contentNav(page).getByRole("button", { name: "Add entry" }).click();
+  // A Single holds exactly one Entry, so its add row withdraws once it has one.
+  await expect(contentNav(page).getByRole("button", { name: "Add entry" })).toHaveCount(0);
+  await expect(siteSettingsRow).toContainText("(1)");
 
   // Native date inputs cannot author malformed dates. Keep one stale provider
   // value to prove Mapping diagnoses it without rewriting the source Entry.
@@ -446,24 +496,29 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/content");
-  await page.getByRole("button", { name: /^Journal articles\b/ }).click();
-  const panes = page.locator(".sg-content-pane");
-  await expectFlatPanels(panes);
-  const paneGeometry = await panes.evaluateAll((nodes) => nodes.map((node) => {
+  await contentTree(page).getByRole("treeitem", { name: /^Journal articles/ }).click();
+  // Three regions of the shared chrome, not three floating cards: they share a
+  // top edge, sit inside the viewport, and never overlap.
+  const regions = page.locator(".cms-editor__region");
+  const regionGeometry = await regions.evaluateAll((nodes) => nodes.map((node) => {
     const rect = node.getBoundingClientRect();
-    const style = getComputedStyle(node);
-    return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, overflowY: style.overflowY };
+    return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, shadow: getComputedStyle(node).boxShadow };
   }));
-  expect(new Set(paneGeometry.map(({ top }) => Math.round(top))).size).toBe(1);
-  expect(paneGeometry.every(({ bottom, overflowY }) => bottom <= 900 && overflowY === "auto")).toBe(true);
-  expect(paneGeometry[0]!.right).toBeLessThanOrEqual(paneGeometry[1]!.left);
-  expect(paneGeometry[1]!.right).toBeLessThanOrEqual(paneGeometry[2]!.left);
+  expect(regionGeometry).toHaveLength(3);
+  expect(new Set(regionGeometry.map(({ top }) => Math.round(top))).size).toBe(1);
+  expect(regionGeometry.every(({ bottom, shadow }) => bottom <= 900 && shadow === "none")).toBe(true);
+  expect(regionGeometry[0]!.right).toBeLessThanOrEqual(regionGeometry[1]!.left);
+  expect(regionGeometry[1]!.right).toBeLessThanOrEqual(regionGeometry[2]!.left);
+  // Each pane scrolls inside itself rather than growing the page.
+  const paneBodies = await page.locator(".cms-editor__region .cms-pane__body").evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).overflowY));
+  expect(paneBodies.length).toBeGreaterThan(0);
+  expect(paneBodies.every((overflowY) => overflowY === "auto")).toBe(true);
   await expect(page.locator(".cms-topbar")).toHaveCSS("height", "48px");
 
   const themeColors: string[] = [];
   for (const theme of ["light", "dark"] as const) {
     await useTheme(page, theme);
-    themeColors.push(await panes.first().evaluate((node) => getComputedStyle(node).backgroundColor));
+    themeColors.push(await page.locator(".cms-editor__region .cms-pane").first().evaluate((node) => getComputedStyle(node).backgroundColor));
     await screenshot(page, testInfo, `content-desktop-${theme}`);
   }
   expect(themeColors[0]).not.toBe(themeColors[1]);
@@ -474,9 +529,11 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   await expect(page.locator(".cms-rail")).toHaveCSS("height", "56px");
   const navigation = page.getByRole("navigation", { name: "Main navigation" });
   for (const product of PRODUCT_LINKS) await expect(navigation.getByRole("link", { name: product, exact: true })).toBeVisible();
-  await expectArrowTabs(page, "Content workspace", ["Library", "Author", "Preview"]);
-  const focusedTab = page.getByRole("tab", { name: "Library", exact: true });
-  await expect(focusedTab).toHaveCSS("outline-width", "2px");
+  // `EditorChrome` replaced the route's own tablist with the shared pane
+  // switch. Scoped to the group: the toolbar also carries a Preview button.
+  const contentPaneSwitch = page.getByRole("radiogroup", { name: "Pane" });
+  await expectArrowRadios(page, contentPaneSwitch, ["Content", "Editor", "Preview"]);
+  await expect(contentPaneSwitch.getByRole("radio").first()).toHaveCSS("outline-width", "2px");
   await expectNoHorizontalOverflow(page);
 
   const cdp = await page.context().newCDPSession(page);
@@ -492,23 +549,37 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   expect(targets.filter(({ width, height }) => width < 44 || height < 44)).toEqual([]);
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
 
-  await page.getByRole("tab", { name: "Library", exact: true }).click();
-  const deleteTrigger = page.getByRole("button", { name: "Delete Journal articles" });
-  await deleteTrigger.click();
-  const dialog = page.getByRole("dialog", { name: "Delete model?" });
+  // Back to the navigator by position: hosts rename these panes freely.
+  await contentPaneSwitch.getByRole("radio").nth(0).click();
+  await expect(contentNav(page)).toBeVisible();
+  await openRowMenu(page, "Journal articles");
+  const deleteTrigger = contentNav(page).getByRole("button", { name: "More actions for Journal articles" });
+  await page.getByRole("menuitem", { name: /^Delete model/ }).click();
+  // The shared destructive question is an `alertdialog`, never a `dialog`.
+  const dialog = page.getByRole("alertdialog", { name: "Delete model?" });
+  await expect(page.getByRole("dialog", { name: "Delete model?" })).toHaveCount(0);
   const dialogStyle = await dialog.evaluate((node) => {
     const style = getComputedStyle(node);
-    return { radius: style.borderRadius, shadow: style.boxShadow };
+    return { radius: Number.parseFloat(style.borderRadius), shadow: style.boxShadow };
   });
-  expect(dialogStyle.radius).toBe("8px");
+  expect(dialogStyle.radius).toBeGreaterThanOrEqual(4);
+  expect(dialogStyle.radius).toBeLessThanOrEqual(12);
   expect(dialogStyle.shadow).not.toBe("none");
-  await expect(dialog.getByRole("button", { name: "Delete" })).toBeFocused();
-  await page.keyboard.press("Tab");
+  // A destructive answer is never the one a stray Enter lands on.
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
-  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
   await expect(dialog.getByRole("button", { name: "Delete" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(deleteTrigger).toBeFocused();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const theme of ["light", "dark"] as const) {
+    await useTheme(page, theme);
+    await screenshot(page, testInfo, `content-narrow-${theme}`);
+  }
+  await expectNoHorizontalOverflow(page);
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   const motion = await page.locator(".sg-content-app button").first().evaluate((node) => {

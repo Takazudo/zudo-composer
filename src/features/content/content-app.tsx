@@ -1,13 +1,20 @@
 import type { JSX } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useBreadcrumb, type EditorStatus } from "../../app/chrome-context";
+import { formatIntent, parseIntent } from "../../app/route-intents";
+import { EditorBody, EditorChrome, RecordTitle, readEditorCollapsed, writeEditorCollapsed } from "../../components/editor-chrome";
+import { CheckIcon, CopyIcon, DuplicateIcon, EllipsisIcon, EyeIcon, FileIcon, SettingsIcon, TrashIcon } from "../../components/icons";
+import { useLibraryConfirm } from "../../components/library-page";
+import { ConfirmDialog, Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay";
+import { Banner, Button, Chip, EmptyState, Pane, PaneBody, PaneHeader, SegmentedControl } from "../../components/ui";
 import type { ContentProvider } from "../../content";
 import type { ComposerComponentProvider } from "../composer/component-provider";
-import { ContentConfirmDialog } from "./confirm-dialog";
+import { ContentAddModelDialog } from "./add-model-dialog";
 import { ContentEntryAuthor, ContentSchemaAuthor } from "./content-author";
-import { ContentLibrary } from "./content-library";
+import { ContentNavigator } from "./content-library";
 import { ContentPreviewPane } from "./content-preview-pane";
-import { createContentAuthoringController, type ContentAuthoringController, type ContentAuthoringState, type ContentPane } from "./controller";
-import { contentEntryLabel } from "./presentation";
+import { createContentAuthoringController, type ContentAuthoringController, type ContentAuthoringState, type ContentSaveStatus, type ContentWorkMode } from "./controller";
+import { contentEntryLabel, contentEntryTitleField } from "./presentation";
 import type { ContentPreviewSource } from "./preview-source";
 
 export interface ContentRouteContentProps {
@@ -17,42 +24,324 @@ export interface ContentRouteContentProps {
   createPreviewSource?: () => ContentPreviewSource;
 }
 
-type Confirm = { kind: "model"; id: string; label: string } | { kind: "entry"; id: string; label: string } | { kind: "field"; id: string; label: string };
-const panes: readonly ContentPane[] = ["library", "author", "preview"];
-const paneLabels: Record<ContentPane, string> = { library: "Library", author: "Author", preview: "Preview" };
+/** Names the persisted rail geometry: one Content editor, not one per record. */
+const CONTENT_EDITOR_KEY = "content";
+const CONTENT_ROUTE = "/content";
 
+const MODE_OPTIONS = [
+  { value: "entries" as const, label: "Entry", icon: FileIcon },
+  { value: "model-fields" as const, label: "Schema", icon: SettingsIcon },
+];
+
+/** The save queue's vocabulary, translated into the chrome's four states. */
+function statusOf(status: ContentSaveStatus, detail: string, onRetry: () => void): EditorStatus {
+  switch (status) {
+    case "saved": return { state: "saved" };
+    case "saving": return { state: "saving" };
+    case "error": return { state: "failed", detail, onRetry };
+    case "dirty": return { state: "unsaved" };
+  }
+}
+
+function contentHref(modelId: string, entryId?: string): string {
+  return formatIntent(entryId === undefined ? { route: "content", modelId } : { route: "content", modelId, entryId });
+}
+
+/**
+ * The Content route on the shared editor chrome.
+ *
+ * The navigator IS the library — there is no separate listing page — so the
+ * whole route is one editor: models and their Entries on the left, the author
+ * in the middle, and what the draft renders as on the right. Save state is
+ * published through `useEditorStatus` rather than drawn here, because autosave
+ * remains authoritative and the app chrome owns where its state is shown.
+ */
 export function ContentApp({ provider, controller: supplied, componentProvider, createPreviewSource }: ContentRouteContentProps): JSX.Element {
   const controller = useMemo(() => supplied ?? createContentAuthoringController(provider), [provider, supplied]);
   const [state, setState] = useState<ContentAuthoringState>(controller.state);
-  const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [addModelOpen, setAddModelOpen] = useState(false);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(() => readEditorCollapsed(CONTENT_EDITOR_KEY).insp);
+  const confirm = useLibraryConfirm();
+  const overflowRef = useRef<HTMLButtonElement | null>(null);
+  const overflow = useMenu(overflowRef, { align: "end" });
+
   useEffect(() => controller.subscribe(setState), [controller]);
   useEffect(() => { if (controller.state.phase === "idle") void controller.initialize(); }, [controller]);
+
   const run = (action: () => void | Promise<void>) => {
     const fail = (reason: unknown) => setError(reason instanceof Error ? reason.message : "Content action failed.");
     setError(null);
+    setNotice(null);
     try { void Promise.resolve(action()).catch(fail); } catch (reason) { fail(reason); }
   };
-  const selectedEntryName = state.entry && state.model ? contentEntryLabel(state.entry, state.model.document.fields) : "Entry";
 
-  return <main class="sg-content-app" aria-busy={state.phase === "loading"}>
-    <header class="sg-content-app__header"><div><p class="sg-content-eyebrow">Authoring studio</p><h1>Content authoring</h1></div><div class="sg-content-save" aria-live="polite" aria-atomic="true">{state.message}</div></header>
-    {(error || state.saveStatus === "error") && <div class="sg-content-notice sg-content-notice--error" role="alert"><span>{error ?? state.message}</span>{state.saveStatus === "error" && <button type="button" onClick={() => controller.retrySave()}>Retry save</button>}</div>}
-    {state.phase === "error" && <section class="sg-content-state" aria-labelledby="content-error"><h2 id="content-error">Content library unavailable</h2><p>{state.message}</p><button type="button" class="sg-content-button--primary" onClick={() => run(() => controller.retryInitialization())}>Retry</button></section>}
-    {state.phase === "recovery" && <section class="sg-content-state" aria-labelledby="content-recovery"><h2 id="content-recovery">Stored Content needs recovery</h2><p>{state.recoveryMessage}</p><p>Your source records are quarantined and will not be overwritten.</p><div class="sg-content-actions"><button type="button" onClick={() => run(() => controller.retryInitialization())}>Retry</button><button type="button" class="sg-content-button--danger" onClick={() => setConfirm({ kind: "model", id: "__fresh__", label: "all quarantined Content data" })}>Start fresh…</button></div></section>}
-    {state.phase === "loading" && <p class="sg-content-state" role="status">Loading Content library…</p>}
-    {state.phase === "ready" && <><WorkspaceTabs active={state.activePane} onChange={(pane) => controller.setActivePane(pane)} /><div class="sg-content-workspace">
-      <section id="sg-content-panel-library" role="tabpanel" aria-labelledby="sg-content-tab-library" class="sg-content-pane sg-content-pane--library" data-active={state.activePane === "library"}><ContentLibrary state={state} controller={controller} run={run} onDeleteModel={(id, label) => setConfirm({ kind: "model", id, label })} onDeleteEntry={(id, label) => setConfirm({ kind: "entry", id, label })} /></section>
-      <section id="sg-content-panel-author" role="tabpanel" aria-labelledby="sg-content-tab-author" class="sg-content-pane sg-content-pane--author" data-active={state.activePane === "author"}>
-        <div class="sg-content-pane__heading"><div><h2>Author</h2><p>{state.model?.document.name ?? "Choose a model"}</p></div>{state.model && <div class="sg-content-mode-switch" role="group" aria-label="Authoring mode"><button type="button" aria-pressed={state.workMode === "entries"} onClick={() => controller.browseEntries("author")}>Entries</button><button type="button" aria-pressed={state.workMode === "model-fields"} onClick={() => run(() => controller.inspectSchema())}>Model fields</button></div>}</div>
-        {!state.model ? <div class="sg-content-empty"><h3>No model selected</h3><p>Choose a model from the Library.</p></div> : state.workMode === "model-fields" ? <ContentSchemaAuthor state={state} controller={controller} run={run} onRemove={(field) => setConfirm({ kind: "field", id: field.id, label: field.label })} /> : state.entry ? <ContentEntryAuthor state={state} controller={controller} /> : <div class="sg-content-empty"><h3>Choose an Entry</h3><p>Select an Entry in the Library or create a new one.</p></div>}
-      </section>
-      <section id="sg-content-panel-preview" role="tabpanel" aria-labelledby="sg-content-tab-preview" class="sg-content-pane sg-content-pane--preview" data-active={state.activePane === "preview"}><div class="sg-content-pane__heading"><div><h2>Preview</h2><p>Evaluated from the current unsaved draft</p></div></div><ContentPreviewPane providerId={provider.descriptor.id} model={state.model} entry={state.entry} entryName={selectedEntryName} componentProvider={componentProvider} createPreviewSource={createPreviewSource} /></section>
-    </div></>}
-    <ContentConfirmDialog open={confirm !== null} title={confirm?.kind === "field" ? "Remove field?" : confirm?.id === "__fresh__" ? "Start fresh?" : `Delete ${confirm?.kind ?? "item"}?`} confirmLabel={confirm?.id === "__fresh__" ? "Start fresh" : "Delete"} onClose={() => setConfirm(null)} onConfirm={() => { if (!confirm) return; if (confirm.id === "__fresh__") run(() => controller.startFresh()); else if (confirm.kind === "model") run(() => controller.deleteModel(confirm.id)); else if (confirm.kind === "entry") run(() => controller.deleteEntry(confirm.id)); else run(() => controller.removeField(confirm.id)); }}><p><strong>{confirm?.label}</strong> will be permanently removed.</p>{confirm?.kind === "field" && <p>Stored values for this field will be scrubbed from every Entry.</p>}</ContentConfirmDialog>
-  </main>;
-}
+  // `/content?model=&entry=` opens what it names, once, and only after the
+  // library is loaded — `openModel` reads through the store the initialization
+  // just prepared. A malformed link is reported rather than silently opening
+  // the bare route.
+  const appliedIntent = useRef(false);
+  useEffect(() => {
+    if (appliedIntent.current || state.phase !== "ready") return;
+    appliedIntent.current = true;
+    const outcome = parseIntent();
+    if (outcome.status === "invalid") { setError(outcome.message); return; }
+    if (outcome.status !== "matched" || outcome.intent.route !== "content") return;
+    const intent = outcome.intent;
+    run(async () => {
+      await controller.openModel(intent.modelId);
+      if (intent.entryId !== undefined) await controller.openEntry(intent.entryId);
+    });
+  }, [controller, state.phase]);
 
-function WorkspaceTabs({ active, onChange }: { active: ContentPane; onChange(pane: ContentPane): void }): JSX.Element {
-  return <div class="sg-content-tabs" role="tablist" aria-label="Content workspace">{panes.map((pane, index) => <button id={`sg-content-tab-${pane}`} key={pane} role="tab" type="button" aria-selected={active === pane} aria-controls={`sg-content-panel-${pane}`} tabIndex={active === pane ? 0 : -1} onClick={() => onChange(pane)} onKeyDown={(event) => { if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return; event.preventDefault(); const next = (index + (event.key === "ArrowRight" ? 1 : -1) + panes.length) % panes.length; onChange(panes[next]!); (event.currentTarget.parentElement?.children[next] as HTMLElement)?.focus(); }}>{paneLabels[pane]}</button>)}</div>;
+  // The address bar follows the selection, so a copied URL opens what the
+  // author is looking at. `replaceState` keeps it out of the history stack —
+  // choosing a record is not a navigation.
+  useEffect(() => {
+    if (!appliedIntent.current || state.phase !== "ready") return;
+    if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") return;
+    window.history.replaceState(null, "", state.model ? contentHref(state.model.id, state.entry?.id) : CONTENT_ROUTE);
+  }, [state.phase, state.model?.id, state.entry?.id]);
+
+  const fields = state.model?.document.fields ?? [];
+  const entryName = state.entry ? contentEntryLabel(state.entry, fields) : "";
+  const titleField = contentEntryTitleField(fields);
+  const schemaMode = state.workMode === "model-fields";
+
+  useBreadcrumb([
+    { label: "Content", href: CONTENT_ROUTE },
+    ...(state.model ? [state.entry ? { label: state.model.document.name, href: contentHref(state.model.id) } : { label: state.model.document.name }] : []),
+    ...(state.entry ? [{ label: entryName }] : []),
+  ]);
+
+  function collapseInspector(collapsed: boolean): void {
+    setInspectorCollapsed(collapsed);
+    writeEditorCollapsed(CONTENT_EDITOR_KEY, "insp", collapsed);
+  }
+
+  function copyEntryId(id: string): void {
+    setError(null);
+    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+    if (!clipboard) { setNotice(`Entry ID: ${id}`); return; }
+    void clipboard.writeText(id).then(
+      () => setNotice("Entry ID copied."),
+      () => setNotice(`Entry ID: ${id}`),
+    );
+  }
+
+  function confirmDeleteModel(id: string, label: string): void {
+    confirm.request({
+      title: "Delete model?",
+      message: `${label} and every Entry it holds are permanently removed. This cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+      onConfirm: () => run(() => controller.deleteModel(id)),
+    });
+  }
+
+  function confirmDeleteEntry(id: string, label: string): void {
+    confirm.request({
+      title: "Delete entry?",
+      message: `${label} is permanently removed. This cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+      onConfirm: () => run(() => controller.deleteEntry(id)),
+    });
+  }
+
+  function confirmStartFresh(): void {
+    confirm.request({
+      title: "Start fresh?",
+      message: "All quarantined Content data is permanently removed. Your source records stay quarantined and are not overwritten.",
+      confirmLabel: "Start fresh",
+      tone: "danger",
+      onConfirm: () => run(() => controller.startFresh()),
+    });
+  }
+
+  if (state.phase !== "ready") {
+    return (
+      <main class="sg-content-app sg-content-app--state" aria-busy={state.phase === "loading"}>
+        {state.phase === "error" ? (
+          <EmptyState
+            title="Content library unavailable"
+            description={state.message}
+            action={<Button variant="primary" onClick={() => run(() => controller.retryInitialization())}>Retry</Button>}
+          />
+        ) : null}
+        {state.phase === "recovery" ? (
+          <EmptyState
+            title="Stored Content needs recovery"
+            description={<>{state.recoveryMessage} Your source records are quarantined and will not be overwritten.</>}
+            action={
+              <>
+                <Button onClick={() => run(() => controller.retryInitialization())}>Retry</Button>
+                <Button variant="danger" onClick={confirmStartFresh}>Start fresh…</Button>
+              </>
+            }
+          />
+        ) : null}
+        {state.phase === "idle" || state.phase === "loading" ? <p class="sg-content-loading" role="status">Loading Content library…</p> : null}
+        <ConfirmDialog {...confirm.dialogProps} />
+      </main>
+    );
+  }
+
+  return (
+    <EditorChrome
+      editorKey={CONTENT_EDITOR_KEY}
+      class="sg-content-app"
+      back={{ href: CONTENT_ROUTE, label: "Back to Content" }}
+      title={
+        <RecordTitle
+          value={schemaMode ? (state.model?.document.name ?? "") : entryName}
+          label={schemaMode ? "Model name" : "Entry title"}
+          placeholder={schemaMode ? "Model name" : "Untitled Entry"}
+          disabled={schemaMode ? state.model === null : state.entry === null || titleField === null}
+          onCommit={(next) => run(() => {
+            if (schemaMode) controller.renameModel(next);
+            else if (titleField) controller.updateEntryValue(titleField.id, next);
+          })}
+        />
+      }
+      status={statusOf(state.saveStatus, state.message, () => controller.retrySave())}
+      dirty={state.saveStatus !== "saved"}
+      paneLabels={{ nav: "Content", main: "Editor", insp: "Preview" }}
+      center={
+        <SegmentedControl<ContentWorkMode>
+          label="Editor mode"
+          size="sm"
+          value={state.workMode}
+          options={MODE_OPTIONS}
+          onChange={(mode) => run(() => (mode === "model-fields" ? controller.inspectSchema() : controller.browseEntries()))}
+        />
+      }
+      right={
+        <>
+          <Button
+            aria-pressed={!inspectorCollapsed}
+            title={inspectorCollapsed ? "Preview panel is closed" : "Preview panel is open"}
+            onClick={() => collapseInspector(!inspectorCollapsed)}
+          >
+            <EyeIcon size="sm" />
+            Preview
+          </Button>
+          <Button
+            variant="primary"
+            disabled={state.saveStatus === "saved"}
+            // Autosave stays authoritative; Save is the explicit flush for an
+            // author who wants the pending write to land now.
+            title={state.saveStatus === "saved" ? "All changes saved" : "Save now"}
+            onClick={() => run(() => (state.saveStatus === "error" ? controller.retrySave() : controller.flushSessions()))}
+          >
+            <CheckIcon size="sm" />
+            Save
+          </Button>
+          <Button variant="ghost" iconOnly elementRef={overflowRef} aria-label="More Content actions" {...overflow.triggerProps}>
+            <EllipsisIcon size="sm" />
+          </Button>
+          <Menu controller={overflow} label="Content actions">
+            <MenuItem
+              icon={DuplicateIcon}
+              disabled={state.entry === null || state.model?.document.kind === "single"}
+              onSelect={() => { if (state.entry) run(() => controller.duplicateEntry(state.entry!.id)); }}
+            >
+              Duplicate entry
+            </MenuItem>
+            <MenuItem icon={CopyIcon} disabled={state.entry === null} onSelect={() => { if (state.entry) copyEntryId(state.entry.id); }}>
+              Copy entry ID
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem
+              icon={TrashIcon}
+              tone="danger"
+              disabled={state.model === null}
+              onSelect={() => {
+                if (state.entry) confirmDeleteEntry(state.entry.id, entryName);
+                else if (state.model) confirmDeleteModel(state.model.id, state.model.document.name);
+              }}
+            >
+              Delete {state.entry ? "entry" : "model"}…
+            </MenuItem>
+          </Menu>
+        </>
+      }
+    >
+      <EditorBody
+        navLabel="Content"
+        inspectorLabel="Preview"
+        inspectorCollapsed={inspectorCollapsed}
+        onInspectorCollapsedChange={collapseInspector}
+        nav={
+          <ContentNavigator
+            state={state}
+            controller={controller}
+            run={run}
+            onAddModel={() => setAddModelOpen(true)}
+            onDeleteModel={confirmDeleteModel}
+            onDeleteEntry={confirmDeleteEntry}
+            onCopyEntryId={copyEntryId}
+          />
+        }
+        main={
+          <Pane variant="main" label="Editor">
+            <PaneHeader title={schemaMode ? "Schema" : "Entry"}>
+              {state.model ? <Chip tone="plain">{state.model.document.name} · {state.model.document.kind}</Chip> : null}
+            </PaneHeader>
+            <PaneBody padded>
+              {error || state.saveStatus === "error" ? (
+                <Banner
+                  tone="err"
+                  action={state.saveStatus === "error" ? <Button size="sm" onClick={() => controller.retrySave()}>Retry save</Button> : undefined}
+                >
+                  {error ?? state.message}
+                </Banner>
+              ) : null}
+              {notice ? <Banner tone="info">{notice}</Banner> : null}
+              {!state.model ? (
+                <EmptyState title="No model selected" description="Choose a model in the Content navigator, or add one." inline />
+              ) : schemaMode ? (
+                <ContentSchemaAuthor
+                  state={state}
+                  controller={controller}
+                  run={run}
+                  onRemove={(field) => confirm.request({
+                    title: "Remove field?",
+                    message: `${field.label} is removed from the model and its stored values are scrubbed from every Entry.`,
+                    confirmLabel: "Remove",
+                    tone: "danger",
+                    onConfirm: () => run(() => controller.removeField(field.id)),
+                  })}
+                />
+              ) : state.entry ? (
+                <ContentEntryAuthor state={state} controller={controller} />
+              ) : (
+                <EmptyState title="Choose an Entry" description="Select an Entry in the navigator, or add one with its model's Add entry row." inline />
+              )}
+            </PaneBody>
+          </Pane>
+        }
+        inspector={
+          <ContentPreviewPane
+            providerId={provider.descriptor.id}
+            model={state.model}
+            entry={state.entry}
+            entryName={entryName || "Entry"}
+            componentProvider={componentProvider}
+            createPreviewSource={createPreviewSource}
+          />
+        }
+      />
+      <ContentAddModelDialog
+        open={addModelOpen}
+        onSubmit={(name, kind) => {
+          setAddModelOpen(false);
+          run(() => controller.createModel(name, kind));
+        }}
+        onClose={() => setAddModelOpen(false)}
+      />
+      <ConfirmDialog {...confirm.dialogProps} />
+    </EditorChrome>
+  );
 }
