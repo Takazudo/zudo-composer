@@ -1,388 +1,42 @@
 /* ============================================================================
- * Composer — feature CSS (issue Takazudo/zudo-sg#247)
+ * Composer — feature CSS
  *
- * The `/composer` route owns a dedicated standalone document shell. This file
- * contains its host-only selectors; the iframe imports preview.css instead.
- *
- * Layout: below the standalone header sits a fixed-height toolbar, then a workspace
- * that fills the remaining viewport height. Desktop (>=64rem) is the
- * "five-track" grid the issue describes: tree rail | resizer | canvas
- * (minmax(0,1fr)) | resizer | inspector rail. Below 64rem the rails and
- * resizers are hidden and the canvas fills the width — this is the
- * content-driven narrow seam retained from the frozen source provenance.
- *
- * Overlay z-index tiers are project-local tokens in
- * `src/styles/app-tokens.css`: sidebar for resizer-adjacent guidance and toolbar
- * for the fixed control row.
+ * The `/composer` route composes the shared editor chrome, so the geometry,
+ * the rail resizers and the narrow-screen pane switch all live in
+ * `src/components/editor-chrome`. What is left here is Composer-specific: the
+ * canvas sheet and its preview iframe, the component chooser's two-pane body,
+ * and the inspector's own row shapes. The iframe imports preview.css instead.
  * ========================================================================== */
 
-:root {
-  /* Rail widths — the resizer scripts (resizer-dom.ts) override
-   * these per-user in px at runtime; these are just the first-paint
-   * defaults for a session with nothing persisted yet. */
-  /* 20rem (320px) matches DEFAULT_TREE_W in resizer-contract.ts so the first
-     paint and the restore-script's fresh-session default agree — wide enough
-     that common component names fit untruncated even with the leading
-     node-type glyph and on CI's wider fonts (Takazudo/zudo-sg#265 / Takazudo/zudo-sg#270 / parity Takazudo/zudo-sg#282). */
-  --sg-composer-tree-w: 20rem;
-  --sg-composer-inspector-w: 20rem;
-  /* Visual (not hit-area) width of each resizer track. */
-  --sg-composer-resizer-w: 0.75rem;
-}
+/* ── Editor regions ─────────────────────────────────────────────────────── */
 
-.sg-composer-shell {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - var(--sg-header-h));
-  min-height: 0;
-  /* Hard, EFFECTIVE horizontal-overflow containment (acceptance: "no body
-   * horizontal overflow" at every width — verified via documentElement.
-   * scrollWidth, which the <body> guard above cannot satisfy; see its note).
-   * As a non-root element the shell genuinely clips, so any workspace chrome
-   * that doesn't fully collapse at the narrow seam (e.g. the two resizer
-   * tracks/hit-areas, ~2×0.75rem) can never push the document wider than the
-   * viewport. `clip` (not `hidden`) is deliberate: it keeps `overflow-y`
-   * `visible` instead of forcing it to `auto`, so no phantom vertical scroll
-   * container is created. Desktop is unaffected — the five-track grid is
-   * joint-clamped to fit the viewport and every resizer affordance sits
-   * interior to the shell, far from its clipped edges. */
-  overflow-x: clip;
-}
-
-.sg-composer-toolbar {
-  flex-shrink: 0;
-  position: relative;
-  z-index: var(--z-index-toolbar);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-hsp-sm);
-  min-height: 3.5rem;
-  padding-inline: clamp(var(--spacing-hsp-md), 2vw, var(--spacing-hsp-xl));
-  padding-block: var(--spacing-vsp-10);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
-}
-
-.sg-composer-grid {
-  flex: 1 1 auto;
-  min-height: 0;
+/* The main region is one grid row for the canvas, plus an auto row that a
+ * provider/navigation banner takes when there is one. `minmax(0, 1fr)` on the
+ * canvas is what keeps the iframe from growing past the region. */
+.sg-composer-main {
   display: grid;
-  /* Narrow (< 64rem): canvas-only — see the min-width:64rem block below. */
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.sg-composer-tree-rail,
-.sg-composer-inspector {
-  display: none;
-  min-width: 0;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  background: var(--color-surface);
-}
-
-.sg-composer-tree-rail {
-  border-right: 1px solid var(--color-border);
-}
-
-.sg-composer-inspector {
-  border-left: 1px solid var(--color-border);
-}
-
-.sg-composer-canvas {
-  grid-column: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-
-.sg-composer-resizer {
-  display: none;
-}
-
-.sg-composer-narrow-note {
-  position: absolute;
-  z-index: var(--z-index-sidebar);
-  right: var(--spacing-hsp-md);
-  bottom: var(--spacing-vsp-md);
-  max-width: 16rem;
-  padding: var(--spacing-vsp-2xs) var(--spacing-hsp-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
-  color: var(--color-muted);
-  font-size: var(--text-micro);
-  box-shadow: var(--shadow-lg);
-}
-
-.sg-composer-narrow-note strong {
-  display: block;
-  color: var(--color-fg);
-}
-
-@media (min-width: 64rem) {
-  .sg-composer-grid {
-    position: relative;
-    grid-template-columns:
-      var(--sg-composer-tree-w)
-      var(--sg-composer-resizer-w)
-      minmax(0, 1fr)
-      var(--sg-composer-resizer-w)
-      var(--sg-composer-inspector-w);
-  }
-
-  .sg-composer-tree-rail,
-  .sg-composer-inspector {
-    display: block;
-  }
-
-  .sg-composer-canvas {
-    grid-column: 3;
-  }
-
-  .sg-composer-resizer {
-    position: relative;
-    display: block;
-    grid-row: 1;
-    cursor: col-resize;
-    background: transparent;
-  }
-
-  [data-sg-composer-tree-resizer] {
-    grid-column: 2;
-  }
-
-  [data-sg-composer-inspector-resizer] {
-    grid-column: 4;
-  }
-
-  /* Accent budget (Takazudo/zudo-sg#267): hover/drag were both the same accent-30% flash —
-     neither is a whitelisted accent role (drag is interaction feedback, not a
-     pressed/selected control), so both move to a neutral fg tint, same idiom
-     as the tree row/action hover below. Dragging reads as the "committed"
-     state, so it gets a stronger tint than a plain hover. */
-  @media (hover: hover) {
-    .sg-composer-resizer:hover {
-      background: color-mix(in oklch, var(--color-fg) 8%, transparent);
-    }
-  }
-  .sg-composer-resizer[data-sg-dragging] {
-    background: color-mix(in oklch, var(--color-fg) 14%, transparent);
-  }
-  /* Outline only, matching every other focus-visible rule in this file — the
-     accent-tinted background this used to add was the odd one out. */
-  .sg-composer-resizer:focus-visible {
-    outline: 2px solid var(--color-focus);
-    outline-offset: -2px;
-  }
-
-  .sg-composer-narrow-note {
-    display: none;
-  }
-}
-
-/* Generous hit area for the resizer without widening its visible track. The pseudo-element extends the
- * pointer/touch target to ~44px (touch-target-sizing best practice) while
- * the visible column stays a slim 0.75rem. */
-.sg-composer-resizer::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline: calc(-1 * var(--spacing-hsp-2xs));
-}
-
-/* ── Toolbar controls ────────────────────────────────────────────────────── */
-
-.sg-composer-toolbar-identity,
-.sg-composer-toolbar-controls,
-.sg-composer-toolbar-field {
   min-width: 0;
 }
 
-.sg-composer-toolbar-identity {
-  flex-wrap: wrap;
+/* The canvas menu has no host-side trigger to measure, so the menu is anchored
+ * to this element, parked at the rect the preview iframe relayed. It is never
+ * painted and never focusable. */
+.sg-composer-menu-anchor {
+  position: fixed;
+  width: 0;
+  height: 0;
+  pointer-events: none;
 }
 
-.sg-composer-toolbar-field {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-hsp-2xs);
-}
-
-.sg-composer-toolbar-field > select {
-  min-width: 0;
-  min-height: 2rem;
-  padding-inline: var(--spacing-hsp-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-fg);
-  font: inherit;
-  cursor: pointer;
-}
-
-.sg-composer-toolbar-field > select:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.sg-composer-toolbar-label {
-  color: var(--color-muted);
-  font-size: var(--text-caption);
-  font-weight: 600;
-}
-
-.sg-composer-mode-toggle {
-  display: inline-flex;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.sg-composer-mode-toggle button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-hsp-2xs);
-  padding: var(--spacing-vsp-3xs) var(--spacing-hsp-md);
-  font-size: var(--text-small);
-  color: var(--color-muted);
-  background: transparent;
-  cursor: pointer;
-  min-height: 2rem;
-}
-
-@media (hover: hover) {
-  .sg-composer-mode-toggle button:hover {
-    color: var(--color-fg);
-  }
-}
-
-.sg-composer-mode-toggle button[aria-pressed="true"] {
-  color: var(--color-on-accent);
-  background: var(--color-accent);
-}
-
-.sg-composer-mode-toggle button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.sg-composer-mode-toggle button:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
-}
-
-.sg-composer-toolbar-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-hsp-xs);
-  min-height: 2rem;
-  padding: var(--spacing-vsp-3xs) var(--spacing-hsp-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-muted);
-  font-size: var(--text-small);
-  cursor: pointer;
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease,
-    background-color 0.15s ease;
-}
-@media (hover: hover) {
-  .sg-composer-toolbar-button:hover:not(:disabled) {
-    color: var(--color-fg);
-    border-color: var(--color-border-strong);
-    background: color-mix(in oklch, var(--color-fg) 6%, var(--color-surface));
-  }
-}
-.sg-composer-toolbar-button:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.sg-composer-toolbar-button:active:not(:disabled) {
-  background: color-mix(in oklch, var(--color-fg) 10%, var(--color-surface));
-}
-
-.sg-composer-toolbar-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-/* Full-size `InlineConfirm` variant used by record-level library actions.
-   Its compact default retains the `.sg-composer-tree-confirm*` class family;
-   this variant is sized to sit inline with toolbar controls. */
-.sg-composer-toolbar-confirm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-hsp-sm);
-  min-height: 2rem;
-  padding-inline: var(--spacing-hsp-sm);
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-danger) 10%, transparent);
-}
-
-.sg-composer-toolbar-confirm-text {
-  flex: 1 1 12rem;
-  font-size: var(--text-small);
-  color: var(--color-fg);
-}
-
-.sg-composer-toolbar-confirm-danger {
-  color: var(--color-danger);
-  border-color: var(--color-danger);
-}
-
-.sg-composer-save-status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-hsp-2xs);
-  font-size: var(--text-micro);
-  color: var(--color-muted);
-}
-
-.sg-composer-save-status__icon,
-.sg-composer-canvas-error__icon,
-.sg-composer-button-icon {
-  flex: 0 0 auto;
-}
-
-.sg-composer-save-status[data-sg-status="saved"] {
-  color: var(--color-success);
-}
-
-.sg-composer-save-status[data-sg-status="dirty"] {
-  color: var(--color-fg);
-}
-
-.sg-composer-save-status[data-sg-status="saving"] {
-  color: var(--color-muted);
-}
-
-.sg-composer-save-status__icon--spinning {
-  animation: sg-composer-status-spin 1.1s linear infinite;
-}
-
-@keyframes sg-composer-status-spin {
-  to { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sg-composer-save-status__icon--spinning {
-    animation: none;
-  }
-}
-
-.sg-composer-save-status[data-sg-status="error"] {
-  color: var(--color-warning);
+/* The boot and route-error states, before any editor is mounted. */
+.sg-composer-route-state {
+  display: grid;
+  gap: var(--spacing-vsp-md);
+  align-content: center;
+  min-height: 60vh;
+  padding: var(--spacing-vsp-lg) var(--spacing-hsp-lg);
 }
 
 .sg-composer-placeholder-pane {
@@ -403,32 +57,32 @@
   color: var(--color-fg);
 }
 
-/* Banners are direct children of the shell, so they form a compact status
- * strip between the toolbar and workspace instead of inheriting the library
- * page's generous outer margin and rounded card treatment. */
-.sg-composer-shell > .sg-composer-library-alert {
-  margin-block-start: 0;
-  border-inline: 0;
-  border-radius: 0;
-  padding-inline: clamp(var(--spacing-hsp-md), 2vw, var(--spacing-hsp-xl));
+
+/* ── Inspector ──────────────────────────────────────────────────────────── */
+
+/* One leaf editor: its label, its control, and whatever it has to say about
+ * the value. `Field` draws the labelled case; this is the wrapper around it. */
+.sg-composer-inspector-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-vsp-3xs);
 }
 
-/* ── Inspector (issue Takazudo/zudo-sg#249) ──────────────────────────────────────────────── */
-/* Component-first: most inspector/toolbar/export markup uses Tailwind
- * utilities directly. These handful of classes cover what utilities can't
- * express cleanly here: a shared touch-target-sizing wrapper (mirrors
- * `.sg-composer-toolbar-button`'s literal 2rem minimum above, restored to
- * 2.75rem under `@media (pointer: coarse)`), the color swatch box, and two
- * spots that must override `.sg-composer-toolbar-button`'s
- * own (unlayered) color/border — a Tailwind utility on the same element can't
- * win that fight, since generated Tailwind utilities are layered while this
- * file is not, and unlayered rules always beat layered
- * ones regardless of source order or specificity. */
+.sg-composer-inspector-props {
+  display: grid;
+  gap: var(--spacing-vsp-xs);
+}
 
-.sg-composer-inspector-control {
+.sg-composer-inspector-control-row {
   display: flex;
   align-items: center;
-  min-height: 2rem;
+  gap: var(--spacing-hsp-xs);
+  min-width: 0;
+}
+
+.sg-composer-inspector-control-row > :is(.cms-input, .cms-textarea, .cms-select-wrap) {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .sg-composer-inspector-swatch {
@@ -440,824 +94,182 @@
   border: 1px solid var(--color-border);
 }
 
-.sg-composer-inspector-remove {
-  color: var(--color-danger);
-  border-color: color-mix(in oklch, var(--color-danger) 45%, var(--color-border));
-}
-
-@media (hover: hover) {
-  .sg-composer-toolbar-button.sg-composer-inspector-remove:hover:not(:disabled) {
-    border-color: var(--color-danger);
-    background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
-    color: var(--color-danger);
-  }
-}
-
-/* Section separators (Takazudo/zudo-sg#267): breadcrumb / identity / move-remove actions /
-   fields / slots each become their own `.sg-composer-inspector-section`, with
-   the border + padding supplying the BETWEEN-section gap. That gap (2x
-   padding-block + 1px border, ~1.75rem total) clearly exceeds the small
-   `gap-*` utilities each section sets on its own children (the ratio-rule
-   spacing the issue asks for) — see css-wisdom's spacing-philosophy article.
-   First/last sections drop the outer padding/border since the panel's own
-   `py-[10px]` and the panel's bottom edge already supply that space. */
-.sg-composer-inspector-section {
-  padding-block: var(--spacing-vsp-xs);
-  border-bottom: 1px solid var(--color-border);
-}
-.sg-composer-inspector-section:first-child {
-  padding-top: 0;
-}
-.sg-composer-inspector-section:last-child {
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-/* 'Slots' section heading (Takazudo/zudo-sg#267): normal-case (was 12px uppercase+tracked) —
-   a short rule under the label replaces letter-spacing as the emphasis cue. */
-.sg-composer-inspector-slots-heading {
-  padding-bottom: var(--spacing-vsp-3xs);
-  border-bottom: 1px solid var(--color-border);
-}
-
-/* Shared "this node/export can't be used as-is" diagnostics box — reused by
- * both the inspector's opaque-node state and the export dialog's blocked
- * state (issue Takazudo/zudo-sg#249). */
-.sg-composer-inspector-diagnostics {
-  border: 1px solid var(--color-warning);
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-warning) 12%, transparent);
-  padding: var(--spacing-vsp-xs) var(--spacing-hsp-sm);
-  font-size: var(--text-small);
-  color: var(--color-fg);
-}
-
-.sg-composer-inspector-diagnostics-title {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-hsp-xs);
-  font-weight: 600;
-}
-
-/* Linked Global-template status deliberately lives OUTSIDE the local tree and
- * selected-node controls. The provider-owning app injects any Retry/Open
- * source/Detach lifecycle callbacks; these styles only make ownership and the
- * lock state legible in both color schemes. */
-.sg-composer-linked-frame {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-hsp-2xs);
-  margin-block-end: var(--spacing-vsp-xs);
-  padding: var(--spacing-vsp-2xs) var(--spacing-hsp-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-info) 10%, var(--color-surface));
-  color: var(--color-fg);
-  font-size: var(--text-micro);
-}
-.sg-composer-linked-frame p {
+/* The optional props an author can still add, as one wrapping row of chips. */
+.sg-composer-inspector-optional {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-hsp-2xs);
-  margin: 0;
-}
-.sg-composer-linked-frame p span { color: var(--color-muted); }
-.sg-composer-linked-frame[data-sg-linked-frame="blocked"] {
-  background: color-mix(in oklch, var(--color-warning) 12%, var(--color-surface));
-}
-.sg-composer-linked-open { width: auto; padding-inline: var(--spacing-hsp-2xs); }
-/* ============================================================================
- * Structure rail + component chooser (issue Takazudo/zudo-sg#250)
- *
- * `sg-composer-tree-*` / `sg-composer-chooser-*` follow the same family as the
- * rest of this file. The tree is plain nested <ul>/<li> + real <button>s —
- * deliberately no `role="tree"` (see `ComposerTree`'s header comment: that
- * would require full arrow-key + roving-tabindex semantics this issue does
- * not implement). Icon-only row actions (disclosure, move, remove) keep a
- * 1.75rem (28px) min hit area on fine pointers, restored to 2.75rem (44px)
- * under `@media (pointer: coarse)` per WCAG 2.5.5, even though their visible
- * glyph is small — see css-wisdom's touch-target-sizing article.
- *
- * Overlay z-index: the chooser `<dialog>` and its `::backdrop` reuse the
- * project-local `--z-index-modal` / `--z-index-modal-backdrop` tiers from
- * `src/styles/app-tokens.css`.
- * ========================================================================== */
-
-/* ── Structure rail ─────────────────────────────────────────────────────── */
-
-.sg-composer-tree {
-  --sg-tree-indent: var(--spacing-hsp-lg);
-  --sg-tree-guide: var(--spacing-hsp-md);
-
-  padding: var(--spacing-vsp-10) var(--spacing-hsp-xs);
-  /* 14px functional-text floor (Takazudo/zudo-sg#265): labels inherit this; subtitles/counts/
-     badges/slot-headers step down to --text-micro (12px) individually. Was
-     --text-small (16px), which truncated common names like "SectionHeading". */
-  font-size: var(--text-caption);
 }
 
-.sg-composer-tree-list,
-.sg-composer-tree-list-nested {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.sg-composer-tree-list-nested {
-  margin-inline-start: var(--sg-tree-indent);
-}
-
-.sg-composer-tree-row {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--spacing-hsp-2xs);
-  border-radius: var(--radius-md);
-}
-
-/* Selected row = accent tint (a whitelisted accent role — the one place the
-   tree spends accent). Text stays --color-fg and reads fine over a 12% tint. */
-.sg-composer-tree-row[data-sg-selected="true"] {
-  background: color-mix(in oklch, var(--color-accent) 12%, transparent);
-}
-
-/* Hover = NEUTRAL tint, not accent (Takazudo/zudo-sg#265; accent-budget rule — hover is not a
-   whitelisted accent role). Selected rows are excluded so their accent tint is
-   never overpainted by the neutral hover. */
-@media (hover: hover) {
-  .sg-composer-tree-row:not([data-sg-selected="true"]):hover {
-    background: color-mix(in oklch, var(--color-fg) 6%, transparent);
-  }
-}
-
-/* The virtual document root is an insertion-target section header rather than
-   another visible nesting depth, matching the familiar outline treatment. */
-.sg-composer-tree-row-root {
-  margin-block-end: var(--spacing-vsp-3xs);
-  padding-block: var(--spacing-vsp-3xs);
-  border-bottom: 1px solid var(--color-border);
-  border-radius: 0;
-  font-weight: 600;
-}
-
-.sg-composer-tree-disclosure,
-.sg-composer-tree-disclosure-spacer {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.5rem;
-  /* Compact ~28px rows (Takazudo/zudo-sg#265, densified further Takazudo/zudo-sg#277). The ≥44px WCAG 2.5.5
-     hit target is restored for coarse pointers only, in the
-     @media (pointer: coarse) block below. */
-  min-height: 1.75rem;
-}
-
-.sg-composer-tree-disclosure {
-  border: none;
-  background: transparent;
-  color: var(--color-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-@media (hover: hover) {
-  .sg-composer-tree-disclosure:hover {
-    color: var(--color-fg);
-  }
-}
-.sg-composer-tree-disclosure:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
-}
-
-.sg-composer-tree-select {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-hsp-2xs);
-  min-height: 1.75rem;
-  padding-inline: var(--spacing-hsp-2xs);
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-fg);
-  text-align: start;
-  cursor: pointer;
-}
-/* Hover feedback lives on the whole row (neutral tint, above) so the select
-   button itself stays transparent — no accent hover wash (Takazudo/zudo-sg#265). */
-.sg-composer-tree-select:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
-}
-.sg-composer-tree-select[data-sg-opaque="true"] {
-  color: var(--color-muted);
-  font-style: italic;
-}
-
-/* Node-type glyph (Page/Root, Slot, Container, Leaf — issue Takazudo/zudo-sg#282): NEUTRAL
-   only, `currentColor`-inherited from the row's own text color, never accent
-   (the tree's one accent role is already spent on row selection — see the
-   accent-budget note on `.sg-composer-tree-row[data-sg-selected]` above). */
-.sg-composer-tree-node-icon {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-self: auto;
-}
-
-.sg-composer-tree-select-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sg-composer-tree-select-subtitle {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--color-muted);
-  font-size: var(--text-micro);
-  /* The component NAME (title) outranks the prop-derived subtitle: yield space
-     to the title first so common names like "SectionHeading" stay untruncated
-     at the default rail. Without this the two share the flex row equally and a
-     long subtitle squeezes the title to an ellipsis (S7 Takazudo/zudo-sg#270). */
-  flex-shrink: 9999;
-  min-width: 0;
-}
-
-.sg-composer-tree-badge {
-  flex-shrink: 0;
-  padding-inline: var(--spacing-hsp-2xs);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: color-mix(in oklch, var(--color-fg) 6%, transparent);
-  color: var(--color-muted);
-  font-size: var(--text-micro);
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.sg-composer-tree-badge[data-sg-tree-badge="unavailable"] {
-  border-color: color-mix(in oklch, var(--color-warning) 45%, var(--color-border));
-  background: color-mix(in oklch, var(--color-warning) 10%, var(--color-surface));
-  color: var(--color-warning);
-}
-
-.sg-composer-tree-badge[data-sg-tree-badge="template-outlet"] {
-  border-color: color-mix(in oklch, var(--color-info) 45%, var(--color-border));
-  background: color-mix(in oklch, var(--color-info) 10%, var(--color-surface));
-  color: var(--color-info);
-}
-
-.sg-composer-tree-count {
-  flex-shrink: 0;
-  margin-inline-start: auto;
-  color: var(--color-muted);
-  font-size: var(--text-micro);
-}
-
-.sg-composer-tree-row-actions {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 1px;
-}
-
-.sg-composer-tree-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-hsp-2xs);
-  /* Compact glyph controls (Takazudo/zudo-sg#265): 24px meets WCAG 2.5.8 (AA) for fine
-     pointers and keeps the action cluster from crowding the label. The ≥44px
-     WCAG 2.5.5 target is restored for coarse pointers in the block below. */
-  min-width: 1.5rem;
-  min-height: 1.75rem;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-muted);
-  font-size: var(--text-caption);
-  line-height: 1;
-  cursor: pointer;
-}
-@media (hover: hover) {
-  .sg-composer-tree-action:hover:not(:disabled) {
-    color: var(--color-fg);
-    background: color-mix(in oklch, var(--color-fg) 8%, transparent);
-  }
-}
-.sg-composer-tree-action:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
-}
-.sg-composer-tree-action:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-/* Destructive glyph is muted at rest (accent/state budget — a red × on every
-   row reads as constant alarm); it turns danger-colored only on hover/focus. */
-.sg-composer-tree-action-danger:focus-visible {
-  color: var(--color-danger);
-}
-@media (hover: hover) {
-  .sg-composer-tree-action-danger:hover:not(:disabled) {
-    color: var(--color-danger);
-    background: color-mix(in oklch, var(--color-danger) 12%, transparent);
-  }
-}
-.sg-composer-tree-add {
-  width: auto;
-  padding-inline: var(--spacing-hsp-2xs);
-  gap: var(--spacing-hsp-2xs);
-  font-size: var(--text-micro);
-}
-
-/* Node context-menu trigger (issue Takazudo/zudo-sg#256): visible on row hover/focus-within,
-   but NEVER removed from the DOM/tab order — a plain opacity toggle keeps it
-   reachable by keyboard even before the pointer ever touches the row. */
-.sg-composer-tree-menu-trigger {
-  opacity: 0;
-}
-@media (hover: hover) {
-  .sg-composer-tree-row:hover .sg-composer-tree-menu-trigger {
-    opacity: 1;
-  }
-}
-.sg-composer-tree-row:focus-within .sg-composer-tree-menu-trigger,
-.sg-composer-tree-menu-trigger:focus-visible {
-  opacity: 1;
-}
-
-/* Insert-menu companion beside a slot's "+Add" (issue Takazudo/zudo-sg#256) — always visible,
-   matching "+Add" itself; opens Add/Paste instead of jumping straight to the
-   chooser. */
-.sg-composer-tree-slot-add-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-.sg-composer-tree-insert-menu {
-  width: auto;
-  padding-inline: var(--spacing-hsp-2xs);
-  font-size: var(--text-micro);
-}
-
-.sg-composer-tree-confirm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-hsp-2xs);
-  padding: var(--spacing-vsp-3xs) var(--spacing-hsp-2xs);
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-danger) 10%, transparent);
-}
-
-.sg-composer-tree-confirm-text {
-  flex: 1 1 12rem;
-  font-size: var(--text-micro);
-  color: var(--color-fg);
-}
-
-/* One compact hierarchy step is shared by component→slot and slot→component.
-   Continuing guides live on the non-last sibling's full box so the rail never
-   breaks between rows. Each incoming L terminates at the actual row midpoint;
-   open branches continue from that same midpoint into their nested list. */
-.sg-composer-tree-slots {
-  display: flex;
-  flex-direction: column;
-  margin-inline-start: var(--sg-tree-indent);
-}
-
-.sg-composer-tree-slot {
-  position: relative;
-  min-width: 0;
-}
-
-.sg-composer-tree-list-nested > .sg-composer-tree-node {
-  position: relative;
-}
-
-.sg-composer-tree-slots > .sg-composer-tree-slot:not(:last-child)::before,
-.sg-composer-tree-list-nested > .sg-composer-tree-node:not(:last-child)::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: calc(var(--sg-tree-guide) - var(--sg-tree-indent));
-  border-inline-start: 1px solid var(--color-border);
-  pointer-events: none;
-}
-
-.sg-composer-tree-slots > .sg-composer-tree-slot > .sg-composer-tree-slot-header::before,
-.sg-composer-tree-list-nested > .sg-composer-tree-node > .sg-composer-tree-row::before {
-  content: "";
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-start: calc(var(--sg-tree-guide) - var(--sg-tree-indent));
-  inline-size: var(--sg-tree-indent);
-  block-size: 50%;
-  border-inline-start: 1px solid var(--color-border);
-  border-block-end: 1px solid var(--color-border);
-  pointer-events: none;
-}
-
-/* Non-expandable rows do not reserve the container-chevron track. Their
-   incoming elbow ends at the row edge, leaving only the normal 4px
-   gap+padding before the icon — the confirmed familiar-outline prototype. */
-.sg-composer-tree-row-leaf > .sg-composer-tree-disclosure-spacer,
-.sg-composer-tree-slot-spacer {
-  width: 0;
-  min-width: 0;
-}
-
-.sg-composer-tree-slots > .sg-composer-tree-slot > .sg-composer-tree-slot-header::before,
-.sg-composer-tree-list-nested > .sg-composer-tree-node > .sg-composer-tree-row-leaf::before {
-  inline-size: calc(var(--sg-tree-indent) - var(--sg-tree-guide));
-}
-
-.sg-composer-tree-row[data-sg-tree-branch-open="true"]::after,
-.sg-composer-tree-slot-header[data-sg-tree-branch-open="true"]::after {
-  content: "";
-  position: absolute;
-  inset-block: 50% 0;
-  inset-inline-start: var(--sg-tree-guide);
-  border-inline-start: 1px solid var(--color-border);
-  pointer-events: none;
-}
-
-/* Slots keep the familiar outline-row treatment. A small outlined marker is
-   strong enough to make insertion targets scannable without turning the
-   entire group into the rejected band treatment. */
-.sg-composer-tree-slot-header {
-  position: relative;
+/* Identity: label column, then the value. `code` keeps ids selectable and
+ * unambiguous — a node id is a UUID and a component id is dotted. */
+.sg-composer-inspector-node {
   display: grid;
-  grid-template-columns: 0 minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--spacing-hsp-2xs);
-  min-height: 1.75rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--spacing-vsp-3xs) var(--spacing-hsp-sm);
+  margin: 0;
+  font-size: var(--text-caption);
+}
+
+.sg-composer-inspector-node dt {
   color: var(--color-muted);
-  font-size: var(--text-micro);
 }
 
-.sg-composer-tree-slot-label {
-  flex: 1 1 auto;
+.sg-composer-inspector-node dd {
+  margin: 0;
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sg-composer-inspector-node-actions {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-hsp-2xs);
-  padding-inline: var(--spacing-hsp-2xs);
-}
-
-.sg-composer-tree-slot-kind {
-  flex-shrink: 0;
-  padding-inline: var(--spacing-hsp-2xs);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-fg);
-  font-size: var(--text-micro);
-  font-weight: 600;
-  line-height: 1.4;
-  text-transform: uppercase;
-}
-
-.sg-composer-tree-slot-name {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-fg);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sg-composer-tree-slot-cardinality {
-  flex-shrink: 9999;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sg-composer-tree-slot-cardinality::before {
-  content: "\00b7";
-  margin-inline-end: var(--spacing-hsp-2xs);
-}
-
-.sg-composer-tree-slot-controls {
-  flex: 0 0 auto;
-  display: inline-flex;
-  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
+  gap: var(--spacing-hsp-2xs);
+  margin-block-start: var(--spacing-vsp-xs);
 }
 
-.sg-composer-tree-slot-controls > .sg-composer-tree-count {
-  min-width: 1.5rem;
-  margin-inline-start: 0;
-  padding-inline: var(--spacing-hsp-2xs);
-  border-radius: var(--radius-full);
-  background: color-mix(in oklch, var(--color-fg) 6%, transparent);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+/* Delete sits at the inline end, away from the two safe actions beside it. */
+.sg-composer-inspector-node-actions > .sg-composer-inspector-remove {
+  margin-inline-start: auto;
 }
 
-.sg-composer-tree-slot-header .sg-composer-tree-add {
-  border: 1px solid var(--color-border);
-  color: var(--color-fg);
-  font-weight: 600;
-}
-
-.sg-composer-tree-empty {
+.sg-composer-inspector-note {
   margin: 0;
-  padding-inline: var(--spacing-hsp-2xs);
   color: var(--color-muted);
-  font-size: var(--text-micro);
-  font-style: italic;
+  font-size: var(--text-caption);
 }
 
-.sg-composer-tree-slot > .sg-composer-tree-empty {
-  margin-inline-start: var(--spacing-hsp-2xs);
+.sg-composer-inspector-diagnostics {
+  margin: 0;
+  padding-inline-start: var(--spacing-hsp-md);
 }
 
-@media (max-width: 42rem) {
-  .sg-composer-toolbar {
-    align-items: flex-start;
-  }
-
-  .sg-composer-toolbar-identity,
-  .sg-composer-toolbar-controls {
-    flex: 1 1 100%;
-  }
-
-  .sg-composer-toolbar-controls {
-    justify-content: flex-end;
-  }
-}
-
-@media (max-width: 30rem) {
-  .sg-composer-toolbar {
-    gap: var(--spacing-vsp-3xs);
-  }
-
-  .sg-composer-toolbar-identity {
-    align-items: flex-start;
-  }
-
-  .sg-composer-toolbar-controls {
-    justify-content: stretch;
-  }
-
-  .sg-composer-toolbar-field {
-    flex: 1 1 100%;
-  }
-
-  .sg-composer-toolbar-field > select {
-    flex: 1 1 auto;
-  }
-
-  .sg-composer-toolbar-controls > .sg-composer-mode-toggle,
-  .sg-composer-toolbar-controls > .sg-composer-toolbar-button {
-    flex: 1 1 auto;
-  }
-
-  .sg-composer-mode-toggle button {
-    flex: 1 1 0;
-  }
-}
-
-/* Coarse pointers (touch): restore the ≥44px WCAG 2.5.5 hit target the compact
-   desktop rows trade away. Rows relax to ~44px; only the sizing changes — the
-   density, typography, guides, and states above are shared across pointers. */
-@media (pointer: coarse) {
-  .sg-composer-tree-disclosure,
-  .sg-composer-tree-disclosure-spacer,
-  .sg-composer-tree-select {
-    min-height: 2.75rem;
-  }
-
-  .sg-composer-tree-action {
-    min-width: 2.75rem;
-    min-height: 2.75rem;
-  }
-
-  /* Restores the WCAG 2.5.5 44px touch target for the toolbar/inspector/
-     chooser controls that were densified to 2rem on fine pointers above
-     (Takazudo/zudo-sg#277). */
-  .sg-composer-mode-toggle button,
-  .sg-composer-toolbar-button,
-  .sg-composer-toolbar-confirm,
-  .sg-composer-inspector-control,
-  .sg-composer-chooser-search,
-  .sg-composer-chooser-category,
-  .sg-composer-tool-dialog-grip,
-  .sg-composer-tool-dialog-resize {
-    min-height: 2.75rem;
-    min-width: 2.75rem;
-  }
-}
-
-/* ── Component chooser dialog ────────────────────────────────────────────── */
-
-.sg-composer-chooser {
-  z-index: var(--z-index-modal);
+.sg-composer-inspector-slots {
+  display: grid;
+  gap: var(--spacing-vsp-3xs);
+  margin: 0;
   padding: 0;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--sg-composer-panel-bg);
-  color: var(--color-fg);
-  /* Stronger than the shared --shadow-lg (that one reads as near-invisible on
-     the dark panel bg) — a two-layer literal like the prototype's, always
-     dark regardless of theme (same "shadows don't flip with mode" precedent
-     as --color-overlay above). */
-  box-shadow:
-    0 20px 50px rgb(0 0 0 / 0.35),
-    0 2px 8px rgb(0 0 0 / 0.24);
-  overflow: hidden;
+  list-style: none;
 }
 
-/* Layout is gated on [open] (S2, Takazudo/zudo-sg#264): the UA stylesheet already hides a
-   closed <dialog> (`dialog:not([open]) { display: none }`), but that's a
-   UA-origin rule — an unconditional author `display: flex` here would win
-   regardless of [open] (author always beats UA, irrespective of
-   specificity) and leave the closed dialog occupying layout. Scoping
-   `display` to `[open]` lets the UA rule apply while closed.
-   `margin: auto` restores the top-layer modal's native centering — Tailwind
-   preflight's universal `margin: 0` strips the UA `margin: auto` a
-   `showModal()` dialog relies on (again author-vs-UA, not specificity: this
-   file is imported unlayered, so it wins over preflight's layered reset
-   either way — restated here explicitly since without it nothing sets
-   margin at all). */
-.sg-composer-tool-dialog {
-  /* The JS geometry helper owns the movable inline values. These explicit CSS
-     dimensions are the no-JS/pre-hydration fallback and the contract future
-     Composer tool dialogs share. */
-  --sg-composer-tool-dialog-gutter: 24px;
-  box-sizing: border-box;
-}
-
-.sg-composer-tool-dialog:not(.sg-composer-chooser) {
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  color: var(--color-fg);
-  box-shadow: var(--shadow-overlay);
-}
-
-.sg-composer-tool-dialog[open] {
-  display: flex;
-  flex-direction: column;
-  position: fixed;
-  inset: var(--sg-composer-tool-dialog-gutter) auto auto var(--sg-composer-tool-dialog-gutter);
-  margin: 0;
-  inline-size: calc(100vw - var(--sg-composer-tool-dialog-gutter) * 2);
-  block-size: calc(100vh - var(--sg-composer-tool-dialog-gutter) * 2);
-  max-inline-size: calc(100vw - var(--sg-composer-tool-dialog-gutter) * 2);
-  max-block-size: calc(100vh - var(--sg-composer-tool-dialog-gutter) * 2);
-}
-
-/* Dynamic viewport units account for mobile browser chrome. The prior 100vh
-   declarations remain a safe fallback for browsers without dvh/dvw support. */
-@supports (height: 100dvh) {
-  .sg-composer-tool-dialog[open] {
-    inline-size: calc(100dvw - var(--sg-composer-tool-dialog-gutter) * 2);
-    block-size: calc(100dvh - var(--sg-composer-tool-dialog-gutter) * 2);
-    max-inline-size: calc(100dvw - var(--sg-composer-tool-dialog-gutter) * 2);
-    max-block-size: calc(100dvh - var(--sg-composer-tool-dialog-gutter) * 2);
-  }
-}
-
-@media (max-width: 40rem) {
-  .sg-composer-tool-dialog {
-    --sg-composer-tool-dialog-gutter: 8px;
-  }
-}
-
-.sg-composer-chooser::backdrop {
-  z-index: var(--z-index-modal-backdrop);
-  background: color-mix(in oklch, var(--color-fg) 45%, transparent);
-}
-
-.sg-composer-chooser-header {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
+.sg-composer-inspector-slot {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: var(--spacing-hsp-sm);
-  padding: var(--spacing-vsp-xs) var(--spacing-hsp-lg);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.sg-composer-chooser-title {
-  margin: 0;
-  flex: 1 1 auto;
-  font-size: var(--text-body);
-  font-weight: 600;
-}
-
-.sg-composer-chooser-target {
-  /* `order: 1` (default is 0 on every other header child) sinks this behind
-     the grip/title/Cancel row regardless of its DOM position — its own
-     `flex: 1 1 100%` basis then forces it onto its own line below them,
-     keeping the controls together on row one without wrapping (Takazudo/zudo-sg#264). */
-  order: 1;
-  margin: 0;
-  flex: 1 1 100%;
-  color: var(--color-muted);
-  font-size: var(--text-small);
-}
-.sg-composer-chooser-target strong {
-  color: var(--color-fg);
-}
-
-/* The Add surface deliberately keeps one shell while switching source kinds:
-   tabs are compact controls rather than a second modal or Pattern-card view. */
-.sg-composer-chooser-tabs {
-  flex: 0 0 auto;
-  display: flex;
-  gap: var(--spacing-hsp-2xs);
-  padding-inline: var(--spacing-hsp-lg);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.sg-composer-chooser-tab {
-  min-height: 2.5rem;
-  padding-inline: var(--spacing-hsp-sm);
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--color-muted);
-  font: inherit;
-  font-size: var(--text-small);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.sg-composer-chooser-tab[aria-selected="true"] {
-  border-bottom-color: var(--color-accent);
-  color: var(--color-fg);
-}
-
-@media (hover: hover) {
-  .sg-composer-chooser-tab:hover {
-    color: var(--color-fg);
-  }
-}
-
-.sg-composer-chooser-tab:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
-}
-
-.sg-composer-tool-dialog-grip,
-.sg-composer-tool-dialog-resize {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  min-width: 2rem;
+  gap: var(--spacing-hsp-xs);
   min-height: 2rem;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 0;
-  background: transparent;
+  padding-inline: var(--spacing-hsp-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   color: var(--color-muted);
+  font-size: var(--text-caption);
 }
 
-.sg-composer-tool-dialog-grip {
-  cursor: grab;
+.sg-composer-inspector-slot-name {
+  color: var(--color-fg);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.sg-composer-tool-dialog-grip:active {
-  cursor: grabbing;
+.sg-composer-inspector-slot-meta {
+  white-space: nowrap;
 }
 
-.sg-composer-tool-dialog-grip-dots {
-  display: inline-flex;
+/* ── Reuse tab ──────────────────────────────────────────────────────────── */
+
+/* One card per reusable role: a glyph, one line of scope, and its action. */
+.sg-composer-reuse-option {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-vsp-xs) var(--spacing-hsp-sm);
 }
 
-.sg-composer-tool-dialog-grip:focus-visible,
-.sg-composer-tool-dialog-resize:focus-visible {
-  border-color: var(--color-focus);
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
+.sg-composer-reuse-scope {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--spacing-hsp-xs);
+  align-items: start;
+  margin: 0 0 var(--spacing-vsp-xs);
+  color: var(--color-muted);
+  font-size: var(--text-caption);
 }
 
-/* The primitive is placed by a future dialog, but owns its own accessible
-   target and visual affordance so consumers do not duplicate its contract. */
-.sg-composer-tool-dialog-resize {
-  cursor: nwse-resize;
+.sg-composer-reuse-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--spacing-hsp-2xs);
 }
 
-.sg-composer-tool-dialog-resize-mark {
-  width: 0.75rem;
-  height: 0.75rem;
-  border-right: 2px solid currentcolor;
-  border-bottom: 2px solid currentcolor;
+.sg-composer-reuse-reason {
+  margin: var(--spacing-vsp-3xs) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-caption);
+}
+
+.sg-composer-reuse-diagnostics {
+  margin: 0;
+  padding-inline-start: var(--spacing-hsp-md);
+  color: var(--color-muted);
+  font-size: var(--text-caption);
+}
+
+/* ── Export dialog ──────────────────────────────────────────────────────── */
+
+.sg-composer-export__note {
+  margin: 0 0 var(--spacing-vsp-xs);
+  color: var(--color-muted);
+  font-size: var(--text-small);
+}
+
+.sg-composer-export__code {
+  margin: 0;
+  max-height: 26rem;
+  overflow: auto;
+  padding: var(--spacing-vsp-xs) var(--spacing-hsp-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+}
+
+.sg-composer-export__diagnostics {
+  margin: 0;
+  padding-inline-start: var(--spacing-hsp-md);
+}
+
+/* ── Component chooser ──────────────────────────────────────────────────── */
+
+/* The dialog body carries the two-pane surface edge to edge, with the
+ * Components / Patterns switch as its own row above it. `overflow: hidden`
+ * rather than the shared `auto`: the catalog list is what scrolls, and a
+ * scrolling body would break the height chain that lets it. */
+.sg-composer-chooser .cms-dialog__body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sg-composer-chooser-source {
+  padding: var(--spacing-vsp-2xs) var(--spacing-hsp-lg);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.sg-composer-chooser-search {
+  flex: 1 1 12rem;
+}
+
+.sg-composer-chooser-note {
+  margin: 0;
+  padding-block: var(--spacing-vsp-sm);
+  color: var(--color-muted);
+  font-size: var(--text-small);
+  text-align: center;
 }
 
 .sg-composer-chooser-controls {
@@ -1268,49 +280,16 @@
   padding-block: var(--spacing-vsp-2xs);
 }
 
-.sg-composer-chooser-search-label {
-  flex: 1 1 12rem;
-}
-
-.sg-composer-chooser-search {
-  width: 100%;
-  min-height: 2rem;
-  padding-inline: var(--spacing-hsp-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-fg);
-  font-size: var(--text-small);
-}
-.sg-composer-chooser-search:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -1px;
-}
-
 .sg-composer-chooser-categories {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-hsp-2xs);
 }
 
+/* A filter chip is a `Button`, so it only needs its pill shape and the
+   selected state the shared control has no variant for. */
 .sg-composer-chooser-category {
-  min-height: 2rem;
-  padding-inline: var(--spacing-hsp-sm);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
-  background: var(--color-surface);
-  color: var(--color-muted);
-  font-size: var(--text-micro);
-  cursor: pointer;
-}
-@media (hover: hover) {
-  .sg-composer-chooser-category:hover {
-    color: var(--color-fg);
-  }
-}
-.sg-composer-chooser-category:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
 }
 .sg-composer-chooser-category[aria-pressed="true"] {
   border-color: var(--color-accent);
@@ -1322,17 +301,6 @@
   margin: 0;
   color: var(--color-muted);
   font-size: var(--text-micro);
-}
-
-.sg-composer-chooser-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-vsp-3xs);
-  padding: var(--spacing-vsp-lg) var(--spacing-hsp-lg);
-  text-align: center;
-  color: var(--color-muted);
-  font-size: var(--text-small);
 }
 
 .sg-composer-chooser-list {
@@ -1469,77 +437,71 @@
   background: var(--color-surface);
 }
 
-/* ── Context menu (issue Takazudo/zudo-sg#256) ──────────────────────────────────────────────
-   ONE host-side popover (`ComposerMenu`) reused for the node menu (Copy/Cut/
-   Duplicate/Delete) and the insert menu (Add component…/Paste here).
-   `position: fixed`, positioned/clamped in JS (`menu-position.ts`) — this
-   file only supplies appearance.
-
-   Overlay z-index adopts the project-local `--z-index-popover` tier from
-   `src/styles/app-tokens.css`. It
-   sits above ordinary content/toolbar/sidebar chrome and below the modal
-   chooser/backdrop tiers, which the menu is never open at the same time as
-   (selecting "Add component…" closes the menu before the chooser opens). */
-.sg-composer-menu {
-  z-index: var(--z-index-popover);
+/* ── Canvas preview host (issue Takazudo/zudo-sg#251 central integration) ──────────────────
+   The parent-side host for Takazudo/zudo-sg#248's isolated preview iframe. The viewport choice
+   (fluid/desktop/tablet/mobile) sets an inline width on the frame wrapper — it
+   reflows the preview document, NOT the surrounding Composer breakpoint (issue
+   Takazudo/zudo-sg#251 scope item 5). */
+.sg-composer-canvas-host {
   display: flex;
   flex-direction: column;
-  min-width: 12rem;
-  max-width: min(20rem, calc(100vw - 1rem));
-  max-height: min(24rem, calc(100vh - 1rem));
-  overflow: auto;
-  padding: var(--spacing-vsp-3xs);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-  color: var(--color-fg);
-  box-shadow: var(--shadow-lg);
+  height: 100%;
+  min-height: 0;
+  /* Page-sheet backdrop (Takazudo/zudo-sg#266): the composition renders on a bordered sheet (the
+   * iframe below) that floats over this quiet gray desk
+   * (--sg-composer-canvas-backdrop, S1 Takazudo/zudo-sg#263). The gutter is VERTICAL ONLY — a
+   * horizontal gutter would shrink the Fluid frame's width and change content
+   * widths; instead a constrained viewport (Desktop/Tablet/Mobile) reveals the
+   * backdrop on its sides purely by CENTERING (margin-inline:auto on the frame),
+   * so every viewport's frame width is byte-for-byte unchanged (acceptance #6). */
+  padding-block: var(--spacing-vsp-md);
+  background: var(--sg-composer-canvas-backdrop);
 }
 
-.sg-composer-menu-item {
+.sg-composer-canvas-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.sg-composer-preview-iframe {
   display: block;
   width: 100%;
-  padding: var(--spacing-vsp-2xs) var(--spacing-hsp-sm);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-fg);
-  text-align: start;
-  font-size: var(--text-small);
-  cursor: pointer;
+  height: 100%;
+  border: 0;
+  /* The sheet's edge + elevation. A box-shadow RING (not a real border) draws the
+   * 1px hairline OUTSIDE the box, so the previewed document's content width is
+   * exactly what it was before the sheet existed (acceptance #6). The iframe
+   * background matches .zc-canvas's sheet fill so no seam shows before paint. */
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 1px var(--color-border), var(--shadow-lg);
+  background: var(--sg-composer-panel-bg);
 }
 
-/* Item glyph (Copy/Cut/Duplicate/Trash/Plus — issue Takazudo/zudo-sg#282): sits inline before
-   the label text (the item button is `display: block`, not flex), so this is
-   a spacing + optical-alignment fix rather than a flex `gap`. Inherits
-   `currentColor` — danger items (Delete) tint red via the same `color`
-   `.sg-composer-menu-item-danger` already sets below. */
-.sg-composer-menu-item-icon {
-  margin-inline-end: var(--spacing-hsp-2xs);
-  vertical-align: -0.15em;
+.sg-composer-canvas-error {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-hsp-sm);
+  padding: var(--spacing-vsp-2xs) var(--spacing-hsp-md);
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
+  color: var(--color-fg);
+  font-size: var(--text-small);
 }
-/* Accent budget (Takazudo/zudo-sg#267): hover is not a whitelisted accent role — neutral fg
-   tint, same idiom as the tree row/action hover. Delete keeps its own
-   danger-tinted hover (functional-state color, outside the accent budget —
-   same "danger" precedent as .sg-composer-tree-action-danger's hover). */
-@media (hover: hover) {
-  .sg-composer-menu-item:hover:not(:disabled) {
-    background: color-mix(in oklch, var(--color-fg) 8%, transparent);
-  }
-  .sg-composer-menu-item-danger:not(:disabled):hover {
-    background: color-mix(in oklch, var(--color-danger) 12%, transparent);
-  }
+
+.sg-composer-canvas-error > span:first-child {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--spacing-hsp-xs);
 }
-.sg-composer-menu-item:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
-}
-.sg-composer-menu-item:disabled {
-  color: var(--color-muted);
-  cursor: not-allowed;
-}
-.sg-composer-menu-item-danger:not(:disabled) {
-  color: var(--color-danger);
+
+.sg-composer-canvas-error[data-composer-preview-fatal="pack-mismatch"] {
+  border-color: var(--color-danger);
+  background: color-mix(in oklch, var(--color-danger) 8%, var(--color-surface));
 }
 
 /* ── Canvas preview host (issue Takazudo/zudo-sg#251 central integration) ──────────────────
@@ -1728,120 +690,3 @@
   background: var(--color-surface);
 }
 
-/* ── Composer chrome outside the library index (issue Takazudo/zudo-sg#301, trimmed for #167) ──
- * The index view itself now composes `src/components/library-page` (its own
- * stylesheet) instead of this selector family. What remains here is the
- * small set of `.sg-composer-library-*` classes still used OUTSIDE the index
- * view — the boot-loading placeholder and the route-error/recovery/detail
- * banners in production-composer-app.tsx and composer-integration.tsx — so
- * deleting the rest of the old bespoke list/toolbar/row CSS could not also
- * silently unstyle those unrelated, out-of-scope screens. */
-
-.sg-composer-library {
-  box-sizing: border-box;
-  inline-size: 100%;
-  max-inline-size: 76rem;
-  min-width: 0;
-  margin-inline: auto;
-  padding: var(--spacing-vsp-lg) var(--spacing-hsp-md) var(--spacing-vsp-xl);
-  color: var(--color-fg);
-  overflow-wrap: break-word;
-}
-
-.sg-composer-library :where(h1, h2, h3, p, dl, dd) {
-  margin: 0;
-}
-
-.sg-composer-library-alert,
-.sg-composer-library-actions {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: var(--spacing-vsp-sm);
-}
-
-.sg-composer-library-state p,
-.sg-composer-library-alert p {
-  color: var(--color-muted);
-}
-
-.sg-composer-library-alert,
-.sg-composer-library-state {
-  margin-block-start: var(--spacing-vsp-lg);
-  padding: var(--spacing-vsp-md) var(--spacing-hsp-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-}
-
-.sg-composer-library-button {
-  box-sizing: border-box;
-  min-width: 2.75rem;
-  min-height: 2.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-hsp-xs);
-  padding: var(--spacing-vsp-2xs) var(--spacing-hsp-md);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-  color: var(--color-fg);
-  font-size: var(--text-small);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.sg-composer-library :where(button, input, select):focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.sg-composer-library :where(button, input, select):disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .sg-composer-library-button:hover:not(:disabled) {
-    background: color-mix(in oklch, var(--color-fg) 8%, var(--color-bg));
-  }
-}
-
-.sg-composer-library-alert {
-  border-color: var(--color-warning);
-  background: color-mix(in oklch, var(--color-warning) 10%, var(--color-surface));
-}
-
-.sg-composer-library-alert > p {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: var(--spacing-hsp-xs);
-}
-
-.sg-composer-library-alert-error {
-  border-color: var(--color-danger);
-  background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
-}
-
-.sg-composer-library-state {
-  text-align: center;
-}
-
-.sg-composer-library-state > * + * {
-  margin-block-start: var(--spacing-vsp-sm);
-}
-
-@media (min-width: 48rem) {
-  .sg-composer-library {
-    padding-inline: var(--spacing-hsp-xl);
-  }
-
-  .sg-composer-library-alert {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--spacing-hsp-lg);
-  }
-}
