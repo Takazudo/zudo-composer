@@ -46,7 +46,9 @@
  * | EditIcon, SaveIcon, RefreshIcon              | Authoring, persistence, retry/refresh                  |
  * | ArrowRightIcon, ArrowLeftIcon                | Mapping source → target and back navigation            |
  * | SearchIcon, SettingsIcon, FilterIcon         | Common labeled shell/library actions                   |
- * | ChevronRightIcon, ChevronDownIcon, ChevronUpIcon | Tree disclosure and sibling movement                |
+ * | SortIcon, GridIcon                           | Library toolbar sort picker and cards view toggle      |
+ * | ChevronRightIcon, ChevronLeftIcon            | Tree disclosure and library page stepping              |
+ * | ChevronDownIcon, ChevronUpIcon               | Disclosure and sibling movement                        |
  * | EllipsisIcon, XMarkIcon                      | Overflow menu, remove, and dialog close                |
  * | PlusIcon, MinusIcon                          | Add and remove/compact controls                        |
  * | CopyIcon, CutIcon, DuplicateIcon, TrashIcon  | Clipboard/menu and destructive actions                 |
@@ -169,6 +171,14 @@ export const ChevronRightIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   svgRoot(w, hgt, cls, style, FILLED, [
     evenOddPath(
       "M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L8.94 8 6.22 5.28a.75.75 0 0 1 0-1.06Z",
+    ),
+  ]),
+);
+
+export const ChevronLeftIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
+  svgRoot(w, hgt, cls, style, FILLED, [
+    evenOddPath(
+      "M9.78 4.22a.75.75 0 0 1 0 1.06L7.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L5.47 8.53a.75.75 0 0 1 0-1.06l3.25-3.25a.75.75 0 0 1 1.06 0Z",
     ),
   ]),
 );
@@ -727,6 +737,22 @@ export const SettingsIcon: IconComponent = lineIcon(() => [
 /** Filter/refine action. */
 export const FilterIcon: IconComponent = lineIcon(() => [
   h("path", { d: "M2 3h12l-4.5 5.25v4.5L6.5 14V8.25L2 3Z" }),
+]);
+
+/** Sort-order picker in a library toolbar. */
+export const SortIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 2.25, y1: 4, x2: 10.75, y2: 4 }),
+  h("line", { x1: 2.25, y1: 8, x2: 8.25, y2: 8 }),
+  h("line", { x1: 2.25, y1: 12, x2: 5.75, y2: 12 }),
+  h("path", { d: "M12.25 3.25v9.5M10.25 10.75l2 2 2-2" }),
+]);
+
+/** Grid/cards view in a library view toggle. */
+export const GridIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 2.25, y: 2.25, width: 5, height: 5, rx: 1 }),
+  h("rect", { x: 8.75, y: 2.25, width: 5, height: 5, rx: 1 }),
+  h("rect", { x: 2.25, y: 8.75, width: 5, height: 5, rx: 1 }),
+  h("rect", { x: 8.75, y: 8.75, width: 5, height: 5, rx: 1 }),
 ]);
 
 /** Download/export action. */
