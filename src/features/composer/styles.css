@@ -10,6 +10,8 @@
 
 /* ── Editor regions ─────────────────────────────────────────────────────── */
 
+.sg-composer-editor { min-width: 0; }
+
 /* The main region is one grid row for the canvas, plus an auto row that a
  * provider/navigation banner takes when there is one. `minmax(0, 1fr)` on the
  * canvas is what keeps the iframe from growing past the region. */
@@ -492,6 +494,10 @@
   font-size: var(--text-small);
 }
 
+/* The canvas notice is a flex row, so its glyph must not be squeezed by the
+   message beside it. */
+.sg-composer-canvas-error__icon { flex-shrink: 0; }
+
 .sg-composer-canvas-error > span:first-child {
   display: inline-flex;
   min-width: 0;
@@ -558,6 +564,10 @@
   color: var(--color-fg);
   font-size: var(--text-small);
 }
+
+/* The canvas notice is a flex row, so its glyph must not be squeezed by the
+   message beside it. */
+.sg-composer-canvas-error__icon { flex-shrink: 0; }
 
 .sg-composer-canvas-error > span:first-child {
   display: inline-flex;

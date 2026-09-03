@@ -81,7 +81,6 @@ export function ComposerToolbarActions({
           label="Generated output blocked"
           tone="warn"
           icon={WarningIcon}
-          class="sg-composer-output-blocked"
         />
       )}
       {onUndo && (

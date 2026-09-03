@@ -502,7 +502,7 @@ export function ComposerChooser({
                       <p class="sg-composer-chooser-count" aria-live="polite">
                         {filteredPatterns.length} of {patterns.length} Pattern{patterns.length === 1 ? "" : "s"}
                       </p>
-                      <ul class="sg-composer-chooser-list sg-composer-chooser-pattern-list">
+                      <ul class="sg-composer-chooser-list">
                         {filteredPatterns.map((entry) => {
                           const key = patternRefKey(entry.ref);
                           const selected = key === selectedPatternKey;

@@ -47,7 +47,6 @@ export function ComposerExportDialog({
       open={open}
       size="wide"
       title={`Export — ${documentName}`}
-      class="sg-composer-export"
       onClose={onClose}
       // Only the copy action; the header's own close control is the way out.
       footer={
