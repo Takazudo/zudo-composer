@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zudo-composer · CMS UI proposal</title>
+<link rel="stylesheet" href="proto.css">
+<style>
+body { display: block; }
+.wrap { max-width: 1180px; margin-inline: auto; padding: var(--sp-b4) var(--sp-4) 120px; display: grid; gap: var(--sp-b4); }
+.hero h1 { font-size: 2rem; letter-spacing: -.02em; }
+.hero p { max-width: 68ch; color: var(--muted); font-size: var(--text-base); margin-top: var(--sp-2); }
+.hero .row { margin-top: var(--sp-3); }
+section > h2 { margin-block-end: var(--sp-3); }
+section > h2 span { color: var(--muted); font-weight: 500; font-size: var(--text-md); margin-inline-start: var(--sp-2); }
+.findings { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: var(--sp-b2); }
+.finding { display: grid; align-content: start; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.finding h3 { font-size: var(--text-base); display: flex; gap: var(--sp-2); align-items: center; }
+.finding h3 .n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); color: var(--muted); font-size: var(--text-xs); font-weight: 700; }
+.finding p { color: var(--muted); font-size: var(--text-md); }
+.finding img { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.finding .fix { display: flex; gap: var(--sp-2); align-items: flex-start; font-size: var(--text-md); padding-top: var(--sp-2); border-top: 1px solid var(--border); }
+.finding .fix svg { color: var(--accent); flex: 0 0 auto; margin-top: 2px; }
+.pages { display: grid; gap: var(--sp-b3); }
+.proposal { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: var(--sp-3); align-items: start; padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.proposal .shots { display: grid; gap: var(--sp-2); }
+.proposal figure { margin: 0; display: grid; gap: 4px; }
+.proposal figcaption { font-size: var(--text-xs); color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.proposal img { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.proposal h3 { font-size: var(--text-lg); display: flex; align-items: center; gap: var(--sp-2); }
+.proposal h3 .n { color: var(--muted); font-weight: 500; }
+.proposal ul { margin: var(--sp-2) 0 0; padding-inline-start: 18px; color: var(--muted); font-size: var(--text-md); display: grid; gap: 4px; }
+.proposal ul li::marker { color: var(--faint); }
+.proposal .open { margin-top: var(--sp-3); }
+.principles { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: var(--sp-b2); }
+.principles .principle:first-child { grid-column: span 3; }
+.principle { padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); display: grid; gap: var(--sp-1); }
+.principle strong { font-size: var(--text-base); }
+.principle p { color: var(--muted); font-size: var(--text-md); }
+.order { counter-reset: step; display: grid; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.order > div { display: grid; grid-template-columns: 40px minmax(0,1fr) auto; gap: var(--sp-3); align-items: center; padding: var(--sp-b2) var(--sp-3); border-block-start: 1px solid var(--border); }
+.order > div:first-child { border: 0; }
+.order > div::before { counter-increment: step; content: counter(step); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); color: var(--muted); font-weight: 700; font-size: var(--text-sm); }
+.order strong { display: block; font-size: var(--text-base); }
+.order span { color: var(--muted); font-size: var(--text-md); }
+.topline { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: var(--sp-2); height: var(--topbar-h); padding-inline: var(--sp-4); border-block-end: 1px solid var(--border); background: var(--surface); font-weight: 650; }
+.topline nav { margin-inline-start: auto; display: flex; gap: var(--sp-1); }
+.topline nav a { color: var(--muted); text-decoration: none; padding: 6px 8px; border-radius: var(--radius-sm); font-weight: 500; font-size: var(--text-md); }
+.topline nav a:hover { color: var(--fg); background: var(--surface-2); }
+@media (max-width: 64rem) { .findings, .principles { grid-template-columns: 1fr; } .proposal { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="topline"><span class="logo" style="width:22px;height:22px;border-radius:6px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-size:11px;font-weight:800">Z</span>zudo-composer · CMS UI proposal
+  <nav><a href="#findings">Findings</a><a href="#principles">Principles</a><a href="#proposals">Proposals</a><a href="#order">Order</a></nav></div>
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">Prototype set · 2026-09-03 · standalone HTML, not production code</p>
+    <h1>One CMS, five workspaces, one chrome.</h1>
+    <p>The five routes were built incrementally and each grew its own header, library, editor and status vocabulary. This set proposes a single shell, a single library pattern and a single editor pattern, then applies them to Composer, Content, Mapping, Sitemapper and Media. Every page is a click-through prototype; use the widget at the bottom-right of each page to compare sidebar vs top navigation and light vs dark.</p>
+    <div class="row" style="flex-wrap: wrap">
+      <a class="btn btn--primary" href="01-dashboard.html">Start at the Dashboard</a>
+      <a class="btn" href="02-library.html">Library pattern</a>
+      <a class="btn" href="03-composer-editor.html">Composer</a>
+      <a class="btn" href="04-content-editor.html">Content</a>
+      <a class="btn" href="05-mapping-editor.html">Mapping</a>
+      <a class="btn" href="06-sitemapper-editor.html">Sitemapper</a>
+      <a class="btn" href="07-media-library.html">Media</a>
+    </div>
+  </header>
+
+  <section id="findings">
+    <h2>What reads as unpolished today<span>from screenshots of the current build and a read of every feature UI</span></h2>
+    <div class="findings">
+      <div class="finding"><h3><span class="n">1</span>Three different page headers, two different editor chromes</h3><p>Composer and Sitemapper use a centered icon-tile header; Content, Mapping and Media use a full-width eyebrow header with status prose on the right. In editors, Composer has a toolbar with “Library”, Sitemapper has “← All sitemaps”, Mapping puts “Library / Save” in the page header, and Content has no back or save affordance at all.</p><img src="screenshots-current/composer.png" alt="Current Composer library header"><img src="screenshots-current/mapping.png" alt="Current Mapping library header"><div class="fix"><svg class="i"><use href="#i-arrow-r"/></svg><span>One topbar with a breadcrumb (workspace › record) and one editor toolbar (back · name · mode · actions) on every route.</span></div></div>
+      <div class="finding"><h3><span class="n">2</span>Five library layouts, one of them visibly broken</h3><p>Composer: storage card + rows with always-visible Duplicate/Delete. Mapping: a card that truncates to “Ne… News Pro 2 bindi”. Sitemapper: centered cards. Content: a nested tree. Media: gallery/table tabs with no search, filter or sort anywhere.</p><img src="screenshots-current/mapping.png" alt="Current Mapping library with truncated card"><div class="fix"><svg class="i"><use href="#i-arrow-r"/></svg><span>One library pattern: header → filter/sort toolbar → table with a row overflow menu, bulk bar, and shared empty/recovery states.</span></div></div>
+      <div class="finding"><h3><span class="n">3</span>Status is prose, and it lives in different places</h3><p>“Content library ready.” / “Mapping library ready.” / “Media library refreshed.” sit as plain text in page headers; Composer and Sitemapper show a “Saved” chip in a toolbar; Content autosaves with no Save button while Mapping requires an explicit Save.</p><div class="fix"><svg class="i"><use href="#i-arrow-r"/></svg><span>One status chip in the topbar (Saved · Unsaved · Saving · Failed), autosave everywhere, and a Save button that is disabled when there is nothing to save.</span></div></div>
+      <div class="finding"><h3><span class="n">4</span>Inspectors and forms scroll before they inform</h3><p>Composer’s inspector opens with two paragraphs of Reuse guidance before the selected node’s props. Content’s schema mode renders nine field-type cards inline per field. Mapping renders each binding as three stacked card regions.</p><img src="screenshots-current/content-model-fields.png" alt="Current Content schema mode with nine cards per field"><div class="fix"><svg class="i"><use href="#i-arrow-r"/></svg><span>Inspector tabs (Properties / Slots / Reuse), a field table with a type-picker popover, and one row per binding.</span></div></div>
+      <div class="finding"><h3><span class="n">5</span>Row actions are loud, terminology drifts</h3><p>Every list row carries text buttons (Delete, Duplicate, Reload). Buttons mix “New Collection” with “New composition”. Sitemap/Sitemap s, Composition/“Static Composition”, Mapping/“Content Mapping”/“Mapping route family” appear side by side.</p><div class="fix"><svg class="i"><use href="#i-arrow-r"/></svg><span>Hover-revealed ⋯ menus, sentence case everywhere, one noun per concept (Composition, Mapping, Sitemap, Entry, Asset).</span></div></div>
+      <div class="finding"><h3><span class="n">6</span>Home is a landing page, not a place to work from</h3><p>The route explains the product to a visitor. There are no counts, no recent records, no “needs attention” list, so the first click is always a guess.</p><img src="screenshots-current/home.png" alt="Current landing page"><div class="fix"><svg class="i"><use href="#i-arrow-r"/></svg><span>A dashboard with per-workspace counts, recent activity, blocked/unassigned items and quick actions.</span></div></div>
+    </div>
+  </section>
+
+  <section id="principles">
+    <h2>Shared rules the prototypes follow<span>continuing the graphite-and-blue direction already in app-tokens.css</span></h2>
+    <div class="principles">
+      <div class="principle"><strong>One shell</strong><p>Dark graphite navigation rail (the unused <code>--color-rail-*</code> tokens already in the app) or a refined top strip; a 48px topbar with breadcrumb, status, search and utilities. Editors add one 44px tool row beneath it.</p></div>
+      <div class="principle"><strong>Accent budget</strong><p>Blue only for: current nav item, selected row/node, focus ring, the single primary action, and “ready” status. Everything else is neutral. Warning and danger stay semantic.</p></div>
+      <div class="principle"><strong>Two density tiers</strong><p>32px chrome rows (toolbars, tree, table) and 36px picker rows. Spacing pairs from the same ×2 ladder (4/8/16/32 or 6/12/24) so groups read as groups.</p></div>
+      <div class="principle"><strong>Three-pane editors</strong><p>Navigator · main · inspector, with real resizers and collapse buttons; on narrow screens the three become a segmented switch in the toolbar. Same skeleton for Composer, Content, Mapping and Sitemapper.</p></div>
+      <div class="principle"><strong>Outline trees, the zudo-doc way</strong><p>Every navigator tree (Composer structure, Content models and entries, Sitemap pages) uses the same outline: no row icons, a » mark on categories, dashed connectors, a right-aligned mono slug column with Show slug / Show count toggles, square caret toggles, inline “Add” rows at the child indent, and an insert-here `+` that appears when you hover the gap between two siblings. Clicking either opens an inline title input in place.</p></div>
+      <div class="principle"><strong>Quiet rows</strong><p>Rows show identity, kind and status; actions appear on hover or in a ⋯ menu. Destructive actions are last, separated, and end with an ellipsis.</p></div>
+      <div class="principle"><strong>Shape and depth</strong><p>5px default radius, 3px for nested controls, hairline borders, flat surfaces. Shadows only on popovers and dialogs. Chips are rectangles, never pills.</p></div>
+    </div>
+  </section>
+
+  <section id="proposals">
+    <h2>The proposals<span>current build on the left, proposal on the right</span></h2>
+    <div class="pages">
+      <div class="proposal"><div class="shots"><figure><figcaption>Current · /</figcaption><img src="screenshots-current/home.png" alt=""></figure><figure><figcaption>Proposal</figcaption><img src="screenshots-proposal/01-dashboard-side.png" alt=""></figure></div><div><h3><span class="n">01</span>Dashboard</h3><ul><li>Per-workspace counts with one line of detail each.</li><li>Recent activity across all record types.</li><li>“Needs attention”: blocked mappings, unassigned pages, incomplete entries.</li><li>Storage/provider status moved out of every library page and into one place.</li></ul><a class="btn btn--primary open" href="01-dashboard.html">Open 01</a></div></div>
+      <div class="proposal"><div class="shots"><figure><figcaption>Current · /composer</figcaption><img src="screenshots-current/composer.png" alt=""></figure><figure><figcaption>Proposal</figcaption><img src="screenshots-proposal/02-library-side.png" alt=""></figure></div><div><h3><span class="n">02</span>Library pattern</h3><ul><li>Header: icon tile, title, one-line purpose, provider switch, primary “New”.</li><li>Toolbar: filter, kind, sort, table/cards view.</li><li>Table rows with ID subline, kind chip, usage, and a hover ⋯ menu.</li><li>Bulk bar, pagination line, and shared empty / no-match / recovery states.</li><li>Tabs on the page show the same pattern on Mappings and Sitemaps.</li></ul><a class="btn btn--primary open" href="02-library.html">Open 02</a></div></div>
+      <div class="proposal"><div class="shots"><figure><figcaption>Current · Composer editor</figcaption><img src="screenshots-current/composer-editor.png" alt=""></figure><figure><figcaption>Proposal</figcaption><img src="screenshots-proposal/03-composer-editor-side.png" alt=""></figure></div><div><h3><span class="n">03</span>Composer editor</h3><ul><li>Shared toolbar: back, inline-editable name, Edit/Preview and viewport as segmented controls, undo/redo, Export, ⋯.</li><li>Structure as an outline tree: components as groups, slots as quiet groups, value hints in the mono column, inline “Add component” rows, and a keyboard-driven palette.</li><li>Inspector tabs Properties / Slots / Reuse; props as a compact label–control grid.</li></ul><a class="btn btn--primary open" href="03-composer-editor.html">Open 03</a></div></div>
+      <div class="proposal"><div class="shots"><figure><figcaption>Current · /content</figcaption><img src="screenshots-current/content-entry-open.png" alt=""></figure><figure><figcaption>Proposal</figcaption><img src="screenshots-proposal/04-content-editor-side.png" alt=""></figure></div><div><h3><span class="n">04</span>Content editor</h3><ul><li>Models as » categories with entries hanging from dashed connectors, an inline “Add entry” row per collection; Entry / Schema as one segmented switch.</li><li>Real field widgets: slug with auto-from-title, toggle, markdown editor with a compact toolbar.</li><li>Schema as a field table; type picker is a popover, not nine inline cards.</li><li>Preview in the inspector with a “Render through” mapping selector.</li></ul><a class="btn btn--primary open" href="04-content-editor.html">Open 04</a></div></div>
+      <div class="proposal"><div class="shots"><figure><figcaption>Current · Mapping editor</figcaption><img src="screenshots-current/mapping-editor.png" alt=""></figure><figure><figcaption>Proposal</figcaption><img src="screenshots-proposal/05-mapping-editor-side.png" alt=""></figure></div><div><h3><span class="n">05</span>Mapping editor</h3><ul><li>Source fields always visible on the left with bound/unbound state.</li><li>One table row per binding: source → transform → target → status.</li><li>Inline diagnostics on the failing row; unbound targets listed as chips to bind.</li><li>Preview and diagnostics in the inspector; Save and Test in the toolbar.</li></ul><a class="btn btn--primary open" href="05-mapping-editor.html">Open 05</a></div></div>
+      <div class="proposal"><div class="shots"><figure><figcaption>Current · Sitemapper editor</figcaption><img src="screenshots-current/sitemapper-editor.png" alt=""></figure><figure><figcaption>Proposal</figcaption><img src="screenshots-proposal/06-sitemapper-editor-side.png" alt=""></figure></div><div><h3><span class="n">06</span>Sitemapper editor</h3><ul><li>Page outline with dashed connectors, route slug column, an assignment dot per page, inline “Add page” rows and an insert-between affordance; hover-only actions.</li><li>Canvas nodes carry their source (composition, mapping family, or unassigned).</li><li>Inspector: Page / Source / SEO tabs; Page source is an explicit None / Composition / Mapping choice.</li></ul><a class="btn btn--primary open" href="06-sitemapper-editor.html">Open 06</a></div></div>
+      <div class="proposal"><div class="shots"><figure><figcaption>Current · /media</figcaption><img src="screenshots-current/media.png" alt=""></figure><figure><figcaption>Proposal</figcaption><img src="screenshots-proposal/07-media-library-side.png" alt=""></figure></div><div><h3><span class="n">07</span>Media library</h3><ul><li>Search, type filter, sort, grid/list view.</li><li>Compact drop strip instead of a hero-sized upload box; upload progress as rows.</li><li>Persistent detail panel with copyable URL and Markdown reference, usage, alt text.</li><li>Dev-only provider status as a chip, not header prose.</li></ul><a class="btn btn--primary open" href="07-media-library.html">Open 07</a></div></div>
+    </div>
+  </section>
+
+  <section id="order">
+    <h2>Suggested production order<span>each step is independently shippable</span></h2>
+    <div class="order">
+      <div><div><strong>Shell + topbar + status chip</strong><span>Decide sidebar vs top nav (the prototype toggles both), extract one breadcrumb topbar, one save-status component. Retire per-route header copy.</span></div><span class="chip chip--plain">shell</span></div>
+      <div><div><strong>Library pattern</strong><span>One table-based library component used by Composer, Mapping, Sitemapper; fixes the truncated Mapping card and removes per-row text buttons.</span></div><span class="chip chip--plain">02</span></div>
+      <div><div><strong>Editor chrome</strong><span>Shared toolbar + three-pane body with resizers (Sitemapper’s inert resizers become real). Composer and Sitemapper adopt first since they already have the shape.</span></div><span class="chip chip--plain">03 · 06</span></div>
+      <div><div><strong>Content and Mapping on the editor chrome</strong><span>Replace floating cards with panes; field table + type popover; binding rows. These two share ~90% of their stylesheet today, so this is mostly deletion.</span></div><span class="chip chip--plain">04 · 05</span></div>
+      <div><div><strong>Media browser + Dashboard</strong><span>Search/filter/detail panel for Media; Dashboard once counts and recent-activity data are exposed by the providers.</span></div><span class="chip chip--plain">07 · 01</span></div>
+    </div>
+  </section>
+</div>
+<div class="proto-controls" aria-label="Prototype controls"><span class="lbl">Theme</span><div class="seg seg--sm"><button data-theme-opt="light" aria-pressed="true">Light</button><button data-theme-opt="dark" aria-pressed="false">Dark</button></div></div>
+<script src="icons.js"></script><script src="proto.js"></script>
+</body>
+</html>

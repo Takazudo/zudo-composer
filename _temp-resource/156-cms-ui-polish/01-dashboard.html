@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — zudo-composer proposal</title>
+<link rel="stylesheet" href="proto.css">
+<style>
+.dash { display: grid; gap: var(--sp-b3); }
+.dash__hero { display: flex; align-items: flex-end; gap: var(--sp-3); }
+.dash__hero h1 { font-size: var(--text-2xl); }
+.dash__hero p { color: var(--muted); margin-top: 2px; }
+.stat-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sp-b2); }
+.stat { display: grid; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); text-decoration: none; color: inherit; }
+.stat:hover { border-color: var(--border-strong); }
+.stat__head { display: flex; align-items: center; gap: var(--sp-2); color: var(--muted); font-weight: 600; font-size: var(--text-sm); }
+.stat__num { font-size: 1.75rem; font-weight: 650; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.stat__num small { font-size: var(--text-sm); font-weight: 500; color: var(--muted); margin-inline-start: 4px; letter-spacing: 0; }
+.stat__foot { display: flex; align-items: center; gap: var(--sp-1); font-size: var(--text-sm); color: var(--muted); }
+.two { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--sp-b2); align-items: start; }
+.recent { display: grid; }
+.recent__row { display: grid; grid-template-columns: 32px minmax(0,1fr) auto auto; align-items: center; gap: var(--sp-b2); height: 48px; padding-inline: var(--sp-3); border-block-start: 1px solid var(--border); text-decoration: none; color: inherit; }
+.recent__row:hover { background: color-mix(in oklch, var(--fg) 3%, var(--surface)); }
+.recent__row .t { display: grid; min-width: 0; }
+.recent__row .t strong { font-weight: 600; }
+.recent__row .t span { font-size: var(--text-xs); color: var(--faint); }
+.recent__row time { font-size: var(--text-sm); color: var(--muted); white-space: nowrap; }
+.pipeline { display: grid; gap: 0; }
+.pipe { display: grid; grid-template-columns: 32px minmax(0,1fr) auto; gap: var(--sp-b2); align-items: center; padding: var(--sp-b2) var(--sp-3); border-block-start: 1px solid var(--border); }
+.pipe .t strong { display: block; font-weight: 600; }
+.pipe .t span { font-size: var(--text-sm); color: var(--muted); }
+.pipe .tile { width: 28px; height: 28px; }
+.pipe__arrow { display: grid; place-items: center; height: 16px; color: var(--faint); margin-inline-start: 26px; }
+.quick { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.attention { display: grid; gap: var(--sp-2); }
+@media (max-width: 64rem) { .stat-grid { grid-template-columns: repeat(2, 1fr); } .two { grid-template-columns: 1fr; } .dash__hero { flex-wrap: wrap; align-items: flex-start; } .dash__hero .grow { flex-basis: 100%; } .recent__row { grid-template-columns: 32px minmax(0,1fr) auto; } .recent__row time { display: none; } .recent__row .t strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+</style>
+</head>
+<body data-route="home">
+<div class="frame">
+  <header class="topbar">
+    <nav class="crumbs" aria-label="Breadcrumb"><span class="cur">Dashboard</span></nav>
+    <div class="topbar__right">
+      <button class="searchbox" type="button"><svg class="i i-sm"><use href="#i-search"/></svg><span>Search records…</span><span class="kbd">⌘K</span></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Theme"><svg class="i"><use href="#i-monitor"/></svg></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Notifications"><svg class="i"><use href="#i-bell"/></svg></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Help"><svg class="i"><use href="#i-help"/></svg></button>
+    </div>
+  </header>
+
+  <main class="page page--doc">
+    <div class="dash">
+      <div class="dash__hero">
+        <div class="grow">
+          <h1>Good morning.</h1>
+          <p>Everything below lives in this browser. 6 records changed since yesterday.</p>
+        </div>
+        <div class="quick">
+          <button class="btn"><svg class="i"><use href="#i-plus"/></svg>New entry</button>
+          <button class="btn"><svg class="i"><use href="#i-plus"/></svg>New composition</button>
+          <button class="btn btn--primary"><svg class="i"><use href="#i-upload"/></svg>Upload media</button>
+        </div>
+      </div>
+
+      <section class="stat-grid" aria-label="Workspace status">
+        <a class="stat" href="04-content-editor.html"><div class="stat__head"><svg class="i"><use href="#i-content"/></svg>Content</div><div class="stat__num">78<small>entries</small></div><div class="stat__foot">2 models · 3 incomplete</div></a>
+        <a class="stat" href="07-media-library.html"><div class="stat__head"><svg class="i"><use href="#i-media"/></svg>Media</div><div class="stat__num">14<small>assets</small></div><div class="stat__foot">11 images · 3 PDFs · 8.2 MB</div></a>
+        <a class="stat" href="02-library.html"><div class="stat__head"><svg class="i"><use href="#i-composer"/></svg>Compositions</div><div class="stat__num">6</div><div class="stat__foot">2 patterns · 1 global template</div></a>
+        <a class="stat" href="05-mapping-editor.html"><div class="stat__head"><svg class="i"><use href="#i-mapping"/></svg>Mappings</div><div class="stat__num">3</div><div class="stat__foot"><span class="chip chip--warn"><span class="dot"></span>1 blocked</span></div></a>
+        <a class="stat" href="06-sitemapper-editor.html"><div class="stat__head"><svg class="i"><use href="#i-sitemap"/></svg>Sitemaps</div><div class="stat__num">2</div><div class="stat__foot">19 pages · 4 unassigned</div></a>
+      </section>
+
+      <div class="two">
+        <section class="card" aria-labelledby="recent-title">
+          <div class="card__header"><h3 id="recent-title">Recent activity</h3><span class="muted small">across all workspaces</span><button class="btn btn--ghost btn--sm" style="margin-inline-start:auto">View all</button></div>
+          <div class="recent">
+            <a class="recent__row" href="04-content-editor.html"><span class="tile"><svg class="i"><use href="#i-content"/></svg></span><span class="t"><strong>Welcome to the newsroom</strong><span>News · entry · edited by you</span></span><span class="chip chip--ok"><span class="dot"></span>Complete</span><time>12 min ago</time></a>
+            <a class="recent__row" href="03-composer-editor.html"><span class="tile"><svg class="i"><use href="#i-composer"/></svg></span><span class="t"><strong>Product overview</strong><span>Composition · 8 nodes</span></span><span class="chip chip--accent">Pattern</span><time>1 h ago</time></a>
+            <a class="recent__row" href="05-mapping-editor.html"><span class="tile"><svg class="i"><use href="#i-mapping"/></svg></span><span class="t"><strong>News → Product overview</strong><span>Mapping · 2 bindings</span></span><span class="chip chip--ok"><span class="dot"></span>Ready</span><time>3 h ago</time></a>
+            <a class="recent__row" href="06-sitemapper-editor.html"><span class="tile"><svg class="i"><use href="#i-sitemap"/></svg></span><span class="t"><strong>Marketing site</strong><span>Sitemap · 12 pages</span></span><span class="chip chip--warn"><span class="dot"></span>4 unassigned</span><time>Yesterday</time></a>
+            <a class="recent__row" href="07-media-library.html"><span class="tile"><svg class="i"><use href="#i-media"/></svg></span><span class="t"><strong>hero-office.jpg</strong><span>Media · 1.4 MB · 2400×1600</span></span><span class="chip chip--plain">Image</span><time>Yesterday</time></a>
+            <a class="recent__row" href="04-content-editor.html"><span class="tile"><svg class="i"><use href="#i-content"/></svg></span><span class="t"><strong>Article 41</strong><span>Articles · entry</span></span><span class="chip chip--warn"><span class="dot"></span>Missing slug</span><time>2 days ago</time></a>
+          </div>
+        </section>
+
+        <div class="stack" style="gap: var(--sp-b2)">
+          <section class="card" aria-labelledby="attn-title">
+            <div class="card__header"><h3 id="attn-title">Needs attention</h3><span class="count-badge">3</span></div>
+            <div class="card__body attention">
+              <div class="banner banner--warn"><svg class="i"><use href="#i-alert"/></svg><div><strong>Mapping “Articles → Blog post” is blocked.</strong><div class="muted small">Target prop <code>ProseMd.markdown</code> no longer exists in the composition.</div></div><a class="btn btn--sm" href="05-mapping-editor.html">Fix</a></div>
+              <div class="banner"><svg class="i"><use href="#i-sitemap"/></svg><div><strong>4 pages have no source.</strong><div class="muted small">Marketing site · /about, /careers, /press, /contact</div></div><a class="btn btn--sm" href="06-sitemapper-editor.html">Assign</a></div>
+              <div class="banner"><svg class="i"><use href="#i-content"/></svg><div><strong>3 entries are incomplete.</strong><div class="muted small">Articles · required fields missing</div></div><a class="btn btn--sm" href="04-content-editor.html">Review</a></div>
+            </div>
+          </section>
+
+          <section class="card" aria-labelledby="pipe-title">
+            <div class="card__header"><h3 id="pipe-title">How the pieces connect</h3></div>
+            <div class="pipeline">
+              <div class="pipe"><span class="tile"><svg class="i"><use href="#i-content"/></svg></span><span class="t"><strong>Content</strong><span>Models define fields; entries hold the values.</span></span><span class="muted small">2 models</span></div>
+              <div class="pipe"><span class="tile"><svg class="i"><use href="#i-mapping"/></svg></span><span class="t"><strong>Mapping</strong><span>Binds entry fields to composition props.</span></span><span class="muted small">3</span></div>
+              <div class="pipe"><span class="tile"><svg class="i"><use href="#i-composer"/></svg></span><span class="t"><strong>Composition</strong><span>Reusable page structure built from provider components.</span></span><span class="muted small">6</span></div>
+              <div class="pipe"><span class="tile"><svg class="i"><use href="#i-sitemap"/></svg></span><span class="t"><strong>Sitemap</strong><span>Places compositions or mappings on routes.</span></span><span class="muted small">2</span></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__header"><h3>Storage</h3><span class="chip chip--ok" style="margin-inline-start:auto"><span class="dot"></span>Healthy</span></div>
+            <div class="card__body stack" style="font-size: var(--text-md)">
+              <div class="row"><svg class="i muted"><use href="#i-database"/></svg><span class="grow">Browser storage</span><span class="muted">IndexedDB · zudo-composer</span></div>
+              <div class="row"><svg class="i muted"><use href="#i-folder"/></svg><span class="grow">Project files</span><span class="chip chip--plain">dev only</span></div>
+              <div class="row"><svg class="i muted"><use href="#i-clock"/></svg><span class="grow">Last write</span><span class="muted">12 min ago</span></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="proto-note"><button class="btn btn--ghost btn--xs btn--icon close" aria-label="Dismiss"><svg class="i i-xs"><use href="#i-x"/></svg></button><strong>Proposal 01 · Dashboard replaces the landing page</strong>Counts, recent records and “needs attention” items give the home route a job. Use the widget at bottom-right to compare sidebar vs top navigation and light vs dark.</div>
+<script src="icons.js"></script><script src="shell.js"></script><script src="proto.js"></script>
+</body>
+</html>

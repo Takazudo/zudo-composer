@@ -2,7 +2,7 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', '**/dist', 'coverage'] },
+  { ignores: ['dist', '**/dist', 'coverage', '_temp-resource/**'] },
   {
     files: ['scripts/**/*.mjs', 'plugins/**/*.mjs'],
     languageOptions: {

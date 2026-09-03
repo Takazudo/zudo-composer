@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media library — zudo-composer proposal</title>
+<link rel="stylesheet" href="proto.css">
+<style>
+.media-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-3); align-items: start; }
+
+/* detail panel */
+.detail-card { position: sticky; top: var(--sp-b3); }
+.detail-preview { aspect-ratio: 3/2; border-radius: var(--radius); border: 1px solid var(--border); display: grid; place-items: center; }
+.detail-preview svg { color: var(--muted); }
+.detail-id { word-break: break-all; }
+.detail-card .field .row > .input { flex: 1 1 auto; min-width: 0; text-overflow: ellipsis; }
+.detail-card .field .row > .btn { flex: 0 0 auto; }
+
+/* compact drop strip */
+.dropzone { display: flex; align-items: center; gap: var(--sp-2); height: 44px; padding-inline: var(--sp-b2); margin-block-end: var(--sp-b2); border: 1px dashed var(--border-strong); border-radius: var(--radius); background: var(--surface-2); color: var(--muted); font-size: var(--text-md); }
+.dropzone > svg { color: var(--faint); flex: 0 0 auto; }
+.dropzone .choose { color: var(--accent); font-weight: 600; cursor: pointer; }
+.dropzone .spacer { flex: 1 1 auto; }
+.dropzone .hint { color: var(--faint); font-size: var(--text-xs); white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .dropzone { height: auto; min-height: 44px; flex-wrap: wrap; padding-block: var(--sp-1); }
+  .dropzone .hint { display: none; }
+}
+
+/* upload progress example */
+.upload-card { margin-block-end: var(--sp-b2); }
+.upload-row + .upload-row { margin-block-start: var(--sp-2); }
+.upload-row .bar { height: 4px; border-radius: 999px; background: var(--surface-3); overflow: hidden; margin-block-start: 4px; }
+.upload-row .bar > div { height: 100%; background: var(--accent); }
+
+/* asset grid */
+.asset-grid[hidden] { display: none; }
+.asset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; margin-block-end: var(--sp-b2); }
+.asset { display: grid; gap: 6px; }
+.asset .thumb { position: relative; aspect-ratio: 1; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); display: grid; place-items: center; }
+.asset.is-selected .thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.asset .thumb > svg.i-lg { color: var(--muted); }
+.asset .cap { display: grid; gap: 1px; min-width: 0; }
+.asset .cap .fname { font-weight: 600; font-size: var(--text-sm); }
+.asset-cb { position: absolute; inset-block-start: 6px; inset-inline-start: 6px; display: flex; opacity: 0; transition: opacity .1s; }
+.asset:hover .asset-cb, .asset.is-selected .asset-cb { opacity: 1; }
+.asset-cb input { width: 14px; height: 14px; accent-color: var(--accent); margin: 0; display: block; }
+.asset .overlay-acts { position: absolute; inset-block-start: 6px; inset-inline-end: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity .1s; }
+.asset:hover .overlay-acts { opacity: 1; }
+.asset .overlay-acts .btn { background: var(--surface); }
+
+.thumb.grad-a { background: linear-gradient(135deg, oklch(0.88 0.01 255), oklch(0.78 0.02 255)); }
+.thumb.grad-b { background: linear-gradient(135deg, oklch(0.90 0.008 255), oklch(0.81 0.015 255)); }
+.thumb.grad-c { background: linear-gradient(135deg, oklch(0.86 0.012 255), oklch(0.76 0.02 255)); }
+.thumb.grad-d { background: linear-gradient(135deg, oklch(0.92 0.006 255), oklch(0.83 0.012 255)); }
+[data-theme="dark"] .thumb.grad-a, [data-theme="dark"] .detail-preview.grad-a { background: linear-gradient(135deg, oklch(0.34 0.014 255), oklch(0.26 0.016 255)); }
+[data-theme="dark"] .thumb.grad-b { background: linear-gradient(135deg, oklch(0.36 0.012 255), oklch(0.28 0.014 255)); }
+[data-theme="dark"] .thumb.grad-c { background: linear-gradient(135deg, oklch(0.32 0.016 255), oklch(0.24 0.018 255)); }
+[data-theme="dark"] .thumb.grad-d { background: linear-gradient(135deg, oklch(0.38 0.01 255), oklch(0.30 0.012 255)); }
+
+.thumb.pdf, .mini-thumb.pdf { background: var(--surface); }
+.pdf-page { width: 60%; height: 76%; background: #fff; border: 1px solid var(--border); border-radius: 4px; display: grid; place-items: center; gap: 4px; color: var(--muted); box-shadow: 0 1px 2px oklch(0 0 0 / .08); }
+.pdf-page span { font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+[data-theme="dark"] .pdf-page { background: oklch(0.94 0.004 255); color: oklch(0.32 0.02 255); }
+
+/* list view */
+.mini-thumb { width: 28px; height: 28px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); display: grid; place-items: center; flex: 0 0 auto; }
+.mini-thumb svg { color: var(--muted); }
+.mini-thumb.grad-a { background: linear-gradient(135deg, oklch(0.88 0.01 255), oklch(0.78 0.02 255)); }
+.mini-thumb.grad-b { background: linear-gradient(135deg, oklch(0.90 0.008 255), oklch(0.81 0.015 255)); }
+.mini-thumb.grad-c { background: linear-gradient(135deg, oklch(0.86 0.012 255), oklch(0.76 0.02 255)); }
+.mini-thumb.grad-d { background: linear-gradient(135deg, oklch(0.92 0.006 255), oklch(0.83 0.012 255)); }
+[data-theme="dark"] .mini-thumb.grad-a { background: linear-gradient(135deg, oklch(0.34 0.014 255), oklch(0.26 0.016 255)); }
+[data-theme="dark"] .mini-thumb.grad-b { background: linear-gradient(135deg, oklch(0.36 0.012 255), oklch(0.28 0.014 255)); }
+[data-theme="dark"] .mini-thumb.grad-c { background: linear-gradient(135deg, oklch(0.32 0.016 255), oklch(0.24 0.018 255)); }
+[data-theme="dark"] .mini-thumb.grad-d { background: linear-gradient(135deg, oklch(0.38 0.01 255), oklch(0.30 0.012 255)); }
+
+@media (max-width: 900px) {
+  .media-layout { grid-template-columns: minmax(0, 1fr); }
+  .detail-card { position: static; }
+}
+</style>
+</head>
+<body data-route="media">
+<div class="frame">
+  <header class="topbar">
+    <nav class="crumbs" aria-label="Breadcrumb"><span class="cur">Media</span></nav>
+    <div class="topbar__right">
+      <button class="searchbox" type="button"><svg class="i i-sm"><use href="#i-search"/></svg><span>Search records…</span><span class="kbd">⌘K</span></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Theme"><svg class="i"><use href="#i-monitor"/></svg></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Notifications"><svg class="i"><use href="#i-bell"/></svg></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Help"><svg class="i"><use href="#i-help"/></svg></button>
+    </div>
+  </header>
+
+  <main class="page page--doc" data-tabset>
+    <div class="page-header">
+      <span class="tile tile--accent"><svg class="i"><use href="#i-media"/></svg></span>
+      <div class="page-header__text">
+        <h1>Media</h1>
+        <p>Images and PDFs delivered from /uploaded-media/. Upload authoring is available in local development only.</p>
+      </div>
+      <div class="page-header__actions">
+        <span class="chip chip--plain">dev · file provider connected</span>
+        <button class="btn btn--primary" data-dialog="dlg-upload"><svg class="i"><use href="#i-upload"/></svg>Upload</button>
+      </div>
+    </div>
+
+    <div class="media-layout">
+      <div class="media-browser">
+        <div class="lib-toolbar">
+          <div class="input-wrap"><svg class="i i-sm"><use href="#i-search"/></svg><input class="input input--sm" placeholder="Search by file name"></div>
+          <div class="seg seg--sm" role="group" aria-label="Type filter">
+            <button aria-pressed="true">All <span class="muted" style="font-weight:500">14</span></button>
+            <button aria-pressed="false">Images <span class="muted" style="font-weight:500">11</span></button>
+            <button aria-pressed="false">PDFs <span class="muted" style="font-weight:500">3</span></button>
+          </div>
+          <div class="has-menu"><button class="btn btn--sm" data-menu="m-sort"><svg class="i i-sm"><use href="#i-sort"/></svg>Sort: Newest<svg class="i i-xs caret"><use href="#i-chev-d"/></svg></button>
+            <div class="menu" id="m-sort" style="inset-block-start: calc(100% + 4px)">
+              <button><svg class="i"><use href="#i-check"/></svg>Newest</button>
+              <button><span></span>Oldest</button>
+              <button><span></span>Name</button>
+              <button><span></span>Size</button>
+            </div>
+          </div>
+          <span class="toolbar__spacer"></span>
+          <div class="seg seg--sm" role="group" aria-label="View" data-tabs>
+            <button data-tab="grid" aria-pressed="true" aria-selected="true" aria-label="Grid view"><svg class="i i-sm"><use href="#i-grid"/></svg></button>
+            <button data-tab="list" aria-pressed="false" aria-selected="false" aria-label="List view"><svg class="i i-sm"><use href="#i-list"/></svg></button>
+          </div>
+        </div>
+
+        <div class="dropzone">
+          <svg class="i i-sm"><use href="#i-upload"/></svg>
+          <span>Drop files here, paste from clipboard, or <span class="choose">Choose files</span></span>
+          <span class="spacer"></span>
+          <span class="hint">PNG, JPG, SVG, PDF · up to 10 MB</span>
+        </div>
+
+        <div class="card upload-card">
+          <div class="card__header"><h3>Uploading 2 files</h3></div>
+          <div class="card__body">
+            <div class="upload-row">
+              <div class="row"><span class="truncate grow small" style="font-weight:600">press-kit-cover.jpg</span><span class="chip chip--ok"><span class="dot"></span>Stored</span></div>
+              <div class="bar"><div style="width:100%"></div></div>
+            </div>
+            <div class="upload-row">
+              <div class="row"><span class="truncate grow small" style="font-weight:600">newsroom-banner.jpg</span><span class="chip"><span class="dot"></span>Uploading 64%</span></div>
+              <div class="bar"><div style="width:64%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div data-panel="grid" class="asset-grid">
+          <div class="asset is-selected">
+            <div class="thumb grad-a">
+              <label class="asset-cb" aria-label="Select hero-office.jpg"><input type="checkbox" checked></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">hero-office.jpg</span><span class="xs faint">2400×1600 · 1.4 MB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb grad-b">
+              <label class="asset-cb" aria-label="Select team-photo.jpg"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">team-photo.jpg</span><span class="xs faint">1800×1200 · 300 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb grad-c">
+              <label class="asset-cb" aria-label="Select product-preview.png"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">product-preview.png</span><span class="xs faint">1200×900 · 200 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb grad-d">
+              <label class="asset-cb" aria-label="Select logo-mark.svg"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">logo-mark.svg</span><span class="xs faint">512×512 · 6 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb grad-a">
+              <label class="asset-cb" aria-label="Select office-map.png"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">office-map.png</span><span class="xs faint">1600×1000 · 250 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb grad-b">
+              <label class="asset-cb" aria-label="Select feature-a.png"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">feature-a.png</span><span class="xs faint">960×720 · 145 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb grad-c">
+              <label class="asset-cb" aria-label="Select feature-b.png"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">feature-b.png</span><span class="xs faint">960×720 · 140 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb grad-d">
+              <label class="asset-cb" aria-label="Select feature-c.png"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">feature-c.png</span><span class="xs faint">960×720 · 138 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb grad-a">
+              <label class="asset-cb" aria-label="Select press-kit-cover.jpg"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">press-kit-cover.jpg</span><span class="xs faint">2000×1333 · 150 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb grad-b">
+              <label class="asset-cb" aria-label="Select pricing-hero.jpg"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">pricing-hero.jpg</span><span class="xs faint">2400×1350 · 200 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb grad-c">
+              <label class="asset-cb" aria-label="Select newsroom-banner.jpg"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <svg class="i i-lg"><use href="#i-image"/></svg>
+            </div>
+            <div class="cap"><span class="truncate fname">newsroom-banner.jpg</span><span class="xs faint">1920×640 · 140 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb pdf">
+              <label class="asset-cb" aria-label="Select deployment-sample.pdf"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <div class="pdf-page"><svg class="i i-lg"><use href="#i-file-pdf"/></svg><span>PDF</span></div>
+            </div>
+            <div class="cap"><span class="truncate fname">deployment-sample.pdf</span><span class="xs faint">240 KB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb pdf">
+              <label class="asset-cb" aria-label="Select press-kit.pdf"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <div class="pdf-page"><svg class="i i-lg"><use href="#i-file-pdf"/></svg><span>PDF</span></div>
+            </div>
+            <div class="cap"><span class="truncate fname">press-kit.pdf</span><span class="xs faint">3.1 MB</span></div>
+          </div>
+          <div class="asset">
+            <div class="thumb pdf">
+              <label class="asset-cb" aria-label="Select brand-guidelines.pdf"><input type="checkbox"></label>
+              <div class="overlay-acts"><button class="btn btn--sm btn--icon" aria-label="Copy URL"><svg class="i i-sm"><use href="#i-copy"/></svg></button><button class="btn btn--sm btn--icon" aria-label="More actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></div>
+              <div class="pdf-page"><svg class="i i-lg"><use href="#i-file-pdf"/></svg><span>PDF</span></div>
+            </div>
+            <div class="cap"><span class="truncate fname">brand-guidelines.pdf</span><span class="xs faint">1.9 MB</span></div>
+          </div>
+        </div>
+
+        <div data-panel="list" hidden>
+          <table class="table table--compact" data-selectable>
+            <thead><tr><th></th><th>Name</th><th>Type</th><th>Dimensions</th><th class="num">Size</th><th>Added</th><th></th></tr></thead>
+            <tbody>
+              <tr aria-selected="true"><td><div class="mini-thumb grad-a"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">hero-office.jpg</td><td class="muted">Image/JPEG</td><td class="muted">2400×1600</td><td class="num muted">1.4 MB</td><td class="muted">Aug 30, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb grad-b"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">team-photo.jpg</td><td class="muted">Image/JPEG</td><td class="muted">1800×1200</td><td class="num muted">300 KB</td><td class="muted">Aug 29, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb grad-c"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">product-preview.png</td><td class="muted">Image/PNG</td><td class="muted">1200×900</td><td class="num muted">200 KB</td><td class="muted">Aug 28, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb grad-d"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">logo-mark.svg</td><td class="muted">Image/SVG</td><td class="muted">512×512</td><td class="num muted">6 KB</td><td class="muted">Aug 27, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb grad-a"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">office-map.png</td><td class="muted">Image/PNG</td><td class="muted">1600×1000</td><td class="num muted">250 KB</td><td class="muted">Aug 26, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb grad-b"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">feature-a.png</td><td class="muted">Image/PNG</td><td class="muted">960×720</td><td class="num muted">145 KB</td><td class="muted">Aug 25, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb grad-c"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">feature-b.png</td><td class="muted">Image/PNG</td><td class="muted">960×720</td><td class="num muted">140 KB</td><td class="muted">Aug 25, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb grad-d"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">feature-c.png</td><td class="muted">Image/PNG</td><td class="muted">960×720</td><td class="num muted">138 KB</td><td class="muted">Aug 25, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb grad-a"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">press-kit-cover.jpg</td><td class="muted">Image/JPEG</td><td class="muted">2000×1333</td><td class="num muted">150 KB</td><td class="muted">Aug 23, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb grad-b"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">pricing-hero.jpg</td><td class="muted">Image/JPEG</td><td class="muted">2400×1350</td><td class="num muted">200 KB</td><td class="muted">Aug 22, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb grad-c"><svg class="i i-xs"><use href="#i-image"/></svg></div></td><td class="name">newsroom-banner.jpg</td><td class="muted">Image/JPEG</td><td class="muted">1920×640</td><td class="num muted">140 KB</td><td class="muted">Aug 21, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb pdf"><svg class="i i-xs"><use href="#i-file-pdf"/></svg></div></td><td class="name">deployment-sample.pdf</td><td class="muted">PDF</td><td class="muted">—</td><td class="num muted">240 KB</td><td class="muted">Aug 20, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb pdf"><svg class="i i-xs"><use href="#i-file-pdf"/></svg></div></td><td class="name">press-kit.pdf</td><td class="muted">PDF</td><td class="muted">—</td><td class="num muted">3.1 MB</td><td class="muted">Aug 18, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+              <tr aria-selected="false"><td><div class="mini-thumb pdf"><svg class="i i-xs"><use href="#i-file-pdf"/></svg></div></td><td class="name">brand-guidelines.pdf</td><td class="muted">PDF</td><td class="muted">—</td><td class="num muted">1.9 MB</td><td class="muted">Aug 15, 2026</td><td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pager"><span>14 assets · 8.2 MB · /uploaded-media/</span></div>
+      </div>
+
+      <aside class="card detail-card">
+        <div class="pane__header">Details<button class="btn btn--ghost btn--sm btn--icon" aria-label="Collapse details"><svg class="i i-sm"><use href="#i-sidebar-r"/></svg></button></div>
+        <div class="pane__body pane__body--pad stack" style="gap: var(--sp-3)">
+          <div class="detail-preview grad-a"><svg class="i i-lg"><use href="#i-image"/></svg></div>
+          <h3 class="truncate">hero-office.jpg</h3>
+          <div class="stack small" style="gap:6px">
+            <div class="row"><span class="muted grow">Type</span><span>Image/JPEG</span></div>
+            <div class="row"><span class="muted grow">Dimensions</span><span>2400×1600</span></div>
+            <div class="row"><span class="muted grow">Size</span><span>1.4 MB</span></div>
+            <div class="row"><span class="muted grow">Added</span><span>Aug 30, 2026</span></div>
+            <div class="row"><span class="muted grow">ID</span><code class="mono xs detail-id">media-01j8x4q9nq</code></div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="field">
+            <label for="d-url">Public URL</label>
+            <div class="row"><input class="input input--sm mono" id="d-url" value="/uploaded-media/hero-office.jpg" readonly><button class="btn btn--sm">Copy</button></div>
+          </div>
+          <div class="field">
+            <label for="d-md">Markdown</label>
+            <div class="row"><input class="input input--sm mono" id="d-md" value="![Office](/uploaded-media/hero-office.jpg)" readonly><button class="btn btn--sm">Copy Markdown</button></div>
+          </div>
+
+          <div class="field">
+            <span class="field__label">Used in <span class="muted" style="font-weight:400">· 2 references</span></span>
+            <div class="stack" style="gap:4px">
+              <div class="row" style="gap:6px"><svg class="i i-sm muted"><use href="#i-content"/></svg><span class="truncate small">Welcome to the newsroom</span></div>
+              <div class="row" style="gap:6px"><svg class="i i-sm muted"><use href="#i-composer"/></svg><span class="truncate small">Landing hero</span></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="d-alt">Alt text</label>
+            <input class="input input--sm" id="d-alt" value="Team at the office">
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="row" style="gap:8px">
+            <button class="btn btn--sm grow"><svg class="i i-sm"><use href="#i-upload"/></svg>Replace file</button>
+            <button class="btn btn--sm btn--danger grow"><svg class="i i-sm"><use href="#i-trash"/></svg>Delete…</button>
+          </div>
+          <p class="xs faint">Reference scan is advisory: it checks stored records in this browser only.</p>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<!-- Upload dialog -->
+<div class="overlay" id="dlg-upload">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-upload-t">
+    <div class="dialog__header"><h2 id="dlg-upload-t">Upload media</h2><button class="btn btn--ghost btn--icon btn--sm" data-dialog-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <div class="dialog__body stack" style="gap: var(--sp-3)">
+      <div class="dropzone" style="height:120px; flex-direction:column; justify-content:center; text-align:center">
+        <svg class="i i-lg"><use href="#i-upload"/></svg>
+        <div><strong>Drop files to upload</strong> <span class="muted small">or</span> <span class="choose">browse</span></div>
+        <span class="xs faint">PNG, JPG, SVG, PDF · up to 10 MB each</span>
+      </div>
+      <div class="empty empty--inline"><svg class="i"><use href="#i-file"/></svg><p>No files selected yet.</p></div>
+    </div>
+    <div class="dialog__footer"><span class="muted small">Uploads to /uploaded-media/ · dev only</span><button class="btn" data-dialog-close>Cancel</button><button class="btn btn--primary" aria-disabled="true" disabled>Upload 0 files</button></div>
+  </div>
+</div>
+
+<div class="proto-note"><button class="btn btn--ghost btn--xs btn--icon close" aria-label="Dismiss"><svg class="i i-xs"><use href="#i-x"/></svg></button><strong>Proposal 07 · Media as a browsable library</strong>Search, type filter, sort and view toggle; a compact drop strip instead of a hero-sized box; a persistent detail panel with copyable references and usage; dev-only status as a chip instead of header prose.</div>
+<script src="icons.js"></script><script src="shell.js"></script><script src="proto.js"></script>
+</body>
+</html>

@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sitemapper editor — zudo-composer proposal</title>
+<link rel="stylesheet" href="proto.css">
+<style>
+/* canvas mock of the sitemap node graph */
+.pane--canvas .pane__body { padding: 0; position: relative; overflow: hidden; }
+.canvas-scroll { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; }
+.canvas-stage { position: relative; width: 1584px; height: 460px; margin: var(--sp-b3); }
+.canvas-lines { position: absolute; inset-block-start: 0; inset-inline-start: 0; pointer-events: none; }
+.canvas-lines path { fill: none; stroke: var(--border-strong); stroke-width: 1.5px; }
+.node { position: absolute; width: 168px; height: 60px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 2px oklch(0 0 0 / .05); display: flex; flex-direction: column; justify-content: space-between; }
+.node--root { border-inline-start: 2px solid var(--accent); }
+.node--sel { outline: 2px solid var(--accent); outline-offset: 2px; }
+.node__title, .node__route, .node__src { flex: none; }
+.node__title { font-weight: 600; font-size: var(--text-sm); line-height: 1.2; }
+.node__route { font-family: var(--mono); font-size: var(--text-xs); line-height: 1.2; color: var(--faint); }
+.node__src { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); line-height: 1.2; color: var(--muted); min-width: 0; }
+.node__src svg { width: 12px; height: 12px; flex: 0 0 auto; }
+.node__src span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node .chip { align-self: flex-start; }
+
+.canvas-toolbar { position: absolute; inset-block-start: var(--sp-2); inset-inline-start: var(--sp-2); z-index: 2; background: var(--surface); box-shadow: var(--shadow-pop); }
+.canvas-legend { position: absolute; inset-block-end: var(--sp-2); inset-inline-start: var(--sp-2); z-index: 2; display: flex; align-items: center; gap: var(--sp-3); padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-pop); font-size: var(--text-xs); color: var(--muted); }
+.canvas-legend .item { display: flex; align-items: center; gap: 6px; }
+
+.assign-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.assign-dot--ok { background: var(--success); }
+.assign-dot--warn { background: var(--warning); }
+.assign-dot--accent { background: var(--accent); }
+
+.tree-row .tail { display: flex; align-items: center; gap: 6px; }
+
+.tree-table th, .tree-table td { padding-inline: var(--sp-2); font-size: var(--text-sm); }
+.tree-table .row svg { width: 13px; height: 13px; }
+
+.src-example { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-b2); }
+.src-example .t { min-width: 0; }
+.src-example .t .ttl { font-weight: 600; font-size: var(--text-md); }
+.src-example .t .sub { font-size: var(--text-xs); color: var(--faint); }
+</style>
+</head>
+<body data-route="sitemapper">
+<div class="frame">
+  <header class="topbar">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="02-library.html">Sitemaps</a><span class="sep">›</span><span class="cur">Marketing site</span></nav>
+    <div class="topbar__right">
+      <span class="status status--ok"><svg class="i i-sm"><use href="#i-check-circle"/></svg>Saved</span>
+      <span class="vdivider" style="height:20px; margin-inline: 6px"></span>
+      <button class="btn btn--ghost btn--icon" aria-label="Theme"><svg class="i"><use href="#i-monitor"/></svg></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Notifications"><svg class="i"><use href="#i-bell"/></svg></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Help"><svg class="i"><use href="#i-help"/></svg></button>
+    </div>
+  </header>
+
+  <div class="editor" data-tabset>
+    <div class="editor__toolbar">
+      <a class="btn btn--ghost btn--icon" href="02-library.html" aria-label="Back to Sitemaps"><svg class="i"><use href="#i-arrow-l"/></svg></a>
+      <div class="record-title"><input value="Marketing site" aria-label="Sitemap name"></div>
+      <div class="pane-switch seg seg--sm" data-pane-switch><button data-pane-target="nav" aria-pressed="false">Pages</button><button data-pane-target="main" aria-pressed="true">Canvas</button><button data-pane-target="insp" aria-pressed="false">Inspect</button></div>
+      <div class="center">
+        <div class="seg" role="group" aria-label="View" data-tabs>
+          <button data-tab="tree" aria-selected="false">Tree</button>
+          <button data-tab="canvas" aria-selected="true">Canvas</button>
+        </div>
+        <div class="seg seg--sm" role="group" aria-label="Zoom">
+          <button aria-label="Zoom out"><svg class="i i-sm"><use href="#i-minus"/></svg></button>
+          <button aria-label="Zoom level" style="cursor:default; pointer-events:none; font-weight:600;">100%</button>
+          <button aria-label="Zoom in"><svg class="i i-sm"><use href="#i-plus"/></svg></button>
+        </div>
+      </div>
+      <div class="right">
+        <button class="btn"><svg class="i"><use href="#i-plus"/></svg>Add page</button>
+        <div class="has-menu"><button class="btn btn--ghost btn--icon" aria-label="More actions" data-menu="m-more"><svg class="i"><use href="#i-more"/></svg></button>
+          <div class="menu" id="m-more" style="inset-inline-end:0; inset-block-start: calc(100% + 4px)"><button><svg class="i"><use href="#i-duplicate"/></svg>Duplicate sitemap</button><button><svg class="i"><use href="#i-download"/></svg>Export routes JSON</button><button><svg class="i"><use href="#i-type"/></svg>Rename…</button><hr><button class="danger"><svg class="i"><use href="#i-trash"/></svg>Delete…</button></div></div>
+      </div>
+    </div>
+
+    <div class="editor__body" style="--nav-w: var(--nav-w-tree)">
+      <!-- PAGES -->
+      <section class="pane" data-pane="nav" data-pane-active="false" aria-label="Pages">
+        <div class="pane__header">Pages<span class="count-badge">12</span><button class="btn btn--ghost btn--sm btn--icon" aria-label="Collapse" data-collapse="nav"><svg class="i i-sm"><use href="#i-sidebar-l"/></svg></button></div>
+        <div class="pane__body">
+          <div class="ztree show-slug show-count" role="tree" data-selectable>
+            <div class="ztree__toolbar">
+              <button class="btn btn--ghost btn--sm" data-ztree-all="collapse">Collapse all</button><button class="btn btn--ghost btn--sm" data-ztree-all="open">Open all</button>
+              <span class="spacer"></span>
+              <label class="switch"><input type="checkbox" checked data-ztree-show="slug"><span class="track"></span><span class="ztree__opt">Show </span>slug</label>
+              <label class="switch"><input type="checkbox" checked data-ztree-show="count"><span class="track"></span><span class="ztree__opt">Show </span>count</label>
+            </div>
+            <section class="ztree-cat" aria-expanded="true">
+              <div class="ztree-cat__row" role="treeitem" aria-selected="false">
+                <button class="ztree-cat__link"><span class="ztree-mark" aria-hidden="true">»</span><span class="truncate">Home</span></button>
+                <span class="ztree-slug">/</span><span class="ztree-count">(11)</span><span class="ztree-dot ztree-dot--ok" title="Composition assigned"></span><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span>
+                <button class="ztree-toggle" aria-expanded="true" aria-label="Collapse Home"><svg class="i i-xs"><use href="#i-chev-d"/></svg></button>
+              </div>
+              <div class="ztree-children" style="--depth:1"><div class="ztree-group" aria-expanded="true"><span class="ztree-spine" style="--depth:1"></span><div class="ztree-group__header" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-group__row" role="treeitem" aria-selected="false"><span class="truncate">Products</span><span class="ztree-slug">/products</span><span class="ztree-count">(2)</span><span class="ztree-dot ztree-dot--ok"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span><button class="ztree-toggle" aria-expanded="true" aria-label="Collapse Products"><svg class="i i-xs"><use href="#i-chev-d"/></svg></button></div><div class="ztree-children" style="--depth:2"><div class="ztree-leaf-wrap" style="--depth:2"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Product overview</span><span class="ztree-slug">/products/overview</span><span class="ztree-dot ztree-dot--ok" title="Composition assigned"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div><div class="ztree-leaf-wrap" style="--depth:2"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Pricing</span><span class="ztree-slug">/products/pricing</span><span class="ztree-dot ztree-dot--ok" title="Composition assigned"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div><div class="ztree-add-wrap is-last" style="--depth:2"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-add"><span class="ztree-add__btn"><svg class="i i-xs"><use href="#i-plus"/></svg></span>Add page</button></div></div></div><div class="ztree-group" aria-expanded="true"><span class="ztree-spine" style="--depth:1"></span><div class="ztree-group__header" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-group__row" role="treeitem" aria-selected="false"><span class="truncate">News</span><span class="ztree-slug">/news</span><span class="ztree-count">(1)</span><span class="ztree-dot ztree-dot--ok"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span><button class="ztree-toggle" aria-expanded="true" aria-label="Collapse News"><svg class="i i-xs"><use href="#i-chev-d"/></svg></button></div><div class="ztree-children" style="--depth:2"><div class="ztree-leaf-wrap" style="--depth:2"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">News entry</span><span class="ztree-slug">/news/:slug</span><span class="ztree-dot ztree-dot--accent" title="Mapping route family"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div><div class="ztree-add-wrap is-last" style="--depth:2"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-add"><span class="ztree-add__btn"><svg class="i i-xs"><use href="#i-plus"/></svg></span>Add page</button></div></div></div><div class="ztree-leaf-wrap" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="true"><span class="truncate">About</span><span class="ztree-slug">/about</span><span class="ztree-dot ztree-dot--warn" title="Unassigned"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div><div class="ztree-leaf-wrap" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Careers</span><span class="ztree-slug">/careers</span><span class="ztree-dot ztree-dot--warn" title="Unassigned"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div><div class="ztree-leaf-wrap" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Press</span><span class="ztree-slug">/press</span><span class="ztree-dot ztree-dot--warn" title="Unassigned"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div><div class="ztree-leaf-wrap" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Contact</span><span class="ztree-slug">/contact</span><span class="ztree-dot ztree-dot--warn" title="Unassigned"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div><div class="ztree-group" aria-expanded="true"><span class="ztree-spine" style="--depth:1"></span><div class="ztree-group__header" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-group__row" role="treeitem" aria-selected="false"><span class="truncate">Docs</span><span class="ztree-slug">/docs</span><span class="ztree-count">(1)</span><span class="ztree-dot ztree-dot--ok"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span><button class="ztree-toggle" aria-expanded="true" aria-label="Collapse Docs"><svg class="i i-xs"><use href="#i-chev-d"/></svg></button></div><div class="ztree-children" style="--depth:2"><div class="ztree-leaf-wrap" style="--depth:2"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Getting started</span><span class="ztree-slug">/docs/getting-started</span><span class="ztree-dot ztree-dot--ok" title="Composition assigned"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="Add child page"><svg class="i i-xs"><use href="#i-plus"/></svg></button><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div><div class="ztree-add-wrap is-last" style="--depth:2"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-add"><span class="ztree-add__btn"><svg class="i i-xs"><use href="#i-plus"/></svg></span>Add page</button></div></div></div><div class="ztree-add-wrap is-last" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-add"><span class="ztree-add__btn"><svg class="i i-xs"><use href="#i-plus"/></svg></span>Add page</button></div></div>
+            </section>
+            <button class="ztree-add-root"><svg class="i i-sm"><use href="#i-plus"/></svg>Add root page</button>
+            <div class="ztree__legend"><span><span class="ztree-dot ztree-dot--ok"></span>Composition</span><span><span class="ztree-dot ztree-dot--accent"></span>Mapping route family</span><span><span class="ztree-dot ztree-dot--warn"></span>Unassigned</span><span class="ztree__hint">Click = select · ↵ = open in inspector</span></div>
+          </div>
+        </div>
+      </section>
+      <div class="resizer" role="separator" aria-orientation="vertical" data-resize="nav"></div>
+
+      <!-- CANVAS / TREE -->
+      <section class="pane pane--canvas pane--main" data-pane="main" data-pane-active="true" aria-label="Canvas">
+        <div class="pane__header" style="background: transparent; border-block-end-color: transparent; text-transform: none; letter-spacing: 0; font-weight: 500;"><span class="muted">Canvas · 100%</span><span class="toolbar__spacer"></span><span class="status"><svg class="i i-sm"><use href="#i-check-circle"/></svg>Layout current</span></div>
+        <div class="pane__body" style="position: relative; padding: 0;">
+          <div data-panel="canvas" style="position:absolute; inset:0;">
+            <div class="canvas-toolbar seg seg--sm" role="group" aria-label="Canvas view controls">
+              <button>Fit</button>
+              <button>Center on selection</button>
+            </div>
+            <div class="canvas-legend">
+              <span class="item"><span class="assign-dot assign-dot--ok"></span>Composition</span>
+              <span class="item"><span class="assign-dot assign-dot--accent"></span>Mapping route family</span>
+              <span class="item"><span class="assign-dot assign-dot--warn"></span>Unassigned</span>
+            </div>
+            <div class="canvas-scroll">
+              <div class="canvas-stage">
+                <svg class="canvas-lines" width="1584" height="460" aria-hidden="true">
+                  <path d="M792,100 V150 H192 V200"/>
+                  <path d="M792,100 V150 H484 V200"/>
+                  <path d="M792,100 V150 H684 V200"/>
+                  <path d="M792,100 V150 H884 V200"/>
+                  <path d="M792,100 V150 H1084 V200"/>
+                  <path d="M792,100 V150 H1284 V200"/>
+                  <path d="M792,100 V150 H1484 V200"/>
+                  <path d="M192,260 V310 H100 V360"/>
+                  <path d="M192,260 V310 H284 V360"/>
+                  <path d="M484,260 V360"/>
+                  <path d="M1484,260 V360"/>
+                </svg>
+
+                <div class="node node--root" style="left:708px; top:40px;">
+                  <div class="node__title truncate">Home</div>
+                  <div class="node__route">/</div>
+                  <div class="node__src" title="Landing hero"><svg class="i"><use href="#i-composer"/></svg><span>Landing hero</span></div>
+                </div>
+
+                <div class="node" style="left:108px; top:200px;">
+                  <div class="node__title truncate">Products</div>
+                  <div class="node__route">/products</div>
+                  <div class="node__src" title="Product overview"><svg class="i"><use href="#i-composer"/></svg><span>Product overview</span></div>
+                </div>
+                <div class="node" style="left:400px; top:200px;">
+                  <div class="node__title truncate">News</div>
+                  <div class="node__route">/news</div>
+                  <div class="node__src" title="Blog post"><svg class="i"><use href="#i-composer"/></svg><span>Blog post</span></div>
+                </div>
+                <div class="node node--sel" style="left:600px; top:200px;">
+                  <div class="node__title truncate">About</div>
+                  <div class="node__route">/about</div>
+                  <span class="chip chip--warn">Unassigned</span>
+                </div>
+                <div class="node" style="left:800px; top:200px;">
+                  <div class="node__title truncate">Careers</div>
+                  <div class="node__route">/careers</div>
+                  <span class="chip chip--warn">Unassigned</span>
+                </div>
+                <div class="node" style="left:1000px; top:200px;">
+                  <div class="node__title truncate">Press</div>
+                  <div class="node__route">/press</div>
+                  <span class="chip chip--warn">Unassigned</span>
+                </div>
+                <div class="node" style="left:1200px; top:200px;">
+                  <div class="node__title truncate">Contact</div>
+                  <div class="node__route">/contact</div>
+                  <span class="chip chip--warn">Unassigned</span>
+                </div>
+                <div class="node" style="left:1400px; top:200px;">
+                  <div class="node__title truncate">Docs</div>
+                  <div class="node__route">/docs</div>
+                  <div class="node__src" title="Site frame"><svg class="i"><use href="#i-composer"/></svg><span>Site frame</span></div>
+                </div>
+
+                <div class="node" style="left:16px; top:360px;">
+                  <div class="node__title truncate">Product overview</div>
+                  <div class="node__route">/products/overview</div>
+                  <div class="node__src" title="Product overview"><svg class="i"><use href="#i-composer"/></svg><span>Product overview</span></div>
+                </div>
+                <div class="node" style="left:200px; top:360px;">
+                  <div class="node__title truncate">Pricing</div>
+                  <div class="node__route">/products/pricing</div>
+                  <div class="node__src" title="Pricing table"><svg class="i"><use href="#i-composer"/></svg><span>Pricing table</span></div>
+                </div>
+                <div class="node" style="left:400px; top:360px;">
+                  <div class="node__title truncate">News entry</div>
+                  <div class="node__route">/news/:slug</div>
+                  <div class="node__src" title="News → Product overview"><svg class="i"><use href="#i-mapping"/></svg><span>News → Product overview</span></div>
+                </div>
+                <div class="node" style="left:1400px; top:360px;">
+                  <div class="node__title truncate">Getting started</div>
+                  <div class="node__route">/docs/getting-started</div>
+                  <div class="node__src" title="Site frame"><svg class="i"><use href="#i-composer"/></svg><span>Site frame</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div data-panel="tree" hidden style="position:absolute; inset:0; overflow:auto; background: var(--surface); padding: var(--sp-3);">
+            <table class="table table--compact tree-table">
+              <thead><tr><th>Title</th><th>Route</th><th>Source</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td class="name">Home</td><td><span class="mono muted xs">/</span></td><td><span class="row" style="gap:6px"><svg class="i i-sm muted"><use href="#i-composer"/></svg>Landing hero</span></td><td><span class="chip chip--ok"><span class="dot"></span>Assigned</span></td></tr>
+                <tr><td class="name">Products</td><td><span class="mono muted xs">/products</span></td><td><span class="row" style="gap:6px"><svg class="i i-sm muted"><use href="#i-composer"/></svg>Product overview</span></td><td><span class="chip chip--ok"><span class="dot"></span>Assigned</span></td></tr>
+                <tr><td class="name">Product overview</td><td><span class="mono muted xs">/products/overview</span></td><td><span class="row" style="gap:6px"><svg class="i i-sm muted"><use href="#i-composer"/></svg>Product overview</span></td><td><span class="chip chip--ok"><span class="dot"></span>Assigned</span></td></tr>
+                <tr><td class="name">Pricing</td><td><span class="mono muted xs">/products/pricing</span></td><td><span class="row" style="gap:6px"><svg class="i i-sm muted"><use href="#i-composer"/></svg>Pricing table</span></td><td><span class="chip chip--ok"><span class="dot"></span>Assigned</span></td></tr>
+                <tr><td class="name">News</td><td><span class="mono muted xs">/news</span></td><td><span class="row" style="gap:6px"><svg class="i i-sm muted"><use href="#i-composer"/></svg>Blog post</span></td><td><span class="chip chip--ok"><span class="dot"></span>Assigned</span></td></tr>
+                <tr><td class="name">News entry</td><td><span class="mono muted xs">/news/:slug</span></td><td><span class="row" style="gap:6px"><svg class="i i-sm muted"><use href="#i-mapping"/></svg>News → Product overview</span></td><td><span class="chip chip--ok"><span class="dot"></span>Ready</span></td></tr>
+                <tr aria-selected="true"><td class="name">About</td><td><span class="mono muted xs">/about</span></td><td class="muted">—</td><td><span class="chip chip--warn"><span class="dot"></span>Unassigned</span></td></tr>
+                <tr><td class="name">Careers</td><td><span class="mono muted xs">/careers</span></td><td class="muted">—</td><td><span class="chip chip--warn"><span class="dot"></span>Unassigned</span></td></tr>
+                <tr><td class="name">Press</td><td><span class="mono muted xs">/press</span></td><td class="muted">—</td><td><span class="chip chip--warn"><span class="dot"></span>Unassigned</span></td></tr>
+                <tr><td class="name">Contact</td><td><span class="mono muted xs">/contact</span></td><td class="muted">—</td><td><span class="chip chip--warn"><span class="dot"></span>Unassigned</span></td></tr>
+                <tr><td class="name">Docs</td><td><span class="mono muted xs">/docs</span></td><td><span class="row" style="gap:6px"><svg class="i i-sm muted"><use href="#i-composer"/></svg>Site frame</span></td><td><span class="chip chip--ok"><span class="dot"></span>Assigned</span></td></tr>
+                <tr><td class="name">Getting started</td><td><span class="mono muted xs">/docs/getting-started</span></td><td><span class="row" style="gap:6px"><svg class="i i-sm muted"><use href="#i-composer"/></svg>Site frame</span></td><td><span class="chip chip--ok"><span class="dot"></span>Assigned</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <div class="resizer" role="separator" aria-orientation="vertical" data-resize="insp"></div>
+      <!-- INSPECTOR -->
+      <section class="pane" data-pane="insp" data-pane-active="false" aria-label="Inspector" data-tabset>
+        <div class="pane__header"><span class="row" style="gap:6px"><svg class="i muted"><use href="#i-page"/></svg><span style="text-transform:none; letter-spacing:0; color: var(--fg)">About</span></span><span class="chip chip--warn">Unassigned</span><button class="btn btn--ghost btn--sm btn--icon" aria-label="Collapse" data-collapse="insp"><svg class="i i-sm"><use href="#i-sidebar-r"/></svg></button></div>
+        <div class="pane__tabs" role="tablist" data-tabs>
+          <button role="tab" data-tab="page" aria-selected="true">Page</button>
+          <button role="tab" data-tab="source" aria-selected="false">Source</button>
+          <button role="tab" data-tab="seo" aria-selected="false">SEO</button>
+        </div>
+        <div class="pane__body">
+          <div data-panel="page">
+            <div class="pane__section">
+              <div class="form form--dense">
+                <div class="field"><label for="f-title">Title</label><input class="input input--sm" id="f-title" value="About"></div>
+                <div class="field"><label for="f-slug">Slug</label><input class="input input--sm mono" id="f-slug" value="about"><span class="field__help mono">/about</span></div>
+                <div class="field"><label for="f-parent">Parent</label><select class="select select--sm" id="f-parent"><option selected>Home</option><option>Products</option><option>News</option><option>Docs</option></select></div>
+                <div class="field"><label for="f-notes">Notes</label><textarea class="textarea" id="f-notes" placeholder="Internal notes about this page…"></textarea></div>
+              </div>
+            </div>
+          </div>
+
+          <div data-panel="source" hidden>
+            <div class="pane__section stack" style="gap: var(--sp-2)">
+              <div class="field">
+                <span class="field__label">Page source</span>
+                <div class="seg" role="group" aria-label="Page source type" style="width:100%">
+                  <button style="flex:1" aria-pressed="false">None</button>
+                  <button style="flex:1" aria-pressed="true">Composition</button>
+                  <button style="flex:1" aria-pressed="false">Mapping</button>
+                </div>
+                <span class="field__help">A page renders either a composition or a mapping route family. Switching clears the other.</span>
+              </div>
+              <div class="card">
+                <div class="empty empty--inline"><svg class="i"><use href="#i-composer"/></svg><strong>No composition assigned</strong><button class="btn btn--primary btn--sm" data-dialog="dlg-pick">Choose composition…</button></div>
+              </div>
+            </div>
+            <div class="pane__section">
+              <div class="pane__section-title">Example · assigned page (Products)</div>
+              <div class="card src-example">
+                <svg class="i muted"><use href="#i-composer"/></svg>
+                <div class="t grow"><div class="ttl truncate">Product overview</div><div class="sub">Composition</div></div>
+                <span class="chip chip--accent">Pattern</span>
+                <button class="btn btn--ghost btn--xs btn--icon" aria-label="Change composition"><svg class="i i-xs"><use href="#i-edit"/></svg></button>
+                <button class="btn btn--ghost btn--xs btn--icon" aria-label="Open composition"><svg class="i i-xs"><use href="#i-external"/></svg></button>
+              </div>
+            </div>
+            <div class="pane__section">
+              <div class="pane__section-title">Example · mapping route family (News entry)</div>
+              <div class="card src-example">
+                <svg class="i muted"><use href="#i-mapping"/></svg>
+                <div class="t grow"><div class="ttl truncate">News → Product overview</div><div class="sub">slug field: slug · 2 routes</div></div>
+                <span class="chip chip--ok"><span class="dot"></span>Ready</span>
+              </div>
+            </div>
+            <div class="pane__section">
+              <div class="pane__section-title">Danger</div>
+              <button class="btn btn--danger btn--sm"><svg class="i i-sm"><use href="#i-trash"/></svg>Delete page…</button>
+              <div class="field__help" style="margin-top:6px">Children move up one level.</div>
+            </div>
+          </div>
+
+          <div data-panel="seo" hidden>
+            <div class="pane__section">
+              <div class="form form--dense">
+                <div class="field"><label for="f-seo-title">Title tag</label><input class="input input--sm" id="f-seo-title" placeholder="About — Marketing site"></div>
+                <div class="field"><label for="f-seo-desc">Description</label><textarea class="textarea" id="f-seo-desc" placeholder="Meta description for search results…"></textarea></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Choose composition dialog -->
+<div class="overlay" id="dlg-pick">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-pick-t" style="grid-template-rows: auto minmax(0,1fr) auto">
+    <div class="dialog__header"><h2 id="dlg-pick-t">Choose composition</h2><button class="btn btn--ghost btn--icon btn--sm" data-dialog-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <div style="display:grid; grid-template-rows: auto minmax(0,1fr); min-height: 360px">
+      <div style="padding: var(--sp-2)"><div class="input-wrap"><svg class="i i-sm"><use href="#i-search"/></svg><input class="input" placeholder="Search 6 compositions…" autofocus></div></div>
+      <div class="list" data-selectable style="overflow:auto">
+        <div class="list-row" aria-selected="true"><svg class="i glyph"><use href="#i-composer"/></svg><span class="t"><strong>Product overview</strong><span class="sub">8 nodes · Pattern</span></span></div>
+        <div class="list-row" aria-selected="false"><svg class="i glyph"><use href="#i-composer"/></svg><span class="t"><strong>Blog post</strong><span class="sub">11 nodes · Plain</span></span></div>
+        <div class="list-row" aria-selected="false"><svg class="i glyph"><use href="#i-composer"/></svg><span class="t"><strong>Site frame</strong><span class="sub">5 nodes · Global template</span></span></div>
+        <div class="list-row" aria-selected="false"><svg class="i glyph"><use href="#i-composer"/></svg><span class="t"><strong>Landing hero</strong><span class="sub">6 nodes · Pattern</span></span></div>
+        <div class="list-row" aria-selected="false"><svg class="i glyph"><use href="#i-composer"/></svg><span class="t"><strong>Pricing table</strong><span class="sub">14 nodes · Plain</span></span></div>
+        <div class="list-row" aria-selected="false"><svg class="i glyph"><use href="#i-composer"/></svg><span class="t"><strong>Untitled composition</strong><span class="sub">0 nodes · Plain</span></span></div>
+      </div>
+    </div>
+    <div class="dialog__footer"><button class="btn" data-dialog-close>Cancel</button><button class="btn btn--primary" data-dialog-close>Assign to About</button></div>
+  </div>
+</div>
+
+<div class="proto-note"><button class="btn btn--ghost btn--xs btn--icon close" aria-label="Dismiss"><svg class="i i-xs"><use href="#i-x"/></svg></button><strong>Proposal 06 · Sitemapper on the shared editor chrome</strong>Tree rows show assignment status at a glance with hover-only actions; canvas nodes carry their source; the inspector makes Page source an explicit None / Composition / Mapping choice instead of stacked mutually-exclusive sections.</div>
+<script src="icons.js"></script><script src="shell.js"></script><script src="proto.js"></script>
+<script>
+// Center the canvas on the selected page on load (same effect as "Center on selection").
+document.addEventListener("DOMContentLoaded", () => {
+  const scroller = document.querySelector(".canvas-scroll");
+  const sel = document.querySelector(".node--sel");
+  const center = () => {
+    if (!scroller || !sel) return;
+    scroller.scrollLeft = Math.max(0, sel.offsetLeft + sel.offsetWidth / 2 - scroller.clientWidth / 2);
+    scroller.scrollTop = Math.max(0, sel.offsetTop + sel.offsetHeight / 2 - scroller.clientHeight / 2);
+  };
+  center();
+  document.querySelectorAll(".canvas-toolbar button").forEach((b) => b.addEventListener("click", center));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapping editor — zudo-composer proposal</title>
+<link rel="stylesheet" href="proto.css">
+<style>
+/* bindings table specifics — kept narrow enough to fit the main pane at default widths */
+.bind-table { table-layout: fixed; width: 100%; }
+.bind-table th, .bind-table td { padding-inline: 8px; }
+.bind-table col.c-grip { width: 22px; }
+.bind-table col.c-arrow { width: 22px; }
+.bind-table col.c-src { width: 27%; }
+.bind-table col.c-xform { width: 22%; }
+.bind-table col.c-tgt { width: 25%; }
+.bind-table col.c-status { width: 94px; }
+.bind-table col.c-actions { width: 30px; }
+.bind-table td, .bind-table th { overflow: hidden; }
+.cellstack { display: grid; gap: 1px; }
+.cellstack .m { color: var(--faint); font-size: var(--text-xs); }
+.cellcombo { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cellcombo svg { color: var(--muted); flex: 0 0 auto; }
+.cellcombo .t { display: grid; min-width: 0; line-height: 1.35; }
+.cellcombo .t strong { font-weight: 600; font-size: var(--text-base); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cellcombo .t .m { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xform-row { display: grid; gap: 4px; min-width: 0; }
+.xform-row .select, .xform-row .input { width: 100%; }
+.bind-table td.arrow { text-align: center; color: var(--faint); white-space: nowrap; }
+.bind-table td.grip { padding-inline-end: 2px; color: var(--faint); cursor: grab; white-space: nowrap; }
+.bind-table td.actions { white-space: nowrap; }
+.err-row td { height: auto; padding: var(--sp-2) var(--sp-b2) var(--sp-b2); background: var(--danger-soft); border-block-end: 1px solid var(--border); white-space: normal; }
+.err-row .banner { background: transparent; border: 0; padding: 0; }
+.unbound-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.unbound-chips button.chip { cursor: pointer; border-style: dashed; }
+.unbound-chips button.chip:hover { border-style: solid; border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
+/* static add-binding menu example */
+.menu--static { position: static; box-shadow: none; display: grid; width: 100%; }
+.menu--static .menu__title:not(:first-child) { margin-block-start: 4px; }
+.menu--static > button[data-hl="true"] { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+/* preview mock */
+.prev-frame { border: 1px solid var(--border); border-radius: var(--radius); background: white; color: #1f2937; min-height: 400px; padding: 28px 26px; position: relative; overflow: hidden; }
+[data-theme="dark"] .prev-frame { background: oklch(0.99 0 0); }
+.prev-frame .eyebrow-x { color: #2563eb; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.prev-frame h1 { font-size: 22px; font-weight: 750; letter-spacing: -.01em; margin: 6px 0 10px; }
+.prev-frame p { font-size: 13px; line-height: 1.55; color: #374151; margin-block-end: 18px; }
+.prev-frame .cta { display: inline-flex; align-items: center; gap: 6px; background: #2563eb; color: white; font-weight: 700; padding: 10px 16px; border-radius: 6px; font-size: 13px; text-decoration: none; }
+.prev-expand { position: absolute; top: 10px; right: 10px; }
+.src-row-chip { margin-inline-start: auto; }
+</style>
+</head>
+<body data-route="mapping">
+<div class="frame">
+  <header class="topbar">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="02-library.html">Mappings</a><span class="sep">›</span><span class="cur">News → Product overview</span></nav>
+    <div class="topbar__right">
+      <span class="status status--warn"><svg class="i i-sm"><use href="#i-alert-circle"/></svg>Unsaved changes</span>
+      <span class="vdivider" style="height:20px; margin-inline: 6px"></span>
+      <button class="btn btn--ghost btn--icon" aria-label="Theme"><svg class="i"><use href="#i-monitor"/></svg></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Notifications"><svg class="i"><use href="#i-bell"/></svg></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Help"><svg class="i"><use href="#i-help"/></svg></button>
+    </div>
+  </header>
+
+  <div class="editor">
+    <div class="editor__toolbar">
+      <a class="btn btn--ghost btn--icon" href="02-library.html" aria-label="Back to Mappings"><svg class="i"><use href="#i-arrow-l"/></svg></a>
+      <div class="record-title"><input value="News → Product overview" aria-label="Mapping name"></div>
+      <div class="pane-switch seg seg--sm" data-pane-switch><button data-pane-target="nav" aria-pressed="false">Fields</button><button data-pane-target="main" aria-pressed="true">Bindings</button><button data-pane-target="insp" aria-pressed="false">Preview</button></div>
+      <div class="center">
+        <button class="btn"><svg class="i i-sm"><use href="#i-collection"/></svg>News · collection<svg class="i i-sm caret"><use href="#i-chev-d"/></svg></button>
+        <svg class="i i-sm muted"><use href="#i-arrow-r"/></svg>
+        <button class="btn"><svg class="i i-sm"><use href="#i-composer"/></svg>Product overview<svg class="i i-sm caret"><use href="#i-chev-d"/></svg></button>
+      </div>
+      <div class="right">
+        <button class="btn"><svg class="i i-sm"><use href="#i-play"/></svg>Test</button>
+        <button class="btn btn--primary"><svg class="i i-sm"><use href="#i-check"/></svg>Save</button>
+        <div class="has-menu"><button class="btn btn--ghost btn--icon" aria-label="More actions" data-menu="m-more"><svg class="i"><use href="#i-more"/></svg></button>
+          <div class="menu" id="m-more" style="inset-inline-end:0; inset-block-start: calc(100% + 4px)"><button><svg class="i"><use href="#i-duplicate"/></svg>Duplicate mapping</button><button><svg class="i"><use href="#i-content"/></svg>Open in Content</button><button><svg class="i"><use href="#i-composer"/></svg>Open composition</button><hr><button class="danger"><svg class="i"><use href="#i-trash"/></svg>Delete…</button></div></div>
+      </div>
+    </div>
+
+    <div class="editor__body">
+      <!-- NAV: Source fields -->
+      <section class="pane" data-pane="nav" data-pane-active="false" aria-label="Source fields">
+        <div class="pane__header">Source fields<span class="count-badge">4</span></div>
+        <div class="pane__body">
+          <div class="list" data-selectable>
+            <div class="list-row" aria-selected="false"><svg class="i glyph"><use href="#i-text"/></svg><span class="t"><strong class="truncate">Title</strong><span class="sub mono">title · text · required</span></span><span class="chip chip--ok src-row-chip">bound</span></div>
+            <div class="list-row" aria-selected="false"><svg class="i glyph"><use href="#i-markdown"/></svg><span class="t"><strong class="truncate">Body</strong><span class="sub mono">body · markdown · required</span></span><span class="chip chip--ok src-row-chip">bound</span></div>
+            <div class="list-row" aria-selected="false"><svg class="i glyph"><use href="#i-boolean"/></svg><span class="t"><strong class="truncate">Published</strong><span class="sub mono">published · boolean</span></span><span class="chip chip--err src-row-chip">bound</span></div>
+            <div class="list-row" aria-selected="false"><svg class="i glyph"><use href="#i-slug"/></svg><span class="t"><strong class="truncate">Slug</strong><span class="sub mono">slug · slug</span></span><button class="btn btn--ghost btn--sm btn--icon src-row-chip" aria-label="Bind Slug"><svg class="i i-sm"><use href="#i-plus"/></svg></button></div>
+          </div>
+          <div class="pane__section">
+            <div class="tree-group-title" style="padding-inline:0">Sample entry</div>
+            <div class="field"><select class="select select--sm"><option>Welcome to the newsroom</option><option>Product roadmap update</option><option>Team offsite recap</option></select><span class="field__help">Used only to evaluate the preview.</span></div>
+          </div>
+        </div>
+      </section>
+      <div class="resizer" role="separator" aria-orientation="vertical" data-resize="nav"></div>
+
+      <!-- MAIN: Bindings table -->
+      <section class="pane pane--main" data-pane="main" data-pane-active="true" aria-label="Bindings">
+        <div class="pane__header">Bindings<span class="count-badge">3</span><button class="btn btn--sm"><svg class="i i-sm"><use href="#i-plus"/></svg>Add binding</button></div>
+        <div class="pane__body">
+          <div class="pane__body--pad">
+            <table class="table table--compact bind-table">
+              <colgroup>
+                <col class="c-grip"><col class="c-src"><col class="c-arrow"><col class="c-xform"><col class="c-tgt"><col class="c-status"><col class="c-actions">
+              </colgroup>
+              <thead>
+                <tr><th></th><th>Source</th><th></th><th>Transform</th><th>Target</th><th>Status</th><th></th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="grip"><svg class="i i-sm"><use href="#i-grip"/></svg></td>
+                  <td class="src"><div class="cellcombo"><svg class="i i-sm"><use href="#i-text"/></svg><div class="t"><strong>Title</strong><span class="m mono">title</span></div></div></td>
+                  <td class="arrow"><svg class="i i-sm"><use href="#i-arrow-r"/></svg></td>
+                  <td><div class="xform-row"><select class="select select--sm"><option>Pass through</option><option>Prefix ·</option><option>Truncate</option><option>Uppercase</option></select></div></td>
+                  <td class="tgt"><div class="cellcombo"><svg class="i i-sm"><use href="#i-heading"/></svg><div class="t"><strong>SectionHeading</strong><span class="m mono">.heading</span></div></div></td>
+                  <td><span class="chip chip--ok"><span class="dot"></span>Ready</span></td>
+                  <td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="Row actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td class="grip"><svg class="i i-sm"><use href="#i-grip"/></svg></td>
+                  <td class="src"><div class="cellcombo"><svg class="i i-sm"><use href="#i-markdown"/></svg><div class="t"><strong>Body</strong><span class="m mono">body</span></div></div></td>
+                  <td class="arrow"><svg class="i i-sm"><use href="#i-arrow-r"/></svg></td>
+                  <td><div class="xform-row"><select class="select select--sm"><option>Pass through</option><option>Prefix ·</option><option>Truncate</option></select></div></td>
+                  <td class="tgt"><div class="cellcombo"><svg class="i i-sm"><use href="#i-markdown"/></svg><div class="t"><strong>ProseMd</strong><span class="m mono">.markdown</span></div></div></td>
+                  <td><span class="chip chip--ok"><span class="dot"></span>Ready</span></td>
+                  <td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="Row actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td class="grip"><svg class="i i-sm"><use href="#i-grip"/></svg></td>
+                  <td class="src"><div class="cellcombo"><svg class="i i-sm"><use href="#i-boolean"/></svg><div class="t"><strong>Published</strong><span class="m mono">published</span></div></div></td>
+                  <td class="arrow"><svg class="i i-sm"><use href="#i-arrow-r"/></svg></td>
+                  <td>
+                    <div class="xform-row">
+                      <select class="select select--sm"><option>Prefix ·</option><option>Pass through</option><option>Truncate</option></select>
+                      <input class="input input--sm" value="News: " aria-label="Prefix value">
+                    </div>
+                  </td>
+                  <td class="tgt"><div class="cellcombo"><svg class="i i-sm"><use href="#i-play"/></svg><div class="t"><strong>CtaButton</strong><span class="m mono">.href</span></div></div></td>
+                  <td><span class="chip chip--err">Incompatible</span></td>
+                  <td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="Row actions"><svg class="i i-sm"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr class="err-row">
+                  <td colspan="7">
+                    <div class="banner banner--err"><svg class="i"><use href="#i-alert-circle"/></svg><div>Boolean cannot feed a url prop. Choose a text or url source, or remove the binding.</div><button class="btn btn--sm">Fix</button></div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="pane__section" style="padding-inline:0; padding-block-start: var(--sp-3)">
+              <div class="pane__section-title">Unbound targets</div>
+              <div class="unbound-chips">
+                <button class="chip" type="button"><svg class="i i-xs"><use href="#i-plus"/></svg>SectionHeading.eyebrow</button>
+                <button class="chip" type="button"><svg class="i i-xs"><use href="#i-plus"/></svg>SectionHeading.intro</button>
+                <button class="chip" type="button"><svg class="i i-xs"><use href="#i-plus"/></svg>CtaButton.children</button>
+                <button class="chip" type="button"><svg class="i i-xs"><use href="#i-plus"/></svg>Card.title</button>
+              </div>
+              <p class="field__help" style="margin-block-start:6px">Click a prop to bind it to a source field.</p>
+            </div>
+
+            <div class="pane__section" style="padding-inline:0; padding-block-start: var(--sp-3)">
+              <div class="pane__section-title">Add-binding menu (example)</div>
+              <div class="card" style="max-width:320px">
+                <div class="card__body" style="padding: 6px">
+                  <div class="menu menu--static" data-open="true">
+                    <div class="menu__title">Bind Slug to…</div>
+                    <button data-hl="true"><svg class="i i-sm"><use href="#i-heading"/></svg><span>SectionHeading.eyebrow<span class="m" style="display:block; font-size:11px; color:var(--faint); font-weight:400">text</span></span></button>
+                    <button><svg class="i i-sm"><use href="#i-heading"/></svg><span>SectionHeading.intro<span class="m" style="display:block; font-size:11px; color:var(--faint); font-weight:400">text</span></span></button>
+                    <div class="menu__title">CtaButton</div>
+                    <button><svg class="i i-sm"><use href="#i-play"/></svg><span>CtaButton.href<span class="m" style="display:block; font-size:11px; color:var(--faint); font-weight:400">url</span></span></button>
+                    <div class="menu__title">Card</div>
+                    <button><svg class="i i-sm"><use href="#i-leaf"/></svg><span>Card.title<span class="m" style="display:block; font-size:11px; color:var(--faint); font-weight:400">text</span></span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="resizer" role="separator" aria-orientation="vertical" data-resize="insp"></div>
+      <!-- INSPECTOR: Preview / Diagnostics -->
+      <section class="pane" data-pane="insp" data-pane-active="false" aria-label="Preview" data-tabset>
+        <div class="pane__header">Preview</div>
+        <div class="pane__tabs" role="tablist" data-tabs>
+          <button role="tab" data-tab="preview" aria-selected="true">Preview</button>
+          <button role="tab" data-tab="diag" aria-selected="false">Diagnostics <span class="count-badge">1</span></button>
+        </div>
+        <div class="pane__body">
+          <div data-panel="preview">
+            <div class="pane__section stack" style="gap: var(--sp-2)">
+              <div class="field"><span class="field__label">Composition</span><span class="row muted small">Product overview · Browser storage</span></div>
+              <span class="status status--warn"><svg class="i i-sm"><use href="#i-alert-circle"/></svg>Preview is current · 2 of 3 applied</span>
+              <div class="prev-frame">
+                <button class="btn btn--sm prev-expand"><svg class="i i-sm"><use href="#i-expand"/></svg>Expand</button>
+                <div class="eyebrow-x">PRODUCT</div>
+                <h1>Welcome to the newsroom</h1>
+                <p>Content values can drive real provider components.</p>
+                <a class="cta" href="#">Browse products →</a>
+              </div>
+            </div>
+          </div>
+          <div data-panel="diag" hidden>
+            <div class="pane__section stack" style="gap: var(--sp-2)">
+              <div class="banner banner--err"><svg class="i"><use href="#i-alert-circle"/></svg><div><strong>Published → CtaButton.href is incompatible.</strong><div class="muted small">Boolean cannot feed a url prop.</div></div></div>
+              <div class="banner banner--info"><svg class="i"><use href="#i-info"/></svg><div>Unbound targets keep their authored composition values.</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="proto-note"><button class="btn btn--ghost btn--xs btn--icon close" aria-label="Dismiss"><svg class="i i-xs"><use href="#i-x"/></svg></button><strong>Proposal 05 · Mapping as a binding board</strong>One row per binding instead of three stacked cards; source fields and unbound targets are always visible; diagnostics sit inline on the row and in the inspector; Save/Test live in the shared toolbar.</div>
+<script src="icons.js"></script><script src="shell.js"></script><script src="proto.js"></script>
+</body>
+</html>

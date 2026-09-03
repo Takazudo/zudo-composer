@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content editor — zudo-composer proposal</title>
+<link rel="stylesheet" href="proto.css">
+<style>
+/* markdown editor block */
+.md-editor { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.md-toolbar { display: flex; align-items: center; gap: 2px; height: 34px; padding-inline: var(--sp-1) var(--sp-2); border-block-end: 1px solid var(--border); background: var(--surface-2); }
+.md-toolbar .vdivider { height: 18px; margin-inline: 4px; }
+.md-toolbar .spacer { flex: 1 1 auto; }
+.md-body { display: grid; grid-template-columns: 1fr 1fr; height: 180px; }
+.md-body .src, .md-body .out { padding: var(--sp-2) var(--sp-b2); overflow: auto; }
+.md-body .src { font-family: var(--mono); font-size: var(--text-sm); line-height: 1.6; color: var(--fg); white-space: pre-wrap; border-inline-end: 1px solid var(--border); }
+.md-body .out { background: var(--bg); font-size: var(--text-base); }
+.md-body .out h2 { font-size: var(--text-lg); margin-block-end: 6px; }
+.md-body .out p { color: var(--muted); line-height: 1.6; }
+
+/* schema panel */
+.field-type-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding-inline: 7px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); font-size: var(--text-xs); font-weight: 600; color: var(--muted); }
+.locked-chip { display: inline-flex; align-items: center; gap: 6px; height: var(--control-h); padding-inline: var(--sp-2); border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font-size: var(--text-base); width: fit-content; }
+.type-picker { width: 220px; flex: 0 0 220px; position: relative; inset: auto; display: grid; box-shadow: var(--shadow-pop); }
+.type-picker[data-open] { display: block; }
+.type-picker .menu__title { padding: 8px 10px 6px; }
+.type-picker .opt { display: grid; grid-template-columns: 18px minmax(0,1fr) 14px; align-items: start; gap: 6px; padding: 6px 8px; border-radius: var(--radius-sm); cursor: default; }
+.type-picker .opt:hover { background: var(--surface-2); }
+.type-picker .opt .ic { color: var(--muted); margin-top: 1px; }
+.type-picker .opt strong { display: block; font-size: var(--text-sm); font-weight: 600; }
+.type-picker .opt span.d { display: block; font-size: var(--text-xs); color: var(--faint); line-height: 1.3; }
+.type-picker .opt .chk { color: var(--accent); }
+.schema-wrap { display: flex; gap: var(--sp-3); align-items: flex-start; min-width: 0; }
+.schema-wrap .table-col { flex: 1 1 0; min-width: 0; overflow-x: auto; }
+.schema-wrap .table-col .table { min-width: 300px; }
+.schema-wrap .table th, .schema-wrap .table td { padding-inline: 6px; }
+.schema-wrap .table td.name { font-weight: 600; }
+.preview-frame { border: 1px solid var(--border); border-radius: var(--radius); background: white; color: #1f2937; height: 360px; overflow: auto; padding: 28px 30px; position: relative; }
+[data-theme="dark"] .preview-frame { background: oklch(0.99 0 0); }
+.preview-frame .eyebrow-x { color: #2563eb; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.preview-frame h1 { font-size: 26px; font-weight: 750; letter-spacing: -.02em; margin: 6px 0 10px; }
+.preview-frame p { font-size: 14px; line-height: 1.6; color: #374151; }
+.preview-frame .exp { position: absolute; top: var(--sp-2); right: var(--sp-2); }
+.binding-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: var(--sp-2); height: 30px; padding-inline: var(--sp-2); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: var(--text-sm); }
+.binding-row + .binding-row { margin-block-start: 4px; }
+</style>
+</head>
+<body data-route="content">
+<div class="frame">
+  <header class="topbar">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="#">Content</a><span class="sep">›</span><a href="#">News</a><span class="sep">›</span><span class="cur">Welcome to the newsroom</span></nav>
+    <div class="topbar__right">
+      <span class="status status--ok"><svg class="i i-sm"><use href="#i-check-circle"/></svg>Saved · 12 min ago</span>
+      <span class="vdivider" style="height:20px; margin-inline: 6px"></span>
+      <button class="btn btn--ghost btn--icon" aria-label="Theme"><svg class="i"><use href="#i-monitor"/></svg></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Notifications"><svg class="i"><use href="#i-bell"/></svg></button>
+      <button class="btn btn--ghost btn--icon" aria-label="Help"><svg class="i"><use href="#i-help"/></svg></button>
+    </div>
+  </header>
+
+  <div class="editor" data-tabset>
+    <div class="editor__toolbar">
+      <a class="btn btn--ghost btn--icon" href="#" aria-label="Back to Content"><svg class="i"><use href="#i-arrow-l"/></svg></a>
+      <div class="record-title"><input value="Welcome to the newsroom" aria-label="Entry title"></div>
+      <div class="pane-switch seg seg--sm" data-pane-switch><button data-pane-target="nav" aria-pressed="false">Content</button><button data-pane-target="main" aria-pressed="true">Entry</button><button data-pane-target="insp" aria-pressed="false">Preview</button></div>
+      <div class="center">
+        <div class="seg" role="group" aria-label="Editor mode" data-tabs>
+          <button data-tab="entry" aria-pressed="true" aria-selected="true"><svg class="i i-sm"><use href="#i-file"/></svg>Entry</button>
+          <button data-tab="schema" aria-pressed="false" aria-selected="false"><svg class="i i-sm"><use href="#i-settings"/></svg>Schema</button>
+        </div>
+      </div>
+      <div class="right">
+        <button class="btn" aria-pressed="true" title="Preview panel is open"><svg class="i i-sm"><use href="#i-eye"/></svg>Preview</button>
+        <span class="toolbar__sep"></span>
+        <button class="btn btn--primary" disabled title="All changes saved"><svg class="i i-sm"><use href="#i-check"/></svg>Save</button>
+        <div class="has-menu"><button class="btn btn--ghost btn--icon" aria-label="More actions" data-menu="m-more"><svg class="i"><use href="#i-more"/></svg></button>
+          <div class="menu" id="m-more" style="inset-inline-end:0; inset-block-start: calc(100% + 4px)"><button><svg class="i"><use href="#i-duplicate"/></svg>Duplicate entry</button><button><svg class="i"><use href="#i-copy"/></svg>Copy entry ID</button><button><svg class="i"><use href="#i-code"/></svg>View JSON</button><hr><button class="danger"><svg class="i"><use href="#i-trash"/></svg>Delete entry…</button></div></div>
+      </div>
+    </div>
+
+    <div class="editor__body" style="--nav-w: var(--nav-w-tree)">
+      <!-- CONTENT NAV -->
+      <section class="pane" data-pane="nav" data-pane-active="false" aria-label="Content">
+        <div class="pane__header">Content<span class="count-badge">3</span><button class="btn btn--ghost btn--sm btn--icon" aria-label="Collapse" data-collapse="nav"><svg class="i i-sm"><use href="#i-sidebar-l"/></svg></button></div>
+        <div class="pane__body">
+          <div class="ztree show-slug show-count" role="tree" data-selectable>
+            <div class="ztree__toolbar">
+              <button class="btn btn--ghost btn--sm" data-ztree-all="collapse">Collapse all</button><button class="btn btn--ghost btn--sm" data-ztree-all="open">Open all</button>
+              <span class="spacer"></span>
+              <label class="switch"><input type="checkbox" checked data-ztree-show="slug"><span class="track"></span><span class="ztree__opt">Show </span>slug</label>
+              <label class="switch"><input type="checkbox" checked data-ztree-show="count"><span class="track"></span><span class="ztree__opt">Show </span>count</label>
+            </div>
+            <section class="ztree-cat" aria-expanded="true">
+              <div class="ztree-cat__row" role="treeitem" aria-selected="false">
+                <button class="ztree-cat__link"><span class="ztree-mark" aria-hidden="true">»</span><span class="truncate">News</span></button>
+                <span class="ztree-slug">news</span><span class="ztree-count">(2)</span><span class="ztree-dot ztree-dot--ok" title="Complete"></span><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span>
+                <button class="ztree-toggle" aria-expanded="true" aria-label="Collapse News"><svg class="i i-xs"><use href="#i-chev-d"/></svg></button>
+              </div>
+              <div class="ztree-children" style="--depth:1">
+                <div class="ztree-leaf-wrap" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="true"><span class="truncate">Welcome to the newsroom</span><span class="ztree-slug">welcome-to-the-newsroom</span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div>
+                <div class="ztree-leaf-wrap" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Mapping is ready</span><span class="ztree-slug">mapping-is-ready</span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div>
+                <div class="ztree-add-wrap is-last" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-add"><span class="ztree-add__btn"><svg class="i i-xs"><use href="#i-plus"/></svg></span>Add entry</button></div>
+              </div>
+            </section>
+            <section class="ztree-cat" aria-expanded="false">
+              <div class="ztree-cat__row" role="treeitem" aria-selected="false">
+                <button class="ztree-cat__link"><span class="ztree-mark" aria-hidden="true">»</span><span class="truncate">Articles</span></button>
+                <span class="ztree-slug">articles</span><span class="ztree-count">(75)</span><span class="ztree-dot ztree-dot--warn" title="3 incomplete"></span><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span>
+                <button class="ztree-toggle" aria-expanded="false" aria-label="Expand Articles"><svg class="i i-xs"><use href="#i-chev-d"/></svg></button>
+              </div>
+              <div class="ztree-children" style="--depth:1" hidden>
+                <div class="ztree-leaf-wrap" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Article 41</span><span class="ztree-slug">article-41</span><span class="ztree-dot ztree-dot--warn" title="Incomplete"></span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div>
+                <div class="ztree-leaf-wrap" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Article 40</span><span class="ztree-slug">article-40</span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div>
+                <div class="ztree-leaf-wrap" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Article 39</span><span class="ztree-slug">article-39</span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div>
+                <div class="ztree-leaf-wrap" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf ztree-more" role="treeitem" aria-selected="false"><span class="truncate">72 more entries…</span></button></div>
+                <div class="ztree-add-wrap is-last" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-add"><span class="ztree-add__btn"><svg class="i i-xs"><use href="#i-plus"/></svg></span>Add entry</button></div>
+              </div>
+            </section>
+            <section class="ztree-cat" aria-expanded="true">
+              <div class="ztree-cat__row" role="treeitem" aria-selected="false">
+                <button class="ztree-cat__link"><span class="ztree-mark" aria-hidden="true">»</span><span class="truncate">Site settings</span></button>
+                <span class="ztree-slug">site-settings</span><span class="ztree-count">(1)</span><span class="ztree-tag ztree-tag--plain">single</span><span class="ztree-dot ztree-dot--ok" title="Complete"></span><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span>
+                <button class="ztree-toggle" aria-expanded="true" aria-label="Collapse Site settings"><svg class="i i-xs"><use href="#i-chev-d"/></svg></button>
+              </div>
+              <div class="ztree-children" style="--depth:1">
+                <div class="ztree-leaf-wrap is-last" style="--depth:1"><span class="ztree-vline"></span><span class="ztree-hline"></span><button class="ztree-leaf" role="treeitem" aria-selected="false"><span class="truncate">Site settings</span><span class="ztree-slug">site-settings</span></button><span class="ztree-acts"><button class="btn btn--ghost btn--xs btn--icon" aria-label="More"><svg class="i i-xs"><use href="#i-more"/></svg></button></span></div>
+              </div>
+            </section>
+            <button class="ztree-add-root"><svg class="i i-sm"><use href="#i-plus"/></svg>Add model</button>
+            <div class="ztree__legend"><span><span class="ztree-dot ztree-dot--ok"></span>Complete</span><span><span class="ztree-dot ztree-dot--warn"></span>Incomplete</span><span class="ztree__hint">Click = select · ↵ = open</span></div>
+          </div>
+        </div>
+      </section>
+      <div class="resizer" role="separator" aria-orientation="vertical" data-resize="nav"></div>
+
+      <!-- MAIN -->
+      <section class="pane pane--main" data-pane="main" data-pane-active="true" aria-label="Entry">
+        <div class="pane__header" style="text-transform:none; letter-spacing:0; font-weight: 500;">
+          <span class="chip chip--plain">Entry</span>
+          <span class="chip">News · collection</span>
+          <span class="toolbar__spacer"></span>
+          <span class="chip chip--ok"><svg class="i i-xs"><use href="#i-check"/></svg>Complete</span>
+        </div>
+        <div class="pane__body">
+          <div class="pane__body--pad" data-panel="entry">
+            <form class="form" style="max-width: 760px; margin-inline: auto">
+              <div class="field">
+                <span class="field__label">Title <span class="req">*</span><span class="kind"><svg class="i i-xs"><use href="#i-text"/></svg>Short text</span></span>
+                <input class="input" value="Welcome to the newsroom">
+              </div>
+
+              <div class="field">
+                <div class="row" style="justify-content: space-between">
+                  <span class="field__label">Slug</span>
+                  <label class="switch small" style="gap:6px"><input type="checkbox" checked><span class="track"></span>Auto from title</label>
+                </div>
+                <input class="input mono" value="welcome-to-the-newsroom" disabled>
+              </div>
+
+              <div class="field">
+                <span class="field__label">Body <span class="req">*</span><span class="kind"><svg class="i i-xs"><use href="#i-markdown"/></svg>Rich text · Markdown</span></span>
+                <div class="md-editor">
+                  <div class="md-toolbar">
+                    <button class="btn btn--ghost btn--xs btn--icon" aria-label="Bold"><svg class="i i-sm"><use href="#i-bold"/></svg></button>
+                    <button class="btn btn--ghost btn--xs btn--icon" aria-label="Italic"><svg class="i i-sm"><use href="#i-italic"/></svg></button>
+                    <button class="btn btn--ghost btn--xs btn--icon" aria-label="Inline code"><svg class="i i-sm"><use href="#i-code"/></svg></button>
+                    <button class="btn btn--ghost btn--xs btn--icon" aria-label="Heading"><svg class="i i-sm"><use href="#i-heading"/></svg></button>
+                    <span class="vdivider"></span>
+                    <button class="btn btn--ghost btn--xs btn--icon" aria-label="Link"><svg class="i i-sm"><use href="#i-link"/></svg></button>
+                    <button class="btn btn--ghost btn--xs btn--icon" aria-label="Quote"><svg class="i i-sm"><use href="#i-quote"/></svg></button>
+                    <button class="btn btn--ghost btn--xs btn--icon" aria-label="Bulleted list"><svg class="i i-sm"><use href="#i-list-ul"/></svg></button>
+                    <span class="spacer"></span>
+                    <div class="seg seg--sm" role="group" aria-label="View"><button aria-pressed="false">Edit</button><button aria-pressed="true">Split</button><button aria-pressed="false">Preview</button></div>
+                  </div>
+                  <div class="md-body">
+                    <div class="src">## Product news
+
+Content values can drive real provider components.</div>
+                    <div class="out"><h2>Product news</h2><p>Content values can drive real provider components.</p></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="switch" style="justify-content: space-between; width: 100%"><span class="field__label" style="font-weight:600">Published</span><input type="checkbox" checked><span class="track"></span></label>
+              </div>
+
+              <div class="form__group">
+                <div class="form__group-title">Metadata</div>
+                <div class="stack small" style="gap:6px">
+                  <div class="row"><span class="muted grow">ID</span><code class="mono">news-entry-welcome</code></div>
+                  <div class="row"><span class="muted grow">Created</span><span>Aug 26, 2026 · 3:04 PM</span></div>
+                  <div class="row"><span class="muted grow">Updated</span><span>Sep 3, 2026 · 8:41 AM</span></div>
+                  <div class="row"><span class="muted grow">Used by</span><span>1 mapping · 2 sitemap pages</span></div>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <!-- SCHEMA PANEL -->
+          <div class="pane__body--pad" data-panel="schema" hidden>
+            <div class="form" style="max-width: 900px; margin-inline: auto">
+              <div class="field">
+                <label for="sch-name">Model name</label>
+                <input class="input" id="sch-name" value="News" style="max-width: 360px">
+              </div>
+
+              <div class="field">
+                <span class="field__label">Model kind</span>
+                <span class="locked-chip"><svg class="i i-sm"><use href="#i-info"/></svg>Collection · locked after creation</span>
+              </div>
+
+              <div class="form__group">
+                <div class="row" style="justify-content: space-between; margin-block-end: var(--sp-1)">
+                  <div class="form__group-title" style="text-transform:none; letter-spacing:0; font-size: var(--text-base); font-weight:650; color: var(--fg)">Fields</div>
+                </div>
+                <div class="schema-wrap">
+                  <div class="table-col">
+                    <table class="table table--compact">
+                      <thead><tr><th style="width:1%"></th><th>Label</th><th>Key</th><th>Type</th><th>Req.</th><th style="width:1%"></th></tr></thead>
+                      <tbody>
+                        <tr>
+                          <td class="muted"><svg class="i i-sm"><use href="#i-grip"/></svg></td>
+                          <td class="name">Title</td>
+                          <td class="mono muted">title</td>
+                          <td><span class="field-type-chip"><svg class="i i-xs"><use href="#i-text"/></svg>Short text</span></td>
+                          <td><label class="switch"><input type="checkbox" checked><span class="track"></span></label></td>
+                          <td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More" data-menu="m-f1"><svg class="i"><use href="#i-more"/></svg></button>
+                            <div class="menu" id="m-f1" style="inset-inline-end:0"><button><svg class="i"><use href="#i-edit"/></svg>Edit field</button><button class="danger"><svg class="i"><use href="#i-trash"/></svg>Remove…</button></div></td>
+                        </tr>
+                        <tr>
+                          <td class="muted"><svg class="i i-sm"><use href="#i-grip"/></svg></td>
+                          <td class="name">Body</td>
+                          <td class="mono muted">body</td>
+                          <td><span class="field-type-chip"><svg class="i i-xs"><use href="#i-markdown"/></svg>Rich text</span></td>
+                          <td><label class="switch"><input type="checkbox" checked><span class="track"></span></label></td>
+                          <td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td>
+                        </tr>
+                        <tr>
+                          <td class="muted"><svg class="i i-sm"><use href="#i-grip"/></svg></td>
+                          <td class="name">Published</td>
+                          <td class="mono muted">published</td>
+                          <td><span class="field-type-chip"><svg class="i i-xs"><use href="#i-boolean"/></svg>Toggle</span></td>
+                          <td><label class="switch"><input type="checkbox"><span class="track"></span></label></td>
+                          <td class="actions"><button class="btn btn--ghost btn--sm btn--icon" aria-label="More"><svg class="i"><use href="#i-more"/></svg></button></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div style="margin-block-start: var(--sp-2)"><button class="btn btn--sm"><svg class="i i-sm"><use href="#i-plus"/></svg>Add field</button></div>
+                    <p class="field__help" style="margin-block-start: var(--sp-2)">Types lock once an entry uses the field.</p>
+                  </div>
+
+                  <div class="menu type-picker" data-open="true" aria-label="Field type">
+                    <div class="menu__title">Field type</div>
+                    <div class="opt"><svg class="i ic"><use href="#i-text"/></svg><span><strong>Short text</strong><span class="d">A single line for names, titles, concise copy.</span></span><svg class="i i-sm chk"><use href="#i-check"/></svg></div>
+                    <div class="opt"><svg class="i ic"><use href="#i-long-text"/></svg><span><strong>Long text</strong><span class="d">Plain multi-line text, no formatting markup.</span></span><span></span></div>
+                    <div class="opt"><svg class="i ic"><use href="#i-markdown"/></svg><span><strong>Rich text</strong><span class="d">Formatting-assisted Markdown for editorial copy.</span></span><span></span></div>
+                    <div class="opt"><svg class="i ic"><use href="#i-number"/></svg><span><strong>Number</strong><span class="d">Integer or decimal values with optional range.</span></span><span></span></div>
+                    <div class="opt"><svg class="i ic"><use href="#i-boolean"/></svg><span><strong>Toggle</strong><span class="d">A single on / off switch value.</span></span><span></span></div>
+                    <div class="opt"><svg class="i ic"><use href="#i-date"/></svg><span><strong>Date</strong><span class="d">Calendar date, optionally with a time.</span></span><span></span></div>
+                    <div class="opt"><svg class="i ic"><use href="#i-slug"/></svg><span><strong>Slug</strong><span class="d">URL-safe identifier, can auto-derive from another field.</span></span><span></span></div>
+                    <div class="opt"><svg class="i ic"><use href="#i-color"/></svg><span><strong>Color</strong><span class="d">A picked color value stored as hex.</span></span><span></span></div>
+                    <div class="opt"><svg class="i ic"><use href="#i-link"/></svg><span><strong>URL</strong><span class="d">An absolute or relative link with validation.</span></span><span></span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="resizer" role="separator" aria-orientation="vertical" data-resize="insp"></div>
+      <!-- INSPECTOR: PREVIEW -->
+      <section class="pane" data-pane="insp" data-pane-active="false" aria-label="Preview" data-tabset>
+        <div class="pane__header">Preview<button class="btn btn--ghost btn--sm btn--icon" aria-label="Collapse" data-collapse="insp"><svg class="i i-sm"><use href="#i-sidebar-r"/></svg></button></div>
+        <div class="pane__tabs" role="tablist" data-tabs>
+          <button role="tab" data-tab="preview" aria-selected="true">Preview</button>
+          <button role="tab" data-tab="mapping" aria-selected="false">Mapping</button>
+          <button role="tab" data-tab="usage" aria-selected="false">Usage</button>
+        </div>
+        <div class="pane__body">
+          <div data-panel="preview">
+            <div class="pane__section stack" style="gap: var(--sp-2)">
+              <div class="field"><label for="p-render">Render through</label>
+                <select class="select select--sm" id="p-render"><option>News → Product overview (ready)</option><option>News → Article layout</option></select>
+              </div>
+              <span class="status status--ok"><svg class="i i-sm"><use href="#i-check-circle"/></svg>Preview is current · 2 bindings applied</span>
+              <div class="preview-frame">
+                <button class="btn btn--sm exp"><svg class="i i-sm"><use href="#i-expand"/></svg>Expand</button>
+                <div class="eyebrow-x">Product</div>
+                <h1>Welcome to the newsroom</h1>
+                <p>Compose responsive sections with the real UI provider. This entry renders through the News model's default mapping.</p>
+              </div>
+            </div>
+          </div>
+          <div data-panel="mapping" hidden>
+            <div class="pane__section">
+              <div class="pane__section-title">Bindings</div>
+              <div class="binding-row"><span>Title <svg class="i i-xs" style="vertical-align:-2px"><use href="#i-arrow-r"/></svg> SectionHeading.heading</span><span class="chip chip--ok">bound</span></div>
+              <div class="binding-row"><span>Body <svg class="i i-xs" style="vertical-align:-2px"><use href="#i-arrow-r"/></svg> ProseMd.markdown</span><span class="chip chip--ok">bound</span></div>
+            </div>
+          </div>
+          <div data-panel="usage" hidden>
+            <div class="pane__section">
+              <div class="pane__section-title">Referenced by</div>
+              <div class="stack small" style="gap:6px">
+                <div class="row"><svg class="i i-sm muted"><use href="#i-mapping"/></svg><span class="grow">News → Product overview</span><span class="chip chip--plain">mapping</span></div>
+                <div class="row"><svg class="i i-sm muted"><use href="#i-sitemap"/></svg><span class="grow">Marketing site · /news/welcome</span><span class="chip chip--plain">page</span></div>
+                <div class="row"><svg class="i i-sm muted"><use href="#i-sitemap"/></svg><span class="grow">Docs · /updates/welcome</span><span class="chip chip--plain">page</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="proto-note"><button class="btn btn--ghost btn--xs btn--icon close" aria-label="Dismiss"><svg class="i i-xs"><use href="#i-x"/></svg></button><strong>Proposal 04 · Content on the shared editor chrome</strong>Entry/Schema is one segmented switch; fields use real widgets; the type picker is a popover instead of nine inline cards; preview lives in the inspector with a Render-through selector.</div>
+<script src="icons.js"></script><script src="shell.js"></script><script src="proto.js"></script>
+</body>
+</html>
