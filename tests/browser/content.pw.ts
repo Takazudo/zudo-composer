@@ -136,8 +136,9 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   // editor chrome names the record it loaded.
   await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Sample Studio sitemap");
-  // Scoped to the editor toolbar: the tree's terminal "Add page" rows share this
-  // accessible name, so a page-wide match is a strict-mode violation.
+  // Scoped to the toolbar: the outline's terminal add rows are called "Add page"
+  // too, and it is the toolbar action this line means to find. `EditorChrome`
+  // gives its toolbar no role, so the class it renders is the handle.
   await expect(page.locator(".cms-editor__toolbar").getByRole("button", { name: "Add page" })).toBeVisible();
   await expect(page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /^Home\b/ })).toBeVisible();
   expect(failures).toEqual([]);

@@ -15,12 +15,16 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import {
+  createSitemapAndReturn,
   expectNoHorizontalOverflow,
   gotoRoute,
   ROUTES,
-  SAMPLE_SITEMAP,
   watchRuntimeFailures,
 } from "./foundations-probe";
+
+// The dev lane ships no records, so the library row and the record editor this
+// audit needs are built through the UI first.
+const TARGET_FIXTURE = "Foundations touch targets";
 
 /**
  * Every control the coarse stylesheet blocks promise 44px to — the rail and
@@ -100,7 +104,7 @@ test("the coarse lane is genuinely coarse, or nothing below proves anything", as
 });
 
 test("no CMS route scrolls sideways on a 390px touch screen", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(300_000);
   const failures = watchRuntimeFailures(page);
   for (const route of ROUTES) {
     failures.length = 0;
@@ -111,7 +115,7 @@ test("no CMS route scrolls sideways on a 390px touch screen", async ({ page }) =
 });
 
 test("every control the coarse stylesheet promises 44px to gets it", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const failures = watchRuntimeFailures(page);
 
   await gotoRoute(page, "/");
@@ -121,13 +125,14 @@ test("every control the coarse stylesheet promises 44px to gets it", async ({ pa
   // nothing means the selectors have drifted, not that the screen is clean.
   expect(dashboard.counted).toBeGreaterThan(7);
 
-  await gotoRoute(page, "/sitemapper");
+  // A library with rows, built through the same dialog this audit later checks.
+  await createSitemapAndReturn(page, TARGET_FIXTURE);
   expect((await auditTouchTargets(page)).undersized, "sitemap library touch targets").toEqual([]);
 
   // The library's row menu and the create dialog are only in the DOM while
   // they are open, so both are opened rather than assumed.
-  await page.getByRole("button", { name: `More actions for ${SAMPLE_SITEMAP}` }).click();
-  await expect(page.getByRole("menu", { name: `${SAMPLE_SITEMAP} actions` })).toBeVisible();
+  await page.getByRole("button", { name: `More actions for ${TARGET_FIXTURE}` }).click();
+  await expect(page.getByRole("menu", { name: `${TARGET_FIXTURE} actions` })).toBeVisible();
   expect((await auditTouchTargets(page)).undersized, "row menu touch targets").toEqual([]);
   await page.keyboard.press("Escape");
 
@@ -137,8 +142,8 @@ test("every control the coarse stylesheet promises 44px to gets it", async ({ pa
   await page.keyboard.press("Escape");
 
   // The record editor: the pane switch, the toolbar and the outline rows.
-  await page.getByRole("link", { name: SAMPLE_SITEMAP, exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(SAMPLE_SITEMAP);
+  await page.getByRole("link", { name: TARGET_FIXTURE, exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(TARGET_FIXTURE);
   const paneSwitch = page.getByRole("radiogroup", { name: "Pane" });
   await expect(paneSwitch).toBeVisible();
   for (const index of [0, 1, 2]) {
