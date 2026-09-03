@@ -12,26 +12,24 @@
  * narrow layout under a real coarse pointer) lives in
  * `foundations.coarse.pw.ts`, because `@media (pointer: coarse)` is switched
  * off here and every one of those assertions would pass vacuously.
+ *
+ * #166's two library proofs are not here at all: the dev lane activates no
+ * SiteProject, so no library on it can list. They live on the dist lane, in
+ * `tests/browser/library-chrome.pw.ts`, which explains why.
  */
 
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import {
   createSitemap,
-  createSitemapAndReturn,
   expectNoHorizontalOverflow,
   expectSaved,
   gotoRoute,
   ROUTES,
-  sitemapRow,
   watchRuntimeFailures,
 } from "./foundations-probe";
 
-// One fixture name per test: contexts are isolated, and a distinct name makes
-// a trace say which test built the record it is looking at.
 const RAIL_FIXTURE = "Foundations rail geometry";
-const MENU_FIXTURE = "Foundations row menu";
-const FOCUS_FIXTURE = "Foundations focus return";
 
 /**
  * Shell-only paths. In the dev lane every module and stylesheet keeps its
@@ -128,98 +126,6 @@ test("the editor remembers its rail widths and collapse across a reload", async 
   const reopened = await readRailGeometry(page);
   expect(reopened.inspCollapsed).toBe(false);
   expect(reopened.navVar).toBe(widened.navVar);
-
-  expect(failures).toEqual([]);
-});
-
-test("a row menu opens outside the library table's scrollport, unclipped", async ({ page }) => {
-  test.setTimeout(120_000);
-  const failures = watchRuntimeFailures(page);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  // With no records the library renders its empty state and there is no table
-  // to be clipped by, so the row this proof needs is created first.
-  await createSitemapAndReturn(page, MENU_FIXTURE);
-
-  // The wrapper is the sticky header's scrollport, so it clips its content
-  // whether or not the table currently overflows. If that ever stops being
-  // true this whole proof is vacuous, which is why it is asserted first.
-  const wrap = page.locator(".cms-table-wrap");
-  await expect(wrap).toHaveCSS("overflow-x", "auto");
-  await expect(wrap).toHaveCSS("overflow-y", "auto");
-
-  const row = sitemapRow(page, MENU_FIXTURE);
-  await row.hover();
-  const trigger = row.getByRole("button", { name: `More actions for ${MENU_FIXTURE}` });
-  await trigger.click();
-  const menu = page.getByRole("menu", { name: `${MENU_FIXTURE} actions` });
-  await expect(menu).toBeVisible();
-
-  // The control that opened the menu really is inside the clip; only the panel
-  // escaped it.
-  expect(
-    await trigger.evaluate((element) => document.querySelector(".cms-table-wrap")?.contains(element) ?? false),
-  ).toBe(true);
-
-  const geometry = await menu.evaluate((panel) => {
-    const scrollport = document.querySelector(".cms-table-wrap");
-    if (scrollport === null) throw new Error("The table scrollport left the page mid-measurement.");
-    const panelRect = panel.getBoundingClientRect();
-    const wrapRect = scrollport.getBoundingClientRect();
-    // Edge midpoints rather than corners: the panel has a border radius, and a
-    // point just inside a rounded corner is outside the painted shape.
-    const probes: readonly (readonly [number, number])[] = [
-      [(panelRect.left + panelRect.right) / 2, panelRect.top + 4],
-      [(panelRect.left + panelRect.right) / 2, panelRect.bottom - 4],
-      [panelRect.left + 4, (panelRect.top + panelRect.bottom) / 2],
-      [panelRect.right - 4, (panelRect.top + panelRect.bottom) / 2],
-      [(panelRect.left + panelRect.right) / 2, (panelRect.top + panelRect.bottom) / 2],
-    ];
-    return {
-      panelInsideScrollport: scrollport.contains(panel),
-      // Nothing is proven if the panel happens to fit inside the clip anyway.
-      panelReachesPastScrollport: panelRect.bottom > wrapRect.bottom || panelRect.top < wrapRect.top,
-      insideViewport:
-        panelRect.top >= 0 &&
-        panelRect.left >= 0 &&
-        panelRect.bottom <= window.innerHeight &&
-        panelRect.right <= window.innerWidth,
-      probes: probes.map(([x, y]) => panel.contains(document.elementFromPoint(x, y))),
-    };
-  });
-
-  expect(geometry.panelInsideScrollport).toBe(false);
-  expect(geometry.panelReachesPastScrollport).toBe(true);
-  expect(geometry.insideViewport).toBe(true);
-  // Hit-testing, not just geometry: a panel painted under the table's own
-  // background would still measure as visible.
-  expect(geometry.probes).toEqual([true, true, true, true, true]);
-
-  expect(failures).toEqual([]);
-});
-
-test("focus returns to the trigger when a menu or a dialog closes", async ({ page }) => {
-  test.setTimeout(120_000);
-  const failures = watchRuntimeFailures(page);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await createSitemapAndReturn(page, FOCUS_FIXTURE);
-
-  const newSitemap = page.getByRole("button", { name: "New sitemap" });
-  await newSitemap.click();
-  const dialog = page.getByRole("dialog", { name: "Create sitemap" });
-  await expect(dialog.getByRole("textbox", { name: "Sitemap name" })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "Create sitemap" })).toHaveCount(0);
-  await expect(newSitemap).toBeFocused();
-
-  const row = sitemapRow(page, FOCUS_FIXTURE);
-  await row.hover();
-  const trigger = row.getByRole("button", { name: `More actions for ${FOCUS_FIXTURE}` });
-  await trigger.click();
-  const menu = page.getByRole("menu", { name: `${FOCUS_FIXTURE} actions` });
-  await expect(menu.getByRole("menuitem", { name: "Open", exact: true })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("menu", { name: `${FOCUS_FIXTURE} actions` })).toHaveCount(0);
-  await expect(trigger).toBeFocused();
 
   expect(failures).toEqual([]);
 });

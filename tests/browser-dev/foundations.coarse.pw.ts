@@ -15,15 +15,16 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import {
-  createSitemapAndReturn,
+  createSitemap,
   expectNoHorizontalOverflow,
   gotoRoute,
   ROUTES,
   watchRuntimeFailures,
 } from "./foundations-probe";
 
-// The dev lane ships no records, so the library row and the record editor this
-// audit needs are built through the UI first.
+// The record this audit walks is built through the UI: the dev lane activates
+// no SiteProject, so its libraries never list, but creating and editing a
+// record goes straight to storage and works.
 const TARGET_FIXTURE = "Foundations touch targets";
 
 /**
@@ -125,25 +126,27 @@ test("every control the coarse stylesheet promises 44px to gets it", async ({ pa
   // nothing means the selectors have drifted, not that the screen is clean.
   expect(dashboard.counted).toBeGreaterThan(7);
 
-  // A library with rows, built through the same dialog this audit later checks.
-  await createSitemapAndReturn(page, TARGET_FIXTURE);
+  await gotoRoute(page, "/sitemapper");
   expect((await auditTouchTargets(page)).undersized, "sitemap library touch targets").toEqual([]);
 
-  // The library's row menu and the create dialog are only in the DOM while
-  // they are open, so both are opened rather than assumed.
-  await page.getByRole("button", { name: `More actions for ${TARGET_FIXTURE}` }).click();
-  await expect(page.getByRole("menu", { name: `${TARGET_FIXTURE} actions` })).toBeVisible();
-  expect((await auditTouchTargets(page)).undersized, "row menu touch targets").toEqual([]);
-  await page.keyboard.press("Escape");
-
+  // A dialog is only in the DOM while it is open, so it is opened rather than
+  // assumed. This is the same control `createSitemap` uses next.
   await page.getByRole("button", { name: "New sitemap" }).click();
   await expect(page.getByRole("dialog", { name: "Create sitemap" })).toBeVisible();
   expect((await auditTouchTargets(page)).undersized, "create dialog touch targets").toEqual([]);
   await page.keyboard.press("Escape");
 
-  // The record editor: the pane switch, the toolbar and the outline rows.
-  await page.getByRole("link", { name: TARGET_FIXTURE, exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(TARGET_FIXTURE);
+  // The record editor: its toolbar, its overflow menu, and each of its panes.
+  await createSitemap(page, TARGET_FIXTURE);
+  expect((await auditTouchTargets(page)).undersized, "record editor touch targets").toEqual([]);
+
+  // The one `Menu` this lane can reach: the library's row menu needs a listing,
+  // and a listing is exactly what the dev lane cannot produce.
+  await page.getByRole("button", { name: "More sitemap actions" }).click();
+  await expect(page.getByRole("menu", { name: "Sitemap actions" })).toBeVisible();
+  expect((await auditTouchTargets(page)).undersized, "sitemap menu touch targets").toEqual([]);
+  await page.keyboard.press("Escape");
+
   const paneSwitch = page.getByRole("radiogroup", { name: "Pane" });
   await expect(paneSwitch).toBeVisible();
   for (const index of [0, 1, 2]) {

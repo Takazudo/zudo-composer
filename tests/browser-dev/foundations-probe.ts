@@ -9,11 +9,25 @@
  * `foundations.pw.ts` and `foundations.coarse.pw.ts` are one deliverable split
  * across two lanes by filename suffix, so what they both need lives here.
  *
- * **The dev lane starts with no records.** "Sample Studio sitemap" and the rest
- * come from the bundled SiteProject sample, which the dist lane serves and
- * `pnpm dev` does not activate. Every fixture below is therefore built through
- * the UI, the way `outline-tree.responsive.pw.ts` does it — which also keeps
- * these specs independent of whatever that sample later contains.
+ * **The dev lane activates no SiteProject, so no library here can list.**
+ * `pnpm dev` leaves `provider-integration` without an active project, its
+ * `verifyRegistry()` throws, and every library — compositions, content,
+ * mapping, sitemaps alike — initializes into "No development SiteProject is
+ * activated". Creating and editing a record still works, because those go
+ * through `provider.store` directly rather than through
+ * `initialization.initialize()`; a *listing* is the one thing this lane cannot
+ * produce. That is why `createSitemap` below stays in the record editor it
+ * navigates to and never comes back to the library for the record it made.
+ *
+ * The proofs that genuinely need a populated library therefore live on the
+ * dist lane, in `tests/browser/library-chrome.pw.ts`. The alternative —
+ * giving `playwright.dev.config.ts` the `ZUDO_SITE_PROJECT_ROOT` treatment
+ * that `playwright.site-project.config.ts` already has, provisioned the way
+ * `scripts/run-site-project-browser.mjs` provisions its disposable root — is a
+ * better long-term answer and would unblock every library-dependent dev-lane
+ * proof at once. It also changes what this lane means and changes the shape of
+ * a named completion gate, so it wants its own decision rather than being a
+ * side effect of one spec.
  */
 
 import { expect } from "@playwright/test";
@@ -111,16 +125,3 @@ export async function createSitemap(page: Page, name: string): Promise<void> {
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(name);
 }
 
-/** Create a Sitemap, then come back to the library that now lists it. */
-export async function createSitemapAndReturn(page: Page, name: string): Promise<void> {
-  await createSitemap(page, name);
-  // The record is left through a real navigation, so it has to be on disk
-  // first rather than sitting in the debounced save queue.
-  await expectSaved(page);
-  await gotoRoute(page, "/sitemapper");
-}
-
-/** One row of the Sitemap library table, found by the link that opens it. */
-export function sitemapRow(page: Page, name: string): Locator {
-  return page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
-}
