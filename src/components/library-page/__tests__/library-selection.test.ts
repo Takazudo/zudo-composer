@@ -60,6 +60,25 @@ describe("useLibrarySelection", () => {
     expect(result.current.selectedIds.has("blog-post")).toBe(false);
   });
 
+  it("does not re-select a later record that reuses a deleted record's id", () => {
+    // A route slugging ids from names hands out the same `untitled-record`
+    // again as soon as the first one is deleted.
+    const reused: Record_ = { ...RECORDS[1], name: "Untitled" };
+    const { result, rerender } = renderHook(
+      ({ rows }: { rows: readonly Record_[] }) => useLibrarySelection({ rows, rowId }),
+      { initialProps: { rows: RECORDS } },
+    );
+    act(() => result.current.toggleRow("blog-post", true));
+
+    const without = RECORDS.filter((row) => row.id !== "blog-post");
+    rerender({ rows: without });
+    expect(result.current.selectedCount).toBe(0);
+
+    rerender({ rows: [...without, reused] });
+    expect(result.current.selectedCount).toBe(0);
+    expect(result.current.isSelected("blog-post")).toBe(false);
+  });
+
   it("covers exactly the visible rows when selecting and deselecting all", () => {
     const visible = RECORDS.filter((row) => row.kind === "pattern");
     const { result } = renderHook(() => useLibrarySelection({ rows: RECORDS, visibleRows: visible, rowId }));

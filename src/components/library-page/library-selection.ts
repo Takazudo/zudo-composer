@@ -1,4 +1,4 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 
 // Row selection behind the bulk bar (issue #164).
 //
@@ -6,9 +6,10 @@ import { useState } from "preact/hooks";
 //   1. A selection survives filtering. Typing in the filter input must not
 //      silently drop the rows an author already picked, so the hook is given
 //      EVERY record and prunes only against that set.
-//   2. A selection does not survive deletion. Pruning is derived on read
-//      rather than pushed through an effect, so the frame after a delete can
-//      never show a bulk bar counting records that are gone.
+//   2. A selection does not survive deletion. Pruning is derived on read, so
+//      the frame after a delete can never show a bulk bar counting records
+//      that are gone, and the stored set is swept afterwards so a deleted id
+//      cannot come back to life on a later record.
 
 export interface LibrarySelectionController<Row> {
   readonly selectedIds: ReadonlySet<string>;
@@ -39,6 +40,21 @@ export function useLibrarySelection<Row>({
 
   const selectedRows = rows.filter((row) => picked.has(rowId(row)));
   const selectedIds: ReadonlySet<string> = new Set(selectedRows.map(rowId));
+
+  // The read above keeps a deleted record out of the bulk bar, but the id it
+  // left behind in the stored set would silently select a FUTURE record that
+  // reuses it — a route slugging ids from names hands out `untitled-record`
+  // again as soon as the first one is deleted. Sweeping it here, after the
+  // render that already read the truth, fixes that without a stale frame.
+  useEffect(() => {
+    setPicked((current) => {
+      const known = new Set(rows.map(rowId));
+      const kept = [...current].filter((id) => known.has(id));
+      return kept.length === current.size ? current : new Set(kept);
+    });
+    // `rowId` is deliberately not a dependency: routes pass it inline, and the
+    // sweep only has anything to do when the record list itself changes.
+  }, [rows]);
 
   return {
     selectedIds,

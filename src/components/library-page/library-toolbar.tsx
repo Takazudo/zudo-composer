@@ -35,8 +35,18 @@ function ChoiceMenu({ label, icon: Icon, options, value, onChange, prefixTrigger
   return (
     <Fragment>
       {/* Raw button: the menu measures its trigger through a ref, which Preact
-       * does not forward to a function component. */}
-      <button type="button" ref={triggerRef} class="cms-btn cms-btn--sm" {...menu.triggerProps}>
+       * does not forward to a function component.
+       *
+       * A facet trigger already reads `Kind: All`. An unprefixed one shows only
+       * its value, and its icon is decorative, so its accessible name has to
+       * say what that value belongs to. */}
+      <button
+        type="button"
+        ref={triggerRef}
+        class="cms-btn cms-btn--sm"
+        aria-label={prefixTrigger ? undefined : `${label}: ${selectedLabel}`}
+        {...menu.triggerProps}
+      >
         {Icon ? <Icon size="sm" /> : null}
         <span>{prefixTrigger ? `${label}: ${selectedLabel}` : selectedLabel}</span>
         <ChevronDownIcon size="xs" class="cms-library-toolbar__caret" />

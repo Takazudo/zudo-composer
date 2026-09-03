@@ -46,7 +46,7 @@ describe("library-page module", () => {
     expect(sources.length).toBeGreaterThan(0);
     for (const name of [...sources, "library-page.css"]) {
       const source = stripComments(readFileSync(resolve(DIRECTORY, name), "utf8"));
-      expect(source, name).not.toMatch(/\b(?:Composition|Mapping|Sitemap)s?\b|\b(?:compositions|mappings|sitemaps|media assets)\b/);
+      expect(source, name).not.toMatch(/\b(?:Composition|Mapping|Sitemap|Media)s?\b|\b(?:compositions|mappings|sitemaps|media assets)\b/);
     }
   });
 

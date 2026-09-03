@@ -52,6 +52,13 @@ describe("LibraryToolbar", () => {
     expect(screen.getByRole("button", { name: /Name/ })).toBeInTheDocument();
   });
 
+  it("names the sort trigger after what it sorts, since it shows only its value", () => {
+    render(<LibraryHarness />);
+    expect(screen.getByRole("button", { name: "Sort: Updated" })).toBeInTheDocument();
+    // The facet says it on the face of the trigger, so it needs no override.
+    expect(screen.getByRole("button", { name: "Kind: All" })).not.toHaveAttribute("aria-label");
+  });
+
   it("renders the optional view toggle only when the route supplies one", () => {
     const { rerender } = render(<LibraryHarness />);
     expect(screen.queryByRole("radiogroup", { name: "View" })).toBeNull();

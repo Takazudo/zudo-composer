@@ -47,7 +47,7 @@
  * | ArrowRightIcon, ArrowLeftIcon                | Mapping source → target and back navigation            |
  * | SearchIcon, SettingsIcon, FilterIcon         | Common labeled shell/library actions                   |
  * | SortIcon, GridIcon                           | Library toolbar sort picker and cards view toggle      |
- * | ChevronRightIcon, ChevronLeftIcon             | Tree disclosure and library page stepping             |
+ * | ChevronRightIcon, ChevronLeftIcon            | Tree disclosure and library page stepping              |
  * | ChevronDownIcon, ChevronUpIcon               | Disclosure and sibling movement                        |
  * | EllipsisIcon, XMarkIcon                      | Overflow menu, remove, and dialog close                |
  * | PlusIcon, MinusIcon                          | Add and remove/compact controls                        |
