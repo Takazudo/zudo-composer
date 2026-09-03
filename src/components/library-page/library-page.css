@@ -1,0 +1,211 @@
+/* ==========================================================================
+ * Library pattern (issue #164) — the header → toolbar → table → states stack
+ * every record route wears.
+ *
+ * Imported by `src/components/library-page/index.ts`, so a route that never
+ * renders a library never pays for this sheet. The rules of
+ * `src/components/ui/ui.css` hold here too: colours are tokens from
+ * `src/styles/app-tokens.css`, every class carries the `cms-` prefix (a bare
+ * `.library` or `.table-wrap` would collide with the Tailwind utilities
+ * generated from the same source scan), and the type ladder is written as
+ * literal rem values because `--text-*` is the provider's namespace.
+ * ========================================================================== */
+
+.cms-library {
+  display: grid;
+  gap: var(--sp-b2);
+  align-content: start;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------------
+ * Page header
+ * -------------------------------------------------------------------------- */
+.cms-library__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  margin-block-end: var(--sp-1);
+}
+
+.cms-library__tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-accent-line);
+  border-radius: var(--radius);
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.cms-library__heading {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.cms-library__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.cms-library__purpose {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: .8125rem;
+}
+
+.cms-library__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-inline-start: auto;
+}
+
+/* --------------------------------------------------------------------------
+ * Toolbar
+ * -------------------------------------------------------------------------- */
+.cms-library-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.cms-library-toolbar__search { width: 260px; max-width: 100%; }
+/* The UA's own clear affordance would sit on top of a 26px control. */
+.cms-library-toolbar__search input::-webkit-search-decoration,
+.cms-library-toolbar__search input::-webkit-search-cancel-button { appearance: none; }
+
+.cms-library-toolbar__caret { color: var(--color-faint); }
+.cms-library-toolbar__spacer { flex: 1 1 auto; }
+
+/* --------------------------------------------------------------------------
+ * Table cells
+ * -------------------------------------------------------------------------- */
+.cms-library-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.cms-library-name__icon { flex: none; color: var(--color-faint); }
+
+.cms-library-name__text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cms-library-name__label {
+  color: var(--color-fg);
+  font-weight: 600;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+a.cms-library-name__label:hover { text-decoration: underline; }
+
+.cms-library-name__sub {
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  font-size: .6875rem;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cms-library-blank { color: var(--color-faint); }
+
+/* --------------------------------------------------------------------------
+ * Bulk bar — the box comes from `.cms-table__bulk`; these are its contents.
+ * -------------------------------------------------------------------------- */
+.cms-library-bulk__count { font-weight: 650; }
+.cms-library-bulk__clear { margin-inline-start: auto; }
+
+/* --------------------------------------------------------------------------
+ * States
+ * -------------------------------------------------------------------------- */
+.cms-library-state {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.cms-library-skeleton {
+  display: grid;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.cms-library-skeleton__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-b2);
+  height: 40px;
+  padding-inline: var(--sp-b2);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.cms-library-skeleton__row:last-child { border-block-end: 0; }
+
+.cms-library-skeleton__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-surface-2);
+}
+
+/* Uneven widths so the placeholder reads as rows of content, not a grid. */
+.cms-library-skeleton__bar { flex: 1 1 0; }
+.cms-library-skeleton__bar:first-child { flex: 3 1 0; }
+.cms-library-skeleton__bar:nth-child(3) { flex: 2 1 0; }
+.cms-library-skeleton__bar:last-child { flex: 0 0 64px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .cms-library-skeleton__bar { animation: cms-library-skeleton-pulse 1.4s ease-in-out infinite; }
+  .cms-library-skeleton__row:nth-child(even) .cms-library-skeleton__bar { animation-delay: .2s; }
+}
+
+@keyframes cms-library-skeleton-pulse {
+  50% { opacity: .45; }
+}
+
+/* --------------------------------------------------------------------------
+ * Pagination line
+ * -------------------------------------------------------------------------- */
+.cms-library-pager {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  color: var(--color-muted);
+  font-size: .75rem;
+}
+
+.cms-library-pager__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-inline-start: auto;
+}
+
+/* --------------------------------------------------------------------------
+ * Narrow screens. The table itself keeps scrolling inside `.cms-table-wrap`;
+ * only the chrome around it reflows.
+ * -------------------------------------------------------------------------- */
+@media (max-width: 64rem) {
+  .cms-library__header { flex-wrap: wrap; }
+  .cms-library__actions { flex-basis: 100%; flex-wrap: wrap; margin-inline-start: 0; }
+  .cms-library-toolbar__search { width: 100%; }
+  .cms-library-toolbar__spacer { display: none; }
+  .cms-library-pager__nav { margin-inline-start: 0; }
+}
