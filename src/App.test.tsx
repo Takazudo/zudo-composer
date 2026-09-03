@@ -16,17 +16,20 @@ describe('App', () => {
     vi.unstubAllGlobals();
   });
 
+  // Content is an editor rather than a library page since issue #169, so each
+  // route names the landmark that proves the real product mounted rather than
+  // assuming every one of them opens on a heading.
   it.each([
-    ['/composer', 'Composition library', 'Compositions'],
-    ['/content', 'Content authoring', 'Content'],
-    ['/mapping', 'Mapping library', 'Mappings'],
-    ['/sitemapper', 'Sitemaps', 'Sitemaps'],
-    ['/media', 'Media library', 'Media'],
-  ])('mounts the real product on direct refresh at %s', async (route, heading, railLabel) => {
+    ['/composer', 'heading', 'Composition library', 'Compositions'],
+    ['/content', 'tree', 'Content', 'Content'],
+    ['/mapping', 'heading', 'Mapping library', 'Mappings'],
+    ['/sitemapper', 'heading', 'Sitemaps', 'Sitemaps'],
+    ['/media', 'heading', 'Media library', 'Media'],
+  ])('mounts the real product on direct refresh at %s', async (route, role, name, railLabel) => {
     vi.stubGlobal('indexedDB', new FDBFactory());
     window.history.replaceState(null, '', route);
     render(<App />);
-    expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
+    expect(await screen.findByRole(role, { name })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
     expect(nav.querySelectorAll('a')).toHaveLength(7);
     const current = nav.querySelectorAll('a[aria-current="page"]');

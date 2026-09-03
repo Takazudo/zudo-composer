@@ -76,9 +76,14 @@ test("the activated graph appears in every authoring library", async ({ page }) 
   }
 
   await page.goto("/content");
-  await expect(page.getByRole("heading", { name: "Content authoring" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^About content\s+Single$/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Journal articles\s+Collection$/ })).toBeVisible();
+  // Content's library is its navigator since issue #169: one `»` category per
+  // model, carrying its id, Entry count and `single` tag.
+  const contentTree = page.getByRole("tree", { name: "Content" });
+  await expect(contentTree).toBeVisible();
+  const aboutModel = contentTree.getByRole("treeitem", { name: /^About content/ });
+  await expect(aboutModel).toBeVisible();
+  await expect(aboutModel).toContainText("single");
+  await expect(contentTree.getByRole("treeitem", { name: /^Journal articles/ })).toBeVisible();
 
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mapping library" })).toBeVisible();
@@ -126,14 +131,15 @@ test("an authoring Entry edit survives reload and is reflected by SiteDelivery",
   test.skip(BROWSER_LANE !== "dev", "the production lane intentionally serves immutable bundled data");
   const failures = watchRuntimeFailures(page);
   await page.goto("/content");
-  const aboutCard = page.locator(".sg-content-library > li").filter({ hasText: "About content" });
-  await aboutCard.getByRole("button", { name: /^About content\s+Single$/ }).click();
-  await aboutCard.getByRole("button", { name: /^Entries/ }).click();
-  await aboutCard.getByRole("button", { name: /A studio built around useful clarity.*Complete/ }).click();
+  const contentTree = page.getByRole("tree", { name: "Content" });
+  await contentTree.getByRole("treeitem", { name: /^About content/ }).click();
+  await contentTree.getByRole("treeitem", { name: /^A studio built around useful clarity/ }).click();
   const heading = page.getByRole("textbox", { name: "Heading (required)" });
   await heading.fill("A browser-edited studio");
   await heading.blur();
-  await expect(page.getByText("All changes saved.", { exact: true })).toBeVisible();
+  // The route publishes its save state through `useEditorStatus`; the shell
+  // draws it in the topbar.
+  await expect(page.locator(".cms-topbar__status")).toContainText("Saved");
   await page.goto("/site/about");
   await expect(page.getByRole("heading", { name: "A browser-edited studio", exact: true })).toBeVisible();
   await page.reload();
