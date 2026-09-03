@@ -24,7 +24,7 @@ describe('App', () => {
     ['/content', 'Content authoring', 'Content'],
     ['/mapping', 'Mapping library', 'Mappings'],
     ['/sitemapper', 'Sitemaps', 'Sitemaps'],
-    ['/media', 'Media library', 'Media'],
+    ['/media', 'Media', 'Media'],
   ])('mounts the real product on direct refresh at %s', async (route, heading, railLabel) => {
     vi.stubGlobal('indexedDB', new FDBFactory());
     window.history.replaceState(null, '', route);
@@ -56,9 +56,9 @@ describe('App', () => {
     window.history.replaceState(null, '', '/media');
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Media library' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Media service not connected' })).toBeInTheDocument();
-    expect(screen.getByText(/no development media service is connected/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Media' })).toBeInTheDocument();
+    expect(screen.getByText('Media file provider not connected')).toBeInTheDocument();
+    expect(screen.getByText(/browsing and uploading media both need the development file provider/i)).toBeInTheDocument();
     expect(request).not.toHaveBeenCalled();
   });
 

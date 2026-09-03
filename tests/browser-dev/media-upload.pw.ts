@@ -106,8 +106,8 @@ test("uploads real media bytes through the dev provider and renders the stored i
 
   try {
     await page.goto("/media");
-    await expect(page.getByRole("heading", { name: "Media library", exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("heading", { name: "Upload media", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Media", exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("region", { name: "Upload media", exact: true })).toBeVisible();
 
     const uploadResponsePromise = page.waitForResponse((response) => {
       return response.url().endsWith("/__zudo_composer_media_file_provider")
@@ -139,9 +139,9 @@ test("uploads real media bytes through the dev provider and renders the stored i
     const uploadStatus = page.getByRole("list", { name: "Upload status" });
     await expect(uploadStatus).toContainText(fileName);
     await expect(uploadStatus.getByText("Stored", { exact: true })).toBeVisible();
-    const card = page.locator(".sg-media-card").filter({ hasText: fileName });
-    await expect(card).toHaveCount(1);
-    const galleryImage = card.locator("img");
+    const tile = page.locator(".sg-media-asset").filter({ hasText: fileName });
+    await expect(tile).toHaveCount(1);
+    const galleryImage = tile.locator("img");
     const publicPath = `/uploaded-media/media-${result.id}.${extension}`;
     await galleryImage.scrollIntoViewIfNeeded();
     await expect(galleryImage).toBeVisible();
