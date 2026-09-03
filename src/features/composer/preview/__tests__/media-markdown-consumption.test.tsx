@@ -36,8 +36,10 @@ describe("Media Markdown consumption", () => {
       mediaProvider,
       { writeClipboard },
     );
-    const library = render(<MediaApp provider={mediaProvider} controller={mediaController} />);
-    await screen.findAllByText("hero image.png");
+    const library = render(<MediaApp provider={mediaProvider} controller={mediaController} intent={{ status: "none" }} />);
+    // The Markdown reference lives in the detail panel, so the asset has to be
+    // the one the panel is showing before it can be copied.
+    fireEvent.click(await screen.findByRole("button", { name: "Show details for hero image.png" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy Markdown" }));
     await waitFor(() => expect(writeClipboard).toHaveBeenCalledOnce());
     library.unmount();
