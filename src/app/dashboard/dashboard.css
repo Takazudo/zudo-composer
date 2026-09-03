@@ -78,6 +78,8 @@
   font-variant-numeric: tabular-nums;
 }
 
+.cms-dash-stat__value { color: inherit; }
+
 .cms-dash-stat__num small {
   margin-inline-start: 4px;
   color: var(--color-muted);

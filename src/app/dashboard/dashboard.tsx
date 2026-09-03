@@ -72,7 +72,7 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
           <h1>{greeting(now)}</h1>
           <p>Everything in this workspace lives in this browser.</p>
         </div>
-        <QuickActions mediaReady={mediaReady} />
+        {empty ? null : <QuickActions mediaReady={mediaReady} />}
       </header>
 
       {error ? (
@@ -104,7 +104,7 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
                   <div class="cms-dash-card__pad">
                     <SourcesUnavailable
                       sources={recent.unavailable.map(({ source }) => source)}
-                      suffix="are missing from this list."
+                      sentence={(listed) => `Records from ${listed} are not in this list.`}
                       onRetry={reload}
                     />
                   </div>
@@ -198,9 +198,14 @@ function StartHere({ mediaReady }: { mediaReady: boolean }): JSX.Element {
   );
 }
 
+/**
+ * Deliberately unnamed: an author waiting on the first read has no workspace
+ * status yet, and a placeholder region carrying that name would answer a
+ * `Workspace status` query with a card that holds no number.
+ */
 function StatsSkeleton(): JSX.Element {
   return (
-    <section class="cms-dash__stats" aria-label="Workspace status" aria-busy="true">
+    <div class="cms-dash__stats" aria-busy="true">
       <p class="cms-sr-only" role="status">Reading the workspace…</p>
       {[0, 1, 2, 3, 4].map((index) => (
         <div key={index} class="cms-dash-stat cms-dash-stat--skeleton" aria-hidden="true">
@@ -209,7 +214,7 @@ function StatsSkeleton(): JSX.Element {
           <span class="cms-dash-stat__bar" />
         </div>
       ))}
-    </section>
+    </div>
   );
 }
 
@@ -235,7 +240,7 @@ function StatCardView({ card, onRetry }: { card: StatCard; onRetry: () => void }
     <a class="cms-dash-stat" href={card.href}>
       {head}
       <span class="cms-dash-stat__num">
-        {card.value}
+        <span class="cms-dash-stat__value">{card.value}</span>
         {card.unit ? <small>{card.unit}</small> : null}
       </span>
       <span class="cms-dash-stat__foot">
@@ -284,7 +289,7 @@ function AttentionCard({
             {view.unavailable.length > 0 ? (
               <SourcesUnavailable
                 sources={view.unavailable.map(({ source }) => source)}
-                suffix="could not be checked."
+                sentence={(listed) => `${listed} could not be checked.`}
                 onRetry={onRetry}
               />
             ) : null}
@@ -324,18 +329,19 @@ function AttentionRow({ item }: { item: WorkspaceAttentionItem }): JSX.Element {
 
 function SourcesUnavailable({
   sources,
-  suffix,
+  sentence,
   onRetry,
 }: {
   sources: readonly WorkspaceSourceName[];
-  suffix: string;
+  /** Receives the sources as one English list, e.g. "Mappings and Content". */
+  sentence: (listed: string) => string;
   onRetry: () => void;
 }): JSX.Element {
   const names = sources.map((source) => SOURCE_LABELS[source]);
   const listed = names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
   return (
     <Banner tone="warn" action={<Button size="sm" onClick={onRetry}>Retry</Button>}>
-      {`${listed} ${suffix}`}
+      {sentence(listed)}
     </Banner>
   );
 }
