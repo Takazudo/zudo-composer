@@ -129,7 +129,10 @@ function createFakeIntegration(options: FakeOptions = {}) {
   });
 
   const sitemapStore = {
-    list: async () => (sitemaps instanceof Error ? Promise.settle(sitemaps) : sitemaps.map((record) => ({ id: record.id, name: record.document.name, createdAt: record.createdAt, updatedAt: record.updatedAt, pageCount: 1 }))),
+    list: async () => {
+      if (sitemaps instanceof Error) throw sitemaps;
+      return sitemaps.map((record) => ({ id: record.id, name: record.document.name, createdAt: record.createdAt, updatedAt: record.updatedAt, pageCount: 1 }));
+    },
     get: async (id: string) => {
       if (sitemaps instanceof Error) throw sitemaps;
       const record = sitemaps.find((entry) => entry.id === id);
