@@ -77,8 +77,11 @@ export function Dialog({
         if (typeof dialog.showModal === "function") dialog.showModal();
         else dialog.setAttribute("open", "");
       }
-      const target = initialFocusRef?.current ?? focusableWithin(dialog)[0] ?? dialog;
-      target.focus();
+      // A preferred target that is currently disabled (a busy confirm, say)
+      // would swallow the focus call and strand it outside the dialog.
+      const preferred = initialFocusRef?.current;
+      const usable = preferred && !(preferred as HTMLButtonElement).disabled ? preferred : null;
+      (usable ?? focusableWithin(dialog)[0] ?? dialog).focus();
       return;
     }
     if (dialog.open) {

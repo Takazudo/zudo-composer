@@ -23,7 +23,8 @@ export interface UseMenuOptions extends MenuPlacement {
 export interface MenuTriggerProps {
   "aria-haspopup": "menu";
   "aria-expanded": "true" | "false";
-  "aria-controls": string;
+  /** Only while open — a closed menu has no element for it to point at. */
+  "aria-controls": string | undefined;
   onClick: (event: JSX.TargetedMouseEvent<HTMLElement>) => void;
   onKeyDown: (event: JSX.TargetedKeyboardEvent<HTMLElement>) => void;
 }
@@ -53,25 +54,33 @@ export function useMenu(triggerRef: MenuTriggerRef, options: UseMenuOptions = {}
   const onOpenChangeRef = useRef(onOpenChange);
   onOpenChangeRef.current = onOpenChange;
 
-  const openMenu = useCallback((intent: MenuFocusIntent = "first") => {
-    setFocusIntent(intent);
-    setOpen((wasOpen) => {
-      if (!wasOpen) onOpenChangeRef.current?.(true);
-      return true;
-    });
+  // Mirrors `open` outside the render cycle: a pointer press, a scroll and a
+  // resize can all ask to close within one gesture, and only the first of them
+  // is a state change worth reporting.
+  const openRef = useRef(false);
+  const changeOpen = useCallback((next: boolean) => {
+    if (openRef.current === next) return;
+    openRef.current = next;
+    setOpen(next);
+    onOpenChangeRef.current?.(next);
   }, []);
+
+  const openMenu = useCallback(
+    (intent: MenuFocusIntent = "first") => {
+      setFocusIntent(intent);
+      changeOpen(true);
+    },
+    [changeOpen],
+  );
 
   const closeMenu = useCallback(
     ({ restoreFocus = true }: CloseMenuOptions = {}) => {
-      setOpen((wasOpen) => {
-        if (wasOpen) onOpenChangeRef.current?.(false);
-        return false;
-      });
+      changeOpen(false);
       // The trigger lives outside the panel, so focus can move before the
       // panel unmounts — no deferral needed to avoid landing on <body>.
       if (restoreFocus) triggerRef.current?.focus();
     },
-    [triggerRef],
+    [changeOpen, triggerRef],
   );
 
   const placement = useMemo<MenuPlacement>(() => ({ align, side, gap, margin }), [align, side, gap, margin]);
@@ -80,7 +89,7 @@ export function useMenu(triggerRef: MenuTriggerRef, options: UseMenuOptions = {}
     () => ({
       "aria-haspopup": "menu",
       "aria-expanded": open ? "true" : "false",
-      "aria-controls": id,
+      "aria-controls": open ? id : undefined,
       onClick: () => {
         if (open) closeMenu();
         else openMenu("first");

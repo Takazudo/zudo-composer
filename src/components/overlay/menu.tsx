@@ -119,12 +119,10 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
       closeMenu({ restoreFocus: false });
     }
     document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("mousedown", onPointerDown, true);
     window.addEventListener("scroll", onDismiss, true);
     window.addEventListener("resize", onDismiss);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("mousedown", onPointerDown, true);
       window.removeEventListener("scroll", onDismiss, true);
       window.removeEventListener("resize", onDismiss);
     };
@@ -217,7 +215,7 @@ export interface MenuRowProps {
 }
 
 export interface MenuItemProps extends MenuRowProps {
-  /** Renders the item as a link. Links ignore `disabled`. */
+  /** Renders the item as a link. */
   href?: string;
 }
 
@@ -242,8 +240,23 @@ export function MenuItem({ children, onSelect, icon, kbd, tone, disabled, closeO
     if (closeOnSelect) close();
   }
   if (href !== undefined) {
+    // `disabled` is not an anchor attribute, so a disabled link is marked and
+    // neutered instead — `aria-disabled` is what keeps it out of roving focus.
     return (
-      <a role="menuitem" tabIndex={-1} class={rowClass(tone, className)} href={href} onClick={select}>
+      <a
+        role="menuitem"
+        tabIndex={-1}
+        class={rowClass(tone, className)}
+        href={href}
+        aria-disabled={disabled ? "true" : undefined}
+        onClick={(event) => {
+          if (disabled) {
+            event.preventDefault();
+            return;
+          }
+          select();
+        }}
+      >
         <MenuRowContent icon={icon} kbd={kbd}>{children}</MenuRowContent>
       </a>
     );
