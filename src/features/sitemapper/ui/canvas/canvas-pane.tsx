@@ -100,7 +100,9 @@ export function CanvasPane({
         title={view === "canvas" ? `Canvas · ${Math.round(zoom * 100)}%` : "Tree"}
       />
       <PaneBody class="sg-sitemapper-main__body">
-        {notice}
+        {/* Always rendered: the body is a two-row grid, and a missing first row
+            would drop the canvas into the `auto` track and collapse it. */}
+        <div class="sg-sitemapper-main__notice">{notice}</div>
         {view === "canvas" ? (
           <SitemapCanvas
             document={document}

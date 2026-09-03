@@ -102,10 +102,12 @@ export function CompositionField({ value, catalog, onChange }: CompositionFieldP
           <Button size="xs" variant="ghost" iconOnly aria-label="Change composition" onClick={() => setPickerOpen(true)}>
             <EditIcon size="xs" />
           </Button>
+          {/* `route-intents` has no Composer record intent yet, so this opens
+              the workspace rather than pretending to open the record. */}
           <a
             class="cms-btn cms-btn--ghost cms-btn--xs cms-btn--icon"
-            href={`/composer?record=${encodeURIComponent(reference.ref.recordId)}`}
-            aria-label="Open composition"
+            href="/composer"
+            aria-label="Open in Composer"
           >
             <ExternalLinkIcon size="xs" />
           </a>

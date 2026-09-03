@@ -25,6 +25,7 @@ import { InspectorPanel } from "../ui/inspector/inspector-panel";
 import { buildSitemapOutline } from "../ui/tree/outline-model";
 import { PagesPane } from "../ui/tree/pages-pane";
 import { countDescendants } from "../ui/tree/tree-helpers";
+import type { SitemapperSaveStatus } from "./controller-model";
 import { sitemapperHref, SITEMAPPER_ROUTE } from "./sitemapper-intent";
 import { useSitemapperController } from "./use-sitemapper-controller";
 
@@ -47,12 +48,13 @@ export interface SitemapperIntegrationProps {
 
 type NameDialogState = { kind: "sitemap" } | { kind: "page"; pageId: string; title: string };
 
-function statusOf(kind: string, reason: string | undefined, onRetry: () => void): EditorStatus {
-  switch (kind) {
+/** The queue's own vocabulary, translated into the chrome's four states. */
+function statusOf(status: SitemapperSaveStatus, onRetry: () => void): EditorStatus {
+  switch (status.kind) {
     case "saved": return { state: "saved" };
     case "saving": return { state: "saving" };
-    case "error": return { state: "failed", ...(reason === undefined ? {} : { detail: reason }), onRetry };
-    default: return { state: "unsaved" };
+    case "error": return { state: "failed", detail: status.reason, onRetry };
+    case "dirty": return { state: "unsaved" };
   }
 }
 
@@ -158,7 +160,7 @@ export function SitemapperIntegration({
   }, [dispatch]);
 
   const requestDelete = useCallback((pageId: string) => {
-    const node = indexDocument(document).byId.get(pageId)?.node;
+    const node = index.byId.get(pageId)?.node;
     if (!node) return;
     const descendants = countDescendants(node);
     confirm.request({
@@ -170,7 +172,7 @@ export function SitemapperIntegration({
       tone: "danger",
       onConfirm: () => dispatch({ type: "remove", pageId }),
     });
-  }, [confirm, dispatch, document]);
+  }, [confirm, dispatch, index]);
 
   const duplicateRecord = async (): Promise<void> => {
     setRecordError(null);
@@ -195,6 +197,10 @@ export function SitemapperIntegration({
   const deleteRecord = async (): Promise<void> => {
     setRecordError(null);
     try {
+      // Close the save queue first: a write still in flight would put the
+      // record straight back after the delete.
+      controller.flushPropUpdates();
+      await controller.queue.close();
       await store.delete(record.id);
       navigateRef.current?.(SITEMAPPER_ROUTE);
     } catch (reason) {
@@ -203,7 +209,11 @@ export function SitemapperIntegration({
   };
 
   const saveStatus = controller.state.saveStatus;
-  const canAddChild = selectedNode === null || selectedNode.source.kind !== "mapping";
+  // A Mapping route family owns its own routes and takes no authored children,
+  // so the toolbar's Add page adds beside it rather than going dead.
+  const addTargetId = selectedNode !== null && selectedNode.source.kind === "mapping"
+    ? index.byId.get(selectedNode.id)?.parentId ?? null
+    : selectedId ?? document.root[0]?.id ?? null;
 
   return (
     <EditorChrome
@@ -211,7 +221,7 @@ export function SitemapperIntegration({
       class="sg-sitemapper-editor"
       back={{ href: SITEMAPPER_ROUTE, label: "Back to Sitemaps" }}
       title={<RecordTitle value={document.name} label="Sitemap name" onCommit={(name) => dispatch({ type: "rename", name })} />}
-      status={statusOf(saveStatus.kind, saveStatus.kind === "error" ? saveStatus.reason : undefined, controller.retrySave)}
+      status={statusOf(saveStatus, controller.retrySave)}
       dirty={saveStatus.kind !== "saved"}
       paneLabels={{ nav: "Pages", main: "Canvas", insp: "Inspect" }}
       center={
@@ -237,11 +247,9 @@ export function SitemapperIntegration({
       right={
         <>
           <Button
-            disabled={!canAddChild}
             onClick={() => {
-              const parentId = selectedId ?? document.root[0]?.id;
-              if (parentId) addChild(parentId);
-              else dispatch({ type: "addRoot", title: "Home" });
+              if (addTargetId === null) dispatch({ type: "addRoot", title: "Home" });
+              else addChild(addTargetId);
             }}
           >
             <PlusIcon size="sm" />
@@ -313,7 +321,7 @@ export function SitemapperIntegration({
             selectedId={selectedId}
             zoom={zoom}
             notice={recordError || controller.lastError ? (
-              <Banner tone="err" class="sg-sitemapper-main__notice">{recordError ?? controller.lastError}</Banner>
+              <Banner tone="err">{recordError ?? controller.lastError}</Banner>
             ) : null}
             onZoomChange={setZoom}
             onSelect={(pageId) => dispatch({ type: "select", pageId })}

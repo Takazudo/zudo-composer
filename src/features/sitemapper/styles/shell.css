@@ -33,7 +33,7 @@
 /* --------------------------------------------------------------------------
  * Main pane: header, optional notice, then the surface itself
  * -------------------------------------------------------------------------- */
-.sg-sitemapper-main__header {
+.sg-sitemapper-main .sg-sitemapper-main__header {
   color: var(--color-muted);
   background: transparent;
   border-block-end-color: transparent;
@@ -42,14 +42,16 @@
   text-transform: none;
 }
 
-.sg-sitemapper-main__body {
+.sg-sitemapper-main .sg-sitemapper-main__body {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
 
-.sg-sitemapper-main__notice { margin: var(--sp-2); }
+/* The slot is always in the DOM so the canvas keeps the second track; it costs
+ * nothing until a notice actually lands in it. */
+.sg-sitemapper-main__notice:not(:empty) { padding: var(--sp-2) var(--sp-2) 0; }
 
 .sg-sitemapper-tree-view {
   min-height: 0;
