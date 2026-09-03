@@ -88,7 +88,7 @@ export function RecordPickerDialog({
         <EmptyState inline icon={SearchIcon} title={`No matches for “${query}”`} />
       ) : null}
       {visible.length > 0 ? (
-        <ul class="cms-mapping-picker__list" aria-label={title}>
+        <ul class="cms-mapping-picker__list">
           {visible.map((entry) => {
             const Icon = entry.icon;
             const current = entry.key === currentKey;

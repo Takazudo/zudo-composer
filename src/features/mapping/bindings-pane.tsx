@@ -248,6 +248,7 @@ export function BindingsPane({
                 {unbound.map((target) => (
                   <BindMenu
                     key={targetKey(target.target)}
+                    triggerVariant="default"
                     triggerClass="cms-mapping-unbound__chip"
                     menuLabel={`Bind ${targetLabel(target)} to…`}
                     triggerLabel={`Bind ${targetLabel(target)} on ${target.target.nodeId}`}

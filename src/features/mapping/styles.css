@@ -78,6 +78,13 @@
 .cms-mapping-table .cms-table { table-layout: fixed; }
 .cms-mapping-table .cms-table td { overflow: hidden; }
 
+/*
+ * The actions column's shared `width: 1%` means "shrink to fit" under auto
+ * layout and a literal 1% under fixed, which would clip the `⋯` trigger inside
+ * the `overflow: hidden` above. It gets a real width here instead.
+ */
+.cms-mapping-table .cms-table .cms-table__actions { width: 3rem; overflow: visible; }
+
 .cms-mapping-cell { display: flex; gap: var(--sp-1); align-items: center; min-width: 0; }
 .cms-mapping-cell__glyph { flex: 0 0 auto; color: var(--color-muted); }
 .cms-mapping-cell__text { display: grid; min-width: 0; line-height: 1.35; }
@@ -98,9 +105,8 @@
 .cms-mapping-transform { display: grid; gap: var(--sp-1); min-width: 0; }
 .cms-mapping-transform .cms-select-wrap, .cms-mapping-transform .cms-input { width: 100%; }
 
-/* The inline diagnostic under a broken row. It is the row's own explanation,
- * so it sits flush under it and carries the banner's tone, not a border. */
-.cms-mapping-row-banner { border-radius: var(--radius); }
+/* The inline diagnostic under a broken row: the row's own explanation, so the
+ * banner keeps its tone and only its paragraphs are reset. */
 .cms-mapping-row-banner p { margin: 0; }
 .cms-mapping-row-banner p + p { margin-block-start: var(--sp-1); }
 
@@ -109,8 +115,16 @@
  * -------------------------------------------------------------------------- */
 .cms-mapping-unbound__chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
 
-/* Dashed until bound: the chip is an invitation, not a state. */
-.cms-mapping-unbound__chip { border-style: dashed; font-family: var(--font-mono); font-size: .6875rem; }
+/*
+ * Dashed until bound: the chip is an invitation, not a state. Scoped through
+ * the container so it outranks `.cms-btn--sm`, which sets the same properties
+ * at the same specificity — bundle order alone would decide it otherwise.
+ */
+.cms-mapping-unbound__chips .cms-mapping-unbound__chip {
+  border-style: dashed;
+  font-family: var(--font-mono);
+  font-size: .6875rem;
+}
 
 .cms-mapping-unbound__empty,
 .cms-mapping-unbound__help {
@@ -200,7 +214,9 @@
 }
 
 @media (pointer: coarse) {
-  /* The chip is a real target on touch, where there is no hover to reveal it. */
-  .cms-mapping-unbound__chip, .cms-mapping-field__chip { min-height: 44px; }
+  /* The row itself grows; its controls are `.cms-btn`s, which `ui.css` already
+   * lifts to 44px, and the bound chip is a status, not a target. */
   .cms-mapping-field { min-height: 44px; }
+  /* The row trigger is 44px wide here, so its column has to be wider than it. */
+  .cms-mapping-table .cms-table .cms-table__actions { width: 3.5rem; }
 }
