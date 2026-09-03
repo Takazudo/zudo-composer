@@ -186,7 +186,7 @@ for (const [path, stale] of [
   ["src/features/composer/chrome/composer-placeholder-pane.tsx", /does NOT implement|exclusive-ownership table/],
   ["src/features/composer/ui/chooser/composer-chooser.tsx", /canvas insert points \(a later wave\)/],
   ["src/features/composer/ui/shared/inline-confirm.tsx", /lands in a later wave|toolbar Reset/],
-  ["src/features/sitemapper/chrome/sitemapper-workspace.tsx", /later Sitemapper wave|once the Sitemapper controller is assembled|once the authoring controller is assembled/],
+  ["src/features/sitemapper/app/sitemapper-integration.tsx", /later Sitemapper wave|once the Sitemapper controller is assembled|once the authoring controller is assembled|placeholder pane/],
 ]) assert.doesNotMatch(read(path), stale, `${path} retained a provisional copied/wave claim`);
 
 for (const path of [

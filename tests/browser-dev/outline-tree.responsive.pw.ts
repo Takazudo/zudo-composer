@@ -13,9 +13,9 @@
  * routes it to BOTH the desktop and the coarse project, which is what #162
  * asks for. Renaming the file silently drops the coarse half.
  *
- * The Sitemapper route adopts `OutlineTree` in issue #165. Until it does the
- * test skips with that reason rather than failing, and it starts running on its
- * own the moment the route renders a tree — there is nothing to switch on.
+ * The Sitemapper route adopted `OutlineTree` in issue #165, which is what made
+ * this spec live. The skip below is kept as the guard it always was: a route
+ * that stops rendering a tree says so instead of failing on a null selector.
  */
 
 import { expect, test } from "@playwright/test";
@@ -84,7 +84,10 @@ async function openSitemapper(page: Page, name: string): Promise<void> {
   const dialog = page.getByRole("dialog", { name: "Create sitemap" });
   await dialog.getByRole("textbox", { name: "Sitemap name" }).fill(name);
   await dialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page.getByRole("toolbar", { name: "Sitemapper toolbar" })).toBeVisible();
+  // Creating navigates to the record's own URL, so the editor is reached the
+  // same way a deep link reaches it.
+  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(name);
 }
 
 /**

@@ -1,8 +1,18 @@
-/* Sitemapper measured canvas — issue Takazudo/zudo-sg#405. */
+/* ==========================================================================
+ * Sitemapper canvas.
+ *
+ * The layout engine hands every node an absolute rectangle in stage
+ * coordinates; zoom is one transform on the stage, and the viewport around it
+ * carries the scaled size so the scrollbars stay honest. Node heights are read
+ * with `offsetHeight` for exactly that reason — a transformed rect would feed
+ * a scaled height back into the layout that produced it.
+ * ========================================================================== */
 
 .sg-sitemapper-canvas {
   position: relative;
   isolation: isolate;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -12,30 +22,78 @@
   background: var(--color-bg);
 }
 
-.sg-sitemapper-canvas__stage {
-  position: relative;
-  min-width: 100%;
+.sg-sitemapper-canvas__scroll {
+  min-width: 0;
+  min-height: 0;
+  padding: var(--sp-3);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
-.sg-sitemapper-connectors {
+.sg-sitemapper-canvas__viewport { position: relative; }
+
+.sg-sitemapper-canvas__stage {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  transform-origin: 0 0;
 }
+
+/* --------------------------------------------------------------------------
+ * Floating controls
+ * -------------------------------------------------------------------------- */
+.sg-sitemapper-canvas__controls {
+  position: absolute;
+  z-index: var(--z-index-local-2);
+  inset-block-start: var(--sp-2);
+  inset-inline-start: var(--sp-2);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+}
+
+.sg-sitemapper-canvas__legend {
+  position: absolute;
+  z-index: var(--z-index-local-2);
+  inset-block-end: var(--sp-2);
+  inset-inline-start: var(--sp-2);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+  color: var(--color-muted);
+  font-size: .75rem;
+}
+
+.sg-sitemapper-canvas__legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.sg-sitemapper-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; }
+.sg-sitemapper-dot--ok { background: var(--color-success); }
+.sg-sitemapper-dot--warn { background: var(--color-warning); }
+.sg-sitemapper-dot--accent { background: var(--color-accent); }
+
+/* --------------------------------------------------------------------------
+ * Connectors
+ * -------------------------------------------------------------------------- */
+.sg-sitemapper-connectors { position: absolute; inset: 0; pointer-events: none; }
 
 .sg-sitemapper-connector {
   fill: none;
   stroke: var(--color-border-strong);
-  stroke-width: 2px;
+  stroke-width: 1.5px;
   stroke-linejoin: round;
   stroke-linecap: square;
   vector-effect: non-scaling-stroke;
 }
 
-.sg-sitemapper-connector[data-sg-external="true"] {
-  stroke-dasharray: 6 5;
-}
+.sg-sitemapper-connector[data-sg-external="true"] { stroke-dasharray: 6 5; }
 
+/* --------------------------------------------------------------------------
+ * Nodes
+ * -------------------------------------------------------------------------- */
 .sg-sitemapper-node-wrap {
   position: absolute;
   left: var(--sg-sitemapper-node-left);
@@ -44,235 +102,85 @@
 }
 
 .sg-sitemapper-node {
-  position: relative;
   display: flex;
   width: 100%;
   min-height: 3.5rem;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: 0.625rem 3rem 0.625rem 0.75rem;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 8px 2rem 8px 10px;
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
+  border-radius: var(--radius);
   background: var(--color-surface);
+  box-shadow: 0 1px 2px var(--color-overlay);
   color: var(--color-fg);
   text-align: start;
   cursor: pointer;
 }
 
-.sg-sitemapper-node[data-sg-depth="0"] {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-weight: 700;
-}
+.sg-sitemapper-node[data-sg-root="true"] { border-inline-start: 2px solid var(--color-accent); }
 
-.sg-sitemapper-node[data-sg-depth="1"] {
-  border: 2px solid var(--color-border-strong);
-  background: var(--color-surface-2);
-  font-weight: 650;
-}
-
-.sg-sitemapper-node[data-sg-depth]:not([data-sg-depth="0"]):not([data-sg-depth="1"]):not([data-sg-depth="2"]) {
-  padding-inline: 0.625rem 3rem;
-  box-shadow: inset 3px 0 var(--color-border-strong);
-  font-size: 0.875rem;
+.sg-sitemapper-node[data-sg-selected="true"] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .sg-sitemapper-node[data-sg-external="true"] {
-  border-color: var(--color-border-strong);
   border-style: dashed;
+  border-color: var(--color-border-strong);
   background: var(--color-bg);
-  color: var(--color-fg);
 }
 
+.sg-sitemapper-node:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
 .sg-sitemapper-node__title {
-  display: -webkit-box;
-  overflow: clip;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: .8125rem;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sg-sitemapper-node__route {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-faint);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: .6875rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sg-sitemapper-node__source {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: .6875rem;
   line-height: 1.2;
 }
 
-.sg-sitemapper-node__meta {
-  max-width: 100%;
-  overflow: clip;
-  color: var(--color-muted);
-  font-size: 0.75rem;
-  font-weight: 400;
-  text-overflow: ellipsis;
+.sg-sitemapper-node__source span {
+  overflow: hidden;
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.sg-sitemapper-node__selected {
-  position: absolute;
-  inset-block-start: -0.75rem;
-  inset-inline-start: -0.75rem;
-  display: grid;
-  width: 1.5rem;
-  height: 1.5rem;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--color-focus);
-  color: var(--color-bg);
-  font-size: 0.75rem;
-  line-height: 1;
-}
-
-.sg-sitemapper-node[data-sg-selected="true"] {
-  outline: 3px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-.sg-sitemapper-node:focus-visible,
-.sg-sitemapper-node__menu-trigger:focus-visible,
-.sg-sitemapper-node__menu button:focus-visible,
-.sg-sitemapper-canvas__action-tray button:focus-visible,
-.sg-sitemapper-canvas__empty button:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-@media (hover: hover) {
-  .sg-sitemapper-node:hover {
-    border-color: var(--color-border-strong);
-    background: color-mix(in oklch, var(--color-accent) 10%, var(--color-surface));
-  }
-
-  .sg-sitemapper-node[data-sg-depth="0"]:hover {
-    background: var(--color-accent-hover);
-  }
-
-  .sg-sitemapper-node[data-sg-depth="1"]:hover {
-    background: color-mix(in oklch, var(--color-accent) 10%, var(--color-surface-2));
-  }
-
-  .sg-sitemapper-node[data-sg-external="true"]:hover {
-    background: color-mix(in oklch, var(--color-accent) 10%, var(--color-bg));
-  }
-}
+.sg-sitemapper-node__chip { align-self: flex-start; }
 
 .sg-sitemapper-node__menu-trigger {
   position: absolute;
-  inset-block-start: 50%;
-  inset-inline-end: 0;
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border-radius: 0.5rem;
-  color: var(--color-fg);
-  transform: translateY(-50%);
-}
-
-.sg-sitemapper-node__menu-trigger[data-sg-depth="0"] {
-  color: var(--color-on-accent);
-}
-
-.sg-sitemapper-node__menu-trigger[data-sg-external="true"] {
-  color: var(--color-fg);
-}
-
-.sg-sitemapper-node__menu {
-  position: absolute;
-  z-index: var(--z-index-popover);
-  inset-block-start: calc(100% + 0.25rem);
-  inset-inline-end: 0;
-  display: grid;
-  min-width: 10rem;
-  padding: 0.25rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 0.5rem;
-  background: var(--color-surface);
-  color: var(--color-fg);
-  box-shadow: var(--shadow-overlay);
-}
-
-.sg-sitemapper-node__menu button {
-  min-height: 44px;
-  padding-inline: 0.75rem;
-  border-radius: 0.25rem;
-  text-align: start;
-}
-
-.sg-sitemapper-danger {
-  color: var(--color-danger);
-}
-
-.sg-sitemapper-node__menu button:disabled,
-.sg-sitemapper-canvas__action-tray button:disabled {
-  color: var(--color-muted);
-  cursor: not-allowed;
-}
-
-.sg-sitemapper-canvas__action-tray {
-  position: sticky;
   z-index: var(--z-index-local-1);
-  bottom: 0;
-  display: none;
-  width: fit-content;
-  max-width: calc(100% - 1.5rem);
-  margin-inline: auto;
-  padding: 0.5rem;
-  gap: 0.25rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 0.5rem 0.5rem 0 0;
-  background: var(--color-surface);
-  color: var(--color-fg);
-  box-shadow: var(--shadow-overlay);
+  inset-block-start: 4px;
+  inset-inline-end: 4px;
 }
 
-.sg-sitemapper-canvas__action-tray button {
-  min-width: 44px;
-  min-height: 44px;
-  padding-inline: 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-}
-
-.sg-sitemapper-canvas__empty {
-  display: grid;
-  width: min(28rem, calc(100% - 1.5rem));
-  min-height: 14rem;
-  margin: 2rem auto;
-  place-content: center;
-  justify-items: center;
-  gap: 0.75rem;
-  padding: 1.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  background: var(--color-surface);
-  color: var(--color-fg);
-  text-align: center;
-}
-
-.sg-sitemapper-canvas__empty p {
-  color: var(--color-muted);
-}
-
-.sg-sitemapper-canvas__empty button {
-  min-height: 44px;
-  padding-inline: 1rem;
-  border-radius: 0.5rem;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-weight: 650;
-}
-
-.sg-sitemapper-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: clip;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-@media (max-width: 63.999rem) {
-  .sg-sitemapper-canvas__action-tray {
-    display: flex;
-  }
+@media (hover: hover) {
+  .sg-sitemapper-node:hover { border-color: var(--color-border-strong); }
 }
