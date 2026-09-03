@@ -188,7 +188,7 @@ describe("Mapping library", () => {
 
     const banner = await screen.findByText(/was not found in provider/);
     expect(banner).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Mappings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mapping library" })).toBeInTheDocument();
 
     // The library is still usable behind the notice.
     expect(screen.getByRole("link", { name: "Article Mapping" })).toBeInTheDocument();
@@ -209,6 +209,6 @@ describe("Mapping library", () => {
     renderApp(workspace, vi.fn(), "?provider=mapping-indexeddb&mapping=mapping-1");
 
     expect(await screen.findByRole("textbox", { name: "Mapping name" })).toHaveValue("Article Mapping");
-    expect(screen.queryByRole("heading", { name: "Mappings" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Mapping library" })).toBeNull();
   });
 });

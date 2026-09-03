@@ -137,7 +137,7 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
     <LibraryPage
       class="cms-mapping-library"
       icon={MappingIcon}
-      title="Mappings"
+      title="Mapping library"
       purpose="Drive a Composition's props from a Content model's fields, one Entry at a time."
       primaryAction={
         <Button variant="primary" disabled={!canCreate} onClick={() => setCreating(true)}>

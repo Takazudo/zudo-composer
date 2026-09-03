@@ -94,6 +94,7 @@
 }
 
 .cms-mapping-arrow { display: block; margin-inline: auto; color: var(--color-faint); }
+.cms-mapping-status { display: inline-flex; min-width: 0; }
 .cms-mapping-transform { display: grid; gap: var(--sp-1); min-width: 0; }
 .cms-mapping-transform .cms-select-wrap, .cms-mapping-transform .cms-input { width: 100%; }
 

@@ -163,10 +163,14 @@ export function BindingsPane({
       key: "status",
       header: "Status",
       width: "7rem",
+      // The wrapper carries the state as data, so a browser spec can count
+      // broken rows without reading a chip's wording.
       cell: (row) => (
-        <Chip tone={STATUS[row.status].tone} dot={row.status === "ready"}>
-          {STATUS[row.status].label}
-        </Chip>
+        <span class="cms-mapping-status" data-status={row.status}>
+          <Chip tone={STATUS[row.status].tone} dot={row.status === "ready"}>
+            {STATUS[row.status].label}
+          </Chip>
+        </span>
       ),
     },
   ];
