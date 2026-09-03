@@ -467,8 +467,16 @@
 .cms-table__actions > [aria-expanded="true"] { opacity: 1; }
 
 .cms-table__empty-row td { height: auto; padding: 0; border-block-end: 0; white-space: normal; }
+
 .cms-table--compact th { height: 30px; }
 .cms-table--compact td { height: 36px; }
+/*
+ * A row's own full-width explanation, not a cell: it wraps, keeps the record
+ * row above it borderless so the pair reads as one unit, and stays tone-neutral
+ * so whatever the route puts in it (a `Banner`, typically) carries the colour.
+ */
+.cms-table tbody tr:has(+ .cms-table__detail-row) td { border-block-end: 0; }
+.cms-table__detail-row > td { height: auto; padding: 0 var(--sp-b2) var(--sp-2); white-space: normal; }
 
 /* --------------------------------------------------------------------------
  * Pane

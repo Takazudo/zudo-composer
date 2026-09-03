@@ -1,4 +1,4 @@
-import type { ComponentChildren } from "preact";
+import { Fragment, type ComponentChildren } from "preact";
 import { cx } from "./class-names";
 import { Checkbox } from "./form-controls";
 
@@ -29,6 +29,12 @@ export interface DataTableProps<Row> {
   selection?: DataTableSelection<Row>;
   /** Trailing actions cell, revealed on row hover or focus. */
   rowActions?: (row: Row) => ComponentChildren;
+  /**
+   * A full-width row rendered under its record, spanning every column — an
+   * inline diagnostic or explanation that belongs to the row above it rather
+   * than to one of its cells. Return null for rows that have nothing to add.
+   */
+  rowDetail?: (row: Row) => ComponentChildren;
   /** Bulk action bar, rendered above the table while rows are selected. */
   bulkBar?: ComponentChildren;
   density?: "default" | "compact";
@@ -44,6 +50,7 @@ export function DataTable<Row>({
   rowKey,
   selection,
   rowActions,
+  rowDetail,
   bulkBar,
   density = "default",
   empty,
@@ -98,24 +105,32 @@ export function DataTable<Row>({
               rows.map((row) => {
                 const id = rowKey(row);
                 const selected = selection?.selectedIds.has(id) ?? false;
+                const detail = rowDetail?.(row);
                 return (
-                  <tr key={id} aria-selected={selection ? selected : undefined}>
-                    {selection ? (
-                      <td class="cms-table__cb">
-                        <Checkbox
-                          checked={selected}
-                          onCheckedChange={(checked) => selection.onToggleRow(id, checked)}
-                          aria-label={selection.rowLabel(row)}
-                        />
-                      </td>
+                  <Fragment key={id}>
+                    <tr aria-selected={selection ? selected : undefined}>
+                      {selection ? (
+                        <td class="cms-table__cb">
+                          <Checkbox
+                            checked={selected}
+                            onCheckedChange={(checked) => selection.onToggleRow(id, checked)}
+                            aria-label={selection.rowLabel(row)}
+                          />
+                        </td>
+                      ) : null}
+                      {columns.map((column) => (
+                        <td key={column.key} class={cx(column.variant && `cms-table__cell--${column.variant}`)}>
+                          {column.cell(row)}
+                        </td>
+                      ))}
+                      {rowActions ? <td class="cms-table__actions">{rowActions(row)}</td> : null}
+                    </tr>
+                    {detail ? (
+                      <tr class="cms-table__detail-row">
+                        <td colSpan={columnCount}>{detail}</td>
+                      </tr>
                     ) : null}
-                    {columns.map((column) => (
-                      <td key={column.key} class={cx(column.variant && `cms-table__cell--${column.variant}`)}>
-                        {column.cell(row)}
-                      </td>
-                    ))}
-                    {rowActions ? <td class="cms-table__actions">{rowActions(row)}</td> : null}
-                  </tr>
+                  </Fragment>
                 );
               })
             )}

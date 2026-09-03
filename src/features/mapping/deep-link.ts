@@ -1,5 +1,8 @@
 import { isSafeRecordId } from "../../shared";
 
+/** The Mapping library; the editor is this route plus a provider-qualified record. */
+export const MAPPING_ROUTE = "/mapping";
+
 /** The two provider-qualified values accepted by the Mapping route. */
 export interface MappingDeepLinkRequest {
   readonly providerId: string;
@@ -44,7 +47,7 @@ function locationParts(input: MappingRouteLocation | URL | string): MappingRoute
 export function parseMappingDeepLink(input?: MappingRouteLocation | URL | string): MappingDeepLinkParseOutcome {
   const route = input ?? (typeof window === "undefined" ? { pathname: "", search: "" } : { pathname: window.location.pathname, search: window.location.search });
   const { pathname, search } = locationParts(route);
-  if (pathname !== "/mapping") return { status: "none" };
+  if (pathname !== MAPPING_ROUTE) return { status: "none" };
 
   const params = new URLSearchParams(search);
   const hasProvider = params.has("provider");
@@ -71,5 +74,5 @@ export function parseMappingDeepLink(input?: MappingRouteLocation | URL | string
 /** Build the canonical provider-first URL used by Content and other workspaces. */
 export function mappingDeepLinkHref(request: MappingDeepLinkRequest): string {
   const params = new URLSearchParams({ provider: request.providerId, mapping: request.mappingId });
-  return `/mapping?${params.toString()}`;
+  return `${MAPPING_ROUTE}?${params.toString()}`;
 }
