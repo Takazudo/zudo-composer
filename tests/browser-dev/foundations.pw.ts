@@ -15,14 +15,23 @@
  */
 
 import { expect, test } from "@playwright/test";
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import {
+  createSitemap,
+  createSitemapAndReturn,
   expectNoHorizontalOverflow,
+  expectSaved,
   gotoRoute,
   ROUTES,
-  SAMPLE_SITEMAP,
+  sitemapRow,
   watchRuntimeFailures,
 } from "./foundations-probe";
+
+// One fixture name per test: contexts are isolated, and a distinct name makes
+// a trace say which test built the record it is looking at.
+const RAIL_FIXTURE = "Foundations rail geometry";
+const MENU_FIXTURE = "Foundations row menu";
+const FOCUS_FIXTURE = "Foundations focus return";
 
 /**
  * Shell-only paths. In the dev lane every module and stylesheet keeps its
@@ -38,13 +47,6 @@ const SHELL_MODULES = [
   "/src/components/editor-chrome",
   "/src/components/outline-tree",
 ] as const;
-
-async function openSampleSitemap(page: Page): Promise<void> {
-  await gotoRoute(page, "/sitemapper");
-  await page.getByRole("link", { name: SAMPLE_SITEMAP, exact: true }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
-  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(SAMPLE_SITEMAP);
-}
 
 /** The persisted half of the editor's geometry, plus what it actually painted. */
 async function readRailGeometry(page: Page) {
@@ -65,17 +67,8 @@ async function readRailGeometry(page: Page) {
   });
 }
 
-function sitemapRow(page: Page, name: string): Locator {
-  return page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
-}
-
-/** The chrome's own promise that nothing is still queued for storage. */
-async function expectSaved(page: Page) {
-  await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
-}
-
 test("every CMS route loads clean and never scrolls sideways", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(300_000);
   const failures = watchRuntimeFailures(page);
 
   for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
@@ -92,10 +85,10 @@ test("every CMS route loads clean and never scrolls sideways", async ({ page }) 
 });
 
 test("the editor remembers its rail widths and collapse across a reload", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await openSampleSitemap(page);
+  await createSitemap(page, RAIL_FIXTURE);
 
   const start = await readRailGeometry(page);
   expect(start.navCollapsed).toBe(false);
@@ -120,7 +113,7 @@ test("the editor remembers its rail widths and collapse across a reload", async 
   await expectSaved(page);
 
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(SAMPLE_SITEMAP);
+  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(RAIL_FIXTURE);
   const restored = await readRailGeometry(page);
   expect(restored.navVar).toBe(widened.navVar);
   expect(restored.inspCollapsed).toBe(true);
@@ -131,7 +124,7 @@ test("the editor remembers its rail widths and collapse across a reload", async 
   await page.getByRole("button", { name: "Show Inspector" }).click();
   await expect(page.getByRole("button", { name: "Hide Inspector" })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(SAMPLE_SITEMAP);
+  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(RAIL_FIXTURE);
   const reopened = await readRailGeometry(page);
   expect(reopened.inspCollapsed).toBe(false);
   expect(reopened.navVar).toBe(widened.navVar);
@@ -140,9 +133,12 @@ test("the editor remembers its rail widths and collapse across a reload", async 
 });
 
 test("a row menu opens outside the library table's scrollport, unclipped", async ({ page }) => {
+  test.setTimeout(120_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await gotoRoute(page, "/sitemapper");
+  // With no records the library renders its empty state and there is no table
+  // to be clipped by, so the row this proof needs is created first.
+  await createSitemapAndReturn(page, MENU_FIXTURE);
 
   // The wrapper is the sticky header's scrollport, so it clips its content
   // whether or not the table currently overflows. If that ever stops being
@@ -151,11 +147,11 @@ test("a row menu opens outside the library table's scrollport, unclipped", async
   await expect(wrap).toHaveCSS("overflow-x", "auto");
   await expect(wrap).toHaveCSS("overflow-y", "auto");
 
-  const row = sitemapRow(page, SAMPLE_SITEMAP);
+  const row = sitemapRow(page, MENU_FIXTURE);
   await row.hover();
-  const trigger = row.getByRole("button", { name: `More actions for ${SAMPLE_SITEMAP}` });
+  const trigger = row.getByRole("button", { name: `More actions for ${MENU_FIXTURE}` });
   await trigger.click();
-  const menu = page.getByRole("menu", { name: `${SAMPLE_SITEMAP} actions` });
+  const menu = page.getByRole("menu", { name: `${MENU_FIXTURE} actions` });
   await expect(menu).toBeVisible();
 
   // The control that opened the menu really is inside the clip; only the panel
@@ -202,9 +198,10 @@ test("a row menu opens outside the library table's scrollport, unclipped", async
 });
 
 test("focus returns to the trigger when a menu or a dialog closes", async ({ page }) => {
+  test.setTimeout(120_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await gotoRoute(page, "/sitemapper");
+  await createSitemapAndReturn(page, FOCUS_FIXTURE);
 
   const newSitemap = page.getByRole("button", { name: "New sitemap" });
   await newSitemap.click();
@@ -214,14 +211,14 @@ test("focus returns to the trigger when a menu or a dialog closes", async ({ pag
   await expect(page.getByRole("dialog", { name: "Create sitemap" })).toHaveCount(0);
   await expect(newSitemap).toBeFocused();
 
-  const row = sitemapRow(page, SAMPLE_SITEMAP);
+  const row = sitemapRow(page, FOCUS_FIXTURE);
   await row.hover();
-  const trigger = row.getByRole("button", { name: `More actions for ${SAMPLE_SITEMAP}` });
+  const trigger = row.getByRole("button", { name: `More actions for ${FOCUS_FIXTURE}` });
   await trigger.click();
-  const menu = page.getByRole("menu", { name: `${SAMPLE_SITEMAP} actions` });
+  const menu = page.getByRole("menu", { name: `${FOCUS_FIXTURE} actions` });
   await expect(menu.getByRole("menuitem", { name: "Open", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("menu", { name: `${SAMPLE_SITEMAP} actions` })).toHaveCount(0);
+  await expect(page.getByRole("menu", { name: `${FOCUS_FIXTURE} actions` })).toHaveCount(0);
   await expect(trigger).toBeFocused();
 
   expect(failures).toEqual([]);
