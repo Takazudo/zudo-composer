@@ -105,7 +105,10 @@ export function ComposerWorkspace({
         nav={tree ?? <ComposerPlaceholderPane label="Structure" note="No structure surface was supplied." />}
         main={
           <div class="sg-composer-main">
-            {banner}
+            {/* Always a real element, even with nothing in it: the canvas has to
+                stay in the second grid row, and a conditional child would slide
+                it into the first (auto) one and collapse its height. */}
+            <div class="sg-composer-main__banner">{banner}</div>
             {canvas ?? <ComposerPlaceholderPane label="Canvas" note="No preview surface was supplied." />}
           </div>
         }

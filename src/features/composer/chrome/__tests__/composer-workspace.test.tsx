@@ -54,8 +54,11 @@ describe("ComposerWorkspace", () => {
         canvas={<div>Real canvas</div>}
       />,
     );
-    const main = container.querySelector(".sg-composer-main");
-    expect(main?.textContent).toBe("Recovered noticeReal canvas");
+    const main = container.querySelector(".sg-composer-main")!;
+    expect(main.textContent).toBe("Recovered noticeReal canvas");
+    // The banner slot is always a real element, so the canvas keeps the second
+    // grid row and its full height whether or not there is a banner.
+    expect(main.firstElementChild).toHaveClass("sg-composer-main__banner");
   });
 
   it("hands the toolbar a rail toggle, which collapses the region it names", () => {

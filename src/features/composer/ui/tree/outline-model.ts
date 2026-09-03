@@ -47,8 +47,6 @@ export interface ComposerSlotRow {
   childCount: number;
   /** False when the slot is full, unavailable, or a published template outlet. */
   canAdd: boolean;
-  /** True for a slot that is empty and could be published as a named outlet. */
-  outletCandidate: boolean;
   /** True for the slot this composition already publishes as its outlet. */
   isOutlet: boolean;
 }
@@ -132,7 +130,6 @@ export function buildComposerOutline({
       label,
       childCount: children.length,
       canAdd,
-      outletCandidate: slotMeta !== undefined && !parentOpaque && children.length === 0 && !isOutlet,
       isOutlet,
     });
     expandableIds.push(id);

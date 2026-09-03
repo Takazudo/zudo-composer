@@ -22,6 +22,10 @@
   min-width: 0;
 }
 
+.sg-composer-main__banner:empty {
+  display: none;
+}
+
 /* The canvas menu has no host-side trigger to measure, so the menu is anchored
  * to this element, parked at the rect the preview iframe relayed. It is never
  * painted and never focusable. */

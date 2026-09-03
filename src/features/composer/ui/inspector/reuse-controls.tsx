@@ -66,6 +66,33 @@ function patternDisabledReason(document: CompositionDocument): string | null {
   return null;
 }
 
+/**
+ * Why the outlet action is unavailable, or null when it is. Ordered by what an
+ * author most needs to know: a document-level conflict outranks a missing
+ * capability, which outranks "you have not picked a slot yet".
+ */
+function outletDisabledReason({
+  readOnly,
+  document,
+  canPublish,
+  selectedSlot,
+}: {
+  readOnly: boolean;
+  document: CompositionDocument;
+  canPublish: boolean;
+  selectedSlot: (SelectedSlot & { label: string; empty: boolean }) | null;
+}): string | null {
+  if (readOnly) return "Reuse actions are unavailable in preview.";
+  if (document.binding !== undefined) return "A bound composition cannot publish an outlet of its own.";
+  if (document.publication?.kind === "pattern") {
+    return "This composition is a Pattern. Unpublish it before choosing an outlet.";
+  }
+  if (!canPublish) return "This editor cannot change the outlet.";
+  if (selectedSlot === null) return "Select a slot in Structure first.";
+  if (!selectedSlot.empty) return `${selectedSlot.label} already has a component. Choose an empty slot.`;
+  return null;
+}
+
 function clearCopy(kind: ClearablePublication): { title: string; message: string; label: string } {
   return kind === "pattern"
     ? {
@@ -192,21 +219,12 @@ export function ReuseControls({
 
   const isGlobalTemplate = publication?.kind === "global-template";
   const patternReason = readOnly ? "Reuse actions are unavailable in preview." : patternDisabledReason(document);
-  // Ordered by what an author most needs to know: a document-level conflict
-  // outranks a missing capability, which outranks "you have not picked a slot".
-  const outletReason = readOnly
-    ? "Reuse actions are unavailable in preview."
-    : document.binding !== undefined
-      ? "A bound composition cannot publish an outlet of its own."
-      : publication?.kind === "pattern"
-        ? "This composition is a Pattern. Unpublish it before choosing an outlet."
-        : !onSetGlobalTemplateOutlet
-          ? "This editor cannot change the outlet."
-          : selectedSlot === null
-            ? "Select a slot in Structure first."
-            : !selectedSlot.empty
-              ? `${selectedSlot.label} already has a component. Choose an empty slot.`
-              : null;
+  const outletReason = outletDisabledReason({
+    readOnly,
+    document,
+    canPublish: onSetGlobalTemplateOutlet !== undefined,
+    selectedSlot,
+  });
 
   async function clearPublication(): Promise<void> {
     const clearing = confirmingClear;

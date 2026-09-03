@@ -366,9 +366,9 @@ export function ComposerChooser({
           </button>
         }
       >
-        {/* Gated on `capturedTarget` rather than on `open` alone: the target is
-            captured one render after the dialog opens, and every label below
-            names it. */}
+        {/* Gated on `capturedTarget`, which every label below names. It is
+            captured in this same render, so the gate only ever closes for a
+            dialog that is not open. */}
         {capturedTarget && (
           <>
             <div class="sg-composer-chooser-source">
