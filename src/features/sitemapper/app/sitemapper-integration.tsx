@@ -165,7 +165,9 @@ export function SitemapperIntegration({
       labels.set(location.node.id, {
         kind: "mapping",
         name: info?.mapping?.name ?? source.ref.recordId,
-        detail: info ? `${info.derivedRouteCount} ${info.derivedRouteCount === 1 ? "route" : "routes"}` : undefined,
+        ...(info === undefined
+          ? {}
+          : { detail: `${info.derivedRouteCount} ${info.derivedRouteCount === 1 ? "route" : "routes"}` }),
       });
     }
     return labels;

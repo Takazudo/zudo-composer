@@ -21,9 +21,9 @@ import type { CompositionCatalog } from "../../../../sitemapper/catalog";
 import type { SitemapDocument, SitemapNode, SitemapPageSource } from "../../../../sitemapper/model";
 import { indexDocument } from "../../../../sitemapper/model";
 import type { MappingAssignmentCatalog, SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
+import { countDescendants } from "../tree/tree-helpers";
 import { CompositionField } from "./composition-field";
 import { MappingField } from "./mapping-field";
-import { countDescendants } from "../tree/tree-helpers";
 import { PageTextField, type PageTextProperty } from "./page-field";
 
 type SourceKind = SitemapPageSource["kind"];
