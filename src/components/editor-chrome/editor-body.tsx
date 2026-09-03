@@ -32,7 +32,7 @@ function RailButton({ rail, collapsed, label, onToggle, class: className }: Rail
       variant="ghost"
       size="sm"
       iconOnly
-      class={cx("cms-editor__rail-toggle", className)}
+      class={className}
       aria-label={`${collapsed ? "Show" : "Hide"} ${label}`}
       aria-expanded={!collapsed}
       onClick={onToggle}
@@ -90,6 +90,10 @@ export interface EditorBodyProps {
   onNavCollapsedChange?: (collapsed: boolean) => void;
   onInspectorCollapsedChange?: (collapsed: boolean) => void;
   class?: string;
+}
+
+function hasSlot(children: ComponentChildren): boolean {
+  return children !== undefined && children !== null && children !== false;
 }
 
 /** Controlled when the caller passes a value, self-owned otherwise. */
@@ -156,8 +160,10 @@ export function EditorBody({
   const toggles = useRef({ nav: toggleNav, insp: toggleInsp });
   toggles.current = { nav: toggleNav, insp: toggleInsp };
 
-  const hasNav = nav !== undefined;
-  const hasInspector = inspector !== undefined;
+  // A route expresses "this editor has no such rail" by passing nothing, and
+  // Preact spells a dropped branch as null or false just as often as undefined.
+  const hasNav = hasSlot(nav);
+  const hasInspector = hasSlot(inspector);
   const navResizer = hasNav && !navOff;
   const inspResizer = hasInspector && !inspOff;
 

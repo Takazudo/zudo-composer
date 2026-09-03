@@ -131,8 +131,11 @@
 .cms-editor__region--main { grid-column: 3; }
 .cms-editor__region--insp { grid-column: 5; }
 
-.cms-editor__body.nav-collapsed .cms-editor__region--nav,
-.cms-editor__body.insp-collapsed .cms-editor__region--insp { display: none; }
+/* `:where()` keeps this at two classes' worth of weight, so the narrow layout
+ * below can still show a collapsed rail as the selected pane without an
+ * `!important` or a doubled selector. */
+.cms-editor__body.nav-collapsed :where(.cms-editor__region--nav),
+.cms-editor__body.insp-collapsed :where(.cms-editor__region--insp) { display: none; }
 
 .cms-editor__stub {
   display: grid;
@@ -183,7 +186,10 @@
   .cms-editor__center { display: none; }
   .cms-record-title { flex: 1 1 auto; }
   .cms-record-title__input { width: 100%; }
-  .cms-editor__right { flex: 0 0 auto; }
+
+  /* The right slot holds whatever actions the editor owns, so it wraps rather
+   * than reaching past the viewport at 390px. */
+  .cms-editor__right { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; }
 
   .cms-editor__pane-switch {
     display: flex;

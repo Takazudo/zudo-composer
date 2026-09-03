@@ -109,7 +109,7 @@ export function readEditorWidths(editorKey: string, options: ReadEditorWidthsOpt
   const {
     nav: navFallback = DEFAULT_NAV_W,
     insp: inspFallback = DEFAULT_INSP_W,
-    viewportWidth = typeof window === "undefined" ? MAX_RAIL_W * 4 : window.innerWidth,
+    viewportWidth = window.innerWidth,
   } = options;
   let nav = getPersistedWidth(railStorageKey(editorKey, "nav"), navFallback);
   let insp = getPersistedWidth(railStorageKey(editorKey, "insp"), inspFallback);

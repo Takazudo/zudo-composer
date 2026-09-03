@@ -86,23 +86,33 @@ export function installRailResizer(handle: HTMLElement, options: RailResizerOpti
     event.preventDefault();
   };
 
+  // A second pointer landing on the handle mid-drag would otherwise strand the
+  // first drag's move listener on the window for the life of the page.
+  let endDrag: (() => void) | null = null;
+
   const pointerdown = (event: PointerEvent) => {
     if (event.button !== 0) return;
     event.preventDefault();
+    endDrag?.();
     const startX = event.clientX;
     const startWidth = width();
     const move = (next: PointerEvent) => apply(startWidth + (next.clientX - startX) * grow);
-    const up = () => {
+    const end = () => {
+      endDrag = null;
       window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
     };
+    endDrag = end;
     window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up, { once: true });
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
   };
 
   handle.addEventListener("keydown", keydown);
   handle.addEventListener("pointerdown", pointerdown);
   return () => {
+    endDrag?.();
     handle.removeEventListener("keydown", keydown);
     handle.removeEventListener("pointerdown", pointerdown);
   };

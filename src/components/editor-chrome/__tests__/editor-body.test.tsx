@@ -86,6 +86,19 @@ describe("EditorBody layout", () => {
     expect(body()).toHaveClass("cms-editor__body--no-insp");
   });
 
+  it("treats a dropped rail branch as no rail at all", () => {
+    render(
+      <EditorChromeContext.Provider value={{ editorKey: EDITOR_KEY, activePane: "main", setActivePane: () => {} }}>
+        <EditorBody nav={null} main={<p>Canvas</p>} inspector={false} />
+      </EditorChromeContext.Provider>,
+    );
+
+    expect(document.querySelector('[data-pane="nav"]')).toBeNull();
+    expect(document.querySelector('[data-pane="insp"]')).toBeNull();
+    expect(screen.queryAllByRole("separator")).toHaveLength(0);
+    expect(body()).toHaveClass("cms-editor__body--no-nav", "cms-editor__body--no-insp");
+  });
+
   it("marks exactly the active pane, so the narrow single-column layout can pick one", () => {
     render(<Harness activePane="insp" />);
 

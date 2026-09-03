@@ -150,6 +150,36 @@ describe("rail resizer pointer drag", () => {
     dispose();
   });
 
+  it("ends the drag when the pointer is cancelled out from under it", () => {
+    const nav = handle();
+    const dispose = installRailResizer(nav, { host, rail: "nav", editorKey: EDITOR_KEY });
+
+    nav.dispatchEvent(new PointerEvent("pointerdown", { clientX: 400, button: 0, cancelable: true }));
+    window.dispatchEvent(new PointerEvent("pointermove", { clientX: 420 }));
+    window.dispatchEvent(new PointerEvent("pointercancel", { clientX: 420 }));
+    window.dispatchEvent(new PointerEvent("pointermove", { clientX: 900 }));
+
+    expect(host.style.getPropertyValue(CSS_VAR_NAV_W)).toBe("300px");
+
+    dispose();
+  });
+
+  it("does not stack two drags when a second pointer lands mid-drag", () => {
+    const nav = handle();
+    const dispose = installRailResizer(nav, { host, rail: "nav", editorKey: EDITOR_KEY });
+
+    nav.dispatchEvent(new PointerEvent("pointerdown", { clientX: 400, button: 0, cancelable: true }));
+    nav.dispatchEvent(new PointerEvent("pointerdown", { clientX: 500, button: 0, cancelable: true }));
+    window.dispatchEvent(new PointerEvent("pointermove", { clientX: 520 }));
+    window.dispatchEvent(new PointerEvent("pointerup", { clientX: 520 }));
+    window.dispatchEvent(new PointerEvent("pointermove", { clientX: 900 }));
+
+    // Only the second drag is live, so the rail moved by its 20px, not by both.
+    expect(host.style.getPropertyValue(CSS_VAR_NAV_W)).toBe("300px");
+
+    dispose();
+  });
+
   it("stops following the pointer once the drag ends", () => {
     const nav = handle();
     const dispose = installRailResizer(nav, { host, rail: "nav", editorKey: EDITOR_KEY });
