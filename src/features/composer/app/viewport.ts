@@ -34,12 +34,16 @@ export const COMPOSER_VIEWPORT_WIDTHS: Record<ComposerCanvasViewport, number | n
   mobile: 390,
 };
 
-/** Human-readable labels for the viewport `<select>`. */
+/**
+ * Segment labels for the toolbar's viewport control. The three device choices
+ * are named by the width they emulate: the number is what an author is
+ * actually choosing, and a segmented row has no space for both.
+ */
 export const COMPOSER_VIEWPORT_LABELS: Record<ComposerCanvasViewport, string> = {
   fluid: "Fluid",
-  desktop: "Desktop",
-  tablet: "Tablet",
-  mobile: "Mobile",
+  desktop: "1280",
+  tablet: "768",
+  mobile: "390",
 };
 
 /** localStorage key for the persisted viewport choice. */

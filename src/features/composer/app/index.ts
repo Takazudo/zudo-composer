@@ -26,9 +26,6 @@ export type {
 export { ComposerCanvasHost } from "./composer-canvas-host";
 export type { ComposerCanvasHostProps } from "./composer-canvas-host";
 
-export { ComposerToolbarBar } from "./composer-toolbar-bar";
-export type { ComposerToolbarBarProps } from "./composer-toolbar-bar";
-
 export {
   useComposerKeyboard,
   type ComposerKeyboardOptions,

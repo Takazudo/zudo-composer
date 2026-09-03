@@ -1,55 +1,68 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Schema-driven Composer inspector panel (issue Takazudo/zudo-sg#249) — the presentational
-// component that plugs into Takazudo/zudo-sg#247's `ComposerWorkspace` `inspector` slot.
-// Purely presentational over the shared Takazudo/zudo-sg#245 document model + Takazudo/zudo-sg#247
-// controller contracts: it reads `document`/`manifest`/`selectedId`/`mode`
-// and reports every mutation through typed callbacks, never touching
-// commands/storage itself.
+// The Composer inspector: three tabs over one selection.
+//
+// Purely presentational over the shared document model and controller
+// contracts — it reads `document`/`manifest`/`selectedId`/`mode` and reports
+// every mutation through typed callbacks, never touching commands or storage.
+//
+// The tabs exist because the three things this pane carries answer different
+// questions and used to be stacked: reuse guidance is document-scoped and was
+// pushing the props an author came to edit below the fold, and the slot list is
+// navigation rather than editing. Properties is what opens.
 //
 // Layered behaviour:
-//  - identity + breadcrumb + slot counts are derived, read-only views over
-//    the document, built with the headless traversal/diagnostics
-//    API (`findLocation`, `classifyNode`, `orderedSlotIds`) — never a second
-//    tree/index implementation;
-//  - editable fields are declared ONLY by the selected node's manifest entry
-//    (`entry.fields`). Nodes blocked solely by invalid persisted prop values
-//    retain those fields as a recovery path; every other opaque/unknown node
-//    renders zero fields and only its diagnostics + raw identity. Sibling
-//    move/remove stay available for opaque nodes (they act on the SLOT
-//    array, not the node's own props);
-//  - Preview/read-only mode keeps the same selection/values on screen but
-//    disables every control, so switching back to Edit never loses what was
-//    selected.
+//  - identity, parent and position are derived, read-only views built with the
+//    headless traversal/diagnostics API (`findLocation`, `classifyNode`,
+//    `orderedSlotIds`) — never a second tree or index implementation;
+//  - editable fields are declared ONLY by the selected node's manifest entry.
+//    A node blocked solely by invalid persisted prop values keeps its fields as
+//    a recovery path; any other opaque node renders its diagnostics and its raw
+//    identity alone. Copy/Duplicate/Delete stay available for an opaque node —
+//    they act on the slot array, not on the node's own props;
+//  - Preview keeps the same selection and values on screen with every control
+//    disabled, so switching back to Edit never loses what was selected.
 
-import type { JSX } from "preact";
+import type { ComponentChildren, JSX } from "preact";
+import { useState } from "preact/hooks";
 import type {
   ComponentCatalog,
   CompositionDocument,
-  CompositionNode,
+  GlobalTemplateOutletTarget,
   JsonObject,
   LinkedEditorLifecycleActions,
   LinkedEditorPresentation,
 } from "../../../../composer/browser";
 import { canRepairNodeProps, classifyNode, findLocation, orderedSlotIds } from "../../../../composer/browser";
+import { RailCollapseButton } from "../../../../components/editor-chrome";
+import { CopyIcon, DuplicateIcon, PlusIcon, SlotIcon, TrashIcon } from "../../../../components/icons";
 import {
-  ArrowRightIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  RefreshIcon,
-  TrashIcon,
-  XMarkIcon,
-} from "../../../../components/icons";
+  Banner,
+  Button,
+  Chip,
+  EmptyState,
+  Pane,
+  PaneBody,
+  PaneHeader,
+  PaneSection,
+  PaneTabs,
+} from "../../../../components/ui";
+import type { PaneTab } from "../../../../components/ui";
 import type { ComposerMode } from "../../chrome/controller-model";
 import type { PropPath, PropCoalescing } from "../../chrome/history-model";
-import { InspectorField } from "./inspector-field";
+import type { SelectedSlot } from "../tree/structure-pane";
+import { InspectorField, seedValue } from "./inspector-field";
 import { ReuseControls } from "./reuse-controls";
 import type { ReuseAuthoringActionResult } from "../shared/reuse-authoring-contract";
+
+type InspectorTab = "props" | "slots" | "reuse";
 
 export interface InspectorPanelProps {
   document: CompositionDocument;
   manifest: ComponentCatalog;
   selectedId: string | null;
+  /** The slot chosen in Structure, when the selected row is a slot. */
+  selectedSlot?: SelectedSlot | null;
   mode: ComposerMode;
   onUpdateProps: (
     nodeId: string,
@@ -58,123 +71,88 @@ export interface InspectorPanelProps {
     removeProps?: readonly string[],
   ) => void;
   /**
-   * Debounced commit channel for PER-KEYSTREAM fields — text/color/number
-   * (issue Takazudo/zudo-sg#291). When absent, those fields fall back to `onUpdateProps`
-   * (immediate), so presentational usage/tests need no extra wiring. Discrete
-   * controls (checkbox/select) always commit through `onUpdateProps` — they
-   * are single commit points with nothing to coalesce, per the resizer's
-   * live-vs-commit philosophy.
+   * Debounced commit channel for PER-KEYSTREAM fields — text/color/number.
+   * When absent, those fields fall back to `onUpdateProps` (immediate), so
+   * presentational usage and tests need no extra wiring. Discrete controls
+   * (checkbox/select) always commit through `onUpdateProps`.
    */
   onUpdatePropsDebounced?: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing) => void;
-  /** Synchronously land any debounce-pending commit (issue Takazudo/zudo-sg#291) — fields call it on blur. */
+  /** Synchronously land any debounce-pending commit — fields call it on blur. */
   onFlushPendingProps?: () => void;
-  onReorder: (nodeId: string, direction: "up" | "down") => void;
   onRemove: (nodeId: string) => void;
+  onCopy?: (nodeId: string) => void;
+  onDuplicate?: (nodeId: string) => void;
+  /** Select one of the selected node's slots in Structure. */
+  onJumpToSlot?: (slot: SelectedSlot) => void;
   /** Publish the current non-empty document as a saved Pattern. */
   onPublishPattern?: () => void;
   /** Provider-guarded source-role removal. The caller must not clear optimistically. */
   onClearPublication?: () => Promise<ReuseAuthoringActionResult>;
+  /** Provider-checked publish/reassign for a real empty component slot. */
+  onSetGlobalTemplateOutlet?: (
+    target: GlobalTemplateOutletTarget,
+    label: string,
+  ) => Promise<ReuseAuthoringActionResult>;
   /** Latest typed controller error (e.g. protected outlet-owner removal). */
   lastError?: string | null;
   /**
-   * Optional friendlier display name for a component id — e.g. sourced from
-   * the host's richer `activeComponentManifest` (title/category/description), which
-   * this component's own `ComponentCatalog` contract does not carry. Falls
-   * back to the raw, stable `componentId`.
+   * Optional friendlier display name for a component id — e.g. from the host's
+   * richer catalog, which this component's `ComponentCatalog` does not carry.
+   * Falls back to the raw, stable `componentId`.
    */
   titleFor?: (componentId: string) => string | undefined;
   /** Document-level link state; selection and fields remain local-only. */
   linkedPresentation?: LinkedEditorPresentation;
-  /** Lifecycle callbacks are injected by the provider-owning app. */
   linkedActions?: LinkedEditorLifecycleActions;
 }
 
-interface BreadcrumbStep {
-  key: string;
-  label: string;
-}
-
-function buildBreadcrumb(
+/** The chain of `Component › slot` steps down to the selected node. */
+function parentPath(
   document: CompositionDocument,
   manifest: ComponentCatalog,
   selectedId: string,
   titleFor: ((componentId: string) => string | undefined) | undefined,
-): BreadcrumbStep[] {
-  const chain: { node: CompositionNode; slotId: string }[] = [];
-  let loc = findLocation(document, manifest, selectedId);
-  while (loc && loc.parentId !== null) {
-    const parentLoc = findLocation(document, manifest, loc.parentId);
-    if (!parentLoc) break;
-    chain.push({ node: parentLoc.node, slotId: loc.slotId });
-    loc = parentLoc;
+): string {
+  const steps: string[] = [];
+  let location = findLocation(document, manifest, selectedId);
+  while (location && location.parentId !== null) {
+    const parent = findLocation(document, manifest, location.parentId);
+    if (!parent) break;
+    const entry = manifest.get(parent.node.componentId);
+    const slot = entry?.slots.find((candidate) => candidate.id === location!.slotId);
+    steps.push(`${titleFor?.(parent.node.componentId) ?? parent.node.componentId} › ${slot?.label ?? location.slotId}`);
+    location = parent;
   }
-  chain.reverse();
-  const steps = chain.map(({ node, slotId }) => {
-    const entry = manifest.get(node.componentId);
-    const slot = entry?.slots.find((s) => s.id === slotId);
-    const title = titleFor?.(node.componentId) ?? node.componentId;
-    return { key: node.id, label: `${title} › ${slot?.label ?? slotId}` };
-  });
-  return [{ key: "root", label: "Root" }, ...steps];
+  steps.reverse();
+  return steps.length === 0 ? "Document root" : steps.join(" / ");
 }
 
-function LinkedInspectorStatus({
-  presentation,
-  actions,
+function InspectorShell({
+  title,
+  version,
+  tabs,
+  activeTab,
+  onSelectTab,
+  children,
 }: {
-  presentation: LinkedEditorPresentation;
-  actions?: LinkedEditorLifecycleActions;
-}): JSX.Element | null {
-  if (presentation.state === "local") return null;
-  if (presentation.state === "resolved") {
-    return (
-      <section class="sg-composer-linked-frame sg-composer-inspector-section" data-sg-linked-frame="resolved">
-        <p class="text-small font-semibold text-fg">Linked Global template</p>
-        <p class="text-caption text-muted">
-          {presentation.sourceName} · Outlet: {presentation.outletLabel || presentation.outletId} · Locked
-        </p>
-        <div class="mt-vsp-3xs flex flex-wrap gap-hsp-2xs">
-          {actions?.onOpenSource && (
-            <button type="button" class="sg-composer-toolbar-button" onClick={() => actions.onOpenSource?.(presentation.sourceRecordId)}>
-              <ArrowRightIcon size="sm" class="sg-composer-button-icon" />
-              Open source
-            </button>
-          )}
-          {actions?.onDetach && (
-            <button type="button" class="sg-composer-toolbar-button" onClick={() => actions.onDetach?.()}>
-              <XMarkIcon size="sm" class="sg-composer-button-icon" />
-              Detach
-            </button>
-          )}
-        </div>
-      </section>
-    );
-  }
+  title: ComponentChildren;
+  version?: string | number;
+  tabs: readonly PaneTab<InspectorTab>[];
+  activeTab: InspectorTab;
+  onSelectTab: (tab: InspectorTab) => void;
+  children: ComponentChildren;
+}): JSX.Element {
   return (
-    <section class="sg-composer-linked-frame sg-composer-inspector-section" data-sg-linked-frame="blocked" role="status">
-      <p class="text-small font-semibold text-fg">Linked template unavailable</p>
-      <p class="text-caption text-muted">{presentation.message}</p>
-      <div class="mt-vsp-3xs flex flex-wrap gap-hsp-2xs">
-        {actions?.onRetry && (
-          <button type="button" class="sg-composer-toolbar-button" onClick={() => actions.onRetry?.()}>
-            <RefreshIcon size="sm" class="sg-composer-button-icon" />
-            Retry
-          </button>
-        )}
-        {actions?.onOpenSource && (
-          <button type="button" class="sg-composer-toolbar-button" onClick={() => actions.onOpenSource?.(presentation.sourceRecordId)}>
-            <ArrowRightIcon size="sm" class="sg-composer-button-icon" />
-            Open source
-          </button>
-        )}
-        {actions?.onRemoveBrokenBinding && (
-          <button type="button" class="sg-composer-toolbar-button sg-composer-inspector-remove" onClick={() => actions.onRemoveBrokenBinding?.()}>
-            <TrashIcon size="sm" class="sg-composer-button-icon" />
-            Remove broken binding
-          </button>
-        )}
-      </div>
-    </section>
+    <Pane label="Inspector">
+      <PaneHeader
+        title={title}
+        actions={<RailCollapseButton rail="insp" />}
+      >
+        {version ? <Chip tone="plain">v{version}</Chip> : null}
+      </PaneHeader>
+      <PaneTabs label="Inspector" tabs={tabs} activeId={activeTab} onSelect={onSelectTab} />
+      <PaneBody>{children}</PaneBody>
+    </Pane>
   );
 }
 
@@ -182,189 +160,275 @@ export function InspectorPanel({
   document,
   manifest,
   selectedId,
+  selectedSlot = null,
   mode,
   onUpdateProps,
   onUpdatePropsDebounced,
   onFlushPendingProps,
-  onReorder,
   onRemove,
+  onCopy,
+  onDuplicate,
+  onJumpToSlot,
   onPublishPattern = () => undefined,
   onClearPublication = async () => ({
     status: "unavailable" as const,
     message: "Publication changes need a current relationship check before they can be cleared.",
   }),
+  onSetGlobalTemplateOutlet,
   lastError = null,
   titleFor,
   linkedPresentation = { state: "local" },
   linkedActions,
 }: InspectorPanelProps): JSX.Element {
+  const [requestedTab, setRequestedTab] = useState<InspectorTab>("props");
   const readOnly = mode === "preview";
   const location = selectedId !== null ? findLocation(document, manifest, selectedId) : undefined;
+  const node = location?.node;
+  const entry = node ? manifest.get(node.componentId) : undefined;
+  const slotIds = node ? orderedSlotIds(node, entry) : [];
 
-  if (selectedId === null || !location) {
+  const reuse = (
+    <ReuseControls
+      document={document}
+      manifest={manifest}
+      mode={mode}
+      lastError={lastError}
+      onPublishPattern={onPublishPattern}
+      onClearPublication={onClearPublication}
+      onSetGlobalTemplateOutlet={onSetGlobalTemplateOutlet}
+      selectedSlot={
+        selectedSlot && node
+          ? {
+            ...selectedSlot,
+            label: entry?.slots.find((slot) => slot.id === selectedSlot.slotId)?.label ?? selectedSlot.slotId,
+            empty: (node.slots[selectedSlot.slotId] ?? []).length === 0,
+          }
+          : null
+      }
+      linkedPresentation={linkedPresentation}
+      linkedActions={linkedActions}
+    />
+  );
+
+  // Resolved during render, not repaired in an effect: an effect runs after
+  // paint, so a tab that no longer exists for the new selection would be shown
+  // for a frame before it moved.
+  const tabs: PaneTab<InspectorTab>[] = [
+    { id: "props", label: "Properties" },
+    { id: "slots", label: "Slots", count: slotIds.length, disabled: slotIds.length === 0 },
+    { id: "reuse", label: "Reuse" },
+  ];
+  const activeTab: InspectorTab = requestedTab === "slots" && slotIds.length === 0 ? "props" : requestedTab;
+
+  if (!node || !location) {
     return (
-      <div class="flex h-full flex-col gap-vsp-2xs p-hsp-md py-[10px]" data-sg-inspector-state="empty">
-        <LinkedInspectorStatus presentation={linkedPresentation} actions={linkedActions} />
-        <ReuseControls
-          document={document}
-          manifest={manifest}
-          mode={mode}
-          lastError={lastError}
-          onPublishPattern={onPublishPattern}
-          onClearPublication={onClearPublication}
-        />
-        <p class="text-small font-semibold text-fg">Nothing selected</p>
-        <p class="text-small text-muted">
-          {document.root.length === 0
-            ? "The composition is empty. Add a component from the structure panel to start editing."
-            : "Select a component in the canvas or structure tree to edit its properties."}
-        </p>
-      </div>
+      <InspectorShell title="Inspector" tabs={tabs} activeTab={activeTab} onSelectTab={setRequestedTab}>
+        <div data-sg-inspector-state="empty">
+          {activeTab === "reuse" ? (
+            reuse
+          ) : (
+            <EmptyState
+              inline
+              title="Nothing selected"
+              description={
+                document.root.length === 0
+                  ? "The composition is empty. Add a component from Structure to start editing."
+                  : "Select a component in the canvas or in Structure to edit its properties."
+              }
+            />
+          )}
+        </div>
+      </InspectorShell>
     );
   }
 
-  const node = location.node;
   const diagnostic = classifyNode(node, manifest);
-  const entry = manifest.get(node.componentId);
   const canRepairProps = entry !== undefined && canRepairNodeProps(diagnostic);
   const fieldsEditable = !diagnostic.opaque || canRepairProps;
-  const breadcrumb = buildBreadcrumb(document, manifest, selectedId, titleFor);
+  const fields = fieldsEditable && entry ? entry.fields : [];
+  const present = fields.filter((field) => Object.hasOwn(node.props, field.prop) || field.required === true);
+  const absentOptional = fields.filter((field) => !Object.hasOwn(node.props, field.prop) && field.required !== true);
   const title = titleFor?.(node.componentId) ?? node.componentId;
 
-  const siblingArray =
+  const siblings =
     location.parentId === null
       ? document.root
       : (findLocation(document, manifest, location.parentId)?.node.slots[location.slotId] ?? []);
-  const canMoveUp = location.index > 0;
-  const canMoveDown = location.index < siblingArray.length - 1;
-  const slotIds = orderedSlotIds(node, entry);
 
   return (
-    <div
-      class="flex h-full flex-col overflow-y-auto p-hsp-md py-[10px]"
-      data-sg-inspector-state={canRepairProps ? "recoverable" : diagnostic.opaque ? "opaque" : "editable"}
+    <InspectorShell
+      title={title}
+      version={node.componentVersion}
+      tabs={tabs}
+      activeTab={activeTab}
+      onSelectTab={setRequestedTab}
     >
-      <LinkedInspectorStatus presentation={linkedPresentation} actions={linkedActions} />
-      <ReuseControls
-        document={document}
-        manifest={manifest}
-        mode={mode}
-        lastError={lastError}
-        onPublishPattern={onPublishPattern}
-        onClearPublication={onClearPublication}
-      />
-      <nav class="sg-composer-inspector-section" aria-label="Selected component location">
-        <ol class="flex flex-wrap items-center gap-hsp-3xs text-caption text-muted">
-          {breadcrumb.map((step, i) => (
-            <li key={step.key} class="flex items-center gap-hsp-3xs">
-              {i > 0 && <span aria-hidden="true">/</span>}
-              {step.label}
-            </li>
-          ))}
-        </ol>
-      </nav>
+      <div data-sg-inspector-state={canRepairProps ? "recoverable" : diagnostic.opaque ? "opaque" : "editable"}>
+        {activeTab === "props" && (
+          <>
+            {readOnly && (
+              <PaneSection title="Preview">
+                <p class="sg-composer-inspector-note" role="status">
+                  Preview mode — properties are read-only.
+                </p>
+              </PaneSection>
+            )}
 
-      <div class="sg-composer-inspector-section flex flex-col gap-vsp-3xs" data-sg-inspector-identity>
-        <p class="truncate text-small font-semibold text-fg">{title}</p>
-        <p class="text-caption text-muted">
-          {node.componentId} · v{node.componentVersion}
-        </p>
+            {diagnostic.opaque && (
+              <PaneSection title="Diagnostics">
+                <Banner
+                  tone="err"
+                  title={
+                    canRepairProps
+                      ? "This component has invalid properties."
+                      : "This component can't be edited."
+                  }
+                >
+                  <ul class="sg-composer-inspector-diagnostics">
+                    {diagnostic.reasons.map((reason, index) => (
+                      <li key={`${reason.code}-${index}`}>{reason.message}</li>
+                    ))}
+                  </ul>
+                </Banner>
+              </PaneSection>
+            )}
 
-        {readOnly && (
-          <p class="text-caption text-muted" role="status">
-            Preview mode — properties are read-only.
-          </p>
+            {present.length > 0 && (
+              <PaneSection title="Properties" class="sg-composer-inspector-props">
+                {present.map((field) => (
+                  <InspectorField
+                    key={`${selectedId}:${field.prop}`}
+                    field={field}
+                    value={Object.hasOwn(node.props, field.prop) ? node.props[field.prop] : undefined}
+                    disabled={readOnly}
+                    onRemove={() => onUpdateProps(node.id, {}, null, [field.prop])}
+                    onCommit={(value, path, structural) => {
+                      const coalescePaths = structural ? null : path && path.length > 0 ? [path as PropPath] : undefined;
+                      if (coalescePaths === undefined) onUpdateProps(node.id, { [field.prop]: value });
+                      else onUpdateProps(node.id, { [field.prop]: value }, coalescePaths);
+                    }}
+                    onCommitDebounced={
+                      onUpdatePropsDebounced &&
+                      ((value, path, structural) => {
+                        const coalescePaths = structural ? null : path && path.length > 0 ? [path as PropPath] : undefined;
+                        if (coalescePaths === undefined) onUpdatePropsDebounced(node.id, { [field.prop]: value });
+                        else onUpdatePropsDebounced(node.id, { [field.prop]: value }, coalescePaths);
+                      })
+                    }
+                    onFlushPending={onFlushPendingProps}
+                  />
+                ))}
+              </PaneSection>
+            )}
+
+            {absentOptional.length > 0 && (
+              <PaneSection title="Optional props">
+                <div class="sg-composer-inspector-optional">
+                  {absentOptional.map((field) => {
+                    const seed = seedValue(field);
+                    return (
+                      <Button
+                        key={field.prop}
+                        size="xs"
+                        disabled={readOnly || seed === undefined}
+                        aria-label={`Add ${field.label}`}
+                        title={
+                          seed === undefined
+                            ? "This value has required fields with no deterministic seed."
+                            : undefined
+                        }
+                        data-sg-inspector-optional-field={field.prop}
+                        // `null` coalescing: adding a prop is a structural
+                        // change, and its own point in the history stack.
+                        onClick={() => {
+                          if (seed !== undefined) onUpdateProps(node.id, { [field.prop]: seed }, null);
+                        }}
+                      >
+                        <PlusIcon size="xs" />
+                        {field.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </PaneSection>
+            )}
+
+            <PaneSection title="Node">
+              <dl class="sg-composer-inspector-node">
+                <dt>Component</dt>
+                <dd><code>{node.componentId}</code></dd>
+                <dt>ID</dt>
+                <dd><code>{node.id}</code></dd>
+                <dt>Parent</dt>
+                <dd>{parentPath(document, manifest, node.id, titleFor)}</dd>
+                <dt>Position</dt>
+                <dd>{location.index + 1} of {siblings.length}</dd>
+              </dl>
+              <div class="sg-composer-inspector-node-actions">
+                {onDuplicate && (
+                  <Button size="sm" disabled={readOnly} onClick={() => onDuplicate(node.id)}>
+                    <DuplicateIcon size="sm" />
+                    Duplicate
+                  </Button>
+                )}
+                {onCopy && (
+                  <Button size="sm" disabled={readOnly} onClick={() => onCopy(node.id)}>
+                    <CopyIcon size="sm" />
+                    Copy
+                  </Button>
+                )}
+                <Button
+                  variant="danger"
+                  size="sm"
+                  class="sg-composer-inspector-remove"
+                  disabled={readOnly}
+                  onClick={() => onRemove(node.id)}
+                >
+                  <TrashIcon size="sm" />
+                  Delete
+                </Button>
+              </div>
+              {lastError && (
+                <p class="sg-composer-inspector-note" role="alert">{lastError}</p>
+              )}
+            </PaneSection>
+          </>
         )}
 
-        {diagnostic.opaque && (
-          <div class="sg-composer-inspector-diagnostics" role="alert">
-            <p class="sg-composer-inspector-diagnostics-title">
-              {canRepairProps ? "This component has invalid properties. Review the declared fields below; output stays blocked until every listed issue is corrected." : "This component can't be edited."}
-            </p>
-            <ul class="list-disc pl-hsp-md">
-              {diagnostic.reasons.map((reason, i) => (
-                <li key={`${reason.code}-${i}`}>{reason.message}</li>
-              ))}
+        {activeTab === "slots" && (
+          <PaneSection title="Slots">
+            <ul class="sg-composer-inspector-slots" data-sg-inspector-slots>
+              {slotIds.map((slotId) => {
+                const slot = entry?.slots.find((candidate) => candidate.id === slotId);
+                const count = (node.slots[slotId] ?? []).length;
+                const label = slot?.label ?? slotId;
+                return (
+                  <li key={slotId} class="sg-composer-inspector-slot">
+                    <SlotIcon size="sm" />
+                    <span class="sg-composer-inspector-slot-name">{label}</span>
+                    <span class="sg-composer-inspector-slot-meta">
+                      {count} {count === 1 ? "child" : "children"}
+                      {slot?.cardinality === "single" ? " · single" : ""}
+                    </span>
+                    {onJumpToSlot && (
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        aria-label={`Jump to ${label}`}
+                        onClick={() => onJumpToSlot({ parentId: node.id, slotId })}
+                      >
+                        Jump
+                      </Button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
-          </div>
+          </PaneSection>
         )}
+
+        {activeTab === "reuse" && reuse}
       </div>
-
-      <div class="sg-composer-inspector-section flex flex-wrap items-center gap-hsp-xs">
-        <button
-          type="button"
-          class="sg-composer-toolbar-button gap-hsp-3xs"
-          disabled={readOnly || !canMoveUp}
-          onClick={() => onReorder(node.id, "up")}
-        >
-          <ChevronUpIcon size="sm" />
-          Move up
-        </button>
-        <button
-          type="button"
-          class="sg-composer-toolbar-button gap-hsp-3xs"
-          disabled={readOnly || !canMoveDown}
-          onClick={() => onReorder(node.id, "down")}
-        >
-          <ChevronDownIcon size="sm" />
-          Move down
-        </button>
-        <button
-          type="button"
-          class="sg-composer-toolbar-button sg-composer-inspector-remove gap-hsp-3xs"
-          disabled={readOnly}
-          onClick={() => onRemove(node.id)}
-        >
-          <TrashIcon size="sm" />
-          Remove
-        </button>
-      </div>
-
-      {fieldsEditable && entry && entry.fields.length > 0 && (
-        <div class="sg-composer-inspector-section flex flex-col gap-vsp-xs">
-          {entry.fields.map((field) => (
-            <InspectorField
-              key={`${selectedId}:${field.prop}`}
-              field={field}
-              value={Object.hasOwn(node.props, field.prop) ? node.props[field.prop] : undefined}
-              disabled={readOnly}
-              onRemove={() => onUpdateProps(node.id, {}, null, [field.prop])}
-              onCommit={(value, path, structural) => {
-                const coalescePaths = structural ? null : path && path.length > 0 ? [path as PropPath] : undefined;
-                if (coalescePaths === undefined) onUpdateProps(node.id, { [field.prop]: value });
-                else onUpdateProps(node.id, { [field.prop]: value }, coalescePaths);
-              }}
-              onCommitDebounced={
-                onUpdatePropsDebounced &&
-                ((value, path, structural) => {
-                  const coalescePaths = structural ? null : path && path.length > 0 ? [path as PropPath] : undefined;
-                  if (coalescePaths === undefined) onUpdatePropsDebounced(node.id, { [field.prop]: value });
-                  else onUpdatePropsDebounced(node.id, { [field.prop]: value }, coalescePaths);
-                })
-              }
-              onFlushPending={onFlushPendingProps}
-            />
-          ))}
-        </div>
-      )}
-
-      {slotIds.length > 0 && (
-        <div class="sg-composer-inspector-section" data-sg-inspector-slots>
-          <p class="sg-composer-inspector-slots-heading text-small font-semibold text-fg">Slots</p>
-          <ul class="mt-vsp-xs flex flex-col gap-vsp-3xs text-small text-fg">
-            {slotIds.map((slotId) => {
-              const slot = entry?.slots.find((s) => s.id === slotId);
-              const count = (node.slots[slotId] ?? []).length;
-              return (
-                <li key={slotId}>
-                  {slot?.label ?? slotId} — {count} {count === 1 ? "child" : "children"}
-                  {slot?.cardinality === "single" ? " (single)" : ""}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
+    </InspectorShell>
   );
 }

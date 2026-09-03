@@ -47,6 +47,7 @@ import type { CompositionDocument, InsertionTarget } from "../../../composer/bro
 import type { ComposerCanvasViewport } from "../chrome/controller-model";
 import type { ComposerComponentProvider } from "../active-pack";
 import { ErrorIcon, InfoIcon, WarningIcon, XMarkIcon } from "../../../components/icons";
+import { Button } from "../../../components/ui";
 import {
   buildComposerPreviewUrl,
   composerPreviewFrameProps,
@@ -318,14 +319,10 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
             <WarningIcon size="sm" class="sg-composer-canvas-error__icon" />
             <span>Preview error: {renderError}</span>
           </span>
-          <button
-            type="button"
-            class="sg-composer-toolbar-button"
-            onClick={() => setRenderError(null)}
-          >
-            <XMarkIcon size="sm" class="sg-composer-button-icon" />
+          <Button size="sm" onClick={() => setRenderError(null)}>
+            <XMarkIcon size="sm" />
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
       {staleNotice !== null && (
@@ -334,14 +331,10 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
             <InfoIcon size="sm" class="sg-composer-canvas-error__icon" />
             <span>{staleNotice}</span>
           </span>
-          <button
-            type="button"
-            class="sg-composer-toolbar-button"
-            onClick={() => setStaleNotice(null)}
-          >
-            <XMarkIcon size="sm" class="sg-composer-button-icon" />
+          <Button size="sm" onClick={() => setStaleNotice(null)}>
+            <XMarkIcon size="sm" />
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
       <div class="sg-composer-canvas-frame" style={frameStyle}>

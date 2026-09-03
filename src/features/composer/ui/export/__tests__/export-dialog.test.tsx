@@ -122,7 +122,7 @@ describe("ComposerExportDialog — focus lifecycle", () => {
     fireEvent.click(trigger);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(document.activeElement).toBe(trigger);
@@ -149,7 +149,7 @@ describe("ComposerExportDialog — focus lifecycle", () => {
     const last = focusables[focusables.length - 1]!;
 
     last.focus();
-    fireEvent.keyDown(document, { key: "Tab" });
+    fireEvent.keyDown(dialog, { key: "Tab" });
     expect(document.activeElement).toBe(first);
   });
 
@@ -163,7 +163,7 @@ describe("ComposerExportDialog — focus lifecycle", () => {
     const last = focusables[focusables.length - 1]!;
 
     first.focus();
-    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(last);
   });
 });

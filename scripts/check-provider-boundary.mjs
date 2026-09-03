@@ -178,7 +178,19 @@ function collectJsGraph(path) {
 }
 collectJsGraph(previewJs[0]);
 const previewText = [...previewGraph].map((path) => readFileSync(path, "utf8")).join("\n");
-for (const forbidden of ["How the pieces connect", "Composition library", "Stored Content needs recovery", "Mapping library", "Add component…", "file-provider"]) {
+// Each marker is a string the HOST renders and the preview graph must not.
+// A marker whose host string is deleted stops proving anything, so repoint it
+// at a live one rather than dropping it: "Structure" is the Composer editor's
+// own rail, "Add component…" its insert menu.
+for (const forbidden of [
+  "How the pieces connect",
+  "Composition library",
+  "Stored Content needs recovery",
+  "Mapping library",
+  "Add component…",
+  "Back to Compositions",
+  "file-provider",
+]) {
   assert.ok(!previewText.includes(forbidden), `preview graph leaked host marker: ${forbidden}`);
 }
 
@@ -210,8 +222,16 @@ const combinedCss = css.join("\n");
 assert.ok(css.some((source) => source.includes(".cms-rail{")), "local app shell CSS was not emitted");
 assert.ok(/--zc-topbar-h:\s*48px/.test(combinedCss), "shell topbar height contract was not emitted");
 assert.ok(/--sg-header-h:\s*var\(\s*--zc-topbar-h\s*\)/.test(combinedCss), "editor height alias was not emitted");
-assert.ok(readFileSync(join(root, "src/features/composer/library/new-composition-dialog.tsx"), "utf8").includes("pr-[3.5rem]"), "local Tailwind source proof drifted");
-assert.ok(css.some((source) => source.includes(".pr-\\[3\\.5rem\\]{")), "local-source Tailwind utility was not emitted");
+// Proof that Tailwind scans THIS app's source, not just the installed
+// provider's: one utility that appears in a local file and in no provider
+// component. It is a pair — the source half guards the class from drifting out
+// of the file, the CSS half proves the scan reached it. If the New-composition
+// dialog stops using this class, REPOINT both halves at another local-only
+// utility rather than deleting them, or the proof silently becomes vacuous.
+// (`pr-[3.5rem]` held this role until epic #156 moved the dialog onto the
+// shared `cms-` controls.)
+assert.ok(readFileSync(join(root, "src/features/composer/library/new-composition-dialog.tsx"), "utf8").includes("min-w-48"), "local Tailwind source proof drifted");
+assert.ok(css.some((source) => source.includes(".min-w-48{")), "local-source Tailwind utility was not emitted");
 assert.ok(readFileSync(join(root, "node_modules/@zudo-sg/ui/src/cards/callout/callout.tsx"), "utf8").includes("border-l-4"), "provider Tailwind source proof drifted");
 assert.ok(css.some((source) => source.includes(".border-l-4{")), "installed-provider Tailwind utility was not emitted");
 for (const [size, value] of Object.entries({ xs: ".75rem", sm: "1rem", md: "1.25rem", lg: "1.5rem" })) {

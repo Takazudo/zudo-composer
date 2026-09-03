@@ -57,7 +57,6 @@ function Harness() {
         selectedId="w"
         mode="edit"
         onUpdateProps={patch}
-        onReorder={() => {}}
         onRemove={() => {}}
       />
     </div>

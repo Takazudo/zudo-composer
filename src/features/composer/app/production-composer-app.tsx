@@ -34,6 +34,7 @@ import {
   type ReuseConsumerLifecycleOutcome,
 } from "../../../composer/browser";
 import { parseIntent } from "../../../app/route-intents";
+import { Banner, Button, EmptyState } from "../../../components/ui";
 import type { ComposerComponentProvider } from "../active-pack";
 import { CompositionLibrary } from "../library";
 import type { CompositionLibraryIntents } from "../library";
@@ -688,6 +689,31 @@ export function ProductionComposerApp({
     }
   }, [duplicatingComposition, idFactory, navigate, nodeIdFactory, providersById, state]);
 
+  const deleteMountedComposition = useCallback(async () => {
+    if (state?.view !== "detail") return;
+    const ref = routeRef(state.route)!;
+    const provider = providersById.get(ref.providerId);
+    if (!provider) return;
+
+    setDetailOperationError(null);
+    try {
+      // Land anything in flight first: a debounced prop commit that resolved
+      // after the delete would put the record straight back.
+      const session = state.session as ProductionDetailSession;
+      await session.flushPendingProps(ref);
+      await session.queue.flush();
+      await provider.store.delete(ref.recordId);
+    } catch (reason) {
+      setDetailOperationError(
+        reason instanceof Error ? reason.message : "The composition could not be deleted.",
+      );
+      return;
+    }
+    // Replace history: the record this entry pointed at no longer exists, so
+    // Back must not return to an editor for it.
+    await navigate({ kind: "index" }, "replace", ref.providerId);
+  }, [navigate, providersById, state]);
+
   const availableProviders = useMemo(
     () => providers.map(({ descriptor }) => ({ descriptor, available: true })),
     [providers],
@@ -702,16 +728,8 @@ export function ProductionComposerApp({
   if (bootProviderId || state?.view === "index") {
     return (
       <>
-        {transitionError && (
-          <div class="sg-composer-library-alert sg-composer-library-alert-error" role="alert">
-            <p>{errorText(transitionError)}</p>
-          </div>
-        )}
-        {intentOutcome.status === "invalid" && (
-          <div class="sg-composer-library-alert sg-composer-library-alert-error" role="alert">
-            <p>{intentOutcome.message}</p>
-          </div>
-        )}
+        {transitionError && <Banner tone="err">{errorText(transitionError)}</Banner>}
+        {intentOutcome.status === "invalid" && <Banner tone="err">{intentOutcome.message}</Banner>}
         <CompositionLibrary
           providers={availableProviders}
           initialProviderId={preferredProviderId}
@@ -757,8 +775,8 @@ export function ProductionComposerApp({
             : {}),
         }}
         registerFlushPendingProps={session.registerFlushPendingProps}
-        onNavigateToLibrary={() => void navigate({ kind: "index" })}
         onDuplicateComposition={() => void duplicateMountedComposition()}
+        onDeleteComposition={() => void deleteMountedComposition()}
         duplicatingComposition={duplicatingComposition}
         getPublicationDependencies={(sourceRecordId) =>
           publicationDependencies(providersById.get(ref.providerId), sourceRecordId, reuseManifest)
@@ -788,53 +806,43 @@ export function ProductionComposerApp({
 
   if (state?.view === "not-found") {
     return (
-      <main class="sg-composer-library" aria-labelledby="sg-composer-route-error-title">
-        <section class="sg-composer-library-alert sg-composer-library-alert-error" role="alert">
-          <div>
-            <h1 id="sg-composer-route-error-title">Composition could not be opened</h1>
-            <p>
-              {state.error instanceof ComposerTransitionError
-                ? errorText(state.error)
-                : state.error.message}
-            </p>
-          </div>
-          <div class="sg-composer-library-actions">
-            {state.route && (
-              <button
-                type="button"
-                class="sg-composer-library-button"
-                onClick={() =>
-                  void transitionLocation(navigation.read(), state.route?.kind === "detail")
-                }
-              >
-                Retry
-              </button>
-            )}
-            <button
-              type="button"
-              class="sg-composer-library-button"
-              onClick={() => void navigate({ kind: "index" }, "replace")}
-            >
-              Back to library
-            </button>
-          </div>
-        </section>
+      <main class="sg-composer-route-state" aria-label="Composition could not be opened">
+        <EmptyState
+          title="Composition could not be opened"
+          description={
+            state.error instanceof ComposerTransitionError
+              ? errorText(state.error)
+              : state.error.message
+          }
+          action={
+            <>
+              {state.route && (
+                <Button
+                  onClick={() =>
+                    void transitionLocation(navigation.read(), state.route?.kind === "detail")
+                  }
+                >
+                  Retry
+                </Button>
+              )}
+              <Button variant="primary" onClick={() => void navigate({ kind: "index" }, "replace")}>
+                Back to Compositions
+              </Button>
+            </>
+          }
+        />
         {initializationNotice && (
-          <section class="sg-composer-library-alert" aria-label="Composition recovery notice">
-            <p>{initializationNotice.message}</p>
-            <p>The original source has been preserved.</p>
-          </section>
+          <Banner tone="warn" title="Composition recovery notice">
+            {initializationNotice.message} The original source has been preserved.
+          </Banner>
         )}
       </main>
     );
   }
 
   return (
-    <main class="sg-composer-library" aria-busy="true" aria-label="Loading Composer">
-      <section class="sg-composer-library-state">
-        <h1>Loading Composer…</h1>
-        <p>Opening the selected composition storage.</p>
-      </section>
+    <main class="sg-composer-route-state" aria-busy="true" aria-label="Loading Composer">
+      <EmptyState title="Loading Composer…" description="Opening the selected composition storage." />
     </main>
   );
 }

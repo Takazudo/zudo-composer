@@ -75,6 +75,16 @@ export interface ComposerIntegrationApi {
   reuseResolution: GlobalTemplateResolutionOutcome | null;
   /** Friendly display name for a component id, from the richer catalog. */
   titleFor: (componentId: string) => string | undefined;
+  /**
+   * Bumped by every reveal, including one that re-selects what is already
+   * selected. The structure rail listens to it rather than to `selectedId`,
+   * because "show me this node" is a request even when the selection does not
+   * move — an author who collapsed the branch since selecting it still needs
+   * the row back.
+   */
+  revealEpoch: number;
+  /** Select and reveal one node; the structure rail reopens its ancestors. */
+  revealNode: (nodeId: string) => void;
 
   // ── Composed callbacks (all resolve to the one controller) ────────────────
   /** Canvas selection: a real node reveals (selects + expands ancestors); `null` clears. */
@@ -226,12 +236,21 @@ export function useComposerIntegration(
     return (componentId: string) => byId.get(componentId);
   }, [manifestEntries]);
 
+  const [revealEpoch, setRevealEpoch] = useState(0);
+  const revealNode = useCallback(
+    (nodeId: string) => {
+      controller.reveal(nodeId);
+      setRevealEpoch((epoch) => epoch + 1);
+    },
+    [controller],
+  );
+
   const handleCanvasSelect = useCallback(
     (nodeId: string | null) => {
       if (nodeId === null) controller.select(null);
-      else controller.reveal(nodeId);
+      else revealNode(nodeId);
     },
-    [controller],
+    [controller, revealNode],
   );
 
   const handleCanvasRequestAdd = useCallback(
@@ -300,6 +319,8 @@ export function useComposerIntegration(
     exportState,
     reuseResolution,
     titleFor,
+    revealEpoch,
+    revealNode,
     handleCanvasSelect,
     handleCanvasRequestAdd,
     handleChooserAdd,

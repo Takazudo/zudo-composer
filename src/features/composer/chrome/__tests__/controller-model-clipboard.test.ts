@@ -29,8 +29,6 @@ function initial(): ComposerControllerState {
     document: makeAbcDocument(),
     manifest: fixtureManifest,
     saveStatus: { kind: "saved" },
-    leftWidth: 260,
-    rightWidth: 320,
   });
 }
 

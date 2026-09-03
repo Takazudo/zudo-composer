@@ -297,8 +297,6 @@ describe("useComposerController — history", () => {
     act(() => {
       result.current.copy("A");
       result.current.setViewport("mobile");
-      result.current.setLeftWidth(411);
-      result.current.setRightWidth(477);
       result.current.select("B");
       result.current.remove("B");
       result.current.setExpanded("split", false);
@@ -310,8 +308,6 @@ describe("useComposerController — history", () => {
     expect(result.current.state.expandedIds.has("split")).toBe(true);
     expect(result.current.state.clipboard?.id).toBe("A");
     expect(result.current.state.viewport).toBe("mobile");
-    expect(result.current.state.leftWidth).toBe(411);
-    expect(result.current.state.rightWidth).toBe(477);
 
     const invalidSelection = setup();
     act(() => {

@@ -18,28 +18,23 @@
 // change" test.
 //
 // ── Accessibility ────────────────────────────────────────────────────────────
-// Native `<dialog>` + `showModal()` for top-layer rendering; Escape is handled
-// explicitly (native UA Escape-to-cancel isn't simulated by every test/DOM
-// environment) via a keydown listener that calls `.close()` — the dialog's
-// native `close` event then drives `onClose` + focus restoration uniformly for
-// every close path (Escape, Cancel, backdrop click, successful add). A
-// `aria-live` status region sits OUTSIDE the `<dialog>` (this component is
-// expected to be mounted unconditionally, with `open` toggling visibility) so
-// "Added" announcements survive the dialog closing/hiding.
+// The shared `Dialog` owns the modal: focus trap, initial focus, Escape,
+// backdrop dismissal and focus restored to whatever opened it. This surface
+// used to reimplement all of that, and it also used to be movable and
+// resizable — one dialog size contract is worth more than a shell an author
+// has to arrange before using. An `aria-live` status region sits OUTSIDE the
+// dialog so "Added" announcements survive it closing.
 //
-// ── Live preview + movable tool shell ───────────────────────────────────────
+// ── Live preview ────────────────────────────────────────────────────────────
 // Search/filter/list rendering stayed in this one component (no internal
-// sub-dialog abstraction) so live preview could
-// wrap the existing target-capture/focus/keyboard machinery without
-// re-deriving it. Hovering OR keyboard-focusing a catalog card sets the
-// STICKY `previewedComponentId` (never cleared by mouseleave/blur — only
-// replaced by the next hover/focus); `ChooserPreviewHost` owns the actual
-// second bridge + iframe (see that module's header for the ephemeral
-// create/dispose contract). The shared geometry hook makes the shell movable
-// for this open session only; it does not touch focus containment,
-// Escape, or target-capture effects.
+// sub-dialog abstraction) so live preview could wrap the existing
+// target-capture machinery without re-deriving it. Hovering OR
+// keyboard-focusing a catalog card sets the STICKY `previewedComponentId`
+// (never cleared by mouseleave/blur — only replaced by the next hover/focus);
+// `ChooserPreviewHost` owns the actual second bridge + iframe (see that
+// module's header for the ephemeral create/dispose contract).
 
-import { useEffect, useId, useMemo, useRef, useState } from "preact/hooks";
+import { useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
 import type {
   ComponentCatalog,
@@ -65,8 +60,9 @@ import {
   matchesQuery,
 } from "./chooser-helpers";
 import { ChooserPreviewHost } from "./chooser-preview-host";
-import { toolDialogStyle, useMovableToolDialog, useToolDialogGeometry } from "../shared/tool-dialog-geometry";
-import { DragGripIcon, DuplicateIcon, XMarkIcon } from "../../../../components/icons";
+import { Dialog } from "../../../../components/overlay";
+import { Banner, Button, EmptyState, Input, SegmentedControl } from "../../../../components/ui";
+import { DuplicateIcon, SearchIcon, XMarkIcon } from "../../../../components/icons";
 
 export interface ComposerChooserProps {
   componentProvider: ComposerComponentProvider;
@@ -174,9 +170,7 @@ export function ComposerChooser({
   previewLocation,
   previewHostWindow,
 }: ComposerChooserProps): JSX.Element {
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
 
   // The captured target lives in STATE (not just a ref) so the false -> true
   // capture produces a render — a ref mutation alone wouldn't. Every render
@@ -184,7 +178,7 @@ export function ComposerChooser({
   // what makes a later selection-change prop update unable to redirect an
   // in-flight chooser (see this module's header + the "capture survives a
   // selection change" test).
-  const [capturedTarget, setCapturedTarget] = useState<InsertionTarget | null>(null);
+  const capturedRef = useRef<InsertionTarget | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>(ALL_CATEGORY);
   const [activeTab, setActiveTab] = useState<ChooserTab>("components");
@@ -199,68 +193,34 @@ export function ComposerChooser({
   const [patternInsertError, setPatternInsertError] = useState<string | null>(null);
   const [insertingPattern, setInsertingPattern] = useState(false);
   const patternRequestGeneration = useRef(0);
-  const geometry = useToolDialogGeometry({ open });
-  const moveGrip = useMovableToolDialog(geometry);
-
-  const titleId = useId();
 
   const catalogById = useMemo(() => buildCatalogById(entries), [entries]);
 
-  useEffect(() => {
-    if (open && capturedTarget === null) {
-      setCapturedTarget(target);
-      triggerRef.current =
-        globalThis.document?.activeElement instanceof HTMLElement ? globalThis.document.activeElement : null;
-      setQuery("");
-      setCategory(ALL_CATEGORY);
-      setActiveTab("components");
-      setStatus("");
-      setPreviewedComponentId(null);
-      setSelectedPatternKey(null);
-      setLoadedPattern(null);
-      setPatternLoadError(null);
-      setPatternLoading(false);
-      setPatternInsertError(null);
-      setInsertingPattern(false);
-    } else if (!open && capturedTarget !== null) {
-      patternRequestGeneration.current += 1;
-      setCapturedTarget(null);
-    }
-  }, [open, target, capturedTarget]);
-
-  // Bridge the controlled `open` prop to the native <dialog> element.
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
-      dialog.showModal();
-    } else if (!open && dialog.open) {
-      dialog.close();
-    }
-  }, [open]);
-
-  // Focus the search input once the CAPTURED content (including the input
-  // itself) has actually rendered — a render earlier, on the same tick
-  // `showModal()` is called, the content is still gated behind
-  // `capturedTarget` being null (see the capture effect above), so
-  // `searchRef.current` would not yet exist.
-  useEffect(() => {
-    if (open && capturedTarget) searchRef.current?.focus();
-  }, [open, capturedTarget]);
-
-  // The native `close` event fires for EVERY close path (Escape via our own
-  // handler, Cancel, backdrop click, `.close()` after a successful add) — one
-  // place to restore focus and tell the controlling parent `open` is false.
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    function handleClose() {
-      onClose();
-      triggerRef.current?.focus?.();
-    }
-    dialog.addEventListener("close", handleClose);
-    return () => dialog.removeEventListener("close", handleClose);
-  }, [onClose]);
+  // Captured DURING RENDER, not in an effect: an effect runs after paint, so
+  // the dialog would open one frame before it knew where it was adding, and the
+  // shared `Dialog` would have already given initial focus to the close button
+  // rather than to a search input that did not exist yet. A ref read back in the
+  // same render is enough — no second render is needed to show the capture.
+  // Seeded closed rather than from `open`, so a chooser whose first render is
+  // already open still captures.
+  const wasOpen = useRef(false);
+  if (open !== wasOpen.current) {
+    wasOpen.current = open;
+    capturedRef.current = open ? target : null;
+    if (!open) patternRequestGeneration.current += 1;
+    setQuery("");
+    setCategory(ALL_CATEGORY);
+    setActiveTab("components");
+    setStatus("");
+    setPreviewedComponentId(null);
+    setSelectedPatternKey(null);
+    setLoadedPattern(null);
+    setPatternLoadError(null);
+    setPatternLoading(false);
+    setPatternInsertError(null);
+    setInsertingPattern(false);
+  }
+  const capturedTarget = capturedRef.current;
 
   const { entries: eligible, blockedReason } = useMemo(() => {
     if (!capturedTarget) return { entries: [] as ComponentDefinition[], blockedReason: null as string | null };
@@ -308,7 +268,7 @@ export function ComposerChooser({
     onAdd(capturedTarget, componentId);
     onExpandAncestors(ancestors);
     setStatus(`${entry?.title ?? componentId} added to ${targetLabel}.`);
-    dialogRef.current?.close();
+    onClose();
   }
 
   function selectPattern(ref: CompositionRecordRef, name: string) {
@@ -364,7 +324,7 @@ export function ComposerChooser({
         return;
       }
       setStatus(`${loadedPattern.name} added to ${targetLabel}.`);
-      dialogRef.current?.close();
+      onClose();
     } catch (reason) {
       setPatternInsertError(reason instanceof Error ? reason.message : "The Pattern could not be inserted.");
     } finally {
@@ -383,35 +343,6 @@ export function ComposerChooser({
     }
   }
 
-  // Manual Tab-wrap focus containment. Real browsers already make everything
-  // OUTSIDE a `showModal()` dialog inert, but not every DOM test environment
-  // simulates that (see this module's tests), and defense-in-depth here is
-  // cheap and matches common accessible-dialog practice.
-  function handleDialogKeyDown(event: JSX.TargetedKeyboardEvent<HTMLDialogElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      dialogRef.current?.close();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const focusable = [...dialog.querySelectorAll<HTMLElement>("button, input, [href], [tabindex]")].filter(
-      (el) => !el.hasAttribute("disabled"),
-    );
-    if (focusable.length === 0) return;
-    const first = focusable[0]!;
-    const last = focusable[focusable.length - 1]!;
-    const active = globalThis.document?.activeElement;
-    if (event.shiftKey && active === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
   function clearFilters() {
     setQuery("");
     setCategory(ALL_CATEGORY);
@@ -422,121 +353,69 @@ export function ComposerChooser({
 
   return (
     <>
-      <dialog
-        ref={dialogRef}
-        class="sg-composer-chooser sg-composer-tool-dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        style={toolDialogStyle(geometry.rect)}
-        onKeyDown={handleDialogKeyDown}
-        onClick={(event) => {
-          if (event.target === dialogRef.current) dialogRef.current?.close();
-        }}
+      <Dialog
+        open={open}
+        size="wide"
+        class="sg-composer-chooser"
+        title={capturedTarget ? `Add to ${targetLabel}` : "Add component"}
+        initialFocusRef={searchRef}
+        onClose={onClose}
+        footer={
+          <button type="button" class="cms-dialog__action" onClick={onClose}>
+            Cancel
+          </button>
+        }
       >
-        {/* Gated on `capturedTarget` (not just `open`) rather than the raw
-            `open` prop: this keeps the dialog's interactive content (and its
-            accessible names, e.g. duplicate catalog-card titles that also
-            appear in the tree) out of the DOM entirely while closed, instead
-            of depending on `dialog:not([open]) { display:none }` UA-stylesheet
-            behavior a DOM test environment may not simulate. */}
+        {/* Gated on `capturedTarget`, which every label below names. It is
+            captured in this same render, so the gate only ever closes for a
+            dialog that is not open. */}
         {capturedTarget && (
           <>
-            <div class="sg-composer-chooser-header">
-              <button
-                type="button"
-                class="sg-composer-tool-dialog-grip"
-                aria-label="Move dialog"
-                aria-describedby={`${titleId}-move-help`}
-                aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Home Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
-                title="Move dialog (Arrow keys; Shift moves farther; Home resets)"
-                {...moveGrip}
-              >
-                <DragGripIcon size="sm" class="sg-composer-tool-dialog-grip-dots" />
-              </button>
-              <h2 id={titleId} class="sg-composer-chooser-title">
-                Add to {targetLabel}
-              </h2>
-              <button
-                type="button"
-                class="sg-composer-toolbar-button sg-composer-chooser-cancel"
-                onClick={() => dialogRef.current?.close()}
-              >
-                <XMarkIcon size="sm" class="sg-composer-button-icon" />
-                Cancel
-              </button>
-              <p class="sg-composer-chooser-target">
-                Adding to <strong>{targetLabel}</strong>
-              </p>
-              <p id={`${titleId}-move-help`} class="sr-only">
-                Use Arrow keys to move the dialog 16 pixels, Shift plus Arrow keys to move it 48 pixels, or Home
-                to restore its default position and size.
-              </p>
-            </div>
-
-            <div class="sg-composer-chooser-tabs" role="tablist" aria-label="Add source">
-              <button
-                id={`${titleId}-components-tab`}
-                type="button"
-                role="tab"
-                class="sg-composer-chooser-tab"
-                aria-selected={activeTab === "components"}
-                aria-controls={`${titleId}-components-panel`}
-                onClick={() => setActiveTab("components")}
-              >
-                Components
-              </button>
-              <button
-                id={`${titleId}-patterns-tab`}
-                type="button"
-                role="tab"
-                class="sg-composer-chooser-tab"
-                aria-selected={activeTab === "patterns"}
-                aria-controls={`${titleId}-patterns-panel`}
-                onClick={() => setActiveTab("patterns")}
-              >
-                Patterns
-              </button>
+            <div class="sg-composer-chooser-source">
+              <SegmentedControl<ChooserTab>
+                label="Add source"
+                size="sm"
+                mode="pressed"
+                value={activeTab}
+                onChange={setActiveTab}
+                options={[
+                  { value: "components", label: "Components" },
+                  { value: "patterns", label: "Patterns" },
+                ]}
+              />
             </div>
 
             <div class="sg-composer-chooser-body">
               {activeTab === "components" ? (
-                <div
-                  id={`${titleId}-components-panel`}
-                  class="sg-composer-chooser-catalog"
-                  role="tabpanel"
-                  aria-labelledby={`${titleId}-components-tab`}
-                >
+                <div class="sg-composer-chooser-catalog" aria-label="Components">
                   {blockedReason ? (
-                    <p class="sg-composer-chooser-empty" role="status">
-                      {blockedReason}
-                    </p>
+                    <Banner tone="warn">{blockedReason}</Banner>
                   ) : (
                     <>
                       <div class="sg-composer-chooser-controls">
-                        <label class="sg-composer-chooser-search-label">
-                          <span class="sr-only">Search components</span>
-                          <input
-                            ref={searchRef}
-                            type="search"
-                            class="sg-composer-chooser-search"
-                            placeholder="Search components…"
-                            value={query}
-                            onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-                            onKeyDown={handleSearchKeyDown}
-                          />
-                        </label>
+                        <Input
+                          elementRef={searchRef}
+                          type="search"
+                          icon={SearchIcon}
+                          class="sg-composer-chooser-search"
+                          aria-label="Search components"
+                          placeholder="Search components…"
+                          value={query}
+                          onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+                          onKeyDown={handleSearchKeyDown}
+                        />
 
                         <div class="sg-composer-chooser-categories" role="group" aria-label="Filter by category">
                           {categories.map((cat) => (
-                            <button
+                            <Button
                               key={cat}
-                              type="button"
+                              size="xs"
                               class="sg-composer-chooser-category"
                               aria-pressed={category === cat}
                               onClick={() => setCategory(cat)}
                             >
                               {cat}
-                            </button>
+                            </Button>
                           ))}
                         </div>
                       </div>
@@ -546,15 +425,17 @@ export function ComposerChooser({
                       </p>
 
                       {filtered.length === 0 ? (
-                        <div class="sg-composer-chooser-empty">
-                          <p>No matching components. Try another search or clear the filters.</p>
-                          {hasActiveFilter && (
-                            <button type="button" class="sg-composer-toolbar-button" onClick={clearFilters}>
-                              <XMarkIcon size="sm" class="sg-composer-button-icon" />
+                        <EmptyState
+                          inline
+                          title="No matching components"
+                          description="Try another search or clear the filters."
+                          action={hasActiveFilter && (
+                            <Button size="sm" onClick={clearFilters}>
+                              <XMarkIcon size="sm" />
                               Clear filters
-                            </button>
+                            </Button>
                           )}
-                        </div>
+                        />
                       ) : (
                         <ul class="sg-composer-chooser-list">
                           {filtered.map((entry) => (
@@ -584,55 +465,44 @@ export function ComposerChooser({
                   )}
                 </div>
               ) : (
-                <div
-                  id={`${titleId}-patterns-panel`}
-                  class="sg-composer-chooser-catalog"
-                  role="tabpanel"
-                  aria-labelledby={`${titleId}-patterns-tab`}
-                >
+                <div class="sg-composer-chooser-catalog" aria-label="Patterns">
                   <div class="sg-composer-chooser-controls">
-                    <label class="sg-composer-chooser-search-label">
-                      <span class="sr-only">Search Patterns</span>
-                      <input
-                        ref={searchRef}
-                        type="search"
-                        class="sg-composer-chooser-search"
-                        placeholder="Search Patterns…"
-                        value={query}
-                        onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-                        onKeyDown={handleSearchKeyDown}
-                      />
-                    </label>
+                    <Input
+                      elementRef={searchRef}
+                      type="search"
+                      icon={SearchIcon}
+                      class="sg-composer-chooser-search"
+                      aria-label="Search Patterns"
+                      placeholder="Search Patterns…"
+                      value={query}
+                      onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+                      onKeyDown={handleSearchKeyDown}
+                    />
                   </div>
 
                   {patternCatalogLoading ? (
-                    <div class="sg-composer-chooser-empty" role="status">
-                      <p>Loading Patterns…</p>
-                    </div>
+                    <p class="sg-composer-chooser-note" role="status">Loading Patterns…</p>
                   ) : patternCatalog && patternCatalog.status !== "listed" ? (
-                    <div class="sg-composer-chooser-empty" role="status">
-                      <p>{patternCatalog.message}</p>
-                    </div>
+                    <p class="sg-composer-chooser-note" role="status">{patternCatalog.message}</p>
                   ) : !patternCatalog ? (
-                    <div class="sg-composer-chooser-empty" role="status">
-                      <p>Patterns are unavailable in this editor.</p>
-                    </div>
+                    <p class="sg-composer-chooser-note" role="status">Patterns are unavailable in this editor.</p>
                   ) : filteredPatterns.length === 0 ? (
-                    <div class="sg-composer-chooser-empty">
-                      <p>{patterns.length === 0 ? "No published Patterns are available." : "No matching Patterns."}</p>
-                      {query.trim() && (
-                        <button type="button" class="sg-composer-toolbar-button" onClick={clearFilters}>
-                          <XMarkIcon size="sm" class="sg-composer-button-icon" />
+                    <EmptyState
+                      inline
+                      title={patterns.length === 0 ? "No published Patterns are available." : "No matching Patterns."}
+                      action={query.trim() ? (
+                        <Button size="sm" onClick={clearFilters}>
+                          <XMarkIcon size="sm" />
                           Clear search
-                        </button>
-                      )}
-                    </div>
+                        </Button>
+                      ) : undefined}
+                    />
                   ) : (
                     <>
                       <p class="sg-composer-chooser-count" aria-live="polite">
                         {filteredPatterns.length} of {patterns.length} Pattern{patterns.length === 1 ? "" : "s"}
                       </p>
-                      <ul class="sg-composer-chooser-list sg-composer-chooser-pattern-list">
+                      <ul class="sg-composer-chooser-list">
                         {filteredPatterns.map((entry) => {
                           const key = patternRefKey(entry.ref);
                           const selected = key === selectedPatternKey;
@@ -672,7 +542,7 @@ export function ComposerChooser({
               ) : (
                 <div class="sg-composer-chooser-pattern-detail">
                   {patternLoading && <p class="sg-composer-chooser-preview-empty">Loading Pattern…</p>}
-                  {patternLoadError && <p class="sg-composer-chooser-pattern-error" role="status">{patternLoadError}</p>}
+                  {patternLoadError && <Banner tone="err">{patternLoadError}</Banner>}
                   {loadedPattern && !patternLoading && !patternLoadError && (
                     <>
                       <ChooserPreviewHost
@@ -690,16 +560,15 @@ export function ComposerChooser({
                           {patternEligibility?.reason}
                         </p>
                       )}
-                      {patternInsertError && <p class="sg-composer-chooser-pattern-error" role="status">{patternInsertError}</p>}
-                      <button
-                        type="button"
-                        class="sg-composer-toolbar-button"
+                      {patternInsertError && <Banner tone="err">{patternInsertError}</Banner>}
+                      <Button
+                        variant="primary"
                         disabled={!patternEligibility?.eligible || !onInsertPattern || insertingPattern}
                         onClick={() => void confirmPatternInsertion()}
                       >
-                        <DuplicateIcon size="sm" class="sg-composer-button-icon" />
+                        <DuplicateIcon size="sm" />
                         {insertingPattern ? "Inserting…" : "Insert Pattern"}
-                      </button>
+                      </Button>
                     </>
                   )}
                   {!patternLoading && !patternLoadError && !loadedPattern && (
@@ -710,8 +579,8 @@ export function ComposerChooser({
             </div>
           </>
         )}
-      </dialog>
-      <div class="sr-only" role="status" aria-live="polite">
+      </Dialog>
+      <div class="cms-sr-only" role="status" aria-live="polite">
         {status}
       </div>
     </>

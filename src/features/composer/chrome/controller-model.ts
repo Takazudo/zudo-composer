@@ -3,14 +3,14 @@
 // The parent `/composer` route owns two independent pieces of state:
 //   - the Takazudo/zudo-sg#245 `CompositionDocument` (the persisted, versioned document tree)
 //   - session state that never round-trips through the document itself:
-//     selection, expansion, edit/preview mode, canvas viewport choice, rail
-//     widths, and an honest save/load status.
+//     selection, expansion, edit/preview mode, canvas viewport choice, and an
+//     honest save/load status.
 //
 // This module is 100% pure — no DOM, no localStorage, no Preact. It only
 // applies Takazudo/zudo-sg#245's commands (addNode/updateProps/reorderNode/removeNode) and
 // folds their `CommandResult` into a new `ComposerControllerState`. Side
-// effects (queue persistence, resizer DOM wiring, and the native navigation
-// guard) live in sibling modules. Keeping this reducer pure makes its command
+// effects (queue persistence and the native navigation guard) live in sibling
+// modules. Keeping this reducer pure makes its command
 // and callback behavior cheap to prove without a DOM harness.
 
 import type {
@@ -82,8 +82,6 @@ export interface ComposerControllerState {
   expandedIds: ReadonlySet<string>;
   mode: ComposerMode;
   viewport: ComposerCanvasViewport;
-  leftWidth: number;
-  rightWidth: number;
   saveStatus: ComposerSaveStatus;
   /**
    * File-provider generated output is derived, never canonical document data.
@@ -146,8 +144,6 @@ export type ComposerAction =
   | { type: "setExpanded"; nodeId: string; expanded: boolean }
   | { type: "setMode"; mode: ComposerMode }
   | { type: "setViewport"; viewport: ComposerCanvasViewport }
-  | { type: "setLeftWidth"; width: number }
-  | { type: "setRightWidth"; width: number }
   | { type: "setSaveStatus"; status: ComposerSaveStatus };
 
 export interface ComposerReducerContext {
@@ -172,8 +168,6 @@ type NonDocumentMutationType =
   | "setExpanded"
   | "setMode"
   | "setViewport"
-  | "setLeftWidth"
-  | "setRightWidth"
   | "setSaveStatus";
 
 /**
@@ -296,18 +290,14 @@ export function createInitialControllerState(options: {
   rootPolicy?: RootPolicy;
   saveStatus: ComposerSaveStatus;
   derivedOutput?: CompositionDerivedOutputOutcome | null;
-  leftWidth: number;
-  rightWidth: number;
 }): ComposerControllerState {
-  const { document, manifest, rootPolicy, saveStatus, derivedOutput = null, leftWidth, rightWidth } = options;
+  const { document, manifest, rootPolicy, saveStatus, derivedOutput = null } = options;
   return {
     document,
     selectedId: repairSelection(document, manifest, null),
     expandedIds: new Set<string>(),
     mode: "edit",
     viewport: "fluid",
-    leftWidth,
-    rightWidth,
     saveStatus,
     derivedOutput,
     clipboard: null,
@@ -680,10 +670,6 @@ export function applyComposerAction(
       return { state: { ...state, mode: action.mode }, error: null, documentChanged: false };
     case "setViewport":
       return { state: { ...state, viewport: action.viewport }, error: null, documentChanged: false };
-    case "setLeftWidth":
-      return { state: { ...state, leftWidth: action.width }, error: null, documentChanged: false };
-    case "setRightWidth":
-      return { state: { ...state, rightWidth: action.width }, error: null, documentChanged: false };
     case "setSaveStatus":
       return { state: { ...state, saveStatus: action.status }, error: null, documentChanged: false };
   }

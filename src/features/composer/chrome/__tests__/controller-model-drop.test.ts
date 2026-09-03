@@ -34,8 +34,6 @@ function stateFrom(document: ReturnType<typeof makeAbcDocument>): ComposerContro
     document,
     manifest: fixtureManifest,
     saveStatus: { kind: "saved" },
-    leftWidth: 260,
-    rightWidth: 320,
   });
 }
 
