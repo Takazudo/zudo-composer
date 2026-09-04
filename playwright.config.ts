@@ -16,19 +16,21 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
   },
   projects: [
-    // Two lanes chosen by filename suffix, the same convention
-    // `playwright.dev.config.ts` uses:
-    //   *.coarse.pw.ts  -> coarse only
-    //   everything else -> desktop only
+    // The same filename convention `playwright.dev.config.ts` uses, so a spec
+    // does not change lanes by moving between them:
+    //   *.coarse.pw.ts      -> coarse only
+    //   *.responsive.pw.ts  -> BOTH desktop and coarse
+    //   everything else     -> desktop only
     // The coarse rules in `ui.css` are switched OFF on a fine pointer, so a
-    // spec that checks one from the desktop lane passes while proving nothing.
-    // The dev lane already has a coarse project but cannot list a library —
-    // it activates no SiteProject — and a table is the one thing the coarse
-    // block still promises 44px to that only a listing can produce.
+    // coarse spec that reached the desktop project would pass while proving
+    // nothing. This lane needs a coarse project of its own because the dev
+    // lane, which has one, activates no SiteProject and so can never render a
+    // library table — the one surface the coarse block still promises 44px to
+    // that only a listing can produce.
     { name: "desktop", testIgnore: "**/*.coarse.pw.ts" },
     {
       name: "coarse",
-      testMatch: "**/*.coarse.pw.ts",
+      testMatch: ["**/*.coarse.pw.ts", "**/*.responsive.pw.ts"],
       use: { hasTouch: true, viewport: { width: 390, height: 844 } },
     },
   ],
