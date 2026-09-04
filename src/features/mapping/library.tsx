@@ -135,12 +135,12 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
     <LibraryPage
       class="cms-mapping-library"
       icon={MappingIcon}
-      title="Mapping library"
+      title="Mappings"
       purpose="Drive a Composition's props from a Content model's fields, one Entry at a time."
       primaryAction={
         <Button variant="primary" disabled={!canCreate} onClick={() => setCreating(true)}>
           <PlusIcon size="sm" />
-          New Mapping
+          New mapping
         </Button>
       }
     >
@@ -162,12 +162,12 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
       ) : null}
       {state.phase === "recovery" ? (
         <LibraryRecoveryBanner
-          title="Stored Mappings need recovery."
+          title="Stored mappings need recovery."
           description={state.recoveryMessage ?? state.message}
           onRetry={() => run(() => controller.retryInitialization())}
           onStartFresh={() => confirm.request({
             title: "Start fresh?",
-            message: "Every quarantined Mapping record is permanently discarded, including the ones that still read correctly.",
+            message: "Every quarantined mapping record is permanently discarded, including the ones that still read correctly.",
             confirmLabel: "Start fresh",
             tone: "danger",
             onConfirm: () => run(() => controller.startFresh()),
@@ -175,24 +175,24 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
         />
       ) : null}
       {state.phase === "idle" || state.phase === "loading" ? (
-        <LibrarySkeleton columns={6} label="Loading Mappings…" />
+        <LibrarySkeleton columns={6} label="Loading mappings…" />
       ) : null}
       {ready && summaries.length === 0 ? (
         <LibraryEmpty
           icon={MappingIcon}
-          title="No Mappings yet"
-          description="A Mapping joins one Content model to one Composition and says which field drives which prop."
+          title="No mappings yet"
+          description="A mapping joins one Content model to one Composition and says which field drives which prop."
           action={
             <Button variant="primary" disabled={!canCreate} onClick={() => setCreating(true)}>
               <PlusIcon size="sm" />
-              {canCreate ? "Create your first Mapping" : "A Content model and a Composition are needed first"}
+              {canCreate ? "Create your first mapping" : "A Content model and a Composition are needed first"}
             </Button>
           }
         />
       ) : null}
       {ready && summaries.length > 0 ? (
         <>
-          <LibraryToolbar query={query} searchLabel="Filter Mappings" searchPlaceholder="Filter by name or ID" />
+          <LibraryToolbar query={query} searchLabel="Filter mappings" searchPlaceholder="Filter by name or ID" />
           <LibraryTable
             caption="Mappings"
             rows={query.rows}
@@ -204,7 +204,7 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
             bulkBar={selection.selectedCount > 0 ? (
               <BulkBar
                 count={selection.selectedCount}
-                describeCount={(count) => `${count} ${count === 1 ? "Mapping" : "Mappings"} selected`}
+                describeCount={(count) => `${count} ${count === 1 ? "mapping" : "mappings"} selected`}
                 actions={[{
                   id: "delete",
                   label: "Delete",
@@ -231,7 +231,7 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
             })}
           />
           <LibraryPagination
-            summary={`${query.rows.length} of ${summaries.length} ${summaries.length === 1 ? "Mapping" : "Mappings"} · ${controller.provider.descriptor.label}`}
+            summary={`${query.rows.length} of ${summaries.length} mappings · ${controller.provider.descriptor.label}`}
           />
         </>
       ) : null}

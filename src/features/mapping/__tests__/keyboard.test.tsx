@@ -69,16 +69,16 @@ describe("Mapping keyboard and dialog behavior", () => {
     expect(workspace.controller.state.saveStatus).toBe("saved");
   });
 
-  it("returns focus to New Mapping after the create dialog closes", async () => {
+  it("returns focus to New mapping after the create dialog closes", async () => {
     const workspace = harness();
     await workspace.controller.initialize();
     renderApp(workspace);
 
-    const opener = screen.getByRole("button", { name: "New Mapping" });
+    const opener = screen.getByRole("button", { name: "New mapping" });
     opener.focus();
     fireEvent.click(opener);
 
-    const dialog = await screen.findByRole("dialog", { name: "Create Mapping" });
+    const dialog = await screen.findByRole("dialog", { name: "Create mapping" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(opener).toHaveFocus());
   });

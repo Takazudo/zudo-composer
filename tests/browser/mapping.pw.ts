@@ -133,7 +133,7 @@ test("direct preview is refreshable and isolated from every host product", async
   await expect(page.locator(".app-shell, .cms-rail, .cms-topbar, .sg-content-app, .cms-mapping-root, .sg-sitemapper-root")).toHaveCount(0);
   await page.reload();
   await expect(page.locator("#app")).toBeAttached();
-  await expect(page.getByText(/Content authoring|Mapping library|Sitemaps/)).toHaveCount(0);
+  await expect(page.getByText(/Content authoring|Mappings|Sitemaps/)).toHaveCount(0);
   const previewDocuments = responses.filter((response) => response.request().isNavigationRequest() && new URL(response.url()).pathname === "/composer/preview");
   expect(previewDocuments).toHaveLength(2);
   expect(previewDocuments.every((response) => response.ok())).toBe(true);

@@ -37,6 +37,7 @@ jobs:
       - run: pnpm contract:external-install
       - run: pnpm deployment:boundary
       - run: pnpm handoff:boundary
+      - run: pnpm styles:class-names
       - run: pnpm test
       - run: pnpm build
       - run: pnpm provider:boundary

@@ -58,7 +58,7 @@ describe("MappingField", () => {
     render(<MappingField value={{ kind: "mapping", ref: { providerId: "mapping", recordId: "gone" }, route: { kind: "single" } }} routeInfo={{ status: "blocked", derivedRouteCount: 0, diagnostics: [diagnostic] }} catalog={sourceCatalog} onChange={() => {}} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("assigned Mapping was not found");
     fireEvent.click(screen.getByRole("button", { name: "Change…" }));
-    expect(await screen.findByRole("dialog", { name: "Choose a Content Mapping" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Choose a Mapping" })).toBeInTheDocument();
     expect(sourceCatalog.routes.resolveMapping).not.toHaveBeenCalled();
   });
 
@@ -76,7 +76,7 @@ describe("MappingField", () => {
     render(<MappingField catalog={sourceCatalog} onChange={() => {}} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Choose a Content Mapping" });
+    const dialog = await screen.findByRole("dialog", { name: "Choose a Mapping" });
     fireEvent.click(await within(dialog).findByRole("button", { name: /Assign Article Mapping/ }));
 
     expect(await screen.findByText("That Mapping no longer exists, so nothing was assigned."))
@@ -100,7 +100,7 @@ describe("MappingField", () => {
     render(<MappingField catalog={sourceCatalog} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Choose a Content Mapping" });
+    const dialog = await screen.findByRole("dialog", { name: "Choose a Mapping" });
     fireEvent.click(await within(dialog).findByRole("button", { name: /Assign Article Mapping/ }));
 
     expect(await screen.findByText("“Articles” has no slug field, so it derives no routes.")).toBeInTheDocument();
@@ -111,7 +111,7 @@ describe("MappingField", () => {
     const sourceCatalog = catalog();
     render(<MappingField catalog={sourceCatalog} onChange={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Choose mapping…" }));
-    expect(await screen.findByRole("dialog", { name: "Choose a Content Mapping" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Choose a Mapping" })).toBeInTheDocument();
     await waitFor(() => expect(sourceCatalog.list).toHaveBeenCalledTimes(1));
   });
 });

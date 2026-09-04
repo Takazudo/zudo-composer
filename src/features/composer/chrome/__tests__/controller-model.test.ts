@@ -13,7 +13,6 @@ import {
   createInitialControllerState,
   DOCUMENT_MUTATION_HISTORY_POLICY,
   DOCUMENT_MUTATION_TYPES,
-  describeSaveStatus,
   hasUnsavedChanges,
   isDocumentMutation,
   type ComposerReducerContext,
@@ -292,14 +291,5 @@ describe("isDocumentMutation / hasUnsavedChanges", () => {
     expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "dirty" } })).toBe(true);
     expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "saving" } })).toBe(true);
     expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "error", reason: "x" } })).toBe(true);
-  });
-});
-
-describe("describeSaveStatus", () => {
-  it("has concise provider-neutral wording for async persistence states", () => {
-    expect(describeSaveStatus({ kind: "saved" })).toBe("Saved");
-    expect(describeSaveStatus({ kind: "dirty" })).toBe("Unsaved changes");
-    expect(describeSaveStatus({ kind: "saving" })).toBe("Saving…");
-    expect(describeSaveStatus({ kind: "error", reason: "quota" })).toBe("Save failed");
   });
 });

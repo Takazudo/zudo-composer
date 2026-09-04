@@ -25,7 +25,7 @@ describe('App', () => {
   it.each([
     ['/composer', 'heading', 'Compositions', 'Compositions'],
     ['/content', 'tree', 'Content', 'Content'],
-    ['/mapping', 'heading', 'Mapping library', 'Mappings'],
+    ['/mapping', 'heading', 'Mappings', 'Mappings'],
     ['/sitemapper', 'heading', 'Sitemaps', 'Sitemaps'],
     ['/media', 'heading', 'Media', 'Media'],
   ])('mounts the real product on direct refresh at %s', async (route, role, name, railLabel) => {

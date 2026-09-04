@@ -232,6 +232,31 @@ describe("Menu dismissal and focus restore", () => {
     fireEvent.scroll(window);
     expect(screen.queryByRole("menu")).toBeNull();
   });
+
+  it("closes when a scroll container around the trigger scrolls", () => {
+    const view = render(<RowMenu />);
+    openMenu();
+    fireEvent.scroll(view.container.firstElementChild!);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("stays open when something that cannot move the trigger scrolls", () => {
+    // A text input scrolling its own value back to the start as it loses focus
+    // is a scroll event like any other, and the listener runs in the capture
+    // phase. Dismissing on it closed the Content schema's type menu on the very
+    // click that opened it, because that click blurred the Key cell beside it.
+    render(<RowMenu />);
+    const menu = openMenu();
+    fireEvent.scroll(screen.getByRole("button", { name: "Outside" }));
+    expect(menu).toBeInTheDocument();
+  });
+
+  it("stays open while its own panel is scrolled", () => {
+    render(<RowMenu />);
+    const menu = openMenu();
+    fireEvent.scroll(menu);
+    expect(menu).toBeInTheDocument();
+  });
 });
 
 describe("Menu structure", () => {

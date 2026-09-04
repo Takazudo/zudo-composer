@@ -679,20 +679,3 @@ export function applyComposerAction(
 export function hasUnsavedChanges(state: ComposerControllerState): boolean {
   return state.saveStatus.kind !== "saved";
 }
-
-/**
- * A short, honest, user-facing description of `saveStatus` — the single
- * place the toolbar's save indicator sources its provider-neutral copy from.
- */
-export function describeSaveStatus(status: ComposerSaveStatus): string {
-  switch (status.kind) {
-    case "saved":
-      return "Saved";
-    case "dirty":
-      return "Unsaved changes";
-    case "saving":
-      return "Saving…";
-    case "error":
-      return "Save failed";
-  }
-}

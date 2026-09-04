@@ -76,13 +76,20 @@ async function auditTouchTargets(page: Page): Promise<TargetAudit> {
           // all; it is not a touch target on this screen.
           if (rect.width === 0 && rect.height === 0) continue;
           counted += 1;
+          // Compared at the same precision it is reported at. A box still
+          // settling can measure 43.99 for a `min-height: 44px` rule, which
+          // failed the raw comparison and then printed as "height: 44" —
+          // a report that contradicts its own failure. Rounding still catches
+          // anything really undersized: the alternative to 44px here is 28.
+          const width = Math.round(rect.width);
+          const height = Math.round(rect.height);
           const owesWidth = square.some((candidate) => element.matches(candidate));
-          if (rect.height >= minimum && (!owesWidth || rect.width >= minimum)) continue;
+          if (height >= minimum && (!owesWidth || width >= minimum)) continue;
           undersized.push({
             selector,
             name: element.getAttribute("aria-label") ?? (element.textContent ?? "").replace(/\s+/gu, " ").trim().slice(0, 40),
-            width: Math.round(rect.width),
-            height: Math.round(rect.height),
+            width,
+            height,
           });
         }
       }

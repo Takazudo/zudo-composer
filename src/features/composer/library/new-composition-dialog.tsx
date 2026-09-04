@@ -247,7 +247,10 @@ export function NewCompositionDialog({
             size="sm"
             type="search"
             icon={SearchIcon}
-            class="min-w-48 flex-1"
+            // An arbitrary length, not `min-w-48`: this app's Tailwind theme
+            // defines no base `--spacing`, so every numeric spacing utility
+            // generates nothing. `scripts/check-class-names.mjs` guards that.
+            class="min-w-[12rem] flex-1"
             aria-label="Search Global templates"
             placeholder="Search templates…"
             value={query}

@@ -42,7 +42,7 @@ export function MappingPickerDialog({ open, catalog, onSelect, onClose }: Mappin
   return (
     <Dialog
       open={open}
-      title="Choose a Content Mapping"
+      title="Choose a Mapping"
       class="sg-sitemapper-picker"
       onClose={onClose}
       footer={<button type="button" class="cms-dialog__action" onClick={onClose}>Cancel</button>}
@@ -59,7 +59,7 @@ export function MappingPickerDialog({ open, catalog, onSelect, onClose }: Mappin
         <EmptyState inline icon={MappingIcon} title="No saved Mappings are available." />
       ) : null}
       {entries.length > 0 ? (
-        <ul class="sg-sitemapper-picker__list" aria-label="Saved Content Mappings">
+        <ul class="sg-sitemapper-picker__list" aria-label="Saved Mappings">
           {entries.map((entry) => (
             <li key={`${entry.ref.providerId}:${entry.ref.recordId}`}>
               <MappingIcon size="sm" class="sg-sitemapper-picker__glyph" />

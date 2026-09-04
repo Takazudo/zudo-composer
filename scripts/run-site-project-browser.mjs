@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -40,7 +40,13 @@ async function runCli(request, environment) {
   return parseCli(result, request.operation);
 }
 
-const temporaryRoot = await mkdtemp(join(tmpdir(), "zudo-composer-site-project-browser-"));
+// `realpath`, because the store requires its root to BE its own real path and
+// refuses to write otherwise ("root escaped its fixed location"). On macOS
+// `os.tmpdir()` is `/var/folders/...`, a symlink to `/private/var/folders/...`,
+// so without this both SiteProject lanes fail before Playwright starts, with
+// the generic "Project storage is unavailable." the API returns for any
+// storage fault. Linux CI never sees it.
+const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-site-project-browser-")));
 try {
   const environment = {
     ZUDO_SITE_PROJECT_ROOT: temporaryRoot,

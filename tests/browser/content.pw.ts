@@ -114,35 +114,22 @@ function schemaRow(page: Page, label: string): Locator {
   return page.getByRole("row").filter({ has: page.getByRole("button", { name: `Type for ${label}`, exact: true }) });
 }
 
-/** Choose a field's type from its popover, which replaced nine inline cards. */
 /**
- * The kind rows render `<strong>{label}</strong><small>{explanation}</small>`
- * with no separator, so the accessible name runs together as
- * "SlugURL-friendly text…". A `\b` after the label cannot match — the next
- * character is a word character. Anchor on the prefix only until the shared
- * component gives the name a separator (tracked for #174).
+ * Choose a field's type from its popover, which replaced nine inline cards.
+ *
+ * `kind` is matched against the row's ACCESSIBLE NAME, which is not its
+ * `textContent`: the row renders `<strong>{label}</strong><small>{sentence}</small>`,
+ * and accname separates the two, so the name reads "Slug URL-friendly text…"
+ * where `textContent` reads "SlugURL-friendly…". Measured, not assumed — the
+ * assertion below pins one whole name so a regression in that separator is a
+ * failure here rather than a screen-reader defect nobody sees.
  */
 async function chooseFieldKind(page: Page, label: string, kind: RegExp) {
-  // Let the debounced autosave land first. The edits that precede this re-render
-  // the schema table, which tears down and rebuilds the portal-rendered menu —
-  // opening it mid-flight leaves a handle on a detached node whose computed
-  // styles come back empty and which cannot take focus.
   await expect(saveStatus(page)).toContainText("Saved");
   const trigger = schemaRow(page, label).getByRole("button", { name: `Type for ${label}`, exact: true });
   const menu = page.getByRole("menu", { name: `Type for ${label}`, exact: true });
   const item = menu.getByRole("menuitemradio", { name: kind });
-  // A re-render of the schema table rebuilds this portal-rendered menu, so an
-  // open one can vanish before it can be used. Reopen once rather than fail on
-  // a race the author would never notice.
   await trigger.click();
-  if (!(await item.isVisible().catch(() => false))) {
-    await trigger.click({ trial: true }).catch(() => undefined);
-    if (!(await item.isVisible().catch(() => false))) await trigger.click();
-  }
-  // The menu is portal-rendered and can be torn down and rebuilt while open, so
-  // an early handle points at a detached node — its computed styles come back
-  // empty and focus goes nowhere. Waiting for visibility forces a re-resolve
-  // against the live element before acting on it.
   await expect(item).toBeVisible();
   await item.click();
   await expect(menu).toHaveCount(0);
@@ -260,7 +247,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(page).toHaveURL(/\/content\?model=about-content&entry=/);
 
   await page.goto("/mapping");
-  await expect(page.getByRole("heading", { name: "Mapping library" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
   // The card's composite name became a row: three bindings and Ready are two
   // columns now, and opening the record is a real navigation to its own URL.
   const aboutMapping = mappingRow(page, "About page mapping");
@@ -295,13 +282,6 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
 });
 
 test("Content models, Mapping editing, and Sitemapper routes survive one browser journey", async ({ page }, testInfo) => {
-  // Known-failing, not skipped-and-forgotten: the schema block below cannot
-  // drive the field-kind menu. It is portal-rendered and rebuilt whenever the
-  // schema table re-renders, so an open menu detaches — its computed styles come
-  // back empty, `focus()` reaches a dead node, and a click never becomes
-  // actionable. Diagnosis and evidence are on the tracking issue; the fix
-  // belongs with the component, not with a longer wait here.
-  test.fixme(true, "field-kind menu detaches while open — see the CMS UI Polish confirm issue");
   test.setTimeout(180_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -334,6 +314,13 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   const lockedKinds = page.getByRole("menu", { name: "Type for Heading", exact: true });
   await expect(lockedKinds.getByText("Type locked · stored Entries use it")).toBeVisible();
   await expect(lockedKinds.getByRole("menuitemradio", { name: /^Date/ })).toBeDisabled();
+  // One whole accessible name, so the separator between the row's `<strong>`
+  // label and its `<small>` sentence is proved rather than assumed. The row's
+  // `textContent` carries none, and a spec that measured that instead would
+  // conclude the name runs together — which is what this file used to claim.
+  await expect(lockedKinds.getByRole("menuitemradio").first()).toHaveAccessibleName(
+    "Short text A single line for names, titles, and concise copy.",
+  );
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Add field" }).click();
@@ -445,7 +432,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   });
 
   await page.goto("/mapping");
-  await expect(page.getByRole("heading", { name: "Mapping library" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
   await page.reload();
   const journalMapping = mappingRow(page, COLLECTION_MAPPING);
   await expect(journalMapping.getByRole("cell").filter({ hasText: /^4$/ })).toHaveCount(1);
@@ -526,8 +513,8 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(COLLECTION_MAPPING);
 
   await page.getByRole("link", { name: "Back to Mappings" }).click();
-  await page.getByRole("button", { name: "New Mapping" }).click();
-  const createMappingDialog = page.getByRole("dialog", { name: "Create Mapping" });
+  await page.getByRole("button", { name: "New mapping" }).click();
+  const createMappingDialog = page.getByRole("dialog", { name: "Create mapping" });
   await createMappingDialog.getByRole("textbox", { name: "Name" }).fill(SINGLE_MAPPING);
   await selectOptionMatching(createMappingDialog.getByRole("combobox", { name: "Content model" }), /Browser Site settings · single/);
   await createMappingDialog.getByRole("button", { name: "Create" }).click();
@@ -544,7 +531,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "New sitemap" }).click();
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
-  await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Content Mapping journey");
+  await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Mapping journey");
   await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
   await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
 
@@ -570,7 +557,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   const sourceKind = inspector.getByRole("radiogroup", { name: "Page source type" });
   await sourceKind.getByRole("radio", { name: "Mapping", exact: true }).click();
   await inspector.getByRole("button", { name: "Choose mapping" }).click();
-  await page.getByRole("dialog", { name: "Choose a Content Mapping" }).getByRole("button", { name: `Assign ${COLLECTION_MAPPING}` }).click();
+  await page.getByRole("dialog", { name: "Choose a Mapping" }).getByRole("button", { name: `Assign ${COLLECTION_MAPPING}` }).click();
   // Scoped to the Mapping group: the shell rail names the active provider in
   // its foot, so a page-wide text match can pass on chrome rather than on the
   // assignment under test.
@@ -610,7 +597,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(mappingCard).toContainText(/·\s*24 routes/);
 
   await mappingField.getByRole("button", { name: "Change mapping" }).click();
-  await page.getByRole("dialog", { name: "Choose a Content Mapping" }).getByRole("button", { name: `Assign ${SINGLE_MAPPING}` }).click();
+  await page.getByRole("dialog", { name: "Choose a Mapping" }).getByRole("button", { name: `Assign ${SINGLE_MAPPING}` }).click();
   await expect(mappingCard.getByText(SINGLE_MAPPING, { exact: true })).toBeVisible();
   // A single Content model derives one route from the page's own slug, so it
   // offers no per-Entry slug field at all.
@@ -636,9 +623,9 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // on disk before it happens rather than sitting in the debounced queue.
   await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
   await page.getByRole("link", { name: "Back to Sitemaps" }).click();
-  const journeyRow = sitemapRow(page, "Content Mapping journey");
+  const journeyRow = sitemapRow(page, "Mapping journey");
   await expect(journeyRow.getByRole("cell").filter({ hasText: /^1$/ })).toHaveCount(1);
-  await journeyRow.getByRole("link", { name: "Content Mapping journey", exact: true }).click();
+  await journeyRow.getByRole("link", { name: "Mapping journey", exact: true }).click();
   const reopened = page.getByRole("region", { name: "Inspector" });
   await page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /^Home\b/ }).click();
   await expect(reopened.locator(".cms-pane__header .cms-chip")).toHaveText("Composition");
