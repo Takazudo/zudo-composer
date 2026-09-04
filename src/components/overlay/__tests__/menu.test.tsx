@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/preact";
+import { act, fireEvent, render, screen } from "@testing-library/preact";
 import type { JSX } from "preact";
-import { useRef, useState } from "preact/hooks";
-import { describe, expect, it, vi } from "vitest";
+import { useCallback, useRef, useState } from "preact/hooks";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import "./overlay-test-environment";
 import { TrashIcon } from "../../icons";
 import { Menu, MenuCheckboxItem, MenuItem, MenuRadioItem, MenuSection, MenuSeparator } from "../menu";
@@ -79,6 +79,59 @@ function ColumnMenu(): JSX.Element {
   );
 }
 
+function RerenderingMenu({ replaceTrigger = false }: { replaceTrigger?: boolean }): JSX.Element {
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [revision, setRevision] = useState(0);
+  const menu = useMenu(triggerRef, { onOpenChange: (open) => open && setRevision(1) });
+  return (
+    <div>
+      <button
+        key={replaceTrigger ? revision : undefined}
+        data-revision={revision}
+        type="button"
+        ref={triggerRef}
+        {...menu.triggerProps}
+      >
+        More
+      </button>
+      <Menu controller={menu} label="Row actions"><MenuItem>Open</MenuItem></Menu>
+    </div>
+  );
+}
+
+let restoreTransientTrigger: (() => void) | null = null;
+
+function TransientTriggerMenu({ retainDisconnected = false }: { retainDisconnected?: boolean }): JSX.Element {
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [showTrigger, setShowTrigger] = useState(true);
+  restoreTransientTrigger = () => setShowTrigger(true);
+  const setTrigger = useCallback((node: HTMLButtonElement | null) => {
+    if (node || !retainDisconnected) triggerRef.current = node;
+  }, [retainDisconnected]);
+  const menu = useMenu(triggerRef, { onOpenChange: (open) => open && setShowTrigger(false) });
+  return (
+    <div>
+      {showTrigger ? <button type="button" ref={setTrigger} {...menu.triggerProps}>More</button> : null}
+      <button type="button">Outside</button>
+      <Menu controller={menu} label="Row actions"><MenuItem>Open</MenuItem></Menu>
+    </div>
+  );
+}
+
+function NestedScrollMenu(): JSX.Element {
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menu = useMenu(triggerRef);
+  return (
+    <div data-testid="outer-clip" style={{ overflow: "hidden" }}>
+      <div data-testid="inner-scroll" style={{ overflow: "auto" }}>
+        <button type="button" ref={triggerRef} {...menu.triggerProps}>More</button>
+        <button type="button">Outside</button>
+        <Menu controller={menu} label="Row actions"><MenuItem>Open</MenuItem></Menu>
+      </div>
+    </div>
+  );
+}
+
 function openMenu(): HTMLElement {
   fireEvent.click(screen.getByRole("button", { name: "More" }));
   return screen.getByRole("menu", { name: "Row actions" });
@@ -87,6 +140,25 @@ function openMenu(): HTMLElement {
 function itemNames(): string[] {
   return screen.getAllByRole("menuitem").map((item) => item.textContent?.trim() ?? "");
 }
+
+function rect(left: number, top: number, width: number, height: number): DOMRect {
+  return {
+    x: left,
+    y: top,
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    toJSON: () => ({}),
+  };
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("Menu trigger contract", () => {
   it("advertises the menu it controls and mirrors its open state", () => {
@@ -233,11 +305,22 @@ describe("Menu dismissal and focus restore", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("closes when a scroll container around the trigger scrolls", () => {
+  it("stays open when an ancestor scroll leaves the trigger visible", () => {
     const view = render(<RowMenu />);
-    openMenu();
-    fireEvent.scroll(view.container.firstElementChild!);
-    expect(screen.queryByRole("menu")).toBeNull();
+    const ancestor = view.container.firstElementChild as HTMLElement;
+    ancestor.style.overflow = "auto";
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.textContent === "More") return rect(100, 100, 30, 20);
+      if (this === ancestor) return rect(20, 20, 300, 240);
+      if (this.getAttribute("role") === "menu") return rect(0, 0, 80, 40);
+      return originalRect.call(this);
+    });
+    const menu = openMenu();
+    fireEvent.scroll(ancestor);
+    expect(menu).toBeInTheDocument();
+    expect(menu.style.left).toBe("100px");
+    expect(menu.style.top).toBe("124px");
   });
 
   it("stays open when something that cannot move the trigger scrolls", () => {
@@ -257,6 +340,119 @@ describe("Menu dismissal and focus restore", () => {
     fireEvent.scroll(menu);
     expect(menu).toBeInTheDocument();
   });
+
+  it("survives an owner re-render and a trigger-node replacement before panel mount", () => {
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute("data-revision") === "1") return rect(220, 80, 30, 20);
+      if (this.getAttribute("role") === "menu") return rect(0, 0, 80, 40);
+      return originalRect.call(this);
+    });
+
+    const ordinary = render(<RerenderingMenu />);
+    const ordinaryTrigger = screen.getByRole("button", { name: "More" });
+    fireEvent.click(ordinaryTrigger);
+    expect(screen.getByRole("menu", { name: "Row actions" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More" })).toBe(ordinaryTrigger);
+    ordinary.unmount();
+
+    render(<RerenderingMenu replaceTrigger />);
+    const originalTrigger = screen.getByRole("button", { name: "More" });
+    fireEvent.click(originalTrigger);
+    const replacement = screen.getByRole("button", { name: "More" });
+    const menu = screen.getByRole("menu", { name: "Row actions" });
+    expect(replacement).not.toBe(originalTrigger);
+    expect(menu).toBeInTheDocument();
+    expect(menu.style.left).toBe("220px");
+    expect(menu.style.top).toBe("104px");
+  });
+
+  it("allows a transient null ref one frame to land, but closes a permanently missing ref", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute("role") === "menu") return rect(0, 0, 80, 40);
+      if (this.textContent === "More") return rect(180, 60, 30, 20);
+      return originalRect.call(this);
+    });
+
+    const transient = render(<TransientTriggerMenu />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const menu = screen.getByRole("menu", { name: "Row actions" });
+    fireEvent.scroll(screen.getByRole("button", { name: "Outside" }));
+    expect(menu).toBeInTheDocument();
+    act(() => restoreTransientTrigger?.());
+    act(() => frames.shift()?.(0));
+    expect(menu).toBeInTheDocument();
+    expect(menu.style.left).toBe("180px");
+    expect(menu.style.top).toBe("84px");
+    transient.unmount();
+
+    render(<TransientTriggerMenu />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    act(() => frames.shift()?.(0));
+    expect(screen.queryByRole("menu", { name: "Row actions" })).toBeNull();
+
+    render(<TransientTriggerMenu retainDisconnected />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    act(() => frames.shift()?.(0));
+    expect(screen.queryByRole("menu", { name: "Row actions" })).toBeNull();
+  });
+
+  it("repositions through nested clipping ancestors and closes only outside their intersection", () => {
+    let anchorRect = rect(100, 100, 30, 20);
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.textContent === "More") return anchorRect;
+      if (this.getAttribute("data-testid") === "inner-scroll") return rect(40, 40, 300, 200);
+      if (this.getAttribute("data-testid") === "outer-clip") return rect(20, 20, 340, 240);
+      if (this.getAttribute("role") === "menu") return rect(0, 0, 80, 40);
+      return originalRect.call(this);
+    });
+
+    render(<NestedScrollMenu />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const menu = screen.getByRole("menu", { name: "Row actions" });
+    expect(menu.style.left).toBe("100px");
+    anchorRect = rect(150, 120, 30, 20);
+    fireEvent.scroll(screen.getByTestId("inner-scroll"));
+    expect(menu).toBeInTheDocument();
+    expect(menu.style.left).toBe("150px");
+    expect(menu.style.top).toBe("144px");
+
+    anchorRect = rect(-80, 120, 30, 20);
+    fireEvent.scroll(screen.getByTestId("outer-clip"));
+    expect(screen.queryByRole("menu", { name: "Row actions" })).toBeNull();
+  });
+
+  it("repositions on window scroll and resize while visible, then dismisses outside the viewport", () => {
+    let anchorRect = rect(100, 100, 30, 20);
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.textContent === "More") return anchorRect;
+      if (this.getAttribute("role") === "menu") return rect(0, 0, 80, 40);
+      return originalRect.call(this);
+    });
+
+    render(<RowMenu />);
+    const menu = openMenu();
+    anchorRect = rect(140, 120, 30, 20);
+    fireEvent.scroll(window);
+    expect(menu.style.left).toBe("140px");
+    expect(menu.style.top).toBe("144px");
+    anchorRect = rect(160, 130, 30, 20);
+    fireEvent(window, new Event("resize"));
+    expect(menu.style.left).toBe("160px");
+    expect(menu.style.top).toBe("154px");
+    anchorRect = rect(window.innerWidth + 10, 130, 30, 20);
+    fireEvent.scroll(window);
+    expect(screen.queryByRole("menu", { name: "Row actions" })).toBeNull();
+  });
 });
 
 describe("Menu structure", () => {
@@ -265,6 +461,24 @@ describe("Menu structure", () => {
     const menu = openMenu();
     expect(view.container.contains(menu)).toBe(false);
     expect(menu.closest(".cms-overlay-portal")?.parentElement).toBe(document.body);
+  });
+
+  it("keeps a body-portalled panel positioned beyond its trigger's scrollport", () => {
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.textContent === "More") return rect(80, 105, 30, 20);
+      if (this.getAttribute("data-testid") === "inner-scroll") return rect(40, 40, 300, 90);
+      if (this.getAttribute("data-testid") === "outer-clip") return rect(20, 20, 340, 150);
+      if (this.getAttribute("role") === "menu") return rect(0, 0, 80, 60);
+      return originalRect.call(this);
+    });
+
+    const view = render(<NestedScrollMenu />);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const menu = screen.getByRole("menu", { name: "Row actions" });
+    expect(view.container.contains(menu)).toBe(false);
+    expect(menu.closest(".cms-overlay-portal")?.parentElement).toBe(document.body);
+    expect(Number.parseFloat(menu.style.top) + 60).toBeGreaterThan(130);
   });
 
   it("positions itself as a fixed, viewport-clamped panel", () => {

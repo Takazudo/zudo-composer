@@ -41,6 +41,42 @@ function focusItem(items: readonly HTMLElement[], index: number): void {
   items[index]?.focus();
 }
 
+const CLIPPING_OVERFLOWS = new Set(["auto", "scroll", "hidden", "clip"]);
+
+function clippingAncestors(trigger: HTMLElement): HTMLElement[] {
+  const ancestors: HTMLElement[] = [];
+  let ancestor = trigger.parentElement;
+  while (ancestor) {
+    const style = getComputedStyle(ancestor);
+    if (
+      CLIPPING_OVERFLOWS.has(style.overflow) ||
+      CLIPPING_OVERFLOWS.has(style.overflowX) ||
+      CLIPPING_OVERFLOWS.has(style.overflowY)
+    ) {
+      ancestors.push(ancestor);
+    }
+    ancestor = ancestor.parentElement;
+  }
+  return ancestors;
+}
+
+function hasVisibleIntersection(trigger: HTMLElement, ancestors: readonly HTMLElement[]): boolean {
+  const triggerRect = trigger.getBoundingClientRect();
+  let left = Math.max(triggerRect.left, 0);
+  let top = Math.max(triggerRect.top, 0);
+  let right = Math.min(triggerRect.right, window.innerWidth);
+  let bottom = Math.min(triggerRect.bottom, window.innerHeight);
+
+  for (const ancestor of ancestors) {
+    const rect = ancestor.getBoundingClientRect();
+    left = Math.max(left, rect.left);
+    top = Math.max(top, rect.top);
+    right = Math.min(right, rect.right);
+    bottom = Math.min(bottom, rect.bottom);
+  }
+  return right > left && bottom > top;
+}
+
 export interface MenuProps {
   controller: MenuController;
   /** Accessible name for the menu region — required, menus are unlabelled otherwise. */
@@ -64,28 +100,6 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
   const panelRef = useRef<HTMLDivElement | null>(null);
   const typeaheadRef = useRef({ buffer: "", at: 0 });
   const { closeMenu, focusIntent, placement, triggerRef } = controller;
-
-  // Re-measured on EVERY render, not just when the anchor moves: the panel's
-  // own size changes with its content (a radio group gaining a check column,
-  // a section appearing), and a stale clamp would leave it over an edge it
-  // just grew past. Layout effect so it never paints at the unclamped spot.
-  useLayoutEffect(() => {
-    const panel = panelRef.current;
-    const trigger = triggerRef.current;
-    if (!panel || !trigger) return;
-    const anchor = trigger.getBoundingClientRect();
-    const panelRect = panel.getBoundingClientRect();
-    const position = computeMenuPosition(
-      anchor,
-      { width: panelRect.width, height: panelRect.height },
-      { width: window.innerWidth, height: window.innerHeight },
-      placement,
-    );
-    panel.style.left = `${position.left}px`;
-    panel.style.top = `${position.top}px`;
-    panel.style.maxHeight = `${position.maxHeight}px`;
-    panel.dataset.side = position.side;
-  });
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
@@ -115,39 +129,88 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
       if (triggerRef.current?.contains(target)) return;
       closeMenu({ restoreFocus: false });
     }
-    /**
-     * The panel is positioned once against the trigger, so a scroll that moves
-     * the trigger leaves it stranded and dismisses it. Only an ANCESTOR scroll
-     * can do that, and the capture phase hears every scroll in the document:
-     *
-     * - a text input scrolling its own value back to the start as it loses
-     *   focus — which is what the click on this trigger just made the schema
-     *   table's Key cell do, closing the menu the same click had opened;
-     * - this panel's own overflow, so a long menu dismissed itself the moment
-     *   it was scrolled.
-     *
-     * Neither moves the trigger. Everything that does is either an element
-     * containing it, the document, or the window itself — so only a Node that
-     * does not contain the trigger is ignored.
-     */
-    function onScroll(event: Event): void {
+
+    const panel = panelRef.current;
+    if (!panel) return;
+    const menuPanel = panel;
+
+    let activeTrigger: HTMLElement | null = null;
+    let ancestors: HTMLElement[] = [];
+    let retryFrame: number | null = null;
+
+    function position(trigger: HTMLElement): void {
+      const anchor = trigger.getBoundingClientRect();
+      const panelRect = menuPanel.getBoundingClientRect();
+      const next = computeMenuPosition(
+        anchor,
+        { width: panelRect.width, height: panelRect.height },
+        { width: window.innerWidth, height: window.innerHeight },
+        placement,
+      );
+      menuPanel.style.left = `${next.left}px`;
+      menuPanel.style.top = `${next.top}px`;
+      menuPanel.style.maxHeight = `${next.maxHeight}px`;
+      menuPanel.dataset.side = next.side;
+    }
+
+    function removeAncestorListeners(): void {
+      for (const ancestor of ancestors) ancestor.removeEventListener("scroll", onViewportChange);
+    }
+
+    function bind(trigger: HTMLElement): void {
+      removeAncestorListeners();
+      activeTrigger = trigger;
+      ancestors = clippingAncestors(trigger);
+      for (const ancestor of ancestors) ancestor.addEventListener("scroll", onViewportChange);
+    }
+
+    function scheduleAnchorRetry(): void {
+      if (retryFrame !== null) return;
+      retryFrame = requestAnimationFrame(() => {
+        retryFrame = null;
+        const trigger = triggerRef.current;
+        if (!trigger?.isConnected) {
+          closeMenu({ restoreFocus: false });
+          return;
+        }
+        bind(trigger);
+        position(trigger);
+      });
+    }
+
+    function onViewportChange(): void {
       const trigger = triggerRef.current;
-      const target = event.target;
-      if (trigger && target instanceof Node && !target.contains(trigger)) return;
-      closeMenu({ restoreFocus: false });
+      if (!trigger?.isConnected) {
+        scheduleAnchorRetry();
+        return;
+      }
+      if (trigger !== activeTrigger) bind(trigger);
+      if (!hasVisibleIntersection(trigger, ancestors)) {
+        closeMenu({ restoreFocus: false });
+        return;
+      }
+      position(trigger);
     }
-    function onResize(): void {
-      closeMenu({ restoreFocus: false });
+
+    const trigger = triggerRef.current;
+    if (trigger?.isConnected) {
+      bind(trigger);
+      position(trigger);
+    } else {
+      scheduleAnchorRetry();
     }
+
     document.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onViewportChange);
+    window.addEventListener("resize", onViewportChange);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onViewportChange);
+      window.removeEventListener("resize", onViewportChange);
+      removeAncestorListeners();
+      if (retryFrame !== null) cancelAnimationFrame(retryFrame);
     };
-  }, [closeMenu, triggerRef]);
+  });
 
   function onKeyDown(event: JSX.TargetedKeyboardEvent<HTMLDivElement>): void {
     const panel = panelRef.current;
