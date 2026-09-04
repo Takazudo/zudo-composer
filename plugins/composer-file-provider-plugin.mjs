@@ -7,6 +7,8 @@
 // over an already-read dependency closure. The core never holds its filesystem
 // queue while awaiting that browser planning round.
 
+import { constants } from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
 
@@ -26,6 +28,16 @@ export const MEDIA_FILE_PROVIDER_RECORD_ID_HEADER = "x-zudo-composer-media-recor
 export const MEDIA_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 export const MEDIA_FILE_PROVIDER_ROOT = "media-store";
 const MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
+const MEDIA_FILE_PROVIDER_BYTES_DIRECTORY = "public/uploaded-media";
+const MEDIA_FILE_PROVIDER_BYTE_PATTERN = /^\/uploaded-media\/(media-[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?\.(?:png|jpg|gif|webp|pdf))$/;
+const MEDIA_CONTENT_TYPE_BY_EXTENSION = Object.freeze({
+  png: "image/png",
+  jpg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+});
+const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
 // A valid 255-code-point display name can expand to 3,060 characters when
 // encodeURIComponent represents astral Unicode as four percent-encoded bytes.
 const MEDIA_ENCODED_FILE_NAME_MAX_LENGTH = 4096;
@@ -169,6 +181,129 @@ function mediaOperationError(value, operation) {
 function decodeMediaFileName(value) {
   if (typeof value !== "string" || value.length === 0 || value.length > MEDIA_ENCODED_FILE_NAME_MAX_LENGTH) return undefined;
   try { return decodeURIComponent(value); } catch { return undefined; }
+}
+
+function mediaErrorCode(value) {
+  if (typeof value !== "object" || value === null || !("code" in value)) return undefined;
+  return typeof value.code === "string" ? value.code : undefined;
+}
+
+function sameMediaFile(a, b) {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+
+function isMissingMediaFileError(value) {
+  const code = mediaErrorCode(value);
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+
+async function closeMediaFile(handle) {
+  await Promise.resolve(handle?.close?.()).catch(() => undefined);
+}
+
+function sendMediaFileError(res) {
+  if (res.headersSent === true || res.destroyed === true || res.writableEnded === true) return;
+  res.statusCode = 500;
+  res.setHeader("content-type", "text/plain");
+  res.end("Unable to read uploaded media file.");
+}
+
+/**
+ * Serve an uploaded media byte file directly from the development store.
+ *
+ * @param {{projectRoot: string, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open}}} options
+ */
+export function createMediaFileMiddleware(options) {
+  const lstatFile = options.operations?.lstat ?? fsPromises.lstat;
+  const openFile = options.operations?.open ?? fsPromises.open;
+  return async function mediaFileMiddleware(req, res, next) {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+
+    const pathname = typeof req.url === "string" ? req.url.split("?", 1)[0] : undefined;
+    const match = pathname === undefined ? undefined : MEDIA_FILE_PROVIDER_BYTE_PATTERN.exec(pathname);
+    const fileName = match?.[1];
+    if (fileName === undefined) return next();
+
+    const extension = fileName.slice(fileName.lastIndexOf(".") + 1);
+    const contentType = MEDIA_CONTENT_TYPE_BY_EXTENSION[extension];
+    if (contentType === undefined) return next();
+    const filePath = resolve(options.projectRoot, MEDIA_FILE_PROVIDER_ROOT, MEDIA_FILE_PROVIDER_BYTES_DIRECTORY, fileName);
+
+    let before;
+    try {
+      before = await lstatFile(filePath);
+    } catch (cause) {
+      if (isMissingMediaFileError(cause) || mediaErrorCode(cause) === "ELOOP") return next();
+      sendMediaFileError(res);
+      return;
+    }
+    if (before.isSymbolicLink() || !before.isFile()) return next();
+
+    let handle;
+    let opened;
+    try {
+      handle = await openFile(filePath, constants.O_RDONLY | NO_FOLLOW);
+      opened = await handle.stat();
+    } catch (cause) {
+      await closeMediaFile(handle);
+      if (isMissingMediaFileError(cause) || mediaErrorCode(cause) === "ELOOP") return next();
+      sendMediaFileError(res);
+      return;
+    }
+    if (opened.isSymbolicLink() || !opened.isFile() || !sameMediaFile(before, opened)) {
+      await closeMediaFile(handle);
+      return next();
+    }
+
+    if (req.method === "HEAD") {
+      await closeMediaFile(handle);
+      res.statusCode = 200;
+      res.setHeader("content-type", contentType);
+      res.setHeader("content-length", String(opened.size));
+      res.setHeader("cache-control", "no-cache");
+      res.end();
+      return;
+    }
+
+    let stream;
+    try {
+      stream = handle.createReadStream({ autoClose: true });
+    } catch {
+      await closeMediaFile(handle);
+      sendMediaFileError(res);
+      return;
+    }
+
+    let streamErrorHandled = false;
+    const onStreamError = (cause) => {
+      if (streamErrorHandled) return;
+      streamErrorHandled = true;
+      if (res.headersSent === true) {
+        res.destroy(cause);
+        return;
+      }
+      if (typeof stream.destroy === "function") stream.destroy();
+      sendMediaFileError(res);
+    };
+    stream.once("error", onStreamError);
+    if (typeof res.once === "function") {
+      const onResponseClose = () => {
+        if (typeof stream.destroy === "function" && !stream.destroyed) stream.destroy();
+      };
+      res.once("close", onResponseClose);
+      stream.once("close", () => res.off?.("close", onResponseClose));
+    }
+
+    try {
+      res.statusCode = 200;
+      res.setHeader("content-type", contentType);
+      res.setHeader("content-length", String(opened.size));
+      res.setHeader("cache-control", "no-cache");
+      stream.pipe(res);
+    } catch (cause) {
+      onStreamError(cause);
+    }
+  };
 }
 
 /**
@@ -653,6 +788,8 @@ export default function composerFileProviderPlugin() {
         }
         sendConnectResponse(res, await handler({ ...requestHead, body }));
       });
+      // Vite's public-dir middleware serves only files in its startup-scanned publicFiles Set (updated by chokidar), so a file uploaded during the session otherwise gets the SPA shell until the watcher catches up (#180).
+      server.middlewares.use(createMediaFileMiddleware({ projectRoot }));
     },
   };
 }

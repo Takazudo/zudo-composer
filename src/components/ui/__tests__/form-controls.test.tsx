@@ -110,8 +110,12 @@ function CheckboxHarness() {
 
 describe("Checkbox", () => {
   it("toggles and reports each change", () => {
-    render(<CheckboxHarness />);
+    const { container } = render(<CheckboxHarness />);
     const control = screen.getByRole("checkbox", { name: "Include drafts" });
+    expect(control).toHaveAttribute("type", "checkbox");
+    const box = container.querySelector(".cms-check__box");
+    expect(box).toHaveAttribute("aria-hidden", "true");
+    expect(control.nextElementSibling).toBe(box);
     fireEvent.click(control);
     expect(screen.getByRole("checkbox", { name: "Include drafts" })).toBeChecked();
   });

@@ -181,6 +181,31 @@ describe("Mapping library", () => {
     await waitFor(() => expect(workspace.records.size).toBe(0));
   });
 
+  it("clears the library behind the shared confirmation", async () => {
+    const { workspace } = await library([mappingRecord([], "mapping-1", "First"), mappingRecord([], "mapping-2", "Second")]);
+    const clear = vi.spyOn(workspace.provider.store, "clear");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear library" }));
+    const confirm = await screen.findByRole("alertdialog", { name: "Clear library?" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Clear library" }));
+
+    await waitFor(() => expect(clear).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("No mappings yet")).toBeInTheDocument();
+  });
+
+  it("leaves the Mapping library untouched when clearing is cancelled", async () => {
+    const { workspace } = await library([mappingRecord([], "mapping-1", "First")]);
+    const clear = vi.spyOn(workspace.provider.store, "clear");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear library" }));
+    const confirm = await screen.findByRole("alertdialog", { name: "Clear library?" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+
+    expect(clear).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "First" })).toBeInTheDocument();
+    expect(workspace.records.size).toBe(1);
+  });
+
   it("reports a deep link that could not be opened as a banner on the library", async () => {
     const workspace = harness([mappingRecord([])]);
     const navigate = vi.fn();

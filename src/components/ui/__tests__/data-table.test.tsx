@@ -1,6 +1,6 @@
 import "./cleanup";
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/preact";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/preact";
 import { useState } from "preact/hooks";
 import { Button } from "../button";
 import { DataTable } from "../data-table";
@@ -25,8 +25,21 @@ const COLUMNS: readonly DataTableColumn<Composition>[] = [
   { key: "slots", header: "Slots", variant: "num", cell: (row) => row.slots },
 ];
 
+afterEach(() => vi.unstubAllGlobals());
+
 function baseProps() {
   return { caption: "Compositions", columns: COLUMNS, rows: ROWS, rowKey: (row: Composition) => row.id };
+}
+
+function setScrollGeometry(
+  scrollport: HTMLElement,
+  { scrollLeft, scrollWidth, clientWidth }: { scrollLeft: number; scrollWidth: number; clientWidth: number },
+): void {
+  Object.defineProperties(scrollport, {
+    scrollLeft: { configurable: true, value: scrollLeft, writable: true },
+    scrollWidth: { configurable: true, value: scrollWidth },
+    clientWidth: { configurable: true, value: clientWidth },
+  });
 }
 
 function SelectableHarness({ rows = ROWS }: { rows?: readonly Composition[] }) {
@@ -149,9 +162,61 @@ describe("DataTable", () => {
 
   it("scrolls horizontally inside its own wrapper", () => {
     const { container } = render(<DataTable {...baseProps()} />);
+    const shell = container.querySelector(".cms-table-scroll-shell");
     const wrap = container.querySelector(".cms-table-wrap");
+    expect(shell).toHaveAttribute("data-scroll-edge", "none");
     expect(wrap).not.toBeNull();
     expect(wrap!.querySelector("table.cms-table")).not.toBeNull();
+  });
+
+  it.each([false, true])("reports all four scroll-edge states with bulk bar rendered: %s", (withBulkBar) => {
+    const { container } = render(
+      <DataTable {...baseProps()} bulkBar={withBulkBar ? <span>Bulk actions</span> : undefined} />,
+    );
+    const shell = container.querySelector<HTMLElement>(".cms-table-scroll-shell")!;
+    const scrollport = container.querySelector<HTMLElement>(".cms-table-wrap")!;
+
+    const states = [
+      { geometry: { scrollLeft: 0, scrollWidth: 300.75, clientWidth: 300 }, edge: "none" },
+      { geometry: { scrollLeft: 0.75, scrollWidth: 500, clientWidth: 300 }, edge: "end" },
+      { geometry: { scrollLeft: 100, scrollWidth: 500, clientWidth: 300 }, edge: "both" },
+      { geometry: { scrollLeft: 199.25, scrollWidth: 500, clientWidth: 300 }, edge: "start" },
+    ] as const;
+
+    for (const { geometry, edge } of states) {
+      setScrollGeometry(scrollport, geometry);
+      fireEvent.scroll(scrollport);
+      expect(shell).toHaveAttribute("data-scroll-edge", edge);
+    }
+
+    expect(container.querySelector(".cms-table__bulk") !== null).toBe(withBulkBar);
+    expect(shell.parentElement).toHaveClass("cms-table-frame");
+  });
+
+  it("re-measures when either the scrollport or table is resized", () => {
+    let callback: ResizeObserverCallback | undefined;
+    const observed: Element[] = [];
+    class ResizeObserverMock {
+      constructor(next: ResizeObserverCallback) { callback = next; }
+      observe(target: Element): void { observed.push(target); }
+      disconnect(): void {}
+      unobserve(): void {}
+    }
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+
+    const { container } = render(<DataTable {...baseProps()} />);
+    const shell = container.querySelector<HTMLElement>(".cms-table-scroll-shell")!;
+    const scrollport = container.querySelector<HTMLElement>(".cms-table-wrap")!;
+    const table = container.querySelector<HTMLTableElement>("table.cms-table")!;
+    expect(observed).toEqual([scrollport, table]);
+
+    setScrollGeometry(scrollport, { scrollLeft: 0, scrollWidth: 500, clientWidth: 300 });
+    act(() => callback!([{ target: table } as unknown as ResizeObserverEntry], {} as ResizeObserver));
+    expect(shell).toHaveAttribute("data-scroll-edge", "end");
+
+    setScrollGeometry(scrollport, { scrollLeft: 0, scrollWidth: 300, clientWidth: 300 });
+    act(() => callback!([], {} as ResizeObserver));
+    expect(shell).toHaveAttribute("data-scroll-edge", "none");
   });
 
   it("offers a compact density", () => {

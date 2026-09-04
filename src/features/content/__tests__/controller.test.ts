@@ -1,5 +1,5 @@
 import { createSequentialIdFactory } from "../../../shared";
-import { createContentModelRecord } from "../../../content";
+import { createContentEntryRecord, createContentModelRecord } from "../../../content";
 import { describe, expect, it, vi } from "vitest";
 import { createContentAuthoringController, CONTENT_ENTRY_PAGE_SIZE } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
@@ -7,6 +7,39 @@ import { createMemoryContentProvider } from "../fixtures";
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("ContentAuthoringController", () => {
+  it("starts clean as pristine and resets that state for another Entry and model", async () => {
+    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "title", key: "title", label: "Title", required: true, kind: "text" }] }, { id: "articles", timestamp: "2026-01-01T00:00:00.000Z" });
+    const settings = createContentModelRecord({ name: "Settings", kind: "single", fields: [] }, { id: "settings", timestamp: "2026-01-01T00:00:00.000Z" });
+    const secondEntry = createContentEntryRecord(articles.id, { title: "Second" }, { id: "entry-2", timestamp: "2026-01-01T00:00:00.000Z" });
+    const provider = createMemoryContentProvider({ models: [articles, settings], entries: [secondEntry] });
+    const controller = createContentAuthoringController(provider);
+
+    expect(controller.state.saveStatus).toBe("pristine");
+    await controller.initialize();
+    expect(controller.state.saveStatus).toBe("pristine");
+    await controller.openModel(articles.id);
+    expect(controller.state.saveStatus).toBe("pristine");
+    await controller.openEntry("entry-2");
+    expect(controller.state.saveStatus).toBe("pristine");
+    await controller.inspectSchema();
+    expect(controller.state.saveStatus).toBe("pristine");
+    await controller.openModel(settings.id);
+    expect(controller.state.saveStatus).toBe("pristine");
+  });
+
+  it("transitions the first Entry edit through saving to saved", async () => {
+    const controller = createContentAuthoringController(createMemoryContentProvider());
+    await controller.initialize();
+    await controller.openModel("articles");
+    await controller.openEntry("entry-1");
+    expect(controller.state.saveStatus).toBe("pristine");
+
+    controller.updateEntryValue("title", "First edit");
+    expect(controller.state.saveStatus).toBe("saving");
+    await controller.flushSessions();
+    expect(controller.state.saveStatus).toBe("saved");
+  });
+
   it("creates Collection and Single models and enforces Single cardinality", async () => {
     const provider = createMemoryContentProvider();
     const controller = createContentAuthoringController(provider, { idFactory: createSequentialIdFactory("id"), now: () => "2026-02-01T00:00:00.000Z" });

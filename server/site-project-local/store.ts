@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import {
   access, lstat, mkdir, open, readFile, readdir, realpath, rename, rmdir, stat, unlink,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type {
   SiteProjectActiveSelection, SiteProjectAdapterMutationResult, SiteProjectAdapterReadResult,
   SiteProjectBuildAdapter, SiteProjectListEntry, SiteProjectStoreAdapter, StoredSiteProject,
@@ -88,6 +88,7 @@ async function syncDirectory(path: string): Promise<void> {
 
 export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProjectBuildAdapter {
   readonly root: string;
+  private resolvedRoot?: string;
   private readonly lockTimeoutMs: number;
   private readonly fault?: (point: string) => void | Promise<void>;
 
@@ -111,7 +112,10 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       await syncDirectory(parentReal);
     }
     const rootReal = await realpath(this.root);
-    if (!isInside(parentReal, rootReal) || rootReal !== this.root) throw new Error("Local SiteProject root escaped its fixed location.");
+    // Compare against the realpath'd parent + basename, not the raw root, so a symlinked ancestor (e.g. macOS /var/folders -> /private/var/folders) is allowed while a symlinked final component still fails this check.
+    const expectedRoot = join(parentReal, basename(this.root));
+    if (!isInside(parentReal, rootReal) || rootReal !== expectedRoot) throw new Error("Local SiteProject root escaped its fixed location.");
+    this.resolvedRoot = rootReal;
     for (const directory of [PROJECTS, BUILDS]) {
       const target = join(this.root, directory);
       if (await exists(target)) {
@@ -312,10 +316,14 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     } finally { await handle.close(); }
     await this.hit("after-close");
     const rootReal = await realpath(this.root);
+    // Compare against the location `ensureRoot` pinned under the held lock, not a freshly
+    // re-derived one: re-resolving the ancestor here would silently accept a mid-write
+    // ancestor swap, which is exactly what this guard exists to catch.
     const rootInfo = await lstat(this.root);
     const directoryInfo = await lstat(directory);
     if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory() || directoryInfo.isSymbolicLink() || !directoryInfo.isDirectory()
-      || rootReal !== this.root || !isInside(rootReal, await realpath(directory))) throw new Error("Root changed during write.");
+      || this.resolvedRoot === undefined || rootReal !== this.resolvedRoot
+      || !isInside(rootReal, await realpath(directory))) throw new Error("Root changed during write.");
     await this.verifyTarget(path);
     await this.hit("before-rename");
     await rename(temp, path);

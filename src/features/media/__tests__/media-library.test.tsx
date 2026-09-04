@@ -84,6 +84,17 @@ describe("Media route header and states", () => {
 });
 
 describe("Media browsing", () => {
+  it("toggles grid selection through the checkbox overlaid on a thumbnail", async () => {
+    const { container } = await renderRoute();
+    const control = screen.getByRole("checkbox", { name: "hero.png" });
+    expect(control.closest(".sg-media-asset__check")).not.toBeNull();
+
+    fireEvent.click(control);
+    expect(control).toBeChecked();
+    expect(container.querySelector(".sg-media-asset--selected .sg-media-asset__name")).toHaveTextContent("hero.png");
+    expect(screen.getByText("1 asset selected")).toBeInTheDocument();
+  });
+
   it("filters by type through a segmented control carrying the library's counts", async () => {
     await renderRoute();
     const types = screen.getByRole("radiogroup", { name: "Type" });

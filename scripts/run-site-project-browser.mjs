@@ -40,12 +40,8 @@ async function runCli(request, environment) {
   return parseCli(result, request.operation);
 }
 
-// `realpath`, because the store requires its root to BE its own real path and
-// refuses to write otherwise ("root escaped its fixed location"). On macOS
-// `os.tmpdir()` is `/var/folders/...`, a symlink to `/private/var/folders/...`,
-// so without this both SiteProject lanes fail before Playwright starts, with
-// the generic "Project storage is unavailable." the API returns for any
-// storage fault. Linux CI never sees it.
+// `realpath` is harmless here, not required: the store accepts a root behind
+// a symlinked ancestor (e.g. macOS `os.tmpdir()` -> `/private/var/folders/...`).
 const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-site-project-browser-")));
 try {
   const environment = {

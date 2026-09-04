@@ -10,11 +10,23 @@ import type { MediaSummary } from "../../media";
 import { SITEMAP_SCHEMA_VERSION, type SitemapNode } from "../../sitemapper/model";
 import type { SitemapRecord } from "../../sitemapper/library";
 import type { ProductionProviderIntegration } from "../provider-integration";
-import { createWorkspaceSummary, type WorkspaceSource, type WorkspaceSummaryIntegration } from "../workspace-summary";
+import {
+  createWorkspaceSummary,
+  type WorkspaceCounts,
+  type WorkspaceInitializationOutcome,
+  type WorkspaceMediaSource,
+  type WorkspaceSource,
+  type WorkspaceSummaryIntegration,
+} from "../workspace-summary";
 
 const AT = (day: number) => `2026-08-${String(day).padStart(2, "0")}T00:00:00.000Z`;
 
 function value<T>(source: WorkspaceSource<T>): T {
+  expect(source.status).toBe("ok");
+  return (source as { status: "ok"; value: T }).value;
+}
+
+function mediaValue<T>(source: WorkspaceMediaSource<T>): T {
   expect(source.status).toBe("ok");
   return (source as { status: "ok"; value: T }).value;
 }
@@ -93,7 +105,8 @@ const emptyCatalog: ComponentCatalog = {
 };
 
 interface FakeOptions {
-  initialize?: () => Promise<{ status: "ready" } | { status: "error"; error: Error }>;
+  initialize?: () => Promise<WorkspaceInitializationOutcome>;
+  retry?: () => Promise<WorkspaceInitializationOutcome>;
   compositions?: readonly CompositionSummary[] | Error;
   mappings?: readonly MappingCatalogEntry[] | Error;
   mappingRecords?: Readonly<Record<string, MappingRecord>>;
@@ -111,6 +124,7 @@ function settle<T>(source: T | Error): Promise<T> {
 
 function createFakeIntegration(options: FakeOptions = {}) {
   const initialize = vi.fn(options.initialize ?? (async () => ({ status: "ready" as const })));
+  const retry = vi.fn(options.retry ?? (async () => ({ status: "ready" as const })));
   const compositions = options.compositions ?? [];
   const mappings = options.mappings ?? [];
   const models = options.models ?? [];
@@ -142,7 +156,7 @@ function createFakeIntegration(options: FakeOptions = {}) {
   };
 
   const integration: WorkspaceSummaryIntegration = {
-    initialization: { initialize },
+    initialization: { initialize, retry },
     componentProvider: { catalog: emptyCatalog },
     compositionProviders: [{ descriptor: { id: "indexeddb", label: "Browser storage" }, store: { list: () => settle(compositions) } }],
     contentProvider: { store: { listModels: async () => (models instanceof Error ? Promise.reject(models) : models.map((model): ContentModelSummary => ({ id: model.id, name: model.document.name, kind: model.document.kind, fieldCount: model.document.fields.length, createdAt: model.createdAt, updatedAt: model.updatedAt }))), scanEntries } },
@@ -167,13 +181,30 @@ function createFakeIntegration(options: FakeOptions = {}) {
     sitemapProvider: { store: sitemapStore },
     mediaProvider: media === null ? undefined : { store: { list: () => settle(media) } },
   };
-  return { integration, initialize, scanEntries };
+  return { integration, initialize, retry, scanEntries };
 }
 
 describe("createWorkspaceSummary — contract", () => {
   it("accepts the production provider integration", () => {
     const accept = (integration: ProductionProviderIntegration): WorkspaceSummaryIntegration => integration;
     expect(accept).toBeTypeOf("function");
+  });
+
+  it("keeps every domain but Media structurally incapable of an absent status", () => {
+    // Media alone may answer "absent" (no provider configured); this is a
+    // compile-time check that the other four domains cannot.
+    // @ts-expect-error compositions is a plain WorkspaceSource — it has no "absent" status.
+    const badCompositions: WorkspaceCounts["compositions"] = { status: "absent" };
+    // @ts-expect-error mappings is a plain WorkspaceSource — it has no "absent" status.
+    const badMappings: WorkspaceCounts["mappings"] = { status: "absent" };
+    // @ts-expect-error sitemaps is a plain WorkspaceSource — it has no "absent" status.
+    const badSitemaps: WorkspaceCounts["sitemaps"] = { status: "absent" };
+    // @ts-expect-error content is a plain WorkspaceSource — it has no "absent" status.
+    const badContent: WorkspaceCounts["content"] = { status: "absent" };
+    const okMedia: WorkspaceCounts["media"] = { status: "absent" };
+
+    expect(okMedia).toEqual({ status: "absent" });
+    void [badCompositions, badMappings, badSitemaps, badContent];
   });
 });
 
@@ -195,7 +226,7 @@ describe("createWorkspaceSummary — counts", () => {
     expect(value(counts.mappings)).toEqual({ mappings: 2, blockedMappings: 1 });
     expect(value(counts.sitemaps)).toEqual({ sitemaps: 1, pages: 2, unassignedPages: 1 });
     expect(value(counts.content)).toEqual({ models: 1, entries: 2, incompleteEntries: 1 });
-    expect(value(counts.media)).toEqual({ assets: 3, bytes: 6656, byType: { "image/png": 2, "application/pdf": 1 } });
+    expect(mediaValue(counts.media)).toEqual({ assets: 3, bytes: 6656, byType: { "image/png": 2, "application/pdf": 1 } });
   });
 
   it("reads sitemaps record by record when the provider is not a collection store", async () => {
@@ -206,10 +237,16 @@ describe("createWorkspaceSummary — counts", () => {
     expect(value((await createWorkspaceSummary(integration).counts()).sitemaps)).toEqual({ sitemaps: 1, pages: 1, unassignedPages: 1 });
   });
 
-  it("reports a missing Media provider as unavailable rather than zero assets", async () => {
+  it("reports a missing Media provider as absent rather than zero assets or unavailable", async () => {
     const { integration } = createFakeIntegration({ media: null });
     const counts = await createWorkspaceSummary(integration).counts();
-    expect(counts.media).toEqual({ status: "unavailable", error: "No Media provider is connected." });
+    expect(counts.media).toEqual({ status: "absent" });
+  });
+
+  it("reports a Media provider whose store rejects as unavailable, not absent", async () => {
+    const { integration } = createFakeIntegration({ media: new Error("The Media database is blocked.") });
+    const counts = await createWorkspaceSummary(integration).counts();
+    expect(counts.media).toEqual({ status: "unavailable", error: "The Media database is blocked." });
   });
 });
 
@@ -255,10 +292,36 @@ describe("createWorkspaceSummary — recent", () => {
     const { records, unavailable } = await createWorkspaceSummary(integration).recent(1);
 
     expect(records.map(({ id }) => id)).toEqual(["hero"]);
-    expect(unavailable).toEqual([
-      { source: "mappings", error: "Mapping storage is unavailable." },
-      { source: "media", error: "No Media provider is connected." },
-    ]);
+    // An absent Media provider is skipped rather than reported: it is the
+    // ordinary dev answer, not a source that failed to be read.
+    expect(unavailable).toEqual([{ source: "mappings", error: "Mapping storage is unavailable." }]);
+  });
+
+  it("skips an absent Media source instead of listing it as unavailable", async () => {
+    const { integration } = createFakeIntegration({
+      compositions: [compositionSummary("hero", AT(5))],
+      media: null,
+    });
+    const { unavailable } = await createWorkspaceSummary(integration).recent();
+    expect(unavailable).toEqual([]);
+  });
+
+  it("lists a Media source that failed to be read as unavailable, unlike an absent one", async () => {
+    const { integration } = createFakeIntegration({ media: new Error("The Media database is blocked.") });
+    const { unavailable } = await createWorkspaceSummary(integration).recent();
+    expect(unavailable).toEqual([{ source: "media", error: "The Media database is blocked." }]);
+  });
+
+  it("keeps the newest record first at any limit, across sources", async () => {
+    const { integration } = createFakeIntegration({
+      compositions: [compositionSummary("hero", AT(5))],
+      media: [mediaSummary("hero-image", AT(8), "image/png", 10)],
+      sitemaps: [sitemapRecord("studio", AT(9), [])],
+    });
+    const summary = createWorkspaceSummary(integration);
+
+    expect((await summary.recent(1)).records.map(({ id }) => id)).toEqual(["studio"]);
+    expect((await summary.recent(2)).records.map(({ id }) => id)).toEqual(["studio", "hero-image"]);
   });
 
   it("labels a Composition by its publication kind", async () => {
@@ -326,7 +389,7 @@ describe("createWorkspaceSummary — resilience and lifecycle", () => {
     expect(counts.sitemaps).toEqual({ status: "unavailable", error: "Sitemap storage is unavailable." });
     expect(value(counts.mappings)).toEqual({ mappings: 1, blockedMappings: 0 });
     expect(value(counts.content)).toEqual({ models: 1, entries: 0, incompleteEntries: 0 });
-    expect(value(counts.media)).toEqual({ assets: 1, bytes: 10, byType: { "image/png": 1 } });
+    expect(mediaValue(counts.media)).toEqual({ assets: 1, bytes: 10, byType: { "image/png": 1 } });
   });
 
   it("keeps Media readable when provider initialization fails", async () => {
@@ -339,7 +402,7 @@ describe("createWorkspaceSummary — resilience and lifecycle", () => {
     for (const source of [counts.compositions, counts.mappings, counts.sitemaps, counts.content]) {
       expect(source).toEqual({ status: "unavailable", error: "The active SiteProject could not be initialized." });
     }
-    expect(value(counts.media)).toEqual({ assets: 1, bytes: 10, byType: { "image/png": 1 } });
+    expect(mediaValue(counts.media)).toEqual({ assets: 1, bytes: 10, byType: { "image/png": 1 } });
     expect(initialize).toHaveBeenCalledTimes(1);
   });
 
@@ -363,8 +426,8 @@ describe("createWorkspaceSummary — resilience and lifecycle", () => {
     expect(scanEntries).toHaveBeenCalledTimes(1);
   });
 
-  it("re-reads providers on refresh without initializing again", async () => {
-    const { integration, initialize, scanEntries } = createFakeIntegration({ models: [contentModel("journal", AT(7))] });
+  it("re-reads providers on refresh without re-running a fulfilled initialization", async () => {
+    const { integration, initialize, retry, scanEntries } = createFakeIntegration({ models: [contentModel("journal", AT(7))] });
     const summary = createWorkspaceSummary(integration);
 
     await summary.counts();
@@ -372,6 +435,92 @@ describe("createWorkspaceSummary — resilience and lifecycle", () => {
     await summary.counts();
 
     expect(initialize).toHaveBeenCalledTimes(1);
+    expect(retry).not.toHaveBeenCalled();
     expect(scanEntries).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-attempts a failed initialization on refresh and recovers through retry", async () => {
+    const { integration, initialize, retry } = createFakeIntegration({
+      initialize: async () => ({ status: "error", error: new Error("The active SiteProject could not be initialized.") }),
+      models: [contentModel("journal", AT(7))],
+    });
+    const summary = createWorkspaceSummary(integration);
+
+    const failed = await summary.counts();
+    for (const source of [failed.compositions, failed.mappings, failed.sitemaps, failed.content]) {
+      expect(source).toEqual({ status: "unavailable", error: "The active SiteProject could not be initialized." });
+    }
+
+    summary.refresh();
+    const recovered = await summary.counts();
+
+    expect(value(recovered.compositions)).toEqual({ compositions: 0, patterns: 0, globalTemplates: 0 });
+    expect(value(recovered.mappings)).toEqual({ mappings: 0, blockedMappings: 0 });
+    expect(value(recovered.sitemaps)).toEqual({ sitemaps: 0, pages: 0, unassignedPages: 0 });
+    expect(value(recovered.content)).toEqual({ models: 1, entries: 0, incompleteEntries: 0 });
+    expect(initialize).toHaveBeenCalledTimes(1);
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares one failed attempt across every loader of a single read", async () => {
+    const { integration, initialize, retry } = createFakeIntegration({
+      initialize: async () => ({ status: "error", error: new Error("The active SiteProject could not be initialized.") }),
+    });
+    const summary = createWorkspaceSummary(integration);
+
+    await Promise.all([summary.counts(), summary.recent(), summary.attention()]);
+
+    expect(initialize).toHaveBeenCalledTimes(1);
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("does not start a second attempt when refresh lands mid-initialization", async () => {
+    let release: ((outcome: WorkspaceInitializationOutcome) => void) | undefined;
+    const gate = new Promise<WorkspaceInitializationOutcome>((resolve) => {
+      release = resolve;
+    });
+    const { integration, initialize, retry } = createFakeIntegration({ initialize: () => gate });
+    const summary = createWorkspaceSummary(integration);
+
+    const inFlight = summary.counts();
+    summary.refresh();
+    release!({ status: "ready" });
+    await inFlight;
+    expect(value((await summary.counts()).sitemaps)).toEqual({ sitemaps: 0, pages: 0, unassignedPages: 0 });
+
+    expect(initialize).toHaveBeenCalledTimes(1);
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("stays failed after a retry that fails again, until the next refresh", async () => {
+    let attempts = 0;
+    const { integration, initialize, retry } = createFakeIntegration({
+      initialize: async () => ({ status: "error", error: new Error("The active SiteProject could not be initialized.") }),
+      retry: async () => (++attempts === 1 ? { status: "error", error: new Error("The retry failed too.") } : { status: "ready" }),
+    });
+    const summary = createWorkspaceSummary(integration);
+
+    expect((await summary.counts()).content).toEqual({ status: "unavailable", error: "The active SiteProject could not be initialized." });
+    summary.refresh();
+    expect((await summary.counts()).content).toEqual({ status: "unavailable", error: "The retry failed too." });
+    summary.refresh();
+    expect(value((await summary.counts()).content)).toEqual({ models: 0, entries: 0, incompleteEntries: 0 });
+
+    expect(initialize).toHaveBeenCalledTimes(1);
+    expect(retry).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats a rejected lifecycle call as a failed initialization and re-attempts it", async () => {
+    const { integration, initialize, retry } = createFakeIntegration({
+      initialize: () => Promise.reject(new Error("The lifecycle threw instead of answering.")),
+    });
+    const summary = createWorkspaceSummary(integration);
+
+    expect((await summary.counts()).sitemaps).toEqual({ status: "unavailable", error: "The lifecycle threw instead of answering." });
+    summary.refresh();
+    expect(value((await summary.counts()).sitemaps)).toEqual({ sitemaps: 0, pages: 0, unassignedPages: 0 });
+
+    expect(initialize).toHaveBeenCalledTimes(1);
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 });
