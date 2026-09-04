@@ -128,11 +128,19 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   const assetPath = (response: Response) => new URL(response.url()).pathname;
   expect(new Set(focusedAssets.filter((response) => assetPath(response).endsWith(".wasm")).map(assetPath)).size).toBe(1);
   expect(new Set(focusedAssets.filter((response) => assetPath(response).endsWith(".mjs")).map(assetPath)).size).toBe(1);
+  // The reload above refetches each asset, so every path appears twice. `vite preview` serves
+  // them `Cache-Control: no-cache` with an ETag, so the second hit may be revalidated into a 304 —
+  // a healthy cache hit that carries no body and no entity headers, and for which `ok()` is false.
+  // Accept that one status, keep every other failure loud, and still demand a real body per asset.
+  const servedWithBody = new Set<string>();
   for (const response of focusedAssets) {
-    expect(response.ok()).toBe(true);
     expect(response.url()).toContain("/assets/");
+    expect(response.ok() || response.status() === 304).toBe(true);
+    if (!response.ok()) continue;
+    servedWithBody.add(assetPath(response));
     expect(response.headers()["content-type"]).toMatch(assetPath(response).endsWith(".wasm") ? /^application\/wasm/ : /javascript/);
   }
+  expect(servedWithBody).toEqual(new Set(focusedAssets.map(assetPath)));
 
   for (const theme of ["light", "dark"] as const) {
     await useTheme(page, theme);
