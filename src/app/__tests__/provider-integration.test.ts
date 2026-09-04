@@ -222,9 +222,14 @@ describe("SiteProject provider integration", () => {
     expect(await current.getCurrentSiteProject()).toMatchObject({ status: "ready" });
   });
 
-  // The summary's `retry()` leaves the graph ready, but every guarded store then
-  // calls `lifecycle.initialize()` again on its own — so recovery only holds if
-  // that follow-up initialize is idempotent against a graph retry just seeded.
+  // Against the real integration, not a fake, because two things must hold at once
+  // and neither is visible from a summary-level fake. `retry()` has to re-open the
+  // backing that failed the first time and re-seed it coherently; and the mapping
+  // loader reads through `mappingCatalog`/`contentCatalog`, which are built over
+  // `ensureReady()`-guarded stores that call `lifecycle.initialize()` again — so
+  // that follow-up initialize must be idempotent against the graph retry just
+  // seeded. (The composition, content and sitemap loaders read their raw stores
+  // directly and never re-enter the lifecycle.)
   it("recovers a workspace summary through retry after the first initialization failed", async () => {
     const backing = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
     const current = integration({ ...backing, composition: failFirstOpen(backing.composition) });
