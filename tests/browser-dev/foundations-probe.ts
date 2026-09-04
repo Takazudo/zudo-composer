@@ -38,9 +38,11 @@
  * what this lane means, not a side effect of one spec, so it is left to be
  * taken deliberately.
  *
- * **Known gap while it stands:** `.cms-table th/td { height: 44px }` from the
- * coarse block in `ui.css` is unproven anywhere. Only this lane has a coarse
- * project, and only a lane with a listing has a table.
+ * The one proof that needed both — `.cms-table th/td { height: 44px }` from the
+ * coarse block in `ui.css` — took the cheaper route instead: the **dist** lane
+ * grew a coarse project of its own, and `tests/browser/library-table.coarse.pw.ts`
+ * checks it against the bundled sample's library. Nothing else here is blocked
+ * on activating a project for this lane.
  */
 
 import { expect } from "@playwright/test";
