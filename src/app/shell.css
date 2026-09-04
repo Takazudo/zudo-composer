@@ -393,6 +393,21 @@
     line-height: 1.2;
   }
 
+  /*
+   * The item centres its content, so the label track is sized to the text and
+   * the base rule's `min-width: 0` never constrains it — "Compositions" painted
+   * 60px of text through a 53px box and over its neighbours, so the strip read
+   * as one run. Stretch the label to the track and let it ellipsize; the base
+   * rule already carries `overflow: hidden` and `text-overflow: ellipsis`,
+   * which cannot fire without `nowrap`.
+   */
+  .app-shell .cms-rail__label {
+    justify-self: stretch;
+    width: 100%;
+    white-space: nowrap;
+    text-align: center;
+  }
+
   .cms-rail__item[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--color-accent); }
   .app-shell .cms-rail__count,
   .app-shell .cms-rail__external { display: none; }
