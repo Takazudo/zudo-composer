@@ -61,8 +61,8 @@ corepack pnpm dev
 ```
 
 The main repository gate includes lint, typecheck, headless/deployment/handoff
-boundaries, unit tests, one production build, the provider artifact boundary,
-and an unauthenticated Wrangler dry-run:
+boundaries, the class-name gate, unit tests, one production build, the provider
+artifact boundary, and an unauthenticated Wrangler dry-run:
 
 ```sh
 corepack pnpm check
