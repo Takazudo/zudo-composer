@@ -17,7 +17,7 @@ export interface CompositionRef {
   recordId: RecordId;
 }
 
-/** A stable reference to a saved Content Mapping. */
+/** A stable reference to a saved Mapping. */
 export interface MappingRef {
   providerId: string;
   recordId: RecordId;

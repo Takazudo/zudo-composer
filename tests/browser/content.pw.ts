@@ -544,7 +544,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "New sitemap" }).click();
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
-  await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Content Mapping journey");
+  await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Mapping journey");
   await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
   await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
 
@@ -570,7 +570,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   const sourceKind = inspector.getByRole("radiogroup", { name: "Page source type" });
   await sourceKind.getByRole("radio", { name: "Mapping", exact: true }).click();
   await inspector.getByRole("button", { name: "Choose mapping" }).click();
-  await page.getByRole("dialog", { name: "Choose a Content Mapping" }).getByRole("button", { name: `Assign ${COLLECTION_MAPPING}` }).click();
+  await page.getByRole("dialog", { name: "Choose a Mapping" }).getByRole("button", { name: `Assign ${COLLECTION_MAPPING}` }).click();
   // Scoped to the Mapping group: the shell rail names the active provider in
   // its foot, so a page-wide text match can pass on chrome rather than on the
   // assignment under test.
@@ -610,7 +610,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(mappingCard).toContainText(/·\s*24 routes/);
 
   await mappingField.getByRole("button", { name: "Change mapping" }).click();
-  await page.getByRole("dialog", { name: "Choose a Content Mapping" }).getByRole("button", { name: `Assign ${SINGLE_MAPPING}` }).click();
+  await page.getByRole("dialog", { name: "Choose a Mapping" }).getByRole("button", { name: `Assign ${SINGLE_MAPPING}` }).click();
   await expect(mappingCard.getByText(SINGLE_MAPPING, { exact: true })).toBeVisible();
   // A single Content model derives one route from the page's own slug, so it
   // offers no per-Entry slug field at all.
@@ -636,9 +636,9 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // on disk before it happens rather than sitting in the debounced queue.
   await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
   await page.getByRole("link", { name: "Back to Sitemaps" }).click();
-  const journeyRow = sitemapRow(page, "Content Mapping journey");
+  const journeyRow = sitemapRow(page, "Mapping journey");
   await expect(journeyRow.getByRole("cell").filter({ hasText: /^1$/ })).toHaveCount(1);
-  await journeyRow.getByRole("link", { name: "Content Mapping journey", exact: true }).click();
+  await journeyRow.getByRole("link", { name: "Mapping journey", exact: true }).click();
   const reopened = page.getByRole("region", { name: "Inspector" });
   await page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /^Home\b/ }).click();
   await expect(reopened.locator(".cms-pane__header .cms-chip")).toHaveText("Composition");
