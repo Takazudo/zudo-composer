@@ -74,7 +74,13 @@ describe("rail counts", () => {
   });
 
   it("omits a slot whose source is unavailable rather than showing zero", () => {
-    const partial = railCounts(counts({ media: { status: "unavailable", error: "No Media provider is connected." } }));
+    const partial = railCounts(counts({ media: { status: "unavailable", error: "The Media database is blocked." } }));
+    expect(partial).not.toHaveProperty("media");
+    expect(partial.content).toBe(2);
+  });
+
+  it("omits a slot whose source is absent rather than showing zero", () => {
+    const partial = railCounts(counts({ media: { status: "absent" } }));
     expect(partial).not.toHaveProperty("media");
     expect(partial.content).toBe(2);
   });

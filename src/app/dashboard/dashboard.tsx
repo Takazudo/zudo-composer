@@ -18,6 +18,7 @@ import { formatIntent } from "../route-intents";
 import type {
   WorkspaceAttention,
   WorkspaceAttentionItem,
+  WorkspaceCounts,
   WorkspaceRecord,
   WorkspaceSourceName,
   WorkspaceSummary,
@@ -37,6 +38,9 @@ import {
 } from "./dashboard-model";
 import { useWorkspaceView } from "./use-workspace-view";
 import "./dashboard.css";
+
+/** The Media stat card and the Storage row read the same three-way status. */
+type MediaStorageStatus = WorkspaceCounts["media"]["status"];
 
 export interface DashboardProps {
   /**
@@ -62,6 +66,9 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
   const view = useWorkspaceView(summary);
   const { counts, recent, attention, loading, error, reload } = view;
   const mediaReady = counts?.media.status === "ok";
+  // Before the first read, no provider has answered either way; that reads the
+  // same as `absent` rather than as an unreadable provider.
+  const mediaStatus: MediaStorageStatus = counts === null ? "absent" : counts.media.status;
   const empty = counts !== null && isEmptyWorkspace(counts);
   // Recent activity and the attention list are answers about records. With no
   // summary mounted, or after one that rejected, there is no answer to give —
@@ -158,7 +165,7 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
             </div>
           </DashCard>
 
-          <StorageCard mediaReady={mediaReady} recentLastWrite={recent === null ? null : lastWrite(recent)} />
+          <StorageCard mediaStatus={mediaStatus} recentLastWrite={recent === null ? null : lastWrite(recent)} />
         </div>
       </div>
     </main>
@@ -235,6 +242,17 @@ function StatCardView({ card, onRetry }: { card: StatCard; onRetry: () => void }
       <div class="cms-dash-stat cms-dash-stat--unavailable">
         {head}
         <StatusChip state="failed" label="Unavailable" detail={card.error} onRetry={onRetry} />
+      </div>
+    );
+  }
+
+  if (card.status === "absent") {
+    // No provider configured — the ordinary dev answer for Media, not a
+    // failure, so it gets an informational chip and no Retry action.
+    return (
+      <div class="cms-dash-stat cms-dash-stat--absent">
+        {head}
+        <StatusChip state="custom" tone="neutral" label="Not connected" />
       </div>
     );
   }
@@ -341,11 +359,18 @@ function SourcesUnavailable({
   );
 }
 
+/** Media files: `ok` → dev only, `absent` → not connected, `unavailable` → plain — its own Retry lives on the stat card. */
+const MEDIA_STORAGE_LABEL: Record<MediaStorageStatus, string> = {
+  ok: "Dev only",
+  absent: "Not connected",
+  unavailable: "Unavailable",
+};
+
 function StorageCard({
-  mediaReady,
+  mediaStatus,
   recentLastWrite,
 }: {
-  mediaReady: boolean;
+  mediaStatus: MediaStorageStatus;
   recentLastWrite: LastWrite | null;
 }): JSX.Element {
   return (
@@ -355,7 +380,7 @@ function StorageCard({
           <span class="cms-dash-storage__value">IndexedDB · zudo-composer</span>
         </StorageRow>
         <StorageRow icon={FolderIcon} label="Media files">
-          {mediaReady ? <Chip tone="plain">Dev only</Chip> : <Chip tone="plain">Not connected</Chip>}
+          <Chip tone="plain">{MEDIA_STORAGE_LABEL[mediaStatus]}</Chip>
         </StorageRow>
         <StorageRow icon={SavedIcon} label="Last write">
           {recentLastWrite === null || recentLastWrite.status === "unknown" ? (

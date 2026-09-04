@@ -22,7 +22,7 @@ function readyCounts(): WorkspaceCounts {
     mappings: { status: "ok", value: { mappings: 3, blockedMappings: 0 } },
     sitemaps: { status: "ok", value: { sitemaps: 2, pages: 9, unassignedPages: 0 } },
     content: { status: "ok", value: { models: 2, entries: 5, incompleteEntries: 0 } },
-    media: { status: "unavailable", error: "No Media provider is connected." },
+    media: { status: "absent" },
   };
 }
 
