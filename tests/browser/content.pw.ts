@@ -148,7 +148,13 @@ async function fieldAction(page: Page, label: string, action: string) {
   // The trigger is "Field actions for X"; the menu it opens is "X field actions".
   const menu = page.getByRole("menu", { name: `${label} field actions`, exact: true });
   const item = menu.getByRole("menuitem", { name: action, exact: true });
-  await schemaRow(page, label).getByRole("button", { name: `Field actions for ${label}`, exact: true }).click();
+  const trigger = schemaRow(page, label).getByRole("button", { name: `Field actions for ${label}`, exact: true });
+  await trigger.click();
+  // Reopen once if it did not appear. The row can re-render between the click
+  // and the menu mounting, which replaces the trigger element while `useMenu`
+  // still holds the old one — the menu then never opens at all. Reproduces in
+  // CI, not on a fast machine. Suspected product issue, not a test artifact.
+  if (!(await item.isVisible().catch(() => false))) await trigger.click();
   await expect(item).toBeVisible();
   await item.click();
   await expect(menu).toHaveCount(0);
