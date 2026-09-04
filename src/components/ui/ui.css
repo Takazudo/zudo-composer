@@ -434,6 +434,32 @@
  * -------------------------------------------------------------------------- */
 .cms-table-frame { display: grid; gap: var(--sp-2); min-width: 0; }
 
+.cms-table-scroll-shell { position: relative; min-width: 0; }
+
+.cms-table-scroll-shell::before,
+.cms-table-scroll-shell::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset-block: 1px;
+  width: 28px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.cms-table-scroll-shell::before {
+  inset-inline-start: 1px;
+  background: linear-gradient(to right, var(--color-surface), transparent);
+}
+
+.cms-table-scroll-shell::after {
+  inset-inline-end: 1px;
+  background: linear-gradient(to left, var(--color-surface), transparent);
+}
+
+.cms-table-scroll-shell:is([data-scroll-edge="start"], [data-scroll-edge="both"])::before,
+.cms-table-scroll-shell:is([data-scroll-edge="end"], [data-scroll-edge="both"])::after { opacity: 1; }
+
 .cms-table__bulk {
   display: flex;
   align-items: center;

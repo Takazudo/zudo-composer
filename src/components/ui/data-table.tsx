@@ -1,6 +1,50 @@
-import { Fragment, type ComponentChildren } from "preact";
+import { Fragment, type ComponentChildren, type RefObject } from "preact";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { cx } from "./class-names";
 import { Checkbox } from "./form-controls";
+
+type ScrollEdge = "none" | "start" | "end" | "both";
+
+const SCROLL_EDGE_TOLERANCE = 1;
+
+function useScrollEdges(
+  scrollRef: RefObject<HTMLDivElement>,
+  tableRef: RefObject<HTMLTableElement>,
+): ScrollEdge {
+  const [edge, setEdge] = useState<ScrollEdge>("none");
+
+  useLayoutEffect(() => {
+    const scrollport = scrollRef.current;
+    const table = tableRef.current;
+    if (!scrollport || !table) return undefined;
+
+    const measure = (): void => {
+      const maxScrollLeft = Math.max(0, scrollport.scrollWidth - scrollport.clientWidth);
+      if (maxScrollLeft <= SCROLL_EDGE_TOLERANCE) {
+        setEdge("none");
+        return;
+      }
+
+      const scrollLeft = Math.min(maxScrollLeft, Math.max(0, scrollport.scrollLeft));
+      const hasStart = scrollLeft > SCROLL_EDGE_TOLERANCE;
+      const hasEnd = maxScrollLeft - scrollLeft > SCROLL_EDGE_TOLERANCE;
+      setEdge(hasStart ? (hasEnd ? "both" : "start") : "end");
+    };
+
+    measure();
+    scrollport.addEventListener("scroll", measure, { passive: true });
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(scrollport);
+    observer?.observe(table);
+
+    return () => {
+      scrollport.removeEventListener("scroll", measure);
+      observer?.disconnect();
+    };
+  }, [scrollRef, tableRef]);
+
+  return edge;
+}
 
 export interface DataTableColumn<Row> {
   key: string;
@@ -60,82 +104,87 @@ export function DataTable<Row>({
   const allSelected = selection !== undefined && rows.length > 0 && selectedCount === rows.length;
   const someSelected = selectedCount > 0 && !allSelected;
   const columnCount = columns.length + (selection ? 1 : 0) + (rowActions ? 1 : 0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const scrollEdge = useScrollEdges(scrollRef, tableRef);
 
   return (
     <div class={cx("cms-table-frame", className)}>
       {bulkBar ? <div class="cms-table__bulk">{bulkBar}</div> : null}
-      <div class="cms-table-wrap">
-        <table class={cx("cms-table", density === "compact" && "cms-table--compact")}>
-          <caption class="cms-sr-only">{caption}</caption>
-          <thead>
-            <tr>
-              {selection ? (
-                <th scope="col" class="cms-table__cb">
-                  <Checkbox
-                    checked={allSelected}
-                    indeterminate={someSelected}
-                    onCheckedChange={(checked) => selection.onToggleAll(checked)}
-                    aria-label={selection.allLabel ?? "Select all rows"}
-                  />
-                </th>
-              ) : null}
-              {columns.map((column) => (
-                <th
-                  key={column.key}
-                  scope="col"
-                  class={cx(column.variant && `cms-table__cell--${column.variant}`)}
-                  style={column.width ? { width: column.width } : undefined}
-                >
-                  {column.header}
-                </th>
-              ))}
-              {rowActions ? (
-                <th scope="col" class="cms-table__actions">
-                  <span class="cms-sr-only">Row actions</span>
-                </th>
-              ) : null}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr class="cms-table__empty-row">
-                <td colSpan={columnCount}>{empty}</td>
+      <div class="cms-table-scroll-shell" data-scroll-edge={scrollEdge}>
+        <div ref={scrollRef} class="cms-table-wrap">
+          <table ref={tableRef} class={cx("cms-table", density === "compact" && "cms-table--compact")}>
+            <caption class="cms-sr-only">{caption}</caption>
+            <thead>
+              <tr>
+                {selection ? (
+                  <th scope="col" class="cms-table__cb">
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onCheckedChange={(checked) => selection.onToggleAll(checked)}
+                      aria-label={selection.allLabel ?? "Select all rows"}
+                    />
+                  </th>
+                ) : null}
+                {columns.map((column) => (
+                  <th
+                    key={column.key}
+                    scope="col"
+                    class={cx(column.variant && `cms-table__cell--${column.variant}`)}
+                    style={column.width ? { width: column.width } : undefined}
+                  >
+                    {column.header}
+                  </th>
+                ))}
+                {rowActions ? (
+                  <th scope="col" class="cms-table__actions">
+                    <span class="cms-sr-only">Row actions</span>
+                  </th>
+                ) : null}
               </tr>
-            ) : (
-              rows.map((row) => {
-                const id = rowKey(row);
-                const selected = selection?.selectedIds.has(id) ?? false;
-                const detail = rowDetail?.(row);
-                return (
-                  <Fragment key={id}>
-                    <tr aria-selected={selection ? selected : undefined}>
-                      {selection ? (
-                        <td class="cms-table__cb">
-                          <Checkbox
-                            checked={selected}
-                            onCheckedChange={(checked) => selection.onToggleRow(id, checked)}
-                            aria-label={selection.rowLabel(row)}
-                          />
-                        </td>
-                      ) : null}
-                      {columns.map((column) => (
-                        <td key={column.key} class={cx(column.variant && `cms-table__cell--${column.variant}`)}>
-                          {column.cell(row)}
-                        </td>
-                      ))}
-                      {rowActions ? <td class="cms-table__actions">{rowActions(row)}</td> : null}
-                    </tr>
-                    {detail ? (
-                      <tr class="cms-table__detail-row">
-                        <td colSpan={columnCount}>{detail}</td>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr class="cms-table__empty-row">
+                  <td colSpan={columnCount}>{empty}</td>
+                </tr>
+              ) : (
+                rows.map((row) => {
+                  const id = rowKey(row);
+                  const selected = selection?.selectedIds.has(id) ?? false;
+                  const detail = rowDetail?.(row);
+                  return (
+                    <Fragment key={id}>
+                      <tr aria-selected={selection ? selected : undefined}>
+                        {selection ? (
+                          <td class="cms-table__cb">
+                            <Checkbox
+                              checked={selected}
+                              onCheckedChange={(checked) => selection.onToggleRow(id, checked)}
+                              aria-label={selection.rowLabel(row)}
+                            />
+                          </td>
+                        ) : null}
+                        {columns.map((column) => (
+                          <td key={column.key} class={cx(column.variant && `cms-table__cell--${column.variant}`)}>
+                            {column.cell(row)}
+                          </td>
+                        ))}
+                        {rowActions ? <td class="cms-table__actions">{rowActions(row)}</td> : null}
                       </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                      {detail ? (
+                        <tr class="cms-table__detail-row">
+                          <td colSpan={columnCount}>{detail}</td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
