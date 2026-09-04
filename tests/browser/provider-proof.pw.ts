@@ -8,7 +8,11 @@ import { expect, test, type Locator, type Page, type Response } from "@playwrigh
  */
 async function treeRowAction(structure: Locator, action: string): Promise<void> {
   const button = structure.getByRole("button", { name: action, exact: true });
-  await structure.getByRole("treeitem").filter({ has: button }).first().focus();
+  // The action lives in `.cms-tree-acts`, a SIBLING of the treeitem inside the
+  // row — not a descendant, whatever the accessibility tree's nesting suggests.
+  // Focusing the button itself is enough: `focus()` runs no actionability check,
+  // and it makes the row `:focus-within`, which gives the button its box.
+  await button.focus();
   await button.click();
 }
 

@@ -8,7 +8,11 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  */
 async function treeRowAction(structure: Locator, action: string): Promise<void> {
   const button = structure.getByRole("button", { name: action, exact: true });
-  await structure.getByRole("treeitem").filter({ has: button }).first().focus();
+  // The action lives in `.cms-tree-acts`, a SIBLING of the treeitem inside the
+  // row — not a descendant, whatever the accessibility tree's nesting suggests.
+  // Focusing the button itself is enough: `focus()` runs no actionability check,
+  // and it makes the row `:focus-within`, which gives the button its box.
+  await button.focus();
   await button.click();
 }
 
@@ -72,9 +76,11 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   await expect(undo).toBeEnabled();
   await expect(redo).toBeDisabled();
 
-  // An outline row's accessible name is its spans run together — title then
-  // hint, with no separator between them.
-  const addedRow = structure.getByRole("treeitem", { name: /^SectionHeadingOur approach/ });
+  // An outline row's accessible name is its title then its hint, separated by a
+  // space — accname inserts one between the spans even though `textContent`
+  // runs them together ("SectionHeadingOur approach"). Verified against a live
+  // page: /^SectionHeading Our approach/ matches, /^SectionHeadingOur/ does not.
+  const addedRow = structure.getByRole("treeitem", { name: /^SectionHeading Our approach/ });
   await expect(addedRow).toHaveCount(1);
   await addedRow.click();
 
@@ -115,29 +121,36 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   await page.keyboard.press("Control+Shift+z");
   await expect(canvas.getByText("Keyboard history intro", { exact: true })).toBeVisible();
 
+  // The row is named after the heading, which the edits above changed, so
+  // `addedRow` no longer matches it — and a count of 0 on that stale locator
+  // would pass whether the row was deleted or merely renamed. Track the current
+  // name so both this assertion and the undo below mean what they say.
+  const renamedRow = structure.getByRole("treeitem", { name: /^SectionHeading Toolbar history heading/ });
+  await expect(renamedRow).toHaveCount(1);
+
   // Removal is a single direct action now that confirmation is retired; its
   // previous document is recoverable from the same history stack.
   await inspector.getByRole("button", { name: "Delete", exact: true }).click();
-  await expect(addedRow).toHaveCount(0);
+  await expect(renamedRow).toHaveCount(0);
   await expect(canvas.getByRole("heading", { name: "Toolbar history heading", exact: true })).toHaveCount(0);
   await expect(page.locator("dialog:visible")).toHaveCount(0);
 
   await undo.click();
-  await expect(addedRow).toHaveCount(1);
+  await expect(renamedRow).toHaveCount(1);
   await expect(canvas.getByRole("heading", { name: "Toolbar history heading", exact: true })).toBeVisible();
   await expect(canvas.getByText("Keyboard history intro", { exact: true })).toBeVisible();
   await expect(page.locator("dialog:visible")).toHaveCount(0);
 
   // Redo reaches the latest stack end; undo is then the only enabled history action.
   await redo.click();
-  await expect(addedRow).toHaveCount(0);
+  await expect(renamedRow).toHaveCount(0);
   await expect(redo).toBeDisabled();
   await expect(undo).toBeEnabled();
 
   // Restore the node so Preview can prove read-only history controls while a
   // real authored component remains visible.
   await undo.click();
-  await expect(addedRow).toHaveCount(1);
+  await expect(renamedRow).toHaveCount(1);
   await mode.getByRole("radio", { name: "Preview", exact: true }).click();
   await expect(mode.getByRole("radio", { name: "Preview", exact: true })).toHaveAttribute("aria-checked", "true");
   await expect(undo).toBeDisabled();
