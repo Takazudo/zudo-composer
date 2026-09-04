@@ -21,8 +21,7 @@ import type { Page } from "@playwright/test";
 
 const SAMPLE_SITEMAP = "Sample Studio sitemap";
 
-/** The fine-pointer heights, so a pass here cannot be the base rule in disguise. */
-const FINE_HEIGHTS = { th: 34, td: 40 };
+/** What the coarse block raises `th`'s 34px and `td`'s 40px to. */
 const COARSE_HEIGHT = 44;
 
 async function openSitemapLibrary(page: Page): Promise<void> {
@@ -62,12 +61,11 @@ test("every library table cell is a 44px touch target", async ({ page }) => {
   expect(cells, "the sitemap library rendered no table").not.toBeNull();
   expect(cells!.th.length, "header cells").toBeGreaterThan(0);
   expect(cells!.td.length, "body cells").toBeGreaterThan(0);
-  // Exact, not a floor: the fine-pointer rules are 34 and 40, so "at least 44"
-  // could not tell the coarse override from a cell some tall control grew.
+  // Exact, not a floor. A floor would be met by the fine-pointer 34 and 40 the
+  // moment some tall control grew a cell, and would then pass on a lane where
+  // the coarse block never applied at all.
   expect([...new Set(cells!.th)], "header cell heights").toEqual([COARSE_HEIGHT]);
   expect([...new Set(cells!.td)], "body cell heights").toEqual([COARSE_HEIGHT]);
-  expect(COARSE_HEIGHT).toBeGreaterThan(FINE_HEIGHTS.th);
-  expect(COARSE_HEIGHT).toBeGreaterThan(FINE_HEIGHTS.td);
 });
 
 test("row actions are visible without a hover that this screen cannot produce", async ({ page }) => {
