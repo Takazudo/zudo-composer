@@ -1,31 +1,31 @@
+/* ==========================================================================
+ * Sitemapper route surface.
+ *
+ * The route is a plain box inside `.cms-shell-main`: the chrome, the controls
+ * and the pattern stylesheets under `src/components` own everything visible,
+ * so this file only makes the route fill the shell and gives the two text
+ * treatments the feature repeats. Every colour is a token from
+ * `src/styles/app-tokens.css`, and every class carries the `sg-sitemapper-`
+ * prefix because `src/base.css` scans this tree with `@source "./"`.
+ * ========================================================================== */
+
 .sg-sitemapper-root {
-  --sg-header-h: var(--zudo-composer-header-height, 0px);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 100%;
   color: var(--color-fg);
   background: var(--color-bg);
 }
 
-.sg-sitemapper-root,
-.sg-sitemapper-root * {
-  box-sizing: border-box;
+.sg-sitemapper-root * { box-sizing: border-box; }
+
+/* The record editor owns the shell's whole viewport; the library scrolls. */
+.sg-sitemapper-library { align-content: start; padding: var(--sp-3); }
+
+.sg-sitemapper-mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: .75rem;
 }
 
-.sg-sitemapper-root > main {
-  width: min(64rem, 100%);
-  min-height: 100vh;
-  margin-inline: auto;
-  padding: 1.5rem;
-}
-
-.sg-sitemapper-root > main h1,
-.sg-sitemapper-root > main h2,
-.sg-sitemapper-root > main p {
-  max-width: none;
-  margin-block: 0 1rem;
-  font-size: inherit;
-  letter-spacing: normal;
-  line-height: 1.5;
-}
-
-.sg-sitemapper-root > main h1 {
-  font-size: 2rem;
-}
+.sg-sitemapper-blank { color: var(--color-faint); }

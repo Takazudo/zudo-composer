@@ -24,7 +24,7 @@ import type { ComposerComponentProvider } from "../active-pack";
 import {
   isEditableEventTarget,
   matchesUndoRedoShortcut,
-} from "../app/use-composer-keyboard";
+} from "../keyboard-shortcuts";
 import { createPreviewClient, type PreviewClient } from "./client";
 import { INLINE_EDITING_ATTR } from "./inline-edit-dom";
 import type { GuardFailure, MessagePoster, MessageTarget, SerializedRect } from "./protocol";

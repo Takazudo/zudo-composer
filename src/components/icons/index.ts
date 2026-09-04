@@ -30,6 +30,7 @@
  * | Icon(s)                                      | Surface / meaning                                      |
  * | -------------------------------------------- | ----------------------------------------------------- |
  * | HomeIcon, ComposerIcon, ContentIcon         | Shared shell route navigation                          |
+ * | ExternalLinkIcon                             | Rail entry that leaves the CMS for the delivered site   |
  * | MappingIcon, SitemapperIcon                  | Mapping and Sitemapper route navigation                |
  * | SystemThemeIcon, LightThemeIcon, DarkThemeIcon | Theme choice control                                  |
  * | TextIcon, LongTextIcon, MarkdownIcon         | Content field cards: text, long text, Markdown         |
@@ -46,7 +47,9 @@
  * | EditIcon, SaveIcon, RefreshIcon              | Authoring, persistence, retry/refresh                  |
  * | ArrowRightIcon, ArrowLeftIcon                | Mapping source → target and back navigation            |
  * | SearchIcon, SettingsIcon, FilterIcon         | Common labeled shell/library actions                   |
- * | ChevronRightIcon, ChevronDownIcon, ChevronUpIcon | Tree disclosure and sibling movement                |
+ * | SortIcon, GridIcon                           | Library toolbar sort picker and cards view toggle      |
+ * | ChevronRightIcon, ChevronLeftIcon            | Tree disclosure and library page stepping              |
+ * | ChevronDownIcon, ChevronUpIcon               | Disclosure and sibling movement                        |
  * | EllipsisIcon, XMarkIcon                      | Overflow menu, remove, and dialog close                |
  * | PlusIcon, MinusIcon                          | Add and remove/compact controls                        |
  * | CopyIcon, CutIcon, DuplicateIcon, TrashIcon  | Clipboard/menu and destructive actions                 |
@@ -169,6 +172,14 @@ export const ChevronRightIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   svgRoot(w, hgt, cls, style, FILLED, [
     evenOddPath(
       "M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L8.94 8 6.22 5.28a.75.75 0 0 1 0-1.06Z",
+    ),
+  ]),
+);
+
+export const ChevronLeftIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
+  svgRoot(w, hgt, cls, style, FILLED, [
+    evenOddPath(
+      "M9.78 4.22a.75.75 0 0 1 0 1.06L7.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L5.47 8.53a.75.75 0 0 1 0-1.06l3.25-3.25a.75.75 0 0 1 1.06 0Z",
     ),
   ]),
 );
@@ -364,15 +375,12 @@ export const SitemapperIcon: IconComponent = lineIcon(() => [
   h("path", { d: "M8 5.25v2.5M3.75 7.75h8.5M3.75 7.75v3M12.25 7.75v3" }),
 ]);
 
-// Familiar alternate names make the route vocabulary easy to discover while
-// keeping one component per visual meaning.
-export const MapIcon = MappingIcon;
-export const SitemapIcon = SitemapperIcon;
-export const HomeRouteIcon = HomeIcon;
-export const ComposerRouteIcon = ComposerIcon;
-export const ContentRouteIcon = ContentIcon;
-export const MappingRouteIcon = MappingIcon;
-export const SitemapperRouteIcon = SitemapperIcon;
+/** A destination outside the CMS chrome — currently the delivered `/site` routes. */
+export const ExternalLinkIcon: IconComponent = lineIcon(() => [
+  h("path", { d: "M9.75 2.75h3.5v3.5" }),
+  h("path", { d: "M13.25 2.75 7.75 8.25" }),
+  h("path", { d: "M11.75 9.5v2.75a1.5 1.5 0 0 1-1.5 1.5h-6.5a1.5 1.5 0 0 1-1.5-1.5v-6.5a1.5 1.5 0 0 1 1.5-1.5H6.5" }),
+]);
 
 // ── Theme choices ────────────────────────────────────────────────────────────
 
@@ -392,17 +400,6 @@ export const LightThemeIcon: IconComponent = lineIcon(() => [
 export const DarkThemeIcon: IconComponent = filledPathIcon(
   "M13.65 10.55A5.95 5.95 0 0 1 5.45 2.35 6.5 6.5 0 1 0 13.65 10.55Z",
 );
-
-export const ComputerDesktopIcon = SystemThemeIcon;
-export const SunIcon = LightThemeIcon;
-export const MoonIcon = DarkThemeIcon;
-export const SystemIcon = SystemThemeIcon;
-export const LightIcon = LightThemeIcon;
-export const DarkIcon = DarkThemeIcon;
-export const ThemeSystemIcon = SystemThemeIcon;
-export const ThemeLightIcon = LightThemeIcon;
-export const ThemeDarkIcon = DarkThemeIcon;
-export const ThemeIcon = SystemThemeIcon;
 
 // ── Content field kinds ──────────────────────────────────────────────────────
 
@@ -474,25 +471,6 @@ export const UrlIcon: IconComponent = lineIcon(() => [
   h("line", { x1: 5.75, y1: 10.25, x2: 10.25, y2: 5.75 }),
 ]);
 
-export const RichTextIcon = MarkdownIcon;
-export const TextFieldIcon = TextIcon;
-export const LongTextFieldIcon = LongTextIcon;
-export const MarkdownFieldIcon = MarkdownIcon;
-export const NumberFieldIcon = NumberIcon;
-export const BooleanFieldIcon = BooleanIcon;
-export const DateFieldIcon = DateIcon;
-export const SlugFieldIcon = SlugIcon;
-export const ColorFieldIcon = ColorIcon;
-export const UrlFieldIcon = UrlIcon;
-export const URLIcon = UrlIcon;
-export const DocumentTextIcon = LongTextIcon;
-export const HashtagIcon = NumberIcon;
-export const ToggleIcon = BooleanIcon;
-export const CalendarIcon = DateIcon;
-export const TagIcon = SlugIcon;
-export const SwatchIcon = ColorIcon;
-export const GlobeAltIcon = UrlIcon;
-
 // ── Markdown formatting ──────────────────────────────────────────────────────
 
 /** Bold formatting action. */
@@ -542,9 +520,6 @@ export const ListIcon: IconComponent = lineIcon(() => [
   h("line", { x1: 5.25, y1: 8, x2: 13.25, y2: 8 }),
   h("line", { x1: 5.25, y1: 12, x2: 13.25, y2: 12 }),
 ]);
-
-export const CodeIcon = InlineCodeIcon;
-export const ListBulletIcon = ListIcon;
 
 // ── Preview, notifications, and status ──────────────────────────────────────
 
@@ -608,22 +583,6 @@ export const LoadingIcon: IconComponent = lineIcon(() => [
 ]);
 
 export const EyeIcon = PreviewIcon;
-export const ArrowsPointingOutIcon = ExpandIcon;
-export const EnlargeIcon = ExpandIcon;
-export const EnvelopeIcon = MailIcon;
-export const EmailIcon = MailIcon;
-export const NotificationIcon = BellIcon;
-export const SuccessIcon = CheckCircleIcon;
-export const AlertIcon = WarningIcon;
-export const AlertTriangleIcon = WarningIcon;
-export const WarningTriangleIcon = WarningIcon;
-export const ExclamationTriangleIcon = WarningIcon;
-export const ExclamationCircleIcon = ErrorIcon;
-export const ErrorCircleIcon = ErrorIcon;
-export const XCircleIcon = ErrorIcon;
-export const InformationCircleIcon = InfoIcon;
-export const SpinnerIcon = LoadingIcon;
-export const ReadyIcon = CheckCircleIcon;
 export const SavedIcon = CheckCircleIcon;
 
 // ── Library and model cardinality ────────────────────────────────────────────
@@ -663,17 +622,7 @@ export const SingleIcon: IconComponent = lineIcon(() => [
   h("circle", { cx: 8, cy: 11.25, r: 1 }),
 ]);
 
-export const DocumentIcon = FileIcon;
 export const EntryIcon = FileIcon;
-export const BookOpenIcon = LibraryIcon;
-export const FolderOpenIcon = FolderIcon;
-export const CollectionModelIcon = CollectionIcon;
-export const SingleModelIcon = SingleIcon;
-export const ContentCollectionIcon = CollectionIcon;
-export const ContentSingleIcon = SingleIcon;
-export const RootIcon = PageIcon;
-export const ManyIcon = CollectionIcon;
-export const OneIcon = SingleIcon;
 
 // ── Editing, persistence, and common actions ─────────────────────────────────
 
@@ -729,6 +678,22 @@ export const FilterIcon: IconComponent = lineIcon(() => [
   h("path", { d: "M2 3h12l-4.5 5.25v4.5L6.5 14V8.25L2 3Z" }),
 ]);
 
+/** Sort-order picker in a library toolbar. */
+export const SortIcon: IconComponent = lineIcon(() => [
+  h("line", { x1: 2.25, y1: 4, x2: 10.75, y2: 4 }),
+  h("line", { x1: 2.25, y1: 8, x2: 8.25, y2: 8 }),
+  h("line", { x1: 2.25, y1: 12, x2: 5.75, y2: 12 }),
+  h("path", { d: "M12.25 3.25v9.5M10.25 10.75l2 2 2-2" }),
+]);
+
+/** Grid/cards view in a library view toggle. */
+export const GridIcon: IconComponent = lineIcon(() => [
+  h("rect", { x: 2.25, y: 2.25, width: 5, height: 5, rx: 1 }),
+  h("rect", { x: 8.75, y: 2.25, width: 5, height: 5, rx: 1 }),
+  h("rect", { x: 2.25, y: 8.75, width: 5, height: 5, rx: 1 }),
+  h("rect", { x: 8.75, y: 8.75, width: 5, height: 5, rx: 1 }),
+]);
+
 /** Download/export action. */
 export const DownloadIcon: IconComponent = lineIcon(() => [
   h("path", { d: "M8 2v8.25M4.75 7.25 8 10.5l3.25-3.25M3 13.5h10" }),
@@ -738,16 +703,6 @@ export const DownloadIcon: IconComponent = lineIcon(() => [
 export const UploadIcon: IconComponent = lineIcon(() => [
   h("path", { d: "M8 10.5V2.25M4.75 5.5 8 2.25l3.25 3.25M3 13.5h10" }),
 ]);
-
-export const PencilIcon = EditIcon;
-export const PencilSquareIcon = EditIcon;
-export const ArrowPathIcon = RefreshIcon;
-export const MoreIcon = EllipsisIcon;
-export const CloseIcon = XMarkIcon;
-export const CheckmarkIcon = CheckIcon;
-export const AddIcon = PlusIcon;
-export const RemoveIcon = MinusIcon;
-export const DeleteIcon = TrashIcon;
 
 // ── Mapping and directional arrows ──────────────────────────────────────────
 
@@ -775,14 +730,3 @@ export const ArrowDownIcon: IconComponent = lineIcon(() => [
   h("polyline", { points: "4.5 9.75 8 13.25 11.5 9.75" }),
 ]);
 
-/** Bidirectional mapping/reorder action. */
-export const ArrowsRightLeftIcon: IconComponent = lineIcon(() => [
-  h("line", { x1: 2.25, y1: 5.25, x2: 13.75, y2: 5.25 }),
-  h("polyline", { points: "10.5 2 13.75 5.25 10.5 8.5" }),
-  h("line", { x1: 13.75, y1: 10.75, x2: 2.25, y2: 10.75 }),
-  h("polyline", { points: "5.5 7.5 2.25 10.75 5.5 14" }),
-]);
-
-export const ArrowForwardIcon = ArrowRightIcon;
-export const ArrowBackIcon = ArrowLeftIcon;
-export const SwapIcon = ArrowsRightLeftIcon;

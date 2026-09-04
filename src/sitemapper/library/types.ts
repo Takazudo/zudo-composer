@@ -16,6 +16,8 @@ export interface SitemapSummary {
   createdAt: string;
   updatedAt: string;
   pageCount: number;
+  /** Pages with no Composition and no Mapping — the library's assignment chip. */
+  unassignedCount: number;
 }
 
 export type SitemapRecordValidationCode =

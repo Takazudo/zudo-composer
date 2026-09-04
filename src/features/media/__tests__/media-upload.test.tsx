@@ -1,7 +1,14 @@
+import type { JSX } from "preact";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMediaRecord, type MediaRecord } from "../../../media";
-import { MEDIA_UPLOAD_ACCEPT, MEDIA_UPLOAD_BUSY_REJECTION, MediaUpload, type MediaUploadStore } from "../media-upload";
+import {
+  MEDIA_UPLOAD_ACCEPT,
+  MEDIA_UPLOAD_BUSY_REJECTION,
+  MediaUploadPanel,
+  useMediaUpload,
+  type MediaUploadStore,
+} from "../media-upload";
 
 const checksum = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
 const bytes = new Uint8Array([1]);
@@ -12,14 +19,28 @@ const deferred = <T,>() => { let resolve!: (value: T) => void; let reject!: (rea
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-function setup(upload = vi.fn<MediaUploadStore["upload"]>().mockImplementation((source) => Promise.resolve(record(source.name))), refresh = vi.fn().mockResolvedValue(undefined)) {
-  const rendered = render(<MediaUpload store={{ upload }} refresh={refresh} now={() => 777} />);
+/** The route's shape: one queue behind the header's button and the drop strip. */
+function Harness({ store, refresh }: { store: MediaUploadStore; refresh: () => Promise<void> }): JSX.Element {
+  const controller = useMediaUpload({ store, refresh, now: () => 777 });
+  return (
+    <>
+      <button type="button" disabled={controller.state.busy} onClick={controller.openPicker}>Upload</button>
+      <MediaUploadPanel controller={controller} />
+    </>
+  );
+}
+
+function setup(
+  upload = vi.fn<MediaUploadStore["upload"]>().mockImplementation((source) => Promise.resolve(record(source.name))),
+  refresh = vi.fn().mockResolvedValue(undefined),
+) {
+  const rendered = render(<Harness store={{ upload }} refresh={refresh} />);
   const surface = rendered.container.querySelector<HTMLElement>(".sg-media-upload")!;
   const input = rendered.container.querySelector<HTMLInputElement>('input[type="file"]')!;
   return { ...rendered, surface, input, upload, refresh };
 }
 
-describe("MediaUpload", () => {
+describe("Media upload", () => {
   it("offers the explicit native picker, resets it before awaiting, and allows a same-file re-pick", async () => {
     const first = deferred<MediaRecord>();
     const upload = vi.fn<MediaUploadStore["upload"]>().mockReturnValueOnce(first.promise).mockResolvedValue(record("same.png"));
@@ -33,6 +54,13 @@ describe("MediaUpload", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Choose files" })).toBeEnabled());
     fireEvent.change(input, { target: { files: [file("same.png")] } });
     await waitFor(() => expect(upload).toHaveBeenCalledTimes(2));
+  });
+
+  it("opens the same file input from the page header's primary action", () => {
+    const { input } = setup();
+    const click = vi.spyOn(input, "click").mockImplementation(() => undefined);
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+    expect(click).toHaveBeenCalledTimes(1);
   });
 
   it("prevents browser drag navigation, sets copy, and ignores child-crossing dragleave", async () => {
@@ -104,5 +132,27 @@ describe("MediaUpload", () => {
     expect(within(status).getAllByText("Stored")).toHaveLength(2);
     expect(within(status).getByText("Failed")).toBeInTheDocument();
     expect(status.parentElement).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("keeps a failed row across the next batch until it is dismissed", async () => {
+    const upload = vi.fn<MediaUploadStore["upload"]>()
+      .mockRejectedValueOnce(new Error("Invalid image bytes."))
+      .mockImplementation((source) => Promise.resolve(record(source.name)));
+    const { input } = setup(upload);
+
+    fireEvent.change(input, { target: { files: [file("broken.png")] } });
+    await screen.findByText("Failed");
+
+    fireEvent.change(input, { target: { files: [file("good.png")] } });
+    await screen.findByText("Stored");
+    const status = screen.getByRole("list", { name: "Upload status" });
+    expect(within(status).getAllByRole("listitem")).toHaveLength(2);
+    // Two batches, two rows, two distinct keys — a reused id would have made
+    // the second drop overwrite the failure rather than sit beside it.
+    expect(within(status).getByText("broken.png")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss broken.png" }));
+    expect(within(status).queryByText("broken.png")).toBeNull();
+    expect(within(status).getAllByRole("listitem")).toHaveLength(1);
   });
 });

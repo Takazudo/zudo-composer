@@ -2,52 +2,38 @@
 /** @jsxImportSource preact */
 import "../../test-support/cleanup";
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/preact";
+import { fireEvent, render, screen, within } from "@testing-library/preact";
 import { ComposerWorkspace } from "../composer-workspace";
-import { ID_INSPECTOR_RAIL, ID_TREE_RAIL, MAX_RAIL_W, MIN_RAIL_W } from "../resizer-contract";
+
+const BACK = { href: "/composer#/", label: "Back to Compositions" };
 
 describe("ComposerWorkspace", () => {
-  it("renders the toolbar, both resizer separators, and a canvas-only narrow note", () => {
-    render(<ComposerWorkspace toolbar={<span>Toolbar</span>} />);
-    expect(screen.getByText("Toolbar")).toBeInTheDocument();
-    expect(screen.getAllByRole("separator")).toHaveLength(2);
-    expect(screen.getByText("Canvas-only view")).toBeInTheDocument();
-    expect(screen.getByText("Use a wider window to edit the tree and properties.")).toBeInTheDocument();
+  it("renders the shared editor chrome: back link, title, and both rail separators", () => {
+    render(<ComposerWorkspace back={BACK} title={<span>Product overview</span>} />);
+    expect(screen.getByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
+    expect(screen.getByText("Product overview")).toBeInTheDocument();
+    expect(screen.getByRole("separator", { name: "Resize Structure" })).toBeInTheDocument();
+    expect(screen.getByRole("separator", { name: "Resize Inspector" })).toBeInTheDocument();
   });
 
-  it("each resizer is a fully specified accessible separator", () => {
-    render(<ComposerWorkspace toolbar={<span>Toolbar</span>} treeWidthPx={260} inspectorWidthPx={300} />);
-    const [treeResizer, inspectorResizer] = screen.getAllByRole("separator");
-
-    expect(treeResizer).toHaveAttribute("aria-orientation", "vertical");
-    expect(treeResizer).toHaveAttribute("aria-controls", ID_TREE_RAIL);
-    expect(treeResizer).toHaveAttribute("aria-valuemin", String(MIN_RAIL_W));
-    expect(treeResizer).toHaveAttribute("aria-valuemax", String(MAX_RAIL_W));
-    expect(treeResizer).toHaveAttribute("aria-valuenow", "260");
-    expect(treeResizer).toHaveAttribute("tabindex", "0");
-    expect(treeResizer).toHaveAttribute("data-sg-composer-tree-resizer");
-
-    expect(inspectorResizer).toHaveAttribute("aria-controls", ID_INSPECTOR_RAIL);
-    expect(inspectorResizer).toHaveAttribute("aria-valuenow", "300");
-    expect(inspectorResizer).toHaveAttribute("data-sg-composer-inspector-resizer");
+  it("names its three panes on the narrow-screen switch", () => {
+    render(<ComposerWorkspace back={BACK} title={<span>Product overview</span>} />);
+    const radios = within(screen.getByRole("radiogroup", { name: "Pane" })).getAllByRole("radio");
+    expect(radios.map((radio) => radio.textContent)).toEqual(["Structure", "Canvas", "Inspect"]);
   });
 
-  it("the tree/inspector/canvas rails carry their contract ids and default to labeled placeholders", () => {
-    const { container } = render(<ComposerWorkspace toolbar={<span>Toolbar</span>} />);
-    const treeRail = container.querySelector(`#${ID_TREE_RAIL}`);
-    expect(treeRail).toHaveClass("sg-composer-tree-rail");
-    expect(treeRail).not.toHaveClass("sg-composer-tree");
-    expect(container.querySelector(`#${ID_INSPECTOR_RAIL}`)).not.toBeNull();
-    expect(container.querySelector("[data-sg-composer-canvas]")).not.toBeNull();
-    expect(screen.getByText("Structure")).toBeInTheDocument();
-    expect(screen.getByText("Canvas")).toBeInTheDocument();
-    expect(screen.getByText("Inspector")).toBeInTheDocument();
+  it("defaults every region to a labelled placeholder", () => {
+    render(<ComposerWorkspace back={BACK} title={<span>Product overview</span>} />);
+    expect(screen.getByText("No structure surface was supplied.")).toBeInTheDocument();
+    expect(screen.getByText("No preview surface was supplied.")).toBeInTheDocument();
+    expect(screen.getByText("No inspector surface was supplied.")).toBeInTheDocument();
   });
 
   it("accepts typed slot overrides for tree/canvas/inspector without any other change", () => {
     render(
       <ComposerWorkspace
-        toolbar={<span>Toolbar</span>}
+        back={BACK}
+        title={<span>Product overview</span>}
         tree={<div>Real tree</div>}
         canvas={<div>Real canvas</div>}
         inspector={<div>Real inspector</div>}
@@ -56,11 +42,40 @@ describe("ComposerWorkspace", () => {
     expect(screen.getByText("Real tree")).toBeInTheDocument();
     expect(screen.getByText("Real canvas")).toBeInTheDocument();
     expect(screen.getByText("Real inspector")).toBeInTheDocument();
-    expect(screen.queryByText("Structure")).not.toBeInTheDocument();
+    expect(screen.queryByText("No structure surface was supplied.")).not.toBeInTheDocument();
   });
 
-  it("renders an optional banner between the toolbar and the grid", () => {
-    render(<ComposerWorkspace toolbar={<span>Toolbar</span>} banner={<div>Recovered notice</div>} />);
-    expect(screen.getByText("Recovered notice")).toBeInTheDocument();
+  it("renders the banner above the canvas, inside the main region", () => {
+    const { container } = render(
+      <ComposerWorkspace
+        back={BACK}
+        title={<span>Product overview</span>}
+        banner={<div>Recovered notice</div>}
+        canvas={<div>Real canvas</div>}
+      />,
+    );
+    const main = container.querySelector(".sg-composer-main")!;
+    expect(main.textContent).toBe("Recovered noticeReal canvas");
+    // The banner slot is always a real element, so the canvas keeps the second
+    // grid row and its full height whether or not there is a banner.
+    expect(main.firstElementChild).toHaveClass("sg-composer-main__banner");
+  });
+
+  it("hands the toolbar a rail toggle, which collapses the region it names", () => {
+    const { container } = render(
+      <ComposerWorkspace
+        back={BACK}
+        title={<span>Product overview</span>}
+        right={({ toggleRail }) => (
+          <button type="button" onClick={() => toggleRail("nav")}>
+            Toggle structure
+          </button>
+        )}
+        tree={<div>Real tree</div>}
+      />,
+    );
+    expect(container.querySelector(".cms-editor__body")).not.toHaveClass("nav-collapsed");
+    fireEvent.click(screen.getByRole("button", { name: "Toggle structure" }));
+    expect(container.querySelector(".cms-editor__body")).toHaveClass("nav-collapsed");
   });
 });

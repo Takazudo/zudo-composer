@@ -50,6 +50,7 @@ assert.ok(workflow.includes("cancel-in-progress: true"), "new pushes must cancel
 for (const command of [
   "pnpm headless:negative-scan",
   "pnpm site-project:boundary",
+  "pnpm styles:class-names",
   "pnpm provider:boundary",
   "pnpm deployment:boundary",
   "pnpm deploy:dry-run",

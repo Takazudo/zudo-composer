@@ -2,14 +2,11 @@
 /** @jsxImportSource preact */
 
 import type { JSX } from "preact";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { ReuseCatalogEntry } from "../../../composer/browser";
-import { PlusIcon, RefreshIcon, XMarkIcon } from "../../../components/icons";
-import {
-  ToolDialogResizeHandle,
-  toolDialogStyle,
-  useToolDialogGeometry,
-} from "../ui/shared/tool-dialog-geometry";
+import { ComposerIcon, FileIcon, RefreshIcon, SearchIcon } from "../../../components/icons";
+import { Dialog } from "../../../components/overlay";
+import { Banner, Button, Chip, Field, Input, cx } from "../../../components/ui";
 import type {
   CompositionLibraryCreateIntent,
   CompositionLibraryIntents,
@@ -40,9 +37,6 @@ type SubmissionState =
   | { status: "create-error"; message: string }
   | { status: "navigation-error"; message: string };
 
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 function formatTimestamp(timestamp: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(timestamp),
@@ -58,9 +52,9 @@ function submissionMessage(result: Exclude<NewCompositionDialogSubmitResult, { s
 }
 
 /**
- * One native, focus-contained modal for ordinary and Global-template-bound
- * creations. It owns only transient form state; persistence and routing stay
- * behind the library intent adapter.
+ * The New-composition dialog on the shared `Dialog`: a name field and a
+ * Global-template picker that keeps the record an empty local document,
+ * binding only the chosen source and outlet.
  */
 export function NewCompositionDialog({
   open,
@@ -70,18 +64,31 @@ export function NewCompositionDialog({
   onRetryNavigation,
   onClose,
 }: NewCompositionDialogProps): JSX.Element {
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const nameRef = useRef<HTMLInputElement | null>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
   const requestRef = useRef(0);
   const submissionInFlightRef = useRef(false);
-  const titleId = useId();
-  const geometry = useToolDialogGeometry({ open });
   const [name, setName] = useState("Untitled composition");
   const [query, setQuery] = useState("");
   const [selectedSource, setSelectedSource] = useState<ReuseCatalogEntry | null>(null);
   const [catalog, setCatalog] = useState<CatalogState>({ status: "loading", entries: [] });
   const [submission, setSubmission] = useState<SubmissionState>({ status: "idle" });
+
+  // Reset during the opening render, not in an effect — see the Sitemapper
+  // name dialog for why: an effect runs after paint, leaving a frame where
+  // the dialog is visible and typeable before the reset lands.
+  const wasOpen = useRef(open);
+  if (open !== wasOpen.current) {
+    wasOpen.current = open;
+    if (open) {
+      setName("Untitled composition");
+      setQuery("");
+      setSelectedSource(null);
+      setSubmission({ status: "idle" });
+      submissionInFlightRef.current = false;
+    } else {
+      requestRef.current += 1;
+    }
+  }
 
   const templateEntries = useMemo(
     () => catalog.entries.filter((entry) => entry.kind === "global-template" && entry.outlet !== undefined),
@@ -91,14 +98,11 @@ export function NewCompositionDialog({
     const normalized = query.trim().toLocaleLowerCase();
     if (!normalized) return templateEntries;
     return templateEntries.filter((entry) =>
-      `${entry.summary.name} ${entry.outlet?.label ?? ""} ${entry.summary.updatedAt}`
-        .toLocaleLowerCase()
-        .includes(normalized),
+      `${entry.summary.name} ${entry.outlet?.label ?? ""}`.toLocaleLowerCase().includes(normalized),
     );
   }, [query, templateEntries]);
   const busy = submission.status === "busy";
-  const retryingNavigation = submission.status === "navigation-error";
-  const formLocked = busy || retryingNavigation;
+  const formLocked = busy || submission.status === "navigation-error";
 
   async function loadTemplates(): Promise<void> {
     if (!providerId) return;
@@ -123,18 +127,8 @@ export function NewCompositionDialog({
   }
 
   useEffect(() => {
-    if (!open) {
-      requestRef.current += 1;
-      return;
-    }
-    setName("Untitled composition");
-    setQuery("");
-    setSelectedSource(null);
-    setSubmission({ status: "idle" });
-    submissionInFlightRef.current = false;
-    void loadTemplates();
-    // `open` is the fresh-session boundary. Provider changes cannot happen
-    // behind the modal, but including it makes a controlled re-open safe.
+    if (open) void loadTemplates();
+    // `providerId` is included for a controlled re-open under a new provider.
   }, [open, providerId]);
 
   useEffect(() => {
@@ -143,72 +137,6 @@ export function NewCompositionDialog({
       setSelectedSource(null);
     }
   }, [selectedSource, templateEntries]);
-
-  // Capture before `showModal()` moves browser focus into the dialog.
-  useLayoutEffect(() => {
-    if (open) {
-      triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    }
-  }, [open]);
-
-  useLayoutEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal?.();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
-
-  useLayoutEffect(() => {
-    if (open) nameRef.current?.focus();
-  }, [open]);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const handleClose = () => {
-      const trigger = triggerRef.current;
-      onClose();
-      // The controlled parent removes the interactive form on close. Restore
-      // focus after that render; otherwise removing the currently focused
-      // field can leave focus on <body> in lightweight DOMs and browsers.
-      setTimeout(() => trigger?.focus(), 0);
-      triggerRef.current = null;
-    };
-    dialog.addEventListener("close", handleClose);
-    return () => dialog.removeEventListener("close", handleClose);
-  }, [onClose]);
-
-  function close(): void {
-    if (!busy) dialogRef.current?.close();
-  }
-
-  function handleKeyDown(event: JSX.TargetedKeyboardEvent<HTMLDialogElement>): void {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      close();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const focusables = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)];
-    if (focusables.length === 0) {
-      event.preventDefault();
-      return;
-    }
-    const first = focusables[0]!;
-    const last = focusables[focusables.length - 1]!;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    } else if (!dialog.contains(document.activeElement)) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
 
   async function submit(): Promise<void> {
     if (!providerId || formLocked || submissionInFlightRef.current) return;
@@ -228,10 +156,7 @@ export function NewCompositionDialog({
           ? { source: { sourceRecordId: selectedSource.ref.recordId, outletId: selectedSource.outlet!.id } }
           : {}),
       });
-      if (result.status === "created") {
-        dialogRef.current?.close();
-        return;
-      }
+      if (result.status === "created") return;
       setSubmission({ status: result.status, message: submissionMessage(result) });
     } catch (reason) {
       setSubmission({
@@ -253,10 +178,7 @@ export function NewCompositionDialog({
     setSubmission({ status: "busy" });
     try {
       const result = await onRetryNavigation();
-      if (result.status === "created") {
-        dialogRef.current?.close();
-        return;
-      }
+      if (result.status === "created") return;
       setSubmission({ status: result.status, message: submissionMessage(result) });
     } catch (reason) {
       setSubmission({
@@ -269,171 +191,128 @@ export function NewCompositionDialog({
   }
 
   return (
-    <dialog
-      ref={dialogRef}
-      class="sg-composer-tool-dialog m-0 overflow-hidden bg-surface p-0 text-fg backdrop:bg-overlay/45"
-      aria-modal={open ? "true" : undefined}
-      aria-labelledby={open ? titleId : undefined}
-      style={toolDialogStyle(geometry.rect)}
-      onKeyDown={handleKeyDown}
-      onCancel={(event) => {
-        event.preventDefault();
-        close();
+    <Dialog
+      open={open}
+      title="New composition"
+      size="wide"
+      initialFocusRef={nameRef}
+      dismissOnBackdrop={!formLocked}
+      onClose={() => {
+        if (!formLocked) onClose();
       }}
-      onClick={(event) => {
-        if (event.target === dialogRef.current) close();
-      }}
-    >
-      {open && providerId && (
-        <div class="flex h-full min-h-0 flex-col overflow-hidden">
-          <header class="flex flex-none items-center justify-between gap-hsp-sm border-b border-border px-hsp-lg py-vsp-xs">
-            <div class="flex min-w-0 flex-1 flex-col gap-vsp-3xs">
-              <h2 id={titleId} class="m-0 text-body font-semibold">New composition</h2>
-              <p class="m-0 text-small text-muted">Create an empty composition or bind its outlet to a Global template.</p>
-            </div>
-            <button type="button" class="sg-composer-library-button" disabled={busy} onClick={close}>
-              <XMarkIcon size="sm" class="sg-composer-button-icon" />
-              Cancel
-            </button>
-          </header>
-
-          <form
-            class="flex min-h-0 flex-1 flex-col"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submit();
-            }}
+      footer={
+        <>
+          <span class="mr-auto text-small text-muted" role="status">
+            {busy ? "Saving composition…" : selectedSource ? `Binding to ${selectedSource.summary.name}.` : "Creating an ordinary composition."}
+          </span>
+          <button type="button" class="cms-dialog__action" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="cms-dialog__action cms-dialog__action--primary"
+            disabled={formLocked}
+            onClick={() => void submit()}
           >
-            <div class="min-h-0 flex-1 overflow-y-auto px-hsp-lg py-vsp-md">
-              <label class="flex flex-col gap-vsp-3xs text-small font-semibold text-fg">
-                <span>Name</span>
-                <input
-                  ref={nameRef}
-                  type="text"
-                  value={name}
-                  disabled={formLocked}
-                  onInput={(event) => setName(event.currentTarget.value)}
-                  class="min-h-11 rounded-md border border-border-strong bg-bg px-hsp-sm text-body text-fg"
-                />
-              </label>
+            {busy ? "Creating…" : "Create composition"}
+          </button>
+        </>
+      }
+    >
+      <p class="cms-dialog__message">Create an empty composition or bind its outlet to a Global template.</p>
+      {submission.status !== "idle" && submission.status !== "busy" ? (
+        <Banner tone="err" action={<Button size="sm" onClick={() => void retry()}><RefreshIcon size="sm" />Retry</Button>}>
+          {submission.message}
+        </Banner>
+      ) : null}
 
-              {submission.status !== "idle" && submission.status !== "busy" && (
-                <section class="mt-vsp-sm border border-danger bg-danger/10 px-hsp-sm py-vsp-xs text-small" role="alert">
-                  <p class="m-0">{submission.message}</p>
-                  <div class="mt-vsp-xs flex flex-wrap gap-hsp-sm">
-                    <button type="button" class="sg-composer-library-button" onClick={() => void retry()}>
-                      <RefreshIcon size="sm" class="sg-composer-button-icon" />
-                      Retry
-                    </button>
-                  </div>
-                </section>
-              )}
+      <Field label="Name">
+        <Input
+          elementRef={nameRef}
+          value={name}
+          disabled={formLocked}
+          onInput={(event) => setName(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            void submit();
+          }}
+        />
+      </Field>
 
-              <section class="mt-vsp-md flex min-h-0 flex-col" aria-labelledby={`${titleId}-template-title`}>
-                <div class="flex flex-wrap items-end justify-between gap-hsp-sm">
-                  <div>
-                    <h3 id={`${titleId}-template-title`} class="m-0 text-small font-semibold">Global template</h3>
-                    <p class="m-0 text-small text-muted">The new record remains empty; only the chosen source and outlet are stored.</p>
-                  </div>
-                  <label class="flex min-w-48 flex-1 flex-col gap-vsp-3xs text-small text-muted">
-                    <span class="sr-only">Search Global templates</span>
-                    <input
-                      type="search"
-                      placeholder="Search templates…"
-                      value={query}
-                      disabled={formLocked || catalog.status !== "listed"}
-                      onInput={(event) => setQuery(event.currentTarget.value)}
-                      class="min-h-11 rounded-md border border-border-strong bg-bg px-hsp-sm text-body text-fg"
-                    />
-                  </label>
-                </div>
-
-                {catalog.status === "loading" ? (
-                  <div class="mt-vsp-sm flex min-h-48 flex-1 items-center justify-center border border-border bg-surface-2 p-hsp-md text-center text-small text-muted" role="status">
-                    Loading Global templates…
-                  </div>
-                ) : catalog.status === "error" ? (
-                  <div class="mt-vsp-sm flex min-h-48 flex-1 flex-col items-center justify-center gap-vsp-sm border border-danger bg-danger/10 p-hsp-md text-center text-small" role="alert">
-                    <p class="m-0">{catalog.message}</p>
-                    <button type="button" class="sg-composer-library-button" disabled={formLocked} onClick={() => void loadTemplates()}>
-                      <RefreshIcon size="sm" class="sg-composer-button-icon" />
-                      Retry templates
-                    </button>
-                  </div>
-                ) : (
-                  <div class="mt-vsp-sm grid min-h-48 flex-1 grid-cols-1 overflow-hidden border border-border md:grid-cols-[minmax(0,3fr)_minmax(12rem,2fr)]">
-                    <div class="min-h-0 overflow-y-auto">
-                      <button
-                        type="button"
-                        class={`flex w-full flex-col gap-vsp-3xs border-b border-border px-hsp-sm py-vsp-xs text-left ${selectedSource === null ? "bg-accent/10" : "bg-transparent"}`}
-                        aria-pressed={selectedSource === null}
-                        disabled={formLocked}
-                        onClick={() => setSelectedSource(null)}
-                      >
-                        <span class="font-semibold">None</span>
-                        <span class="text-small text-muted">Create an ordinary, unbound empty composition.</span>
-                      </button>
-                      {templateEntries.length === 0 ? (
-                        <p class="m-0 p-hsp-sm text-small text-muted">No eligible Global templates are available from this provider.</p>
-                      ) : filteredTemplates.length === 0 ? (
-                        <div class="p-hsp-sm text-small text-muted">
-                          <p class="m-0">No Global templates match this search.</p>
-                          <button type="button" class="mt-vsp-xs sg-composer-library-button" onClick={() => setQuery("")}>
-                            <XMarkIcon size="sm" class="sg-composer-button-icon" />
-                            Clear search
-                          </button>
-                        </div>
-                      ) : (
-                        <ul class="m-0 list-none p-0">
-                          {filteredTemplates.map((entry) => (
-                            <li key={`${entry.ref.providerId}:${entry.ref.recordId}:${entry.outlet!.id}`}>
-                              <button
-                                type="button"
-                                class={`flex w-full flex-col gap-vsp-3xs border-b border-border px-hsp-sm py-vsp-xs text-left ${sameSource(selectedSource, entry) ? "bg-accent/10" : "bg-transparent"}`}
-                                aria-pressed={sameSource(selectedSource, entry)}
-                                disabled={formLocked}
-                                onClick={() => setSelectedSource(entry)}
-                              >
-                                <span class="font-semibold">{entry.summary.name}</span>
-                                <span class="text-small text-muted">Outlet: {entry.outlet!.label || entry.outlet!.id} · Updated {formatTimestamp(entry.summary.updatedAt)}</span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                    <aside class="border-t border-border bg-surface-2 p-hsp-sm text-small md:border-l md:border-t-0" aria-label="Template choice details">
-                      {selectedSource ? (
-                        <>
-                          <p class="m-0 font-semibold">{selectedSource.summary.name}</p>
-                          <dl class="mt-vsp-xs grid grid-cols-[auto_1fr] gap-x-hsp-sm gap-y-vsp-3xs text-muted">
-                            <dt>Outlet</dt><dd class="m-0">{selectedSource.outlet!.label || selectedSource.outlet!.id}</dd>
-                            <dt>Updated</dt><dd class="m-0">{formatTimestamp(selectedSource.summary.updatedAt)}</dd>
-                            <dt>Source ID</dt><dd class="m-0 break-all font-mono text-xs">{selectedSource.ref.recordId}</dd>
-                          </dl>
-                        </>
-                      ) : (
-                        <p class="m-0 text-muted">No template selected. The composition will have an unrestricted empty root.</p>
-                      )}
-                    </aside>
-                  </div>
-                )}
-              </section>
-            </div>
-
-            <footer class="relative flex flex-none flex-wrap items-center justify-between gap-hsp-sm border-t border-border px-hsp-lg py-vsp-xs pr-[3.5rem]">
-              <p class="m-0 text-small text-muted" role="status">
-                {busy ? "Saving composition…" : selectedSource ? `Binding to ${selectedSource.summary.name}.` : "Creating an ordinary composition."}
-              </p>
-              <button type="submit" class="sg-composer-library-button sg-composer-library-button-primary" disabled={formLocked}>
-                <PlusIcon size="sm" class="sg-composer-button-icon" />
-                {busy ? "Creating…" : "Create composition"}
-              </button>
-              <ToolDialogResizeHandle geometry={geometry} class="absolute bottom-0 right-0 min-h-11 min-w-11" />
-            </footer>
-          </form>
+      <div class="mt-vsp-md flex min-h-0 flex-col gap-vsp-xs">
+        <div class="flex flex-wrap items-end justify-between gap-hsp-sm">
+          <span class="cms-field__label-text">Global template</span>
+          <Input
+            size="sm"
+            type="search"
+            icon={SearchIcon}
+            // An arbitrary length, not `min-w-48`: this app's Tailwind theme
+            // defines no base `--spacing`, so every numeric spacing utility
+            // generates nothing. `scripts/check-class-names.mjs` guards that.
+            class="min-w-[12rem] flex-1"
+            aria-label="Search Global templates"
+            placeholder="Search templates…"
+            value={query}
+            disabled={formLocked || catalog.status !== "listed"}
+            onInput={(event) => setQuery(event.currentTarget.value)}
+          />
         </div>
-      )}
-    </dialog>
+
+        {catalog.status === "loading" ? (
+          <p class="text-small text-muted" role="status">Loading Global templates…</p>
+        ) : catalog.status === "error" ? (
+          <Banner tone="err" action={<Button size="sm" disabled={formLocked} onClick={() => void loadTemplates()}><RefreshIcon size="sm" />Retry templates</Button>}>
+            {catalog.message}
+          </Banner>
+        ) : (
+          <div class="grid grid-cols-1 gap-hsp-sm sm:grid-cols-2" aria-label="Start from">
+            <button
+              type="button"
+              class={cx(
+                "flex flex-col items-start gap-vsp-3xs rounded-md border px-hsp-sm py-vsp-xs text-left text-small",
+                selectedSource === null ? "border-accent bg-accent/10" : "border-border-strong bg-bg",
+              )}
+              aria-pressed={selectedSource === null}
+              disabled={formLocked}
+              onClick={() => setSelectedSource(null)}
+            >
+              <span class="inline-flex items-center gap-hsp-xs font-semibold text-fg"><FileIcon size="sm" />Blank document</span>
+              <span class="text-muted">Empty root. Add the first component from the canvas.</span>
+            </button>
+            {filteredTemplates.map((entry) => (
+              <button
+                key={`${entry.ref.providerId}:${entry.ref.recordId}:${entry.outlet!.id}`}
+                type="button"
+                class={cx(
+                  "flex flex-col items-start gap-vsp-3xs rounded-md border px-hsp-sm py-vsp-xs text-left text-small",
+                  sameSource(selectedSource, entry) ? "border-accent bg-accent/10" : "border-border-strong bg-bg",
+                )}
+                aria-pressed={sameSource(selectedSource, entry)}
+                disabled={formLocked}
+                onClick={() => setSelectedSource(entry)}
+              >
+                <span class="inline-flex flex-wrap items-center gap-hsp-xs font-semibold text-fg">
+                  <ComposerIcon size="sm" />
+                  {entry.summary.name}
+                  <Chip tone="accent">Global template</Chip>
+                </span>
+                <span class="text-muted">
+                  Outlet: {entry.outlet!.label || entry.outlet!.id} · Updated {formatTimestamp(entry.summary.updatedAt)}
+                </span>
+              </button>
+            ))}
+            {templateEntries.length === 0 ? (
+              <p class="text-small text-muted">No eligible Global templates are available from this provider.</p>
+            ) : filteredTemplates.length === 0 ? (
+              <p class="text-small text-muted">
+                No Global templates match this search.{" "}
+                <Button size="sm" variant="ghost" onClick={() => setQuery("")}>Clear search</Button>
+              </p>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </Dialog>
   );
 }

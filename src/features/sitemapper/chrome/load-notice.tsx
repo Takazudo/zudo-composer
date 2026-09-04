@@ -1,42 +1,56 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
-// Dismissible load/recovery notice for the Sitemapper workspace (issue Takazudo/zudo-sg#409).
+// Why a Sitemap could not be opened, said out loud.
 //
-// Recovery is intentionally visible and separate from the live save pill: a
-// malformed record may have produced a writable sample, while a future-schema
-// record is quarantined and must not be overwritten until the user explicitly
-// chooses a reset path in the controller.
+// Recovery is intentionally visible and never destructive: a record this build
+// cannot read — malformed, or written by a newer schema — is left exactly as it
+// is rather than repaired in place or overwritten by an empty document. The
+// notice therefore reports and offers the way back, and nothing else.
 
 import type { JSX } from "preact";
+import { Banner, Button } from "../../../components/ui";
 
 export type SitemapperLoadNotice =
-  | { kind: "recovered"; reason: string }
-  | { kind: "quarantined"; foundSchemaVersion: number };
+  | { kind: "missing"; sitemapId: string }
+  | { kind: "unreadable"; sitemapId: string; reason?: string }
+  | { kind: "future-schema"; sitemapId: string; foundSchemaVersion?: number };
 
 export interface SitemapperLoadNoticeBannerProps {
   notice: SitemapperLoadNotice;
-  onDismiss: () => void;
+  /** The only way forward: back to the library. */
+  onBack: () => void;
+  backLabel?: string;
 }
 
 export function describeSitemapperLoadNotice(notice: SitemapperLoadNotice): string {
   switch (notice.kind) {
-    case "recovered":
-      return `The saved Sitemap could not be read (${notice.reason}) — recovered the sample so you can keep working.`;
-    case "quarantined":
-      return `Storage holds a newer Sitemap (schema v${notice.foundSchemaVersion}) this version does not understand. Working from the sample — nothing is saved until you reset.`;
+    case "missing":
+      return `Sitemap “${notice.sitemapId}” no longer exists. It may have been deleted from this browser.`;
+    case "unreadable":
+      return notice.reason
+        ? `Sitemap “${notice.sitemapId}” could not be read (${notice.reason}) and was left untouched.`
+        : `Sitemap “${notice.sitemapId}” could not be read and was left untouched.`;
+    case "future-schema":
+      return notice.foundSchemaVersion === undefined
+        ? `Sitemap “${notice.sitemapId}” was written by a newer build. It is held back rather than rewritten.`
+        : `Sitemap “${notice.sitemapId}” was written by a newer build (schema v${notice.foundSchemaVersion}). It is held back rather than rewritten.`;
   }
 }
 
 export function SitemapperLoadNoticeBanner({
   notice,
-  onDismiss,
+  onBack,
+  backLabel = "Back to Sitemaps",
 }: SitemapperLoadNoticeBannerProps): JSX.Element {
   return (
-    <div class="sg-sitemapper-load-notice" role="status">
-      <span>{describeSitemapperLoadNotice(notice)}</span>
-      <button type="button" class="sg-sitemapper-toolbar-button" onClick={onDismiss}>
-        Dismiss
-      </button>
+    <div class="sg-sitemapper-load-notice">
+      <Banner
+        tone="err"
+        title="This sitemap could not be opened."
+        action={<Button size="sm" onClick={onBack}>{backLabel}</Button>}
+      >
+        {describeSitemapperLoadNotice(notice)}
+      </Banner>
     </div>
   );
 }

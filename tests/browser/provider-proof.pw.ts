@@ -1,4 +1,21 @@
-import { expect, test, type Page, type Response } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
+
+/**
+ * `.cms-tree-acts` is `width: 0; opacity: 0` until its row is hovered or
+ * focus-within, so an OutlineTree row action is in the accessibility tree but
+ * has no box — Playwright's actionability check waits on it forever. Focus the
+ * owning row first; focus-within is deterministic where hover is not.
+ */
+async function treeRowAction(structure: Locator, action: string): Promise<void> {
+  const button = structure.getByRole("button", { name: action, exact: true });
+  // The action lives in `.cms-tree-acts`, a SIBLING of the treeitem inside the
+  // row — not a descendant, whatever the accessibility tree's nesting suggests.
+  // Focusing the button itself is enough: `focus()` runs no actionability check,
+  // and it makes the row `:focus-within`, which gives the button its box.
+  await button.focus();
+  await button.click();
+}
+
 
 const COMPONENTS = [
   "Callout",
@@ -46,15 +63,19 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/composer");
-  await expect(page.getByRole("heading", { name: "Composition library" })).toBeVisible();
-  await page.getByRole("button", { name: "Open About page" }).click();
-  await expect(page.getByRole("toolbar", { name: "Composer toolbar" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
+  await page.getByRole("link", { name: "About page", exact: true }).click();
+  // The shared editor toolbar carries no role of its own, so it is scoped by
+  // class; "Undo" and "Add component" also exist inside the canvas iframe.
+  const toolbar = page.locator(".cms-editor__toolbar");
+  const structure = page.locator(".cms-editor__region--nav");
+  await expect(toolbar).toBeVisible();
 
   const canvas = page.frameLocator('iframe[title="Composer preview canvas"]');
   await expect(canvas.getByText("Static about heading", { exact: true })).toBeVisible();
   await expect(canvas.getByText("Static about body", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add component to document root" }).click();
+  await treeRowAction(structure, "Add component to the document");
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await expect(chooser).toBeVisible();
   for (const title of COMPONENTS) {
@@ -63,7 +84,7 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   await expect(chooser.getByRole("button", { name: /^(Callout|Card|ProseMd|ProseP|PlaceholderBox|AutoGrid|Container|CtaButton|Hero|SectionHeading|SplitLayout|Stack)\b/i })).toHaveCount(12);
   await chooser.getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: /^ProseMd/ }).click();
+  await structure.getByRole("treeitem", { name: /^ProseMd/ }).click();
   const markdown = page.getByRole("textbox", { name: "Markdown" });
   const persistedMarkdown = [
     "## Browser proof",
@@ -95,13 +116,13 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   });
   expect(surfaceColors.foreground).not.toBe(surfaceColors.background);
 
-  await page.getByRole("button", { name: "Export JSX" }).click();
+  await toolbar.getByRole("button", { name: "Export JSX" }).click();
   const exportDialog = page.getByRole("dialog", { name: /Export — About page/i });
   await expect(exportDialog).toContainText('from "@zudo-sg/ui"');
   await exportDialog.getByRole("button", { name: "Close" }).click();
 
   await page.reload();
-  await page.getByRole("button", { name: /^ProseMd/ }).click();
+  await structure.getByRole("treeitem", { name: /^ProseMd/ }).click();
   await expect(page.getByRole("textbox", { name: "Markdown" })).toHaveValue(persistedMarkdown);
 
   const assetPath = (response: Response) => new URL(response.url()).pathname;
@@ -117,9 +138,9 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
     await useTheme(page, theme);
     await expect(canvas.locator("html")).toHaveAttribute("data-theme", theme);
   }
-  await page.getByRole("button", { name: "Add component to document root" }).click();
+  await treeRowAction(structure, "Add component to the document");
   await page.setViewportSize({ width: 375, height: 812 });
-  await expect(page.getByRole("toolbar", { name: "Composer toolbar" })).toBeVisible();
+  await expect(toolbar).toBeVisible();
   const narrowChooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await expect(narrowChooser.getByText("12 of 12 components", { exact: true })).toBeVisible();
   await narrowChooser.getByRole("button", { name: "Cancel" }).click();
@@ -144,22 +165,33 @@ test("clean Sitemapper assigns and resolves the seeded About page catalog entry"
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Provider proof");
   await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page.getByRole("toolbar", { name: "Sitemapper toolbar" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
 
+  // Creating navigates to the record's own URL: `/sitemapper` is the library
+  // and `/sitemapper?sitemap=` is one Sitemap, so the editor is a real route.
+  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Provider proof");
+  await expect(page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /Home/ })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Source" }).click();
+  await page.getByRole("radio", { name: "Composition", exact: true }).click();
   await page.getByRole("button", { name: "Choose composition" }).click();
   const picker = page.getByRole("dialog", { name: "Choose a composition" });
   await expect(picker.getByText("About page", { exact: true })).toBeVisible();
   await picker.getByRole("button", { name: /Assign About page from Browser storage/i }).click();
-  await expect(page.getByText("About page", { exact: true })).toBeVisible();
-  await expect(page.getByText("Browser storage", { exact: true })).toBeVisible();
+  // Scoped to the Composition group: the shell rail also shows the active
+  // provider ("Browser storage") in its foot, so a page-wide text match is
+  // ambiguous and would pass on the rail rather than on the assignment.
+  const compositionField = page.getByRole("group", { name: "Composition" });
+  await expect(compositionField.getByText("About page", { exact: true })).toBeVisible();
+  await expect(compositionField.getByText("Browser storage", { exact: true })).toBeVisible();
 
   for (const theme of ["light", "dark"] as const) await useTheme(page, theme);
   await page.setViewportSize({ width: 375, height: 812 });
-  const canvasTab = page.getByRole("tab", { name: "Canvas" });
-  await canvasTab.click();
-  await expect(canvasTab).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tabpanel", { name: "Canvas" })).toBeVisible();
+  // Below 64rem the toolbar's centre controls are withdrawn, so the only
+  // "Canvas" control left is the pane switch this asserts on.
+  const canvasPane = page.getByRole("radio", { name: "Canvas" });
+  await canvasPane.click();
+  await expect(canvasPane).toHaveAttribute("aria-checked", "true");
   await expect(page.getByRole("region", { name: "Sitemap canvas" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   expect(failures).toEqual([]);

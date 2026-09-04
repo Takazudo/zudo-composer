@@ -5,6 +5,9 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 
+/** The Dashboard heading follows the local clock, so match all three. */
+const GREETING = /^Good (morning|afternoon|evening)\.$/;
+
 describe('App', () => {
   afterEach(() => {
     cleanup();
@@ -12,35 +15,42 @@ describe('App', () => {
     document.documentElement.removeAttribute('data-theme-preference');
     document.documentElement.removeAttribute('data-theme');
     window.localStorage.removeItem('zudo-composer-theme');
+    window.localStorage.removeItem('zudo-composer-rail');
     vi.unstubAllGlobals();
   });
 
+  // Content is an editor rather than a library page since issue #169, so each
+  // route names the landmark that proves the real product mounted rather than
+  // assuming every one of them opens on a heading.
   it.each([
-    ['/composer', 'Composition library'],
-    ['/content', 'Content authoring'],
-    ['/mapping', 'Mapping library'],
-    ['/sitemapper', 'Sitemaps'],
-    ['/media', 'Media library'],
-  ])('mounts the real product on direct refresh at %s', async (route, heading) => {
+    ['/composer', 'heading', 'Compositions', 'Compositions'],
+    ['/content', 'tree', 'Content', 'Content'],
+    ['/mapping', 'heading', 'Mappings', 'Mappings'],
+    ['/sitemapper', 'heading', 'Sitemaps', 'Sitemaps'],
+    ['/media', 'heading', 'Media', 'Media'],
+  ])('mounts the real product on direct refresh at %s', async (route, role, name, railLabel) => {
     vi.stubGlobal('indexedDB', new FDBFactory());
     window.history.replaceState(null, '', route);
     render(<App />);
-    expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
+    expect(await screen.findByRole(role, { name })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-    expect(nav.querySelectorAll('a')).toHaveLength(6);
-    expect(screen.getByRole('link', { name: heading === 'Composition library' ? 'Composer' : heading === 'Content authoring' ? 'Content' : heading === 'Mapping library' ? 'Mapping' : heading === 'Media library' ? 'Media' : 'Sitemapper' })).toHaveAttribute('aria-current', 'page');
+    expect(nav.querySelectorAll('a')).toHaveLength(7);
+    const current = nav.querySelectorAll('a[aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveTextContent(railLabel);
   });
 
-  it('shows the shared route vocabulary with descriptions and icon support on Home', () => {
+  it('renders the workspace Dashboard on Home', () => {
     render(<App />);
 
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-    expect(nav.querySelectorAll('a')).toHaveLength(6);
-    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('heading', { name: 'Choose a tool' })).toBeInTheDocument();
-    expect(screen.getByText('Build reusable page structures from components.')).toBeInTheDocument();
-    expect(screen.getByText('Connect Content fields to Composition slots.')).toBeInTheDocument();
-    expect(document.querySelectorAll('.app-route-link svg')).toHaveLength(6);
+    expect(nav.querySelectorAll('a')).toHaveLength(7);
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('heading', { name: GREETING })).toBeInTheDocument();
+    // The explainer is the one Dashboard card that owes nothing to a provider,
+    // so it stands before the first read lands.
+    expect(screen.getByRole('region', { name: 'How the pieces connect' })).toBeInTheDocument();
+    expect(document.querySelectorAll('.cms-rail__item svg')).toHaveLength(8);
   });
 
   it('keeps the production Media state truthful without probing a provider', () => {
@@ -49,9 +59,9 @@ describe('App', () => {
     window.history.replaceState(null, '', '/media');
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Media library' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Media service not connected' })).toBeInTheDocument();
-    expect(screen.getByText(/no development media service is connected/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Media' })).toBeInTheDocument();
+    expect(screen.getByText('Media file provider not connected')).toBeInTheDocument();
+    expect(screen.getByText(/browsing and uploading media both need the development file provider/i)).toBeInTheDocument();
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -60,25 +70,25 @@ describe('App', () => {
 
     const trigger = screen.getByRole('button', { name: 'Theme: System' });
     fireEvent.click(trigger);
-    expect(screen.getByRole('menu', { name: 'Theme preference' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitemradio', { name: /System/ })).toHaveAttribute('aria-checked', 'true');
+    const menu = screen.getByRole('menu', { name: 'Theme preference' });
+    expect(screen.getByRole('menuitemradio', { name: 'System' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('menuitemradio', { name: 'System' })).toHaveFocus();
 
-    const system = screen.getByRole('menuitemradio', { name: /System/ });
-    fireEvent.keyDown(system, { key: 'ArrowDown' });
-    expect(screen.getByRole('menuitemradio', { name: /Light/ })).toHaveFocus();
-    fireEvent.keyDown(screen.getByRole('menuitemradio', { name: /Light/ }), { key: 'ArrowDown' });
-    fireEvent.keyDown(screen.getByRole('menuitemradio', { name: /Dark/ }), { key: 'Enter' });
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(screen.getByRole('menuitemradio', { name: 'Light' })).toHaveFocus();
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(screen.getByRole('menuitemradio', { name: 'Dark' })).toHaveFocus();
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
     expect(document.documentElement.dataset.themePreference).toBe('dark');
     expect(screen.queryByRole('menu', { name: 'Theme preference' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Theme: Dark' })).toHaveFocus();
 
     fireEvent.click(screen.getByRole('button', { name: 'Theme: Dark' }));
-    fireEvent.mouseDown(document.body);
+    fireEvent.pointerDown(document.body);
     expect(screen.queryByRole('menu', { name: 'Theme preference' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Theme: Dark' })).toHaveFocus();
 
     fireEvent.click(screen.getByRole('button', { name: 'Theme: Dark' }));
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('menu', { name: 'Theme preference' }), { key: 'Escape' });
     expect(screen.queryByRole('menu', { name: 'Theme preference' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Theme: Dark' })).toHaveFocus();
   });
@@ -101,7 +111,7 @@ describe('App', () => {
     expect(trigger).toHaveFocus();
 
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByRole('heading', { name: 'Choose a tool' }));
+    fireEvent.click(screen.getByRole('heading', { name: GREETING }));
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).not.toBeInTheDocument();
   });
 
@@ -120,11 +130,12 @@ describe('App', () => {
     expect(main).not.toMatch(/^import .*\.\/App/m);
   });
 
-  it('identifies the standalone composer shell', () => {
+  it('opens the standalone routes from the Dashboard quick actions', () => {
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: /build structures/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Composer' })).toHaveAttribute('href', '/composer');
+    // Built through `route-intents`, never a hand-rolled query string.
+    expect(screen.getByRole('link', { name: 'New composition' })).toHaveAttribute('href', '/composer?new=1');
+    expect(screen.getByRole('link', { name: 'New entry' })).toHaveAttribute('href', '/content');
   });
 
   it('mounts the real Sitemapper with its host-injected Composer catalog', async () => {
@@ -140,6 +151,7 @@ describe('App', () => {
     const { container } = render(<App />);
     expect(await screen.findByRole('heading', { name: 'Clear ideas, carefully shaped' })).toBeInTheDocument();
     expect(container.querySelector('.app-shell')).not.toBeInTheDocument();
+    expect(container.querySelector('.cms-rail')).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
   });

@@ -18,6 +18,7 @@ export type {
 export { SitemapPersistenceError, SITEMAP_PROVIDERS, isSitemapCollectionStore } from "./types";
 export {
   countSitemapPages,
+  countUnassignedSitemapPages,
   summarizeSitemap,
   compareSitemapSummariesNewestFirst,
 } from "./helpers";

@@ -15,9 +15,6 @@ if (window.location.pathname === "/composer/preview") {
   const themeController = createThemeController(initialTheme);
   import.meta.hot?.dispose(() => themeController.dispose());
   await import("./style.css");
-  const { restoreComposerWidths, installComposerResizers } = await import("./features/composer/chrome/resizer-dom");
-  restoreComposerWidths();
   const { App } = await import("./App");
   render(<App themeController={themeController} />, root);
-  installComposerResizers();
 }

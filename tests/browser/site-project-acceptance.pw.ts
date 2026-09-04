@@ -70,24 +70,40 @@ async function expectRouteContent(page: Page, route: string) {
 test("the activated graph appears in every authoring library", async ({ page }) => {
   const failures = watchRuntimeFailures(page);
   await page.goto("/composer");
-  await expect(page.getByRole("heading", { name: "Composition library" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
   for (const name of ["About page", "Home page", "Journal entry page", "Journal index page", "Services page", "Site frame"]) {
-    await expect(page.getByRole("button", { name: `Open ${name}`, exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   }
 
   await page.goto("/content");
-  await expect(page.getByRole("heading", { name: "Content authoring" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^About content\s+Single$/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Journal articles\s+Collection$/ })).toBeVisible();
+  // Content's library is its navigator since issue #169: one `»` category per
+  // model, carrying its id, Entry count and `single` tag.
+  const contentTree = page.getByRole("tree", { name: "Content" });
+  await expect(contentTree).toBeVisible();
+  const aboutModel = contentTree.getByRole("treeitem", { name: /^About content/ });
+  await expect(aboutModel).toBeVisible();
+  await expect(aboutModel).toContainText("single");
+  await expect(contentTree.getByRole("treeitem", { name: /^Journal articles/ })).toBeVisible();
 
   await page.goto("/mapping");
-  await expect(page.getByRole("heading", { name: "Mapping library" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /About page mapping.*Ready/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Journal entry mapping.*Ready/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
+  // Issue #171 put the Mapping library on `LibraryPage`: the name is a link and
+  // readiness is a column, so each row is found by its link and then read.
+  for (const name of ["About page mapping", "Journal entry mapping"]) {
+    const row = page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
+    await expect(row.getByText("Ready", { exact: true })).toBeVisible();
+  }
 
   await page.goto("/sitemapper");
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sample Studio sitemap 5 pages", exact: true })).toBeVisible();
+  // The Sitemap library became a `DataTable` in issue #165: the record is
+  // reached through the name link, and its page count is a column of its own
+  // rather than part of one button's accessible name.
+  const sitemapRow = page
+    .getByRole("row")
+    .filter({ has: page.getByRole("link", { name: "Sample Studio sitemap", exact: true }) });
+  await expect(sitemapRow).toHaveCount(1);
+  await expect(sitemapRow.getByRole("cell").filter({ hasText: /^5$/ })).toHaveCount(1);
   expect(failures).toEqual([]);
 });
 
@@ -119,14 +135,17 @@ test("an authoring Entry edit survives reload and is reflected by SiteDelivery",
   test.skip(BROWSER_LANE !== "dev", "the production lane intentionally serves immutable bundled data");
   const failures = watchRuntimeFailures(page);
   await page.goto("/content");
-  const aboutCard = page.locator(".sg-content-library > li").filter({ hasText: "About content" });
-  await aboutCard.getByRole("button", { name: /^About content\s+Single$/ }).click();
-  await aboutCard.getByRole("button", { name: /^Entries/ }).click();
-  await aboutCard.getByRole("button", { name: /A studio built around useful clarity.*Complete/ }).click();
-  const heading = page.getByRole("textbox", { name: "Heading (required)" });
+  const contentTree = page.getByRole("tree", { name: "Content" });
+  await contentTree.getByRole("treeitem", { name: /^About content/ }).click();
+  await contentTree.getByRole("treeitem", { name: /^A studio built around useful clarity/ }).click();
+  // #170 moved "required" onto the control as an attribute; the field's name
+  // is its label alone, and the kind hint beside it is decorative.
+  const heading = page.getByRole("textbox", { name: "Heading", exact: true });
   await heading.fill("A browser-edited studio");
   await heading.blur();
-  await expect(page.getByText("All changes saved.", { exact: true })).toBeVisible();
+  // The route publishes its save state through `useEditorStatus`; the shell
+  // draws it in the topbar.
+  await expect(page.locator(".cms-topbar__status")).toContainText("Saved");
   await page.goto("/site/about");
   await expect(page.getByRole("heading", { name: "A browser-edited studio", exact: true })).toBeVisible();
   await page.reload();

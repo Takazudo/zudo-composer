@@ -6,6 +6,7 @@
 import type { JSX } from "preact";
 import { useState } from "preact/hooks";
 import { CopyIcon } from "../../../../components/icons";
+import { Button } from "../../../../components/ui";
 import { copyText } from "../../../../shared/clipboard";
 
 export type ComposerCopyStatus = "idle" | "copied" | "failed";
@@ -28,17 +29,16 @@ export function ComposerCopyButton({ text, label = "Copy JSX" }: ComposerCopyBut
   const announcement = status === "copied" ? "Copied to clipboard" : status === "failed" ? "Copy failed" : "";
 
   return (
-    <button
-      type="button"
-      class="sg-composer-toolbar-button"
+    <Button
+      variant="primary"
       onClick={() => void handleClick()}
       data-sg-copy-status={status}
     >
-      <CopyIcon size="sm" class="sg-composer-button-icon" />
+      <CopyIcon size="sm" />
       {visibleLabel}
-      <span role="status" aria-live="polite" class="sr-only">
+      <span role="status" aria-live="polite" class="cms-sr-only">
         {announcement}
       </span>
-    </button>
+    </Button>
   );
 }

@@ -1,4 +1,21 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+
+/**
+ * `.cms-tree-acts` is `width: 0; opacity: 0` until its row is hovered or
+ * focus-within, so an OutlineTree row action is in the accessibility tree but
+ * has no box — Playwright's actionability check waits on it forever. Focus the
+ * owning row first; focus-within is deterministic where hover is not.
+ */
+async function treeRowAction(structure: Locator, action: string): Promise<void> {
+  const button = structure.getByRole("button", { name: action, exact: true });
+  // The action lives in `.cms-tree-acts`, a SIBLING of the treeitem inside the
+  // row — not a descendant, whatever the accessibility tree's nesting suggests.
+  // Focusing the button itself is enough: `focus()` runs no actionability check,
+  // and it makes the row `:focus-within`, which gives the button its box.
+  await button.focus();
+  await button.click();
+}
+
 
 function watchRuntimeFailures(page: Page) {
   const failures: string[] = [];
@@ -20,13 +37,18 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.goto("/composer");
-  await expect(page.getByRole("heading", { name: "Composition library" })).toBeVisible();
-  await page.getByRole("button", { name: "Open About page" }).click();
+  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
+  // A library row's name is the link that opens it.
+  await page.getByRole("link", { name: "About page", exact: true }).click();
 
-  const toolbar = page.getByRole("toolbar", { name: "Composer toolbar" });
+  // The editor toolbar has no role of its own, so it is scoped by class: "Undo"
+  // and "Add component" both also exist inside the canvas iframe and the rails.
+  const toolbar = page.locator(".cms-editor__toolbar");
   const undo = toolbar.getByRole("button", { name: "Undo" });
   const redo = toolbar.getByRole("button", { name: "Redo" });
-  const mode = page.getByRole("group", { name: "Composer mode" });
+  const mode = toolbar.getByRole("radiogroup", { name: "Composer mode" });
+  const structure = page.locator(".cms-editor__region--nav");
+  const inspector = page.locator(".cms-editor__region--insp");
   const canvas = page.frameLocator('iframe[title="Composer preview canvas"]');
 
   await expect(toolbar).toBeVisible();
@@ -36,7 +58,7 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   await expect(redo).toBeDisabled();
 
   // Compose a real provider node through the production chooser.
-  await page.getByRole("button", { name: "Add component to document root" }).click();
+  await treeRowAction(structure, "Add component to the document");
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await expect(chooser).toBeVisible();
   await chooser.getByRole("button", { name: "SectionHeading", exact: true }).click();
@@ -54,12 +76,13 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   await expect(undo).toBeEnabled();
   await expect(redo).toBeDisabled();
 
-  const addedRow = page.locator("[data-sg-tree-node-id]").filter({ hasText: "Our approach" });
+  // An outline row's accessible name is its title then its hint, separated by a
+  // space — accname inserts one between the spans even though `textContent`
+  // runs them together ("SectionHeadingOur approach"). Verified against a live
+  // page: /^SectionHeading Our approach/ matches, /^SectionHeadingOur/ does not.
+  const addedRow = structure.getByRole("treeitem", { name: /^SectionHeading Our approach/ });
   await expect(addedRow).toHaveCount(1);
-  await addedRow.getByRole("button", { name: "SectionHeading Our approach", exact: true }).click();
-  const addedNodeId = await addedRow.getAttribute("data-sg-tree-node-id");
-  expect(addedNodeId).not.toBeNull();
-  const addedNode = page.locator(`[data-sg-tree-node-id="${addedNodeId}"]`);
+  await addedRow.click();
 
   // Edit a real prop, then prove the toolbar restores and re-applies that value.
   const heading = page.getByRole("textbox", { name: "Heading", exact: true });
@@ -98,35 +121,42 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   await page.keyboard.press("Control+Shift+z");
   await expect(canvas.getByText("Keyboard history intro", { exact: true })).toBeVisible();
 
+  // The row is named after the heading, which the edits above changed, so
+  // `addedRow` no longer matches it — and a count of 0 on that stale locator
+  // would pass whether the row was deleted or merely renamed. Track the current
+  // name so both this assertion and the undo below mean what they say.
+  const renamedRow = structure.getByRole("treeitem", { name: /^SectionHeading Toolbar history heading/ });
+  await expect(renamedRow).toHaveCount(1);
+
   // Removal is a single direct action now that confirmation is retired; its
   // previous document is recoverable from the same history stack.
-  await page.getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(addedNode).toHaveCount(0);
+  await inspector.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(renamedRow).toHaveCount(0);
   await expect(canvas.getByRole("heading", { name: "Toolbar history heading", exact: true })).toHaveCount(0);
   await expect(page.locator("dialog:visible")).toHaveCount(0);
 
   await undo.click();
-  await expect(addedNode).toHaveCount(1);
+  await expect(renamedRow).toHaveCount(1);
   await expect(canvas.getByRole("heading", { name: "Toolbar history heading", exact: true })).toBeVisible();
   await expect(canvas.getByText("Keyboard history intro", { exact: true })).toBeVisible();
   await expect(page.locator("dialog:visible")).toHaveCount(0);
 
   // Redo reaches the latest stack end; undo is then the only enabled history action.
   await redo.click();
-  await expect(addedNode).toHaveCount(0);
+  await expect(renamedRow).toHaveCount(0);
   await expect(redo).toBeDisabled();
   await expect(undo).toBeEnabled();
 
   // Restore the node so Preview can prove read-only history controls while a
   // real authored component remains visible.
   await undo.click();
-  await expect(addedNode).toHaveCount(1);
-  await mode.getByRole("button", { name: "Preview", exact: true }).click();
-  await expect(mode.getByRole("button", { name: "Preview", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(renamedRow).toHaveCount(1);
+  await mode.getByRole("radio", { name: "Preview", exact: true }).click();
+  await expect(mode.getByRole("radio", { name: "Preview", exact: true })).toHaveAttribute("aria-checked", "true");
   await expect(undo).toBeDisabled();
   await expect(redo).toBeDisabled();
   await expect(page.getByText("Preview mode — properties are read-only.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add component to document root" })).toHaveCount(0);
+  await expect(structure.getByRole("button", { name: "Add component to the document" })).toHaveCount(0);
 
   expect(failures).toEqual([]);
 });
@@ -137,12 +167,13 @@ test("Hero structured actions persist, render, export, and undo structural edits
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.goto("/composer");
-  await page.getByRole("button", { name: "Open About page" }).click();
-  await page.getByRole("button", { name: "Add component to document root" }).click();
+  await page.getByRole("link", { name: "About page", exact: true }).click();
+  const structure = page.locator(".cms-editor__region--nav");
+  await treeRowAction(structure, "Add component to the document");
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
   await chooser.getByRole("button", { name: "Hero", exact: true }).click();
 
-  const toolbar = page.getByRole("toolbar", { name: "Composer toolbar" });
+  const toolbar = page.locator(".cms-editor__toolbar");
   const undo = toolbar.getByRole("button", { name: "Undo" });
   const redo = toolbar.getByRole("button", { name: "Redo" });
   const canvas = page.frameLocator('iframe[title="Composer preview canvas"]');
@@ -167,7 +198,7 @@ test("Hero structured actions persist, render, export, and undo structural edits
   await second.getByRole("combobox", { name: "Variant", exact: true }).selectOption("secondary");
 
   await expect(hero.getByRole("link")).toHaveText([/^Read docs/, /^Contact us/]);
-  await page.getByRole("button", { name: "Export JSX" }).click();
+  await toolbar.getByRole("button", { name: "Export JSX" }).click();
   const exportDialog = page.getByRole("dialog", { name: /Export — About page/i });
   await expect(exportDialog).toContainText("Read docs");
   await expect(exportDialog).toContainText("Contact us");

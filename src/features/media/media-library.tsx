@@ -1,34 +1,247 @@
 import type { JSX } from "preact";
 import type { MediaSummary } from "../../media";
-import type { MediaLibraryController, MediaLibraryState, MediaLibraryView } from "./controller";
-import { mediaUrl } from "./controller";
+import { CopyIcon, MarkdownIcon, PreviewIcon, TrashIcon } from "../../components/icons";
+import {
+  LibraryNoMatch,
+  LibraryPagination,
+  LibrarySortMenu,
+  LibraryTable,
+  LibraryToolbar,
+  LibraryViewToggle,
+  RowMenu,
+  type LibraryFacet,
+  type LibraryQueryController,
+  type LibraryRowContract,
+  type LibrarySelectionController,
+  type LibrarySort,
+  type LibraryView,
+  type RowMenuProps,
+} from "../../components/library-page";
+import { Button, Checkbox, SegmentedControl, type DataTableColumn } from "../../components/ui";
+import { compareMediaSummariesNewestFirst } from "../../media";
+import type { MediaDimensionStore } from "./media-dimensions";
+import { formatBytes, isMediaImage, mediaCaption, mediaTypeLabel } from "./media-format";
+import { MediaThumb } from "./media-thumb";
 
-const views: readonly MediaLibraryView[] = ["gallery", "details"];
-const viewLabels: Record<MediaLibraryView, string> = { gallery: "Gallery", details: "Details" };
+export type MediaTypeFilter = "all" | "images" | "pdfs";
 
-export interface MediaLibraryProps { state: MediaLibraryState; controller: MediaLibraryController; run(action: () => void | Promise<void>): void; onDelete(record: MediaSummary): void; }
+export const MEDIA_SORTS: readonly LibrarySort<MediaSummary>[] = [
+  { id: "newest", label: "Newest", compare: compareMediaSummariesNewestFirst },
+  { id: "oldest", label: "Oldest", compare: (a, b) => compareMediaSummariesNewestFirst(b, a) },
+  { id: "name", label: "Name", compare: (a, b) => a.fileName.localeCompare(b.fileName) },
+  { id: "size", label: "Size", compare: (a, b) => b.byteLength - a.byteLength },
+];
 
-export function MediaLibrary({ state, controller, run, onDelete }: MediaLibraryProps): JSX.Element {
-  return <><div class="sg-media-toolbar"><div><h2>Browse media</h2><p>{state.records.length} asset{state.records.length === 1 ? "" : "s"}</p></div><MediaViewTabs active={state.view} onChange={(view) => controller.setView(view)} /></div>
-    {state.records.length === 0 ? <div class="sg-media-empty"><h3>No media yet</h3><p>Uploaded assets will appear here.</p></div> : <div class="sg-media-panels">
-      <section id="sg-media-panel-gallery" role="tabpanel" aria-labelledby="sg-media-tab-gallery" hidden={state.view !== "gallery"}><ul class="sg-media-gallery">{state.records.map((record) => <li key={record.id} class="sg-media-card"><MediaPreview record={record} /><div class="sg-media-card__body"><strong title={record.fileName}>{record.fileName}</strong><MediaFacts record={record} /></div><MediaActions record={record} run={run} onDelete={onDelete} controller={controller} /></li>)}</ul></section>
-      <section id="sg-media-panel-details" role="tabpanel" aria-labelledby="sg-media-tab-details" hidden={state.view !== "details"}><div class="sg-media-details-scroll" role="region" aria-label="Media details, horizontally scrollable" tabIndex={0}><table class="sg-media-details"><thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Size</th><th scope="col">Date</th><th scope="col">Actions</th></tr></thead><tbody>{state.records.map((record) => <tr key={record.id}><th scope="row"><div class="sg-media-details__name"><MediaPreview record={record} compact />{record.fileName}</div></th><td>{mediaTypeLabel(record.mediaType)}</td><td>{formatBytes(record.byteLength)}</td><td>{formatDate(record.updatedAt)}</td><td><MediaActions record={record} run={run} onDelete={onDelete} controller={controller} /></td></tr>)}</tbody></table></div></section>
-    </div>}</>;
+/**
+ * The type filter.
+ *
+ * It is a facet as far as `useLibraryQuery` is concerned — that is what makes
+ * filtering and the no-match state work — but the toolbar renders facets as
+ * menus, and the prototype's control is a `SegmentedControl` carrying counts.
+ * The definition and the control therefore live together here.
+ */
+const MEDIA_TYPE_FILTER_ID = "type";
+
+export const MEDIA_TYPE_FACET: LibraryFacet<MediaSummary> = {
+  id: MEDIA_TYPE_FILTER_ID,
+  label: "Type",
+  options: [
+    { id: "all", label: "All" },
+    { id: "images", label: "Images", match: isMediaImage },
+    { id: "pdfs", label: "PDFs", match: (row) => !isMediaImage(row) },
+  ],
+};
+
+export interface MediaLibraryProps {
+  /** Every asset in the library, for the filter counts and the pager total. */
+  records: readonly MediaSummary[];
+  query: LibraryQueryController<MediaSummary>;
+  selection: LibrarySelectionController<MediaSummary>;
+  dimensions: MediaDimensionStore;
+  view: LibraryView;
+  onViewChange(view: LibraryView): void;
+  /** The asset the detail panel is showing. */
+  activeId: string | null;
+  onActivate(record: MediaSummary): void;
+  onCopyUrl(record: MediaSummary): void;
+  onCopyMarkdown(record: MediaSummary): void;
+  onDelete(records: readonly MediaSummary[]): void;
+  /** The bulk bar, supplied by the route so both views show the same one. */
+  bulkBar?: JSX.Element | null;
+  /** The compact drop strip and its queue, placed under the toolbar. */
+  uploadPanel?: JSX.Element | null;
 }
 
-function MediaViewTabs({ active, onChange }: { active: MediaLibraryView; onChange(view: MediaLibraryView): void }): JSX.Element {
-  return <div class="sg-media-tabs" role="tablist" aria-label="Media layout">{views.map((view, index) => <button id={`sg-media-tab-${view}`} key={view} type="button" role="tab" aria-selected={active === view} aria-controls={`sg-media-panel-${view}`} tabIndex={active === view ? 0 : -1} onClick={() => onChange(view)} onKeyDown={(event) => {
-    let next: number | undefined;
-    if (event.key === "ArrowRight") next = (index + 1) % views.length; else if (event.key === "ArrowLeft") next = (index - 1 + views.length) % views.length; else if (event.key === "Home") next = 0; else if (event.key === "End") next = views.length - 1;
-    if (next === undefined) return; event.preventDefault(); onChange(views[next]!); (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
-  }}>{viewLabels[view]}</button>)}</div>;
+const CONTRACT: LibraryRowContract<MediaSummary> = {
+  id: (row) => row.id,
+  name: (row) => row.fileName,
+  // No `kind` accessor: the media type is a column of its own here rather than
+  // a chip, because it is the value the type filter above is narrowing on.
+  //
+  // The built-in timestamp column reads `Added` because there is no way to
+  // change an asset — the file provider has upload and delete, and `put()`
+  // rejects — so `createdAt` is the only date an author can act on.
+  updatedAt: (row) => row.createdAt,
+};
+
+export function MediaLibrary({
+  records,
+  query,
+  selection,
+  dimensions,
+  view,
+  onViewChange,
+  activeId,
+  onActivate,
+  onCopyUrl,
+  onCopyMarkdown,
+  onDelete,
+  bulkBar,
+  uploadPanel,
+}: MediaLibraryProps): JSX.Element {
+  const imageCount = records.filter(isMediaImage).length;
+  const filter = query.facetValue(MEDIA_TYPE_FILTER_ID) as MediaTypeFilter;
+  const totalBytes = records.reduce((sum, record) => sum + record.byteLength, 0);
+
+  const columns: readonly DataTableColumn<MediaSummary>[] = [
+    { key: "type", header: "Type", variant: "muted", cell: (row) => mediaTypeLabel(row.mediaType) },
+    { key: "size", header: "Size", variant: "num", cell: (row) => formatBytes(row.byteLength) },
+  ];
+
+  const rowMenu = (row: MediaSummary) => ({
+    label: row.fileName,
+    open: { id: "details", label: "Show details", icon: PreviewIcon, onSelect: () => onActivate(row) },
+    actions: [
+      { id: "copy-url", label: "Copy URL", icon: CopyIcon, onSelect: () => onCopyUrl(row) },
+      { id: "copy-markdown", label: "Copy Markdown", icon: MarkdownIcon, onSelect: () => onCopyMarkdown(row) },
+    ],
+    destructive: [{ id: "delete", label: "Delete…", icon: TrashIcon, onSelect: () => onDelete([row]) }],
+  });
+
+  const noMatch = <LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} />;
+
+  return (
+    <div class="sg-media-browser">
+      <LibraryToolbar
+        // The toolbar renders one menu per facet, and this route's single facet
+        // is the prototype's `SegmentedControl` instead. Handing it a
+        // facet-free and sort-free view of the controller keeps the generated
+        // search input while the two choice controls are placed by hand, in the
+        // prototype's order.
+        query={{ ...query, facets: [], sorts: [] }}
+        searchLabel="Filter media"
+        searchPlaceholder="Filter by file name or ID"
+        end={<LibraryViewToggle value={view} onChange={onViewChange} tableLabel="List view" cardsLabel="Grid view" />}
+      >
+        <SegmentedControl<MediaTypeFilter>
+          label="Type"
+          size="sm"
+          value={filter}
+          onChange={(next) => query.setFacetValue(MEDIA_TYPE_FILTER_ID, next)}
+          options={[
+            { value: "all", label: <TypeSegment label="All" count={records.length} /> },
+            { value: "images", label: <TypeSegment label="Images" count={imageCount} /> },
+            { value: "pdfs", label: <TypeSegment label="PDFs" count={records.length - imageCount} /> },
+          ]}
+        />
+        <LibrarySortMenu sorts={MEDIA_SORTS} value={query.sortId} onChange={query.setSortId} />
+      </LibraryToolbar>
+
+      {uploadPanel}
+
+      {view === "cards" ? (
+        <>
+          {bulkBar ? <div class="cms-table__bulk">{bulkBar}</div> : null}
+          {query.rows.length === 0 ? noMatch : (
+            <ul class="sg-media-grid" aria-label="Media assets">
+              {query.rows.map((row) => (
+                <MediaTile
+                  key={row.id}
+                  record={row}
+                  dimensions={dimensions}
+                  active={row.id === activeId}
+                  selected={selection.isSelected(row.id)}
+                  onToggleSelected={(selected) => selection.toggleRow(row.id, selected)}
+                  onActivate={() => onActivate(row)}
+                  onCopyUrl={() => onCopyUrl(row)}
+                  rowMenu={rowMenu(row)}
+                />
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <LibraryTable
+          caption="Media assets"
+          rows={query.rows}
+          contract={CONTRACT}
+          columns={columns}
+          selection={selection}
+          updatedHeader="Added"
+          bulkBar={bulkBar ?? undefined}
+          empty={noMatch}
+          rowMenu={rowMenu}
+        />
+      )}
+
+      <LibraryPagination
+        summary={`${query.rows.length} of ${records.length} assets · ${formatBytes(totalBytes)} · /uploaded-media/`}
+      />
+    </div>
+  );
 }
 
-function MediaPreview({ record, compact = false }: { record: MediaSummary; compact?: boolean }): JSX.Element {
-  return <div class={compact ? "sg-media-preview sg-media-preview--compact" : "sg-media-preview"}>{record.mediaType.startsWith("image/") ? <img src={mediaUrl(record)} alt={record.fileName} loading="lazy" /> : <span aria-hidden="true">PDF</span>}</div>;
+function TypeSegment({ label, count }: { label: string; count: number }): JSX.Element {
+  return (
+    <>
+      {label}
+      <span class="sg-media-seg__count">{count}</span>
+    </>
+  );
 }
-function MediaFacts({ record }: { record: MediaSummary }): JSX.Element { return <dl class="sg-media-facts"><div><dt>Type</dt><dd>{mediaTypeLabel(record.mediaType)}</dd></div><div><dt>Size</dt><dd>{formatBytes(record.byteLength)}</dd></div><div><dt>Date</dt><dd>{formatDate(record.updatedAt)}</dd></div></dl>; }
-function MediaActions({ record, controller, run, onDelete }: { record: MediaSummary; controller: MediaLibraryController; run(action: () => void | Promise<void>): void; onDelete(record: MediaSummary): void }): JSX.Element { return <div class="sg-media-actions"><button type="button" onClick={() => run(() => controller.copyMarkdown(record))}>Copy Markdown</button><button type="button" class="sg-media-button--danger" onClick={() => onDelete(record)}>Delete</button></div>; }
-export function formatBytes(bytes: number): string { if (bytes < 1024) return `${bytes} B`; if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`; return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} MB`; }
-function formatDate(value: string): string { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value)); }
-function mediaTypeLabel(value: string): string { return value === "application/pdf" ? "PDF" : value.slice(value.indexOf("/") + 1).toUpperCase(); }
+
+interface MediaTileProps {
+  record: MediaSummary;
+  dimensions: MediaDimensionStore;
+  active: boolean;
+  selected: boolean;
+  onToggleSelected(selected: boolean): void;
+  onActivate(): void;
+  onCopyUrl(): void;
+  rowMenu: RowMenuProps;
+}
+
+function MediaTile({ record, dimensions, active, selected, onToggleSelected, onActivate, onCopyUrl, rowMenu }: MediaTileProps): JSX.Element {
+  return (
+    <li class={`sg-media-asset${active ? " sg-media-asset--active" : ""}${selected ? " sg-media-asset--selected" : ""}`}>
+      <div class="sg-media-asset__thumb">
+        <button
+          type="button"
+          class="sg-media-asset__open"
+          // The tile is the route's way into the detail panel, and the panel
+          // shows exactly one asset — `aria-current` says which, where
+          // `aria-pressed` would promise a toggle that clicking again does not
+          // perform.
+          aria-current={active ? "true" : undefined}
+          aria-label={`Show details for ${record.fileName}`}
+          onClick={onActivate}
+        >
+          <MediaThumb record={record} dimensions={dimensions} />
+        </button>
+        <span class="sg-media-asset__check">
+          <Checkbox checked={selected} onCheckedChange={onToggleSelected} aria-label={record.fileName} />
+        </span>
+        <span class="sg-media-asset__acts">
+          <Button size="sm" iconOnly aria-label={`Copy URL for ${record.fileName}`} onClick={onCopyUrl}>
+            <CopyIcon size="sm" />
+          </Button>
+          <RowMenu {...rowMenu} />
+        </span>
+      </div>
+      <div class="sg-media-asset__caption">
+        <span class="sg-media-asset__name" title={record.fileName}>{record.fileName}</span>
+        <span class="sg-media-asset__meta">{mediaCaption(record, dimensions.get(record.id))}</span>
+      </div>
+    </li>
+  );
+}

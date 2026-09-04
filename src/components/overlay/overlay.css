@@ -1,0 +1,339 @@
+/* --------------------------------------------------------------------------
+ * CMS overlay primitives (issue #159) — Menu and Dialog.
+ *
+ * Owned by src/components/overlay and imported from its index, not from
+ * src/style.css: the module ships its own presentation so a route can adopt
+ * the primitives by importing the module alone.
+ *
+ * Geometry mirrors _temp-resource/156-cms-ui-polish/proto.css (`.menu`,
+ * `.overlay`, `.dialog`). Colour comes from tokens only.
+ * -------------------------------------------------------------------------- */
+
+/*
+ * The epic's chrome tokens (--radius, --shadow-pop, --shadow-modal,
+ * --color-danger-soft) are added to src/styles/app-tokens.css by the sibling
+ * core-controls task. Each alias names the design-system token that already
+ * covers it app-wide, so this module is correct on its own and picks up the
+ * chrome values the moment they exist.
+ */
+.cms-menu,
+.cms-dialog {
+  --cms-overlay-radius: var(--radius, var(--radius-md));
+  --cms-overlay-shadow-pop: var(--shadow-pop, var(--shadow-overlay));
+  --cms-overlay-shadow-modal: var(--shadow-modal, var(--shadow-overlay));
+  --cms-overlay-danger-soft: var(--color-danger-soft, color-mix(in oklch, var(--color-danger) 12%, transparent));
+}
+
+/* The portal host only carries the fixed-position panel out of its trigger's
+ * stacking context; it must never become a flex/grid item of <body>. */
+.cms-overlay-portal {
+  display: contents;
+}
+
+/* --- Menu ---------------------------------------------------------------- */
+
+.cms-menu {
+  position: fixed;
+  z-index: var(--z-index-popover);
+  display: grid;
+  gap: 1px;
+  min-width: 11.25rem;
+  max-width: min(24rem, calc(100vw - 1rem));
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border);
+  border-radius: var(--cms-overlay-radius);
+  background: var(--color-surface);
+  box-shadow: var(--cms-overlay-shadow-pop);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+}
+
+.cms-menu:focus {
+  outline: none;
+}
+
+.cms-menu__section {
+  display: grid;
+  gap: 1px;
+}
+
+.cms-menu__title {
+  padding: 6px 8px 2px;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cms-menu__item {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.875rem;
+  padding-inline: 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cms-menu__item:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+.cms-menu__item:focus {
+  outline: none;
+  background: var(--color-surface-2);
+}
+
+.cms-menu__item:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.cms-menu__item:disabled {
+  color: var(--color-muted);
+  cursor: default;
+}
+
+.cms-menu__item--danger {
+  color: var(--color-danger);
+}
+
+.cms-menu__item--danger:hover:not(:disabled),
+.cms-menu__item--danger:focus {
+  background: var(--cms-overlay-danger-soft);
+}
+
+.cms-menu__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-muted);
+}
+
+.cms-menu__item--danger .cms-menu__icon {
+  color: currentColor;
+}
+
+.cms-menu__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-menu__kbd {
+  justify-self: end;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.cms-menu__separator {
+  margin: 3px 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+/* --- Dialog -------------------------------------------------------------- */
+
+.cms-dialog {
+  width: min(35rem, calc(100vw - 2rem));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--cms-overlay-radius);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  /*
+   * The scrim rides on the dialog's own box instead of ::backdrop: custom
+   * properties only reach ::backdrop where it inherits from the originating
+   * element, which is not yet universal, and a token-less literal is not an
+   * option here.
+   */
+  box-shadow: var(--cms-overlay-shadow-modal), 0 0 0 100vmax var(--color-overlay);
+}
+
+.cms-dialog--wide {
+  width: min(57.5rem, calc(100vw - 2rem));
+}
+
+.cms-dialog::backdrop {
+  background: transparent;
+}
+
+/* Without modal <dialog> support the element stays in normal flow; put it back
+ * over the page so the fallback path is still usable. */
+.cms-dialog:not(:modal) {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-index-modal);
+  margin: auto;
+}
+
+.cms-dialog__panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(80vh, calc(100vh - 2rem));
+}
+
+.cms-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-block-end: 1px solid var(--color-border);
+}
+
+.cms-dialog__title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+}
+
+.cms-dialog__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  margin-inline-start: auto;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.cms-dialog__close:hover {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+}
+
+.cms-dialog__body {
+  padding: 1rem;
+  overflow: auto;
+}
+
+.cms-dialog__message {
+  margin: 0;
+  color: var(--color-fg);
+  line-height: var(--leading-normal);
+}
+
+.cms-dialog__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-block-start: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+}
+
+/* Actions sit at the trailing edge, whether or not the footer opens with a
+ * status line (the prototype's "Saved to Browser storage"). */
+.cms-dialog__footer > :first-child:not(.cms-dialog__action) {
+  margin-inline-end: auto;
+}
+
+.cms-dialog__footer > .cms-dialog__action:first-child {
+  margin-inline-start: auto;
+}
+
+.cms-dialog__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.875rem;
+  padding-inline: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cms-dialog__action:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+.cms-dialog__action:disabled {
+  color: var(--color-muted);
+  cursor: default;
+}
+
+.cms-dialog__action--primary {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.cms-dialog__action--primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.cms-dialog__action--danger {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: var(--color-on-accent);
+}
+
+.cms-dialog__action--danger:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-danger) 85%, var(--color-fg));
+}
+
+/* --- Motion -------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .cms-menu {
+    animation: cms-overlay-pop-in 90ms ease-out;
+  }
+
+  .cms-dialog[open] {
+    animation: cms-overlay-modal-in 140ms ease-out;
+  }
+}
+
+@keyframes cms-overlay-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes cms-overlay-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+/* --- Coarse pointers ----------------------------------------------------- */
+
+@media (pointer: coarse) {
+  .cms-menu__item {
+    min-height: 2.75rem;
+  }
+
+  .cms-dialog__action,
+  .cms-dialog__close {
+    min-height: 2.75rem;
+  }
+
+  .cms-dialog__close {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}

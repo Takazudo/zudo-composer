@@ -6,6 +6,7 @@ export type {
 } from "./commands";
 export {
   addChildPage,
+  addRootPage,
   addSiblingPage,
   cloneSubtreeWithNewIds,
   duplicatePage,

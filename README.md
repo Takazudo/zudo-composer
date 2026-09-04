@@ -61,8 +61,8 @@ corepack pnpm dev
 ```
 
 The main repository gate includes lint, typecheck, headless/deployment/handoff
-boundaries, unit tests, one production build, the provider artifact boundary,
-and an unauthenticated Wrangler dry-run:
+boundaries, the class-name gate, unit tests, one production build, the provider
+artifact boundary, and an unauthenticated Wrangler dry-run:
 
 ```sh
 corepack pnpm check
@@ -90,6 +90,12 @@ then delegates to `test:browser:dist`. The Media dev lane exercises upload
 transport without changing the production artifact. The SiteProject helper adds
 an isolated CLI-activated dev lane and a local-Wrangler production lane that
 reuses the one build. CI deliberately builds exactly once.
+
+Both `test:browser:dist` and `test:browser:dev` route specs to a viewport by
+filename: `*.coarse.pw.ts` runs only on a 390x844 touch project, and
+`*.responsive.pw.ts` runs on both. The rules those specs check are switched off
+on a fine pointer, so a coarse spec that reaches the desktop project passes
+while proving nothing — the suffix is part of the proof, not a label.
 
 ## Immutable UI-provider handoff
 

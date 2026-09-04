@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
 import {
+  cloneJson,
   COMPOSITION_PROVIDERS,
   COMPOSITION_SCHEMA_VERSION,
   createCompositionRecord,
@@ -13,7 +14,9 @@ import {
   createCompositionReuseService,
   createUuidIdFactory,
   duplicateCompositionRecord,
+  generateBrowserJsxExport,
   isCompositionLifecycleStore,
+  resolveGlobalTemplateLoad,
   summarizeComposition,
   type CompositionDocument,
   type ComponentCatalog,
@@ -25,10 +28,13 @@ import {
   type CompositionRecordRef,
   type CompositionRecoveryOutcome,
   type CompositionSaveOutcome,
+  type GlobalTemplateResolutionOutcome,
   type SaveQueue,
   type IdFactory,
   type ReuseConsumerLifecycleOutcome,
 } from "../../../composer/browser";
+import { parseIntent } from "../../../app/route-intents";
+import { Banner, Button, EmptyState } from "../../../components/ui";
 import type { ComposerComponentProvider } from "../active-pack";
 import { CompositionLibrary } from "../library";
 import type { CompositionLibraryIntents } from "../library";
@@ -67,6 +73,8 @@ export interface ProductionComposerAppProps {
   now?: () => string;
   /** Existing preview bridge seams, forwarded for focused integration tests. */
   preview?: Pick<ComposerIntegrationProps, "createBridge" | "previewLocation" | "hostWindow">;
+  /** Test seam for the `/composer?new=1` route-intent's query string. */
+  readIntentSearch?: () => string;
 }
 
 interface ProductionDetailSession extends ComposerDetailSession {
@@ -194,11 +202,22 @@ export function ProductionComposerApp({
   nodeIdFactory: injectedNodeIdFactory,
   now: injectedNow,
   preview,
+  readIntentSearch,
 }: ProductionComposerAppProps): JSX.Element {
   const reuseManifest = componentProvider.catalog;
   const navigation = useMemo(
     () => injectedNavigation ?? browserNavigation(),
     [injectedNavigation],
+  );
+  // Read once per load, mirroring the Sitemapper intent's own "a re-read
+  // would only ever agree with it" reasoning: the query string never changes
+  // underneath a mounted app except through this component's own navigation.
+  const intentOutcome = useMemo(
+    () => parseIntent({
+      pathname: COMPOSER_DOCUMENT_PATH,
+      search: (readIntentSearch ?? (() => (typeof window === "undefined" ? "" : window.location.search)))(),
+    }),
+    [],
   );
   const routeConfig = useMemo<ComposerRouteConfig>(
     () => ({
@@ -234,6 +253,12 @@ export function ProductionComposerApp({
   const [detailOperationError, setDetailOperationError] = useState<string | null>(null);
   const [duplicatingComposition, setDuplicatingComposition] = useState(false);
   const [bootProviderId, setBootProviderId] = useState<CompositionProviderId | null>(null);
+  // Consumed once for the whole app session, not once per CompositionLibrary
+  // mount — a plain mount-effect flag would reopen the dialog every time the
+  // index view remounts after a detour through a detail route.
+  const [pendingNewIntent, setPendingNewIntent] = useState(
+    () => intentOutcome.status === "matched" && intentOutcome.intent.route === "composer" && intentOutcome.intent.action === "new",
+  );
   const [initializationNotice, setInitializationNotice] =
     useState<CompositionRecoveryOutcome | null>(null);
   const [retryingRecovery, setRetryingRecovery] = useState(false);
@@ -528,10 +553,35 @@ export function ProductionComposerApp({
         await provider(ref.providerId).store.put(record);
         return summarizeComposition(record);
       },
+      rename: async (ref, name) => {
+        const activeProvider = provider(ref.providerId);
+        const loaded = await activeProvider.store.get(ref.recordId);
+        if (loaded.status !== "loaded") throw new Error(failedLoadMessage(loaded));
+        const record: CompositionRecord = {
+          ...cloneJson(loaded.record),
+          updatedAt: nowRef.current(),
+          document: { ...cloneJson(loaded.record.document), name },
+        };
+        await activeProvider.store.put(record);
+        return summarizeComposition(record);
+      },
       delete: (ref) => provider(ref.providerId).store.delete(ref.recordId),
       clear: (providerId) => provider(providerId).store.clear(),
+      exportJsx: async (ref) => {
+        const activeProvider = provider(ref.providerId);
+        const loaded = await activeProvider.store.get(ref.recordId);
+        if (loaded.status !== "loaded") throw new Error(failedLoadMessage(loaded));
+        const record = loaded.record;
+        let resolution: GlobalTemplateResolutionOutcome | undefined;
+        if (record.document.binding) {
+          const sourceLoad = await activeProvider.store.get(record.document.binding.sourceRecordId);
+          resolution = resolveGlobalTemplateLoad(record, sourceLoad, reuseManifest);
+        }
+        const outcome = generateBrowserJsxExport({ record, manifest: reuseManifest, resolution });
+        return { documentName: record.document.name, outcome };
+      },
     };
-  }, [idFactory, navigate, nodeIdFactory, providersById]);
+  }, [idFactory, navigate, nodeIdFactory, providersById, reuseManifest]);
 
   const handleInitializationApplied = useCallback(
     (providerId: CompositionProviderId, outcome: CompositionInitializationOutcome) => {
@@ -639,6 +689,31 @@ export function ProductionComposerApp({
     }
   }, [duplicatingComposition, idFactory, navigate, nodeIdFactory, providersById, state]);
 
+  const deleteMountedComposition = useCallback(async () => {
+    if (state?.view !== "detail") return;
+    const ref = routeRef(state.route)!;
+    const provider = providersById.get(ref.providerId);
+    if (!provider) return;
+
+    setDetailOperationError(null);
+    try {
+      // Land anything in flight first: a debounced prop commit that resolved
+      // after the delete would put the record straight back.
+      const session = state.session as ProductionDetailSession;
+      await session.flushPendingProps(ref);
+      await session.queue.flush();
+      await provider.store.delete(ref.recordId);
+    } catch (reason) {
+      setDetailOperationError(
+        reason instanceof Error ? reason.message : "The composition could not be deleted.",
+      );
+      return;
+    }
+    // Replace history: the record this entry pointed at no longer exists, so
+    // Back must not return to an editor for it.
+    await navigate({ kind: "index" }, "replace", ref.providerId);
+  }, [navigate, providersById, state]);
+
   const availableProviders = useMemo(
     () => providers.map(({ descriptor }) => ({ descriptor, available: true })),
     [providers],
@@ -653,16 +728,15 @@ export function ProductionComposerApp({
   if (bootProviderId || state?.view === "index") {
     return (
       <>
-        {transitionError && (
-          <div class="sg-composer-library-alert sg-composer-library-alert-error" role="alert">
-            <p>{errorText(transitionError)}</p>
-          </div>
-        )}
+        {transitionError && <Banner tone="err">{errorText(transitionError)}</Banner>}
+        {intentOutcome.status === "invalid" && <Banner tone="err">{intentOutcome.message}</Banner>}
         <CompositionLibrary
           providers={availableProviders}
           initialProviderId={preferredProviderId}
           intents={libraryIntents}
           onInitializationApplied={handleInitializationApplied}
+          openNewOnMount={pendingNewIntent}
+          onOpenNewConsumed={() => setPendingNewIntent(false)}
         />
       </>
     );
@@ -701,8 +775,8 @@ export function ProductionComposerApp({
             : {}),
         }}
         registerFlushPendingProps={session.registerFlushPendingProps}
-        onNavigateToLibrary={() => void navigate({ kind: "index" })}
         onDuplicateComposition={() => void duplicateMountedComposition()}
+        onDeleteComposition={() => void deleteMountedComposition()}
         duplicatingComposition={duplicatingComposition}
         getPublicationDependencies={(sourceRecordId) =>
           publicationDependencies(providersById.get(ref.providerId), sourceRecordId, reuseManifest)
@@ -732,53 +806,43 @@ export function ProductionComposerApp({
 
   if (state?.view === "not-found") {
     return (
-      <main class="sg-composer-library" aria-labelledby="sg-composer-route-error-title">
-        <section class="sg-composer-library-alert sg-composer-library-alert-error" role="alert">
-          <div>
-            <h1 id="sg-composer-route-error-title">Composition could not be opened</h1>
-            <p>
-              {state.error instanceof ComposerTransitionError
-                ? errorText(state.error)
-                : state.error.message}
-            </p>
-          </div>
-          <div class="sg-composer-library-actions">
-            {state.route && (
-              <button
-                type="button"
-                class="sg-composer-library-button"
-                onClick={() =>
-                  void transitionLocation(navigation.read(), state.route?.kind === "detail")
-                }
-              >
-                Retry
-              </button>
-            )}
-            <button
-              type="button"
-              class="sg-composer-library-button"
-              onClick={() => void navigate({ kind: "index" }, "replace")}
-            >
-              Back to library
-            </button>
-          </div>
-        </section>
+      <main class="sg-composer-route-state" aria-label="Composition could not be opened">
+        <EmptyState
+          title="Composition could not be opened"
+          description={
+            state.error instanceof ComposerTransitionError
+              ? errorText(state.error)
+              : state.error.message
+          }
+          action={
+            <>
+              {state.route && (
+                <Button
+                  onClick={() =>
+                    void transitionLocation(navigation.read(), state.route?.kind === "detail")
+                  }
+                >
+                  Retry
+                </Button>
+              )}
+              <Button variant="primary" onClick={() => void navigate({ kind: "index" }, "replace")}>
+                Back to Compositions
+              </Button>
+            </>
+          }
+        />
         {initializationNotice && (
-          <section class="sg-composer-library-alert" aria-label="Composition recovery notice">
-            <p>{initializationNotice.message}</p>
-            <p>The original source has been preserved.</p>
-          </section>
+          <Banner tone="warn" title="Composition recovery notice">
+            {initializationNotice.message} The original source has been preserved.
+          </Banner>
         )}
       </main>
     );
   }
 
   return (
-    <main class="sg-composer-library" aria-busy="true" aria-label="Loading Composer">
-      <section class="sg-composer-library-state">
-        <h1>Loading Composer…</h1>
-        <p>Opening the selected composition storage.</p>
-      </section>
+    <main class="sg-composer-route-state" aria-busy="true" aria-label="Loading Composer">
+      <EmptyState title="Loading Composer…" description="Opening the selected composition storage." />
     </main>
   );
 }

@@ -1,0 +1,441 @@
+/* ==========================================================================
+ * Application shell (issue #161): dark rail + breadcrumb topbar.
+ *
+ * Imported by `shell.tsx`, not by `src/style.css`, so the chrome travels with
+ * the module that renders it — and so none of it can reach the isolated
+ * `/composer/preview` document, whose entry graph never touches the Shell.
+ *
+ * Rules this file keeps:
+ * - Every colour is a token from `src/styles/app-tokens.css`; the rail reads
+ *   the `--color-rail-*` set so it stays graphite in both themes.
+ * - New classes carry the `cms-` prefix. `src/base.css` scans this source tree
+ *   with `@source "./"`, so a bare name would collide with a Tailwind utility.
+ * - The type ladder is written as literal rem values because `--text-*` is the
+ *   provider's Tailwind namespace: .625rem/10px, .6875rem/11px, .75rem/12px,
+ *   .8125rem/13px chrome default.
+ * ========================================================================== */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--zc-rail-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  /* The shell owns the viewport: the rail and topbar stay put and the route
+   * workspace scrolls inside `.cms-shell-main`. */
+  height: 100vh;
+  overflow-x: clip;
+  color: var(--color-fg);
+  background: var(--color-bg);
+}
+
+.app-shell[data-rail="collapsed"] { --zc-rail-w: var(--zc-rail-w-collapsed); }
+
+/* --------------------------------------------------------------------------
+ * Rail
+ * -------------------------------------------------------------------------- */
+
+.cms-rail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  z-index: var(--z-index-sidebar);
+  color: var(--color-rail-fg);
+  background: var(--color-rail-bg);
+  border-inline-end: 1px solid var(--color-rail-border);
+}
+
+.cms-rail__brand {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--zc-topbar-h);
+  padding-inline: var(--sp-3);
+  border-block-end: 1px solid var(--color-rail-border);
+  color: var(--color-rail-fg);
+  font-size: .8125rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.cms-rail__logo {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  font-size: .6875rem;
+  font-weight: 800;
+}
+
+.cms-rail__nav {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-2);
+  overflow-y: auto;
+}
+
+.cms-rail__group { display: grid; gap: 2px; min-width: 0; }
+
+.cms-rail__section {
+  padding: var(--sp-3) var(--sp-3) var(--sp-1);
+  color: var(--color-rail-muted);
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.cms-rail__items {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cms-rail__item {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  height: var(--row-chrome);
+  padding-inline: var(--sp-2);
+  border-radius: var(--radius);
+  color: var(--color-rail-muted);
+  font-size: .8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.cms-rail__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cms-rail__count { color: var(--color-rail-muted); font-size: .6875rem; font-variant-numeric: tabular-nums; }
+.cms-rail__external { color: var(--color-rail-muted); }
+
+.cms-rail__item[aria-current="page"] {
+  color: var(--color-rail-fg);
+  /* One step above hover, tinted by the accent that also draws the edge bar —
+   * the rail token set names no separate active rung. */
+  background: color-mix(in oklch, var(--color-accent) 16%, var(--color-rail-hover-bg));
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+.cms-rail__foot {
+  display: grid;
+  gap: var(--sp-1);
+  margin-block-start: auto;
+  padding: var(--sp-2);
+  border-block-start: 1px solid var(--color-rail-border);
+}
+
+.cms-rail__status {
+  display: grid;
+  gap: 1px;
+  padding: var(--sp-2);
+  border-radius: var(--radius);
+  color: var(--color-rail-muted);
+  font-size: .75rem;
+}
+
+.cms-rail__status strong { color: var(--color-rail-fg); font-weight: 600; }
+/* Outranks the shared ghost button, which paints in the app palette rather
+ * than the rail's. */
+.cms-rail .cms-rail__collapse { justify-self: end; color: var(--color-rail-muted); }
+
+/* Collapsed rail: a 56px icon column. Names stay in the accessibility tree —
+ * hidden, not removed — so no rail item becomes an unlabelled icon. */
+.app-shell[data-rail="collapsed"] :is(.cms-rail__label, .cms-rail__brand-name) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.app-shell[data-rail="collapsed"] .cms-rail__brand { justify-content: center; padding-inline: 0; }
+.app-shell[data-rail="collapsed"] .cms-rail__item { grid-template-columns: 1rem; justify-content: center; padding-inline: 0; }
+.app-shell[data-rail="collapsed"] :is(.cms-rail__section, .cms-rail__count, .cms-rail__external, .cms-rail__status) { display: none; }
+.app-shell[data-rail="collapsed"] .cms-rail__collapse { justify-self: center; }
+
+/* --------------------------------------------------------------------------
+ * Frame and topbar
+ * -------------------------------------------------------------------------- */
+
+.cms-frame {
+  display: grid;
+  grid-template-rows: var(--zc-topbar-h) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.cms-topbar {
+  position: relative;
+  /* The notifications panel must clear the sticky toolbars routes own. */
+  z-index: var(--z-index-popover);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding-inline: var(--sp-3) var(--sp-2);
+  border-block-end: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.cms-crumbs { display: flex; align-items: center; min-width: 0; }
+
+.cms-crumbs__list {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: .8125rem;
+}
+
+.cms-crumbs__item { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
+.cms-crumbs__link { flex: 0 0 auto; color: var(--color-muted); text-decoration: none; white-space: nowrap; }
+.cms-crumbs__sep { flex: 0 0 auto; color: var(--color-faint); }
+
+.cms-crumbs__current {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-fg);
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cms-topbar__status { flex: 0 1 auto; min-width: 0; }
+.cms-topbar__right { flex: 0 0 auto; display: flex; align-items: center; gap: var(--sp-1); margin-inline-start: auto; }
+.cms-topbar__control-label { font-size: .75rem; }
+.cms-topbar__control[aria-expanded="true"] { color: var(--color-fg); border-color: var(--color-border); background: var(--color-surface-2); }
+
+/* The route workspace scrolls inside the shell, so the rail and topbar stay put. */
+.cms-shell-main { min-width: 0; min-height: 0; overflow: auto; }
+
+/* --------------------------------------------------------------------------
+ * Notifications disclosure — the one floating surface the shell still owns
+ * -------------------------------------------------------------------------- */
+
+.app-disclosure { position: relative; }
+
+.app-popover {
+  position: absolute;
+  z-index: var(--z-index-popover);
+  inset-block-start: calc(100% + .5rem);
+  inset-inline-end: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+
+.app-notification-panel {
+  display: grid;
+  gap: .875rem;
+  width: min(23rem, calc(100vw - 2rem));
+  padding: 1rem;
+}
+
+.app-notification-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem;
+  padding-block-end: .75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-notification-panel__header h2,
+.app-notification-panel__header p,
+.app-notification-panel__intro,
+.app-notification-channel p { margin: 0; }
+.app-notification-panel__header h2 { font-size: 1rem; line-height: 1.3; }
+.app-notification-panel__eyebrow { margin-block-end: .125rem !important; color: var(--color-muted); font-size: .6875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.app-notification-panel__intro { color: var(--color-muted); font-size: .8125rem; line-height: 1.5; }
+
+.app-icon-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: .5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.app-notification-channel {
+  display: grid;
+  gap: .625rem;
+  padding-block-start: .125rem;
+}
+
+.app-notification-channel__heading {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-width: 0;
+}
+
+.app-status-label {
+  margin-inline-start: auto;
+  padding: .125rem .375rem;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  color: var(--color-muted);
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.app-notification-channel > p { color: var(--color-muted); font-size: .8125rem; line-height: 1.5; }
+
+.app-disabled-control {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-height: 2.75rem;
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+.app-disabled-control input { width: 1rem; height: 1rem; accent-color: var(--color-muted); }
+.app-notification-configure { justify-content: flex-start; padding-inline: .625rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface-2); }
+.app-notification-configure:disabled { color: var(--color-muted); cursor: not-allowed; }
+
+/* --------------------------------------------------------------------------
+ * Focus, hover, and narrow screens
+ * -------------------------------------------------------------------------- */
+
+.cms-topbar :is(a, button):focus-visible,
+.app-popover :is(a, button, input):focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+/* The rail is graphite in both themes, so the accent-hued focus ring the rest
+ * of the app uses would sit on a background it was never contrast-checked for. */
+.cms-rail :is(a, button):focus-visible { outline: 2px solid var(--color-rail-fg); outline-offset: 2px; }
+
+@media (hover: hover) {
+  .cms-rail__item:hover,
+  .cms-rail__brand:hover,
+  .cms-rail__collapse:hover { color: var(--color-rail-fg); background: var(--color-rail-hover-bg); }
+  .cms-rail__item[aria-current="page"]:hover { background: color-mix(in oklch, var(--color-accent) 22%, var(--color-rail-hover-bg)); }
+  .cms-crumbs__link:hover { color: var(--color-fg); }
+  .cms-topbar__control:hover,
+  .app-icon-button:hover { color: var(--color-fg); background: var(--color-surface-2); }
+}
+
+@media (max-width: 64rem) {
+  /* The rail leaves the side and becomes a bottom tab strip. */
+  .app-shell,
+  .app-shell[data-rail="collapsed"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) var(--zc-bottom-strip-h);
+  }
+
+  .cms-rail {
+    order: 2;
+    flex-direction: row;
+    align-items: center;
+    height: var(--zc-bottom-strip-h);
+    border-inline-end: 0;
+    border-block-start: 1px solid var(--color-rail-border);
+  }
+
+  .app-shell[data-rail="collapsed"] :is(.cms-rail__label, .cms-rail__brand-name) {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: hidden;
+    clip-path: none;
+  }
+
+  .cms-rail__brand,
+  .cms-rail__section,
+  .cms-rail__foot { display: none; }
+
+  .cms-rail__nav { display: flex; flex: 1 1 auto; gap: 0; padding: var(--sp-1); overflow: visible; }
+  /* The group wrappers step aside so all seven items share one row. */
+  .cms-rail__group { display: contents; }
+  .cms-rail__items { display: flex; flex: 1 1 auto; gap: 0; }
+  .cms-rail__items > li { display: flex; flex: 1 1 0; min-width: 0; }
+
+  .app-shell .cms-rail__item,
+  .app-shell[data-rail="collapsed"] .cms-rail__item {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    justify-items: center;
+    flex: 1 1 auto;
+    gap: 2px;
+    height: 48px;
+    padding-inline: 2px;
+    font-size: .625rem;
+    line-height: 1.2;
+  }
+
+  /*
+   * The item centres its content, so the label track is sized to the text and
+   * the base rule's `min-width: 0` never constrains it — "Compositions" painted
+   * 60px of text through a 53px box and over its neighbours, so the strip read
+   * as one run. Stretch the label to the track and let it ellipsize; the base
+   * rule already carries `overflow: hidden` and `text-overflow: ellipsis`,
+   * which cannot fire without `nowrap`.
+   */
+  .app-shell .cms-rail__label {
+    justify-self: stretch;
+    width: 100%;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .cms-rail__item[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--color-accent); }
+  .app-shell .cms-rail__count,
+  .app-shell .cms-rail__external { display: none; }
+
+  .cms-topbar { padding-inline: var(--sp-2); gap: var(--sp-1); }
+  .cms-crumbs { flex: 1 1 auto; overflow: hidden; }
+  .cms-topbar__control-label { display: none; }
+
+  /* Status text is hidden from the bar, not from assistive technology: the
+   * chip would otherwise announce as a bare icon. */
+  .cms-topbar__status .cms-status__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (pointer: coarse) {
+  .cms-rail__item,
+  .cms-topbar :is(a, button) { min-height: 44px; }
+  /* A breadcrumb link is an inline box until it is told not to be, and
+   * `min-height` does nothing to one — so the rule above passes it by. */
+  .cms-crumbs__link { display: inline-flex; align-items: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell * { scroll-behavior: auto; transition-duration: .01ms; animation-duration: .01ms; animation-iteration-count: 1; }
+}

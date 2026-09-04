@@ -26,15 +26,13 @@ export type {
 export { ComposerCanvasHost } from "./composer-canvas-host";
 export type { ComposerCanvasHostProps } from "./composer-canvas-host";
 
-export { ComposerToolbarBar } from "./composer-toolbar-bar";
-export type { ComposerToolbarBarProps } from "./composer-toolbar-bar";
-
 export {
   useComposerKeyboard,
-  isEditableEventTarget,
   type ComposerKeyboardOptions,
   type KeyboardHost,
 } from "./use-composer-keyboard";
+
+export { isEditableEventTarget, matchesUndoRedoShortcut } from "../keyboard-shortcuts";
 
 export { useHostTheme, resolveHostTheme } from "./use-host-theme";
 

@@ -15,14 +15,14 @@ describe("MappingPreviewHost", () => {
     expect(renderSnapshot).toHaveBeenCalledWith(expect.objectContaining({ document }), expect.objectContaining({ mode: "preview", selectedId: null }));
     const frame = container.querySelector("iframe")!;
     expect(frame.getAttribute("src")).toBe("/composer/preview"); expect(frame.getAttribute("sandbox")).toBe("allow-same-origin allow-scripts"); expect(frame.tabIndex).toBe(-1);
-    expect(frame.contentDocument?.querySelector(".sg-mapping-app")).toBeNull();
+    expect(frame.contentDocument?.querySelector(".cms-mapping-root")).toBeNull();
   });
 
   it("keeps Mapping modules out of the direct preview route graph", () => {
     const root = process.cwd();
     for (const file of ["preview-entry.ts", "preview-app.ts", "renderer.ts", "client.ts"]) {
       const source = readFileSync(`${root}/src/features/composer/preview/${file}`, "utf8");
-      expect(source).not.toMatch(/features\/mapping|\.\.\/\.\.\/mapping|sg-mapping/);
+      expect(source).not.toMatch(/features\/mapping|\.\.\/\.\.\/mapping|cms-mapping/);
     }
   });
 

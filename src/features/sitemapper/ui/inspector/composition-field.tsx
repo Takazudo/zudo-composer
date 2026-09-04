@@ -3,10 +3,9 @@
 
 import type { JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import type {
-  CompositionCatalog,
-  ResolveOutcome,
-} from "../../../../sitemapper/catalog";
+import { ComposerIcon, EditIcon, ExternalLinkIcon } from "../../../../components/icons";
+import { Banner, Button, EmptyState } from "../../../../components/ui";
+import type { CompositionCatalog, ResolveOutcome } from "../../../../sitemapper/catalog";
 import type { CompositionRef } from "../../../../sitemapper/model";
 import { CompositionPickerDialog } from "../picker/composition-picker-dialog";
 
@@ -70,7 +69,7 @@ export function CompositionField({ value, catalog, onChange }: CompositionFieldP
         }
         setReference({ status: "broken", ref, reason: brokenReason(outcome) });
       })
-      .catch((reason) => {
+      .catch((reason: unknown) => {
         if (request !== requestRef.current) return;
         setReference({
           status: "broken",
@@ -81,44 +80,54 @@ export function CompositionField({ value, catalog, onChange }: CompositionFieldP
   }, [catalog, value?.providerId, value?.recordId]);
 
   return (
-    <section class="sg-sitemapper-composition" aria-labelledby="sg-sitemapper-composition-label">
-      <h3 id="sg-sitemapper-composition-label">Composition</h3>
+    <div class="sg-sitemapper-source" role="group" aria-label="Composition">
+      {reference.status === "unassigned" ? (
+        <EmptyState
+          inline
+          icon={ComposerIcon}
+          title="No composition assigned"
+          action={<Button variant="primary" size="sm" onClick={() => setPickerOpen(true)}>Choose composition…</Button>}
+        />
+      ) : null}
 
-      {reference.status === "unassigned" && (
-        <div class="sg-sitemapper-composition__state">
-          <p>No composition assigned.</p>
-          <button type="button" onClick={() => setPickerOpen(true)}>Choose composition</button>
+      {reference.status === "loading" ? <p role="status">Resolving composition…</p> : null}
+
+      {reference.status === "resolved" ? (
+        <div class="sg-sitemapper-source__card">
+          <ComposerIcon size="sm" class="sg-sitemapper-source__glyph" />
+          <span class="sg-sitemapper-source__text">
+            <strong>{reference.name}</strong>
+            <span>{reference.providerLabel}</span>
+          </span>
+          <Button size="xs" variant="ghost" iconOnly aria-label="Change composition" onClick={() => setPickerOpen(true)}>
+            <EditIcon size="xs" />
+          </Button>
+          {/* `route-intents` has no Composer record intent yet, so this opens
+              the workspace rather than pretending to open the record. */}
+          <a
+            class="cms-btn cms-btn--ghost cms-btn--xs cms-btn--icon"
+            href="/composer"
+            aria-label="Open in Composer"
+          >
+            <ExternalLinkIcon size="xs" />
+          </a>
         </div>
-      )}
+      ) : null}
 
-      {reference.status === "loading" && <p role="status">Resolving composition…</p>}
-
-      {reference.status === "resolved" && (
-        <div class="sg-sitemapper-composition__state">
-          <p><strong>{reference.name}</strong><span>{reference.providerLabel}</span></p>
-          <div class="sg-sitemapper-composition__actions">
-            <button type="button" onClick={() => setPickerOpen(true)}>Replace composition</button>
-            <button type="button" class="sg-sitemapper-danger" onClick={() => onChange(null)}>Clear composition</button>
-          </div>
-        </div>
-      )}
-
-      {reference.status === "broken" && (
-        <div class="sg-sitemapper-composition__state sg-sitemapper-composition__state--broken">
-          <p><strong class="sg-sitemapper-composition__badge">Broken reference</strong></p>
-          <p>{reference.reason}</p>
-          <dl>
-            <div>
-              <dt>Raw reference</dt>
-              <dd><code>{reference.ref.providerId}:{reference.ref.recordId}</code></dd>
-            </div>
-          </dl>
-          <div class="sg-sitemapper-composition__actions">
-            <button type="button" onClick={() => setPickerOpen(true)}>Replace composition</button>
-            <button type="button" class="sg-sitemapper-danger" onClick={() => onChange(null)}>Clear composition</button>
-          </div>
-        </div>
-      )}
+      {reference.status === "broken" ? (
+        <Banner
+          tone="err"
+          title="Broken reference"
+          action={
+            <>
+              <Button size="sm" onClick={() => setPickerOpen(true)}>Change…</Button>
+              <Button size="sm" variant="danger" onClick={() => onChange(null)}>Clear</Button>
+            </>
+          }
+        >
+          {reference.reason} <code class="sg-sitemapper-mono">{reference.ref.providerId}:{reference.ref.recordId}</code>
+        </Banner>
+      ) : null}
 
       <CompositionPickerDialog
         open={pickerOpen}
@@ -127,7 +136,7 @@ export function CompositionField({ value, catalog, onChange }: CompositionFieldP
         onSelect={onChange}
         onClose={() => setPickerOpen(false)}
       />
-    </section>
+    </div>
   );
 }
 

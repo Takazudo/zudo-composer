@@ -42,7 +42,6 @@ function renderPanel({ withDebouncedChannel = true } = {}) {
       onUpdateProps={onUpdateProps}
       onUpdatePropsDebounced={withDebouncedChannel ? onUpdatePropsDebounced : undefined}
       onFlushPendingProps={withDebouncedChannel ? onFlushPendingProps : undefined}
-      onReorder={() => {}}
       onRemove={() => {}}
     />,
   );

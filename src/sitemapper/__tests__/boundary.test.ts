@@ -46,6 +46,9 @@ describe("standalone Sitemapper boundary", () => {
     const storage = readFileSync(resolve(repositoryRoot, "src/sitemapper/storage/indexeddb/types.ts"), "utf8");
     expect(app).toContain("catalog: CompositionCatalog");
     expect(app).not.toContain("createIndexedDbCompositionProvider");
+    // The Sitemap provider is owned by the host integration; the route may not build a second one.
+    expect(app).toContain("provider: SitemapProvider");
+    expect(app).not.toContain("createIndexedDbSitemapProvider");
     expect(storage).toContain('SITEMAPPER_DATABASE_NAME = "zudo-composer-sitemapper"');
     expect(storage).toContain("SITEMAPPER_DATABASE_VERSION = 1");
     expect(SitemapperRouteContent).toBeTypeOf("function");

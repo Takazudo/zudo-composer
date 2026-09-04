@@ -1,7 +1,8 @@
 import type { JSX } from "preact";
-import type { ContentFieldKind } from "../../content";
+import { useRef } from "preact/hooks";
 import {
   BooleanIcon,
+  ChevronDownIcon,
   ColorIcon,
   DateIcon,
   LongTextIcon,
@@ -12,6 +13,9 @@ import {
   UrlIcon,
   type IconComponent,
 } from "../../components/icons";
+import { Menu, MenuRadioItem, MenuSection, useMenu } from "../../components/overlay";
+import { Button } from "../../components/ui";
+import type { ContentFieldKind } from "../../content";
 
 export interface ContentFieldKindPresentation {
   kind: ContentFieldKind;
@@ -32,44 +36,80 @@ export const CONTENT_FIELD_KIND_PRESENTATIONS: readonly ContentFieldKindPresenta
   { kind: "url", label: "URL", explanation: "A web address validated by the browser.", icon: UrlIcon },
 ] as const;
 
+const FALLBACK_PRESENTATION = CONTENT_FIELD_KIND_PRESENTATIONS[0]!;
+
+export function contentFieldKindPresentation(kind: ContentFieldKind): ContentFieldKindPresentation {
+  return CONTENT_FIELD_KIND_PRESENTATIONS.find((presentation) => presentation.kind === kind) ?? FALLBACK_PRESENTATION;
+}
+
 export interface FieldKindPickerProps {
   value: ContentFieldKind;
+  /** Stored Entries hold values for this field, so its type can no longer change. */
   locked?: boolean;
-  label?: string;
-  descriptionId?: string;
+  /** Accessible name for the trigger, e.g. "Type for Title". */
+  label: string;
   onChange(kind: ContentFieldKind): void;
 }
 
-export function FieldKindPicker({ value, locked = false, label = "Field type", descriptionId, onChange }: FieldKindPickerProps): JSX.Element {
-  const move = (event: JSX.TargetedKeyboardEvent<HTMLButtonElement>, index: number): void => {
-    if (locked || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    const length = CONTENT_FIELD_KIND_PRESENTATIONS.length;
-    const next = event.key === "Home" ? 0 : event.key === "End" ? length - 1 : (index + (event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1) + length) % length;
-    const kind = CONTENT_FIELD_KIND_PRESENTATIONS[next]!.kind;
-    onChange(kind);
-    (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
-  };
+/** Why a locked field's other types are unreachable, said where the author looks. */
+const LOCKED_TITLE = "Type locked · stored Entries use it";
+const LOCKED_REASON = "Type is immutable because stored Entries hold values for this field. Remove those values, or add a new field, to use another type.";
 
-  return <div class="sg-content-kind-picker" role="radiogroup" aria-label={label} aria-describedby={descriptionId} aria-disabled={locked || undefined}>
-    {CONTENT_FIELD_KIND_PRESENTATIONS.map(({ kind, label: friendlyLabel, explanation, icon: Icon }, index) => {
-      const selected = kind === value;
-      const unavailable = locked && !selected;
-      return <button
-        key={kind}
-        type="button"
-        role="radio"
-        aria-checked={selected}
-        aria-disabled={unavailable || undefined}
-        tabIndex={selected ? 0 : -1}
+/**
+ * The field-type control: one chip-shaped trigger opening a `Menu` of the nine
+ * kinds, each with the sentence that says what it is for.
+ *
+ * It replaced a nine-card inline radiogroup. Nine cards cost a whole screen per
+ * field in a schema that is itself a list of fields, and the popover carries the
+ * same information — icon, friendly name, explanation, the current choice — in
+ * the space of the chip that names the type in the row.
+ */
+export function FieldKindPicker({ value, locked = false, label, onChange }: FieldKindPickerProps): JSX.Element {
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menu = useMenu(triggerRef, { align: "start" });
+  const { label: currentLabel, icon: CurrentIcon } = contentFieldKindPresentation(value);
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="sg-content-kind-trigger"
+        elementRef={triggerRef}
+        aria-label={label}
+        title={locked ? LOCKED_REASON : undefined}
         data-locked={locked || undefined}
-        onClick={() => { if (!locked) onChange(kind); }}
-        onKeyDown={(event) => move(event, index)}
+        {...menu.triggerProps}
       >
-        <Icon size="lg" />
-        <span><strong>{friendlyLabel}</strong><small>{explanation}</small><code>{kind}</code></span>
-        {locked && selected && <em>In use · type locked</em>}
-      </button>;
-    })}
-  </div>;
+        <CurrentIcon size="xs" />
+        {currentLabel}
+        <ChevronDownIcon size="xs" class="sg-content-kind-trigger__caret" />
+      </Button>
+      <Menu controller={menu} label={label} class="sg-content-kind-menu">
+        <MenuSection title={locked ? LOCKED_TITLE : "Field type"}>
+          {CONTENT_FIELD_KIND_PRESENTATIONS.map(({ kind, label: friendlyLabel, explanation, icon: Icon }) => (
+            <MenuRadioItem
+              key={kind}
+              checked={kind === value}
+              // The chosen kind stays selectable so the menu always has one
+              // focusable row; re-picking it is a no-op.
+              disabled={locked && kind !== value}
+              // `disabled` stops a pointer, not a synthesised activation, and
+              // the controller answers a locked change by throwing — so the
+              // refusal is stated here too rather than left to the attribute.
+              onSelect={() => { if (!locked && kind !== value) onChange(kind); }}
+            >
+              <span class="sg-content-kind-option">
+                <Icon size="sm" class="sg-content-kind-option__icon" />
+                <span>
+                  <strong>{friendlyLabel}</strong>
+                  <small>{explanation}</small>
+                </span>
+              </span>
+            </MenuRadioItem>
+          ))}
+        </MenuSection>
+      </Menu>
+    </>
+  );
 }

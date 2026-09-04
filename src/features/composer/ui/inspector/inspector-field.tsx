@@ -10,7 +10,7 @@
 // make them standalone history checkpoints.
 
 import { useEffect, useId, useRef, useState } from "preact/hooks";
-import type { JSX } from "preact";
+import type { ComponentChildren, JSX } from "preact";
 import type {
   ArrayValueDefinition,
   FieldDefinition,
@@ -23,6 +23,7 @@ import type {
   ValueDefinition,
 } from "@zudo-composer/component-contract";
 import { ContractValidationError, validateFieldValue } from "@zudo-composer/component-contract";
+import { Button, Checkbox, Field, Input, Select, Textarea } from "../../../../components/ui";
 import type { PropPath } from "../../chrome/history-model";
 import { useNumericField } from "./use-numeric-field";
 import { useTextField } from "./use-text-field";
@@ -49,10 +50,40 @@ export interface InspectorFieldProps {
   onRemove?: () => void;
 }
 
-const FIELD_LABEL_CLASS = "block text-caption font-medium text-muted";
-const FIELD_INPUT_CLASS =
-  "sg-composer-inspector-control w-full rounded-md border border-border bg-surface px-hsp-sm text-small text-fg disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger";
-const STRUCTURE_BUTTON_CLASS = "sg-composer-toolbar-button";
+const FIELD_LABEL_CLASS = "cms-field__label-text";
+/** The compact chrome button the composite editors use for their own structure actions. */
+const STRUCTURE_BUTTON_CLASS = "cms-btn cms-btn--xs";
+
+/**
+ * A labelled leaf is a `Field`; an unlabelled one — a list item's scalar, say —
+ * is the bare control, because a `Field` with no label text would render an
+ * empty label element and claim the control has a name it does not have.
+ */
+function FieldRow({
+  label,
+  controlId,
+  error,
+  children,
+}: {
+  label: string | undefined;
+  controlId: string;
+  error?: string | null;
+  children: ComponentChildren;
+}): JSX.Element {
+  if (label === undefined) {
+    return (
+      <div class="sg-composer-inspector-row">
+        {children}
+        {error ? <p class="cms-field__error" role="alert">{error}</p> : null}
+      </div>
+    );
+  }
+  return (
+    <Field label={label} controlId={controlId} error={error ?? undefined}>
+      {children}
+    </Field>
+  );
+}
 
 function labelFor(definition: InspectorDefinition): string | undefined {
   if ("label" in definition && typeof definition.label === "string") return definition.label;
@@ -192,33 +223,13 @@ export function InspectorField({
   onFlushPending,
   onRemove,
 }: InspectorFieldProps): JSX.Element {
-  const addSeed = value === undefined ? seedValue(field) : undefined;
-  if (value === undefined && field.required !== true) {
-    const message = addSeed === undefined ? "Cannot add this value: its required fields have no deterministic seed." : null;
-    return (
-      <div class="flex flex-col gap-vsp-3xs" data-sg-inspector-optional-field={field.prop}>
-        <span class={FIELD_LABEL_CLASS}>{field.label}</span>
-        <button
-          type="button"
-          class={STRUCTURE_BUTTON_CLASS}
-          disabled={disabled || addSeed === undefined}
-          aria-label={`Add ${field.label}`}
-          onClick={() => {
-            if (addSeed !== undefined) emitCommit("structural", addSeed, undefined, onCommit, onCommitDebounced);
-          }}
-        >
-          Add {field.label}
-        </button>
-        {message && <p class="text-caption text-danger" role="alert">{message}</p>}
-      </div>
-    );
-  }
-
+  // An absent optional prop is offered by the inspector's own "Optional props"
+  // section, not here: this renderer only ever draws a value that exists.
   if (value === undefined) {
     return (
-      <div class="flex flex-col gap-vsp-3xs" data-sg-inspector-missing-required={field.prop}>
+      <div class="sg-composer-inspector-row" data-sg-inspector-missing-required={field.prop}>
         <span class={FIELD_LABEL_CLASS}>{field.label}</span>
-        <p class="text-caption text-danger" role="alert">Required value is missing.</p>
+        <p class="cms-field__error" role="alert">Required value is missing.</p>
       </div>
     );
   }
@@ -245,18 +256,13 @@ export function InspectorField({
     );
   const invalidValue = isStructured(field) ? null : validationMessage(field, value);
   return (
-    <div class="flex flex-col gap-vsp-3xs">
-      {invalidValue && <p class="text-caption text-danger" role="alert" data-sg-inspector-validation>{invalidValue}</p>}
+    <div class="sg-composer-inspector-row">
+      {invalidValue && <p class="cms-field__error" role="alert" data-sg-inspector-validation>{invalidValue}</p>}
       {editor}
       {field.required !== true && onRemove && (
-        <button
-          type="button"
-          class={`${STRUCTURE_BUTTON_CLASS} sg-composer-inspector-remove`}
-          disabled={disabled}
-          onClick={onRemove}
-        >
+        <Button size="xs" variant="ghost" disabled={disabled} onClick={onRemove}>
           Remove {field.label}
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -347,22 +353,15 @@ function ValueEditor({
       );
     case "boolean": {
       return (
-        <label
-          class="sg-composer-inspector-control flex cursor-pointer items-center gap-hsp-xs text-small text-fg has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
-          for={inputId}
-        >
-          <input
-            id={inputId}
-            type="checkbox"
-            class="h-4 w-4 accent-accent"
-            checked={value === true}
-            disabled={disabled}
-            onChange={(event) => {
-              if (event.currentTarget instanceof HTMLInputElement) onLeafCommit(event.currentTarget.checked, path, "discrete");
-            }}
-          />
-          <span>{label}</span>
-        </label>
+        <Checkbox
+          id={inputId}
+          checked={value === true}
+          disabled={disabled}
+          // An unlabelled boolean is a list or tuple item, which the composite
+          // editors name by position rather than by prop.
+          {...(label === undefined ? { "aria-label": "Value" } : { label })}
+          onCheckedChange={(checked) => onLeafCommit(checked, path, "discrete")}
+        />
       );
     }
     case "list":
@@ -450,14 +449,12 @@ function ScalarTextEditor({
     onFlushPending?.();
   };
   return (
-    <div class="flex flex-col gap-vsp-3xs">
-      {label && <label class={FIELD_LABEL_CLASS} for={inputId}>{label}</label>}
-      <div class="flex items-center gap-hsp-xs">
+    <FieldRow label={label} controlId={inputId}>
+      <div class="sg-composer-inspector-control-row">
         {swatch && <span class="sg-composer-inspector-swatch" style={{ backgroundColor: draft || "transparent" }} aria-hidden="true" />}
         {multiline ? (
-          <textarea
+          <Textarea
             id={inputId}
-            class="w-full rounded-md border border-border bg-surface px-hsp-sm py-vsp-2xs text-small text-fg disabled:cursor-not-allowed disabled:opacity-50"
             value={draft}
             disabled={disabled}
             rows={3}
@@ -468,10 +465,10 @@ function ScalarTextEditor({
             onBlur={handleBlur}
           />
         ) : (
-          <input
+          <Input
             id={inputId}
             type="text"
-            class={FIELD_INPUT_CLASS}
+            size="sm"
             value={draft}
             disabled={disabled}
             onInput={(event) => {
@@ -482,7 +479,7 @@ function ScalarTextEditor({
           />
         )}
       </div>
-    </div>
+    </FieldRow>
   );
 }
 
@@ -524,27 +521,28 @@ function ScalarNumberEditor({
     onFlushPending?.();
   };
   return (
-    <div class="flex flex-col gap-vsp-3xs">
-      {label && <label class={FIELD_LABEL_CLASS} for={inputId}>{label}</label>}
-      <input
+    <FieldRow label={label} controlId={inputId} error={error}>
+      <Input
         id={inputId}
         type="number"
-        class={FIELD_INPUT_CLASS}
+        size="sm"
         value={draft}
         min={min}
         max={max}
         step={step}
         disabled={disabled}
-        aria-invalid={error !== null}
-        aria-describedby={error !== null ? errorId : undefined}
+        aria-invalid={error !== null ? "true" : undefined}
+        // A labelled field is described by `Field`'s own error element; only the
+        // unlabelled case (a list item's scalar) needs its own wiring.
+        aria-describedby={label === undefined && error !== null ? errorId : undefined}
         onInput={(event) => {
           if (event.currentTarget instanceof HTMLInputElement) onInput(event.currentTarget.value);
         }}
         onFocus={handleFocus}
         onBlur={handleBlur}
       />
-      {error !== null && <p id={errorId} class="text-caption text-danger" role="alert">{error}</p>}
-    </div>
+      {label === undefined && error !== null && <p id={errorId} class="cms-field__error" role="alert">{error}</p>}
+    </FieldRow>
   );
 }
 
@@ -561,22 +559,21 @@ function ScalarSelectEditor({ label, value, options, disabled, inputId, onCommit
   const current = typeof value === "string" ? value : "";
   const invalid = !options.includes(current);
   return (
-    <div class="flex flex-col gap-vsp-3xs">
-      {label && <label class={FIELD_LABEL_CLASS} for={inputId}>{label}</label>}
-      <select
+    <FieldRow label={label} controlId={inputId}>
+      <Select
         id={inputId}
-        class={FIELD_INPUT_CLASS}
+        size="sm"
         value={current}
         disabled={disabled}
-        aria-invalid={invalid}
+        aria-invalid={invalid ? "true" : undefined}
         onChange={(event) => {
           if (event.currentTarget instanceof HTMLSelectElement) onCommit(event.currentTarget.value);
         }}
       >
         {invalid && <option value={current}>{current || "Invalid value"} (invalid)</option>}
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
-      </select>
-    </div>
+      </Select>
+    </FieldRow>
   );
 }
 

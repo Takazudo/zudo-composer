@@ -1,96 +1,296 @@
-@import "@zudo-sg/ui/styles/tokens.css";
-@import "@zudo-sg/ui/styles/colors.css";
+/* ==========================================================================
+ * Media route surface.
+ *
+ * The route wears the library pattern, so `src/components/library-page`,
+ * `src/components/ui` and `src/components/overlay` own the header, toolbar,
+ * table, chips, banners and dialog. What is left here is what only a media
+ * library has: the compact drop strip, the upload queue, the asset grid and
+ * its thumbnails, and the detail panel beside them.
+ *
+ * Every colour is a token from `src/styles/app-tokens.css`, and every class
+ * carries the `sg-media-` prefix because `src/base.css` scans this tree with
+ * `@source "./"` — a bare `.asset` or `.thumb` would collide with a generated
+ * Tailwind utility. The type ladder is written as literal rem values because
+ * `--text-*` is the provider's namespace.
+ * ========================================================================== */
 
-.sg-media-app {
-  --sg-media-space-row: var(--spacing-vsp-2xs);
-  --sg-media-space-group: var(--spacing-vsp-xs);
-  --sg-media-space-section: var(--spacing-vsp-sm);
-  --sg-media-space-inline: var(--spacing-hsp-sm);
-  --sg-media-space-region: var(--spacing-hsp-lg);
+/* The record editors own the shell's viewport; this library scrolls inside it. */
+.sg-media-route { align-content: start; padding: var(--sp-3); }
+
+/* --------------------------------------------------------------------------
+ * Browser column beside the detail panel
+ * -------------------------------------------------------------------------- */
+.sg-media-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--sp-3);
+  align-items: start;
   min-width: 0;
-  padding: var(--sg-media-space-region);
-  color: var(--color-fg);
-  background: var(--color-bg);
 }
 
-.sg-media-app :where(h1, h2, h3, p, dl, dd) { margin: 0; }
-.sg-media-app__header, .sg-media-toolbar, .sg-media-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--sg-media-space-inline); min-width: 0; }
-.sg-media-app__header { margin-block-end: var(--sg-media-space-section); }
-.sg-media-app h1 { font-size: var(--text-xl); line-height: var(--leading-tight); }
-.sg-media-app h2 { font-size: var(--text-lg); line-height: var(--leading-tight); }
-.sg-media-app h3 { font-size: var(--text-base); }
-.sg-media-eyebrow { color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--font-weight-bold); letter-spacing: .08em; text-transform: uppercase; }
-.sg-media-status, .sg-media-toolbar p { color: var(--color-muted); font-size: var(--text-sm); }
-.sg-media-status { text-align: end; }
-.sg-media-upload { display: grid; gap: var(--sg-media-space-group); margin-block-end: var(--sg-media-space-section); padding: var(--sg-media-space-group); border: 1px dashed var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface-2); transition: border-color .15s ease, background-color .15s ease; }
-.sg-media-upload--drag-active { border-color: var(--color-accent); background: var(--color-surface); }
-.sg-media-upload__intro { display: flex; align-items: center; justify-content: space-between; gap: var(--sg-media-space-inline); }
-.sg-media-upload__intro > div { display: grid; gap: var(--sg-media-space-row); }
-.sg-media-upload__intro p, .sg-media-upload__rejection { color: var(--color-muted); font-size: var(--text-sm); }
-.sg-media-upload__input { position: fixed; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.sg-media-upload__status { display: grid; gap: var(--sg-media-space-row); margin: 0; padding: 0; list-style: none; }
-.sg-media-upload__status li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sg-media-space-row) var(--sg-media-space-inline); padding-block-start: var(--sg-media-space-row); border-block-start: 1px solid var(--color-border); font-size: var(--text-sm); }
-.sg-media-upload__status li > span { min-width: 0; overflow-wrap: anywhere; }
-.sg-media-upload__status li > span:nth-child(n + 3) { grid-column: 1 / -1; color: var(--color-muted); }
-.sg-media-toolbar { align-items: flex-end; margin-block-end: var(--sg-media-space-group); }
+.sg-media-browser {
+  display: grid;
+  gap: var(--sp-b2);
+  align-content: start;
+  min-width: 0;
+}
 
-.sg-media-tabs { display: flex; gap: var(--spacing-hsp-xs); }
-.sg-media-app :where(button) { min-height: 2.25rem; padding: var(--spacing-vsp-3xs) var(--spacing-hsp-md); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); color: var(--color-fg); background: var(--color-surface); cursor: pointer; }
-.sg-media-app button:focus-visible, .sg-media-details-scroll:focus-visible, .sg-media-dialog button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-.sg-media-tabs button[aria-selected="true"] { border-color: var(--color-accent); background: var(--color-surface-2); }
-.sg-media-button--danger { color: var(--color-danger) !important; }
+.sg-media-seg__count { margin-inline-start: var(--sp-1); color: var(--color-muted); font-weight: 500; }
 
-.sg-media-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr)); gap: var(--sg-media-space-group); margin: 0; padding: 0; list-style: none; }
-.sg-media-card { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; overflow: clip; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface); box-shadow: none; }
-.sg-media-preview { display: grid; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; color: var(--color-muted); background: var(--color-surface-2); }
-.sg-media-preview img { width: 100%; height: 100%; object-fit: contain; }
-.sg-media-preview--compact { flex: 0 0 auto; width: 2.5rem; aspect-ratio: 1; border-radius: var(--radius-DEFAULT); }
-.sg-media-card__body { display: grid; gap: var(--sg-media-space-row); min-width: 0; padding: var(--sg-media-space-group); }
-.sg-media-card__body > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sg-media-facts { display: grid; gap: var(--spacing-vsp-3xs); font-size: var(--text-xs); }
-.sg-media-facts div { display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: var(--sg-media-space-inline); }
-.sg-media-facts dt { color: var(--color-muted); }
-.sg-media-facts dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sg-media-card > .sg-media-actions { justify-content: flex-start; flex-wrap: wrap; padding: 0 var(--sg-media-space-group) var(--sg-media-space-group); }
+/* --------------------------------------------------------------------------
+ * Compact drop strip
+ *
+ * One control-height row rather than a hero-sized box: uploading is one of the
+ * things an author does on this page, not the point of the page.
+ * -------------------------------------------------------------------------- */
+.sg-media-upload { display: grid; gap: var(--sp-2); min-width: 0; }
 
-.sg-media-details-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); }
-.sg-media-details { width: 100%; min-width: 52rem; border-collapse: collapse; background: var(--color-surface); }
-.sg-media-details :where(th, td) { padding: var(--spacing-vsp-xs) var(--spacing-hsp-sm); border-block-end: 1px solid var(--color-border); text-align: start; white-space: nowrap; }
-.sg-media-details thead th { color: var(--color-muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em; }
-.sg-media-details tbody tr:last-child :where(th, td) { border-block-end: 0; }
-.sg-media-details__name { display: flex; align-items: center; gap: var(--sg-media-space-inline); max-width: 20rem; overflow: hidden; text-overflow: ellipsis; }
-.sg-media-details .sg-media-actions { justify-content: flex-start; }
+.sg-media-upload__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
-.sg-media-empty, .sg-media-state, .sg-media-notice { display: grid; gap: var(--sg-media-space-row); max-width: 42rem; padding: var(--sg-media-space-group); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); background: var(--color-surface-2); box-shadow: none; }
-.sg-media-empty p, .sg-media-state p { color: var(--color-muted); }
-.sg-media-notice { margin-block-end: var(--sg-media-space-group); }
-.sg-media-notice--error { border-color: var(--color-danger); }
+.sg-media-drop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  min-height: 44px;
+  padding: var(--sp-1) var(--sp-b2);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  background: var(--color-surface-2);
+  font-size: .8125rem;
+}
 
-.sg-media-dialog { max-width: min(34rem, calc(100% - 2rem)); padding: 0; border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-fg); background: var(--color-surface); box-shadow: var(--shadow-overlay); }
-.sg-media-dialog::backdrop { background: color-mix(in oklch, var(--color-fg) 45%, transparent); }
-.sg-media-dialog__surface { display: grid; gap: var(--sg-media-space-section, var(--spacing-vsp-sm)); padding: var(--sg-media-space-region, var(--spacing-hsp-lg)); }
-.sg-media-dialog__surface > div:not(.sg-media-actions) { display: grid; gap: var(--sg-media-space-row, var(--spacing-vsp-2xs)); }
-.sg-media-dialog .sg-media-actions { justify-content: flex-end; }
-.sg-media-dialog button { min-height: 2.25rem; padding: var(--spacing-vsp-3xs) var(--spacing-hsp-md); border: 1px solid var(--color-border); border-radius: var(--radius-DEFAULT); color: var(--color-fg); background: var(--color-surface); }
-.sg-media-advisory { padding: var(--sg-media-space-row); border-inline-start: 3px solid var(--color-warning, var(--color-accent)); color: var(--color-muted); font-size: var(--text-sm); line-height: var(--leading-normal); }
+.sg-media-upload--drag-active .sg-media-drop { border-color: var(--color-accent); background: var(--color-accent-soft); }
+.sg-media-drop__icon { flex: none; color: var(--color-faint); }
+.sg-media-drop__text { min-width: 0; }
+.sg-media-drop__choose { color: var(--color-accent); font-weight: 600; }
 
+.sg-media-drop__hint {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--color-faint);
+  font-size: .6875rem;
+  white-space: nowrap;
+}
+
+.sg-media-upload__rejection { margin: 0; color: var(--color-warning-fg); font-size: .75rem; }
+
+/* --------------------------------------------------------------------------
+ * Upload queue — status, never byte progress: the file provider reports a
+ * stored record, not a transfer percentage.
+ * -------------------------------------------------------------------------- */
+.sg-media-uploads { display: grid; gap: var(--sp-1); margin: 0; padding: 0; list-style: none; }
+
+.sg-media-uploads__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-1) var(--sp-b2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  font-size: .8125rem;
+}
+
+.sg-media-uploads__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sg-media-uploads__detail { flex: 1 1 100%; color: var(--color-muted); font-size: .75rem; overflow-wrap: anywhere; }
+
+/* --------------------------------------------------------------------------
+ * Asset grid
+ * -------------------------------------------------------------------------- */
+.sg-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr));
+  gap: var(--sp-b2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sg-media-asset { display: grid; gap: var(--sp-1); min-width: 0; }
+
+.sg-media-asset__thumb {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-2);
+}
+
+.sg-media-asset__open {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  cursor: pointer;
+}
+
+/* The thumb clips its overflow, so a focus ring outside the box is invisible. */
+.sg-media-asset__open:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+
+.sg-media-asset--active .sg-media-asset__thumb { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.sg-media-asset--selected .sg-media-asset__thumb { border-color: var(--color-accent-line); }
+
+.sg-media-asset__check,
+.sg-media-asset__acts {
+  position: absolute;
+  z-index: var(--z-index-local-1);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  inset-block-start: var(--sp-b1);
+}
+
+.sg-media-asset__check { inset-inline-start: var(--sp-b1); }
+.sg-media-asset__acts { inset-inline-end: var(--sp-b1); }
+/* Over a photograph the controls need their own ground to stay legible. */
+.sg-media-asset__check .cms-check,
+.sg-media-asset__acts .cms-btn { background: var(--color-surface); }
+.sg-media-asset__check .cms-check { padding: var(--sp-1); border-radius: var(--radius-sm); }
+
+.sg-media-asset__caption { display: grid; gap: 1px; min-width: 0; }
+
+.sg-media-asset__name {
+  overflow: hidden;
+  font-size: .8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sg-media-asset__meta { color: var(--color-faint); font-size: .6875rem; }
+
+.sg-media-image { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+/* A PDF has no thumbnail to render, so it gets a page-shaped tile instead. */
+.sg-media-pdf {
+  display: grid;
+  place-items: center;
+  gap: var(--sp-1);
+  width: 60%;
+  height: 76%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  background: var(--color-surface);
+}
+
+.sg-media-pdf--detail { width: 45%; height: 80%; }
+.sg-media-pdf__label { font-size: .625rem; font-weight: 700; letter-spacing: .06em; }
+
+/* --------------------------------------------------------------------------
+ * Detail panel
+ * -------------------------------------------------------------------------- */
+.sg-media-detail { position: sticky; inset-block-start: var(--sp-3); }
+.sg-media-detail__body { display: grid; gap: var(--sp-b2); min-width: 0; }
+
+.sg-media-detail__preview {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-2);
+}
+
+.sg-media-detail__name {
+  margin: 0;
+  overflow: hidden;
+  font-size: .9375rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sg-media-detail__facts { display: grid; gap: var(--sp-1); margin: 0; font-size: .75rem; }
+.sg-media-detail__facts > div { display: flex; gap: var(--sp-2); align-items: baseline; }
+.sg-media-detail__facts dt { flex: 1 1 auto; color: var(--color-muted); }
+.sg-media-detail__facts dd { margin: 0; min-width: 0; text-align: end; overflow-wrap: anywhere; }
+.sg-media-detail__id { font-family: var(--font-mono); font-size: .6875rem; }
+
+.sg-media-detail__copy { display: flex; align-items: center; gap: var(--sp-2); }
+.sg-media-detail__value { flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); font-size: .6875rem; }
+.sg-media-detail__delete { justify-self: start; }
+
+/* --------------------------------------------------------------------------
+ * Delete confirmation
+ *
+ * The scan line and the advisory sit inside the dialog's single message
+ * paragraph, so they are inline boxes promoted to blocks rather than nested
+ * `<p>` elements the parser would close early.
+ * -------------------------------------------------------------------------- */
+.sg-media-scan { display: block; margin-block-start: var(--sp-2); }
+
+.sg-media-advisory {
+  display: block;
+  margin-block-start: var(--sp-2);
+  padding-inline-start: var(--sp-2);
+  border-inline-start: 3px solid var(--color-warning);
+  color: var(--color-muted);
+  font-size: .75rem;
+}
+
+/* --------------------------------------------------------------------------
+ * Narrow screens: the detail panel stops being a column and stops sticking.
+ * -------------------------------------------------------------------------- */
+@media (max-width: 64rem) {
+  .sg-media-layout { grid-template-columns: minmax(0, 1fr); }
+  .sg-media-detail { position: static; }
+}
+
+@media (max-width: 40rem) {
+  .sg-media-drop__hint { display: none; }
+}
+
+/* --------------------------------------------------------------------------
+ * Pointer capability
+ *
+ * The tile's checkbox and actions are revealed on hover only where hover
+ * exists. On a coarse pointer they stay visible, because a hover-only
+ * affordance is unreachable there by design.
+ * -------------------------------------------------------------------------- */
 @media (hover: hover) and (pointer: fine) {
-  .sg-media-app button:not(:disabled):hover, .sg-media-dialog button:not(:disabled):hover { background: var(--color-surface-2); }
-}
+  .sg-media-asset__check,
+  .sg-media-asset__acts { opacity: 0; transition: opacity .12s ease; }
 
-@media (max-width: 42rem) {
-  .sg-media-app { width: 100%; max-width: 100%; overflow-x: clip; }
-  .sg-media-app__header, .sg-media-toolbar { align-items: stretch; flex-direction: column; }
-  .sg-media-status { text-align: start; }
-  .sg-media-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sg-media-upload__intro { align-items: stretch; flex-direction: column; }
+  .sg-media-asset:hover .sg-media-asset__check,
+  .sg-media-asset:hover .sg-media-asset__acts,
+  .sg-media-asset:focus-within .sg-media-asset__check,
+  .sg-media-asset:focus-within .sg-media-asset__acts,
+  .sg-media-asset--active .sg-media-asset__check,
+  .sg-media-asset--active .sg-media-asset__acts,
+  .sg-media-asset--selected .sg-media-asset__check { opacity: 1; }
 }
 
 @media (pointer: coarse) {
-  .sg-media-app button, .sg-media-dialog button { min-width: 44px; min-height: 44px; }
-  .sg-media-details-scroll { min-height: 44px; }
+  .sg-media-asset__open { min-height: 44px; }
+  .sg-media-drop { min-height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sg-media-app *, .sg-media-dialog * { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  .sg-media-asset__check,
+  .sg-media-asset__acts { transition-duration: .01ms; }
 }

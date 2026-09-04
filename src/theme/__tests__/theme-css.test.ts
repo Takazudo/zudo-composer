@@ -23,13 +23,26 @@ describe("application theme CSS contract", () => {
     expect(theme).not.toMatch(/filter:\s*invert/);
   });
 
-  it("overrides structural colors without merging semantic state roles", () => {
+  it("overrides structural colors and now owns the state roles the CMS chrome speaks", () => {
     const theme = read("src/styles/app-tokens.css");
     for (const token of ["bg", "surface", "surface-2", "border", "fg", "muted", "accent", "accent-hover", "on-accent", "focus"]) {
       expect(theme).toContain(`--color-${token}:`);
     }
-    for (const state of ["danger", "success", "warning", "info"]) {
-      expect(theme).not.toContain(`--color-${state}:`);
+    // Epic #156 gives every route one status vocabulary, so danger/success/
+    // warning are app roles now — declared in both themes, hue-matched to the
+    // provider rungs they supersede. `info` stays the provider's: no chrome
+    // surface uses it, and the accent already carries that meaning.
+    for (const scheme of ["light", "dark"] as const) {
+      const start = theme.indexOf(`:root[data-theme="${scheme}"] {`);
+      const block = theme.slice(start, theme.indexOf("\n}", start));
+      for (const state of ["danger", "success", "warning"]) expect(block).toContain(`--color-${state}:`);
     }
+    expect(theme).not.toContain("--color-info:");
+  });
+
+  it("leaves the provider Tier-1 palette alone", () => {
+    // The provider's contract is that only its own sheet writes --palette-*;
+    // the app maps semantic roles, never raw rungs.
+    expect(read("src/styles/app-tokens.css")).not.toContain("--palette-");
   });
 });

@@ -157,10 +157,14 @@ describe("ComposerChooser — modal behavior", () => {
     expect(trigger).toHaveFocus();
 
     const props = baseProps();
-    render(<ComposerChooser {...props} />);
+    const { rerender } = render(<ComposerChooser {...props} />);
     expect(trigger).not.toHaveFocus();
 
+    // The dialog is controlled: Cancel asks the owner to close, and focus comes
+    // back when the owner actually does.
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+    rerender(<ComposerChooser {...props} open={false} />);
     expect(trigger).toHaveFocus();
     trigger.remove();
   });
@@ -330,9 +334,9 @@ describe("ComposerChooser — published Pattern insertion", () => {
     });
     render(<ComposerChooser {...props} />);
 
-    expect(screen.getByRole("tab", { name: "Components" })).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(screen.getByRole("tab", { name: "Patterns" }));
-    expect(screen.getByRole("tab", { name: "Patterns" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "Components" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Patterns" }));
+    expect(screen.getByRole("button", { name: "Patterns" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /^Feature row/ })).toHaveTextContent("2 roots · 2 nodes");
 
     fireEvent.click(screen.getByRole("button", { name: /^Feature row/ }));
@@ -360,7 +364,7 @@ describe("ComposerChooser — published Pattern insertion", () => {
     });
     render(<ComposerChooser {...props} />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Patterns" }));
+    fireEvent.click(screen.getByRole("button", { name: "Patterns" }));
     const search = screen.getByPlaceholderText("Search Patterns…") as HTMLInputElement;
     fireEvent.input(search, { target: { value: "feature" } });
     fireEvent.click(screen.getByRole("button", { name: /^Feature row/ }));
@@ -382,7 +386,7 @@ describe("ComposerChooser — published Pattern insertion", () => {
     });
     render(<ComposerChooser {...props} />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Patterns" }));
+    fireEvent.click(screen.getByRole("button", { name: "Patterns" }));
     fireEvent.click(screen.getByRole("button", { name: /^Feature row/ }));
     await waitFor(() => expect(screen.getByText(/no longer published as a Pattern/i)).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "Insert Pattern" })).not.toBeInTheDocument();
@@ -494,117 +498,5 @@ describe("ComposerChooser — live preview pane (issue #254)", () => {
     fireEvent.mouseEnter(screen.getByRole("button", { name: /^Box/ }));
     const message = harness.posts[0]!.message as { document: { root: { slots: Record<string, unknown> }[] } };
     expect(message.document.root[0]!.slots).toEqual({});
-  });
-});
-
-describe("ComposerChooser — movable tool-dialog geometry (issue #315)", () => {
-  it("opens at a stable explicit 24px-inset rect without an enlarge control", () => {
-    const props = baseProps();
-    render(<ComposerChooser {...props} />);
-
-    const dialog = screen.getByRole("dialog", { hidden: true }) as HTMLDialogElement;
-    expect(dialog.style.left).toBe("24px");
-    expect(dialog.style.top).toBe("24px");
-    expect(dialog.style.width).toBe("976px");
-    expect(dialog.style.height).toBe("720px");
-    expect(dialog).not.toHaveAttribute("data-sg-enlarged");
-    expect(screen.queryByRole("button", { name: /enlarge|restore/i })).not.toBeInTheDocument();
-  });
-
-  it("labels and documents the six-dot move grip, then supports keyboard movement and Home reset", () => {
-    const props = baseProps();
-    render(<ComposerChooser {...props} />);
-
-    const dialog = screen.getByRole("dialog", { hidden: true });
-    const grip = screen.getByRole("button", { name: "Move dialog" });
-    expect(grip).toHaveAttribute("aria-keyshortcuts", expect.stringContaining("Shift+ArrowRight"));
-    expect(screen.getByText(/Shift plus Arrow keys to move it 48 pixels/)).toBeInTheDocument();
-
-    fireEvent.keyDown(grip, { key: "ArrowRight" });
-    fireEvent.keyDown(grip, { key: "ArrowDown", shiftKey: true });
-    expect(dialog.style.left).toBe("40px");
-    expect(dialog.style.top).toBe("48px");
-    expect(dialog.style.width).toBe("976px");
-    expect(dialog.style.height).toBe("720px");
-
-    fireEvent.keyDown(grip, { key: "Home" });
-    expect(dialog.style.left).toBe("24px");
-    expect(dialog.style.top).toBe("24px");
-    expect(dialog.style.width).toBe("976px");
-    expect(dialog.style.height).toBe("720px");
-  });
-
-  it("uses pointer capture to drag only the position and resets the rect on a fresh open", () => {
-    function Harness() {
-      const [open, setOpen] = useState(true);
-      return (
-        <>
-          <button type="button" onClick={() => setOpen(false)}>
-            close
-          </button>
-          <button type="button" onClick={() => setOpen(true)}>
-            open
-          </button>
-          <ComposerChooser
-            componentProvider={fixtureComponentProvider}
-            open={open}
-            target={rootTarget}
-            document={makeAbcDocument()}
-            manifest={fixtureManifest}
-            entries={fixtureCatalog}
-            onAdd={vi.fn()}
-            onExpandAncestors={vi.fn()}
-            onClose={() => setOpen(false)}
-            previewLocation={INERT_PREVIEW_LOCATION}
-          />
-        </>
-      );
-    }
-
-    resetFixtureIds();
-    render(<Harness />);
-    const dialog = screen.getByRole("dialog", { hidden: true });
-    const grip = screen.getByRole("button", { name: "Move dialog" });
-    const capture = vi.fn();
-    Object.defineProperty(grip, "setPointerCapture", { configurable: true, value: capture });
-
-    fireEvent.pointerDown(grip, { button: 0, pointerId: 7, clientX: 40, clientY: 40 });
-    fireEvent.pointerMove(grip, { pointerId: 7, clientX: 140, clientY: 80 });
-    fireEvent.pointerUp(grip, { pointerId: 7 });
-    expect(capture).toHaveBeenCalledWith(7);
-    expect(dialog.style.left).toBe("48px");
-    expect(dialog.style.top).toBe("48px");
-    expect(dialog.style.width).toBe("976px");
-    expect(dialog.style.height).toBe("720px");
-
-    fireEvent.click(screen.getByText("close"));
-    fireEvent.click(screen.getByText("open"));
-    const reopened = screen.getByRole("dialog", { hidden: true }) as HTMLDialogElement;
-    expect(reopened.style.left).toBe("24px");
-    expect(reopened.style.top).toBe("24px");
-    expect(reopened.style.width).toBe("976px");
-    expect(reopened.style.height).toBe("720px");
-  });
-
-  it("clamps a moved chooser after a viewport resize so the grip and close control stay reachable", () => {
-    const width = vi.spyOn(window, "innerWidth", "get").mockReturnValue(1024);
-    const height = vi.spyOn(window, "innerHeight", "get").mockReturnValue(768);
-    const props = baseProps();
-    render(<ComposerChooser {...props} />);
-
-    const dialog = screen.getByRole("dialog", { hidden: true });
-    const grip = screen.getByRole("button", { name: "Move dialog" });
-    fireEvent.keyDown(grip, { key: "ArrowLeft" });
-    fireEvent.keyDown(grip, { key: "ArrowUp" });
-    width.mockReturnValue(390);
-    height.mockReturnValue(300);
-    act(() => { window.dispatchEvent(new Event("resize")); });
-
-    expect(dialog.style.left).toBe("8px");
-    expect(dialog.style.top).toBe("8px");
-    expect(dialog.style.width).toBe("374px");
-    expect(dialog.style.height).toBe("284px");
-    width.mockRestore();
-    height.mockRestore();
   });
 });

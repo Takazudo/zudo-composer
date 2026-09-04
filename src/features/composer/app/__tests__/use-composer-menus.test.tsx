@@ -1,9 +1,11 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 import "../../test-support/cleanup";
-// Tests the context-menu orchestration hook (issue #256): item derivation per
-// context, disabled-paste + clipboard-name label, opaque-node item hiding,
-// single-action Delete behavior, and which close path invokes `restoreFocus`.
+// Tests the context-menu orchestration hook: item derivation per context,
+// disabled-paste + clipboard-name label, opaque-node item hiding, the
+// single-action Delete, sibling reorder bounds, and which close path invokes
+// `restoreFocus`. Positioning belongs to the shared `Menu`, which measures the
+// trigger this hook points it at.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/preact";
@@ -30,34 +32,33 @@ function setup(sample = makeAbcDocument()) {
 
 beforeEach(() => localStorage.clear());
 
-describe("useComposerMenus — node menu (issue #256)", () => {
-  it("openNodeMenu on a normal node offers Copy/Cut/Duplicate/Delete, Delete danger-styled", () => {
+describe("useComposerMenus — node menu", () => {
+  it("openNodeMenu on a normal node offers Copy/Cut/Duplicate/Move/Delete, Delete danger-styled", () => {
     const { result } = setup();
     act(() => result.current.menus.openNodeMenu("B", RECT, vi.fn()));
 
-    expect(result.current.menus.open).toBe(true);
-    expect(result.current.menus.anchor).toEqual({ x: RECT.x, y: RECT.y + RECT.height + 4 });
-    const ids = result.current.menus.items!.map((i) => i.id);
-    expect(ids).toEqual(["copy", "cut", "duplicate", "delete"]);
-    expect(result.current.menus.items!.find((i) => i.id === "delete")!.danger).toBe(true);
+    expect(result.current.menus.controller.open).toBe(true);
+    const ids = result.current.menus.items.map((i) => i.id);
+    expect(ids).toEqual(["copy", "cut", "duplicate", "move-up", "move-down", "delete"]);
+    expect(result.current.menus.items.find((i) => i.id === "delete")!.danger).toBe(true);
   });
 
-  it("hides Copy/Cut/Duplicate for an opaque node — Delete remains", () => {
+  it("hides Copy/Cut/Duplicate for an opaque node — reorder and Delete remain", () => {
     const document = makeAbcDocument();
     document.root.push({ id: "ghost", componentId: "ghost.unknown", componentVersion: 1, props: {}, slots: {} });
     const { result } = setup(document);
     act(() => result.current.menus.openNodeMenu("ghost", RECT, vi.fn()));
-    expect(result.current.menus.items!.map((i) => i.id)).toEqual(["delete"]);
+    expect(result.current.menus.items.map((i) => i.id)).toEqual(["move-up", "move-down", "delete"]);
   });
 
   it("Delete on a leaf removes immediately and restores focus", () => {
     const { result } = setup();
     const restoreFocus = vi.fn();
     act(() => result.current.menus.openNodeMenu("B", RECT, restoreFocus));
-    act(() => result.current.menus.items!.find((i) => i.id === "delete")!.onSelect());
+    act(() => result.current.menus.items.find((i) => i.id === "delete")!.onSelect());
 
     expect(result.current.api.controller.state.document.root[0]!.slots.right).toHaveLength(1);
-    expect(result.current.menus.open).toBe(false);
+    expect(result.current.menus.controller.open).toBe(false);
     expect(restoreFocus).toHaveBeenCalledTimes(1);
   });
 
@@ -65,10 +66,10 @@ describe("useComposerMenus — node menu (issue #256)", () => {
     const { result } = setup();
     const restoreFocus = vi.fn();
     act(() => result.current.menus.openNodeMenu("split", RECT, restoreFocus));
-    act(() => result.current.menus.items!.find((i) => i.id === "delete")!.onSelect());
+    act(() => result.current.menus.items.find((i) => i.id === "delete")!.onSelect());
 
     expect(result.current.api.controller.state.document.root).toHaveLength(0);
-    expect(result.current.menus.open).toBe(false);
+    expect(result.current.menus.controller.open).toBe(false);
     expect(restoreFocus).toHaveBeenCalledTimes(1);
   });
 
@@ -76,14 +77,14 @@ describe("useComposerMenus — node menu (issue #256)", () => {
     const { result } = setup();
     const restoreFocus = vi.fn();
     act(() => result.current.menus.openNodeMenu("B", RECT, restoreFocus));
-    act(() => result.current.menus.items!.find((i) => i.id === "copy")!.onSelect());
+    act(() => result.current.menus.items.find((i) => i.id === "copy")!.onSelect());
     expect(result.current.api.controller.state.clipboard).toMatchObject({ id: "B" });
-    expect(result.current.menus.open).toBe(false);
+    expect(result.current.menus.controller.open).toBe(false);
     expect(restoreFocus).toHaveBeenCalledTimes(1);
 
     restoreFocus.mockClear();
     act(() => result.current.menus.openNodeMenu("C", RECT, restoreFocus));
-    act(() => result.current.menus.items!.find((i) => i.id === "duplicate")!.onSelect());
+    act(() => result.current.menus.items.find((i) => i.id === "duplicate")!.onSelect());
     const rightIds = result.current.api.controller.state.document.root[0]!.slots.right.map(
       (n: { id: string }) => n.id,
     );
@@ -93,11 +94,11 @@ describe("useComposerMenus — node menu (issue #256)", () => {
   });
 });
 
-describe("useComposerMenus — insert menu (issue #256)", () => {
+describe("useComposerMenus — insert menu", () => {
   it("always offers BOTH 'Add component…' and 'Paste here'; paste disabled while clipboard is empty", () => {
     const { result } = setup();
     act(() => result.current.menus.openInsertMenu({ parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 }, RECT, vi.fn()));
-    const items = result.current.menus.items!;
+    const items = result.current.menus.items;
     expect(items.map((i) => i.id)).toEqual(["add", "paste"]);
     expect(items.find((i) => i.id === "paste")!.disabled).toBe(true);
     expect(items.find((i) => i.id === "paste")!.label).toBe("Paste here");
@@ -107,7 +108,7 @@ describe("useComposerMenus — insert menu (issue #256)", () => {
     const { result } = setup();
     act(() => result.current.api.handleCopy("B"));
     act(() => result.current.menus.openInsertMenu({ parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 }, RECT, vi.fn()));
-    const paste = result.current.menus.items!.find((i) => i.id === "paste")!;
+    const paste = result.current.menus.items.find((i) => i.id === "paste")!;
     expect(paste.disabled).toBe(false);
     expect(paste.label).toBe('Paste "Box" here');
   });
@@ -118,12 +119,12 @@ describe("useComposerMenus — insert menu (issue #256)", () => {
     const restoreFocus = vi.fn();
     const target = { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 };
     act(() => result.current.menus.openInsertMenu(target, RECT, restoreFocus));
-    act(() => result.current.menus.items!.find((i) => i.id === "paste")!.onSelect());
+    act(() => result.current.menus.items.find((i) => i.id === "paste")!.onSelect());
 
     const doc = result.current.api.controller.state.document;
     expect(doc.root).toHaveLength(2);
     expect(doc.root[0]!.componentId).toBe(FIXTURE_IDS.box);
-    expect(result.current.menus.open).toBe(false);
+    expect(result.current.menus.controller.open).toBe(false);
     expect(restoreFocus).toHaveBeenCalledTimes(1);
   });
 
@@ -132,9 +133,9 @@ describe("useComposerMenus — insert menu (issue #256)", () => {
     const restoreFocus = vi.fn();
     const target = { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 };
     act(() => result.current.menus.openInsertMenu(target, RECT, restoreFocus));
-    act(() => result.current.menus.items!.find((i) => i.id === "add")!.onSelect());
+    act(() => result.current.menus.items.find((i) => i.id === "add")!.onSelect());
 
-    expect(result.current.menus.open).toBe(false);
+    expect(result.current.menus.controller.open).toBe(false);
     expect(restoreFocus).not.toHaveBeenCalled();
     expect(result.current.api.chooser).toEqual({ open: true, target });
   });
@@ -144,35 +145,25 @@ describe("useComposerMenus — insert menu (issue #256)", () => {
     const target = { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 };
     const addComponent = vi.fn();
     act(() => result.current.menus.openInsertMenu(target, RECT, vi.fn(), addComponent));
-    act(() => result.current.menus.items!.find((i) => i.id === "add")!.onSelect());
+    act(() => result.current.menus.items.find((i) => i.id === "add")!.onSelect());
 
     expect(addComponent).toHaveBeenCalledTimes(1);
     expect(result.current.api.chooser.open).toBe(false);
   });
 });
 
-describe("useComposerMenus — tree convenience wrappers", () => {
-  it("handleTreeOpenNodeMenu derives the anchor from the trigger's rect and restores focus to the trigger itself", () => {
+describe("useComposerMenus — structure-row wrappers", () => {
+  it("handleTreeOpenNodeMenu points the menu at the trigger and restores focus to it", () => {
     const { result } = setup();
     const trigger = document.createElement("button");
     document.body.append(trigger);
-    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
-      x: 5,
-      y: 6,
-      width: 20,
-      height: 10,
-      top: 6,
-      left: 5,
-      right: 25,
-      bottom: 16,
-      toJSON: () => ({}),
-    });
     const focusSpy = vi.spyOn(trigger, "focus");
 
     act(() => result.current.menus.handleTreeOpenNodeMenu("B", trigger));
-    expect(result.current.menus.anchor).toEqual({ x: 5, y: 6 + 10 + 4 });
+    expect(result.current.menus.controller.open).toBe(true);
+    expect(result.current.menus.controller.triggerRef.current).toBe(trigger);
 
-    act(() => result.current.menus.onClose());
+    act(() => result.current.menus.close());
     expect(focusSpy).toHaveBeenCalledTimes(1);
     trigger.remove();
   });
@@ -189,8 +180,8 @@ describe("useComposerMenus — tree convenience wrappers", () => {
         trigger,
       ),
     );
-    expect(result.current.menus.open).toBe(true);
-    act(() => result.current.menus.onClose());
+    expect(result.current.menus.controller.open).toBe(true);
+    act(() => result.current.menus.close());
     expect(focusSpy).toHaveBeenCalledTimes(1);
     trigger.remove();
   });

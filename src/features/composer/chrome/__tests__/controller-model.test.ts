@@ -13,7 +13,6 @@ import {
   createInitialControllerState,
   DOCUMENT_MUTATION_HISTORY_POLICY,
   DOCUMENT_MUTATION_TYPES,
-  describeSaveStatus,
   hasUnsavedChanges,
   isDocumentMutation,
   type ComposerReducerContext,
@@ -32,8 +31,6 @@ function initial() {
     document: makeAbcDocument(),
     manifest: fixtureManifest,
     saveStatus: { kind: "saved" },
-    leftWidth: 260,
-    rightWidth: 320,
   });
 }
 
@@ -44,8 +41,6 @@ describe("createInitialControllerState", () => {
     expect(state.expandedIds.size).toBe(0);
     expect(state.mode).toBe("edit");
     expect(state.viewport).toBe("fluid");
-    expect(state.leftWidth).toBe(260);
-    expect(state.rightWidth).toBe(320);
   });
 });
 
@@ -165,8 +160,6 @@ describe("applyComposerAction — Composition reuse commands", () => {
       document: doc([]),
       manifest: fixtureManifest,
       saveStatus: { kind: "saved" },
-      leftWidth: 260,
-      rightWidth: 320,
     });
     const contract = {
       sourceRecordId: "source-record",
@@ -237,17 +230,14 @@ describe("applyComposerAction — selection, reveal, expansion", () => {
   });
 });
 
-describe("applyComposerAction — mode, viewport, widths, save status", () => {
-  it("setMode / setViewport / setLeftWidth / setRightWidth update verbatim and never touch the document", () => {
+describe("applyComposerAction — mode, viewport, save status", () => {
+  it("setMode / setViewport update verbatim and never touch the document", () => {
     const state = initial();
     expect(applyComposerAction(state, { type: "setMode", mode: "preview" }, ctx()).state.mode).toBe("preview");
-    expect(applyComposerAction(state, { type: "setViewport", viewport: "mobile" }, ctx()).state.viewport).toBe(
-      "mobile",
-    );
-    const widthResult = applyComposerAction(state, { type: "setLeftWidth", width: 300 }, ctx());
-    expect(widthResult.state.leftWidth).toBe(300);
-    expect(widthResult.documentChanged).toBe(false);
-    expect(widthResult.state.document).toBe(state.document);
+    const viewportResult = applyComposerAction(state, { type: "setViewport", viewport: "mobile" }, ctx());
+    expect(viewportResult.state.viewport).toBe("mobile");
+    expect(viewportResult.documentChanged).toBe(false);
+    expect(viewportResult.state.document).toBe(state.document);
   });
 
   it("setSaveStatus updates verbatim", () => {
@@ -301,14 +291,5 @@ describe("isDocumentMutation / hasUnsavedChanges", () => {
     expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "dirty" } })).toBe(true);
     expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "saving" } })).toBe(true);
     expect(hasUnsavedChanges({ ...state, saveStatus: { kind: "error", reason: "x" } })).toBe(true);
-  });
-});
-
-describe("describeSaveStatus", () => {
-  it("has concise provider-neutral wording for async persistence states", () => {
-    expect(describeSaveStatus({ kind: "saved" })).toBe("Saved");
-    expect(describeSaveStatus({ kind: "dirty" })).toBe("Unsaved changes");
-    expect(describeSaveStatus({ kind: "saving" })).toBe("Saving…");
-    expect(describeSaveStatus({ kind: "error", reason: "quota" })).toBe("Save failed");
   });
 });

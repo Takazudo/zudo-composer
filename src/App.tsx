@@ -1,8 +1,9 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
+import { Dashboard } from "./app/dashboard";
 import { createProductionProviderIntegration } from "./app/provider-integration";
-import { Home } from "./app/home";
 import { Shell } from "./app/shell";
+import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
 import { ContentRouteContent } from "./features/content";
 import { MappingRouteContent } from "./features/mapping";
@@ -34,6 +35,9 @@ export function App({ themeController }: AppProps = {}) {
   useEffect(() => () => ownedThemeController?.dispose(), [ownedThemeController]);
 
   const providers = useMemo(createProductionProviderIntegration, []);
+  // One read model for the whole chrome; the rail's counts come from it, and
+  // the Dashboard route reuses this instance rather than initializing a second.
+  const workspaceSummary = useMemo(() => createWorkspaceSummary(providers), [providers]);
   const path = window.location.pathname;
   useEffect(() => { if (path === "/sitemapper") void providers.compositionCatalog.listCompositions().catch(() => undefined); }, [path, providers]);
   if (isSitePath(path)) return <SiteDelivery providers={providers} pathname={path} />;
@@ -43,7 +47,7 @@ export function App({ themeController }: AppProps = {}) {
   else if (path === "/mapping") content = <MappingRouteContent provider={providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
   else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} />;
-  else if (path === "/") content = <Home />;
+  else if (path === "/") content = <Dashboard summary={workspaceSummary} />;
   else content = <NotFound />;
-  return <Shell path={path} themeController={activeThemeController} themeSnapshot={themeSnapshot}>{content}</Shell>;
+  return <Shell path={path} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}>{content}</Shell>;
 }
