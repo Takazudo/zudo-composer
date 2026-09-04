@@ -140,21 +140,12 @@ async function chooseFieldKind(page: Page, label: string, kind: RegExp) {
 
 /** A schema field's own `⋯` menu: Move up, Move down, Remove…. */
 async function fieldAction(page: Page, label: string, action: string) {
-  // Same discipline as chooseFieldKind, and for the same reason: this is called
-  // straight after an edit, so without waiting for the debounced autosave the
-  // menu opens into the re-render that follows it. Waiting for the item rather
-  // than clicking blind also lets the locator resolve against the live node.
   await expect(saveStatus(page)).toContainText("Saved");
   // The trigger is "Field actions for X"; the menu it opens is "X field actions".
   const menu = page.getByRole("menu", { name: `${label} field actions`, exact: true });
   const item = menu.getByRole("menuitem", { name: action, exact: true });
   const trigger = schemaRow(page, label).getByRole("button", { name: `Field actions for ${label}`, exact: true });
   await trigger.click();
-  // Reopen once if it did not appear. The row can re-render between the click
-  // and the menu mounting, which replaces the trigger element while `useMenu`
-  // still holds the old one — the menu then never opens at all. Reproduces in
-  // CI, not on a fast machine. Suspected product issue, not a test artifact.
-  if (!(await item.isVisible().catch(() => false))) await trigger.click();
   await expect(item).toBeVisible();
   await item.click();
   await expect(menu).toHaveCount(0);
