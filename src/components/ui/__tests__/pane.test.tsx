@@ -51,6 +51,12 @@ describe("PaneHeader", () => {
     expect(container.querySelector(".cms-count-badge")).toBeNull();
   });
 
+  it("can expose the title as a semantic heading", () => {
+    render(<PaneHeader title="Content" as="h1" />);
+    const heading = screen.getByRole("heading", { name: "Content", level: 1 });
+    expect(heading).toHaveClass("cms-pane__title");
+  });
+
   it("collapses a large count so the badge stays one row wide", () => {
     render(<PaneHeader title="Entries" count={1200} />);
     expect(screen.getByText("999+")).toBeInTheDocument();

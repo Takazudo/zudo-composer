@@ -272,6 +272,31 @@ export function SitemapLibrary({
     });
   };
 
+  const clearLibrary = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setOperationError(null);
+    try {
+      await provider.store.clear();
+      setOutcome({ status: "ready", summaries: [] });
+      selection.clear();
+    } catch (reason) {
+      setOperationError(message(reason, "The Sitemaps could not be cleared."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const askClear = (): void => {
+    confirm.request({
+      title: "Clear library?",
+      message: `Delete all ${summaries.length} sitemaps? This cannot be undone.`,
+      confirmLabel: "Clear library",
+      tone: "danger",
+      onConfirm: () => void clearLibrary(),
+    });
+  };
+
   const startCreate = (): void => {
     setOperationError(null);
     setDialog({ kind: "create" });
@@ -338,7 +363,17 @@ export function SitemapLibrary({
       ) : null}
       {ready && summaries.length > 0 ? (
         <>
-          <LibraryToolbar query={query} searchLabel="Filter sitemaps" searchPlaceholder="Filter by name or ID" />
+          <LibraryToolbar
+            query={query}
+            searchLabel="Filter sitemaps"
+            searchPlaceholder="Filter by name or ID"
+            end={
+              <Button size="sm" variant="ghost" disabled={busy} onClick={askClear}>
+                <TrashIcon size="sm" />
+                Clear library
+              </Button>
+            }
+          />
           <LibraryTable
             caption="Sitemaps"
             rows={query.rows}

@@ -195,6 +195,13 @@ export class MappingEditorController {
     this.set({ ...this.current, message: "Mapping deleted." });
   }
 
+  async clear(): Promise<void> {
+    await this.flush();
+    await this.provider.store.clear();
+    await this.refreshLibrary();
+    this.set({ ...this.current, phase: "ready", recoveryMessage: null, message: "Mapping library ready." });
+  }
+
   rename(name: string): void { if (name.trim()) this.edit((record) => ({ ...record, document: { ...record.document, name } })); }
 
   async selectContentModel(ref: ContentCatalogEntry["ref"]): Promise<void> {

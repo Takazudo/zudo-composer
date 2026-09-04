@@ -187,6 +187,16 @@ describe("ui.css", () => {
     for (const selector of [".cms-btn", ".cms-seg__option", ".cms-pane__tab", ".cms-input", ".cms-select", ".cms-switch", ".cms-check"]) {
       expect(block).toContain(selector);
     }
+    expect(block).toContain(".cms-check__box");
+  });
+
+  it("draws checkbox states from tokens and remains visible in forced colours", () => {
+    expect(uiCss).toContain(".cms-check__input:checked + .cms-check__box");
+    expect(uiCss).toContain(".cms-check__input:indeterminate + .cms-check__box");
+    expect(uiCss).toContain(".cms-check__input:focus-visible + .cms-check__box");
+    expect(uiCss).toContain("@media (forced-colors: active)");
+    expect(uiCss).toContain("background: var(--color-surface)");
+    expect(uiCss).toContain("background: var(--color-accent)");
   });
 });
 

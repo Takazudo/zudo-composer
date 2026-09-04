@@ -73,6 +73,7 @@ const SORTS: readonly LibrarySort<MappingSummary>[] = [
 
 export function MappingLibrary({ state, controller, navigate, notice, error, run }: MappingLibraryProps): JSX.Element {
   const [creating, setCreating] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const confirm = useLibraryConfirm();
   const summaries = state.mappings;
   const details = state.libraryDetails;
@@ -126,6 +127,26 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
     confirmLabel: "Delete",
     tone: "danger",
     onConfirm: () => remove(ids),
+  });
+
+  const clearLibrary = () => {
+    if (clearing) return;
+    setClearing(true);
+    run(async () => {
+      try {
+        await controller.clear();
+      } finally {
+        setClearing(false);
+      }
+    });
+  };
+
+  const askClear = () => confirm.request({
+    title: "Clear library?",
+    message: `Delete all ${summaries.length} mappings? This cannot be undone.`,
+    confirmLabel: "Clear library",
+    tone: "danger",
+    onConfirm: clearLibrary,
   });
 
   const canCreate = state.contentModels.length > 0 && state.compositions.length > 0;
@@ -192,7 +213,17 @@ export function MappingLibrary({ state, controller, navigate, notice, error, run
       ) : null}
       {ready && summaries.length > 0 ? (
         <>
-          <LibraryToolbar query={query} searchLabel="Filter mappings" searchPlaceholder="Filter by name or ID" />
+          <LibraryToolbar
+            query={query}
+            searchLabel="Filter mappings"
+            searchPlaceholder="Filter by name or ID"
+            end={
+              <Button size="sm" variant="ghost" disabled={clearing} onClick={askClear}>
+                <TrashIcon size="sm" />
+                Clear library
+              </Button>
+            }
+          />
           <LibraryTable
             caption="Mappings"
             rows={query.rows}

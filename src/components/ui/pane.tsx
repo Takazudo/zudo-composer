@@ -24,6 +24,8 @@ export function Pane({ variant = "default", label, class: className, children }:
 
 export interface PaneHeaderProps {
   title: ComponentChildren;
+  /** The semantic element for the title; most pane titles remain spans. */
+  as?: "span" | "h1";
   count?: number;
   /** Trailing controls, pushed to the inline end. */
   actions?: ComponentChildren;
@@ -31,10 +33,11 @@ export interface PaneHeaderProps {
   children?: ComponentChildren;
 }
 
-export function PaneHeader({ title, count, actions, class: className, children }: PaneHeaderProps) {
+export function PaneHeader({ title, as = "span", count, actions, class: className, children }: PaneHeaderProps) {
+  const Title = as;
   return (
     <div class={cx("cms-pane__header", className)}>
-      <span class="cms-pane__title">{title}</span>
+      <Title class="cms-pane__title">{title}</Title>
       {count === undefined ? null : <CountBadge count={count} />}
       {children}
       {actions ? <div class="cms-pane__header-actions">{actions}</div> : null}

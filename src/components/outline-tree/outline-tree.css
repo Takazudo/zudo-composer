@@ -257,6 +257,10 @@
   white-space: nowrap;
 }
 
+@media (min-width: 64rem) {
+  .cms-tree-title { min-width: min(100%, 18ch); }
+}
+
 .cms-tree-group__row { font-weight: 650; }
 .cms-tree-leaf:hover,
 .cms-tree-group__row:hover,

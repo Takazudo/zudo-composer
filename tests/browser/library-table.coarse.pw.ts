@@ -30,6 +30,12 @@ async function openSitemapLibrary(page: Page): Promise<void> {
   await expect(page.getByRole("link", { name: SAMPLE_SITEMAP, exact: true })).toHaveCount(1);
 }
 
+async function openMappingLibrary(page: Page): Promise<void> {
+  await page.goto("/mapping");
+  await expect(page.getByRole("heading", { name: "Mappings", exact: true })).toBeVisible();
+  await expect(page.locator(".cms-table-scroll-shell")).toHaveCount(1);
+}
+
 test("the coarse lane is genuinely coarse, or nothing below proves anything", async ({ page }) => {
   await page.goto("/");
   expect(
@@ -97,4 +103,40 @@ test("the library does not scroll sideways at 390px — the table scrolls inside
     };
   });
   expect(overflow, "the sitemap library scrolls horizontally").toBeNull();
+});
+
+test("the mapping table signals each horizontal scroll edge without blocking its sticky header", async ({ page }) => {
+  await openMappingLibrary(page);
+
+  const shell = page.locator(".cms-table-scroll-shell");
+  const scrollport = page.locator(".cms-table-wrap");
+  await expect(shell).toHaveAttribute("data-scroll-edge", "end");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+  const hit = await page.evaluate(() => {
+    const shellElement = document.querySelector<HTMLElement>(".cms-table-scroll-shell");
+    const headers = [...document.querySelectorAll<HTMLElement>(".cms-table th")];
+    if (!shellElement || headers.length === 0) return null;
+    const shellRect = shellElement.getBoundingClientRect();
+    const headerRect = headers[0]!.getBoundingClientRect();
+    const x = shellRect.right - 12;
+    const y = headerRect.top + headerRect.height / 2;
+    const hitHeader = document.elementFromPoint(x, y)?.closest("th");
+    const index = hitHeader ? headers.indexOf(hitHeader as HTMLElement) : -1;
+    return { index, x, y };
+  });
+  expect(hit, "no sticky header cell was hit beneath the end fade").not.toBeNull();
+  expect(hit!.index, "the end fade intercepted sticky-header hit testing").toBeGreaterThanOrEqual(0);
+  const hitHeader = page.locator(".cms-table th").nth(hit!.index);
+  const hitHeaderBox = await hitHeader.boundingBox();
+  expect(hitHeaderBox).not.toBeNull();
+  await hitHeader.click({
+    position: { x: hit!.x - hitHeaderBox!.x, y: hit!.y - hitHeaderBox!.y },
+  });
+
+  await scrollport.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+  await expect(shell).toHaveAttribute("data-scroll-edge", "start");
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(shell).toHaveAttribute("data-scroll-edge", "none");
 });
