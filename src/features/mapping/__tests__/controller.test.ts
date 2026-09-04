@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMappingRecord } from "../../../mapping";
 import {
   COMPOSITION_REF,
@@ -53,6 +53,19 @@ describe("MappingEditorController", () => {
     expect(copy.document.bindings).toEqual(source.document.bindings);
     expect(h.records.get(source.id)!.document.name).toBe("Article Mapping");
     expect(h.controller.state.mappings.map((summary) => summary.id).sort()).toEqual([duplicateId, source.id].sort());
+  });
+
+  it("clears every stored Mapping and refreshes the library summaries", async () => {
+    const h = harness([mappingRecord([], "mapping-1", "First"), mappingRecord([], "mapping-2", "Second")]);
+    const clear = vi.spyOn(h.provider.store, "clear");
+    await h.controller.initialize();
+
+    await h.controller.clear();
+
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(h.records.size).toBe(0);
+    expect(h.controller.state.mappings).toEqual([]);
+    expect(h.controller.state.libraryDetails).toEqual({});
   });
 
   it("refuses to create or duplicate onto an id that already exists", async () => {
