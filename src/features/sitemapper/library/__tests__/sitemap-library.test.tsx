@@ -177,6 +177,33 @@ describe("Sitemaps library", () => {
     expect(screen.queryByText("2 sitemaps selected")).toBeNull();
   });
 
+  it("clears the library behind the shared confirmation", async () => {
+    const setup = provider([record(), record("brand-map", "Brand map", false)]);
+    const clear = vi.spyOn(setup.provider.store, "clear");
+    render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Clear library" }));
+    const confirm = await screen.findByRole("alertdialog", { name: "Clear library?" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Clear library" }));
+
+    await waitFor(() => expect(clear).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("No sitemaps yet")).toBeInTheDocument();
+  });
+
+  it("leaves the Sitemap library untouched when clearing is cancelled", async () => {
+    const setup = provider([record()]);
+    const clear = vi.spyOn(setup.provider.store, "clear");
+    render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Clear library" }));
+    const confirm = await screen.findByRole("alertdialog", { name: "Clear library?" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+
+    expect(clear).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "Product map" })).toBeInTheDocument();
+    expect(setup.records.size).toBe(1);
+  });
+
   it("keeps the records readable behind the recovery banner and confirms Start fresh", async () => {
     const setup = provider([record()]);
     setup.provider.initialization.initialize = async () => ({
