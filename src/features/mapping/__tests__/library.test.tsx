@@ -81,7 +81,7 @@ function twoOfEach(workspace: MappingHarness): { reorder: () => void } {
   return { reorder: () => { flipped = true; } };
 }
 
-describe("Mapping library", () => {
+describe("Mappings", () => {
   it("shows each Mapping's source, target, bindings and readiness on one row", async () => {
     const { container } = await library();
 
@@ -113,8 +113,8 @@ describe("Mapping library", () => {
     const navigate = vi.fn();
     renderApp(workspace, navigate);
 
-    fireEvent.click(screen.getByRole("button", { name: "New Mapping" }));
-    const dialog = await screen.findByRole("dialog", { name: "Create Mapping" });
+    fireEvent.click(screen.getByRole("button", { name: "New mapping" }));
+    const dialog = await screen.findByRole("dialog", { name: "Create mapping" });
 
     // Pick the second entry of each list.
     fireEvent.change(within(dialog).getByRole("combobox", { name: "Content model" }), { target: { value: "content-indexeddb/model-2" } });
@@ -142,14 +142,14 @@ describe("Mapping library", () => {
     await workspace.controller.initialize();
     renderApp(workspace, vi.fn());
 
-    fireEvent.click(screen.getByRole("button", { name: "New Mapping" }));
-    const dialog = await screen.findByRole("dialog", { name: "Create Mapping" });
+    fireEvent.click(screen.getByRole("button", { name: "New mapping" }));
+    const dialog = await screen.findByRole("dialog", { name: "Create mapping" });
     const name = within(dialog).getByRole("textbox", { name: "Name" });
     expect(name).toHaveValue("Untitled Mapping");
 
     fireEvent.input(name, { target: { value: "  " } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
-    expect(within(dialog).getByText("Enter a Mapping name.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Enter a mapping name.")).toBeInTheDocument();
     expect(workspace.records.size).toBe(0);
 
     fireEvent.input(name, { target: { value: "Guide Mapping" } });
@@ -188,7 +188,7 @@ describe("Mapping library", () => {
 
     const banner = await screen.findByText(/was not found in provider/);
     expect(banner).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Mapping library" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mappings" })).toBeInTheDocument();
 
     // The library is still usable behind the notice.
     expect(screen.getByRole("link", { name: "Article Mapping" })).toBeInTheDocument();
@@ -209,6 +209,6 @@ describe("Mapping library", () => {
     renderApp(workspace, vi.fn(), "?provider=mapping-indexeddb&mapping=mapping-1");
 
     expect(await screen.findByRole("textbox", { name: "Mapping name" })).toHaveValue("Article Mapping");
-    expect(screen.queryByRole("heading", { name: "Mapping library" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Mappings" })).toBeNull();
   });
 });

@@ -80,7 +80,7 @@ export function NewMappingDialog({
   return (
     <Dialog
       open={open}
-      title="Create Mapping"
+      title="Create mapping"
       initialFocusRef={nameRef}
       dismissOnBackdrop={!busy}
       onClose={() => {
@@ -97,9 +97,9 @@ export function NewMappingDialog({
         </>
       }
     >
-      <p class="cms-dialog__message">A Mapping reads one Content model and writes one Composition.</p>
+      <p class="cms-dialog__message">A mapping reads one Content model and writes one Composition.</p>
       {error ? <Banner tone="err">{error}</Banner> : null}
-      <Field label="Name" error={missing ? "Enter a Mapping name." : undefined}>
+      <Field label="Name" error={missing ? "Enter a mapping name." : undefined}>
         <Input
           elementRef={nameRef}
           value={name}

@@ -247,7 +247,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await expect(page).toHaveURL(/\/content\?model=about-content&entry=/);
 
   await page.goto("/mapping");
-  await expect(page.getByRole("heading", { name: "Mapping library" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
   // The card's composite name became a row: three bindings and Ready are two
   // columns now, and opening the record is a real navigation to its own URL.
   const aboutMapping = mappingRow(page, "About page mapping");
@@ -432,7 +432,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   });
 
   await page.goto("/mapping");
-  await expect(page.getByRole("heading", { name: "Mapping library" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
   await page.reload();
   const journalMapping = mappingRow(page, COLLECTION_MAPPING);
   await expect(journalMapping.getByRole("cell").filter({ hasText: /^4$/ })).toHaveCount(1);
@@ -513,8 +513,8 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(COLLECTION_MAPPING);
 
   await page.getByRole("link", { name: "Back to Mappings" }).click();
-  await page.getByRole("button", { name: "New Mapping" }).click();
-  const createMappingDialog = page.getByRole("dialog", { name: "Create Mapping" });
+  await page.getByRole("button", { name: "New mapping" }).click();
+  const createMappingDialog = page.getByRole("dialog", { name: "Create mapping" });
   await createMappingDialog.getByRole("textbox", { name: "Name" }).fill(SINGLE_MAPPING);
   await selectOptionMatching(createMappingDialog.getByRole("combobox", { name: "Content model" }), /Browser Site settings · single/);
   await createMappingDialog.getByRole("button", { name: "Create" }).click();
