@@ -28,7 +28,7 @@ export interface NewMappingDialogProps {
   onClose: () => void;
 }
 
-const DEFAULT_NAME = "Untitled Mapping";
+const DEFAULT_NAME = "Untitled mapping";
 
 export function NewMappingDialog({
   open,

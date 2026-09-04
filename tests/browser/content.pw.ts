@@ -315,9 +315,9 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(lockedKinds.getByText("Type locked · stored Entries use it")).toBeVisible();
   await expect(lockedKinds.getByRole("menuitemradio", { name: /^Date/ })).toBeDisabled();
   // One whole accessible name, so the separator between the row's `<strong>`
-  // label and its `<small>` sentence is proved rather than assumed. Its
-  // `textContent` has no separator; a spec reading that instead would conclude
-  // the name runs together, and every `\b` anchor above would look impossible.
+  // label and its `<small>` sentence is proved rather than assumed. The row's
+  // `textContent` carries none, and a spec that measured that instead would
+  // conclude the name runs together — which is what this file used to claim.
   await expect(lockedKinds.getByRole("menuitemradio").first()).toHaveAccessibleName(
     "Short text A single line for names, titles, and concise copy.",
   );

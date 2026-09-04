@@ -47,7 +47,6 @@ function code(line) {
 }
 
 const styleSheets = [
-  "src/base.css",
   ...find("src", "-name", "*.css"),
   ...find("node_modules/@zudo-sg/ui/styles", "-name", "*.css"),
 ];

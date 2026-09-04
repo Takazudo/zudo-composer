@@ -81,7 +81,7 @@ function twoOfEach(workspace: MappingHarness): { reorder: () => void } {
   return { reorder: () => { flipped = true; } };
 }
 
-describe("Mappings", () => {
+describe("Mapping library", () => {
   it("shows each Mapping's source, target, bindings and readiness on one row", async () => {
     const { container } = await library();
 
@@ -145,7 +145,7 @@ describe("Mappings", () => {
     fireEvent.click(screen.getByRole("button", { name: "New mapping" }));
     const dialog = await screen.findByRole("dialog", { name: "Create mapping" });
     const name = within(dialog).getByRole("textbox", { name: "Name" });
-    expect(name).toHaveValue("Untitled Mapping");
+    expect(name).toHaveValue("Untitled mapping");
 
     fireEvent.input(name, { target: { value: "  " } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
