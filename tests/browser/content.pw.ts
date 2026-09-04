@@ -674,6 +674,7 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   expect(paneBodies.length).toBeGreaterThan(0);
   expect(paneBodies.every((overflowY) => overflowY === "auto")).toBe(true);
   await expect(page.locator(".cms-topbar")).toHaveCSS("height", "48px");
+  await expect(contentNav(page).getByRole("heading", { name: "Content", exact: true })).toBeVisible();
 
   const themeColors: string[] = [];
   for (const theme of ["light", "dark"] as const) {
@@ -692,8 +693,13 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   // `EditorChrome` replaced the route's own tablist with the shared pane
   // switch. Scoped to the group: the toolbar also carries a Preview button.
   const contentPaneSwitch = page.getByRole("radiogroup", { name: "Pane" });
-  await expectArrowRadios(page, contentPaneSwitch, ["Content", "Editor", "Preview"]);
+  await expectArrowRadios(page, contentPaneSwitch, ["Content", "Entry", "Preview"]);
   await expect(contentPaneSwitch.getByRole("radio").first()).toHaveCSS("outline-width", "2px");
+  await expectNoHorizontalOverflow(page);
+
+  await page.getByRole("button", { name: "More Content actions" }).click();
+  await page.getByRole("menu", { name: "Content actions" }).getByRole("menuitem", { name: "Edit schema", exact: true }).click();
+  await expect(page.locator(".cms-editor__region--main .cms-pane__title")).toHaveText("Schema");
   await expectNoHorizontalOverflow(page);
 
   const cdp = await page.context().newCDPSession(page);

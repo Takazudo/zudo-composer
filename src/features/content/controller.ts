@@ -13,11 +13,11 @@ import {
   type ContentProvider,
 } from "../../content";
 import { createUuidIdFactory, type IdFactory } from "../../shared";
-import { createSaveQueue, type SaveQueue, type SaveQueueState } from "../../shared/persistence";
+import { createSaveQueue, type SaveQueue } from "../../shared/persistence";
 
 export const CONTENT_ENTRY_PAGE_SIZE = 25;
 export type ContentWorkMode = "entries" | "model-fields";
-export type ContentSaveStatus = "saved" | "dirty" | "saving" | "error";
+export type ContentSaveStatus = "pristine" | "saved" | "dirty" | "saving" | "error";
 
 export interface ContentAuthoringState {
   phase: "idle" | "loading" | "ready" | "recovery" | "error";
@@ -43,10 +43,10 @@ export interface ContentAuthoringState {
 
 const initialState: ContentAuthoringState = {
   phase: "idle", models: [], entryCounts: {}, incompleteCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
-  workMode: "entries", saveStatus: "saved", message: "", recoveryMessage: null,
+  workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null,
 };
 
-function queueStatus(state: SaveQueueState<ContentModelRecord> | SaveQueueState<ContentEntryRecord>): ContentSaveStatus {
+function queueStatus(state: { status: Exclude<ContentSaveStatus, "pristine"> }): Exclude<ContentSaveStatus, "pristine"> {
   return state.status;
 }
 
@@ -98,7 +98,7 @@ export class ContentAuthoringController {
     ]);
     this.installModelQueue(outcome.record);
     this.set({ ...this.current, phase: "ready", model: outcome.record, entries: page.entries, entry: null,
-      usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, workMode: "entries", message: "Model loaded.",
+      usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, workMode: "entries", saveStatus: "pristine", message: "Model loaded.",
       entryCounts: { ...this.current.entryCounts, [id]: snapshot.count },
       incompleteCounts: { ...this.current.incompleteCounts, [id]: incompleteEntryCount(outcome.record, snapshot.entries) } });
     if (outcome.record.document.kind === "single" && page.entries[0]) await this.openEntry(page.entries[0].id);
@@ -114,7 +114,12 @@ export class ContentAuthoringController {
   async reloadEntries(): Promise<void> {
     const model = this.requireModel(); const selectedId = this.current.entry?.id;
     await this.flushSessions();
-    if (this.entryQueue) { await this.entryQueue.close(); this.unsubscribeEntry?.(); this.entryQueue = null; this.unsubscribeEntry = null; }
+    if (this.entryQueue) {
+      const queue = this.entryQueue;
+      this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
+      this.entryQueue = null;
+      await queue.close();
+    }
     const [page, snapshot] = await Promise.all([
       this.provider.store.pageEntries(model.id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
       this.provider.store.scanEntries(model.id),
@@ -164,7 +169,10 @@ export class ContentAuthoringController {
     await this.provider.store.removeField(model.id, fieldId);
     const outcome = await this.provider.store.getModel(model.id);
     if (outcome.status !== "loaded") throw new Error("The updated model could not be reloaded.");
-    await this.entryQueue?.close(); this.entryQueue = null; this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
+    const entryQueue = this.entryQueue;
+    this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
+    this.entryQueue = null;
+    await entryQueue?.close();
     this.installModelQueue(outcome.record);
     const [page, snapshot] = await Promise.all([
       this.provider.store.pageEntries(model.id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
@@ -201,19 +209,32 @@ export class ContentAuthoringController {
 
   async openEntry(id: string): Promise<void> {
     if (this.current.entry?.id === id) return;
-    if (this.entryQueue) { await this.entryQueue.flush(); await this.entryQueue.close(); this.unsubscribeEntry?.(); }
+    if (this.entryQueue) {
+      const queue = this.entryQueue;
+      await queue.flush();
+      this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
+      this.entryQueue = null;
+      await queue.close();
+    }
     const outcome = await this.provider.store.getEntry(id);
     if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Entry was not found." : "This Entry is unreadable and has been preserved.");
     this.entryQueue = createSaveQueue({ ref: { providerId: this.provider.descriptor.id, recordId: outcome.record.id }, initialRecord: outcome.record,
       write: ({ record }) => this.provider.store.putEntry(record) });
-    this.unsubscribeEntry = this.entryQueue.subscribe((state) => this.set({ ...this.current, saveStatus: queueStatus(state),
-      message: state.status === "error" ? state.error.message : state.status === "saved" ? "All changes saved." : state.status === "saving" ? "Saving changes…" : "Unsaved changes." }));
-    this.set({ ...this.current, entry: outcome.record, workMode: "entries" });
+    this.unsubscribeEntry = this.subscribeQueue(this.entryQueue);
+    // Queue construction publishes its initial `saved` state synchronously;
+    // that only says the persisted record was loaded, not that this route has
+    // authored a change during this session.
+    this.set({ ...this.current, entry: outcome.record, workMode: "entries", saveStatus: "pristine", message: "Entry loaded." });
   }
 
   async inspectSchema(): Promise<void> {
-    if (this.entryQueue) { await this.entryQueue.flush(); await this.entryQueue.close(); this.unsubscribeEntry?.(); }
-    this.entryQueue = null; this.unsubscribeEntry = null;
+    if (this.entryQueue) {
+      const queue = this.entryQueue;
+      await queue.flush();
+      this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
+      this.entryQueue = null;
+      await queue.close();
+    }
     this.set({ ...this.current, entry: null, workMode: "model-fields", message: "Model fields ready." });
   }
 
@@ -236,7 +257,13 @@ export class ContentAuthoringController {
   }
 
   async deleteEntry(id: string): Promise<void> {
-    if (this.current.entry?.id === id && this.entryQueue) { await this.entryQueue.flush(); await this.entryQueue.close(); this.entryQueue = null; this.unsubscribeEntry?.(); }
+    if (this.current.entry?.id === id && this.entryQueue) {
+      const queue = this.entryQueue;
+      await queue.flush();
+      this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
+      this.entryQueue = null;
+      await queue.close();
+    }
     await this.provider.store.deleteEntry(id);
     const model = this.current.model;
     const snapshot = model ? await this.provider.store.scanEntries(model.id) : null;
@@ -281,12 +308,35 @@ export class ContentAuthoringController {
     this.unsubscribeModel?.(); void this.modelQueue?.close();
     this.modelQueue = createSaveQueue({ ref: { providerId: this.provider.descriptor.id, recordId: record.id }, initialRecord: record,
       write: ({ record: draft }) => this.provider.store.putModel(draft) });
-    this.unsubscribeModel = this.modelQueue.subscribe((state) => this.set({ ...this.current, saveStatus: queueStatus(state),
-      message: state.status === "error" ? state.error.message : state.status === "saved" ? "All changes saved." : state.status === "saving" ? "Saving changes…" : "Unsaved changes." }));
+    this.unsubscribeModel = this.subscribeQueue(this.modelQueue);
   }
   private async closeQueues(): Promise<void> {
-    await this.entryQueue?.close(); await this.modelQueue?.close(); this.unsubscribeEntry?.(); this.unsubscribeModel?.();
-    this.entryQueue = null; this.modelQueue = null; this.unsubscribeEntry = null; this.unsubscribeModel = null;
+    const entryQueue = this.entryQueue;
+    const modelQueue = this.modelQueue;
+    this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
+    this.unsubscribeModel?.(); this.unsubscribeModel = null;
+    this.entryQueue = null;
+    this.modelQueue = null;
+    await entryQueue?.close(); await modelQueue?.close();
+  }
+
+  /**
+   * Queue subscriptions deliver `saved` immediately for revision zero. That
+   * initial delivery is a load acknowledgement, not an authored save, so the
+   * Content route exposes it as pristine. Every later queue transition keeps
+   * the normal saved/dirty/saving/error vocabulary.
+   */
+  private subscribeQueue<TRecord extends ContentModelRecord | ContentEntryRecord>(queue: SaveQueue<TRecord>): () => void {
+    let initial = true;
+    return queue.subscribe((state) => {
+      if (initial) {
+        initial = false;
+        this.set({ ...this.current, saveStatus: "pristine" });
+        return;
+      }
+      this.set({ ...this.current, saveStatus: queueStatus(state),
+        message: state.status === "error" ? state.error.message : state.status === "saved" ? "All changes saved." : state.status === "saving" ? "Saving changes…" : "Unsaved changes." });
+    });
   }
   /**
    * Fill in the navigator's warn dots after the library is already usable.

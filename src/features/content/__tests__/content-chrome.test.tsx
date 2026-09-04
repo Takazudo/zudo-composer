@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ContentApp } from "../content-app";
+import { createContentAuthoringController } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
 
 // Vitest runs without `globals`, so Testing Library never installs its own
@@ -19,6 +20,10 @@ async function openArticles() {
   fireEvent.click(within(tree).getByRole("treeitem", { name: /^Articles/ }));
   await within(tree).findByRole("treeitem", { name: /^Hello/ });
   return tree;
+}
+
+function unload(): boolean {
+  return !window.dispatchEvent(new Event("beforeunload", { cancelable: true }));
 }
 
 describe("Content route intents", () => {
@@ -86,11 +91,37 @@ describe("Content navigator and toolbar", () => {
     await waitFor(() => expect(within(tree).getByRole("treeitem", { name: /^Articles/ })).toHaveTextContent("1 incomplete"));
   });
 
-  it("keeps Save disabled while clean, because autosave already landed the change", async () => {
+  it("keeps Save disabled before the first edit, with no false Saved state", async () => {
     await openArticles();
     const save = screen.getByRole("button", { name: "Save" });
     expect(save).toBeDisabled();
-    expect(save).toHaveAttribute("title", "All changes saved");
+    expect(save).toHaveAttribute("title", "No changes to save");
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(unload()).toBe(false);
+  });
+
+  it("offers the other authoring mode from the overflow menu", async () => {
+    await openArticles();
+    fireEvent.click(screen.getByRole("button", { name: "More Content actions" }));
+    fireEvent.click(within(screen.getByRole("menu", { name: "Content actions" })).getByRole("menuitem", { name: "Edit schema" }));
+
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Editor" })).getByText("Schema", { exact: true })).toBeVisible());
+  });
+
+  it("arms the unload guard and Save after a real edit", async () => {
+    const provider = createMemoryContentProvider({ failWrites: true });
+    const controller = createContentAuthoringController(provider);
+    render(<ContentApp provider={provider} controller={controller} />);
+    const tree = await screen.findByRole("tree", { name: "Content" });
+    fireEvent.click(within(tree).getByRole("treeitem", { name: /^Articles/ }));
+    const entry = await within(tree).findByRole("treeitem", { name: /^Hello/ });
+    fireEvent.click(entry);
+    const title = await screen.findByRole("textbox", { name: "Title", exact: true });
+    fireEvent.input(title, { target: { value: "Failed edit" } });
+
+    await waitFor(() => expect(controller.state.saveStatus).toBe("error"));
+    expect(unload()).toBe(true);
+    expect(screen.getByRole("button", { name: "Save" })).not.toBeDisabled();
   });
 
   it("renames the open Entry from the toolbar title, and the navigator follows", async () => {
