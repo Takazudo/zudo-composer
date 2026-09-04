@@ -140,8 +140,18 @@ async function chooseFieldKind(page: Page, label: string, kind: RegExp) {
 
 /** A schema field's own `⋯` menu: Move up, Move down, Remove…. */
 async function fieldAction(page: Page, label: string, action: string) {
+  // Same discipline as chooseFieldKind, and for the same reason: this is called
+  // straight after an edit, so without waiting for the debounced autosave the
+  // menu opens into the re-render that follows it. Waiting for the item rather
+  // than clicking blind also lets the locator resolve against the live node.
+  await expect(saveStatus(page)).toContainText("Saved");
+  // The trigger is "Field actions for X"; the menu it opens is "X field actions".
+  const menu = page.getByRole("menu", { name: `${label} field actions`, exact: true });
+  const item = menu.getByRole("menuitem", { name: action, exact: true });
   await schemaRow(page, label).getByRole("button", { name: `Field actions for ${label}`, exact: true }).click();
-  await page.getByRole("menuitem", { name: action, exact: true }).click();
+  await expect(item).toBeVisible();
+  await item.click();
+  await expect(menu).toHaveCount(0);
 }
 
 /** A binding's own `⋯` menu: Move up, Move down, Remove binding. */
