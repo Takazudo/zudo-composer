@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFilesystemCompositionStore } from "../../src/composer/storage/filesystem";
 import { createFilesystemMediaStore } from "../../src/media/storage/filesystem";
@@ -17,8 +17,10 @@ import plugin, {
   MEDIA_FILE_PROVIDER_ENDPOINT,
   MEDIA_FILE_PROVIDER_FILE_NAME_HEADER,
   MEDIA_FILE_PROVIDER_OPERATION_HEADER,
+  MEDIA_FILE_PROVIDER_ROOT,
   MEDIA_UPLOAD_MAX_BYTES,
   createComposerFileProviderMiddleware,
+  createMediaFileMiddleware,
   createMediaUploadMiddleware,
 } from "../composer-file-provider-plugin.mjs";
 
@@ -424,6 +426,8 @@ describe("media upload request boundary and core integration", () => {
 });
 
 describe("dev/build registration boundary", () => {
+  type RegisteredMiddleware = (request: unknown, response: unknown, next: () => unknown) => unknown;
+
   function setupSource(command: "serve" | "build") {
     const instance = plugin();
     instance.configResolved({ command, root: sandbox });
@@ -433,6 +437,215 @@ describe("dev/build registration boundary", () => {
     if (typeof source !== "string") throw new Error("expected synchronous virtual module");
     return { instance, source };
   }
+
+  async function invokeRegistered(
+    middlewares: readonly RegisteredMiddleware[],
+    requestStream: unknown,
+    response: unknown,
+    finalNext: () => unknown = () => undefined,
+  ) {
+    let index = 0;
+    const dispatch = async (): Promise<void> => {
+      const middleware = middlewares[index++];
+      if (middleware === undefined) {
+        await finalNext();
+        return;
+      }
+      await middleware(requestStream, response, dispatch);
+    };
+    await dispatch();
+  }
+
+  async function setupServeServer() {
+    const { instance, source } = setupSource("serve");
+    const middlewares: RegisteredMiddleware[] = [];
+    const ssrLoadModule = vi.fn().mockResolvedValue({
+      createFilesystemCompositionStore,
+      createFilesystemMediaStore,
+      validateCompositionRecord,
+    });
+    await instance.configureServer?.({
+      middlewares: { use(value: RegisteredMiddleware) { middlewares.push(value); } },
+      ssrLoadModule,
+    } as never);
+    expect(middlewares).toHaveLength(3);
+    return { instance, source, middlewares, ssrLoadModule };
+  }
+
+  function mediaRequest(method: string, url: string) {
+    const requestStream = Readable.from([]) as Readable & { method?: string; url?: string; headers: Record<string, string> };
+    requestStream.method = method;
+    requestStream.url = url;
+    requestStream.headers = {};
+    return requestStream;
+  }
+
+  function mediaResponse() {
+    const response = new PassThrough() as PassThrough & {
+      statusCode: number;
+      headers: Record<string, string>;
+      headersSent: boolean;
+      setHeader(name: string, value: string): void;
+    };
+    response.statusCode = 0;
+    response.headers = {};
+    response.headersSent = false;
+    response.setHeader = (name, value) => { response.headers[name] = String(value); };
+    return response;
+  }
+
+  async function responseBytes(response: PassThrough) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of response) chunks.push(Buffer.from(chunk));
+    return Buffer.concat(chunks);
+  }
+
+  async function writeMediaBytes(fileName: string, bytes: Uint8Array) {
+    const bytesRoot = join(sandbox, MEDIA_FILE_PROVIDER_ROOT, "public", "uploaded-media");
+    await mkdir(bytesRoot, { recursive: true });
+    await writeFile(join(bytesRoot, fileName), bytes);
+  }
+
+  describe("uploaded-media direct serving", () => {
+    it("serves files created after middleware registration with the stored byte type", async () => {
+      const { middlewares } = await setupServeServer();
+      const variants = [
+        ["png", "image/png", Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 1])],
+        ["jpg", "image/jpeg", Uint8Array.from([0xff, 0xd8, 0xff, 2])],
+        ["gif", "image/gif", Uint8Array.from([0x47, 0x49, 0x46, 0x38, 3])],
+        ["webp", "image/webp", Uint8Array.from([0x52, 0x49, 0x46, 0x46, 4])],
+        ["pdf", "application/pdf", Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 5])],
+      ] as const;
+
+      for (const [extension, contentType, bytes] of variants) {
+        const fileName = `media-${extension}.${extension}`;
+        await writeMediaBytes(fileName, bytes);
+        const response = mediaResponse();
+        await invokeRegistered(middlewares, mediaRequest("GET", `/uploaded-media/${fileName}?cache=after-upload`), response);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.headers).toEqual({
+          "content-type": contentType,
+          "content-length": String(bytes.byteLength),
+          "cache-control": "no-cache",
+        });
+        await expect(responseBytes(response)).resolves.toEqual(Buffer.from(bytes));
+      }
+    });
+
+    it("returns headers and no body for HEAD", async () => {
+      const { middlewares } = await setupServeServer();
+      const bytes = Uint8Array.from([1, 2, 3, 4]);
+      await writeMediaBytes("media-head.pdf", bytes);
+      const response = mediaResponse();
+
+      await invokeRegistered(middlewares, mediaRequest("HEAD", "/uploaded-media/media-head.pdf"), response);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers).toEqual({
+        "content-type": "application/pdf",
+        "content-length": String(bytes.byteLength),
+        "cache-control": "no-cache",
+      });
+      await expect(responseBytes(response)).resolves.toEqual(Buffer.alloc(0));
+    });
+
+    it("passes missing files to the next middleware without writing a response", async () => {
+      const { middlewares } = await setupServeServer();
+      const response = mediaResponse();
+      const next = vi.fn();
+
+      await invokeRegistered(middlewares, mediaRequest("GET", "/uploaded-media/media-missing.png"), response, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(response.statusCode).toBe(0);
+      expect(response.headers).toEqual({});
+      expect(response.readableLength).toBe(0);
+    });
+
+    it("rejects unsafe names before touching the filesystem", async () => {
+      const lstat = vi.fn();
+      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, operations: { lstat } });
+      const unsafeUrls = [
+        "/uploaded-media/../x",
+        "/uploaded-media/media-a.png/../b.png",
+        "/uploaded-media/%2e%2e",
+        "/uploaded-media/media-%2e%2e.png",
+        "/uploaded-media/.media-x.png",
+        "/uploaded-media/nested/media-x.png",
+      ];
+
+      for (const url of unsafeUrls) {
+        const next = vi.fn();
+        await invokeRegistered([middleware], mediaRequest("GET", url), mediaResponse(), next);
+        expect(next).toHaveBeenCalledTimes(1);
+      }
+      expect(lstat).not.toHaveBeenCalled();
+    });
+
+    it("rejects names outside the store byte pattern", async () => {
+      const lstat = vi.fn();
+      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, operations: { lstat } });
+      const overlongId = "a".repeat(129);
+      const driftedUrls = [
+        "/uploaded-media/media-_a.png",
+        "/uploaded-media/media-a_.png",
+        "/uploaded-media/media--a.png",
+        "/uploaded-media/media-a-.png",
+        "/uploaded-media/media-A.png",
+        `/uploaded-media/media-${overlongId}.png`,
+        "/uploaded-media/media-a.bmp",
+      ];
+
+      for (const url of driftedUrls) {
+        const next = vi.fn();
+        await invokeRegistered([middleware], mediaRequest("GET", url), mediaResponse(), next);
+        expect(next).toHaveBeenCalledTimes(1);
+      }
+      expect(lstat).not.toHaveBeenCalled();
+    });
+
+    it("passes POST requests to the next middleware", async () => {
+      const lstat = vi.fn();
+      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, operations: { lstat } });
+      const next = vi.fn();
+
+      await invokeRegistered([middleware], mediaRequest("POST", "/uploaded-media/media-post.png"), mediaResponse(), next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(lstat).not.toHaveBeenCalled();
+    });
+
+    it("passes symlinks and directories to the next middleware", async () => {
+      const bytesRoot = join(sandbox, MEDIA_FILE_PROVIDER_ROOT, "public", "uploaded-media");
+      await mkdir(bytesRoot, { recursive: true });
+      const outside = join(sandbox, "outside-media.png");
+      await writeFile(outside, Buffer.from("outside"));
+      await symlink(outside, join(bytesRoot, "media-link.png"));
+      await mkdir(join(bytesRoot, "media-directory.png"));
+      const middleware = createMediaFileMiddleware({ projectRoot: sandbox });
+
+      for (const fileName of ["media-link.png", "media-directory.png"]) {
+        const next = vi.fn();
+        await invokeRegistered([middleware], mediaRequest("GET", `/uploaded-media/${fileName}`), mediaResponse(), next);
+        expect(next).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it("returns a plain-text 500 for non-missing open failures", async () => {
+      await writeMediaBytes("media-denied.png", Uint8Array.from([1, 2, 3]));
+      const open = vi.fn().mockRejectedValue(Object.assign(new Error("permission denied"), { code: "EACCES" }));
+      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, operations: { open } });
+      const response = mediaResponse();
+
+      await invokeRegistered([middleware], mediaRequest("GET", "/uploaded-media/media-denied.png"), response);
+
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(response.statusCode).toBe(500);
+      expect(response.headers["content-type"]).toBe("text/plain");
+      await expect(responseBytes(response)).resolves.toEqual(Buffer.from("Unable to read uploaded media file."));
+    });
+  });
 
   it("injects an unguessable per-server capability only for dev", () => {
     const { source: dev, instance } = setupSource("serve");
@@ -457,19 +670,9 @@ describe("dev/build registration boundary", () => {
   });
 
   it("rejects repeated Connect chunks over the limit exactly once", async () => {
-    const { instance, source } = setupSource("serve");
+    const { source, middlewares, ssrLoadModule } = await setupServeServer();
     const config = JSON.parse(source.match(/= (.*);/)?.[1] ?? "null");
-    let middleware: ((request: Readable & { url?: string; method?: string; headers: Record<string, string> }, response: unknown, next: () => void) => Promise<void>) | undefined;
-    const ssrLoadModule = vi.fn().mockResolvedValue({
-      createFilesystemCompositionStore,
-      validateCompositionRecord,
-    });
-    await instance.configureServer?.({
-      middlewares: { use(value: typeof middleware) { middleware = value; } },
-      ssrLoadModule,
-    } as never);
     expect(ssrLoadModule).toHaveBeenCalledWith("/src/composer/storage/file-provider/dev-server-entry.ts");
-    if (!middleware) throw new Error("Vite middleware was not registered");
 
     const requestStream = Readable.from([
       Buffer.alloc(config.maxBodyBytes, 97),
@@ -490,20 +693,14 @@ describe("dev/build registration boundary", () => {
       setHeader: vi.fn(),
       end: vi.fn(),
     };
-    await middleware(requestStream, response, vi.fn());
+    await invokeRegistered(middlewares, requestStream, response);
     expect(response.statusCode).toBe(413);
     expect(response.end).toHaveBeenCalledTimes(1);
     expect(response.end.mock.calls[0]![0]).toContain("body-too-large");
   });
 
   it("rejects unauthenticated Connect requests before attaching body readers", async () => {
-    const { instance } = setupSource("serve");
-    let middleware: ((request: Readable & { url?: string; method?: string; headers: Record<string, string> }, response: unknown, next: () => void) => Promise<void>) | undefined;
-    await instance.configureServer?.({
-      middlewares: { use(value: typeof middleware) { middleware = value; } },
-      ssrLoadModule: vi.fn().mockResolvedValue({ createFilesystemCompositionStore, validateCompositionRecord }),
-    } as never);
-    if (!middleware) throw new Error("Vite middleware was not registered");
+    const { middlewares } = await setupServeServer();
     const requestStream = Readable.from([Buffer.alloc(3 * 1024 * 1024)]) as Readable & {
       url?: string; method?: string; headers: Record<string, string>;
     };
@@ -511,20 +708,14 @@ describe("dev/build registration boundary", () => {
     requestStream.method = "POST";
     requestStream.headers = {};
     const response = { statusCode: 0, setHeader: vi.fn(), end: vi.fn() };
-    await middleware(requestStream, response, vi.fn());
+    await invokeRegistered(middlewares, requestStream, response);
     expect(response.statusCode).toBe(403);
     expect(requestStream.listenerCount("data")).toBe(0);
   });
 
   it("settles a prematurely aborted authenticated request", async () => {
-    const { instance, source } = setupSource("serve");
+    const { source, middlewares } = await setupServeServer();
     const config = JSON.parse(source.match(/= (.*);/)?.[1] ?? "null");
-    let middleware: ((request: Readable & { url?: string; method?: string; headers: Record<string, string> }, response: unknown, next: () => void) => Promise<void>) | undefined;
-    await instance.configureServer?.({
-      middlewares: { use(value: typeof middleware) { middleware = value; } },
-      ssrLoadModule: vi.fn().mockResolvedValue({ createFilesystemCompositionStore, validateCompositionRecord }),
-    } as never);
-    if (!middleware) throw new Error("Vite middleware was not registered");
     let emitted = false;
     const requestStream = new Readable({
       read() {
@@ -545,7 +736,7 @@ describe("dev/build registration boundary", () => {
       [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: config.capability,
     };
     const response = { statusCode: 0, destroyed: false, setHeader: vi.fn(), end: vi.fn() };
-    await middleware(requestStream, response, vi.fn());
+    await invokeRegistered(middlewares, requestStream, response);
     expect(response.statusCode).toBe(400);
     expect(response.end).toHaveBeenCalledTimes(1);
   });
