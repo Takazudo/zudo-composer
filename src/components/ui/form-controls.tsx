@@ -160,6 +160,7 @@ export function Checkbox(props: CheckboxProps) {
         aria-describedby={aria["aria-describedby"] ?? field?.describedBy}
         onChange={(event) => onCheckedChange(event.currentTarget.checked)}
       />
+      <span class="cms-check__box" aria-hidden="true" />
       {label === undefined ? null : <span class="cms-check__label">{label}</span>}
     </label>
   );

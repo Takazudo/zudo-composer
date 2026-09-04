@@ -63,8 +63,7 @@
 
 .cms-btn:focus-visible,
 .cms-seg__option:focus-visible,
-.cms-pane__tab:focus-visible,
-.cms-check__input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.cms-pane__tab:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 
 .cms-btn--icon { width: var(--control-h); padding-inline: 0; }
 .cms-btn--sm { height: 26px; padding-inline: var(--sp-2); font-size: .75rem; }
@@ -259,7 +258,48 @@
 .cms-switch__input:focus-visible + .cms-switch__track { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 .cms-switch__input:disabled + .cms-switch__track { opacity: .5; }
 
-.cms-check__input { width: 15px; height: 15px; margin: 0; accent-color: var(--color-accent); }
+.cms-check { position: relative; }
+.cms-check__input { position: absolute; opacity: 0; margin: 0; }
+
+.cms-check__box {
+  position: relative;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-on-accent);
+  background: var(--color-surface);
+}
+
+.cms-check__box::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-start: 3px;
+  width: 7px;
+  height: 4px;
+  border-inline-start: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  rotate: -45deg;
+  opacity: 0;
+}
+
+.cms-check__input:checked + .cms-check__box,
+.cms-check__input:indeterminate + .cms-check__box { border-color: var(--color-accent); background: var(--color-accent); }
+.cms-check__input:checked + .cms-check__box::after { opacity: 1; }
+.cms-check__input:indeterminate + .cms-check__box::after {
+  inset-block-start: 6px;
+  inset-inline-start: 3px;
+  width: 7px;
+  height: 2px;
+  border: 0;
+  background: currentColor;
+  rotate: none;
+  opacity: 1;
+}
+.cms-check__input:focus-visible + .cms-check__box { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.cms-check__input:disabled + .cms-check__box { opacity: .5; }
 
 /* --------------------------------------------------------------------------
  * Chip, CountBadge, Kbd
@@ -466,7 +506,7 @@
 .cms-table th.cms-table__cell--num { text-align: end; }
 
 .cms-table__cb { width: 1%; padding-inline-end: 0; }
-.cms-table__cb .cms-check__input { display: block; width: 14px; height: 14px; }
+.cms-table__cb .cms-check__box { display: block; width: 14px; height: 14px; }
 
 .cms-table__actions { width: 1%; text-align: end; }
 .cms-table__actions > * { opacity: 0; }
@@ -626,8 +666,15 @@
   .cms-table--compact th,
   .cms-table--compact td { height: 44px; }
   .cms-table__actions > * { opacity: 1; }
-  .cms-check__input,
-  .cms-table__cb .cms-check__input { width: 20px; height: 20px; }
+  .cms-check__box,
+  .cms-table__cb .cms-check__box { width: 20px; height: 20px; }
+}
+
+@media (forced-colors: active) {
+  .cms-check__box { forced-color-adjust: none; border-color: CanvasText; color: HighlightText; background: Canvas; }
+  .cms-check__input:checked + .cms-check__box,
+  .cms-check__input:indeterminate + .cms-check__box { border-color: Highlight; background: Highlight; }
+  .cms-check__input:focus-visible + .cms-check__box { outline-color: Highlight; }
 }
 
 @media (prefers-reduced-motion: reduce) {
