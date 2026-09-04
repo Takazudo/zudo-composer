@@ -9,6 +9,7 @@ import { loadSampleSiteProject } from "../../site-project/sample";
 import { activeComponentProvider } from "../../features/composer/active-pack";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import { createProductionProviderIntegration } from "../provider-integration";
+import { createWorkspaceSummary } from "../workspace-summary";
 
 const sample = () => loadSampleSiteProject(activeSiteProjectValidationContext);
 const revision = (project: ReturnType<typeof sample>) => createHash("sha256").update(serializeSiteProject(project), "utf8").digest("hex");
@@ -219,6 +220,28 @@ describe("SiteProject provider integration", () => {
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { retryable: true } });
     expect(await current.initialization.retry()).toEqual({ status: "ready" });
     expect(await current.getCurrentSiteProject()).toMatchObject({ status: "ready" });
+  });
+
+  // The summary's `retry()` leaves the graph ready, but every guarded store then
+  // calls `lifecycle.initialize()` again on its own — so recovery only holds if
+  // that follow-up initialize is idempotent against a graph retry just seeded.
+  it("recovers a workspace summary through retry after the first initialization failed", async () => {
+    const backing = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
+    const current = integration({ ...backing, composition: failFirstOpen(backing.composition) });
+    const retry = vi.spyOn(current.initialization, "retry");
+    const summary = createWorkspaceSummary(current);
+
+    const failed = await summary.counts();
+    for (const source of [failed.compositions, failed.mappings, failed.sitemaps, failed.content]) expect(source.status).toBe("unavailable");
+
+    summary.refresh();
+    const recovered = await summary.counts();
+
+    expect(recovered.compositions).toMatchObject({ status: "ok", value: { compositions: 6 } });
+    expect(recovered.content).toMatchObject({ status: "ok", value: { models: 2, entries: 4 } });
+    expect(recovered.mappings).toMatchObject({ status: "ok", value: { mappings: 2 } });
+    expect(recovered.sitemaps).toMatchObject({ status: "ok", value: { sitemaps: 1 } });
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it.each(["composer", "content", "mapping", "sitemapper"] as const)("converges when %s boots first", async (first) => {

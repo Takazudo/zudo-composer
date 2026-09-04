@@ -7,9 +7,11 @@
 //      authoring databases and the Media provider is a separate dev service, so
 //      a single failure must degrade one panel rather than blank the dashboard.
 //      Every source therefore returns `ok` or `unavailable` on its own.
-//   2. Provider initialization happens ONCE per summary. `refresh()` re-reads
-//      the providers; it never re-runs the lifecycle, so a refresh can never
-//      re-seed, re-verify, or restart the SiteProject integration.
+//   2. Provider initialization happens ONCE per summary UNLESS it failed. A
+//      fulfilled initialization is never re-run, so a refresh can never
+//      re-seed, re-verify, or restart the SiteProject integration; a failed one
+//      is re-attempted on the next `refresh()` through the lifecycle's `retry()`,
+//      which is what lets the dashboard's `Unavailable · Retry` succeed.
 //
 // SiteProject delivery routes (`/site*`) are deliberately absent: they render
 // outside the CMS chrome and are not authoring records.
@@ -95,6 +97,10 @@ export interface WorkspaceRecord {
 }
 
 export interface WorkspaceRecent {
+  /**
+   * Newest first across every source, sorted before `limit` is applied, so
+   * `records[0]` is the workspace's latest write at any limit.
+   */
   readonly records: readonly WorkspaceRecord[];
   /** Sources omitted from `records` because they could not be read. */
   readonly unavailable: readonly WorkspaceSourceFailure[];
@@ -118,13 +124,16 @@ export interface WorkspaceAttention {
   readonly content: WorkspaceSource<readonly WorkspaceAttentionItem[]>;
 }
 
+/** What one lifecycle attempt answers. */
+export type WorkspaceInitializationOutcome = { status: "ready" } | { status: "error"; error: Error };
+
 /**
  * The structural slice of `ProductionProviderIntegration` this read model uses.
  * Naming it here keeps the summary testable with plain fakes and keeps the
  * integration free to grow.
  */
 export interface WorkspaceSummaryIntegration {
-  readonly initialization: { initialize(): Promise<{ status: "ready" } | { status: "error"; error: Error }> };
+  readonly initialization: { initialize(): Promise<WorkspaceInitializationOutcome>; retry(): Promise<WorkspaceInitializationOutcome> };
   readonly componentProvider: { readonly catalog: ComponentCatalog };
   readonly compositionProviders: readonly {
     readonly descriptor: { readonly id: string; readonly label: string };
@@ -142,7 +151,10 @@ export interface WorkspaceSummary {
   counts(): Promise<WorkspaceCounts>;
   recent(limit?: number): Promise<WorkspaceRecent>;
   attention(): Promise<WorkspaceAttention>;
-  /** Drop the memoised provider reads; the next call re-reads them. */
+  /**
+   * Drop the memoised provider reads; the next call re-reads them. A failed
+   * initialization is re-attempted too; a fulfilled or in-flight one is not.
+   */
   refresh(): void;
 }
 
@@ -236,13 +248,35 @@ async function readSitemapRecords(store: WorkspaceSitemapStore): Promise<readonl
 
 export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration): WorkspaceSummary {
   // Memoised so `counts()`, `recent()` and `attention()` share one lifecycle run
-  // and one set of provider reads. A rejection is memoised too: initialization
-  // is attempted exactly once per summary, `refresh()` included.
+  // and one set of provider reads. A failure is memoised too — one broken read
+  // costs one attempt, not one per loader — and stays memoised until `refresh()`
+  // re-attempts it through `retry()`. Only a failed initialization is ever
+  // dropped: re-running a fulfilled one would re-seed the integration, and
+  // dropping an in-flight one would leave two attempts running at once.
+  // `attempted` outlives the state because, once `refresh()` has cleared a
+  // failure, the state alone can no longer tell a first attempt from a re-attempt.
+  let state: "idle" | "pending" | "ready" | "failed" = "idle";
+  let attempted = false;
   let initialization: Promise<void> | undefined;
-  const ensureInitialized = (): Promise<void> => (initialization ??= (async () => {
-    const outcome = await integration.initialization.initialize();
-    if (outcome.status === "error") throw outcome.error;
-  })());
+  const ensureInitialized = (): Promise<void> => {
+    if (initialization) return initialization;
+    const action = attempted ? "retry" : "initialize";
+    attempted = true;
+    state = "pending";
+    initialization = (async () => {
+      const outcome = await integration.initialization[action]();
+      if (outcome.status === "error") throw outcome.error;
+    })().then(
+      () => {
+        state = "ready";
+      },
+      (cause: unknown) => {
+        state = "failed";
+        throw cause;
+      },
+    );
+    return initialization;
+  };
 
   const loadCompositions = async (): Promise<CompositionsData> => {
     await ensureInitialized();
@@ -442,6 +476,9 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     },
     refresh() {
       pending = undefined;
+      if (state !== "failed") return;
+      state = "idle";
+      initialization = undefined;
     },
   };
 }

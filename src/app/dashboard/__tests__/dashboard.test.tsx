@@ -204,7 +204,7 @@ describe("Dashboard", () => {
     expect(within(attention).getByText("Target prop ProseMd.markdown no longer exists.")).toBeInTheDocument();
   });
 
-  it("degrades one card to Unavailable rather than showing a zero it cannot vouch for", async () => {
+  it("degrades one card to Unavailable rather than showing a zero it cannot vouch for, and recovers it on Retry", async () => {
     const failed = ready({ counts: readyCounts({ sitemaps: { status: "unavailable", error: "Sitemaps could not be read." } }) });
     const { summary, refresh } = fakeSummary(failed, ready());
     render(<Dashboard summary={summary} />);
@@ -222,6 +222,12 @@ describe("Dashboard", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(within(statsRegion()).getAllByRole("link")).toHaveLength(5));
     expect(screen.queryByText("Unavailable · Sitemaps could not be read.")).not.toBeInTheDocument();
+
+    // The recovered card shows the count it could not vouch for a moment ago.
+    const recovered = within(statsRegion()).getAllByRole("link")[4]!;
+    expect(within(recovered).getByText("Sitemaps")).toBeInTheDocument();
+    expect(within(recovered).getByText("2")).toBeInTheDocument();
+    expect(within(recovered).getByText("19 pages")).toBeInTheDocument();
   });
 
   it("says which sources are missing from the recent list and from the attention check", async () => {
