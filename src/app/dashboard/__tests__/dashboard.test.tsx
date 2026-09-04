@@ -109,7 +109,7 @@ function emptyWorkspace(): Payload {
   return {
     counts: {
       content: { status: "ok", value: { models: 0, entries: 0, incompleteEntries: 0 } },
-      media: { status: "unavailable", error: "No Media provider is connected." },
+      media: { status: "absent" },
       compositions: { status: "ok", value: { compositions: 0, patterns: 0, globalTemplates: 0 } },
       mappings: { status: "ok", value: { mappings: 0, blockedMappings: 0 } },
       sitemaps: { status: "ok", value: { sitemaps: 0, pages: 0, unassignedPages: 0 } },
@@ -168,8 +168,16 @@ describe("Dashboard", () => {
     expect(screen.getByRole("link", { name: "New composition" })).toHaveAttribute("href", "/composer?new=1");
   });
 
-  it("hides the upload action while no Media provider has answered", async () => {
-    const payload = ready({ counts: readyCounts({ media: { status: "unavailable", error: "No Media provider is connected." } }) });
+  it("hides the upload action while no Media provider is configured", async () => {
+    const payload = ready({ counts: readyCounts({ media: { status: "absent" } }) });
+    render(<Dashboard summary={fakeSummary(payload).summary} />);
+
+    await screen.findByRole("region", { name: "Workspace status" });
+    expect(screen.queryByRole("link", { name: "Upload media" })).not.toBeInTheDocument();
+  });
+
+  it("hides the upload action while the Media provider has failed", async () => {
+    const payload = ready({ counts: readyCounts({ media: { status: "unavailable", error: "The Media database is blocked." } }) });
     render(<Dashboard summary={fakeSummary(payload).summary} />);
 
     await screen.findByRole("region", { name: "Workspace status" });
@@ -204,7 +212,7 @@ describe("Dashboard", () => {
     expect(within(attention).getByText("Target prop ProseMd.markdown no longer exists.")).toBeInTheDocument();
   });
 
-  it("degrades one card to Unavailable rather than showing a zero it cannot vouch for", async () => {
+  it("degrades one card to Unavailable rather than showing a zero it cannot vouch for, and recovers it on Retry", async () => {
     const failed = ready({ counts: readyCounts({ sitemaps: { status: "unavailable", error: "Sitemaps could not be read." } }) });
     const { summary, refresh } = fakeSummary(failed, ready());
     render(<Dashboard summary={summary} />);
@@ -222,11 +230,17 @@ describe("Dashboard", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(within(statsRegion()).getAllByRole("link")).toHaveLength(5));
     expect(screen.queryByText("Unavailable · Sitemaps could not be read.")).not.toBeInTheDocument();
+
+    // The recovered card shows the count it could not vouch for a moment ago.
+    const recovered = within(statsRegion()).getAllByRole("link")[4]!;
+    expect(within(recovered).getByText("Sitemaps")).toBeInTheDocument();
+    expect(within(recovered).getByText("2")).toBeInTheDocument();
+    expect(within(recovered).getByText("19 pages")).toBeInTheDocument();
   });
 
   it("says which sources are missing from the recent list and from the attention check", async () => {
     const degraded = ready({
-      recent: readyRecent({ unavailable: [{ source: "media", error: "No Media provider is connected." }] }),
+      recent: readyRecent({ unavailable: [{ source: "media", error: "The Media database is blocked." }] }),
       attention: readyAttention({ content: { status: "unavailable", error: "Content could not be read." } }),
     });
     const { summary, refresh } = fakeSummary(degraded, ready());
@@ -269,6 +283,32 @@ describe("Dashboard", () => {
     expect(within(storage).getByText("IndexedDB · zudo-composer")).toBeInTheDocument();
     expect(within(storage).getByText("Dev only")).toBeInTheDocument();
     expect(within(storage).getByText("12 min ago")).toBeInTheDocument();
+  });
+
+  it("shows an informational chip with no Retry action for an absent Media provider", async () => {
+    const payload = ready({ counts: readyCounts({ media: { status: "absent" } }) });
+    render(<Dashboard summary={fakeSummary(payload).summary} />);
+
+    const stats = await screen.findByRole("region", { name: "Workspace status" });
+    expect(within(stats).getByText("Not connected")).toBeInTheDocument();
+    expect(within(stats).queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+
+    const storage = screen.getByRole("region", { name: "Storage" });
+    expect(within(storage).getByText("Not connected")).toBeInTheDocument();
+  });
+
+  it("never calls a failed Media store 'not connected', and offers Retry from the stat card only", async () => {
+    const payload = ready({ counts: readyCounts({ media: { status: "unavailable", error: "The Media database is blocked." } }) });
+    render(<Dashboard summary={fakeSummary(payload).summary} />);
+
+    const stats = await screen.findByRole("region", { name: "Workspace status" });
+    expect(within(stats).getByText("Unavailable · The Media database is blocked.")).toBeInTheDocument();
+    expect(within(stats).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+
+    const storage = screen.getByRole("region", { name: "Storage" });
+    expect(within(storage).getByText("Unavailable")).toBeInTheDocument();
+    expect(within(storage).queryByText("Not connected")).not.toBeInTheDocument();
+    expect(within(storage).queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
   });
 
   it("separates an empty workspace from one whose newest write is unknown", async () => {
