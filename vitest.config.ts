@@ -8,7 +8,10 @@ export default defineConfig({
       {
         test: {
           name: 'server',
-          include: ['server/**/*.test.ts'],
+          // Must stay as wide as the app project's `server/**` exclusion, or a server spec
+          // in any other supported extension would be claimed by neither project and silently
+          // never run.
+          include: ['server/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
           environment: 'node',
           // These specs spawn real Node processes (CLI framing, cross-process CAS) and
           // a 5s in-process default reads as a regression under full-suite load (#179).

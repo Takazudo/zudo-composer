@@ -153,6 +153,17 @@ describe("LocalSiteProjectStore", () => {
     await expect(readFile(join(real, "root", "projects", `${project.id}.site-project.json`), "utf8")).resolves.toContain(project.id);
   });
 
+  it("refuses a root whose own final component is a symlink", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "zudo-site-project-linked-root-")); roots.push(parent);
+    const real = join(parent, "real"); await mkdir(real);
+    const testRoot = join(parent, "root"); await symlink(real, testRoot, "dir");
+    const store = createLocalSiteProjectStore({ testRoot });
+    await expect(store.apply({ project: makeProject(), expectedRevision: null, expectedActive: null })).resolves.toEqual({
+      status: "unavailable",
+      message: "Local SiteProject root is not a real directory.",
+    });
+  });
+
   it("refuses lock and recognizable-orphan symlinks without following or deleting them", async () => {
     const testRoot = await root();
     const store = createLocalSiteProjectStore({ testRoot });
