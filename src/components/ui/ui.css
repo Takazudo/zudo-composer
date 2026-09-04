@@ -453,7 +453,14 @@
 .cms-table tbody tr:last-child td { border-block-end: 0; }
 .cms-table tbody tr[aria-selected="true"] td { background: var(--color-accent-soft); }
 
-.cms-table__cell--name { font-weight: 600; }
+/*
+ * The name column is the one a person reads to choose a row, so it gets a floor.
+ * Without it, auto table layout starves the flexible column first: at 390px the
+ * names collapsed to a single letter ("A.", "J.", "J.") while a 129px column
+ * still carried the word "Plain", and two rows became indistinguishable. The
+ * wrapper is `overflow: auto`, so the table scrolls instead of compressing.
+ */
+.cms-table__cell--name { font-weight: 600; min-width: 11rem; }
 .cms-table__cell--muted { color: var(--color-muted); }
 .cms-table__cell--num { text-align: end; font-variant-numeric: tabular-nums; }
 .cms-table th.cms-table__cell--num { text-align: end; }
