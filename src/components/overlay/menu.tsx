@@ -115,16 +115,37 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
       if (triggerRef.current?.contains(target)) return;
       closeMenu({ restoreFocus: false });
     }
-    function onDismiss(): void {
+    /**
+     * The panel is positioned once against the trigger, so a scroll that moves
+     * the trigger leaves it stranded and dismisses it. Only an ANCESTOR scroll
+     * can do that, and the capture phase hears every scroll in the document:
+     *
+     * - a text input scrolling its own value back to the start as it loses
+     *   focus — which is what the click on this trigger just made the schema
+     *   table's Key cell do, closing the menu the same click had opened;
+     * - this panel's own overflow, so a long menu dismissed itself the moment
+     *   it was scrolled.
+     *
+     * Neither moves the trigger. Everything that does is either an element
+     * containing it, the document, or the window itself — so only a Node that
+     * does not contain the trigger is ignored.
+     */
+    function onScroll(event: Event): void {
+      const trigger = triggerRef.current;
+      const target = event.target;
+      if (trigger && target instanceof Node && !target.contains(trigger)) return;
+      closeMenu({ restoreFocus: false });
+    }
+    function onResize(): void {
       closeMenu({ restoreFocus: false });
     }
     document.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("scroll", onDismiss, true);
-    window.addEventListener("resize", onDismiss);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("scroll", onDismiss, true);
-      window.removeEventListener("resize", onDismiss);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
     };
   }, [closeMenu, triggerRef]);
 

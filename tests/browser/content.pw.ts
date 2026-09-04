@@ -114,35 +114,22 @@ function schemaRow(page: Page, label: string): Locator {
   return page.getByRole("row").filter({ has: page.getByRole("button", { name: `Type for ${label}`, exact: true }) });
 }
 
-/** Choose a field's type from its popover, which replaced nine inline cards. */
 /**
- * The kind rows render `<strong>{label}</strong><small>{explanation}</small>`
- * with no separator, so the accessible name runs together as
- * "SlugURL-friendly text…". A `\b` after the label cannot match — the next
- * character is a word character. Anchor on the prefix only until the shared
- * component gives the name a separator (tracked for #174).
+ * Choose a field's type from its popover, which replaced nine inline cards.
+ *
+ * `kind` is matched against the row's ACCESSIBLE NAME, which is not its
+ * `textContent`: the row renders `<strong>{label}</strong><small>{sentence}</small>`,
+ * and accname separates the two, so the name reads "Slug URL-friendly text…"
+ * where `textContent` reads "SlugURL-friendly…". Measured, not assumed — the
+ * assertion below pins one whole name so a regression in that separator is a
+ * failure here rather than a screen-reader defect nobody sees.
  */
 async function chooseFieldKind(page: Page, label: string, kind: RegExp) {
-  // Let the debounced autosave land first. The edits that precede this re-render
-  // the schema table, which tears down and rebuilds the portal-rendered menu —
-  // opening it mid-flight leaves a handle on a detached node whose computed
-  // styles come back empty and which cannot take focus.
   await expect(saveStatus(page)).toContainText("Saved");
   const trigger = schemaRow(page, label).getByRole("button", { name: `Type for ${label}`, exact: true });
   const menu = page.getByRole("menu", { name: `Type for ${label}`, exact: true });
   const item = menu.getByRole("menuitemradio", { name: kind });
-  // A re-render of the schema table rebuilds this portal-rendered menu, so an
-  // open one can vanish before it can be used. Reopen once rather than fail on
-  // a race the author would never notice.
   await trigger.click();
-  if (!(await item.isVisible().catch(() => false))) {
-    await trigger.click({ trial: true }).catch(() => undefined);
-    if (!(await item.isVisible().catch(() => false))) await trigger.click();
-  }
-  // The menu is portal-rendered and can be torn down and rebuilt while open, so
-  // an early handle points at a detached node — its computed styles come back
-  // empty and focus goes nowhere. Waiting for visibility forces a re-resolve
-  // against the live element before acting on it.
   await expect(item).toBeVisible();
   await item.click();
   await expect(menu).toHaveCount(0);
@@ -295,13 +282,6 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
 });
 
 test("Content models, Mapping editing, and Sitemapper routes survive one browser journey", async ({ page }, testInfo) => {
-  // Known-failing, not skipped-and-forgotten: the schema block below cannot
-  // drive the field-kind menu. It is portal-rendered and rebuilt whenever the
-  // schema table re-renders, so an open menu detaches — its computed styles come
-  // back empty, `focus()` reaches a dead node, and a click never becomes
-  // actionable. Diagnosis and evidence are on the tracking issue; the fix
-  // belongs with the component, not with a longer wait here.
-  test.fixme(true, "field-kind menu detaches while open — see the CMS UI Polish confirm issue");
   test.setTimeout(180_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -334,6 +314,13 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   const lockedKinds = page.getByRole("menu", { name: "Type for Heading", exact: true });
   await expect(lockedKinds.getByText("Type locked · stored Entries use it")).toBeVisible();
   await expect(lockedKinds.getByRole("menuitemradio", { name: /^Date/ })).toBeDisabled();
+  // One whole accessible name, so the separator between the row's `<strong>`
+  // label and its `<small>` sentence is proved rather than assumed. Its
+  // `textContent` has no separator; a spec reading that instead would conclude
+  // the name runs together, and every `\b` anchor above would look impossible.
+  await expect(lockedKinds.getByRole("menuitemradio").first()).toHaveAccessibleName(
+    "Short text A single line for names, titles, and concise copy.",
+  );
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Add field" }).click();
