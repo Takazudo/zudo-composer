@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { WorkspaceAttention, WorkspaceCounts, WorkspaceRecent } from "../../workspace-summary";
 import {
   attentionView,
-  formatByteSize,
   greeting,
   isEmptyWorkspace,
   lastWrite,
@@ -27,7 +26,7 @@ function counts(overrides: Partial<WorkspaceCounts> = {}): WorkspaceCounts {
 function emptyCounts(): WorkspaceCounts {
   return {
     content: { status: "ok", value: { models: 0, entries: 0, incompleteEntries: 0 } },
-    media: { status: "unavailable", error: "No Media provider is connected." },
+    media: { status: "absent" },
     compositions: { status: "ok", value: { compositions: 0, patterns: 0, globalTemplates: 0 } },
     mappings: { status: "ok", value: { mappings: 0, blockedMappings: 0 } },
     sitemaps: { status: "ok", value: { sitemaps: 0, pages: 0, unassignedPages: 0 } },
@@ -54,7 +53,7 @@ describe("statCards", () => {
   });
 
   it("carries a failed source through as unavailable rather than as a zero", () => {
-    const cards = statCards(counts({ media: { status: "unavailable", error: "No Media provider is connected." } }));
+    const cards = statCards(counts({ media: { status: "unavailable", error: "The Media database is blocked." } }));
     const media = cards.find((card) => card.id === "media");
     expect(media).toEqual({
       id: "media",
@@ -62,9 +61,17 @@ describe("statCards", () => {
       href: "/media",
       icon: expect.anything(),
       status: "unavailable",
-      error: "No Media provider is connected.",
+      error: "The Media database is blocked.",
     });
     expect(media).not.toHaveProperty("value");
+  });
+
+  it("carries an absent Media provider through without a value or an error", () => {
+    const cards = statCards(counts({ media: { status: "absent" } }));
+    const media = cards.find((card) => card.id === "media");
+    expect(media).toEqual({ id: "media", label: "Media", href: "/media", icon: expect.anything(), status: "absent" });
+    expect(media).not.toHaveProperty("value");
+    expect(media).not.toHaveProperty("error");
   });
 
   it("uses singular units for a workspace holding one of a thing", () => {
@@ -93,14 +100,6 @@ describe("mediaTypeSummary", () => {
   });
 });
 
-describe("formatByteSize", () => {
-  it("steps from bytes to megabytes", () => {
-    expect(formatByteSize(512)).toBe("512 B");
-    expect(formatByteSize(2048)).toBe("2.0 KB");
-    expect(formatByteSize(8_598_323)).toBe("8.2 MB");
-  });
-});
-
 describe("isEmptyWorkspace", () => {
   it("is true only once every authoring source has answered with nothing", () => {
     expect(isEmptyWorkspace(emptyCounts())).toBe(true);
@@ -118,6 +117,18 @@ describe("isEmptyWorkspace", () => {
       media: { status: "ok", value: { assets: 2, bytes: 10, byType: { "image/png": 2 } } },
     } as WorkspaceCounts;
     expect(isEmptyWorkspace(withMedia)).toBe(false);
+  });
+
+  it("is false where Media is unavailable, because a failed provider may hold assets", () => {
+    const unavailableMedia = {
+      ...emptyCounts(),
+      media: { status: "unavailable", error: "The Media database is blocked." },
+    } as WorkspaceCounts;
+    expect(isEmptyWorkspace(unavailableMedia)).toBe(false);
+  });
+
+  it("is true where Media is absent, the ordinary dev answer for no assets", () => {
+    expect(isEmptyWorkspace({ ...emptyCounts(), media: { status: "absent" } })).toBe(true);
   });
 });
 

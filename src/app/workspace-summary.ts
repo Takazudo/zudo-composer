@@ -6,7 +6,10 @@
 //   1. Sources resolve INDEPENDENTLY. IndexedDB cannot transact across the four
 //      authoring databases and the Media provider is a separate dev service, so
 //      a single failure must degrade one panel rather than blank the dashboard.
-//      Every source therefore returns `ok` or `unavailable` on its own.
+//      Every source therefore returns `ok` or `unavailable` on its own — except
+//      Media, which can also be `absent`: there is no dev provider configured
+//      at all, which is not the same failure as a configured one that could not
+//      be read.
 //   2. Provider initialization happens ONCE per summary UNLESS it failed. A
 //      fulfilled initialization is never re-run, so a refresh can never
 //      re-seed, re-verify, or restart the SiteProject integration; a failed one
@@ -33,6 +36,14 @@ import { formatIntent, type RouteIntent } from "./route-intents";
 export type WorkspaceSource<T> =
   | { readonly status: "ok"; readonly value: T }
   | { readonly status: "unavailable"; readonly error: string };
+
+/**
+ * Media-only: a third status for "no provider is configured", distinct from
+ * `unavailable` (a configured provider that failed). Every other domain stays
+ * on the plain `WorkspaceSource<T>` above and is structurally incapable of
+ * being absent.
+ */
+export type WorkspaceMediaSource<T> = WorkspaceSource<T> | { readonly status: "absent" };
 
 export type WorkspaceSourceName = "compositions" | "mappings" | "sitemaps" | "content" | "media";
 
@@ -72,7 +83,7 @@ export interface WorkspaceCounts {
   readonly mappings: WorkspaceSource<MappingCounts>;
   readonly sitemaps: WorkspaceSource<SitemapCounts>;
   readonly content: WorkspaceSource<ContentCounts>;
-  readonly media: WorkspaceSource<MediaCounts>;
+  readonly media: WorkspaceMediaSource<MediaCounts>;
 }
 
 export type WorkspaceRecordKind =
@@ -189,7 +200,7 @@ interface WorkspaceData {
   readonly mappings: WorkspaceSource<MappingsData>;
   readonly sitemaps: WorkspaceSource<SitemapsData>;
   readonly content: WorkspaceSource<ContentData>;
-  readonly media: WorkspaceSource<MediaData>;
+  readonly media: WorkspaceMediaSource<MediaData>;
 }
 
 function reason(cause: unknown, fallback: string): string {
@@ -197,6 +208,10 @@ function reason(cause: unknown, fallback: string): string {
 }
 
 function project<A, B>(source: WorkspaceSource<A>, map: (value: A) => B): WorkspaceSource<B> {
+  return source.status === "ok" ? { status: "ok", value: map(source.value) } : source;
+}
+
+function projectMedia<A, B>(source: WorkspaceMediaSource<A>, map: (value: A) => B): WorkspaceMediaSource<B> {
   return source.status === "ok" ? { status: "ok", value: map(source.value) } : source;
 }
 
@@ -408,9 +423,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
 
   // Media is a separate provider with its own lifecycle, so it deliberately does
   // not wait on — or fail with — the SiteProject integration.
-  const loadMedia = async (): Promise<MediaData> => {
-    const provider = integration.mediaProvider;
-    if (!provider) throw new Error("No Media provider is connected.");
+  const loadMedia = async (provider: NonNullable<WorkspaceSummaryIntegration["mediaProvider"]>): Promise<MediaData> => {
     const summaries = await provider.store.list();
     const byType: Record<string, number> = {};
     let bytes = 0;
@@ -422,6 +435,18 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
       records.push({ kind: "media", id: summary.id, label: summary.fileName, updatedAt: summary.updatedAt, href: formatIntent(intent), intent });
     }
     return { counts: { assets: summaries.length, bytes, byType }, records };
+  };
+
+  // Unlike `guard`, "no provider connected" is reported as `absent` rather than
+  // caught as a failure — it is the ordinary dev answer, not a broken read.
+  const readMedia = async (): Promise<WorkspaceMediaSource<MediaData>> => {
+    const provider = integration.mediaProvider;
+    if (!provider) return { status: "absent" };
+    try {
+      return { status: "ok", value: await loadMedia(provider) };
+    } catch (cause) {
+      return { status: "unavailable", error: reason(cause, "Media could not be read.") };
+    }
   };
 
   const guard = async <T>(fallback: string, load: () => Promise<T>): Promise<WorkspaceSource<T>> => {
@@ -439,7 +464,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
       guard("Mappings could not be read.", loadMappings),
       guard("Sitemaps could not be read.", loadSitemaps),
       guard("Content could not be read.", loadContent),
-      guard("Media could not be read.", loadMedia),
+      readMedia(),
     ]);
     return { compositions, mappings, sitemaps, content, media };
   })());
@@ -452,18 +477,22 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
         mappings: project(data.mappings, ({ counts }) => counts),
         sitemaps: project(data.sitemaps, ({ counts }) => counts),
         content: project(data.content, ({ counts }) => counts),
-        media: project(data.media, ({ counts }) => counts),
+        media: projectMedia(data.media, ({ counts }) => counts),
       };
     },
     async recent(limit = DEFAULT_RECENT_LIMIT) {
       const data = await read();
       const records: WorkspaceRecord[] = [];
       const unavailable: WorkspaceSourceFailure[] = [];
-      for (const source of ["compositions", "mappings", "sitemaps", "content", "media"] as const) {
+      for (const source of ["compositions", "mappings", "sitemaps", "content"] as const) {
         const entry = data[source];
         if (entry.status === "ok") records.push(...entry.value.records);
         else unavailable.push({ source, error: entry.error });
       }
+      // An absent Media provider is the ordinary dev answer, not a failed read,
+      // so — unlike the four sources above — it is skipped rather than listed.
+      if (data.media.status === "ok") records.push(...data.media.value.records);
+      else if (data.media.status === "unavailable") unavailable.push({ source: "media", error: data.media.error });
       return { records: records.sort(byRecency).slice(0, Math.max(0, limit)), unavailable };
     },
     async attention() {
