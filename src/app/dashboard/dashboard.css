@@ -264,6 +264,7 @@
   .cms-dash__hero { flex-wrap: wrap; align-items: flex-start; }
   .cms-dash__greeting { flex-basis: 100%; }
   .cms-dash__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cms-dash-stat:nth-child(odd):last-child { grid-column: 1 / -1; }
   .cms-dash__columns { grid-template-columns: minmax(0, 1fr); }
   .cms-dash-recent__row { grid-template-columns: 28px minmax(0, 1fr) auto; }
   .cms-dash-recent__row time { display: none; }
