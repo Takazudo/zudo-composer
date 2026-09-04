@@ -126,7 +126,7 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
 
   return (
     <Pane label="Content">
-      <PaneHeader title="Content" count={state.models.length} actions={<RailCollapseButton rail="nav" />} />
+      <PaneHeader as="h1" title="Content" count={state.models.length} actions={<RailCollapseButton rail="nav" />} />
       <PaneBody>
         <OutlineTree
           label="Content"

@@ -34,8 +34,9 @@ const MODE_OPTIONS = [
 ];
 
 /** The save queue's vocabulary, translated into the chrome's four states. */
-function statusOf(status: ContentSaveStatus, detail: string, onRetry: () => void): EditorStatus {
+function statusOf(status: ContentSaveStatus, detail: string, onRetry: () => void): EditorStatus | null {
   switch (status) {
+    case "pristine": return null;
     case "saved": return { state: "saved" };
     case "saving": return { state: "saving" };
     case "error": return { state: "failed", detail, onRetry };
@@ -210,8 +211,8 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
         />
       }
       status={statusOf(state.saveStatus, state.message, () => controller.retrySave())}
-      dirty={state.saveStatus !== "saved"}
-      paneLabels={{ nav: "Content", main: "Editor", insp: "Preview" }}
+      dirty={state.saveStatus === "dirty" || state.saveStatus === "saving" || state.saveStatus === "error"}
+      paneLabels={{ nav: "Content", main: schemaMode ? "Schema" : "Entry", insp: "Preview" }}
       center={
         <SegmentedControl<ContentWorkMode>
           label="Editor mode"
@@ -233,10 +234,10 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
           </Button>
           <Button
             variant="primary"
-            disabled={state.saveStatus === "saved"}
+            disabled={state.saveStatus === "saved" || state.saveStatus === "pristine"}
             // Autosave stays authoritative; Save is the explicit flush for an
             // author who wants the pending write to land now.
-            title={state.saveStatus === "saved" ? "All changes saved" : "Save now"}
+            title={state.saveStatus === "pristine" ? "No changes to save" : state.saveStatus === "saved" ? "All changes saved" : "Save now"}
             onClick={() => run(() => (state.saveStatus === "error" ? controller.retrySave() : controller.flushSessions()))}
           >
             <CheckIcon size="sm" />
@@ -246,6 +247,12 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             <EllipsisIcon size="sm" />
           </Button>
           <Menu controller={overflow} label="Content actions">
+            {schemaMode ? (
+              <MenuItem icon={FileIcon} onSelect={() => controller.browseEntries()}>Edit entry</MenuItem>
+            ) : (
+              <MenuItem icon={SettingsIcon} onSelect={() => run(() => controller.inspectSchema())}>Edit schema</MenuItem>
+            )}
+            <MenuSeparator />
             <MenuItem
               icon={DuplicateIcon}
               disabled={state.entry === null || state.model?.document.kind === "single"}
