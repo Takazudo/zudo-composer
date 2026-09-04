@@ -233,6 +233,10 @@ export ZUDO_SITE_PROJECT_ROOT=/absolute/path/to/a-disposable-site-project-root
 corepack pnpm dev
 ```
 
+The path may sit behind a symlinked ancestor directory (macOS `TMPDIR`
+resolves this way); only the final path component itself must be a real
+directory, not a symlink.
+
 Production `vite build` always serializes the bundled sample passed in
 `vite.config.ts`; it does not read the local store, active pointer, Vite dev
 bridge, CLI, Node modules, or arbitrary local project files.

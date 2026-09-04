@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,9 +11,7 @@ import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV } from "../sto
 
 const roots: string[] = [];
 async function root(): Promise<string> {
-  // realpath is required: on macOS tmpdir() is /var/folders/... which symlinks to
-  // /private/var/..., and the store's ensureRoot guard demands realpath(root) === root.
-  const path = await realpath(await mkdtemp(join(tmpdir(), "zudo-site-project-")));
+  const path = await mkdtemp(join(tmpdir(), "zudo-site-project-"));
   roots.push(path);
   return join(path, ".zudo-site-project");
 }
@@ -140,6 +138,19 @@ describe("LocalSiteProjectStore", () => {
     await writeFile(join(testRoot, "unknown.txt"), "preserve", "utf8");
     await expect(store.list()).resolves.toEqual(expect.objectContaining({ status: "unavailable" }));
     await expect(readFile(join(testRoot, "unknown.txt"), "utf8")).resolves.toBe("preserve");
+  });
+
+  it("operates under a root whose ancestor is a symlink", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "zudo-site-project-ancestor-")); roots.push(parent);
+    const real = join(parent, "real"); await mkdir(real);
+    const link = join(parent, "link"); await symlink(real, link, "dir");
+    const testRoot = join(link, "root");
+    const store = createLocalSiteProjectStore({ testRoot });
+    const project = makeProject();
+    await expect(store.apply({ project, expectedRevision: null, expectedActive: null })).resolves.toEqual(expect.objectContaining({ status: "ok" }));
+    await expect(store.list()).resolves.toEqual(expect.objectContaining({ status: "ok", value: expect.objectContaining({ projects: [expect.objectContaining({ projectId: project.id })] }) }));
+    await expect(store.readActiveProject()).resolves.toEqual(expect.objectContaining({ status: "ok" }));
+    await expect(readFile(join(real, "root", "projects", `${project.id}.site-project.json`), "utf8")).resolves.toContain(project.id);
   });
 
   it("refuses lock and recognizable-orphan symlinks without following or deleting them", async () => {
