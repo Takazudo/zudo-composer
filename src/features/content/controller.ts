@@ -93,7 +93,7 @@ export class ContentAuthoringController {
   private modelRequestId = 0;
   private entryRequestId = 0;
   private listRequestId = 0;
-  private conflictDraft: { baseModel: ContentModelRecord | null; baseEntry: ContentEntryRecord | null; localModel: ContentModelRecord | null; localEntry: ContentEntryRecord | null; authoritativeModel: ContentModelRecord | null; authoritativeEntry: ContentEntryRecord | null } | null = null;
+  private conflictDraft: { baseModel: ContentModelRecord | null; baseEntry: ContentEntryRecord | null; localModel: ContentModelRecord | null; localEntry: ContentEntryRecord | null; authoritativeModel: ContentModelRecord | null; authoritativeEntry: ContentEntryRecord | null; unreconcilablePaths: readonly string[] } | null = null;
   /** Invalidates an in-flight completeness sweep when the library reloads under it. */
   private scanGeneration = 0;
 
@@ -242,6 +242,7 @@ export class ContentAuthoringController {
     await this.flushSessions();
     const entry = createContentEntryRecord(model.id, {}, { idFactory: this.idFactory, now: this.now });
     await this.provider.store.putEntry(entry);
+    this.listRequestId++;
     this.admitEntry(model, entry);
     await this.openEntry(entry.id);
   }
@@ -258,6 +259,7 @@ export class ContentAuthoringController {
     if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Entry was not found." : "This Entry is unreadable and has been preserved.");
     const copy = createContentEntryRecord(model.id, structuredClone(outcome.record.values), { idFactory: this.idFactory, now: this.now });
     await this.provider.store.putEntry(copy);
+    this.listRequestId++;
     this.admitEntry(model, copy);
     await this.openEntry(copy.id);
   }
@@ -324,6 +326,7 @@ export class ContentAuthoringController {
     const values = { ...entry.values }; if (value === undefined || value === "") delete values[fieldId]; else values[fieldId] = value;
     const updated = { ...entry, updatedAt: this.now(), values };
     this.entryQueue.edit(this.entryQueue.ref, updated);
+    this.listRequestId++;
     // The model's warn dot is a running total rather than a rescan: an edit can
     // only change this one Entry's completeness, so the delta is exact.
     const model = this.current.model;
@@ -411,6 +414,7 @@ export class ContentAuthoringController {
     });
     if (edits.length === 0) return;
     await applyContentInverseMutation(ownerStore, read.snapshots, edits);
+    if (ownerStore === this.provider.store && inverse.source.recordId === this.current.model?.id) this.listRequestId++;
     await this.refreshGraph(target, entryRequestId);
   }
 
@@ -484,8 +488,13 @@ export class ContentAuthoringController {
     if (!recovery) return;
     if (!this.current.conflictRecovery?.authoritativeReady) throw new Error("Load the latest provider records before reapplying your draft.");
     if ((recovery.localModel && !recovery.authoritativeModel) || (recovery.localEntry && !recovery.authoritativeEntry)) throw new Error("The provider deleted this record. Use latest, then recreate it explicitly if needed.");
-    const model = recovery.baseModel && recovery.localModel && recovery.authoritativeModel ? mergeConflictRecord(recovery.baseModel, recovery.localModel, recovery.authoritativeModel) : recovery.authoritativeModel;
-    const entry = recovery.baseEntry && recovery.localEntry && recovery.authoritativeEntry ? mergeConflictRecord(recovery.baseEntry, recovery.localEntry, recovery.authoritativeEntry) : recovery.authoritativeEntry;
+    const modelMerge = recovery.baseModel && recovery.localModel && recovery.authoritativeModel ? mergeConflictRecord(recovery.baseModel, recovery.localModel, recovery.authoritativeModel, "/model") : { status: "merged" as const, value: recovery.authoritativeModel };
+    const entryMerge = recovery.baseEntry && recovery.localEntry && recovery.authoritativeEntry ? mergeConflictRecord(recovery.baseEntry, recovery.localEntry, recovery.authoritativeEntry, "/entry") : { status: "merged" as const, value: recovery.authoritativeEntry };
+    const conflicts = [...(modelMerge.status === "conflict" ? modelMerge.paths : []), ...(entryMerge.status === "conflict" ? entryMerge.paths : [])];
+    if (conflicts.length) throw new Error(`Your draft and the provider both changed ${conflicts.join(", ")}. Use latest, then re-edit those values manually.`);
+    if (modelMerge.status === "conflict" || entryMerge.status === "conflict") throw new Error("Your draft cannot be reconciled safely. Use latest, then re-edit manually.");
+    const model = modelMerge.value, entry = entryMerge.value;
+    this.listRequestId++;
     this.conflictDraft = null;
     this.set({ ...this.current, model, entry, entries: this.current.entries.map((item) => entry && item.id === entry.id ? entry : item), conflictRecovery: null, saveStatus: "pristine", message: "Reapplying your draft over the latest provider records…" });
     if (model) { this.installModelQueue(recovery.authoritativeModel!); if (JSON.stringify(model) !== JSON.stringify(recovery.authoritativeModel)) this.modelQueue!.edit(this.modelQueue!.ref, model); }
@@ -495,19 +504,33 @@ export class ContentAuthoringController {
   async reloadConflictAuthoritative(): Promise<void> {
     const recovery = this.conflictDraft;
     if (!recovery) return;
+    const listRequestId = ++this.listRequestId;
     try {
-      const snapshot = await this.provider.store.readAll();
+      const before = await this.provider.store.readAll();
       const selectedModelId = recovery.localModel?.id ?? this.current.model?.id;
       const selectedEntryId = recovery.localEntry?.id ?? this.current.entry?.id;
+      const page = selectedModelId ? await this.provider.store.pageEntries(selectedModelId, { limit: CONTENT_ENTRY_PAGE_SIZE }) : { entries: [] };
+      const snapshot = await this.provider.store.readAll();
+      if (listRequestId !== this.listRequestId || recovery !== this.conflictDraft) return;
+      if (before.providerId !== snapshot.providerId || before.mutationToken !== snapshot.mutationToken) throw new Error("Content changed again while the authoritative page was loading.");
       const authoritativeModel = snapshot.models.find((record) => record.id === selectedModelId) ?? null;
       const authoritativeEntry = snapshot.entries.find((record) => record.id === selectedEntryId && record.modelId === selectedModelId) ?? null;
-      const entries = authoritativeModel ? snapshot.entries.filter((record) => record.modelId === authoritativeModel.id).slice(0, CONTENT_ENTRY_PAGE_SIZE) : [];
-      this.conflictDraft = { ...recovery, authoritativeModel, authoritativeEntry };
-      const canReapply = (!recovery.localModel || authoritativeModel !== null) && (!recovery.localEntry || authoritativeEntry !== null);
-      this.set({ ...this.current, phase: "ready", models: snapshot.models.map(summarizeContentModel), model: authoritativeModel, entry: authoritativeEntry, entries,
-        usedFieldIds: usedFields(entries), nextCursor: undefined, conflictRecovery: { message: "Content changed in the provider. The latest records are loaded; choose whether to use them or explicitly reapply your preserved draft.", canReapply, authoritativeReady: true },
+      const allEntries = authoritativeModel ? snapshot.entries.filter((record) => record.modelId === authoritativeModel.id) : [];
+      const entries = authoritativeModel ? page.entries : [];
+      const modelMerge = recovery.baseModel && recovery.localModel && authoritativeModel ? mergeConflictRecord(recovery.baseModel, recovery.localModel, authoritativeModel, "/model") : null;
+      const entryMerge = recovery.baseEntry && recovery.localEntry && authoritativeEntry ? mergeConflictRecord(recovery.baseEntry, recovery.localEntry, authoritativeEntry, "/entry") : null;
+      const unreconcilablePaths = [...(modelMerge?.status === "conflict" ? modelMerge.paths : []), ...(entryMerge?.status === "conflict" ? entryMerge.paths : [])];
+      this.conflictDraft = { ...recovery, authoritativeModel, authoritativeEntry, unreconcilablePaths };
+      const canReapply = (!recovery.localModel || authoritativeModel !== null) && (!recovery.localEntry || authoritativeEntry !== null) && unreconcilablePaths.length === 0;
+      this.set({ ...this.current, phase: "ready", models: snapshot.models.map(summarizeContentModel), modelDescriptions: Object.fromEntries(snapshot.models.map((record) => [record.id, record.document.description])),
+        entryCounts: Object.fromEntries(snapshot.models.map((record) => [record.id, snapshot.entries.filter((entry) => entry.modelId === record.id).length])),
+        incompleteCounts: Object.fromEntries(snapshot.models.map((record) => [record.id, incompleteEntryCount(record, snapshot.entries.filter((entry) => entry.modelId === record.id))])),
+        model: authoritativeModel, entry: authoritativeEntry, entries,
+        usedFieldIds: usedFields(allEntries), nextCursor: authoritativeModel ? page.nextCursor : undefined,
+        conflictRecovery: { message: unreconcilablePaths.length ? `Content changed in the provider. Array changes at ${unreconcilablePaths.join(", ")} cannot be reconciled safely; use latest and re-edit manually.` : "Content changed in the provider. The latest records are loaded; choose whether to use them or explicitly reapply your preserved draft.", canReapply, authoritativeReady: true },
         saveStatus: "error", message: "Content conflict requires an explicit choice." });
     } catch (cause) {
+      if (listRequestId !== this.listRequestId || recovery !== this.conflictDraft) return;
       this.set({ ...this.current, saveStatus: "error", conflictRecovery: { message: `Content changed, but the latest provider records could not be loaded: ${errorMessage(cause)}`, canReapply: false, authoritativeReady: false }, message: "Retry loading the latest Content before resolving the conflict." });
     }
   }
@@ -670,10 +693,11 @@ export class ContentAuthoringController {
   }
   private async commitDeletion(snapshot: ContentSnapshot, operations: ContentMutation["operations"]): Promise<void> {
     const draft = { baseModel: snapshot.models.find((record) => record.id === this.current.model?.id) ?? null, baseEntry: snapshot.entries.find((record) => record.id === this.current.entry?.id) ?? null,
-      localModel: this.current.model, localEntry: this.current.entry, authoritativeModel: null, authoritativeEntry: null };
+      localModel: this.current.model, localEntry: this.current.entry, authoritativeModel: null, authoritativeEntry: null, unreconcilablePaths: [] };
     try {
       await this.closeQueues();
       await this.provider.store.transact({ expectedMutationToken: snapshot.mutationToken, operations });
+      this.listRequestId++;
     } catch (cause) {
       this.conflictDraft = draft;
       await this.reloadConflictAuthoritative();
@@ -691,18 +715,106 @@ export class ContentAuthoringController {
 
 function errorMessage(cause: unknown): string { return cause instanceof Error ? cause.message : "Unknown provider error."; }
 
-function mergeConflictRecord<T>(base: T, local: T, authoritative: T): T {
-  if (JSON.stringify(local) === JSON.stringify(base)) return structuredClone(authoritative);
-  if (!isPlainObject(base) || !isPlainObject(local) || !isPlainObject(authoritative)) return structuredClone(local);
+type MergeResult<T> = { status: "merged"; value: T } | { status: "conflict"; paths: string[] };
+
+function mergeConflictRecord<T>(base: T, local: T, authoritative: T, path: string): MergeResult<T> {
+  if (sameValue(local, authoritative)) return { status: "merged", value: structuredClone(local) };
+  if (sameValue(local, base)) return { status: "merged", value: structuredClone(authoritative) };
+  if (sameValue(authoritative, base)) return { status: "merged", value: structuredClone(local) };
+  if (Array.isArray(base) && Array.isArray(local) && Array.isArray(authoritative)) return mergeStableArray(base, local, authoritative, path) as MergeResult<T>;
+  if (!isPlainObject(base) || !isPlainObject(local) || !isPlainObject(authoritative)) return { status: "conflict", paths: [path || "/"] };
   const merged: Record<string, unknown> = {};
+  const conflicts: string[] = [];
   for (const key of new Set([...Object.keys(authoritative), ...Object.keys(local), ...Object.keys(base)])) {
-    if (!(key in local)) { if (key in base && !(key in authoritative)) continue; merged[key] = structuredClone(authoritative[key]); continue; }
-    if (!(key in base)) { merged[key] = structuredClone(local[key]); continue; }
-    if (!(key in authoritative)) { merged[key] = structuredClone(local[key]); continue; }
-    merged[key] = mergeConflictRecord(base[key], local[key], authoritative[key]);
+    const childPath = `${path}/${escapePointerSegment(key)}`;
+    const baseHas = key in base, localHas = key in local, authoritativeHas = key in authoritative;
+    const providerMetadata = (path === "/model" && key === "updatedAt") || (path === "/entry" && (key === "updatedAt" || key === "generation"));
+    if (providerMetadata) { if (authoritativeHas) merged[key] = structuredClone(authoritative[key]); continue; }
+    if (!baseHas) {
+      if (localHas && authoritativeHas && !sameValue(local[key], authoritative[key])) conflicts.push(childPath);
+      else if (localHas || authoritativeHas) merged[key] = structuredClone(localHas ? local[key] : authoritative[key]);
+      continue;
+    }
+    if (!localHas && !authoritativeHas) continue;
+    if (!localHas) { if (!sameValue(authoritative[key], base[key])) conflicts.push(childPath); continue; }
+    if (!authoritativeHas) { if (!sameValue(local[key], base[key])) conflicts.push(childPath); continue; }
+    const child = mergeConflictRecord(base[key], local[key], authoritative[key], childPath);
+    if (child.status === "conflict") conflicts.push(...child.paths); else merged[key] = child.value;
   }
-  return merged as T;
+  return conflicts.length ? { status: "conflict", paths: [...new Set(conflicts)] } : { status: "merged", value: merged as T };
 }
+
+function mergeStableArray(base: unknown[], local: unknown[], authoritative: unknown[], path: string): MergeResult<unknown[]> {
+  const keyed = [base, local, authoritative].map((values) => keyArray(values, path));
+  if (keyed.some((value) => value === null)) return { status: "conflict", paths: [path || "/"] };
+  const [baseKeyed, localKeyed, authoritativeKeyed] = keyed as [KeyedArray, KeyedArray, KeyedArray];
+  const merged = new Map<string, unknown>(), conflicts: string[] = [];
+  for (const key of new Set([...baseKeyed.order, ...localKeyed.order, ...authoritativeKeyed.order])) {
+    const baseHas = baseKeyed.items.has(key), localHas = localKeyed.items.has(key), authoritativeHas = authoritativeKeyed.items.has(key);
+    const childPath = `${path}/${escapePointerSegment(key)}`;
+    if (!baseHas) {
+      if (localHas && authoritativeHas && !sameValue(localKeyed.items.get(key), authoritativeKeyed.items.get(key))) conflicts.push(childPath);
+      else merged.set(key, structuredClone(localHas ? localKeyed.items.get(key) : authoritativeKeyed.items.get(key)));
+      continue;
+    }
+    if (!localHas && !authoritativeHas) continue;
+    if (!localHas) { if (!sameValue(authoritativeKeyed.items.get(key), baseKeyed.items.get(key))) conflicts.push(childPath); continue; }
+    if (!authoritativeHas) { if (!sameValue(localKeyed.items.get(key), baseKeyed.items.get(key))) conflicts.push(childPath); continue; }
+    const child = mergeConflictRecord(baseKeyed.items.get(key), localKeyed.items.get(key), authoritativeKeyed.items.get(key), childPath);
+    if (child.status === "conflict") conflicts.push(...child.paths); else merged.set(key, child.value);
+  }
+  if (conflicts.length) return { status: "conflict", paths: [...new Set(conflicts)] };
+  const order = mergeArrayOrder(baseKeyed.order, localKeyed.order, authoritativeKeyed.order, new Set(merged.keys()));
+  return order ? { status: "merged", value: order.map((key) => merged.get(key)) } : { status: "conflict", paths: [path || "/"] };
+}
+
+interface KeyedArray { order: string[]; items: Map<string, unknown> }
+function keyArray(values: unknown[], path: string): KeyedArray | null {
+  const order: string[] = [], items = new Map<string, unknown>();
+  for (const value of values) {
+    const key = stableArrayKey(value, path);
+    if (!key || items.has(key)) return null;
+    order.push(key); items.set(key, value);
+  }
+  return { order, items };
+}
+function stableArrayKey(value: unknown, path: string): string | null {
+  if (!isPlainObject(value)) return null;
+  if (path.startsWith("/model/") && typeof value.id === "string" && value.id) return `id:${JSON.stringify(value.id)}`;
+  if (path.startsWith("/entry/values/") && typeof value.providerId === "string" && typeof value.modelId === "string" && typeof value.recordId === "string") return `ref:${JSON.stringify([value.providerId, value.modelId, value.recordId])}`;
+  return null;
+}
+function mergeArrayOrder(base: string[], local: string[], authoritative: string[], retained: Set<string>): string[] | null {
+  const edges = new Map<string, Set<string>>([...retained].map((key) => [key, new Set()]));
+  const baseKeys = new Set(base);
+  const reordered = (order: string[]) => {
+    const common = new Set(order.filter((key) => baseKeys.has(key) && retained.has(key)));
+    return !sameValue(base.filter((key) => common.has(key)), order.filter((key) => common.has(key)));
+  };
+  const localReordered = reordered(local), authoritativeReordered = reordered(authoritative);
+  const addEdges = (order: string[], additionsOnly: boolean) => {
+    const present = order.filter((key) => retained.has(key));
+    for (let index = 1; index < present.length; index++) {
+      const from = present[index - 1]!, to = present[index]!;
+      if (!additionsOnly || !baseKeys.has(from) || !baseKeys.has(to)) edges.get(from)!.add(to);
+    }
+  };
+  if (!localReordered && !authoritativeReordered) addEdges(base, false);
+  if (localReordered) addEdges(local, false);
+  if (authoritativeReordered) addEdges(authoritative, false);
+  addEdges(local, true); addEdges(authoritative, true);
+  const priority = [...new Set([...local, ...authoritative, ...base])].filter((key) => retained.has(key));
+  const result: string[] = [];
+  while (result.length < retained.size) {
+    const next = priority.find((key) => !result.includes(key) && [...edges].every(([from, targets]) => result.includes(from) || !targets.has(key)));
+    if (!next) return null;
+    result.push(next);
+  }
+  return result;
+}
+
+function sameValue(left: unknown, right: unknown): boolean { return JSON.stringify(left) === JSON.stringify(right); }
+function escapePointerSegment(value: string): string { return value.replaceAll("~", "~0").replaceAll("/", "~1"); }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 

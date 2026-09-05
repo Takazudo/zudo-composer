@@ -123,6 +123,24 @@ describe("ContentAuthoringController", () => {
     expect(controller.state.entries.some((entry) => entry.id === "entry-25")).toBe(false);
   });
 
+  it.each([
+    ["create", async (controller: ReturnType<typeof createContentAuthoringController>) => controller.createEntry()],
+    ["duplicate", async (controller: ReturnType<typeof createContentAuthoringController>) => controller.duplicateEntry("entry-0")],
+    ["delete", async (controller: ReturnType<typeof createContentAuthoringController>) => controller.deleteEntry("entry-25")],
+    ["field scrub", async (controller: ReturnType<typeof createContentAuthoringController>) => controller.removeField("title")],
+    ["Entry edit", async (controller: ReturnType<typeof createContentAuthoringController>) => { await controller.openEntry("entry-0"); controller.updateEntryValue("title", "Edited"); await controller.flushSessions(); }],
+  ])("invalidates delayed pagination after a committed %s mutation", async (_label, mutate) => {
+    const model = createContentModelRecord({ name: "Many", kind: "collection", fields: [{ id: "title", key: "title", label: "Title", required: false, kind: "text" }] }, { id: "many", timestamp: "2026-01-01T00:00:00.000Z" });
+    const entries = Array.from({ length: 26 }, (_, index) => createContentEntryRecord("many", { title: `Title ${index}` }, { id: `entry-${index}`, timestamp: "2026-01-01T00:00:00.000Z" }));
+    const provider = createMemoryContentProvider({ models: [model], entries });
+    const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("many");
+    const originalPage = provider.store.pageEntries, delayed = deferred<Awaited<ReturnType<typeof originalPage>>>();
+    vi.spyOn(provider.store, "pageEntries").mockImplementation((modelId, options) => options?.cursor ? delayed.promise : originalPage(modelId, options));
+    const more = controller.loadMoreEntries(); await tick(); await mutate(controller);
+    delayed.resolve({ entries: [entries[25]!] }); await more;
+    expect(controller.state.entries.filter((entry) => entry.id === "entry-25")).toHaveLength(0);
+  });
+
   it("rejects an Entry whose stored model identity does not match the open model", async () => {
     const a = createContentModelRecord({ name: "A", kind: "collection", fields: [] }, { id: "model-a", timestamp: "2026-01-01T00:00:00.000Z" });
     const b = createContentModelRecord({ name: "B", kind: "collection", fields: [] }, { id: "model-b", timestamp: "2026-01-01T00:00:00.000Z" });
@@ -274,6 +292,71 @@ describe("ContentAuthoringController", () => {
     controller.discardConflictDraft();
     controller.updateEntryValue("title", "Explicit edit"); await controller.flushSessions();
     const saved = await provider.store.getEntry("entry-1"); expect(saved.status === "loaded" && saved.record.values.title).toBe("Explicit edit");
+  });
+
+  it("three-way merges unambiguous stable-ID schema additions without dropping either side", async () => {
+    const provider = createMemoryContentProvider(); const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("articles"); await controller.openEntry("entry-1");
+    const transact = provider.store.transact;
+    vi.spyOn(provider.store, "transact").mockImplementationOnce(async (mutation) => {
+      Object.assign(controller.state.model!.document, { fields: [...controller.state.model!.document.fields, { id: "local", key: "local", label: "Local", required: false, kind: "text" as const }] });
+      const model = await provider.store.getModel("articles");
+      if (model.status === "loaded") await provider.store.putModel({ ...model.record, document: { ...model.record.document, fields: [...model.record.document.fields, { id: "remote", key: "remote", label: "Remote", required: false, kind: "text" }] } });
+      return transact(mutation);
+    });
+    await expect(controller.deleteEntry("entry-1")).rejects.toThrow(/mutation token changed/i);
+    expect(controller.state.conflictRecovery?.canReapply).toBe(true);
+    controller.reconcileConflictDraft(); await controller.flushSessions();
+    const stored = await provider.store.getModel("articles");
+    expect(stored.status === "loaded" && stored.record.document.fields.map((field) => field.id)).toEqual(["title", "local", "remote"]);
+  });
+
+  it("three-way merges unambiguous stable-reference additions without dropping either side", async () => {
+    const target = { providerId: "content-indexeddb", modelId: "people", recordId: "a" } as const;
+    const model = createContentModelRecord({ name: "People", kind: "collection", fields: [{ id: "friends", key: "friends", label: "Friends", required: false, kind: "reference-list", target: { providerId: "content-indexeddb", recordId: "people" }, ordered: true }] }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
+    const owner = createContentEntryRecord("people", { friends: [target] }, { id: "owner", timestamp: "2026-01-01T00:00:00.000Z" });
+    const targets = ["a", "b", "c"].map((id) => createContentEntryRecord("people", {}, { id, timestamp: "2026-01-01T00:00:00.000Z" }));
+    const provider = createMemoryContentProvider({ models: [model], entries: [owner, ...targets] }); const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("people"); await controller.openEntry("owner");
+    const transact = provider.store.transact, local = { ...target, recordId: "b" }, remote = { ...target, recordId: "c" };
+    vi.spyOn(provider.store, "transact").mockImplementationOnce(async (mutation) => {
+      Object.assign(controller.state.entry!.values, { friends: [target, local] });
+      const stored = await provider.store.getEntry("owner");
+      if (stored.status === "loaded") await provider.store.putEntry({ ...stored.record, values: { friends: [target, remote] } });
+      return transact(mutation);
+    });
+    await expect(controller.deleteEntry("owner")).rejects.toThrow(/mutation token changed/i);
+    expect(controller.state.conflictRecovery?.canReapply).toBe(true);
+    controller.reconcileConflictDraft(); await controller.flushSessions();
+    const stored = await provider.store.getEntry("owner");
+    expect(stored.status === "loaded" && (stored.record.values.friends as typeof target[]).map((ref) => ref.recordId)).toEqual(["a", "b", "c"]);
+  });
+
+  it("refuses to reapply concurrently divergent arrays without stable identities", async () => {
+    const model = createContentModelRecord({ name: "Lists", kind: "collection", fields: [{ id: "tags", key: "tags", label: "Tags", required: false, kind: "list", item: { kind: "text" } }] }, { id: "lists", timestamp: "2026-01-01T00:00:00.000Z" });
+    const entry = createContentEntryRecord("lists", { tags: ["base"] }, { id: "list-entry", timestamp: "2026-01-01T00:00:00.000Z" });
+    const provider = createMemoryContentProvider({ models: [model], entries: [entry] }); const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("lists"); await controller.openEntry("list-entry");
+    const transact = provider.store.transact;
+    vi.spyOn(provider.store, "transact").mockImplementationOnce(async (mutation) => {
+      Object.assign(controller.state.entry!.values, { tags: ["base", "local"] });
+      const stored = await provider.store.getEntry("list-entry");
+      if (stored.status === "loaded") await provider.store.putEntry({ ...stored.record, values: { ...stored.record.values, tags: ["base", "remote"] } });
+      return transact(mutation);
+    });
+    await expect(controller.deleteEntry("list-entry")).rejects.toThrow(/mutation token changed/i);
+    expect(controller.state.conflictRecovery).toMatchObject({ canReapply: false, authoritativeReady: true });
+    expect(controller.state.conflictRecovery?.message).toContain("/entry/values/tags");
+    expect(() => controller.reconcileConflictDraft()).toThrow(/re-edit.*manually/i);
+  });
+
+  it("restores paginated presentation and full integrity facts after authoritative conflict reload", async () => {
+    const model = createContentModelRecord({ name: "Many", kind: "collection", fields: [{ id: "special", key: "special", label: "Special", required: true, kind: "text" }] }, { id: "many", timestamp: "2026-01-01T00:00:00.000Z" });
+    const entries = Array.from({ length: 30 }, (_, index) => createContentEntryRecord("many", index === 29 ? { special: "used beyond page" } : {}, { id: `entry-${index}`, timestamp: "2026-01-01T00:00:00.000Z" }));
+    const provider = createMemoryContentProvider({ models: [model], entries }); const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("many"); await controller.openEntry("entry-0");
+    const transact = provider.store.transact;
+    vi.spyOn(provider.store, "transact").mockImplementationOnce(async (mutation) => { const stored = await provider.store.getEntry("entry-0"); if (stored.status === "loaded") await provider.store.putEntry({ ...stored.record, values: { special: "concurrent" } }); return transact(mutation); });
+    await expect(controller.deleteEntry("entry-0")).rejects.toThrow(/mutation token changed/i);
+    expect(controller.state.entries).toHaveLength(25); expect(controller.state.nextCursor).toBe("25");
+    expect(controller.state.usedFieldIds).toContain("special"); expect(controller.state.incompleteCounts.many).toBe(28);
+    await controller.loadMoreEntries(); expect(controller.state.entries).toHaveLength(30);
   });
 
   it("keeps queues detached when deletion commits but the authoritative refresh fails", async () => {
