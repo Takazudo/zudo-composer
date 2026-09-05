@@ -64,7 +64,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   const [state, setState] = useState<ContentAuthoringState>(controller.state);
   const [actionError, setError] = useState<string | null>(null);
   const [intentError, setIntentError] = useState<string | null>(null);
-  const error = intentError ?? actionError;
+  const error = [actionError, intentError].filter(Boolean).join(" ") || null;
   const [notice, setNotice] = useState<string | null>(null);
   const [addModelOpen, setAddModelOpen] = useState(false);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(() => readEditorCollapsed(CONTENT_EDITOR_KEY).insp);

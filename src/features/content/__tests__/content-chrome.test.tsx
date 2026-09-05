@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContentApp } from "../content-app";
 import { createContentAuthoringController } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
@@ -69,6 +69,26 @@ describe("Content route intents", () => {
 
     expect(await screen.findByText("This link must include one model id.")).toBeInTheDocument();
     expect(screen.getByText("No model selected")).toBeInTheDocument();
+  });
+
+  it("shows a failed recovery load alongside the route error until a successful retry", async () => {
+    const provider = createMemoryContentProvider();
+    visit("/content?provider=content-indexeddb&model=articles&view=missing");
+    render(<ContentApp provider={provider} />);
+    await screen.findByText('Content view "missing" is unavailable for this model.');
+    const load = vi.spyOn(provider.store, "getEntry").mockRejectedValueOnce(new Error("Entry provider temporarily unavailable."));
+    const tree = screen.getByRole("tree", { name: "Content" });
+    const entry = within(tree).getByRole("treeitem", { name: /^Hello/ });
+    fireEvent.click(entry);
+    const failure = await screen.findByText(/Entry provider temporarily unavailable\./);
+    expect(failure).toHaveTextContent('Content view "missing" is unavailable for this model.');
+    expect(window.location.search).toBe("?provider=content-indexeddb&model=articles&view=missing");
+    fireEvent.click(entry);
+    expect(await screen.findByRole("textbox", { name: "Entry title" })).toHaveValue("Hello");
+    await waitFor(() => expect(window.location.search).toBe("?provider=content-indexeddb&model=articles&entry=entry-1"));
+    expect(screen.queryByText(/Entry provider temporarily unavailable\./)).toBeNull();
+    expect(screen.queryByText(/Content view "missing" is unavailable/)).toBeNull();
+    expect(load).toHaveBeenCalledTimes(2);
   });
 
   it("follows the selection in the address bar, so a copied URL reopens it", async () => {
