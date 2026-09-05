@@ -126,7 +126,7 @@ describe("SiteProject API protocol", () => {
       ok: true,
       result: {
         protocolVersion: 1,
-        projectSchemaVersion: 1,
+        projectSchemaVersion: 2,
         requestShapes: [
           { operation: "activate", keys: ["protocolVersion", "operation", "projectId", "revision", "expectedActive"] },
           { operation: "apply", keys: ["protocolVersion", "operation", "project", "expectedRevision", "expectedActive"] },
