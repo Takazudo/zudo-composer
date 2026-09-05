@@ -96,6 +96,8 @@ export function OutlineTree(props: OutlineTreeProps) {
   const editOriginId = useRef<string | null>(null);
   const restoreFocusId = useRef<string | null>(null);
   const originElement = useRef<HTMLElement | null>(null);
+  const originTerminal = useRef<string | null | undefined>(undefined);
+  const terminalElements = useRef(new Map<string | null, HTMLElement>());
   const rootElement = useRef<HTMLDivElement>(null);
   const expandParent = useRef<(id: string) => void>(() => {});
   expandParent.current = (id) => setExpanded(id, true);
@@ -122,7 +124,9 @@ export function OutlineTree(props: OutlineTreeProps) {
     } else if (restoreOrigin.current) {
       restoreFocusId.current = null;
       if (originElement.current?.isConnected) originElement.current.focus();
-      else (rowElements.current.get(editOriginId.current ?? "") ?? rootElement.current)?.focus();
+      else if (originTerminal.current !== undefined && terminalElements.current.has(originTerminal.current)) {
+        terminalElements.current.get(originTerminal.current)?.focus();
+      } else (rowElements.current.get(editOriginId.current ?? "") ?? rootElement.current)?.focus();
     }
     restoreOrigin.current = false;
   });
@@ -170,6 +174,8 @@ export function OutlineTree(props: OutlineTreeProps) {
     setRenamingId(null);
     editOriginId.current = originId;
     originElement.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    originTerminal.current = originId === null && target.index === insertLists.get(target.parentId)?.length
+      ? target.parentId : undefined;
     const transaction = {
       anchor: { parentId: target.parentId, beforeId: insertSiblings(nodes, target.parentId)?.[target.index]?.id ?? null },
       inline: onRequestInsert === undefined,
@@ -247,6 +253,7 @@ export function OutlineTree(props: OutlineTreeProps) {
       event.preventDefault();
       event.stopPropagation();
       originElement.current = rowElements.current.get(id) ?? null;
+      originTerminal.current = undefined;
       pendingRef.current = null;
       setPending(null);
       setRenamingId(id);
@@ -325,6 +332,10 @@ export function OutlineTree(props: OutlineTreeProps) {
     registerRow: (id, element) => {
       if (element === null) rowElements.current.delete(id);
       else rowElements.current.set(id, element);
+    },
+    registerTerminal: (parentId, element) => {
+      if (element === null) terminalElements.current.delete(parentId);
+      else terminalElements.current.set(parentId, element);
     },
     handleRowKeyDown,
     tabStopId,

@@ -27,6 +27,7 @@ export interface OutlineTreeContextValue {
   cancelEdit: () => void;
   addLabel: (parent: OutlineNode | null) => string;
   registerRow: (id: string, element: HTMLElement | null) => void;
+  registerTerminal: (parentId: string | null, element: HTMLElement | null) => void;
   handleRowKeyDown: (event: KeyboardEvent, id: string) => void;
   /** The single row in the tab order — roving tabindex. */
   tabStopId: string | null;
