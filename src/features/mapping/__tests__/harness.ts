@@ -22,6 +22,7 @@ import {
 import { createSequentialIdFactory } from "../../../shared";
 import { activeComponentProvider } from "../../composer/active-pack";
 import { MappingEditorController, type MappingContentEntryCatalog, type MappingEditorControllerOptions } from "../controller";
+import type { MappingAttachmentCallbacks } from "../attachments";
 
 export const NOW = "2026-01-02T03:04:05.000Z";
 
@@ -205,12 +206,20 @@ export function harness(
     },
   };
 
+  const attachments: MappingAttachmentCallbacks = {
+    async list() { return { targets: [], attachments: [] }; },
+    async attach() {},
+    async detach() {},
+    async preview() { return { status: "unavailable", effectiveEntries: [], diagnostics: [] }; },
+    async assertMappingDeletable() {},
+    async withMappingMutation(_mapping, action) { return action(); },
+  };
   const controller = new MappingEditorController(
     provider,
     { content, compositions },
     contentEntries,
     activeComponentProvider.catalog,
-    { idFactory: createSequentialIdFactory("test"), now: () => NOW, ...options },
+    { idFactory: createSequentialIdFactory("test"), now: () => NOW, attachments, ...options },
   );
 
   return { controller, provider, records, content, compositions, contentEntries };

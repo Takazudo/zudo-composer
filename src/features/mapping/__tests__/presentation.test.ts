@@ -6,6 +6,8 @@ import {
   compatibleTargetGroups,
   entryLabel,
   firstCompatibleTransform,
+  projectionKey,
+  sourceProjectionOptions,
   parseRefKey,
   refKey,
   targetKey,
@@ -137,5 +139,20 @@ describe("Mapping presentation helpers", () => {
   it("labels a sample Entry with the Content route's own rule", () => {
     expect(entryLabel(entry, model)).toBe(contentEntryLabel(entry, model.document.fields));
     expect(entryLabel(entry, null)).toBe("Untitled Entry");
+  });
+
+  it("keeps structured and provider-backed projections stable and human-readable", () => {
+    const field = {
+      id: "meta",
+      key: "meta",
+      label: "Metadata",
+      required: false,
+      kind: "object" as const,
+      fields: [{ id: "title", key: "title", label: "Display title", required: false, kind: "text" as const }],
+    };
+    const options = sourceProjectionOptions(field);
+    const nested = options.find((option) => option.projection.kind === "object-field")!;
+    expect(nested.label).toBe("Display title");
+    expect(projectionKey(nested.projection)).toBe("object-field:title");
   });
 });

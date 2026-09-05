@@ -14,6 +14,7 @@ import {
   type MappingEditorController,
   type MappingEditorState,
 } from "./controller";
+import type { MappingAttachmentCallbacks } from "./attachments";
 import {
   MAPPING_ROUTE,
   parseMappingDeepLink,
@@ -35,6 +36,8 @@ export interface MappingRouteContentProps {
   contentEntries: MappingContentEntryCatalog;
   componentProvider: ComposerComponentProvider;
   controller?: MappingEditorController;
+  /** Aggregate project attachment callbacks supplied by the workspace owner. */
+  attachmentCallbacks?: MappingAttachmentCallbacks;
   /** Optional route seam for direct-refresh and deep-link tests. */
   location?: MappingRouteLocation;
   /** Route transitions; the browser's own navigation otherwise. */
@@ -53,8 +56,9 @@ export function MappingApp(props: MappingRouteContentProps): JSX.Element {
       { content: props.contentCatalog, compositions: props.compositionCatalog },
       props.contentEntries,
       props.componentProvider.catalog,
+      { attachments: props.attachmentCallbacks },
     ),
-    [props.controller, props.provider, props.contentCatalog, props.compositionCatalog, props.contentEntries, props.componentProvider.catalog],
+    [props.controller, props.provider, props.contentCatalog, props.compositionCatalog, props.contentEntries, props.componentProvider.catalog, props.attachmentCallbacks],
   );
   const [state, setState] = useState<MappingEditorState>(controller.state);
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +73,13 @@ export function MappingApp(props: MappingRouteContentProps): JSX.Element {
   useEffect(() => controller.subscribe(setState), [controller]);
   useEffect(() => {
     if (!integration) return;
-    const session = integration.sessions.register({ feature: "Mapping", providerId: props.provider.descriptor.id, workspaceId: integration.workspace.id }, { flush: () => controller.flush() });
+    const session = integration.sessions.register({ feature: "Mapping", providerId: props.provider.descriptor.id, workspaceId: integration.workspace.id }, { flush: async () => { await controller.flush(); await props.attachmentCallbacks?.flush?.(); } });
     let draft = controller.state.mapping;
-    const unsubscribe = controller.subscribe((next) => { if (draft !== next.mapping) { draft = next.mapping; session.changed(); } });
-    return () => { unsubscribe(); session.detach(); };
-  }, [controller, integration, props.provider]);
+    let attachments = controller.state.attachments.snapshot;
+    const unsubscribe = controller.subscribe((next) => { if (draft !== next.mapping || attachments !== next.attachments.snapshot) { draft = next.mapping; attachments = next.attachments.snapshot; session.changed(); } });
+    const unsubscribeAttachments = props.attachmentCallbacks?.subscribe?.(() => { session.changed(); void controller.refreshAttachments(); });
+    return () => { unsubscribe(); unsubscribeAttachments?.(); session.detach(); };
+  }, [controller, integration, props.provider, props.attachmentCallbacks]);
   useEffect(() => {
     if (initializationStarted.current || controller.state.phase !== "idle") return;
     initializationStarted.current = true;

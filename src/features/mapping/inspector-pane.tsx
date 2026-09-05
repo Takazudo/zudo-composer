@@ -8,8 +8,10 @@ import { Banner, EmptyState, Pane, PaneBody, PaneHeader, PaneSection, PaneTabs, 
 import type { MappingDefinitionDiagnostic, MappingEntryDiagnostic } from "../../mapping";
 import type { ComposerComponentProvider } from "../composer/component-provider";
 import type { MappingEditorState } from "./controller";
+import type { MappingEditorController } from "./controller";
 import { MappingPreviewHost } from "./preview-host";
-import { entryLabel } from "./presentation";
+import { diagnosticPath, entryLabel } from "./presentation";
+import { MappingAttachmentPane } from "./attachment-pane";
 
 // The inspector: what the current sample Entry renders as, and everything the
 // resolver has to say about the Mapping. Diagnostics used to be drawn in three
@@ -25,6 +27,8 @@ export interface InspectorPaneProps {
   onTabChange: (tab: MappingInspectorTab) => void;
   onPreviewCurrent: () => void;
   onPreviewError: (message: string) => void;
+  controller: MappingEditorController;
+  run: (action: () => void | Promise<void>) => void;
 }
 
 type AnyDiagnostic = MappingDefinitionDiagnostic | MappingEntryDiagnostic;
@@ -50,6 +54,8 @@ export function InspectorPane({
   onTabChange,
   onPreviewCurrent,
   onPreviewError,
+  controller,
+  run,
 }: InspectorPaneProps): JSX.Element {
   const mapping = state.mapping!;
   const model = state.definition?.contentModel ?? null;
@@ -67,7 +73,7 @@ export function InspectorPane({
     ...(state.evaluation?.entryDiagnostics ?? []),
   ];
   const previewFailure = state.previewStatus === "error" && state.message ? state.message : null;
-  const count = diagnostics.length + (state.entryFailure ? 1 : 0) + (previewFailure ? 1 : 0);
+  const count = diagnostics.length + (state.collectionEvaluation?.diagnostics.length ?? 0) + (state.entryFailure ? 1 : 0) + (previewFailure ? 1 : 0);
   const status = previewStatus(state);
 
   return (
@@ -126,6 +132,7 @@ export function InspectorPane({
               onCurrent={onPreviewCurrent}
               onError={onPreviewError}
             />
+            <MappingAttachmentPane state={state} mapping={mapping} controller={controller} componentProvider={componentProvider} run={run} />
           </PaneSection>
         </div>
         <div hidden={tab !== "diagnostics"}>
@@ -142,12 +149,23 @@ export function InspectorPane({
               <Banner tone="err" title="Entry provider unavailable.">{state.entryFailure}</Banner>
             ) : null}
             {previewFailure ? <Banner tone="err" title="Preview host failure.">{previewFailure}</Banner> : null}
+            {state.collectionEvaluation?.diagnostics.map((diagnostic, index) => (
+              <Banner
+                key={`query:${diagnostic.code}:${index}`}
+                tone={diagnostic.severity === "blocking" ? "err" : "warn"}
+                title={`Query · ${diagnostic.severity}`}
+              >
+                <span class="cms-mapping-diagnostic__path">{diagnosticPath(diagnostic) ?? "query"}</span>
+                {diagnostic.message}
+              </Banner>
+            ))}
             {diagnostics.map((diagnostic, index) => (
               <Banner
                 key={`${diagnostic.scope}:${diagnostic.code}:${index}`}
                 tone={diagnostic.severity === "blocking" ? "err" : "warn"}
                 title={`${diagnostic.scope === "definition" ? "Definition" : "Entry"} · ${diagnostic.severity}`}
               >
+                {diagnosticPath(diagnostic) ? <span class="cms-mapping-diagnostic__path">{diagnosticPath(diagnostic)}</span> : null}
                 {diagnostic.message}
               </Banner>
             ))}

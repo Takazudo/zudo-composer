@@ -72,6 +72,27 @@ test("provider-qualified Journal Mapping evaluates each seeded Entry", async ({ 
   expect(failures).toEqual([]);
 });
 
+test("collection query settings and ordered pins survive a Mapping reload", async ({ page }) => {
+  const failures = watchRuntimeFailures(page);
+  await page.goto(JOURNAL_MAPPING);
+
+  await expect(page.getByRole("combobox", { name: "Mapping mode" })).toHaveValue("collection");
+  await expect(page.getByText("Effective records", { exact: true })).toBeVisible();
+  await expect(page.locator(".cms-mapping-query__result li")).toHaveCount(3);
+
+  await page.getByRole("button", { name: "Choose" }).click();
+  const pins = page.getByRole("dialog", { name: "Choose ordered pins" });
+  await pins.getByRole("checkbox").first().check();
+  await pins.getByRole("button", { name: "Save pins" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
+  await page.reload();
+
+  await expect(page.locator(".cms-mapping-query__pins li").first()).toContainText("article-");
+  await expect(page.locator(".cms-mapping-query__result li")).toHaveCount(3);
+  expect(failures).toEqual([]);
+});
+
 test("focused Mapping source and target drift remains visible and can be repaired", async ({ page }) => {
   const failures = watchRuntimeFailures(page);
   await page.goto(JOURNAL_MAPPING);

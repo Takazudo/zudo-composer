@@ -9,6 +9,7 @@ import type { ContentFieldDefinition } from "../../content";
 import type { MappingTarget, MappingTargetDescriptor } from "../../mapping";
 import type { MappingEditorState } from "./controller";
 import { BindMenu } from "./bind-menu";
+import { CollectionQueryPane, type CollectionQueryPaneProps } from "./query-pane";
 import {
   compatibleTargetGroups,
   entryLabel,
@@ -31,6 +32,9 @@ export interface SourcePaneProps {
   rows: readonly MappingBindingRow[];
   onBind: (sourceFieldId: string, target: MappingTarget) => void;
   onSelectEntry: (entryId: string) => void;
+  onModeChange: (kind: "single" | "collection") => void;
+  onQueryChange: CollectionQueryPaneProps["onQueryChange"];
+  onOpenPins: () => void;
 }
 
 /** The chip beside a field: bound and working, bound and broken, or unbound. */
@@ -55,7 +59,7 @@ function targetMenuGroups(field: ContentFieldDefinition, targets: readonly Mappi
   }));
 }
 
-export function SourcePane({ state, rows, onBind, onSelectEntry }: SourcePaneProps): JSX.Element {
+export function SourcePane({ state, rows, onBind, onSelectEntry, onModeChange, onQueryChange, onOpenPins }: SourcePaneProps): JSX.Element {
   const model = state.definition?.contentModel ?? null;
   const fields = model?.document.fields ?? [];
   const targets = state.definition?.targets ?? [];
@@ -110,6 +114,7 @@ export function SourcePane({ state, rows, onBind, onSelectEntry }: SourcePanePro
             </ul>
           ) : null}
         </PaneSection>
+        <CollectionQueryPane state={state} onModeChange={onModeChange} onQueryChange={onQueryChange} onOpenPins={onOpenPins} />
         <PaneSection title="Sample entry">
           <Field label="Sample Entry" help="Used only to evaluate the preview.">
             <Select
