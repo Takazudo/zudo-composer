@@ -249,7 +249,10 @@ describe("MappingEditorController", () => {
       async detach(received) { requests.push(`detach:${received.id}`); snapshot = { ...snapshot, attachments: [] }; },
       async preview() { return { status: "ready", document: composition.document, staticFallback: composition.document, effectiveEntries: [entry], diagnostics: [] }; },
       async assertMappingDeletable() {},
-      async withMappingMutation(_mapping, action) { return action(); },
+      async withMappingMutation(mapping, action) {
+        if (mapping && snapshot.attachments.some((candidate) => candidate.mapping.providerId === mapping.providerId && candidate.mapping.recordId === mapping.recordId)) throw new Error("attached Mapping cannot change mode");
+        return action();
+      },
     };
     const h = harness([source], RESOLVED_ENTRIES, { attachments: callbacks });
     await h.controller.initialize();
@@ -257,6 +260,8 @@ describe("MappingEditorController", () => {
     await h.controller.attachCollection({ composition: { ...COMPOSITION_REF }, target: { nodeId: HEADING_NODE, slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: source.id } });
     expect(requests[0]).toBe(`indexeddb/composition-1:${HEADING_NODE}.body:mapping-indexeddb/${source.id}`);
     expect(h.controller.state.attachments.snapshot?.attachments).toHaveLength(1);
+    await expect(h.controller.setMode("single")).rejects.toThrow(/attached Mapping/);
+    expect(h.controller.state.mapping?.document.mode.kind).toBe("collection");
     await h.controller.previewCollectionAttachment(attachment.id);
     expect(h.controller.state.attachments.preview?.status).toBe("ready");
     await h.controller.detachCollection(attachment.id);

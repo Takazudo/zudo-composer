@@ -16,8 +16,9 @@ describe("mapping attachment aggregate service", () => {
     const updateGate = new Promise<void>((resolve) => { releaseUpdate = resolve; });
     const updateStartedGate = new Promise<void>((resolve) => { updateStarted = resolve; });
     const metadata = { id: "workspace", mutationToken: 0 } as WorkspaceRecord;
+    let observedFlushSessions: boolean | undefined;
     const service = createMappingAttachmentService({
-      getCurrentSiteProject: async () => ({ status: "ready", project }),
+      getCurrentSiteProject: async (captureOptions) => { observedFlushSessions = captureOptions?.flushSessions; return { status: "ready", project }; },
       workspace: {
         metadata: async () => ({ ...metadata, mutationToken }),
         updateMetadata: async () => {
@@ -43,5 +44,22 @@ describe("mapping attachment aggregate service", () => {
     await flushing;
 
     expect(flushed).toBe(true);
+    expect(observedFlushSessions).toBe(false);
+  });
+
+  it("guards destructive mutations from workspace metadata even when the Mapping snapshot is broken", async () => {
+    const attachment = { id: "edge", order: 0, composition: { providerId: "indexeddb", recordId: "owner" }, target: { nodeId: "missing", slotId: "content" }, mapping: { providerId: "mapping-indexeddb", recordId: "mapping" } } as const;
+    const metadata = { id: "workspace", mutationToken: 0, metadata: { collectionAttachments: [attachment] } } as unknown as WorkspaceRecord;
+    let snapshotReads = 0;
+    const service = createMappingAttachmentService({
+      getCurrentSiteProject: async () => { snapshotReads += 1; throw new Error("broken Mapping snapshot"); },
+      workspace: { metadata: async () => metadata, updateMetadata: async () => metadata },
+      componentCatalog: activeComponentProvider.catalog,
+      subscribe: () => () => undefined,
+    });
+
+    await expect(service.withMappingMutation(null, async () => undefined)).rejects.toThrow(/still persisted/);
+    await expect(service.assertMappingDeletable(attachment.mapping)).rejects.toThrow(/attached/);
+    expect(snapshotReads).toBe(0);
   });
 });

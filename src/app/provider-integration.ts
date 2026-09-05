@@ -17,7 +17,7 @@ import { createIndexedDbSitemapProvider } from "../sitemapper/storage/indexeddb/
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
 import { createWorkspaceStorage, projectFromWorkspace, workspaceScopedFactory, workspaceDatabaseName, withWorkspaceInitializationLock, WORKSPACE_DATABASE_NAME, type WorkspaceRecord } from "./workspace-storage";
 import { createWorkspaceSaveRegistry, type WorkspaceSaveRegistry } from "./workspace-sessions";
-import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture, type WorkspaceCaptureOutcome, type WorkspaceSnapshotSource } from "./workspace-snapshot";
+import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture, type WorkspaceCaptureOutcome, type WorkspaceSnapshotSource, type WorkspaceToken } from "./workspace-snapshot";
 import { subscribePersistenceChanges } from "../shared/persistence-generation";
 import { createMappingAttachmentService } from "./mapping-attachment-service";
 
@@ -108,11 +108,11 @@ export interface ProductionProviderIntegration {
   mappingAttachmentService: MappingAttachmentCallbacks;
   sitemapProvider: SitemapProvider; sitemapperMappingCatalog: MappingAssignmentCatalog;
   initialization: { initialize(): Promise<ProviderIntegrationOutcome>; retry(): Promise<ProviderIntegrationOutcome>; startFresh(): Promise<ProviderIntegrationOutcome> };
-  getCurrentSiteProject(): Promise<SiteProjectSnapshotOutcome>;
+  getCurrentSiteProject(options?: { flushSessions?: boolean }): Promise<SiteProjectSnapshotOutcome>;
 }
 export interface WorkspaceLifecycle {
   readonly id: string | undefined;
-  metadata(): Promise<WorkspaceRecord>;
+  metadata(options?: { ensureReady?: boolean }): Promise<WorkspaceRecord>;
   updateMetadata(expectedToken: number, patch: { name?: string; activeSitemap?: SiteProject["activeSitemap"]; collectionAttachments?: readonly SiteProject["collectionAttachments"][number][] }): Promise<WorkspaceRecord>;
   reconcileBaseline(capture: WorkspaceCapture, revision: string): Promise<"applied" | "changed">;
   open(id: string): Promise<ProductionProviderIntegration>;
@@ -459,7 +459,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   };
   const workspace: WorkspaceLifecycle = {
     get id() { return workspaceId; },
-    async metadata() { await ensureReady(); return (await storage.open(workspaceId))!; },
+    async metadata(metadataOptions = {}) { if (metadataOptions.ensureReady !== false) await ensureReady(); return (await storage.open(workspaceId))!; },
     async updateMetadata(expectedToken, patch) {
       await ensureReady();
       if (patch.activeSitemap) {
@@ -478,8 +478,31 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       return create(initialProject, initialRevision);
     },
   };
-  const getCurrentSiteProject = async (): Promise<SiteProjectSnapshotOutcome> => {
-    const value = await capture(false);
+  const captureWithoutSessions = async (includeMedia: boolean): Promise<WorkspaceCaptureOutcome> => {
+    if (!project || !workspaceId) return { status: "unavailable", source: "workspace", error: new ProviderIntegrationError("snapshot", "Open a workspace before capture.") };
+    const ready = await lifecycle.initialize();
+    if (ready.status === "error") return { status: "unavailable", source: ready.error.phase, error: ready.error };
+    const sessionGeneration = sessions.generation;
+    const before: Record<string, WorkspaceToken> = {};
+    const embedded: Record<string, WorkspaceToken> = {};
+    const values: Record<string, unknown> = {};
+    let sourceList: WorkspaceSnapshotSource[];
+    let current = "workspace";
+    try {
+      sourceList = sources(includeMedia);
+      for (const source of sourceList) { current = source.id; before[source.id] = await source.token(); }
+      for (const source of sourceList) { current = source.id; const snapshot = await source.read(); values[source.id] = snapshot.value; embedded[source.id] = snapshot.mutationToken; }
+      const changed: string[] = [];
+      for (const source of sourceList) { current = source.id; const after = await source.token(); if (before[source.id] !== embedded[source.id] || after !== embedded[source.id]) changed.push(source.id); }
+      if (sessions.generation !== sessionGeneration) changed.push("editor-sessions");
+      if (changed.length) return { status: "changed", sources: changed };
+      return { status: "ready", capture: { workspaceId, sessionGeneration, tokens: embedded, values } };
+    } catch (cause) {
+      return { status: "unavailable", source: current, error: cause instanceof Error ? cause : new Error("Snapshot read failed.", { cause }) };
+    }
+  };
+  const getCurrentSiteProject = async (captureOptions: { flushSessions?: boolean } = {}): Promise<SiteProjectSnapshotOutcome> => {
+    const value = captureOptions.flushSessions === false ? await captureWithoutSessions(false) : await capture(false);
     if (value.status !== "ready") return { status: "error", error: new ProviderIntegrationError("snapshot", value.status === "unavailable" ? `${value.source}: ${value.error.message}` : value.status === "save-failed" ? value.failures.map((failure) => `${failure.feature}/${failure.providerId}/${failure.recordId ?? "operation"}: ${failure.error.message}`).join("; ") : `Workspace changed during capture: ${value.sources.join(", ")}.`) };
     try { return { status: "ready", project: await snapshotNow(value.capture, true) }; }
     catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Snapshot validation failed.") }; }

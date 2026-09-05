@@ -248,8 +248,12 @@ export class MappingEditorController {
     const mode: MappingMode = kind === "single"
       ? { kind: "single" }
       : { kind: "collection", query: defaultCollectionQuery() };
-    this.edit((record) => ({ ...record, document: { ...record.document, mode } }));
-    await this.refreshResolution();
+    const attachments = this.requireAttachmentMutation("Mapping mode changes are blocked because collection attachments could not be verified.");
+    await attachments.withMappingMutation({ providerId: this.provider.descriptor.id, recordId: mapping.id }, async () => {
+      this.edit((record) => ({ ...record, document: { ...record.document, mode } }));
+      await this.refreshResolution();
+      await this.flush();
+    });
   }
 
   async updateCollectionQuery(change: Partial<MappingCollectionQuery> | ((query: MappingCollectionQuery) => MappingCollectionQuery)): Promise<void> {
@@ -413,6 +417,7 @@ export class MappingEditorController {
 
   async attachCollection(request: Parameters<NonNullable<MappingAttachmentCallbacks>["attach"]>[0]): Promise<void> {
     if (!this.attachmentCallbacks) throw new Error("Collection attachment service is unavailable.");
+    await this.flush();
     await this.attachmentCallbacks.attach(request);
     await this.attachmentCallbacks.flush?.();
     await this.refreshAttachments();
@@ -422,6 +427,7 @@ export class MappingEditorController {
     if (!this.attachmentCallbacks) throw new Error("Collection attachment service is unavailable.");
     const attachment = this.current.attachments.snapshot?.attachments.find((item) => item.attachment.id === attachmentId)?.attachment;
     if (!attachment) throw new Error("This collection attachment is no longer available.");
+    await this.flush();
     await this.attachmentCallbacks.detach(attachment);
     await this.attachmentCallbacks.flush?.();
     await this.refreshAttachments();

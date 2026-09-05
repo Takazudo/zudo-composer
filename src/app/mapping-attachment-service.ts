@@ -8,9 +8,9 @@ import { activeSiteProjectValidationContext } from "./site-project-manifest";
 import type { WorkspaceRecord } from "./workspace-storage";
 
 interface MappingAttachmentServiceOptions {
-  getCurrentSiteProject(): Promise<{ status: "ready"; project: SiteProject } | { status: "error"; error: Error }>;
+  getCurrentSiteProject(options?: { flushSessions?: boolean }): Promise<{ status: "ready"; project: SiteProject } | { status: "error"; error: Error }>;
   workspace: {
-    metadata(): Promise<WorkspaceRecord>;
+    metadata(options?: { ensureReady?: boolean }): Promise<WorkspaceRecord>;
     updateMetadata(expectedToken: number, patch: { collectionAttachments?: readonly SiteProjectCollectionAttachment[] }): Promise<WorkspaceRecord>;
   };
   componentCatalog: ComponentCatalog;
@@ -126,14 +126,14 @@ function queryDiagnostics(diagnostics: readonly { code: string; severity: "block
 }
 
 export function createMappingAttachmentService(options: MappingAttachmentServiceOptions): MappingAttachmentCallbacks {
-  let operation = Promise.resolve();
+  let operation: Promise<unknown> = Promise.resolve();
 
-  async function coherent(): Promise<ProjectContext> {
+  async function coherent(flushSessions = true): Promise<ProjectContext> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const before = await options.workspace.metadata();
-      const current = await options.getCurrentSiteProject();
+      const before = await options.workspace.metadata({ ensureReady: false });
+      const current = await options.getCurrentSiteProject({ flushSessions });
       if (current.status === "error") throw current.error;
-      const after = await options.workspace.metadata();
+      const after = await options.workspace.metadata({ ensureReady: false });
       if (before.mutationToken === after.mutationToken) return { project: current.project, metadata: after };
     }
     throw new Error("Workspace changed while reading collection attachments; retry.");
@@ -141,17 +141,17 @@ export function createMappingAttachmentService(options: MappingAttachmentService
 
   async function withOperation<T>(action: () => Promise<T>): Promise<T> {
     const next = operation.then(action, action);
-    operation = next.then(() => undefined, () => undefined);
+    operation = next;
     return next;
   }
 
   async function withWorkspaceOperation<T>(action: () => Promise<T>): Promise<T> {
-    const metadata = await options.workspace.metadata();
+    const metadata = await options.workspace.metadata({ ensureReady: false });
     return withWorkspaceMutationLock(metadata.id, action);
   }
 
-  function assertMappingReferences(project: SiteProject, mapping: MappingRecordRef | null): void {
-    const referenced = project.collectionAttachments.some((attachment) => mapping === null || refKey(attachment.mapping) === refKey(mapping));
+  function assertAttachmentReferences(metadata: WorkspaceRecord, mapping: MappingRecordRef | null): void {
+    const referenced = metadata.metadata.collectionAttachments.some((attachment) => mapping === null || refKey(attachment.mapping) === refKey(mapping));
     if (!referenced) return;
     if (mapping === null) throw new Error("Mapping mutations are blocked because collection attachments are still persisted. Detach every collection attachment first.");
     throw new Error("This Mapping is attached to a Composition named slot. Detach every collection attachment before mutating it.");
@@ -159,8 +159,8 @@ export function createMappingAttachmentService(options: MappingAttachmentService
 
   async function withMappingMutation<T>(mapping: MappingRecordRef | null, action: () => Promise<T>): Promise<T> {
     return withWorkspaceOperation(async () => {
-      const context = await coherent();
-      assertMappingReferences(context.project, mapping);
+      const metadata = await options.workspace.metadata({ ensureReady: false });
+      assertAttachmentReferences(metadata, mapping);
       return action();
     });
   }
@@ -202,7 +202,7 @@ export function createMappingAttachmentService(options: MappingAttachmentService
 
   async function attach(request: Parameters<MappingAttachmentCallbacks["attach"]>[0]): Promise<void> {
     return withOperation(() => withWorkspaceOperation(async () => {
-      const context = await coherent();
+      const context = await coherent(false);
       const composition = projectComposition(context.project, request.composition);
       const mapping = projectMapping(context.project, request.mapping);
       if (!composition) throw new Error("Attachment owner Composition was not found.");
@@ -225,7 +225,7 @@ export function createMappingAttachmentService(options: MappingAttachmentService
 
   async function detach(attachment: SiteProjectCollectionAttachment): Promise<void> {
     return withOperation(() => withWorkspaceOperation(async () => {
-      const context = await coherent();
+      const context = await coherent(false);
       const current = context.project.collectionAttachments.find((candidate) => candidate.id === attachment.id);
       if (!current || attachmentIdentity(current) !== attachmentIdentity(attachment)) throw new Error("Collection attachment changed; reload before detaching.");
       const next = context.project.collectionAttachments.filter((candidate) => candidate.id !== attachment.id);
@@ -250,8 +250,8 @@ export function createMappingAttachmentService(options: MappingAttachmentService
 
   async function assertMappingDeletable(mapping: MappingRecordRef): Promise<void> {
     await withOperation(() => withWorkspaceOperation(async () => {
-      const { project } = await coherent();
-      assertMappingReferences(project, mapping);
+      const metadata = await options.workspace.metadata({ ensureReady: false });
+      assertAttachmentReferences(metadata, mapping);
     }));
   }
 
