@@ -10,6 +10,7 @@ import {
   createIndexedDbCompositionProvider,
   summarizeComposition,
   type CompositionInitializationOutcome,
+  type CompositionDeleteOutcome,
   type CompositionProvider,
   type CompositionRecord,
 } from "../../../../composer/browser";
@@ -64,6 +65,7 @@ function memoryProvider(
     initialize?: () => Promise<CompositionInitializationOutcome>;
     put?: (value: CompositionRecord) => Promise<void>;
     lifecycle?: boolean;
+    deleteWithDependencyCheck?: (id: string) => Promise<CompositionDeleteOutcome>;
   } = {},
 ): CompositionProvider & { records: Map<string, CompositionRecord> } {
   const records = new Map(initial.map((value) => [value.id, structuredClone(value)]));
@@ -88,9 +90,9 @@ function memoryProvider(
   };
   if (overrides.lifecycle) {
     Object.assign(store, {
-      deleteWithDependencyCheck: vi.fn(async (id: string) => (
+      deleteWithDependencyCheck: vi.fn(overrides.deleteWithDependencyCheck ?? (async (id: string) => (
         records.delete(id) ? { status: "deleted" as const } : { status: "not-found" as const }
-      )),
+      ))),
       unpublishWithDependencyCheck: vi.fn(async (id: string) => (
         records.has(id) ? { status: "unpublished" as const } : { status: "not-found" as const }
       )),
@@ -679,6 +681,41 @@ describe("ProductionComposerApp", () => {
     navigation.visit("/composer");
     await screen.findByRole("link", { name: "Alpha" });
     expect(screen.queryByRole("dialog", { name: "New composition" })).not.toBeInTheDocument();
+  });
+
+  it("dependency-checks deletion of a mounted Global template and keeps the editor open when blocked", async () => {
+    const template = record("site-shell", "Site shell");
+    template.document.publication = {
+      kind: "global-template",
+      outlet: { id: "main", label: "Main", target: { parentId: "sample-section", slotId: "content" } },
+    };
+    const consumer = record("consumer", "Consumer");
+    consumer.document.binding = { sourceRecordId: template.id, outletId: "main" };
+    const indexeddb = memoryProvider("indexeddb", [template, consumer], {
+      lifecycle: true,
+      deleteWithDependencyCheck: vi.fn(async () => ({
+        status: "blocked" as const,
+        dependents: [{ summary: summarizeComposition(consumer), binding: consumer.document.binding! }],
+      })),
+    });
+    render(
+      <ProductionComposerApp
+        componentProvider={fixtureComponentProvider}
+        providers={[indexeddb]}
+        navigation={new FakeNavigation("/composer?provider=indexeddb&composition=site-shell")}
+        preview={PREVIEW}
+      />,
+    );
+    await screen.findByRole("link", { name: "Back to Compositions" });
+    fireEvent.click(screen.getByRole("button", { name: "More composition actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Delete Site shell?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText("Cannot delete this Global template while 1 consumer is still linked.")).toBeInTheDocument();
+    expect(indexeddb.records.has("site-shell")).toBe(true);
+    expect(indexeddb.store.delete).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
   });
 
   it("reports a malformed /composer?new=0 route intent instead of silently opening the dialog", async () => {

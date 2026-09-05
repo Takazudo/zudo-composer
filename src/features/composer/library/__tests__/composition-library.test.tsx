@@ -1,20 +1,24 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 import "../../test-support/cleanup";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   COMPOSITION_PROVIDERS,
+  COMPOSITION_SCHEMA_VERSION,
   CompositionPersistenceError,
   type CompositionInitializationOutcome,
   type CompositionSummary,
   type ReuseCatalogEntry,
 } from "../../../../composer/browser";
 import { CompositionLibrary } from "../composition-library";
+import { fixtureComponentProvider } from "../../test-support/fixture-pack";
 import type {
   CompositionLibraryIntents,
+  CompositionLibraryPreviewOutcome,
   CompositionLibraryProviderCapability,
 } from "../library-contract";
+import { COMPOSITION_PREVIEW_FALLBACK_LIMIT } from "../composition-library-preview";
 
 const originalShowModal = HTMLDialogElement.prototype.showModal;
 const originalClose = HTMLDialogElement.prototype.close;
@@ -72,6 +76,7 @@ function fakeIntents(overrides: Partial<CompositionLibraryIntents> = {}): Compos
       documentName: "Alpha layout",
       outcome: { status: "ready" as const, kind: "ordinary" as const, generation: { ok: true, blocked: false, code: "export code", diagnostics: { byId: new Map(), opaqueIds: [] }, imports: [], nodeOrder: [] } as never },
     })),
+    resolvePreview: vi.fn(async (ref) => ({ status: "not-found" as const, ref, message: "No fixture preview." })),
     ...overrides,
   };
 }
@@ -80,7 +85,7 @@ function renderLibrary(
   intents = fakeIntents(),
   providers: readonly CompositionLibraryProviderCapability[] = defaultProviders,
 ) {
-  render(<CompositionLibrary providers={providers} initialProviderId="indexeddb" intents={intents} />);
+  render(<CompositionLibrary componentProvider={fixtureComponentProvider} providers={providers} initialProviderId="indexeddb" intents={intents} />);
   return intents;
 }
 
@@ -91,6 +96,146 @@ async function waitForLibrary(): Promise<void> {
 const dataRows = () => screen.getAllByRole("row").slice(1);
 
 describe("CompositionLibrary data and capability states", () => {
+  it("offers Cards/List views and resolves a provider-qualified inert runtime preview", async () => {
+    const intents = fakeIntents({
+      initialize: vi.fn(async () => ready([ALPHA])),
+      resolvePreview: vi.fn(async (ref) => ({
+        status: "ready" as const,
+        ref,
+        revision: "record-revision",
+        snapshot: {
+          localRecordId: ref.recordId,
+          document: {
+            schemaVersion: COMPOSITION_SCHEMA_VERSION,
+            id: ref.recordId,
+            name: "Alpha layout",
+            root: [],
+          },
+        },
+      })),
+    });
+    renderLibrary(intents);
+    await waitForLibrary();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+    const cards = screen.getByLabelText("Composition cards");
+    const card = within(cards).getByRole("article");
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" }));
+    const frame = card.querySelector("iframe")!;
+    expect(frame).toHaveAttribute("sandbox");
+    expect(frame).toHaveAttribute("tabindex", "-1");
+    expect(frame).toHaveClass("sg-composition-preview__frame");
+
+    fireEvent.click(within(card).getByRole("button", { name: "Preview" }));
+    const dialog = screen.getByRole("dialog", { name: "Preview — Alpha layout" });
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Phone" }));
+    expect(within(dialog).getByRole("radio", { name: "Phone" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    fireEvent.click(screen.getByRole("radio", { name: "List" }));
+    expect(screen.getByRole("table", { name: "Compositions" })).toBeInTheDocument();
+  });
+
+  it("bounds card iframe mounting to the near-visible observer window", async () => {
+    let report!: (entries: Array<{ isIntersecting: boolean }>) => void;
+    const disconnect = vi.fn();
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: typeof report) { report = callback; }
+      observe() {}
+      disconnect = disconnect;
+    });
+    const intents = fakeIntents({ initialize: vi.fn(async () => ready([ALPHA])) });
+    renderLibrary(intents);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+
+    expect(intents.resolvePreview).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Composition cards").querySelector("iframe")).toBeNull();
+    act(() => report([{ isIntersecting: true }]));
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledOnce());
+    expect(screen.getByLabelText("Composition cards").querySelector("iframe")).not.toBeNull();
+    act(() => report([{ isIntersecting: false }]));
+    expect(screen.getByLabelText("Composition cards").querySelector("iframe")).toBeNull();
+  });
+
+  it("keeps the no-observer fallback bounded when many cards are rendered", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const rows = Array.from({ length: 10 }, (_, index) => summary(`row-${index}`, `Row ${index}`));
+    const intents = fakeIntents({ initialize: vi.fn(async () => ready(rows)) });
+    renderLibrary(intents);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledTimes(COMPOSITION_PREVIEW_FALLBACK_LIMIT));
+    expect(screen.getByLabelText("Composition cards").querySelectorAll("iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+    expect(screen.getAllByText("Preview loads when nearby")).toHaveLength(rows.length - COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+
+    const firstCard = screen.getByRole("heading", { name: "Row 0" }).closest("article")!;
+    fireEvent.click(within(firstCard).getByRole("button", { name: "Preview" }));
+    let dialog = screen.getByRole("dialog", { name: "Preview — Row 0" });
+    expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Phone" }));
+    expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+
+    const deferredCard = screen.getByRole("heading", { name: "Row 5" }).closest("article")!;
+    fireEvent.click(within(deferredCard).getByRole("button", { name: "Preview" }));
+    dialog = screen.getByRole("dialog", { name: "Preview — Row 5" });
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "row-5" }));
+    expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+  });
+
+  it("invalidates same-id cards across providers and ignores the prior provider's late preview", async () => {
+    let resolveBrowser!: (outcome: CompositionLibraryPreviewOutcome) => void;
+    const browserPreview = new Promise<CompositionLibraryPreviewOutcome>((resolve) => { resolveBrowser = resolve; });
+    const shared = summary("shared", "Shared composition");
+    const providers: CompositionLibraryProviderCapability[] = [
+      { descriptor: COMPOSITION_PROVIDERS.indexeddb, available: true },
+      { descriptor: COMPOSITION_PROVIDERS.files, available: true },
+    ];
+    const intents = fakeIntents({
+      initialize: vi.fn(async () => ready([shared])),
+      resolvePreview: vi.fn(async (ref) => ref.providerId === "indexeddb"
+        ? browserPreview
+        : { status: "blocked" as const, ref, message: "Files provider preview." }),
+    });
+    renderLibrary(intents, providers);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "shared" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
+    expect(await screen.findByText("Files provider preview.")).toBeInTheDocument();
+    act(() => resolveBrowser({
+      status: "blocked",
+      ref: { providerId: "indexeddb", recordId: "shared" },
+      message: "Stale browser preview.",
+    }));
+    await Promise.resolve();
+    expect(screen.queryByText("Stale browser preview.")).toBeNull();
+    expect(screen.getByText("Files provider preview.")).toBeInTheDocument();
+  });
+
+  it("rejects a preview outcome whose provider-qualified identity does not match its card", async () => {
+    const intents = fakeIntents({
+      initialize: vi.fn(async () => ready([ALPHA])),
+      resolvePreview: vi.fn(async () => ({
+        status: "blocked" as const,
+        ref: { providerId: "files" as const, recordId: "alpha" },
+        message: "Wrong-provider payload.",
+      })),
+    });
+    renderLibrary(intents);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+
+    expect(await screen.findByText("The provider returned a preview for a different Composition.")).toBeInTheDocument();
+    expect(screen.queryByText("Wrong-provider payload.")).toBeNull();
+  });
+
   it("shows Plain/Pattern/Global template kind chips and node counts", async () => {
     const plain = summary("plain", "Plain page");
     const pattern = { ...summary("pattern", "Callout", LATE), publicationKind: "pattern" as const };

@@ -5,12 +5,14 @@ import { ExpandIcon, XMarkIcon } from "../../../components/icons";
 import type { ComposerComponentProvider } from "../component-provider";
 import { useResolvedTheme } from "../../../theme/use-resolved-theme";
 import { buildComposerPreviewUrl, composerPreviewFrameProps, createComposerPreviewBridge, type ComposerPreviewBridge, type ComposerPreviewLocation } from "./bridge";
-import { localPreviewSnapshot, type MessageTarget } from "./protocol";
+import { localPreviewSnapshot, type ComposerPreviewSnapshot, type MessageTarget } from "./protocol";
 import "./composition-preview-host.css";
 
 export interface CompositionPreviewHostProps {
   componentProvider: ComposerComponentProvider;
   document: CompositionDocument | null;
+  /** Resolved provider-owned snapshot. When present it is sent verbatim instead of a local-only projection. */
+  snapshot?: ComposerPreviewSnapshot | null;
   title?: string;
   emptyTitle?: string;
   emptyMessage?: string;
@@ -27,6 +29,7 @@ export interface CompositionPreviewHostProps {
 export function CompositionPreviewHost({
   componentProvider,
   document,
+  snapshot,
   title = "Composition preview",
   emptyTitle = "Preview unavailable",
   emptyMessage = "Choose a valid source to render a preview.",
@@ -40,10 +43,15 @@ export function CompositionPreviewHost({
 }: CompositionPreviewHostProps): JSX.Element {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const bridgeRef = useRef<ComposerPreviewBridge | null>(null);
-  const renderedDocumentRef = useRef<CompositionDocument | null>(null);
+  const renderedSnapshotRef = useRef<ComposerPreviewSnapshot | null>(null);
   const renderedThemeRef = useRef<"light" | "dark" | null>(null);
-  const latestDocumentRef = useRef(document);
-  latestDocumentRef.current = document;
+  const localSnapshot = useMemo(
+    () => (document ? localPreviewSnapshot(document, document.id) : null),
+    [document],
+  );
+  const effectiveSnapshot = snapshot ?? localSnapshot;
+  const latestSnapshotRef = useRef(effectiveSnapshot);
+  latestSnapshotRef.current = effectiveSnapshot;
   const activeTheme = useResolvedTheme();
   const latestThemeRef = useRef(activeTheme);
   latestThemeRef.current = activeTheme;
@@ -73,30 +81,30 @@ export function CompositionPreviewHost({
       },
     });
     bridgeRef.current = bridge;
-    renderedDocumentRef.current = null;
-    const initialDocument = latestDocumentRef.current;
-    if (initialDocument) {
-      bridge.render(localPreviewSnapshot(initialDocument, initialDocument.id), { mode: "preview", theme: latestThemeRef.current, selectedId: null });
-      renderedDocumentRef.current = initialDocument;
+    renderedSnapshotRef.current = null;
+    const initialSnapshot = latestSnapshotRef.current;
+    if (initialSnapshot) {
+      bridge.render(initialSnapshot, { mode: "preview", theme: latestThemeRef.current, selectedId: null });
+      renderedSnapshotRef.current = initialSnapshot;
       renderedThemeRef.current = latestThemeRef.current;
       if (bridge.ready) onCurrentRef.current?.();
     }
     return () => {
       bridge.dispose();
       bridgeRef.current = null;
-      renderedDocumentRef.current = null;
+      renderedSnapshotRef.current = null;
       renderedThemeRef.current = null;
     };
   }, [componentProvider.manifest.packId, componentProvider.manifest.packVersion, createBridge, hostWindow, location]);
 
   useEffect(() => {
     const bridge = bridgeRef.current;
-    if (!bridge || !document || (renderedDocumentRef.current === document && renderedThemeRef.current === activeTheme)) return;
-    bridge.render(localPreviewSnapshot(document, document.id), { mode: "preview", theme: activeTheme, selectedId: null });
-    renderedDocumentRef.current = document;
+    if (!bridge || !effectiveSnapshot || (renderedSnapshotRef.current === effectiveSnapshot && renderedThemeRef.current === activeTheme)) return;
+    bridge.render(effectiveSnapshot, { mode: "preview", theme: activeTheme, selectedId: null });
+    renderedSnapshotRef.current = effectiveSnapshot;
     renderedThemeRef.current = activeTheme;
     if (bridge.ready) onCurrentRef.current?.();
-  }, [activeTheme, document]);
+  }, [activeTheme, effectiveSnapshot]);
 
   useEffect(() => {
     if (enlarged) {
@@ -132,8 +140,8 @@ export function CompositionPreviewHost({
     {enlargeable && <button ref={enlargeButtonRef} hidden={enlarged} type="button" class="sg-composition-preview__enlarge" aria-label={`Enlarge ${title}`} onClick={() => setEnlarged(true)}><ExpandIcon size="sm" /><span>Full screen</span></button>}
     {enlarged && <button ref={closeButtonRef} type="button" class="sg-composition-preview__close" aria-label={`Close full-screen ${title}`} onClick={() => setEnlarged(false)}><XMarkIcon size="sm" /><span>Close</span></button>}
     <div class="sg-composition-preview__stage" aria-busy={loading}>
-      {!document && <div class="sg-composition-preview__empty"><h3>{emptyTitle}</h3><p>{emptyMessage}</p></div>}
-      <iframe ref={frameRef} class="sg-composition-preview__frame" tabIndex={-1} aria-hidden={!document} {...frameProps} />
+      {!effectiveSnapshot && <div class="sg-composition-preview__empty"><h3>{emptyTitle}</h3><p>{emptyMessage}</p></div>}
+      <iframe ref={frameRef} class="sg-composition-preview__frame" tabIndex={-1} aria-hidden={!effectiveSnapshot} {...frameProps} />
     </div>
   </div>;
 }

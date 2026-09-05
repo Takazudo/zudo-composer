@@ -92,7 +92,7 @@ export interface ComposerMenusApi {
 
   // ── Structure-row wrappers — the `(id/target, trigger)` callback shape ──
   handleTreeOpenNodeMenu: (nodeId: string, trigger: HTMLElement) => void;
-  handleTreeOpenInsertMenu: (target: InsertionTarget, trigger: HTMLElement) => void;
+  handleTreeOpenInsertMenu: (target: InsertionTarget, trigger: HTMLElement, addComponent?: () => void) => void;
 }
 
 export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi {
@@ -193,13 +193,13 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
   );
 
   const handleTreeOpenInsertMenu = useCallback(
-    (target: InsertionTarget, trigger: HTMLElement) => {
+    (target: InsertionTarget, trigger: HTMLElement, addComponentOverride?: () => void) => {
       openAt(
         {
           kind: "insert",
           target,
           restoreFocus: () => trigger.focus(),
-          addComponent: () => api.openChooser(target),
+          addComponent: addComponentOverride ?? (() => api.openChooser(target)),
         },
         trigger,
         null,

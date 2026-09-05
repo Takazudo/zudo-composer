@@ -7,6 +7,7 @@ import type {
   CompositionSummary,
   ReuseCatalogOutcome,
 } from "../../../composer/browser";
+import type { ComposerPreviewSnapshot } from "../preview";
 
 /** A provider can be described even when the current runtime cannot offer it. */
 export interface CompositionLibraryProviderCapability {
@@ -23,6 +24,12 @@ export interface CompositionLibraryExportOutcome {
   documentName: string;
   outcome: BrowserJsxExportOutcome;
 }
+
+/** A provider-qualified, fully detached input for an isolated library preview. */
+export type CompositionLibraryPreviewOutcome =
+  | { status: "ready"; ref: CompositionRecordRef; snapshot: ComposerPreviewSnapshot; revision: string }
+  | { status: "not-found"; ref: CompositionRecordRef; message: string }
+  | { status: "blocked"; ref: CompositionRecordRef; message: string };
 
 /**
  * The New-composition dialog always creates an empty local document. A source
@@ -57,4 +64,6 @@ export interface CompositionLibraryIntents {
   clear(providerId: CompositionProviderId): Promise<void>;
   /** Generates JSX for a stored record without mounting the editor. */
   exportJsx(ref: CompositionRecordRef): Promise<CompositionLibraryExportOutcome>;
+  /** Loads the current record and resolves any linked Global-template source in its owning provider. */
+  resolvePreview(ref: CompositionRecordRef): Promise<CompositionLibraryPreviewOutcome>;
 }
