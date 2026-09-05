@@ -1,4 +1,5 @@
 "use client";
+import { useMediaResolvedPreviewSnapshot } from "../../preview/media-snapshot";
 
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
@@ -131,10 +132,13 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
     () => composerPreviewFrameProps(location, PREVIEW_IFRAME_TITLE),
     [location],
   );
-  const previewDocument = useMemo(
+  const authoredPreviewDocument = useMemo(
     () => sourceDocument ?? (entry ? buildChooserPreviewDocument(entry, catalogById) : null),
     [catalogById, entry, sourceDocument],
   );
+  const authoredSnapshot = useMemo(() => authoredPreviewDocument ? localPreviewSnapshot(authoredPreviewDocument, authoredPreviewDocument.id) : null, [authoredPreviewDocument]);
+  const media = useMediaResolvedPreviewSnapshot(authoredSnapshot, componentProvider.catalog);
+  const previewDocument = media.snapshot?.document ?? null;
   const latestPreviewDocumentRef = useRef(previewDocument);
   latestPreviewDocumentRef.current = previewDocument;
   const latestThemeRef = useRef(activeTheme);
@@ -210,7 +214,8 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
         {!previewDocument && (
           <p class="sg-composer-chooser-preview-empty">Hover or focus a component to preview it here.</p>
         )}
-        <iframe ref={frameRef} class="sg-composer-preview-iframe" {...frameProps} />
+        {media.error && <p role="alert">{media.error}</p>}
+        <iframe ref={frameRef} hidden={!previewDocument} style={{ display: previewDocument ? undefined : "none" }} class="sg-composer-preview-iframe" {...frameProps} />
       </div>
     </div>
   );

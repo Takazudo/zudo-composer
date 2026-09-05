@@ -163,7 +163,7 @@ export class MediaLibraryController {
     }
     // Capture before registering this write, so a Content flush cannot wait on itself.
     const scans = await Promise.all(records.map((record) => this.scan(record, true)));
-    if (scans.some((scan) => scan.status !== "complete" || scan.locations.length > 0)) throw new Error("Trash blocked: active Content uses or an incomplete authoritative scan remain.");
+    if (scans.some((scan) => scan.status !== "complete" || scan.locations.length > 0 || (scan.additionalLocations?.length ?? 0) > 0)) throw new Error("Trash blocked: active project uses or an incomplete authoritative scan remain.");
     return this.mutate("Trash", async () => {
       for (const [index, record] of records.entries()) {
         if (!await this.contentServices!.isCurrent(scans[index]!)) throw new Error("Content changed during the safety check. Inspect usages again.");

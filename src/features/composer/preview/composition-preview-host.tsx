@@ -7,6 +7,7 @@ import { useResolvedTheme } from "../../../theme/use-resolved-theme";
 import { buildComposerPreviewUrl, composerPreviewFrameProps, createComposerPreviewBridge, type ComposerPreviewBridge, type ComposerPreviewLocation } from "./bridge";
 import { localPreviewSnapshot, type ComposerPreviewSnapshot, type MessageTarget } from "./protocol";
 import "./composition-preview-host.css";
+import { useMediaResolvedPreviewSnapshot } from "./media-snapshot";
 
 export interface CompositionPreviewHostProps {
   componentProvider: ComposerComponentProvider;
@@ -49,7 +50,8 @@ export function CompositionPreviewHost({
     () => (document ? localPreviewSnapshot(document, document.id) : null),
     [document],
   );
-  const effectiveSnapshot = snapshot ?? localSnapshot;
+  const media = useMediaResolvedPreviewSnapshot(snapshot ?? localSnapshot, componentProvider.catalog);
+  const effectiveSnapshot = media.snapshot;
   const latestSnapshotRef = useRef(effectiveSnapshot);
   latestSnapshotRef.current = effectiveSnapshot;
   const activeTheme = useResolvedTheme();
@@ -59,6 +61,7 @@ export function CompositionPreviewHost({
   onCurrentRef.current = onCurrent;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  useEffect(() => { if (media.error) onErrorRef.current?.(media.error); }, [media.error]);
   const [enlarged, setEnlarged] = useState(false);
   const enlargeButtonRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -139,9 +142,9 @@ export function CompositionPreviewHost({
   >
     {enlargeable && <button ref={enlargeButtonRef} hidden={enlarged} type="button" class="sg-composition-preview__enlarge" aria-label={`Enlarge ${title}`} onClick={() => setEnlarged(true)}><ExpandIcon size="sm" /><span>Full screen</span></button>}
     {enlarged && <button ref={closeButtonRef} type="button" class="sg-composition-preview__close" aria-label={`Close full-screen ${title}`} onClick={() => setEnlarged(false)}><XMarkIcon size="sm" /><span>Close</span></button>}
-    <div class="sg-composition-preview__stage" aria-busy={loading}>
-      {!effectiveSnapshot && <div class="sg-composition-preview__empty"><h3>{emptyTitle}</h3><p>{emptyMessage}</p></div>}
-      <iframe ref={frameRef} class="sg-composition-preview__frame" tabIndex={-1} aria-hidden={!effectiveSnapshot} {...frameProps} />
+    <div class="sg-composition-preview__stage" aria-busy={loading || media.loading}>
+      {!effectiveSnapshot && <div class="sg-composition-preview__empty"><h3>{emptyTitle}</h3><p>{media.error ?? (media.loading ? "Resolving current Media versions…" : emptyMessage)}</p></div>}
+      <iframe ref={frameRef} hidden={!effectiveSnapshot} style={{ display: effectiveSnapshot ? undefined : "none" }} class="sg-composition-preview__frame" tabIndex={-1} aria-hidden={!effectiveSnapshot} {...frameProps} />
     </div>
   </div>;
 }

@@ -10,6 +10,10 @@ import { MediaFieldPicker, MediaRouteContent } from "../../features/media";
 import { ContentRouteContent } from "../../features/content";
 import { notifyPersistenceChange } from "../../shared/persistence-generation";
 import { CONTENT_DATABASE_NAME } from "../../content";
+import { COMPOSER_DATABASE_NAME } from "../../composer/storage/indexeddb/types";
+import { MAPPING_DATABASE_NAME } from "../../mapping/storage/indexeddb/types";
+import { SITEMAPPER_DATABASE_NAME } from "../../sitemapper/storage/indexeddb/types";
+import { WORKSPACE_DATABASE_NAME } from "../workspace-storage";
 import { workspaceDatabaseName } from "../workspace-storage";
 
 vi.mock("../provider-integration", () => ({ createProductionProviderIntegration: () => { throw new Error("Inject the test workspace."); } }));
@@ -32,6 +36,7 @@ vi.mock("../../features/sitemapper", () => ({ SitemapperRouteContent: () => <h1>
 vi.mock("../../features/delivery/site-delivery", () => ({ SiteDelivery: () => <h1>Visitor website</h1> }));
 function workspace(id = "one") {
   return {
+    componentProvider: activeComponentProvider,
     sessions: createWorkspaceSaveRegistry(),
     workspace: { id, reset: vi.fn(), open: vi.fn() },
     initialization: { initialize: vi.fn(async () => ({ status: "ready" })), retry: vi.fn(async () => ({ status: "ready" })) },
@@ -75,10 +80,12 @@ describe("application workspace lifetime", () => {
       integration.sessions.register({ feature: "Media", providerId: "media-files" }, { flush: async () => undefined }).changed();
       expect(listener).not.toHaveBeenCalled();
       notifyPersistenceChange(workspaceDatabaseName(CONTENT_DATABASE_NAME, "one"));
-      expect(listener).toHaveBeenCalledTimes(1);
+      for (const database of [COMPOSER_DATABASE_NAME, MAPPING_DATABASE_NAME, SITEMAPPER_DATABASE_NAME]) notifyPersistenceChange(workspaceDatabaseName(database, "one"));
+      notifyPersistenceChange(WORKSPACE_DATABASE_NAME); notifyPersistenceChange("compositions:files");
+      expect(listener).toHaveBeenCalledTimes(6);
     } finally { stop(); }
     notifyPersistenceChange(workspaceDatabaseName(CONTENT_DATABASE_NAME, "one"));
-    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledTimes(6);
   });
   it.each(["rail", "portal"])("flushes real Mapping edits before %s navigation and retains failed edits", async (kind) => {
     const record = mappingRecord([]), h = harness([record]);
