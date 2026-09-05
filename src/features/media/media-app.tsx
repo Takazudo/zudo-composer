@@ -128,6 +128,7 @@ function ConnectedMedia({ provider, supplied, controllerOptions, intent }: Conne
     if (appliedIntent.current || state.phase !== "ready") return;
     appliedIntent.current = true;
     if (parsedIntent.status !== "matched" || parsedIntent.intent.route !== "media") return;
+    if (parsedIntent.intent.providerId !== provider.descriptor.id) { setLinkNotice("The requested Media provider is unavailable."); return; }
     const wanted = parsedIntent.intent.assetId;
     if (records.some((record) => record.id === wanted)) setActiveId(wanted);
     else setLinkNotice(`This library has no media asset with the id ${wanted}.`);

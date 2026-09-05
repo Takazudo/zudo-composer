@@ -109,6 +109,7 @@ function SitemapperRecord({
   }
   return (
     <SitemapperIntegration
+      providerId={intent.providerId}
       key={state.record.id}
       record={state.record}
       store={provider.store}
@@ -138,6 +139,7 @@ export function ProductionSitemapperApp({
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
   const outcome = useMemo(() => readSitemapperIntent(location), [location]);
+  if (outcome.status === "sitemap" && outcome.intent.providerId !== provider.descriptor?.id) return <Banner tone="err">The requested Sitemap provider is unavailable.</Banner>;
 
   return (
     <div class="sg-sitemapper-root">

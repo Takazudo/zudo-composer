@@ -29,7 +29,6 @@ import { Banner, Button, type DataTableColumn } from "../../../components/ui";
 import { cloneJson, createUuidIdFactory, type IdFactory } from "../../../shared";
 import {
   compareSitemapSummariesNewestFirst,
-  SITEMAP_PROVIDERS,
   summarizeSitemap,
   type SitemapInitializationOutcome,
   type SitemapProvider,
@@ -88,7 +87,6 @@ const CONTRACT: LibraryRowContract<SitemapSummary> = {
   id: (row) => row.id,
   name: (row) => row.name,
   icon: () => SitemapperIcon,
-  href: (row) => sitemapperHref(row.id),
   kind: (row) => (row.unassignedCount === 0
     ? { label: "All assigned", tone: "ok" }
     : { label: `${row.unassignedCount} unassigned`, tone: "warn" }),
@@ -182,7 +180,7 @@ export function SitemapLibrary({
       await provider.store.put(record);
       commitSummary(summarizeSitemap(record));
       setDialog(null);
-      navigate(sitemapperHref(record.id));
+      navigate(sitemapperHref(provider.descriptor!.id, record.id));
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap could not be created."));
     } finally {
@@ -313,7 +311,8 @@ export function SitemapLibrary({
     </Button>
   );
 
-  const storageLabel = (provider.descriptor ?? SITEMAP_PROVIDERS.indexeddb).label;
+  if (!provider.descriptor) return <Banner tone="err">The Sitemap provider identity is unavailable.</Banner>;
+  const storageLabel = provider.descriptor.label;
   const ready = outcome !== null && outcome.status !== "error";
 
   return (
@@ -377,7 +376,7 @@ export function SitemapLibrary({
           <LibraryTable
             caption="Sitemaps"
             rows={query.rows}
-            contract={CONTRACT}
+            contract={{ ...CONTRACT, href: (row) => sitemapperHref(provider.descriptor!.id, row.id) }}
             columns={COLUMNS}
             selection={selection}
             kindHeader="Assignment"
@@ -398,7 +397,7 @@ export function SitemapLibrary({
             ) : undefined}
             rowMenu={(row) => ({
               label: row.name,
-              open: { id: "open", label: "Open", kbd: "↵", href: sitemapperHref(row.id) },
+              open: { id: "open", label: "Open", kbd: "↵", href: sitemapperHref(provider.descriptor!.id, row.id) },
               actions: [
                 { id: "rename", label: "Rename…", icon: EditIcon, onSelect: () => { setOperationError(null); setDialog({ kind: "rename", id: row.id, name: row.name }); } },
                 { id: "duplicate", label: "Duplicate", icon: DuplicateIcon, onSelect: () => void duplicate(row.id) },

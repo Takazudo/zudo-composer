@@ -28,7 +28,7 @@ function unload(): boolean {
 
 describe("Content route intents", () => {
   it("opens the model and Entry the link names", async () => {
-    visit("/content?model=articles&entry=entry-1");
+    visit("/content?provider=content-indexeddb&model=articles&entry=entry-1");
     render(<ContentApp provider={createMemoryContentProvider()} />);
 
     const title = await screen.findByRole("textbox", { name: "Entry title" });
@@ -38,19 +38,19 @@ describe("Content route intents", () => {
   });
 
   it("reports a malformed link instead of quietly opening the bare route", async () => {
-    visit("/content?model=articles&model=journal");
+    visit("/content?provider=content-indexeddb&model=articles&model=journal");
     render(<ContentApp provider={createMemoryContentProvider()} />);
 
-    expect(await screen.findByText("This link must include one Content model id.")).toBeInTheDocument();
+    expect(await screen.findByText("This link must include one model id.")).toBeInTheDocument();
     expect(screen.getByText("No model selected")).toBeInTheDocument();
   });
 
   it("follows the selection in the address bar, so a copied URL reopens it", async () => {
     const tree = await openArticles();
-    await waitFor(() => expect(window.location.search).toBe("?model=articles"));
+    await waitFor(() => expect(window.location.search).toBe("?provider=content-indexeddb&model=articles"));
 
     fireEvent.click(within(tree).getByRole("treeitem", { name: /^Hello/ }));
-    await waitFor(() => expect(window.location.search).toBe("?model=articles&entry=entry-1"));
+    await waitFor(() => expect(window.location.search).toBe("?provider=content-indexeddb&model=articles&entry=entry-1"));
   });
 });
 

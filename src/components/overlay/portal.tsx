@@ -15,12 +15,14 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 // only thing a separate root gives up.
 
 export interface OverlayPortalProps {
+  /** Keep native-modal descendants in their owning top-layer subtree. */
+  container?: Element | null;
   /** Class applied to the host element, so the portal is identifiable in the DOM. */
   hostClass: string;
   children: ComponentChildren;
 }
 
-export function OverlayPortal({ hostClass, children }: OverlayPortalProps): null {
+export function OverlayPortal({ hostClass, children, container }: OverlayPortalProps): null {
   const hostRef = useRef<HTMLDivElement | null>(null);
   // Overlays are client-only; without a document there is nothing to portal to.
   if (hostRef.current === null && typeof document !== "undefined") {
@@ -31,12 +33,12 @@ export function OverlayPortal({ hostClass, children }: OverlayPortalProps): null
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    document.body.appendChild(host);
+    (container ?? document.body).appendChild(host);
     return () => {
       render(null, host);
       host.remove();
     };
-  }, []);
+  }, [container]);
 
   // No dependency array: the host mirrors whatever this render produced.
   useLayoutEffect(() => {

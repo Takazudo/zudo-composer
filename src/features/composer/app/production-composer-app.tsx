@@ -33,7 +33,7 @@ import {
   type IdFactory,
   type ReuseConsumerLifecycleOutcome,
 } from "../../../composer/browser";
-import { parseIntent } from "../../../app/route-intents";
+import { notifyRouteSelection, parseIntent } from "../../../app/route-intents";
 import { Banner, Button, EmptyState } from "../../../components/ui";
 import type { ComposerComponentProvider } from "../active-pack";
 import { CompositionLibrary } from "../library";
@@ -125,9 +125,9 @@ function lifecycleOutcomeMessage(outcome: Exclude<ReuseConsumerLifecycleOutcome,
 
 function browserNavigation(): ComposerBrowserNavigation {
   return {
-    read: () => ({ pathname: window.location.pathname, hash: window.location.hash }),
-    push: (url) => window.history.pushState(null, "", url),
-    replace: (url) => window.history.replaceState(null, "", url),
+    read: () => ({ pathname: window.location.pathname, search: window.location.search, hash: window.location.hash }),
+    push: (url) => { window.history.pushState(null, "", url); notifyRouteSelection(); },
+    replace: (url) => { window.history.replaceState(null, "", url); notifyRouteSelection(); },
     subscribe: (listener) => {
       let scheduled = false;
       const schedule = () => {
@@ -138,10 +138,8 @@ function browserNavigation(): ComposerBrowserNavigation {
           listener();
         });
       };
-      window.addEventListener("hashchange", schedule);
       window.addEventListener("popstate", schedule);
       return () => {
-        window.removeEventListener("hashchange", schedule);
         window.removeEventListener("popstate", schedule);
       };
     },
@@ -163,22 +161,9 @@ function canonicalResolution(
   location: ComposerRouteLocation,
   config: ComposerRouteConfig,
 ): { resolution: ReturnType<typeof parseComposerRoute>; url: string; history: ComposerTransitionIntent["history"] } {
-  if (
-    location.pathname === COMPOSER_DOCUMENT_PATH &&
-    (location.hash === "" || location.hash === "#/")
-  ) {
-    const route = { kind: "index" } as const;
-    const url = formatComposerRoute(route);
-    return {
-      resolution: { status: "matched", route },
-      url,
-      history:
-        location.hash === "#/" ? "already-applied" : "replace",
-    };
-  }
   return {
     resolution: parseComposerRoute(location, config),
-    url: `${location.pathname}${location.hash}`,
+    url: `${location.pathname}${location.search}${location.hash ?? ""}`,
     history: "already-applied",
   };
 }
@@ -257,7 +242,7 @@ export function ProductionComposerApp({
   // mount — a plain mount-effect flag would reopen the dialog every time the
   // index view remounts after a detour through a detail route.
   const [pendingNewIntent, setPendingNewIntent] = useState(
-    () => intentOutcome.status === "matched" && intentOutcome.intent.route === "composer" && intentOutcome.intent.action === "new",
+    () => intentOutcome.status === "matched" && intentOutcome.intent.route === "composer" && "action" in intentOutcome.intent && intentOutcome.intent.action === "new",
   );
   const [initializationNotice, setInitializationNotice] =
     useState<CompositionRecoveryOutcome | null>(null);
@@ -361,6 +346,7 @@ export function ProductionComposerApp({
         return (
           locationGeneration === locationGenerationRef.current &&
           current.pathname === location.pathname &&
+          current.search === location.search &&
           current.hash === location.hash
         );
       };

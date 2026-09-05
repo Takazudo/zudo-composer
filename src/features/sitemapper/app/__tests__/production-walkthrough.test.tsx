@@ -66,7 +66,7 @@ describe("production Sitemapper walkthrough", () => {
     fireEvent.input(within(createDialog).getByRole("textbox", { name: "Sitemap name" }), { target: { value: "Product map" } });
     fireEvent.click(within(createDialog).getByRole("button", { name: "Create sitemap" }));
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?sitemap=product-map-1"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?provider=sitemap-indexeddb&sitemap=product-map-1"));
 
     // The link the library produced is the only state the editor needs.
     view.rerender(
@@ -76,7 +76,7 @@ describe("production Sitemapper walkthrough", () => {
         pageIdFactory={createSequentialIdFactory("page")}
         now={() => "2026-04-02T00:00:00.000Z"}
         navigate={navigate}
-        location={{ pathname: "/sitemapper", search: "?sitemap=product-map-1" }}
+        location={{ pathname: "/sitemapper", search: "?provider=sitemap-indexeddb&sitemap=product-map-1" }}
       />,
     );
 
@@ -106,7 +106,7 @@ describe("production Sitemapper walkthrough", () => {
         pageIdFactory={createSequentialIdFactory("page")}
         now={() => "2026-04-02T00:00:00.000Z"}
         navigate={vi.fn()}
-        location={{ pathname: "/sitemapper", search: "?sitemap=walk-map" }}
+        location={{ pathname: "/sitemapper", search: "?provider=sitemap-indexeddb&sitemap=walk-map" }}
       />,
     );
 
@@ -143,7 +143,7 @@ describe("production Sitemapper walkthrough", () => {
         provider={provider}
         catalog={catalog()}
         navigate={navigate}
-        location={{ pathname: "/sitemapper", search: "?sitemap=missing-map" }}
+        location={{ pathname: "/sitemapper", search: "?provider=sitemap-indexeddb&sitemap=missing-map" }}
       />,
     );
 
@@ -159,11 +159,11 @@ describe("production Sitemapper walkthrough", () => {
         provider={provider}
         catalog={catalog()}
         navigate={vi.fn()}
-        location={{ pathname: "/sitemapper", search: "?sitemap=..%2Fetc" }}
+        location={{ pathname: "/sitemapper", search: "?provider=sitemap-indexeddb&sitemap=..%2Fetc" }}
       />,
     );
 
-    expect(await screen.findByText("The Sitemap id is malformed.")).toBeInTheDocument();
+    expect(await screen.findByText("The sitemap id is malformed.")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "New sitemap" }, { timeout: 10_000 })).toBeInTheDocument();
   });
 });

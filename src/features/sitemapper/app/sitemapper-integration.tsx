@@ -6,6 +6,7 @@
 import type { JSX } from "preact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../../app/chrome-context";
+import { notifyRouteSelection } from "../../../app/route-intents";
 import { EditorBody, EditorChrome, RecordTitle } from "../../../components/editor-chrome";
 import { DuplicateIcon, EditIcon, EllipsisIcon, MinusIcon, PlusIcon, TrashIcon } from "../../../components/icons";
 import { useLibraryConfirm } from "../../../components/library-page";
@@ -40,6 +41,7 @@ const ZOOM_STEP = 0.1;
 const NO_ROUTE_INFO: ReadonlyMap<string, SitemapNodeRouteInfo> = new Map();
 
 export interface SitemapperIntegrationProps {
+  providerId: string;
   record: SitemapRecord;
   store: Pick<SitemapStore, "put" | "delete">;
   catalog: Pick<CompositionCatalog, "listCompositions" | "resolveComposition">;
@@ -67,6 +69,7 @@ function statusOf(status: SitemapperSaveStatus, onRetry: () => void): EditorStat
 }
 
 export function SitemapperIntegration({
+  providerId,
   record,
   store,
   catalog,
@@ -116,7 +119,8 @@ export function SitemapperIntegration({
   // selecting a page is not a navigation.
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") return;
-    window.history.replaceState(null, "", sitemapperHref(record.id, selectedId ?? undefined));
+    window.history.replaceState(null, "", sitemapperHref(providerId, record.id, selectedId ?? undefined));
+    notifyRouteSelection();
   }, [record.id, selectedId]);
 
   useEffect(() => {
@@ -207,7 +211,7 @@ export function SitemapperIntegration({
         updatedAt: timestamp,
         document: { ...cloneJson(source.document), id: duplicateId, name: `${source.document.name} copy` },
       });
-      navigateRef.current?.(sitemapperHref(duplicateId));
+      navigateRef.current?.(sitemapperHref(providerId, duplicateId));
     } catch (reason) {
       setRecordError(reason instanceof Error ? reason.message : "The Sitemap could not be duplicated.");
     }

@@ -42,6 +42,7 @@ describe("rail navigation model", () => {
       "composer",
       "mapping",
       "sitemapper",
+      "review",
       "site",
     ]);
   });
@@ -116,6 +117,28 @@ describe("rail collapse persistence", () => {
 });
 
 describe("Rail", () => {
+  it("lists arbitrary singleton/collection models and pins a provider-qualified view", () => {
+    const onPinsChange = vi.fn();
+    renderRail({ onPinsChange, models: [
+      { providerId: "catalog", modelId: "people", label: "People", kind: "collection", views: [{ id: "contacts", label: "Contact details" }] },
+      { providerId: "editorial", modelId: "identity", label: "Site identity", kind: "single", views: [] },
+    ] });
+    expect(screen.getByRole("link", { name: "People" })).toHaveAttribute("href", "/content?provider=catalog&model=people");
+    expect(screen.getByRole("link", { name: "Site identity" })).toHaveAttribute("href", "/content?provider=editorial&model=identity");
+    fireEvent.click(screen.getByRole("button", { name: "People actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin Contact details" }));
+    expect(onPinsChange).toHaveBeenCalledWith([{ label: "Contact details", target: { route: "content", providerId: "catalog", modelId: "people", viewId: "contacts" } }]);
+  });
+
+  it("keeps stale pins visibly unavailable and removable without a fallback link", () => {
+    const onPinsChange = vi.fn();
+    renderRail({ onPinsChange, pins: [{ label: "Old contacts", target: { route: "content", providerId: "missing", modelId: "people" } }] });
+    expect(screen.getByText("Old contacts · unavailable")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Old contacts" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Old contacts pin actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove pin" }));
+    expect(onPinsChange).toHaveBeenCalledWith([]);
+  });
   it("marks only the current route", () => {
     renderRail({ path: "/content" });
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
@@ -131,10 +154,10 @@ describe("Rail", () => {
 
   it("names the Site entry as a link out of the CMS and never marks it current", () => {
     renderRail({ path: "/" });
-    const site = screen.getByRole("link", { name: "Site — open the delivered site" });
-    expect(site).toHaveAttribute("href", "/site");
+    const site = screen.getByRole("link", { name: "Website preview — choose preview source" });
+    expect(site).toHaveAttribute("href", "/website-preview");
     expect(site).not.toHaveAttribute("aria-current");
-    expect(site.querySelector(".cms-rail__external")).not.toBeNull();
+    expect(currentRailItem("/website-preview")?.id).toBe("site");
   });
 
   it("renders a count only where the summary supplied one", () => {
@@ -158,7 +181,7 @@ describe("Rail", () => {
     const { rerender } = renderRail({ onToggleCollapsed });
     const collapse = screen.getByRole("button", { name: "Collapse navigation" });
     expect(collapse).toHaveAttribute("aria-expanded", "true");
-    expect(collapse).toHaveAttribute("aria-controls", "cms-rail-nav");
+    expect(document.getElementById(collapse.getAttribute("aria-controls")!)).toHaveAttribute("aria-label", "Main navigation");
     fireEvent.click(collapse);
     expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
 

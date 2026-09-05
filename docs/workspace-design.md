@@ -248,3 +248,55 @@ BroadcastChannel messages are refresh hints. Delayed/dropped messages cannot
 bypass persisted-token checks. Direct external filesystem changes are caught on
 the next capture/read; external processes do not promise browser wakeups.
 Sidebar/theme/pin preferences never enter metadata or capture tokens.
+
+## Generic workspace shell
+
+The shell owns Overview, Content, Media, Compositions, Mappings, Sitemaps,
+Review & release and Website preview. Content navigation reads the complete
+provider-qualified catalog, resolves each model's declarative views and renders
+collections and singletons in the same dashed nested list. Failed sources remain
+explicitly unavailable. Model actions pin a model or view; pin actions rename,
+reorder and remove it. Stale pins stay visibly unavailable and removable.
+`zudo-composer-navigation-pins-v1` and `zudo-composer-rail` are browser preferences,
+outside project metadata, save sessions and review generations.
+
+Desktop widths are 244px, 218px at 761–1100px, and 56px when compact. The shared
+square `DisclosureButton` changes only geometry; the routed editor DOM persists.
+Ctrl/Meta+Backslash ignores handled events, IME, menus and native dialogs. Browse
+opens complete temporary navigation beside the compact rail, without changing
+the saved width. Keep expanded commits it. Outside pointer dismissal leaves
+destination focus alone; Close/Escape restores Browse. At 760px and below an
+initially closed native modal drawer uses `min(320px, 100vw - 48px)`, `100dvh`,
+a sticky close toolbar, 44px targets and contained scrolling. Breakpoint changes
+close temporary UI, restore visible focus and release scroll locking. Menus
+inside native dialogs mount their portals in the owning dialog's top layer.
+The precise pixel geometry comes from the approved shell contract; focus,
+touch-safe hover and scrolling follow CSS Wisdom's
+`responsive/media-query-best-practices.mdx`,
+`states-and-transitions/hover-focus-active-states.mdx` and
+`scroll/overscroll-behavior.mdx`.
+
+All record links use strict single-valued query intents in `route-intents.ts`:
+provider plus composition/model/mapping/sitemap/asset; Content can additionally
+name entry/view, and Sitemap can name page. Hashes, duplicate/unknown parameters,
+missing providers and unsafe IDs are invalid; there is no fallback record.
+Composer now uses the same query contract. `/composer/preview` keeps its isolated
+entry graph. An editor's accepted history selection calls `notifyRouteSelection`
+so the host updates navigation without remounting that editor.
+
+`useWorkspace()` exposes the current integration, `navigate`, `reset`, `open`,
+busy state and visible failure. Feature factories consume `integration.sessions`
+as described above; later feature owners must register their debounced drafts
+and pending operations. Shell navigation and browser traversal await this shared
+barrier before changing route. Mapping and Sitemap wrappers route imperative
+navigation through the same callback. Summary subscriptions refresh Overview and
+rail counts after integration change notifications; subscriptions are disposed
+on replacement. Retry opens existing data. Reset swaps the integration only after
+`workspace.reset()` returns its initialized replacement; failure preserves the
+old workspace. Active Sitemap selection uses metadata CAS and registers its
+pending write with shared sessions.
+
+Review & release explicitly reports its unavailable release services until the
+release integration lands. Website preview labels the current visitor route as
+live draft input and does not claim approval or activated immutable delivery.
+Notifications continue to disclose disabled, unconnected delivery capabilities.

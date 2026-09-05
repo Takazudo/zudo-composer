@@ -119,8 +119,8 @@ describe("CompositionLibrary data and capability states", () => {
     renderLibrary();
     await waitForLibrary();
 
-    expect(screen.getByRole("link", { name: "Bravo layout" })).toHaveAttribute("href", "/composer#/composition/indexeddb/bravo");
-    expect(screen.getByRole("link", { name: "Alpha layout" })).toHaveAttribute("href", "/composer#/composition/indexeddb/alpha");
+    expect(screen.getByRole("link", { name: "Bravo layout" })).toHaveAttribute("href", "/composer?provider=indexeddb&composition=bravo");
+    expect(screen.getByRole("link", { name: "Alpha layout" })).toHaveAttribute("href", "/composer?provider=indexeddb&composition=alpha");
     const rows = dataRows();
     expect(within(rows[0]).getByText("Bravo layout")).toBeInTheDocument();
     expect(within(rows[1]).getByText("Alpha layout")).toBeInTheDocument();

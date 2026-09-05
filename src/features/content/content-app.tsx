@@ -1,7 +1,7 @@
 import type { JSX } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../app/chrome-context";
-import { formatIntent, parseIntent } from "../../app/route-intents";
+import { formatIntent, notifyRouteSelection, parseIntent } from "../../app/route-intents";
 import { EditorBody, EditorChrome, RecordTitle, readEditorCollapsed, writeEditorCollapsed } from "../../components/editor-chrome";
 import { CheckCircleIcon, CheckIcon, CopyIcon, DuplicateIcon, EllipsisIcon, EyeIcon, FileIcon, SettingsIcon, TrashIcon, WarningIcon } from "../../components/icons";
 import { useLibraryConfirm } from "../../components/library-page";
@@ -44,8 +44,8 @@ function statusOf(status: ContentSaveStatus, detail: string, onRetry: () => void
   }
 }
 
-function contentHref(modelId: string, entryId?: string): string {
-  return formatIntent(entryId === undefined ? { route: "content", modelId } : { route: "content", modelId, entryId });
+function contentHref(providerId: string, modelId: string, entryId?: string): string {
+  return formatIntent(entryId === undefined ? { route: "content", providerId, modelId } : { route: "content", providerId, modelId, entryId });
 }
 
 /**
@@ -90,6 +90,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
     if (outcome.status === "invalid") { setError(outcome.message); return; }
     if (outcome.status !== "matched" || outcome.intent.route !== "content") return;
     const intent = outcome.intent;
+    if (intent.providerId !== provider.descriptor.id) { setError("The requested Content provider is unavailable."); return; }
     run(async () => {
       await controller.openModel(intent.modelId);
       if (intent.entryId !== undefined) await controller.openEntry(intent.entryId);
@@ -102,7 +103,8 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   useEffect(() => {
     if (!appliedIntent.current || state.phase !== "ready") return;
     if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") return;
-    window.history.replaceState(null, "", state.model ? contentHref(state.model.id, state.entry?.id) : CONTENT_ROUTE);
+    window.history.replaceState(null, "", state.model ? contentHref(provider.descriptor.id, state.model.id, state.entry?.id) : CONTENT_ROUTE);
+    notifyRouteSelection();
   }, [state.phase, state.model?.id, state.entry?.id]);
 
   const fields = state.model?.document.fields ?? [];
@@ -116,7 +118,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
 
   useBreadcrumb([
     { label: "Content", href: CONTENT_ROUTE },
-    ...(state.model ? [state.entry ? { label: state.model.document.name, href: contentHref(state.model.id) } : { label: state.model.document.name }] : []),
+    ...(state.model ? [state.entry ? { label: state.model.document.name, href: contentHref(provider.descriptor.id, state.model.id) } : { label: state.model.document.name }] : []),
     ...(state.entry ? [{ label: entryName }] : []),
   ]);
 
