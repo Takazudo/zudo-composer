@@ -3,12 +3,13 @@ import { useEffect, useId, useRef, useState } from "preact/hooks";
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, ErrorIcon, InfoIcon, PlusIcon, TrashIcon } from "../../components/icons";
 import { formatLibraryTimestampFull } from "../../components/library-page";
 import { Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay";
-import { Button, Chip, DataTable, Field, Input, Switch, Textarea, type DataTableColumn } from "../../components/ui";
-import { isContentFieldKey, type ContentEntryRecord, type ContentFieldDefinition } from "../../content";
+import { Button, Chip, DataTable, Field, Input, Select, Switch, Textarea, type DataTableColumn } from "../../components/ui";
+import { createContentValueSchema, isContentFieldKey, type ContentEntryRecord, type ContentFieldDefinition, type ContentFieldKind } from "../../content";
 import type { ContentAuthoringController, ContentAuthoringState } from "./controller";
 import { FieldKindPicker, contentFieldKindPresentation } from "./field-kind-picker";
 import { MarkdownEditor } from "./markdown-editor";
 import { deriveSlug } from "./slug";
+import { StructuredValueEditor, type ContentMediaPickerRenderer } from "./structured-field-editor";
 
 /** The route's reporter: it runs an action and shows what it failed with. */
 export type ContentAuthorRun = (action: () => void | Promise<void>) => void;
@@ -120,6 +121,20 @@ function SchemaFieldMenu({ field, index, count, onMove, onRemove }: SchemaFieldM
   );
 }
 
+function FieldSchemaOptions({ field, controller, run }: { field: ContentFieldDefinition; controller: ContentAuthoringController; run: ContentAuthorRun }): JSX.Element | null {
+  const [models, setModels] = useState<Awaited<ReturnType<ContentAuthoringController["referenceModels"]>>>([]);
+  useEffect(() => { if (field.kind !== "reference" && field.kind !== "reference-list") return; let live = true; void controller.referenceModels().then((items) => { if (live) setModels(items); }); return () => { live = false; }; }, [controller, field.kind]);
+  if (field.kind === "choice") return <Textarea aria-label={`Options for ${field.label}`} rows={3} value={field.options.map((option) => `${option.value}|${option.label}`).join("\n")} onBlur={(event) => {
+    const options = event.currentTarget.value.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => { const [value, ...label] = line.split("|"); return { value: value!.trim(), label: (label.join("|") || value!).trim() }; }).filter((option) => option.value && option.label);
+    if (options.length) run(() => controller.replaceField(field.id, { ...field, options }));
+  }} />;
+  if (field.kind === "reference" || field.kind === "reference-list") return <div class="sg-content-schema-options"><Select aria-label={`Target model for ${field.label}`} value={`${field.target.providerId}/${field.target.recordId}`} onChange={(event) => { const target = models.find((item) => `${item.ref.providerId}/${item.ref.recordId}` === event.currentTarget.value)?.ref; if (target) run(() => controller.replaceField(field.id, { ...field, target })); }}>{models.map((model) => <option key={`${model.ref.providerId}/${model.ref.recordId}`} value={`${model.ref.providerId}/${model.ref.recordId}`}>{model.label} · {model.providerLabel}</option>)}</Select>{field.kind === "reference-list" ? <Switch label="Preserve explicit order" checked={field.ordered} onCheckedChange={(ordered) => run(() => controller.replaceField(field.id, { ...field, ordered }))} /> : null}</div>;
+  if (field.kind === "media-use") return <Select aria-label={`Media presentation for ${field.label}`} value={field.use} onChange={(event) => run(() => controller.replaceField(field.id, { ...field, use: event.currentTarget.value as "image" | "link" | "card" }))}><option value="image">Image</option><option value="link">Link</option><option value="card">Card</option></Select>;
+  if (field.kind === "list") return <Select aria-label={`Item type for ${field.label}`} value={field.item.kind} onChange={(event) => run(() => controller.replaceField(field.id, { ...field, item: createContentValueSchema(event.currentTarget.value as ContentFieldKind, { providerId: controller.provider.descriptor.id, recordId: controller.state.model!.id }) }))}>{["text", "long-text", "number", "boolean", "date", "url", "object"].map((kind) => <option value={kind} key={kind}>{contentFieldKindPresentation(kind as ContentFieldKind).label}</option>)}</Select>;
+  if (field.kind === "object") return <div class="sg-content-schema-options"><span class="sg-content-hint">{field.fields.length} nested fields</span><Button size="xs" onClick={() => { const index = field.fields.length + 1; const child: ContentFieldDefinition = { id: `nested-${field.id}-${index}`, key: `field${index}`, label: `Nested field ${index}`, required: false, kind: "text" }; run(() => controller.replaceField(field.id, { ...field, fields: [...field.fields, child] })); }}>Add nested field</Button></div>;
+  return null;
+}
+
 export interface ContentSchemaAuthorProps {
   state: ContentAuthoringState;
   controller: ContentAuthoringController;
@@ -192,10 +207,18 @@ export function ContentSchemaAuthor({ state, controller, run, onRemove }: Conten
         />
       ),
     },
+    {
+      key: "configuration",
+      header: "Configuration",
+      cell: (field) => <FieldSchemaOptions field={field} controller={controller} run={run} />,
+    },
   ];
 
   return (
     <div class="sg-content-form">
+      <Field controlId="content-model-description" label="Model description" help="Shown in All models so authors can tell similar schemas apart.">
+        <Textarea rows={2} value={model.document.description} onInput={(event) => run(() => controller.updateModelDescription(event.currentTarget.value))} />
+      </Field>
       <div class="sg-content-locked">
         <span class="sg-content-locked__label">Model kind</span>
         <Chip tone="plain" class="sg-content-locked__chip">
@@ -244,6 +267,7 @@ export interface ContentEntryAuthorProps {
   state: ContentAuthoringState;
   controller: ContentAuthoringController;
   run: ContentAuthorRun;
+  renderMediaPicker?: ContentMediaPickerRenderer;
 }
 
 /**
@@ -253,7 +277,7 @@ export interface ContentEntryAuthorProps {
  * Entry's "used by" is resolved by the Mapping catalogue, which the inspector's
  * Usage tab owns; inventing a count here would mean guessing.
  */
-export function ContentEntryAuthor({ state, controller, run }: ContentEntryAuthorProps): JSX.Element {
+export function ContentEntryAuthor({ state, controller, run, renderMediaPicker }: ContentEntryAuthorProps): JSX.Element {
   const entry = state.entry!;
   const allFields = state.model!.document.fields;
   const view = state.model!.document.presentation?.views.find((item) => item.id === state.viewId);
@@ -305,6 +329,10 @@ export function ContentEntryAuthor({ state, controller, run }: ContentEntryAutho
         // a date), so it is marked decorative and the name stays the label.
         const kind = <span aria-hidden="true"><KindIcon size="xs" />{kindLabel}</span>;
         const commit = (next: ContentEntryRecord["values"][string] | undefined) => run(() => controller.updateEntryValue(field.id, next));
+
+        if (["choice", "reference", "reference-list", "object", "list", "media-use"].includes(field.kind)) {
+          return <div class="sg-content-rich-field" data-content-field-id={field.id} data-content-value-path="/" key={field.id}><Field controlId={controlId} label={field.label} required={field.required} kind={kind}><StructuredValueEditor schema={field} field={field} value={value} path={[]} controller={controller} run={run} renderMediaPicker={renderMediaPicker} commit={(next) => controller.updateEntryValue(field.id, next)} /></Field></div>;
+        }
 
         if (field.kind === "markdown") {
           return (

@@ -221,6 +221,29 @@ function saveStatus(page: Page): Locator {
   return page.locator(".cms-topbar__status");
 }
 
+test("Content directory, Raw storage, and field-qualified usage links stay model-first", async ({ page }) => {
+  const failures = watchRuntimeFailures(page);
+  await page.goto("/content");
+  await expect(page.getByRole("heading", { name: "All models", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Journal articles.*Browser storage/ })).toBeVisible();
+
+  await contentTree(page).getByRole("treeitem", { name: /^Journal articles/ }).click();
+  await contentTree(page).getByRole("treeitem", { name: /^Map the moving parts/ }).click();
+  const heading = page.getByRole("textbox", { name: "Heading", exact: true });
+  await expect(heading).toBeVisible();
+  const fieldId = (await heading.getAttribute("id"))!.replace(/^content-entry-/, "");
+  const selected = new URL(page.url());
+  selected.searchParams.set("field", fieldId);
+  await page.goto(selected.toString());
+  await expect(page.getByRole("textbox", { name: "Heading", exact: true })).toBeFocused();
+
+  await page.getByRole("tab", { name: "Raw", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Resolved values" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Exact field-ID storage" })).toBeVisible();
+  await expect(page.locator(".sg-content-raw pre").last()).toContainText(`"${fieldId}"`);
+  expect(failures).toEqual([]);
+});
+
 /** The one row-level overflow menu the navigator gives every model and Entry. */
 async function openRowMenu(page: Page, name: string) {
   const row = contentTree(page).getByRole("treeitem", { name: new RegExp(`^${name}`) });

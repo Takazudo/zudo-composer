@@ -4,6 +4,9 @@ import {
   createContentModelRecord,
   createContentValueSchema,
   diagnoseContentEntryCompleteness,
+  applyContentInverseMutation,
+  contentEntryDigest,
+  readContentGraph,
   type ContentEntryRecord,
   type ContentFieldDefinition,
   type ContentFieldKind,
@@ -11,19 +14,27 @@ import {
   type ContentModelKind,
   type ContentModelRecord,
   type ContentModelSummary,
+  type ContentEntryRef,
+  type ContentGraphLocation,
+  type ContentRecordRef,
+  type ContentSnapshot,
   type ContentProvider,
 } from "../../content";
 import { createUuidIdFactory, type IdFactory } from "../../shared";
 import { createSaveQueue, type SaveQueue } from "../../shared/persistence";
 
 export const CONTENT_ENTRY_PAGE_SIZE = 25;
-export type ContentWorkMode = "entries" | "model-fields";
+export type ContentWorkMode = "entries" | "model-fields" | "relationships";
 export type ContentSaveStatus = "pristine" | "saved" | "dirty" | "saving" | "error";
+export interface ContentMediaCatalogSource { descriptor: { id: string; label: string }; store: { list(): Promise<readonly { id: string; fileName: string; state: "active" | "trash" }[]> } }
 
 export interface ContentAuthoringState {
   viewId: string | null;
   phase: "idle" | "loading" | "ready" | "recovery" | "error";
   models: readonly ContentModelSummary[];
+  providerId: string;
+  providerLabel: string;
+  modelDescriptions: Readonly<Record<string, string>>;
   entryCounts: Readonly<Record<string, number>>;
   /**
    * Entries missing a required value, per model — what the navigator's warn
@@ -41,12 +52,17 @@ export interface ContentAuthoringState {
   saveStatus: ContentSaveStatus;
   message: string;
   recoveryMessage: string | null;
+  graphStatus: "idle" | "ready" | "unavailable";
+  graphMessage: string;
+  snapshots: readonly ContentSnapshot[];
+  incoming: readonly { owner: ContentGraphLocation; ordered: boolean }[];
+  publicationState: "draft" | "published" | "published-pending";
 }
 
 const initialState: ContentAuthoringState = {
   viewId: null,
-  phase: "idle", models: [], entryCounts: {}, incompleteCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
-  workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null,
+  phase: "idle", models: [], providerId: "", providerLabel: "", modelDescriptions: {}, entryCounts: {}, incompleteCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
+  workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null, graphStatus: "idle", graphMessage: "", snapshots: [], incoming: [], publicationState: "draft",
 };
 
 function queueStatus(state: { status: Exclude<ContentSaveStatus, "pristine"> }): Exclude<ContentSaveStatus, "pristine"> {
@@ -58,6 +74,10 @@ export class ContentAuthoringController {
   private readonly listeners = new Set<(state: ContentAuthoringState) => void>();
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
+  private readonly providers: readonly ContentProvider[];
+  private readonly mediaProvider?: ContentMediaCatalogSource;
+  private readonly loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]>;
+  private baselineEntry: ContentEntryRecord | null = null;
   private modelQueue: SaveQueue<ContentModelRecord> | null = null;
   private entryQueue: SaveQueue<ContentEntryRecord> | null = null;
   private unsubscribeModel: (() => void) | null = null;
@@ -65,9 +85,13 @@ export class ContentAuthoringController {
   /** Invalidates an in-flight completeness sweep when the library reloads under it. */
   private scanGeneration = 0;
 
-  constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string } = {}) {
+  constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; mediaProvider?: ContentMediaCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> } = {}) {
     this.idFactory = options.idFactory ?? createUuidIdFactory();
     this.now = options.now ?? (() => new Date().toISOString());
+    this.providers = options.providers ?? [provider];
+    this.mediaProvider = options.mediaProvider;
+    this.loadActivatedBaseline = options.loadActivatedBaseline;
+    this.current = { ...initialState, providerId: provider.descriptor.id, providerLabel: provider.descriptor.label };
   }
 
   get state(): ContentAuthoringState { return this.current; }
@@ -231,7 +255,10 @@ export class ContentAuthoringController {
     // Queue construction publishes its initial `saved` state synchronously;
     // that only says the persisted record was loaded, not that this route has
     // authored a change during this session.
-    this.set({ ...this.current, entry: outcome.record, workMode: "entries", saveStatus: "pristine", message: "Entry loaded." });
+    this.baselineEntry = null;
+    this.set({ ...this.current, entry: outcome.record, workMode: "entries", saveStatus: "pristine", message: "Entry loaded.", incoming: [], publicationState: outcome.record.lifecycle });
+    void this.refreshGraph(outcome.record);
+    void this.refreshPublication(outcome.record);
   }
 
   async inspectSchema(): Promise<void> {
@@ -249,6 +276,12 @@ export class ContentAuthoringController {
     this.set({ ...this.current, workMode: "entries", message: "Entries ready." });
   }
 
+  async inspectRelationships(): Promise<void> {
+    await this.flushSessions();
+    if (this.current.entry) await this.refreshGraph(this.current.entry);
+    this.set({ ...this.current, workMode: "relationships", message: "Relationships ready." });
+  }
+
   selectView(viewId: string | null): void {
     if (viewId !== null && !this.requireModel().document.presentation?.views.some((view) => view.id === viewId)) throw new Error(`Content view "${viewId}" is unavailable for this model.`);
     this.set({ ...this.current, viewId });
@@ -263,9 +296,99 @@ export class ContentAuthoringController {
     // only change this one Entry's completeness, so the delta is exact.
     const model = this.current.model;
     const delta = model ? Number(this.completeness(updated).length > 0) - Number(this.completeness(entry).length > 0) : 0;
-    this.set({ ...this.current, entry: updated, entries: this.current.entries.map((item) => item.id === updated.id ? updated : item),
+    this.set({ ...this.current, entry: updated, entries: this.current.entries.map((item) => item.id === updated.id ? updated : item), publicationState: this.publicationState(updated),
       ...(model && delta !== 0 ? { incompleteCounts: shiftCount(this.current.incompleteCounts, model.id, delta) } : {}),
       usedFieldIds: value === undefined || value === "" ? this.current.usedFieldIds : [...new Set([...this.current.usedFieldIds, fieldId])] });
+  }
+
+  /** Updates one nested canonical value without introducing a parallel form model. */
+  updateEntryValueAtPath(fieldId: string, path: readonly (string | number)[], value: ContentEntryRecord["values"][string] | undefined): void {
+    if (path.length === 0) { this.updateEntryValue(fieldId, value); return; }
+    const entry = this.current.entry;
+    if (!entry) throw new Error("No Entry is open.");
+    const root = structuredClone(entry.values[fieldId] ?? (typeof path[0] === "number" ? [] : {})) as unknown;
+    let cursor = root as Record<string | number, unknown>;
+    for (let index = 0; index < path.length - 1; index++) {
+      const segment = path[index]!, next = path[index + 1]!;
+      const child = cursor[segment];
+      cursor[segment] = child !== null && typeof child === "object" ? child : typeof next === "number" ? [] : {};
+      cursor = cursor[segment] as Record<string | number, unknown>;
+    }
+    const last = path[path.length - 1]!;
+    if (value === undefined || value === "") {
+      if (Array.isArray(cursor) && typeof last === "number") cursor.splice(last, 1);
+      else delete cursor[last];
+    } else cursor[last] = value;
+    this.updateEntryValue(fieldId, root as ContentEntryRecord["values"][string]);
+  }
+
+  updateModelDescription(description: string): void {
+    this.updateModel((record) => ({ ...record, document: { ...record.document, description } }));
+    const model = this.requireModel();
+    this.set({ ...this.current, modelDescriptions: { ...this.current.modelDescriptions, [model.id]: description } });
+  }
+
+  replaceField(fieldId: string, next: ContentFieldDefinition): void {
+    this.requireModel();
+    if (next.id !== fieldId) throw new Error("Field identity cannot change.");
+    this.updateModel((record) => ({ ...record, document: { ...record.document, fields: record.document.fields.map((field) => field.id === fieldId ? structuredClone(next) : field) } }));
+  }
+
+  async referenceEntries(target: ContentRecordRef): Promise<{ ref: ContentEntryRef; label: string; lifecycle: ContentEntryRecord["lifecycle"] }[]> {
+    const owner = this.providers.find((candidate) => candidate.descriptor.id === target.providerId);
+    if (!owner) throw new Error(`Content provider “${target.providerId}” is unavailable.`);
+    const snapshot = await owner.store.scanEntries(target.recordId);
+    return snapshot.entries.map((entry) => ({ ref: { providerId: target.providerId, modelId: target.recordId, recordId: entry.id }, label: entryLabel(entry, snapshot.model), lifecycle: entry.lifecycle }));
+  }
+
+  async referenceModels(): Promise<{ ref: ContentRecordRef; label: string; providerLabel: string }[]> {
+    const results = await Promise.allSettled(this.providers.map(async (provider) => ({ provider, models: await provider.store.listModels() })));
+    return results.flatMap((result) => result.status === "fulfilled" ? result.value.models.map((model) => ({ ref: { providerId: result.value.provider.descriptor.id, recordId: model.id }, label: model.name, providerLabel: result.value.provider.descriptor.label })) : []);
+  }
+
+  async mediaAssets(): Promise<{ providerId: string; assetId: string; label: string }[]> {
+    if (!this.mediaProvider) throw new Error("The Media provider is unavailable. Open Media after connecting a provider.");
+    const assets = await this.mediaProvider.store.list();
+    return assets.filter((asset) => asset.state === "active").map((asset) => ({ providerId: this.mediaProvider!.descriptor.id, assetId: asset.id, label: asset.fileName }));
+  }
+
+  async applyInverse(inverseId: string, selectedOwnerIds: readonly string[]): Promise<void> {
+    const model = this.requireModel(), target = this.current.entry;
+    if (!target) throw new Error("No Entry is open.");
+    const inverse = model.document.presentation?.inverses.find((item) => item.id === inverseId);
+    if (!inverse) throw new Error("Inverse relationship is unavailable.");
+    await this.flushSessions();
+    const read = await readContentGraph(this.providers.map((provider) => provider.store));
+    if (read.status !== "ready") throw new Error(read.message);
+    const ownerSnapshot = read.snapshots.find((snapshot) => snapshot.providerId === inverse.source.providerId);
+    const ownerStore = this.providers.find((provider) => provider.descriptor.id === inverse.source.providerId)?.store;
+    if (!ownerSnapshot || !ownerStore) throw new Error("The inverse relationship owner provider is unavailable.");
+    const owners = ownerSnapshot.entries.filter((entry) => entry.modelId === inverse.source.recordId);
+    const targetRef = { providerId: this.provider.descriptor.id, modelId: model.id, recordId: target.id };
+    const edits = owners.flatMap((owner) => {
+      const field = ownerSnapshot.models.find((item) => item.id === owner.modelId)?.document.fields.find((item) => item.id === inverse.fieldId);
+      if (!field || (field.kind !== "reference" && field.kind !== "reference-list")) throw new Error("The inverse owning field is unavailable.");
+      const selected = selectedOwnerIds.includes(owner.id);
+      const current = field.kind === "reference" ? (owner.values[field.id] ? [owner.values[field.id] as unknown as ContentEntryRef] : []) : (owner.values[field.id] ?? []) as unknown as ContentEntryRef[];
+      const wasSelected = current.some((ref) => ref.providerId === targetRef.providerId && ref.modelId === targetRef.modelId && ref.recordId === targetRef.recordId);
+      if (wasSelected === selected) return [];
+      const targets = selected ? [...current.filter((ref) => ref.recordId !== target.id), targetRef] : current.filter((ref) => ref.recordId !== target.id);
+      return [{ owner: { providerId: inverse.source.providerId, modelId: inverse.source.recordId, recordId: owner.id }, fieldId: inverse.fieldId, targets }];
+    });
+    if (edits.length === 0) return;
+    await applyContentInverseMutation(ownerStore, read.snapshots, edits);
+    await this.refreshGraph(target);
+  }
+
+  async requestUnpublish(): Promise<void> {
+    const entry = this.current.entry;
+    if (!entry) throw new Error("No Entry is open.");
+    if (entry.lifecycle === "draft") return;
+    await this.flushSessions();
+    const snapshot = await this.provider.store.readAll();
+    await this.provider.store.transact({ expectedMutationToken: snapshot.mutationToken, operations: [{ kind: "unpublish-entry", id: entry.id }] });
+    await this.reloadEntries();
+    await this.openEntry(entry.id);
   }
 
   async deleteEntry(id: string): Promise<void> {
@@ -307,13 +430,14 @@ export class ContentAuthoringController {
       const outcome = await load();
       if (outcome.status === "ready") {
         const counts = await Promise.all(outcome.models.map(async (model) => [model.id, await this.provider.store.countEntries(model.id)] as const));
-        this.set({ ...initialState, phase: "ready", models: outcome.models, entryCounts: Object.fromEntries(counts), message: "Content library ready." });
+        const descriptions = await this.loadModelDescriptions(outcome.models);
+        this.set({ ...initialState, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "ready", models: outcome.models, modelDescriptions: descriptions, entryCounts: Object.fromEntries(counts), message: "Content library ready." });
         void this.sweepIncompleteCounts(outcome.models);
       }
-      else if (outcome.status === "recovery-required") this.set({ ...initialState, phase: "recovery", models: outcome.models, recoveryMessage: outcome.recovery.message, message: "Recovery required. Source data was preserved." });
-      else this.set({ ...initialState, phase: "error", message: outcome.error.message });
+      else if (outcome.status === "recovery-required") this.set({ ...initialState, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "recovery", models: outcome.models, recoveryMessage: outcome.recovery.message, message: "Recovery required. Source data was preserved." });
+      else this.set({ ...initialState, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "error", message: outcome.error.message });
     } catch (reason) {
-      this.set({ ...initialState, phase: "error", message: reason instanceof Error ? reason.message : "Content library initialization failed." });
+      this.set({ ...initialState, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "error", message: reason instanceof Error ? reason.message : "Content library initialization failed." });
     }
   }
   private installModelQueue(record: ContentModelRecord): void {
@@ -392,7 +516,31 @@ export class ContentAuthoringController {
 
   private requireModel(): ContentModelRecord { if (!this.current.model) throw new Error("No Content model is open."); return this.current.model; }
   private uniqueFieldKey(base: string): string { const keys = new Set(this.requireModel().document.fields.map((field) => field.key)); let key = base; let i = 2; while (keys.has(key)) key = `${base}${i++}`; return key; }
-  private async refreshModels(): Promise<void> { const models = await this.provider.store.listModels(); const counts = await Promise.all(models.map(async (model) => [model.id, await this.provider.store.countEntries(model.id)] as const)); this.set({ ...this.current, models, entryCounts: Object.fromEntries(counts) }); }
+  private async refreshModels(): Promise<void> { const models = await this.provider.store.listModels(); const counts = await Promise.all(models.map(async (model) => [model.id, await this.provider.store.countEntries(model.id)] as const)); this.set({ ...this.current, models, modelDescriptions: await this.loadModelDescriptions(models), entryCounts: Object.fromEntries(counts) }); }
+  private async loadModelDescriptions(models: readonly ContentModelSummary[]): Promise<Record<string, string>> {
+    const pairs = await Promise.all(models.map(async (summary) => { const result = await this.provider.store.getModel(summary.id); return [summary.id, result.status === "loaded" ? result.record.document.description : ""] as const; }));
+    return Object.fromEntries(pairs);
+  }
+  private async refreshGraph(entry: ContentEntryRecord): Promise<void> {
+    const read = await readContentGraph(this.providers.map((provider) => provider.store));
+    if (this.current.entry?.id !== entry.id) return;
+    if (read.status !== "ready") { this.set({ ...this.current, graphStatus: "unavailable", graphMessage: read.message, snapshots: [], incoming: [] }); return; }
+    const ref = { providerId: this.provider.descriptor.id, modelId: entry.modelId, recordId: entry.id };
+    this.set({ ...this.current, graphStatus: read.index.complete ? "ready" : "unavailable", graphMessage: read.index.complete ? "" : "Some providers or records could not be resolved.", snapshots: read.snapshots, incoming: read.index.incoming(ref).map(({ owner, ordered }) => ({ owner, ordered })) });
+  }
+  private async refreshPublication(entry: ContentEntryRecord): Promise<void> {
+    if (!this.loadActivatedBaseline) return;
+    try {
+      const snapshots = await this.loadActivatedBaseline();
+      if (this.current.entry?.id !== entry.id) return;
+      this.baselineEntry = snapshots.find((snapshot) => snapshot.providerId === this.provider.descriptor.id)?.entries.find((candidate) => candidate.id === entry.id && candidate.modelId === entry.modelId) ?? null;
+      this.set({ ...this.current, publicationState: this.publicationState(this.current.entry) });
+    } catch { /* An unavailable release baseline cannot justify a pending-change claim. */ }
+  }
+  private publicationState(entry: ContentEntryRecord): ContentAuthoringState["publicationState"] {
+    if (entry.lifecycle === "draft") return "draft";
+    return this.baselineEntry && contentEntryDigest(this.baselineEntry) !== contentEntryDigest(entry) ? "published-pending" : "published";
+  }
   private set(state: ContentAuthoringState): void { this.current = state; for (const listener of [...this.listeners]) listener(state); }
 }
 
@@ -409,6 +557,12 @@ function shiftCount(counts: Readonly<Record<string, number>>, modelId: string, d
   return { ...counts, [modelId]: Math.max(0, (counts[modelId] ?? 0) + delta) };
 }
 
-export function createContentAuthoringController(provider: ContentProvider, options?: { idFactory?: IdFactory; now?: () => string }): ContentAuthoringController {
+export function createContentAuthoringController(provider: ContentProvider, options?: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; mediaProvider?: ContentMediaCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> }): ContentAuthoringController {
   return new ContentAuthoringController(provider, options);
+}
+
+function entryLabel(entry: ContentEntryRecord, model: ContentModelRecord): string {
+  const preferred = model.document.fields.find((field) => field.kind === "text" && (field.key === "title" || field.key === "name")) ?? model.document.fields.find((field) => field.kind === "text");
+  const value = preferred && entry.values[preferred.id];
+  return typeof value === "string" && value.trim() ? value : `Untitled Entry · ${entry.id}`;
 }

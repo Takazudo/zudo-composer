@@ -112,6 +112,17 @@ describe("ContentAuthoringController", () => {
     const saved = await provider.store.getEntry("entry-1"); expect(saved.status === "loaded" && saved.record.values.title).toBe("Latest");
   });
 
+  it("reports pending published edits only by comparing the activated baseline", async () => {
+    const model = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "title", key: "title", label: "Title", required: true, kind: "text" }] }, { id: "articles", timestamp: "2026-01-01T00:00:00.000Z" });
+    const published = { ...createContentEntryRecord("articles", { title: "Activated" }, { id: "published", timestamp: "2026-01-01T00:00:00.000Z" }), lifecycle: "published" as const };
+    const provider = createMemoryContentProvider({ models: [model], entries: [published] });
+    const controller = createContentAuthoringController(provider, { loadActivatedBaseline: async () => [{ providerId: provider.descriptor.id, mutationToken: 1, models: [model], entries: [published] }] });
+    await controller.initialize(); await controller.openModel("articles"); await controller.openEntry("published"); await tick();
+    expect(controller.state.publicationState).toBe("published");
+    controller.updateEntryValue("title", "Working change");
+    expect(controller.state.publicationState).toBe("published-pending");
+  });
+
   it("keeps quarantine explicit and starts fresh only on request", async () => {
     const provider = createMemoryContentProvider({ initialization: { status: "recovery-required", models: [], recovery: { kind: "quarantined", reason: "invalid", sourcePreserved: true, affectedRecordIds: ["broken"], message: "Malformed data preserved." } } });
     const controller = createContentAuthoringController(provider); await controller.initialize();

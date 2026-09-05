@@ -4,8 +4,11 @@ import {
   BooleanIcon,
   ChevronDownIcon,
   ColorIcon,
+  CollectionIcon,
   DateIcon,
   LongTextIcon,
+  LinkIcon,
+  ListIcon,
   MarkdownIcon,
   NumberIcon,
   SlugIcon,
@@ -34,6 +37,12 @@ export const CONTENT_FIELD_KIND_PRESENTATIONS: readonly ContentFieldKindPresenta
   { kind: "slug", label: "Slug", explanation: "URL-friendly text for readable paths and identifiers.", icon: SlugIcon },
   { kind: "color", label: "Color", explanation: "A browser color value selected with a native color control.", icon: ColorIcon },
   { kind: "url", label: "URL", explanation: "A web address validated by the browser.", icon: UrlIcon },
+  { kind: "choice", label: "Choice", explanation: "One value selected from a model-defined set of options.", icon: ListIcon },
+  { kind: "reference", label: "Reference", explanation: "One provider-qualified Entry from another model.", icon: LinkIcon },
+  { kind: "reference-list", label: "References", explanation: "A unique, optionally ordered list of related Entries.", icon: LinkIcon },
+  { kind: "object", label: "Object", explanation: "A named group of nested structured fields.", icon: CollectionIcon },
+  { kind: "list", label: "List", explanation: "A repeatable list whose items share one schema.", icon: ListIcon },
+  { kind: "media-use", label: "Media use", explanation: "An Image, Link, or Card with per-use accessible text.", icon: CollectionIcon },
 ] as const;
 
 const FALLBACK_PRESENTATION = CONTENT_FIELD_KIND_PRESENTATIONS[0]!;
@@ -56,7 +65,7 @@ const LOCKED_TITLE = "Type locked · stored Entries use it";
 const LOCKED_REASON = "Type is immutable because stored Entries hold values for this field. Remove those values, or add a new field, to use another type.";
 
 /**
- * The field-type control: one chip-shaped trigger opening a `Menu` of the nine
+ * The field-type control: one chip-shaped trigger opening a `Menu` of all
  * kinds, each with the sentence that says what it is for.
  *
  * It replaced a nine-card inline radiogroup. Nine cards cost a whole screen per
