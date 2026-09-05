@@ -16,6 +16,7 @@ export interface ContentNavigatorProps {
   onDeleteModel(id: string, label: string): void;
   onDeleteEntry(id: string, label: string): void;
   onCopyEntryId(id: string): void;
+  onSelectionAccepted?(): void;
 }
 
 interface RowMenuProps {
@@ -69,7 +70,7 @@ function ContentRowMenu({ node, kind, canHoldAnotherEntry, onOpen, onAddEntry, o
  * holds one model's Entries at a time; every other category is childless, and
  * selecting one is what loads it.
  */
-export function ContentNavigator({ state, controller, run, onAddModel, onDeleteModel, onDeleteEntry, onCopyEntryId }: ContentNavigatorProps): JSX.Element {
+export function ContentNavigator({ state, controller, run, onAddModel, onDeleteModel, onDeleteEntry, onCopyEntryId, onSelectionAccepted }: ContentNavigatorProps): JSX.Element {
   const { setActivePane } = useEditorChrome();
   const openModel = state.model;
   const openModelId = openModel?.id ?? null;
@@ -116,10 +117,11 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
       run(async () => {
         await controller.openModel(id);
         controller.browseEntries();
+        onSelectionAccepted?.();
       });
       return;
     }
-    run(() => controller.openEntry(id));
+    run(async () => { await controller.openEntry(id); onSelectionAccepted?.(); });
   }
 
   const selectedId = state.entry?.id ?? openModelId ?? undefined;
@@ -140,7 +142,7 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
           canInsert={canInsert}
           onRequestInsert={(target) => {
             if (target.parentId === null) onAddModel();
-            else run(() => controller.createEntry());
+            else run(async () => { await controller.createEntry(); onSelectionAccepted?.(); });
           }}
           addLabel={(parent) => (parent === null ? "Add model" : "Add entry")}
           legend={
@@ -167,8 +169,9 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
                 onAddEntry={() => run(async () => {
                   await controller.openModel(node.id);
                   await controller.createEntry();
+                  onSelectionAccepted?.();
                 })}
-                onDuplicate={() => run(() => controller.duplicateEntry(node.id))}
+                onDuplicate={() => run(async () => { await controller.duplicateEntry(node.id); onSelectionAccepted?.(); })}
                 onCopyId={() => onCopyEntryId(node.id)}
                 onDelete={() => (model === null ? onDeleteEntry(node.id, node.title) : onDeleteModel(node.id, node.title))}
               />

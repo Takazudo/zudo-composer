@@ -56,6 +56,11 @@ describe("Content route intents", () => {
     render(<ContentApp provider={createMemoryContentProvider()} />);
     expect(await screen.findByText('Content view "missing" is unavailable for this model.')).toBeInTheDocument();
     expect(new URLSearchParams(window.location.search).get("view")).toBe("missing");
+    const tree = screen.getByRole("tree", { name: "Content" });
+    fireEvent.click(within(tree).getByRole("treeitem", { name: /^Hello/ }));
+    expect(await screen.findByRole("textbox", { name: "Entry title" })).toHaveValue("Hello");
+    await waitFor(() => expect(window.location.search).toBe("?provider=content-indexeddb&model=articles&entry=entry-1"));
+    expect(screen.queryByText('Content view "missing" is unavailable for this model.')).toBeNull();
   });
 
   it("reports a malformed link instead of quietly opening the bare route", async () => {

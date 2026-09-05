@@ -62,7 +62,9 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   const integration = useWorkspace()?.integration;
   const controller = useMemo(() => supplied ?? createContentAuthoringController(provider), [provider, supplied]);
   const [state, setState] = useState<ContentAuthoringState>(controller.state);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
+  const [intentError, setIntentError] = useState<string | null>(null);
+  const error = intentError ?? actionError;
   const [notice, setNotice] = useState<string | null>(null);
   const [addModelOpen, setAddModelOpen] = useState(false);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(() => readEditorCollapsed(CONTENT_EDITOR_KEY).insp);
@@ -95,20 +97,25 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   // the bare route.
   const appliedIntent = useRef(false);
   const [intentAccepted, setIntentAccepted] = useState(false);
+  const acceptVisibleSelection = () => {
+    if (!controller.state.model) return;
+    if (!intentAccepted) controller.selectView(null);
+    setIntentError(null); setError(null); setIntentAccepted(true);
+  };
   useEffect(() => {
     if (appliedIntent.current || state.phase !== "ready") return;
     appliedIntent.current = true;
     const outcome = parseIntent();
-    if (outcome.status === "invalid") { setError(outcome.message); return; }
+    if (outcome.status === "invalid") { setIntentError(outcome.message); return; }
     if (outcome.status !== "matched" || outcome.intent.route !== "content") { setIntentAccepted(true); return; }
     const intent = outcome.intent;
-    if (intent.providerId !== provider.descriptor.id) { setError("The requested Content provider is unavailable."); return; }
-    run(async () => {
+    if (intent.providerId !== provider.descriptor.id) { setIntentError("The requested Content provider is unavailable."); return; }
+    void (async () => {
       await controller.openModel(intent.modelId);
       controller.selectView(intent.viewId ?? null);
       if (intent.entryId !== undefined) await controller.openEntry(intent.entryId);
       setIntentAccepted(true);
-    });
+    })().catch((cause: unknown) => setIntentError(cause instanceof Error ? cause.message : "The Content link could not be opened."));
   }, [controller, state.phase]);
 
   // The address bar follows the selection, so a copied URL opens what the
@@ -235,7 +242,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
           size="sm"
           value={state.workMode}
           options={MODE_OPTIONS}
-          onChange={(mode) => run(() => (mode === "model-fields" ? controller.inspectSchema() : controller.browseEntries()))}
+          onChange={(mode) => run(async () => { if (mode === "model-fields") await controller.inspectSchema(); else controller.browseEntries(); acceptVisibleSelection(); })}
         />
       }
       right={
@@ -264,9 +271,9 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
           </Button>
           <Menu controller={overflow} label="Content actions">
             {schemaMode ? (
-              <MenuItem icon={FileIcon} onSelect={() => controller.browseEntries()}>Edit entry</MenuItem>
+              <MenuItem icon={FileIcon} onSelect={() => { controller.browseEntries(); acceptVisibleSelection(); }}>Edit entry</MenuItem>
             ) : (
-              <MenuItem icon={SettingsIcon} onSelect={() => run(() => controller.inspectSchema())}>Edit schema</MenuItem>
+              <MenuItem icon={SettingsIcon} onSelect={() => run(async () => { await controller.inspectSchema(); acceptVisibleSelection(); })}>Edit schema</MenuItem>
             )}
             <MenuSeparator />
             <MenuItem
@@ -309,6 +316,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             onDeleteModel={confirmDeleteModel}
             onDeleteEntry={confirmDeleteEntry}
             onCopyEntryId={copyEntryId}
+            onSelectionAccepted={acceptVisibleSelection}
           />
         }
         main={
@@ -378,7 +386,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
         open={addModelOpen}
         onSubmit={(name, kind) => {
           setAddModelOpen(false);
-          run(() => controller.createModel(name, kind));
+          run(async () => { await controller.createModel(name, kind); acceptVisibleSelection(); });
         }}
         onClose={() => setAddModelOpen(false)}
       />
