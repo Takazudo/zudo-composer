@@ -132,6 +132,7 @@ export class IndexedDbContentRuntime {
           entries.createIndex(CONTENT_ENTRY_MODEL_CREATED_AT_INDEX, ["modelId", "createdAt", "id"], { unique: true });
           const meta = request.result.createObjectStore(CONTENT_META_STORE_NAME, { keyPath: "key" });
           meta.put({ key: CONTENT_META_KEYS.schema, databaseVersion: CONTENT_DATABASE_VERSION, modelRecordSchemaVersion: CONTENT_MODEL_SCHEMA_VERSION, entryRecordSchemaVersion: CONTENT_ENTRY_SCHEMA_VERSION } satisfies ContentSchemaMeta);
+          meta.put({ key: CONTENT_META_KEYS.mutation, token: 0 });
         } catch (error) {
           upgradeFailure = error instanceof ContentPersistenceError ? error : contentPersistenceError("initialize", "transaction-failed", "Content database initialization failed.", true, error);
           try { transaction?.abort(); } catch { /* already aborted */ }

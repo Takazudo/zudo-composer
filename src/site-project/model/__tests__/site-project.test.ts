@@ -53,11 +53,12 @@ function project(): SiteProject {
       schemaVersion: 1 as const,
       id: "articles",
       name: "Articles",
+      description: "",
       kind: "collection" as const,
       fields: [{ id: "title", key: "title", label: "Title", required: true, kind: "text" as const }],
     },
   };
-  const entry = { schemaVersion: 1 as const, id: "welcome", modelId: "articles", createdAt: timestamp, updatedAt: timestamp, values: { title: "Welcome" } };
+  const entry = { schemaVersion: 1 as const, lifecycle: "published" as const, generation: 0, id: "welcome", modelId: "articles", createdAt: timestamp, updatedAt: timestamp, values: { title: "Welcome" } };
   const mapping = {
     id: "article-page",
     createdAt: timestamp,
@@ -103,6 +104,15 @@ function project(): SiteProject {
 describe("SiteProject contract", () => {
   it("validates a provider-scoped graph and permits equal record ids in different providers", () => {
     expect(validateSiteProject(project(), context)).toEqual({ ok: true, project: project(), diagnostics: [] });
+  });
+
+  it("validates nested Content relationships against every entry and schema in the aggregate", () => {
+    const value = project(), provider = value.providers.content[0]!, model = provider.models[0]!;
+    model.document.fields.push({ id: "related", key: "related", label: "Related", required: false, kind: "list", item: { kind: "reference", target: { providerId: provider.id, recordId: model.id } } });
+    provider.entries[0]!.values.related = [{ providerId: provider.id, modelId: model.id, recordId: "welcome" }];
+    expect(validateSiteProject(value, context).ok).toBe(true);
+    provider.entries[0]!.values.related = [{ providerId: provider.id, modelId: model.id, recordId: "missing" }];
+    expect(validateSiteProject(value, context)).toMatchObject({ ok: false, diagnostics: expect.arrayContaining([expect.objectContaining({ code: "invalid-entry-value", message: expect.stringContaining("target entry") })]) });
   });
 
   it("validates an explicit Entry route title field against its mapped Content model", () => {

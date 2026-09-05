@@ -10,7 +10,7 @@ const contentProvider = (scanEntries: SitemapperContentProvider["store"]["scanEn
 
 describe("Mapping assignment catalog", () => {
   it("preserves provider-qualified list identity and resolves from one Content snapshot", async () => {
-    const model = { id: "articles", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 1 as const, id: "articles", name: "Articles", kind: "collection" as const, fields: [] } };
+    const model = { id: "articles", createdAt: stamp, updatedAt: stamp, document: { description: "", schemaVersion: 1 as const, id: "articles", name: "Articles", kind: "collection" as const, fields: [] } };
     const scanEntries = vi.fn(async () => ({ model, count: 0, entries: [], diagnostics: [] }));
     const catalog = createMappingAssignmentCatalog([mappingProvider()], [contentProvider(scanEntries)]);
     expect(await catalog.list()).toMatchObject({ entries: [{ ref: { providerId: "mapping", recordId: "articles" } }], failures: [] });

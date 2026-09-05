@@ -1,4 +1,4 @@
-import { createContentEntryRecord, createContentModelRecord, type ContentEntryRecord, type ContentInitializationOutcome, type ContentModelRecord, type ContentProvider } from "../../content";
+import { createContentEntryRecord, createContentModelRecord, ContentPersistenceError, type ContentEntryRecord, type ContentInitializationOutcome, type ContentModelRecord, type ContentProvider } from "../../content";
 
 export type ContentRenderFixtureName = "populated" | "empty" | "single" | "long-text" | "broken";
 
@@ -9,6 +9,11 @@ export function createMemoryContentProvider(options: { initialization?: ContentI
   const ready = (): ContentInitializationOutcome => options.initialization ?? { status: "ready", models: models.map((record) => ({ id: record.id, name: record.document.name, kind: record.document.kind, fieldCount: record.document.fields.length, createdAt: record.createdAt, updatedAt: record.updatedAt })) };
   return { descriptor: { id: "content-indexeddb", label: "Browser storage" }, initialization: { initialize: async () => ready(), retry: async () => ready(), startFresh: async () => { models = []; entries = []; return { status: "ready", models: [] }; } }, store: {
     provider: { id: "content-indexeddb", label: "Browser storage" }, listModels: async () => { const outcome = ready(); return outcome.status === "ready" ? outcome.models : []; },
+    transactionScope: "unsupported",
+    // Render-only fixture: real transaction/generation behavior is tested against IndexedDB.
+    readAll: async () => { throw new ContentPersistenceError("read-all", "unsupported-transaction", "Render fixtures do not supply coherent mutation snapshots.", false); },
+    transact: async () => { throw new ContentPersistenceError("transact", "unsupported-transaction", "Render fixtures do not support atomic mutations.", false); },
+    reconcilePublication: async () => { throw new ContentPersistenceError("reconcile-publication", "unsupported-transaction", "Render fixtures do not support publication.", false); },
     getModel: async (id) => { const found = models.find((item) => item.id === id); return found ? { status: "loaded", record: structuredClone(found) } : { status: "not-found", id }; },
     putModel: async (record) => { if (options.failWrites) throw new Error("Write failed"); models = [structuredClone(record), ...models.filter((item) => item.id !== record.id)]; },
     deleteModel: async (id) => { const found = models.some((item) => item.id === id); models = models.filter((item) => item.id !== id); entries = entries.filter((item) => item.modelId !== id); return found; },

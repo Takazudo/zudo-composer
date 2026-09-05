@@ -15,7 +15,7 @@ const fields = [
   { id: "date", key: "date", label: "Date", required: false, kind: "date" },
   { id: "tone", key: "tone", label: "Tone", required: false, kind: "slug" },
 ] as const;
-const model: ContentModelRecord = { id: "articles", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: CONTENT_MODEL_SCHEMA_VERSION, id: "articles", name: "Articles", kind: "collection", fields: [...fields] } };
+const model: ContentModelRecord = { id: "articles", createdAt: stamp, updatedAt: stamp, document: { description: "", schemaVersion: CONTENT_MODEL_SCHEMA_VERSION, id: "articles", name: "Articles", kind: "collection", fields: [...fields] } };
 const composition: CompositionRecord = { id: "landing", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 2, id: "landing", name: "Landing", root: [{ id: "hero", componentId: "hero", componentVersion: 1, props: { title: "Static", subtitle: "Keep", tone: "quiet" }, slots: { body: [{ id: "nested", componentId: "copy", componentVersion: 1, props: { text: "Nested" }, slots: {} }] } }] } };
 const manifest = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "test", packVersion: "1", components: [
   { id: "hero", schemaVersion: 1, title: "Hero", category: "Test", description: "", source: { module: "x", exportKind: "named", exportName: "Hero" }, defaults: {}, fields: [{ schema: { type: "string" }, editor: { kind: "text" }, prop: "title", label: "Title" }, { schema: { type: "string" }, editor: { kind: "text" }, prop: "subtitle", label: "Subtitle" }, { schema: { type: "string", enum: ["quiet", "loud"] }, editor: { kind: "select" }, prop: "tone", label: "Tone" }, { schema: { type: "array", items: { schema: { type: "string" }, editor: { kind: "text" } } }, editor: { kind: "list" }, prop: "tags", label: "Tags" }], slots: [{ id: "body", prop: "body", label: "Body", cardinality: "many" }] },
@@ -24,7 +24,7 @@ const manifest = createComponentCatalog({ kind: "zudo-composer/component-pack", 
 
 function mapping(bindings: readonly MappingBinding[] = [{ id: "bind-title", sourceFieldId: "title", target: { nodeId: "hero", prop: "title" }, transform: { kind: "identity" } }]) { return createMappingRecord({ id: "article-landing", name: "Article landing", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "indexeddb", recordId: "landing" }, bindings, createdAt: stamp }); }
 function catalogs(contentRecord = model, compositionRecord = composition) { return { content: createContentCatalog([{ descriptor: { id: "content", label: "Content" }, store: { listModels: async () => [], getModel: async () => ({ status: "loaded" as const, record: contentRecord }) } }]), compositions: createCompositionCatalog([{ descriptor: { id: "indexeddb", label: "Compositions" }, store: { list: async () => [], get: async () => ({ status: "loaded" as const, record: compositionRecord }) } }]) }; }
-function entry(values: ContentEntryRecord["values"]): ContentEntryRecord { return { schemaVersion: CONTENT_ENTRY_SCHEMA_VERSION, id: "entry-one", modelId: "articles", createdAt: stamp, updatedAt: stamp, values }; }
+function entry(values: ContentEntryRecord["values"]): ContentEntryRecord { return { lifecycle: "draft" as const, generation: 0, schemaVersion: CONTENT_ENTRY_SCHEMA_VERSION, id: "entry-one", modelId: "articles", createdAt: stamp, updatedAt: stamp, values }; }
 
 describe("normative compatibility matrix", () => {
   const sources: readonly ContentFieldKind[] = CONTENT_FIELD_KINDS;

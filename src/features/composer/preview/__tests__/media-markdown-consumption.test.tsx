@@ -51,7 +51,7 @@ describe("Media Markdown consumption", () => {
       id: "articles",
       createdAt: stamp,
       updatedAt: stamp,
-      document: {
+      document: { description: "",
         schemaVersion: CONTENT_MODEL_SCHEMA_VERSION,
         id: "articles",
         name: "Articles",
@@ -76,7 +76,7 @@ describe("Media Markdown consumption", () => {
         }],
       },
     };
-    const entry: ContentEntryRecord = {
+    const entry: ContentEntryRecord = { lifecycle: "draft" as const, generation: 0,
       schemaVersion: CONTENT_ENTRY_SCHEMA_VERSION,
       id: "article-one",
       modelId: model.id,
