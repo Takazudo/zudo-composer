@@ -1,7 +1,7 @@
 import type { FieldDefinition, JsonValue } from "@zudo-composer/component-contract";
 import type { CompositionRecordRef } from "../../composer/library";
 import type { ContentModelRef } from "../../content/catalog";
-import type { ContentFieldKind } from "../../content/model";
+import type { ContentFieldDefinition } from "../../content/model";
 import type { RecordId } from "../../shared";
 
 export const MAPPING_SCHEMA_VERSION = 1 as const;
@@ -125,7 +125,7 @@ export interface MappingEntryDiagnostic {
 
 export interface ResolvedMappingBinding {
   binding: MappingBinding;
-  source: { id: RecordId; key: string; label: string; required: boolean; kind: ContentFieldKind };
+  source: ContentFieldDefinition;
   target: MappingTargetDescriptor;
 }
 

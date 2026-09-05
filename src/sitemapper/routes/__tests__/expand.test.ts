@@ -7,13 +7,13 @@ import type { MappingRouteCatalog } from "../types";
 
 const stamp = "2026-08-29T00:00:00.000Z";
 const mapping = (): MappingRecord => ({ id: "mapping", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 1, id: "mapping", name: "Articles", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "indexeddb", recordId: "article" }, bindings: [] } });
-const model = (kind: "single" | "collection" = "collection", fieldKind: "slug" | "text" = "slug"): ContentModelRecord => ({ id: "articles", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 1, id: "articles", name: "Articles", kind, fields: [
+const model = (kind: "single" | "collection" = "collection", fieldKind: "slug" | "text" = "slug"): ContentModelRecord => ({ id: "articles", createdAt: stamp, updatedAt: stamp, document: { description: "", schemaVersion: 1, id: "articles", name: "Articles", kind, fields: [
   { id: "slug", key: "slug", label: "Slug", required: true, kind: fieldKind },
   { id: "title", key: "title", label: "Title", required: false, kind: "text" },
   { id: "summary", key: "summary", label: "Summary", required: false, kind: "long-text" },
   { id: "count", key: "count", label: "Count", required: false, kind: "number" },
 ] } });
-const snapshot = (values: readonly unknown[]): ContentEntrySnapshot => ({ model: model(), count: values.length, diagnostics: [], entries: values.map((value, index) => ({ schemaVersion: 1, id: `entry-${index}`, modelId: "articles", createdAt: stamp, updatedAt: stamp, values: { slug: value as never, title: `Title ${index}` } })) });
+const snapshot = (values: readonly unknown[]): ContentEntrySnapshot => ({ model: model(), count: values.length, diagnostics: [], entries: values.map((value, index) => ({ lifecycle: "draft" as const, generation: 0, schemaVersion: 1, id: `entry-${index}`, modelId: "articles", createdAt: stamp, updatedAt: stamp, values: { slug: value as never, title: `Title ${index}` } })) });
 const page = (id: string, slug: string, source: SitemapNode["source"] = { kind: "unassigned" }, children: SitemapNode[] = []): SitemapNode => ({ id, title: id, slug, source, children });
 const document = (root: SitemapNode): SitemapDocument => ({ schemaVersion: SITEMAP_SCHEMA_VERSION, id: "site", name: "Site", root: [root] });
 const catalog = (options: { kind?: "single" | "collection"; values?: readonly unknown[]; fieldKind?: "slug" | "text"; readinessDiagnostic?: { code: string; message: string } } = {}): MappingRouteCatalog => ({ list: vi.fn(), resolveMapping: vi.fn(async () => ({ status: "resolved" as const, record: mapping() })), resolveDefinitionReadiness: vi.fn(async () => options.readinessDiagnostic ? ({ status: "blocked" as const, diagnostics: [options.readinessDiagnostic] }) : ({ status: "ready" as const })), resolveContentSnapshot: vi.fn(async () => ({ status: "resolved" as const, model: model(options.kind, options.fieldKind), snapshot: snapshot(options.values ?? ["first", "second"]) })) });

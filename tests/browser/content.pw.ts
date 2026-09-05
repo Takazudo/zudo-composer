@@ -406,8 +406,8 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(contentNav(page).getByRole("button", { name: "Add entry" })).toHaveCount(0);
   await expect(siteSettingsRow).toContainText("(1)");
 
-  // Native date inputs cannot author malformed dates. Keep one stale provider
-  // value to prove Mapping diagnoses it without rewriting the source Entry.
+  // A populated canonical date proves the transform, while another Entry keeps
+  // its optional date empty. Invalid stored dates now require Content recovery.
   await page.evaluate(async () => {
     const databaseName = (await indexedDB.databases()).find(({ name }) => name?.startsWith("zudo-composer-content--site-project--"))?.name;
     if (!databaseName) throw new Error("Revision-scoped Content storage was not found.");
@@ -429,7 +429,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
       request.onsuccess = () => resolve(request.result as { values: Record<string, unknown> } & Record<string, unknown>);
       request.onerror = () => reject(request.error);
     });
-    entries.put({ ...entry, values: { ...entry.values, [dateFieldId]: "2026-02-30" } });
+    entries.put({ ...entry, values: { ...entry.values, [dateFieldId]: "2026-02-28" } });
     await new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
       transaction.onabort = () => reject(transaction.error);
@@ -492,7 +492,8 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(reviewDateTransform.locator("option")).toHaveText(["Pass through", "Format date", "Truncate to 160", "Add prefix"]);
   await reviewDateTransform.selectOption({ label: "Format date" });
   await selectEntry(page, /Start with the question.*article-first-question/);
-  await expectTestReports(page, /not canonical YYYY-MM-DD/);
+  await expectTestReports(page, /No diagnostics/);
+  await expect(mappingFrame.getByText("Feb 28, 2026", { exact: true })).toBeVisible();
   await selectEntry(page, /Map the moving parts.*article-moving-parts/);
   await expectTestReports(page, /Optional source field "Review date" has no value/);
   // "Ready" was the modal's own word for it; the tab says it by carrying no

@@ -82,6 +82,7 @@ export function model(kind: "single" | "collection" = "collection"): ContentMode
       schemaVersion: 1,
       id: "articles",
       name: "Articles",
+      description: "",
       kind,
       fields: [
         { id: "title", key: "title", label: "Title", required: true, kind: "text" },
@@ -96,6 +97,8 @@ export function entry(id: string, title: unknown = id, slug: unknown = id): Cont
     schemaVersion: 1,
     id,
     modelId: "articles",
+    lifecycle: "published",
+    generation: 0,
     createdAt: timestamp,
     updatedAt: timestamp,
     values: { title, slug } as ContentEntryRecord["values"],

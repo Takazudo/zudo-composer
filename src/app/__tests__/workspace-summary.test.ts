@@ -72,6 +72,7 @@ function contentModel(id: string, updatedAt: string): ContentModelRecord {
       schemaVersion: 1,
       id,
       name: `Model ${id}`,
+      description: "",
       kind: "collection",
       fields: [
         { id: "heading", key: "heading", label: "Heading", required: true, kind: "text" },
@@ -82,7 +83,7 @@ function contentModel(id: string, updatedAt: string): ContentModelRecord {
 }
 
 function contentEntry(id: string, updatedAt: string, values: ContentEntryRecord["values"]): ContentEntryRecord {
-  return { schemaVersion: 1, id, modelId: "journal", createdAt: AT(1), updatedAt, values };
+  return { schemaVersion: 1, lifecycle: "draft", generation: 0, id, modelId: "journal", createdAt: AT(1), updatedAt, values };
 }
 
 function sitemapNode(id: string, title: string, source: SitemapNode["source"], children: SitemapNode[] = []): SitemapNode {

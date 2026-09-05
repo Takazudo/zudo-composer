@@ -6,24 +6,51 @@ export const CONTENT_ENTRY_SCHEMA_VERSION = 1 as const;
 
 export const CONTENT_FIELD_KINDS = [
   "text", "long-text", "markdown", "number", "boolean", "date", "slug", "color", "url",
+  "choice", "reference", "reference-list", "object", "list", "media-use",
 ] as const;
 export type ContentFieldKind = (typeof CONTENT_FIELD_KINDS)[number];
 export type ContentModelKind = "collection" | "single";
 
-export interface ContentFieldDefinition {
+export interface ContentRecordRef { providerId: string; recordId: RecordId }
+export interface ContentEntryRef extends ContentRecordRef { modelId: RecordId }
+export interface ContentAssetRef { assetId: string }
+export type ContentMediaUse =
+  | { kind: "image"; asset: ContentAssetRef; alt: string; decorative: boolean; caption: string }
+  | { kind: "link"; asset: ContentAssetRef; label: string }
+  | { kind: "card"; asset: ContentAssetRef; title: string; description: string };
+
+export type ContentValueSchema =
+  | { kind: "text" | "long-text" | "markdown" | "number" | "boolean" | "date" | "slug" | "color" | "url" }
+  | { kind: "choice"; options: { value: string; label: string }[] }
+  | { kind: "reference"; target: ContentRecordRef }
+  | { kind: "reference-list"; target: ContentRecordRef; ordered: boolean }
+  | { kind: "object"; fields: ContentFieldDefinition[] }
+  | { kind: "list"; item: ContentValueSchema }
+  | { kind: "media-use"; use: ContentMediaUse["kind"] };
+
+export type ContentFieldDefinition = {
   id: RecordId;
   key: string;
   label: string;
   required: boolean;
-  kind: ContentFieldKind;
+} & ContentValueSchema;
+
+/** Inverses are presentation metadata. Only the named owning field stores edges. */
+export interface ContentInverseDefinition { id: string; label: string; source: ContentRecordRef; fieldId: string }
+export interface ContentPresentation {
+  groups: { id: string; label: string; fieldIds: string[] }[];
+  views: { id: string; label: string; fieldIds: string[] }[];
+  inverses: ContentInverseDefinition[];
 }
 
 export interface ContentModelDocument {
   schemaVersion: typeof CONTENT_MODEL_SCHEMA_VERSION;
   id: RecordId;
   name: string;
+  description: string;
   kind: ContentModelKind;
   fields: ContentFieldDefinition[];
+  presentation?: ContentPresentation;
 }
 
 export interface ContentModelRecord {
@@ -40,13 +67,17 @@ export interface ContentEntryRecord {
   createdAt: string;
   updatedAt: string;
   values: Record<RecordId, JsonValue>;
+  lifecycle: "draft" | "published";
+  /** Storage assigns a new generation atomically for every entry mutation. */
+  generation: number;
 }
 
 export interface ContentCompletenessDiagnostic {
-  code: "required-value-missing";
+  code: "required-value-missing" | "semantic-value-incomplete";
   modelId: RecordId;
   entryId: RecordId;
   fieldId: RecordId;
   fieldKey: string;
   message: string;
+  path?: readonly (string | number)[];
 }

@@ -45,6 +45,7 @@ export const model: ContentModelRecord = {
     schemaVersion: 1,
     id: "model-1",
     name: "Articles",
+    description: "",
     kind: "collection",
     fields: [
       { id: "field-title", key: "title", label: "Title", required: true, kind: "text" },
@@ -59,6 +60,8 @@ export const entry: ContentEntryRecord = {
   schemaVersion: 1,
   id: "entry-1",
   modelId: model.id,
+  lifecycle: "draft",
+  generation: 0,
   createdAt: NOW,
   updatedAt: NOW,
   values: { "field-title": "Hello world", "field-flag": true, "field-date": "2026-01-02", "field-slug": "hello-world" },

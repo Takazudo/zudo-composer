@@ -9,6 +9,7 @@ export function isStringProducingSource(kind: ContentFieldKind): boolean {
   switch (kind) {
     case "text": case "long-text": case "markdown": case "date": case "slug": case "color": case "url": return true;
     case "number": case "boolean": return false;
+    case "choice": case "reference": case "reference-list": case "object": case "list": case "media-use": return false;
     default: return assertNever(kind, "Content field");
   }
 }
@@ -20,6 +21,7 @@ function isIdentityCompatible(source: ContentFieldKind, target: MappingTargetKin
       switch (source) {
         case "text": case "slug": return true;
         case "long-text": case "markdown": case "number": case "boolean": case "date": case "color": case "url": return false;
+        case "choice": case "reference": case "reference-list": case "object": case "list": case "media-use": return false;
         default: return assertNever(source, "Content field");
       }
     }
@@ -27,6 +29,7 @@ function isIdentityCompatible(source: ContentFieldKind, target: MappingTargetKin
       switch (source) {
         case "color": return true;
         case "text": case "long-text": case "markdown": case "number": case "boolean": case "date": case "slug": case "url": return false;
+        case "choice": case "reference": case "reference-list": case "object": case "list": case "media-use": return false;
         default: return assertNever(source, "Content field");
       }
     }
@@ -34,6 +37,7 @@ function isIdentityCompatible(source: ContentFieldKind, target: MappingTargetKin
       switch (source) {
         case "number": return true;
         case "text": case "long-text": case "markdown": case "boolean": case "date": case "slug": case "color": case "url": return false;
+        case "choice": case "reference": case "reference-list": case "object": case "list": case "media-use": return false;
         default: return assertNever(source, "Content field");
       }
     }
@@ -41,6 +45,7 @@ function isIdentityCompatible(source: ContentFieldKind, target: MappingTargetKin
       switch (source) {
         case "boolean": return true;
         case "text": case "long-text": case "markdown": case "number": case "date": case "slug": case "color": case "url": return false;
+        case "choice": case "reference": case "reference-list": case "object": case "list": case "media-use": return false;
         default: return assertNever(source, "Content field");
       }
     }
@@ -71,6 +76,7 @@ export function isCanonicalDate(value: string): boolean {
 }
 
 export function applyMappingTransform(value: string | number | boolean, transform: MappingTransform): string | number | boolean {
+  if (!["string", "number", "boolean"].includes(typeof value)) throw new TypeError("Scalar mapping transforms do not accept structured Content values.");
   switch (transform.kind) {
     case "identity": return value;
     case "prefix": return transform.prefix + String(value);

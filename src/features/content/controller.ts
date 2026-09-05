@@ -2,6 +2,7 @@ import {
   CONTENT_FIELD_KINDS,
   createContentEntryRecord,
   createContentModelRecord,
+  createContentValueSchema,
   diagnoseContentEntryCompleteness,
   type ContentEntryRecord,
   type ContentFieldDefinition,
@@ -142,7 +143,7 @@ export class ContentAuthoringController {
 
   addField(kind: ContentFieldKind = "text"): void {
     if (!CONTENT_FIELD_KINDS.includes(kind)) throw new Error("Unsupported field kind.");
-    const field: ContentFieldDefinition = { id: this.idFactory("content-field"), key: this.uniqueFieldKey("field"), label: "New field", required: false, kind };
+    const field: ContentFieldDefinition = { id: this.idFactory("content-field"), key: this.uniqueFieldKey("field"), label: "New field", required: false, ...createContentValueSchema(kind, { providerId: this.provider.descriptor.id, recordId: this.requireModel().id }) };
     this.updateModel((record) => ({ ...record, document: { ...record.document, fields: [...record.document.fields, field] } }));
   }
 
@@ -153,7 +154,11 @@ export class ContentAuthoringController {
     if (patch.kind && patch.kind !== old.kind && this.current.usedFieldIds.includes(fieldId)) {
       throw new Error("Field kind cannot change while stored Entries use this field.");
     }
-    this.updateModel((record) => ({ ...record, document: { ...record.document, fields: record.document.fields.map((field) => field.id === fieldId ? { ...field, ...patch } : field) } }));
+    const { kind, ...metadata } = patch;
+    const next: ContentFieldDefinition = kind && kind !== old.kind
+      ? { id: old.id, key: old.key, label: old.label, required: old.required, ...metadata, ...createContentValueSchema(kind, { providerId: this.provider.descriptor.id, recordId: model.id }) }
+      : { ...old, ...metadata };
+    this.updateModel((record) => ({ ...record, document: { ...record.document, fields: record.document.fields.map((field) => field.id === fieldId ? next : field) } }));
   }
 
   moveField(fieldId: string, direction: -1 | 1): void {

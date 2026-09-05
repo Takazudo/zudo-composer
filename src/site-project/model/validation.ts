@@ -2,6 +2,7 @@ import { createComponentCatalog } from "../../composer/model/types";
 import { diagnoseDocument } from "../../composer/model/validate";
 import { validateCompositionRecord } from "../../composer/library";
 import { isValueValidForField, validateContentEntryRecord, validateContentModelRecord } from "../../content/model";
+import { buildContentGraphIndex } from "../../content/library";
 import { validateMappingRecord } from "../../mapping/model";
 import { discoverMappingTargets } from "../../mapping/resolver/targets";
 import { validateSitemapRecord } from "../../sitemapper/library";
@@ -307,6 +308,14 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
         }
       }
     });
+  }
+
+  const contentGraph = buildContentGraphIndex([...contentModels].map(([providerId, models]) => ({ providerId, mutationToken: 0, models, entries: contentEntries.get(providerId) ?? [] })));
+  for (const issue of contentGraph.diagnostics) {
+    if (!["missing-provider", "missing-entry", "invalid-inverse", "missing-model"].includes(issue.code)) continue;
+    const record = contentEntries.get(issue.providerId)?.find((entry) => entry.id === issue.recordId)
+      ?? contentModels.get(issue.providerId)?.find((model) => model.id === issue.recordId);
+    diagnostic(diagnostics, "invalid-entry-value", record ? recordPaths.get(record) ?? "$.providers.content" : "$.providers.content", issue.message);
   }
 
   for (const records of mappings.values()) {

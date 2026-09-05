@@ -8,8 +8,8 @@ import { mappingDeepLinkHref, parseMappingDeepLink } from "../deep-link";
 
 const now = "2026-01-02T03:04:05.000Z";
 const component = activeComponentProvider.manifest.components.find((item) => item.fields.some((field) => field.editor.kind === "text"))!;
-const model: ContentModelRecord = { id: "model-1", createdAt: now, updatedAt: now, document: { schemaVersion: 1, id: "model-1", name: "Articles", kind: "collection", fields: [{ id: "title", key: "title", label: "Title", required: true, kind: "text" }] } };
-const entry: ContentEntryRecord = { schemaVersion: 1, id: "entry-1", modelId: model.id, createdAt: now, updatedAt: now, values: { title: "Hello" } };
+const model: ContentModelRecord = { id: "model-1", createdAt: now, updatedAt: now, document: { description: "", schemaVersion: 1, id: "model-1", name: "Articles", kind: "collection", fields: [{ id: "title", key: "title", label: "Title", required: true, kind: "text" }] } };
+const entry: ContentEntryRecord = { lifecycle: "draft" as const, generation: 0, schemaVersion: 1, id: "entry-1", modelId: model.id, createdAt: now, updatedAt: now, values: { title: "Hello" } };
 const composition: CompositionRecord = { id: "composition-1", createdAt: now, updatedAt: now, document: { schemaVersion: 2, id: "composition-1", name: "Article page", root: [{ id: "node-1", componentId: component.id, componentVersion: component.schemaVersion, props: { ...component.defaults }, slots: Object.fromEntries(component.slots.map((slot) => [slot.id, []])) }] } };
 const record = createMappingRecord({ id: "mapping-1", name: "Article", contentModel: { providerId: "content-indexeddb", recordId: model.id }, composition: { providerId: "indexeddb", recordId: composition.id }, createdAt: now });
 
