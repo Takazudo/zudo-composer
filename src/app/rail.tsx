@@ -1,7 +1,6 @@
-import type { JSX } from "preact";
+import type { ComponentChildren, JSX } from "preact";
+import { useId, useRef, useState } from "preact/hooks";
 import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
   ComposerIcon,
   ContentIcon,
   ExternalLinkIcon,
@@ -12,7 +11,10 @@ import {
   SitemapperIcon,
   type IconComponent,
 } from "../components/icons";
-import { Button } from "../components/ui";
+import { Button, DisclosureButton } from "../components/ui";
+import { Dialog, Menu, MenuItem, useMenu } from "../components/overlay";
+import { formatIntent } from "./route-intents";
+import { pinAvailable, type NavigationModel, type NavigationPin } from "./navigation-preferences";
 import type { WorkspaceCounts } from "./workspace-summary";
 
 // The workspace rail (issue #161): the dark graphite sidebar that replaced the
@@ -20,7 +22,7 @@ import type { WorkspaceCounts } from "./workspace-summary";
 // 64rem. Grouping follows the prototype — one Dashboard entry, then the records
 // an author writes, then the structures they are placed into.
 
-export type RailItemId = "home" | "content" | "media" | "composer" | "mapping" | "sitemapper" | "site";
+export type RailItemId = "home" | "content" | "media" | "composer" | "mapping" | "sitemapper" | "review" | "site";
 
 export interface RailItem {
   readonly id: RailItemId;
@@ -48,7 +50,7 @@ export interface RailGroup {
 export const RAIL_GROUPS: readonly RailGroup[] = [
   {
     id: "overview",
-    items: [{ id: "home", label: "Dashboard", href: "/", icon: HomeIcon }],
+    items: [{ id: "home", label: "Overview", href: "/", icon: HomeIcon }],
   },
   {
     id: "author",
@@ -65,13 +67,13 @@ export const RAIL_GROUPS: readonly RailGroup[] = [
       { id: "composer", label: "Compositions", href: "/composer", icon: ComposerIcon },
       { id: "mapping", label: "Mappings", href: "/mapping", icon: MappingIcon },
       { id: "sitemapper", label: "Sitemaps", href: "/sitemapper", icon: SitemapperIcon },
+      { id: "review", label: "Review & release", href: "/review", icon: PageIcon },
       {
         id: "site",
-        label: "Site",
-        href: "/site",
+        label: "Website preview",
+        href: "/website-preview",
         icon: PageIcon,
-        external: true,
-        accessibleName: "Site — open the delivered site",
+        accessibleName: "Website preview — choose preview source",
       },
     ],
   },
@@ -138,7 +140,7 @@ export function persistRailState(state: RailState, storage: Storage | null = def
 /** The rail item a pathname is currently inside, or `null` for an unknown route. */
 export function currentRailItem(path: string): RailItem | null {
   const normalized = path === "" ? "/" : path;
-  return RAIL_ITEMS.find((item) => !item.external && item.href === normalized) ?? null;
+  return RAIL_ITEMS.find((item) => !item.external && item.href === normalized.split("?")[0]) ?? null;
 }
 
 export interface RailProps {
@@ -146,19 +148,35 @@ export interface RailProps {
   collapsed: boolean;
   onToggleCollapsed: () => void;
   counts?: RailCounts;
+  models?: readonly NavigationModel[];
+  modelError?: string | null;
+  pins?: readonly NavigationPin[];
+  onPinsChange?: (pins: NavigationPin[]) => void;
+  onBrowse?: () => void;
+  onNavigate?: (href: string) => void;
+  hideToggle?: boolean;
 }
-
-const NAV_ID = "cms-rail-nav";
-
-export function Rail({ path, collapsed, onToggleCollapsed, counts = {} }: RailProps): JSX.Element {
+export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models = [], modelError, pins = [], onPinsChange, onBrowse, onNavigate, hideToggle }: RailProps): JSX.Element {
   const current = currentRailItem(path);
+  const navId = `cms-rail-nav-${useId()}`;
+  const [contentOpen, setContentOpen] = useState(true);
+  const [rename, setRename] = useState<NavigationPin | null>(null);
+  const [label, setLabel] = useState("");
+  const navigate = (event: JSX.TargetedMouseEvent<HTMLAnchorElement>, href: string) => {
+    if (!onNavigate || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault(); onNavigate(href);
+  };
+  const addPin = (pin: NavigationPin) => {
+    if (!pins.some((value) => formatIntent(value.target) === formatIntent(pin.target))) onPinsChange?.([...pins, pin]);
+  };
   return (
-    <div class="cms-rail">
-      <a class="cms-rail__brand" href="/">
+    <div class="cms-rail" data-compact={collapsed}>
+      <a class="cms-rail__brand" href="/" onClick={(event) => navigate(event, "/")}>
         <span class="cms-rail__logo" aria-hidden="true">Z</span>
         <span class="cms-rail__brand-name">zudo-composer</span>
       </a>
-      <nav id={NAV_ID} class="cms-rail__nav" aria-label="Main navigation">
+      {!hideToggle && <div class="cms-rail__toolbar"><DisclosureButton expanded={!collapsed} aria-label={collapsed ? "Expand navigation" : "Collapse navigation"} aria-controls={navId} onClick={onToggleCollapsed} class="cms-rail__collapse" />{collapsed && onBrowse && <Button size="xs" variant="ghost" onClick={onBrowse} aria-label="Browse navigation">Browse</Button>}</div>}
+      <nav id={navId} class="cms-rail__nav" aria-label="Main navigation">
         {RAIL_GROUPS.map((group) => (
           <div key={group.id} class="cms-rail__group">
             {group.label ? (
@@ -173,12 +191,15 @@ export function Rail({ path, collapsed, onToggleCollapsed, counts = {} }: RailPr
                 const count = counts[item.id];
                 return (
                   <li key={item.id}>
+                    <div class="cms-rail__row">
+                    {!collapsed && item.id === "content" && <DisclosureButton expanded={contentOpen} aria-label={contentOpen ? "Collapse Content models" : "Expand Content models"} onClick={() => setContentOpen(!contentOpen)} size="xs" variant="ghost" />}
                     <a
                       class="cms-rail__item"
                       href={item.href}
+                      onClick={(event) => navigate(event, item.href)}
                       data-route={item.id}
                       aria-current={current?.id === item.id ? "page" : undefined}
-                      aria-label={item.accessibleName}
+                      aria-label={item.accessibleName ?? item.label}
                       title={collapsed ? item.label : undefined}
                     >
                       <ItemIcon size="sm" class="cms-rail__icon" />
@@ -192,31 +213,40 @@ export function Rail({ path, collapsed, onToggleCollapsed, counts = {} }: RailPr
                         <span class="cms-rail__count" aria-hidden="true">{count}</span>
                       )}
                     </a>
+                    </div>
+                    {!collapsed && item.id === "content" && contentOpen && <ul class="cms-rail__tree" aria-label="Content models">
+                      {modelError && <li role="status">{modelError}</li>}
+                      {models.map((model) => {
+                        const target = { route: "content" as const, providerId: model.providerId, modelId: model.modelId };
+                        const href = formatIntent(target);
+                        return <li key={href}><div class="cms-rail__row"><a href={href} class="cms-rail__model" onClick={(event) => navigate(event, href)} title={`${model.label} · ${model.providerId} · ${model.kind === "single" ? "Singleton" : "Collection"}`} aria-current={path === href ? "page" : undefined}>{model.label}</a><RailActions label={`${model.label} actions`}><MenuItem onSelect={() => addPin({ label: model.label, target })}>Pin model</MenuItem>{model.views.map((view) => <MenuItem key={view.id} onSelect={() => addPin({ label: view.label, target: { ...target, viewId: view.id } })}>Pin {view.label}</MenuItem>)}</RailActions></div></li>;
+                      })}
+                    </ul>}
                   </li>
                 );
               })}
             </ul>
           </div>
         ))}
+        {!collapsed && pins.length > 0 && <div class="cms-rail__group"><div class="cms-rail__section">Pinned views</div><ul class="cms-rail__items" aria-label="Pinned views">{pins.map((pin, index) => {
+          const href = formatIntent(pin.target), available = pinAvailable(pin, models);
+          const move = (offset: number) => { const next = [...pins]; [next[index], next[index + offset]] = [next[index + offset]!, next[index]!]; onPinsChange?.(next); };
+          return <li class="cms-rail__row" key={href}>{available ? <a class="cms-rail__model" href={href} onClick={(event) => navigate(event, href)}>{pin.label}</a> : <span class="cms-rail__model" title="This model or view is unavailable">{pin.label} · unavailable</span>}<RailActions label={`${pin.label} pin actions`}><MenuItem onSelect={() => { setRename(pin); setLabel(pin.label); }}>Rename pin</MenuItem><MenuItem disabled={index === 0} onSelect={() => move(-1)}>Move up</MenuItem><MenuItem disabled={index === pins.length - 1} onSelect={() => move(1)}>Move down</MenuItem><MenuItem onSelect={() => onPinsChange?.(pins.filter((value) => value !== pin))}>Remove pin</MenuItem></RailActions></li>;
+        })}</ul></div>}
       </nav>
       <div class="cms-rail__foot">
         <div class="cms-rail__status">
           <strong>Browser storage</strong>
           <span>IndexedDB · zudo-composer</span>
         </div>
-        <Button
-          class="cms-rail__collapse"
-          variant="ghost"
-          size="sm"
-          iconOnly
-          aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-          aria-expanded={collapsed ? "false" : "true"}
-          aria-controls={NAV_ID}
-          onClick={onToggleCollapsed}
-        >
-          {collapsed ? <ArrowRightIcon size="sm" /> : <ArrowLeftIcon size="sm" />}
-        </Button>
       </div>
+      <Dialog open={rename !== null} title="Rename pin" onClose={() => setRename(null)}><form onSubmit={(event) => { event.preventDefault(); if (!label.trim()) return; onPinsChange?.(pins.map((pin) => pin === rename ? { ...pin, label: label.trim() } : pin)); setRename(null); }}><label>Pin label<input value={label} maxLength={120} required onInput={(event) => setLabel(event.currentTarget.value)} /></label><Button type="submit">Save label</Button></form></Dialog>
     </div>
   );
+}
+
+function RailActions({ label, children }: { label: string; children: ComponentChildren }): JSX.Element {
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const menu = useMenu(trigger, { align: "start" });
+  return <><button ref={trigger} type="button" class="cms-btn cms-btn--ghost cms-rail__actions" aria-label={label} {...menu.triggerProps}>···</button><Menu controller={menu} label={label}>{children}</Menu></>;
 }

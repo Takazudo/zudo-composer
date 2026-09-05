@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { useWorkspace } from "../../../app/workspace-context";
 import { cloneJson, createUuidIdFactory, type IdFactory } from "../../../shared";
 import {
   createSaveQueue,
@@ -56,6 +57,8 @@ function statusFromQueue(state: SaveQueueState<SitemapRecord>): SitemapperSaveSt
 }
 
 export function useSitemapperController(options: UseSitemapperControllerOptions): SitemapperController {
+  const integration = useWorkspace()?.integration;
+  const workspaceSession = useRef<ReturnType<NonNullable<typeof integration>["sessions"]["register"]> | null>(null);
   const idFactoryRef = useRef(options.idFactory ?? createUuidIdFactory());
   const nowRef = useRef(options.now ?? (() => new Date().toISOString()));
   const debounceMsRef = useRef(options.debounceMs ?? SITEMAPPER_PROP_DEBOUNCE_MS);
@@ -153,6 +156,7 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
 
   const updatePropsDebounced = useCallback((pageId: string, patch: SitemapPagePropsPatch): void => {
     pendingRef.current.set(pageId, { ...pendingRef.current.get(pageId), ...patch });
+    workspaceSession.current?.changed();
     const current = stateRef.current!;
     if (current.saveStatus.kind !== "dirty") {
       const next = { ...current, saveStatus: { kind: "dirty" } as const };
@@ -188,6 +192,17 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
 
   const flushRef = useRef(flushPropUpdates);
   flushRef.current = flushPropUpdates;
+  useEffect(() => {
+    if (!integration) return;
+    const queue = queueRef.current!;
+    const session = integration.sessions.register({ feature: "Sitemap", ...queue.ref, workspaceId: integration.workspace.id }, {
+      flush: async () => { flushRef.current(); await queue.flush(); }, retry: () => queue.retry(),
+    });
+    workspaceSession.current = session;
+    let revision = queue.state.draftRevision;
+    const unsubscribe = queue.subscribe((next) => { if (revision !== next.draftRevision) { revision = next.draftRevision; session.changed(); } });
+    return () => { flushRef.current(); unsubscribe(); session.detach(); workspaceSession.current = null; };
+  }, [integration]);
   useEffect(() => {
     const queue = queueRef.current!;
     const unsubscribe = queue.subscribe((queueState) => {

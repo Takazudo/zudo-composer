@@ -93,7 +93,7 @@ export function Menu({ controller, label, class: className, children }: MenuProp
   const parent = useContext(MenuContext);
   if (!controller.open) return null;
   return (
-    <OverlayPortal hostClass="cms-overlay-portal">
+    <OverlayPortal hostClass="cms-overlay-portal" container={controller.triggerRef.current?.closest("dialog[open]")}>
       <MenuSurface controller={controller} label={label} class={className} parent={parent}>
         {children}
       </MenuSurface>

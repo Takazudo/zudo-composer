@@ -21,6 +21,7 @@ export type ContentWorkMode = "entries" | "model-fields";
 export type ContentSaveStatus = "pristine" | "saved" | "dirty" | "saving" | "error";
 
 export interface ContentAuthoringState {
+  viewId: string | null;
   phase: "idle" | "loading" | "ready" | "recovery" | "error";
   models: readonly ContentModelSummary[];
   entryCounts: Readonly<Record<string, number>>;
@@ -43,6 +44,7 @@ export interface ContentAuthoringState {
 }
 
 const initialState: ContentAuthoringState = {
+  viewId: null,
   phase: "idle", models: [], entryCounts: {}, incompleteCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
   workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null,
 };
@@ -98,7 +100,7 @@ export class ContentAuthoringController {
       this.provider.store.scanEntries(id),
     ]);
     this.installModelQueue(outcome.record);
-    this.set({ ...this.current, phase: "ready", model: outcome.record, entries: page.entries, entry: null,
+    this.set({ ...this.current, phase: "ready", viewId: null, model: outcome.record, entries: page.entries, entry: null,
       usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, workMode: "entries", saveStatus: "pristine", message: "Model loaded.",
       entryCounts: { ...this.current.entryCounts, [id]: snapshot.count },
       incompleteCounts: { ...this.current.incompleteCounts, [id]: incompleteEntryCount(outcome.record, snapshot.entries) } });
@@ -245,6 +247,11 @@ export class ContentAuthoringController {
 
   browseEntries(): void {
     this.set({ ...this.current, workMode: "entries", message: "Entries ready." });
+  }
+
+  selectView(viewId: string | null): void {
+    if (viewId !== null && !this.requireModel().document.presentation?.views.some((view) => view.id === viewId)) throw new Error(`Content view "${viewId}" is unavailable for this model.`);
+    this.set({ ...this.current, viewId });
   }
 
   updateEntryValue(fieldId: string, value: ContentEntryRecord["values"][string] | undefined): void {

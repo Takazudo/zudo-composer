@@ -2,6 +2,7 @@
 /** @jsxImportSource preact */
 
 import type { JSX } from "preact";
+import { useWorkspace } from "../../app/workspace-context";
 import "./styles.css";
 import {
   ProductionSitemapperApp,
@@ -10,5 +11,6 @@ import {
 
 /** Standalone route content; the application shell supplies its active catalog. */
 export function SitemapperRouteContent(props: ProductionSitemapperAppProps): JSX.Element {
-  return <ProductionSitemapperApp {...props} />;
+  const workspace = useWorkspace();
+  return <ProductionSitemapperApp {...props} navigate={props.navigate ?? (workspace ? (href) => { void workspace.navigate(href); } : undefined)} />;
 }

@@ -3,7 +3,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { SitemapProvider, SitemapRecord } from "../../../../sitemapper/library";
+import { SITEMAP_PROVIDERS, type SitemapProvider, type SitemapRecord } from "../../../../sitemapper/library";
 import { SitemapLibrary } from "../sitemap-library";
 
 const originalShowModal = HTMLDialogElement.prototype.showModal;
@@ -48,6 +48,7 @@ function provider(initial: SitemapRecord[] = []): { provider: SitemapProvider; r
   return {
     records,
     provider: {
+      descriptor: SITEMAP_PROVIDERS.indexeddb,
       store: {
         list: async () => summaries(),
         get: async (id) => records.has(id) ? { status: "loaded", record: records.get(id)! } : { status: "not-found", id },
@@ -86,7 +87,7 @@ describe("Sitemaps library", () => {
 
     fireEvent.input(input, { target: { value: "Launch map" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?sitemap=new-map"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?provider=sitemap-indexeddb&sitemap=new-map"));
     expect(setup.records.get("new-map")?.document.name).toBe("Launch map");
     expect(prompt).not.toHaveBeenCalled();
   });
@@ -95,7 +96,7 @@ describe("Sitemaps library", () => {
     const setup = provider([record(), record("brand-map", "Brand map", false)]);
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
 
-    expect(await screen.findByRole("link", { name: "Product map" })).toHaveAttribute("href", "/sitemapper?sitemap=product-map");
+    expect(await screen.findByRole("link", { name: "Product map" })).toHaveAttribute("href", "/sitemapper?provider=sitemap-indexeddb&sitemap=product-map");
     expect(screen.getByText("1 unassigned")).toBeInTheDocument();
     expect(screen.getByText("All assigned")).toBeInTheDocument();
     expect(screen.getByText("2 of 2 sitemaps · Browser storage")).toBeInTheDocument();
@@ -241,8 +242,8 @@ describe("Sitemaps library", () => {
 
   it("reports a malformed deep link instead of silently showing the library", async () => {
     const setup = provider();
-    render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} notice={<p role="alert">The Sitemap id is malformed.</p>} />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("The Sitemap id is malformed.");
+    render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} notice={<p role="alert">The sitemap id is malformed.</p>} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("The sitemap id is malformed.");
   });
 });
 

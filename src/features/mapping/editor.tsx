@@ -176,7 +176,7 @@ export function MappingEditor({
             >
               Duplicate mapping
             </MenuItem>
-            <MenuItem icon={ContentIcon} href={formatIntent({ route: "content", modelId: mapping.document.contentModel.recordId })}>
+            <MenuItem icon={ContentIcon} href={formatIntent({ route: "content", providerId: mapping.document.contentModel.providerId, modelId: mapping.document.contentModel.recordId })}>
               Open in Content
             </MenuItem>
             <MenuItem

@@ -1,4 +1,4 @@
-import type { JSX } from "preact";
+import type { ComponentChildren, JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   BellIcon,
@@ -101,9 +101,9 @@ function NotificationDisclosure(): JSX.Element {
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  const close = (): void => {
+  const close = (restore = true): void => {
     setOpen(false);
-    triggerRef.current?.focus();
+    if (restore) triggerRef.current?.focus();
   };
 
   useEffect(() => {
@@ -112,15 +112,15 @@ function NotificationDisclosure(): JSX.Element {
     const onPointerDown = (event: PointerEvent): void => {
       const target = event.target as Node;
       if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
-      close();
+      close(false);
     };
     const onMouseDown = (event: MouseEvent): void => {
       const target = event.target as Node;
       if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
-      close();
+      close(false);
     };
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
       event.preventDefault();
       close();
     };
@@ -157,7 +157,7 @@ function NotificationDisclosure(): JSX.Element {
               <p class="app-notification-panel__eyebrow">Workspace signals</p>
               <h2 id="app-notifications-title">Notifications</h2>
             </div>
-            <button ref={closeRef} type="button" class="app-icon-button" aria-label="Close notifications" onClick={close}>
+            <button ref={closeRef} type="button" class="app-icon-button" aria-label="Close notifications" onClick={() => close()}>
               <XMarkIcon size="sm" />
             </button>
           </header>
@@ -182,15 +182,17 @@ function NotificationDisclosure(): JSX.Element {
 }
 
 export interface TopbarProps {
+  navigationControl?: ComponentChildren;
   breadcrumb: readonly BreadcrumbItem[];
   editorStatus: EditorStatus | null;
   themeController: ThemeController;
   themeSnapshot: ThemeSnapshot;
 }
 
-export function Topbar({ breadcrumb, editorStatus, themeController, themeSnapshot }: TopbarProps): JSX.Element {
+export function Topbar({ breadcrumb, editorStatus, themeController, themeSnapshot, navigationControl }: TopbarProps): JSX.Element {
   return (
     <header class="cms-topbar">
+      {navigationControl}
       <Breadcrumb items={breadcrumb} />
       {editorStatus ? (
         <StatusChip

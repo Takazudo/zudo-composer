@@ -1,7 +1,8 @@
 import type { JSX } from "preact";
+import { useWorkspace } from "../../app/workspace-context";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../app/chrome-context";
-import { formatIntent, parseIntent } from "../../app/route-intents";
+import { formatIntent, notifyRouteSelection, parseIntent } from "../../app/route-intents";
 import { EditorBody, EditorChrome, RecordTitle, readEditorCollapsed, writeEditorCollapsed } from "../../components/editor-chrome";
 import { CheckCircleIcon, CheckIcon, CopyIcon, DuplicateIcon, EllipsisIcon, EyeIcon, FileIcon, SettingsIcon, TrashIcon, WarningIcon } from "../../components/icons";
 import { useLibraryConfirm } from "../../components/library-page";
@@ -44,8 +45,8 @@ function statusOf(status: ContentSaveStatus, detail: string, onRetry: () => void
   }
 }
 
-function contentHref(modelId: string, entryId?: string): string {
-  return formatIntent(entryId === undefined ? { route: "content", modelId } : { route: "content", modelId, entryId });
+function contentHref(providerId: string, modelId: string, entryId?: string, viewId?: string | null): string {
+  return formatIntent({ route: "content", providerId, modelId, ...(entryId ? { entryId } : {}), ...(viewId ? { viewId } : {}) });
 }
 
 /**
@@ -58,9 +59,12 @@ function contentHref(modelId: string, entryId?: string): string {
  * remains authoritative and the app chrome owns where its state is shown.
  */
 export function ContentApp({ provider, controller: supplied, componentProvider, createPreviewSource }: ContentRouteContentProps): JSX.Element {
+  const integration = useWorkspace()?.integration;
   const controller = useMemo(() => supplied ?? createContentAuthoringController(provider), [provider, supplied]);
   const [state, setState] = useState<ContentAuthoringState>(controller.state);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
+  const [intentError, setIntentError] = useState<string | null>(null);
+  const error = [actionError, intentError].filter(Boolean).join(" ") || null;
   const [notice, setNotice] = useState<string | null>(null);
   const [addModelOpen, setAddModelOpen] = useState(false);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(() => readEditorCollapsed(CONTENT_EDITOR_KEY).insp);
@@ -69,6 +73,15 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   const overflow = useMenu(overflowRef, { align: "end" });
 
   useEffect(() => controller.subscribe(setState), [controller]);
+  useEffect(() => {
+    if (!integration) return;
+    const session = integration.sessions.register({ feature: "Content", providerId: provider.descriptor.id, workspaceId: integration.workspace.id }, { flush: () => controller.flushSessions(), retry: () => controller.retrySave() });
+    let model = controller.state.model, entry = controller.state.entry;
+    const unsubscribe = controller.subscribe((next) => {
+      if (model !== next.model || entry !== next.entry) { model = next.model; entry = next.entry; session.changed(); }
+    });
+    return () => { unsubscribe(); session.detach(); };
+  }, [controller, integration, provider]);
   useEffect(() => { if (controller.state.phase === "idle") void controller.initialize(); }, [controller]);
 
   const run = (action: () => void | Promise<void>) => {
@@ -83,27 +96,37 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   // just prepared. A malformed link is reported rather than silently opening
   // the bare route.
   const appliedIntent = useRef(false);
+  const [intentAccepted, setIntentAccepted] = useState(false);
+  const acceptVisibleSelection = () => {
+    if (!controller.state.model) return;
+    if (!intentAccepted) controller.selectView(null);
+    setIntentError(null); setError(null); setIntentAccepted(true);
+  };
   useEffect(() => {
     if (appliedIntent.current || state.phase !== "ready") return;
     appliedIntent.current = true;
     const outcome = parseIntent();
-    if (outcome.status === "invalid") { setError(outcome.message); return; }
-    if (outcome.status !== "matched" || outcome.intent.route !== "content") return;
+    if (outcome.status === "invalid") { setIntentError(outcome.message); return; }
+    if (outcome.status !== "matched" || outcome.intent.route !== "content") { setIntentAccepted(true); return; }
     const intent = outcome.intent;
-    run(async () => {
+    if (intent.providerId !== provider.descriptor.id) { setIntentError("The requested Content provider is unavailable."); return; }
+    void (async () => {
       await controller.openModel(intent.modelId);
+      controller.selectView(intent.viewId ?? null);
       if (intent.entryId !== undefined) await controller.openEntry(intent.entryId);
-    });
+      setIntentAccepted(true);
+    })().catch((cause: unknown) => setIntentError(cause instanceof Error ? cause.message : "The Content link could not be opened."));
   }, [controller, state.phase]);
 
   // The address bar follows the selection, so a copied URL opens what the
   // author is looking at. `replaceState` keeps it out of the history stack —
   // choosing a record is not a navigation.
   useEffect(() => {
-    if (!appliedIntent.current || state.phase !== "ready") return;
+    if (!intentAccepted || state.phase !== "ready") return;
     if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") return;
-    window.history.replaceState(null, "", state.model ? contentHref(state.model.id, state.entry?.id) : CONTENT_ROUTE);
-  }, [state.phase, state.model?.id, state.entry?.id]);
+    window.history.replaceState(null, "", state.model ? contentHref(provider.descriptor.id, state.model.id, state.entry?.id, state.viewId) : CONTENT_ROUTE);
+    notifyRouteSelection();
+  }, [intentAccepted, state.phase, state.model?.id, state.entry?.id, state.viewId]);
 
   const fields = state.model?.document.fields ?? [];
   const entryName = state.entry ? contentEntryLabel(state.entry, fields) : "";
@@ -116,7 +139,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
 
   useBreadcrumb([
     { label: "Content", href: CONTENT_ROUTE },
-    ...(state.model ? [state.entry ? { label: state.model.document.name, href: contentHref(state.model.id) } : { label: state.model.document.name }] : []),
+    ...(state.model ? [state.entry ? { label: state.model.document.name, href: contentHref(provider.descriptor.id, state.model.id) } : { label: state.model.document.name }] : []),
     ...(state.entry ? [{ label: entryName }] : []),
   ]);
 
@@ -219,7 +242,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
           size="sm"
           value={state.workMode}
           options={MODE_OPTIONS}
-          onChange={(mode) => run(() => (mode === "model-fields" ? controller.inspectSchema() : controller.browseEntries()))}
+          onChange={(mode) => run(async () => { if (mode === "model-fields") await controller.inspectSchema(); else controller.browseEntries(); acceptVisibleSelection(); })}
         />
       }
       right={
@@ -248,9 +271,9 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
           </Button>
           <Menu controller={overflow} label="Content actions">
             {schemaMode ? (
-              <MenuItem icon={FileIcon} onSelect={() => controller.browseEntries()}>Edit entry</MenuItem>
+              <MenuItem icon={FileIcon} onSelect={() => { controller.browseEntries(); acceptVisibleSelection(); }}>Edit entry</MenuItem>
             ) : (
-              <MenuItem icon={SettingsIcon} onSelect={() => run(() => controller.inspectSchema())}>Edit schema</MenuItem>
+              <MenuItem icon={SettingsIcon} onSelect={() => run(async () => { await controller.inspectSchema(); acceptVisibleSelection(); })}>Edit schema</MenuItem>
             )}
             <MenuSeparator />
             <MenuItem
@@ -293,6 +316,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             onDeleteModel={confirmDeleteModel}
             onDeleteEntry={confirmDeleteEntry}
             onCopyEntryId={copyEntryId}
+            onSelectionAccepted={acceptVisibleSelection}
           />
         }
         main={
@@ -362,7 +386,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
         open={addModelOpen}
         onSubmit={(name, kind) => {
           setAddModelOpen(false);
-          run(() => controller.createModel(name, kind));
+          run(async () => { await controller.createModel(name, kind); acceptVisibleSelection(); });
         }}
         onClose={() => setAddModelOpen(false)}
       />

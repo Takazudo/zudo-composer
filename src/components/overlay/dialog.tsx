@@ -97,6 +97,7 @@ export function Dialog({
 
   function handleKeyDown(event: JSX.TargetedKeyboardEvent<HTMLDialogElement>): void {
     if (event.key === "Escape") {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       // Handled here rather than left to `cancel`, so the contract holds in
       // environments where `<dialog>` has no modal behaviour of its own.
       event.preventDefault();

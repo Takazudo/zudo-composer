@@ -260,13 +260,13 @@ describe("Media deletion", () => {
 });
 
 describe("Media deep links", () => {
-  it("opens the asset a /media?asset= link names", async () => {
-    await renderRoute(uploadingProvider(), { status: "matched", intent: { route: "media", assetId: "brand" } });
+  it("opens the asset a /media?provider=media-files&asset= link names", async () => {
+    await renderRoute(uploadingProvider(), { status: "matched", intent: { route: "media", providerId: "media-memory", assetId: "brand" } });
     expect(await screen.findByRole("heading", { name: "brand.pdf" })).toBeInTheDocument();
   });
 
   it("says so when the link names an asset this library does not hold", async () => {
-    await renderRoute(uploadingProvider(), { status: "matched", intent: { route: "media", assetId: "gone" } });
+    await renderRoute(uploadingProvider(), { status: "matched", intent: { route: "media", providerId: "media-memory", assetId: "gone" } });
     expect(await screen.findByText("This library has no media asset with the id gone.")).toBeInTheDocument();
     expect(screen.getByText("No asset selected")).toBeInTheDocument();
   });

@@ -36,6 +36,7 @@ export function useWorkspaceView(summary: WorkspaceSummary | undefined): Workspa
   // the time the effect re-runs, so the next read reaches the providers.
   const [generation, setGeneration] = useState(0);
   const [data, setData] = useState<ViewData>(() => ({ ...IDLE, loading: summary !== undefined }));
+  useEffect(() => summary?.subscribe?.(() => setGeneration((value) => value + 1)), [summary]);
 
   useEffect(() => {
     if (!summary) {

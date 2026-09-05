@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSequentialIdFactory } from "../../../../shared";
 import type { SitemapRecord } from "../../../../sitemapper/library";
 import { useSitemapperController, type UseSitemapperControllerOptions } from "../use-sitemapper-controller";
+import { WorkspaceContext } from "../../../../app/workspace-context";
+import type { ProductionProviderIntegration } from "../../../../app/provider-integration";
+import { createWorkspaceSaveRegistry } from "../../../../app/workspace-sessions";
 
 function record(): SitemapRecord {
   return {
@@ -33,6 +36,18 @@ beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }));
 afterEach(() => vi.useRealTimers());
 
 describe("useSitemapperController", () => {
+  it("registers the real pending property debounce with the workspace save barrier", async () => {
+    const sessions = createWorkspaceSaveRegistry(); const write = vi.fn(async () => undefined);
+    const integration = { sessions, workspace: { id: "workspace" } } as unknown as ProductionProviderIntegration;
+    const { result, unmount } = renderHook(() => useSitemapperController({ record: record(), providerId: "sitemap-indexeddb", write }), {
+      wrapper: ({ children }) => <WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}>{children}</WorkspaceContext.Provider>,
+    });
+    act(() => result.current.updatePropsDebounced("home", { title: "Pending title" }));
+    expect(write).not.toHaveBeenCalled();
+    await act(async () => { expect((await sessions.flush()).status).toBe("ready"); });
+    expect(write).toHaveBeenCalledWith(expect.objectContaining({ record: expect.objectContaining({ document: expect.objectContaining({ root: expect.arrayContaining([expect.objectContaining({ title: "Pending title" })]) }) }) }));
+    unmount(); expect((await sessions.flush()).status).toBe("ready");
+  });
   it("keeps dispatch stable across state-changing renders", () => {
     const { result } = setup();
     const dispatch = result.current.dispatch;

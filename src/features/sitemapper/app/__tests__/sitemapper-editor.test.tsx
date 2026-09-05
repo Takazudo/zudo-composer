@@ -70,6 +70,7 @@ function renderEditor(overrides: Partial<Harness> = {}, initialPageId?: string) 
   const view = render(
     <ChromeContext.Provider value={chrome}>
       <SitemapperIntegration
+        providerId="sitemap-indexeddb"
         record={record()}
         store={store}
         catalog={catalog}

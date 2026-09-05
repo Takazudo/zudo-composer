@@ -161,7 +161,7 @@ function createFakeIntegration(options: FakeOptions = {}) {
     initialization: { initialize, retry },
     componentProvider: { catalog: emptyCatalog },
     compositionProviders: [{ descriptor: { id: "indexeddb", label: "Browser storage" }, store: { list: () => settle(compositions) } }],
-    contentProvider: { store: { listModels: async () => (models instanceof Error ? Promise.reject(models) : models.map((model): ContentModelSummary => ({ id: model.id, name: model.document.name, kind: model.document.kind, fieldCount: model.document.fields.length, createdAt: model.createdAt, updatedAt: model.updatedAt }))), scanEntries } },
+    contentProvider: { descriptor: { id: "content-indexeddb" }, store: { listModels: async () => (models instanceof Error ? Promise.reject(models) : models.map((model): ContentModelSummary => ({ id: model.id, name: model.document.name, kind: model.document.kind, fieldCount: model.document.fields.length, createdAt: model.createdAt, updatedAt: model.updatedAt }))), scanEntries } },
     contentCatalog: {
       listModels: async () => ({ status: "listed", entries: [], failures: [] }),
       resolveModel: async (ref) => {
@@ -180,8 +180,8 @@ function createFakeIntegration(options: FakeOptions = {}) {
       list: async () => ({ status: "listed", entries: [], failures: [] }),
       resolve: async (ref) => (knownCompositions.has(ref.recordId) ? { status: "resolved", record: compositionRecord(ref.recordId) } : { status: "not-found" }),
     },
-    sitemapProvider: { store: sitemapStore },
-    mediaProvider: media === null ? undefined : { store: { list: () => settle(media) } },
+    sitemapProvider: { descriptor: { id: "sitemap-indexeddb" }, store: sitemapStore },
+    mediaProvider: media === null ? undefined : { descriptor: { id: "media-files" }, store: { list: () => settle(media) } },
   };
   return { integration, initialize, retry, scanEntries };
 }
@@ -275,12 +275,12 @@ describe("createWorkspaceSummary — recent", () => {
       "content-entry:first",
     ]);
     expect(records.map(({ href }) => href)).toEqual([
-      "/sitemapper?sitemap=studio",
-      "/media?asset=hero-image",
-      "/content?model=journal",
+      "/sitemapper?provider=sitemap-indexeddb&sitemap=studio",
+      "/media?provider=media-files&asset=hero-image",
+      "/content?provider=content-indexeddb&model=journal",
       "/mapping?provider=mapping-indexeddb&mapping=journal",
       "/composer",
-      "/content?model=journal&entry=first",
+      "/content?provider=content-indexeddb&model=journal&entry=first",
     ]);
     expect(records.find(({ kind }) => kind === "content-entry")?.label).toBe("First article");
   });
@@ -353,16 +353,16 @@ describe("createWorkspaceSummary — attention", () => {
       id: "home",
       label: "Home",
       detail: '"Sitemap studio" has a page with no Composition or Mapping source.',
-      href: "/sitemapper?sitemap=studio&page=home",
-      intent: { route: "sitemapper", sitemapId: "studio", pageId: "home" },
+      href: "/sitemapper?provider=sitemap-indexeddb&sitemap=studio&page=home",
+      intent: { route: "sitemapper", providerId: "sitemap-indexeddb", sitemapId: "studio", pageId: "home" },
     }]);
     expect(value(attention.content)).toEqual([{
       kind: "incomplete-entry",
       id: "second",
       label: "second",
       detail: "Heading is required.",
-      href: "/content?model=journal&entry=second",
-      intent: { route: "content", modelId: "journal", entryId: "second" },
+      href: "/content?provider=content-indexeddb&model=journal&entry=second",
+      intent: { route: "content", providerId: "content-indexeddb", modelId: "journal", entryId: "second" },
     }]);
   });
 
@@ -371,7 +371,7 @@ describe("createWorkspaceSummary — attention", () => {
       sitemaps: [sitemapRecord("studio", AT(3), [sitemapNode("Page One", "Home", { kind: "unassigned" })])],
     });
     const attention = await createWorkspaceSummary(integration).attention();
-    expect(value(attention.sitemaps)[0]).toMatchObject({ href: "/sitemapper?sitemap=studio", intent: { route: "sitemapper", sitemapId: "studio" } });
+    expect(value(attention.sitemaps)[0]).toMatchObject({ href: "/sitemapper?provider=sitemap-indexeddb&sitemap=studio", intent: { route: "sitemapper", providerId: "sitemap-indexeddb", sitemapId: "studio" } });
   });
 });
 
