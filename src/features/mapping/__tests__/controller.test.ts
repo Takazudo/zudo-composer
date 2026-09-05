@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMappingRecord } from "../../../mapping";
+import type { MappingAttachmentCallbacks, MappingAttachmentItem, MappingAttachmentSnapshot } from "../attachments";
 import {
   COMPOSITION_REF,
   CONTENT_REF,
+  composition,
   entry,
+  HEADING_NODE,
   HEADING_TARGET,
   NOW,
   READY_BINDING,
@@ -166,5 +169,75 @@ describe("MappingEditorController", () => {
     await h.controller.open(await h.controller.create("Unavailable", CONTENT_REF, COMPOSITION_REF));
     expect(h.controller.state.entryFailure).toBe("Provider alpha is unavailable.");
     expect(h.controller.state.entries).toEqual([]);
+  });
+
+  it("persists a collection query and keeps its effective result deterministic", async () => {
+    const source = mappingRecord([READY_BINDING]);
+    source.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 1 } };
+    const h = harness([source]);
+    await h.controller.initialize();
+    await h.controller.open(source.id);
+
+    expect(h.controller.state.collectionEvaluation?.entries.map((candidate) => candidate.id)).toEqual([entry.id]);
+    await h.controller.setCollectionPublication("published-only");
+    expect(h.controller.state.collectionEvaluation?.entries).toEqual([]);
+    expect(h.controller.state.collectionEvaluation?.diagnostics.map((diagnostic) => diagnostic.code)).toContain("empty-source");
+    await h.controller.setCollectionPublication("include-drafts");
+    await h.controller.setCollectionLimit(7);
+    await h.controller.flush();
+
+    expect(h.records.get(source.id)?.document.mode).toEqual({ kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 7 } });
+  });
+
+  it("keeps provider-qualified ordered pins in the current query", async () => {
+    const source = mappingRecord([]);
+    source.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 10 } };
+    const h = harness([source]);
+    await h.controller.initialize();
+    await h.controller.open(source.id);
+    await h.controller.setCollectionPins([{ providerId: CONTENT_REF.providerId, modelId: CONTENT_REF.recordId, recordId: entry.id }]);
+
+    expect(h.controller.state.mapping?.document.mode).toMatchObject({ kind: "collection", query: { pins: [{ providerId: CONTENT_REF.providerId, modelId: CONTENT_REF.recordId, recordId: entry.id }] } });
+    expect(h.controller.state.collectionEvaluation?.entries[0]?.id).toBe(entry.id);
+  });
+
+  it("uses aggregate attachment callbacks for named-slot attach, preview and detach", async () => {
+    const source = mappingRecord([]);
+    source.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 10 } };
+    const attachment = {
+      id: "feed",
+      order: 0,
+      composition: { ...COMPOSITION_REF },
+      target: { nodeId: HEADING_NODE, slotId: "body" },
+      mapping: { providerId: "mapping-indexeddb", recordId: source.id },
+    } as const;
+    const item: MappingAttachmentItem = {
+      attachment,
+      target: { composition: { ...COMPOSITION_REF }, compositionName: "Article page", nodeId: HEADING_NODE, slotId: "body", slotLabel: "Body", componentId: "ui.section-heading", cardinality: "many" },
+      mapping: { providerId: "mapping-indexeddb", recordId: source.id },
+      mappingName: source.document.name,
+      effectiveEntries: [entry],
+      staticFallback: composition.document,
+      diagnostics: [],
+    };
+    let snapshot: MappingAttachmentSnapshot = { targets: [item.target], attachments: [] };
+    const requests: string[] = [];
+    const callbacks: MappingAttachmentCallbacks = {
+      async list() { return snapshot; },
+      async attach(request) { requests.push(`${request.composition.providerId}/${request.composition.recordId}:${request.target.nodeId}.${request.target.slotId}:${request.mapping.providerId}/${request.mapping.recordId}`); snapshot = { ...snapshot, attachments: [item] }; },
+      async detach(received) { requests.push(`detach:${received.id}`); snapshot = { ...snapshot, attachments: [] }; },
+      async preview() { return { status: "ready", document: composition.document, staticFallback: composition.document, effectiveEntries: [entry], diagnostics: [] }; },
+    };
+    const h = harness([source], RESOLVED_ENTRIES, { attachments: callbacks });
+    await h.controller.initialize();
+    await h.controller.open(source.id);
+    await h.controller.attachCollection({ composition: { ...COMPOSITION_REF }, target: { nodeId: HEADING_NODE, slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: source.id } });
+    expect(requests[0]).toBe(`indexeddb/composition-1:${HEADING_NODE}.body:mapping-indexeddb/${source.id}`);
+    expect(h.controller.state.attachments.snapshot?.attachments).toHaveLength(1);
+    await h.controller.previewCollectionAttachment(attachment.id);
+    expect(h.controller.state.attachments.preview?.status).toBe("ready");
+    await h.controller.detachCollection(attachment.id);
+    expect(requests.at(-1)).toBe("detach:feed");
+    expect(h.controller.state.attachments.snapshot?.attachments).toHaveLength(0);
   });
 });

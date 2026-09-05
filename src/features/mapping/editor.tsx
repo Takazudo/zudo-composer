@@ -21,15 +21,17 @@ import {
 import { useLibraryConfirm } from "../../components/library-page";
 import { ConfirmDialog, Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay";
 import { Banner, Button } from "../../components/ui";
+import type { MappingCollectionQuery } from "../../mapping";
 import { formatComposerRoute } from "../composer/routing";
 import type { ComposerComponentProvider } from "../composer/component-provider";
 import { BindingsPane } from "./bindings-pane";
 import type { MappingEditorController, MappingEditorState, MappingSaveStatus } from "./controller";
 import { MAPPING_ROUTE, mappingDeepLinkHref } from "./deep-link";
 import { InspectorPane, type MappingInspectorTab } from "./inspector-pane";
-import { buildBindingRows, firstCompatibleTransform, refKey } from "./presentation";
+import { buildBindingRows, firstCompatibleProjection, firstCompatibleTransform, refKey } from "./presentation";
 import { RecordPickerDialog } from "./record-picker-dialog";
 import { SourcePane } from "./source-pane";
+import { PinPickerDialog } from "./pin-picker-dialog";
 
 // The Mapping editor on the shared record chrome: back, an inline-editable
 // name, the source/target pair in the centre, and Test + Save on the right.
@@ -71,6 +73,7 @@ export function MappingEditor({
   const [pane, setPane] = useState<EditorPane>("main");
   const [tab, setTab] = useState<MappingInspectorTab>("preview");
   const [picker, setPicker] = useState<PickerKind | null>(null);
+  const [pinPickerOpen, setPinPickerOpen] = useState(false);
   const confirm = useLibraryConfirm();
   const overflowRef = useRef<HTMLButtonElement | null>(null);
   const overflow = useMenu(overflowRef, { align: "end" });
@@ -100,8 +103,9 @@ export function MappingEditor({
     const field = state.definition?.contentModel?.document.fields.find((candidate) => candidate.id === sourceFieldId);
     // The menu only ever offers compatible sources, so a transform exists;
     // keeping the stored one would leave the row broken in a new way.
-    const transform = row?.target && field ? firstCompatibleTransform(field.kind, row.target) : null;
-    return controller.updateBinding(bindingId, { sourceFieldId, ...(transform ? { transform } : {}) });
+    const projection = row?.target && field ? firstCompatibleProjection(field, row.target) : null;
+    const transform = projection && row?.target ? firstCompatibleTransform(projection.kind, row.target) : null;
+    return controller.updateBinding(bindingId, { sourceFieldId, ...(projection ? { projection: projection.projection } : {}), ...(transform ? { transform } : {}) });
   });
 
   const askDelete = () => confirm.request({
@@ -202,6 +206,9 @@ export function MappingEditor({
             rows={rows}
             onBind={bind}
             onSelectEntry={(entryId) => run(() => controller.selectEntry(entryId))}
+            onModeChange={(kind) => run(() => controller.setMode(kind))}
+            onQueryChange={(change: Partial<MappingCollectionQuery> | ((query: MappingCollectionQuery) => MappingCollectionQuery)) => run(() => controller.updateCollectionQuery(change))}
+            onOpenPins={() => setPinPickerOpen(true)}
           />
         }
         main={
@@ -211,6 +218,11 @@ export function MappingEditor({
             notice={error ? <Banner tone="err">{error}</Banner> : null}
             onBind={bind}
             onRebind={rebind}
+            onProjection={(bindingId, projection) => run(() => {
+              const row = rows.find((candidate) => candidate.binding.id === bindingId);
+              const transform = row?.target ? firstCompatibleTransform(row.projections.find((candidate) => JSON.stringify(candidate.projection) === JSON.stringify(projection))?.kind ?? "text", row.target) : null;
+              return controller.updateBinding(bindingId, { projection, ...(transform ? { transform } : {}) });
+            })}
             onTransform={(bindingId, transform) => run(() => controller.updateBinding(bindingId, { transform }))}
             onMove={(bindingId, direction) => run(() => controller.moveBinding(bindingId, direction))}
             onRemove={(bindingId) => run(() => controller.removeBinding(bindingId))}
@@ -224,6 +236,8 @@ export function MappingEditor({
             onTabChange={setTab}
             onPreviewCurrent={() => controller.setPreviewCurrent()}
             onPreviewError={(message) => controller.setPreviewError(message)}
+            controller={controller}
+            run={run}
           />
         }
       />
@@ -264,6 +278,16 @@ export function MappingEditor({
           return entry ? controller.selectComposition(entry.ref) : Promise.resolve();
         })}
         onClose={() => setPicker(null)}
+      />
+      <PinPickerDialog
+        open={pinPickerOpen}
+        entries={state.entries}
+        model={state.definition?.contentModel ?? null}
+        providerId={mapping.document.contentModel.providerId}
+        currentPins={mapping.document.mode.kind === "collection" ? mapping.document.mode.query.pins : []}
+        publication={mapping.document.mode.kind === "collection" ? mapping.document.mode.query.publication : "published-only"}
+        onSave={(pins) => run(() => controller.setCollectionPins(pins))}
+        onClose={() => setPinPickerOpen(false)}
       />
       <ConfirmDialog {...confirm.dialogProps} />
     </EditorChrome>

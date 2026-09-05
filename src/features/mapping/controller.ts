@@ -2,14 +2,21 @@ import type { ComponentCatalog, CompositionDocument } from "../../composer/model
 import type { ContentCatalog, ContentCatalogEntry, ContentEntryRecord, ContentEntrySnapshot, ContentModelRecord } from "../../content";
 import {
   createMappingRecord,
+  evaluateCollectionQuery,
+  evaluateResolvedMapping,
   evaluateMapping,
   isMappingCompatible,
   resolveMappingDefinition,
   type CompositionCatalog,
   type CompositionCatalogEntry,
   type MappingBinding,
+  type MappingCollectionCondition,
+  type MappingCollectionEvaluation,
+  type MappingCollectionPin,
+  type MappingCollectionQuery,
   type MappingDefinitionResolution,
   type MappingEvaluationResult,
+  type MappingMode,
   type MappingProvider,
   type MappingRecord,
   type MappingSummary,
@@ -19,6 +26,13 @@ import {
 } from "../../mapping";
 import { cloneJson, createUuidIdFactory, isSafeRecordId, type IdFactory } from "../../shared";
 import { type MappingDeepLinkRequest, type MappingDeepLinkState } from "./deep-link";
+import {
+  emptyMappingAttachmentState,
+  type MappingAttachmentCallbacks,
+  type MappingAttachmentState,
+} from "./attachments";
+import { materializeCollectionPreview } from "./collection-preview";
+import { compatibleTransformsForProjection, sourceProjectionOptions } from "./projection-options";
 
 export type MappingSaveStatus = "saved" | "dirty" | "saving" | "error";
 
@@ -51,24 +65,29 @@ export interface MappingEditorState {
   entryFailure: string | null;
   entry: ContentEntryRecord | null;
   evaluation: MappingEvaluationResult | null;
+  collectionEvaluation: MappingCollectionEvaluation | null;
+  collectionEvaluations: readonly MappingEvaluationResult[];
   previewDocument: CompositionDocument | null;
   previewStatus: "empty" | "loading" | "current" | "error";
   saveStatus: MappingSaveStatus;
   message: string;
   recoveryMessage: string | null;
+  attachments: MappingAttachmentState;
   deepLink?: MappingDeepLinkState;
 }
 
 const initialState: MappingEditorState = {
   phase: "idle", mappings: [], libraryDetails: {}, contentModels: [], compositions: [], catalogFailures: [], mapping: null,
-  definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null,
+  definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, collectionEvaluation: null, collectionEvaluations: [], previewDocument: null,
   previewStatus: "empty", saveStatus: "saved", message: "", recoveryMessage: null,
+  attachments: emptyMappingAttachmentState,
   deepLink: { status: "none" },
 };
 
 export interface MappingEditorControllerOptions {
   idFactory?: IdFactory;
   now?: () => string;
+  attachments?: MappingAttachmentCallbacks;
 }
 
 export function compatibleTransforms(sourceKind: ContentModelRecord["document"]["fields"][number]["kind"], target: MappingTargetDescriptor): readonly MappingTransform["kind"][] {
@@ -83,6 +102,7 @@ export class MappingEditorController {
   private readonly listeners = new Set<(state: MappingEditorState) => void>();
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
+  private readonly attachmentCallbacks?: MappingAttachmentCallbacks;
   private refreshRevision = 0;
   private pendingFlush: Promise<void> | null = null;
 
@@ -95,6 +115,7 @@ export class MappingEditorController {
   ) {
     this.idFactory = options.idFactory ?? createUuidIdFactory();
     this.now = options.now ?? (() => new Date().toISOString());
+    this.attachmentCallbacks = options.attachments;
   }
 
   get state(): MappingEditorState { return this.current; }
@@ -141,7 +162,7 @@ export class MappingEditorController {
     await this.openLoadedRecord(outcome.record);
   }
 
-  async close(): Promise<void> { await this.flush(); this.refreshRevision += 1; this.set({ ...this.current, mapping: null, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null, previewStatus: "empty", message: "Mapping library ready.", deepLink: { status: "none" } }); }
+  async close(): Promise<void> { await this.flush(); this.refreshRevision += 1; this.set({ ...this.current, mapping: null, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, collectionEvaluation: null, collectionEvaluations: [], previewDocument: null, previewStatus: "empty", message: "Mapping library ready.", deepLink: { status: "none" } }); }
 
   /**
    * Resolve a route request against the named provider only. A provider
@@ -205,6 +226,69 @@ export class MappingEditorController {
 
   rename(name: string): void { if (name.trim()) this.edit((record) => ({ ...record, document: { ...record.document, name } })); }
 
+  /** Switches the current Mapping between a singleton and deterministic collection query. */
+  async setMode(kind: MappingMode["kind"]): Promise<void> {
+    const mapping = this.requireMapping();
+    if (kind === mapping.document.mode.kind) return;
+    const mode: MappingMode = kind === "single"
+      ? { kind: "single" }
+      : { kind: "collection", query: defaultCollectionQuery() };
+    this.edit((record) => ({ ...record, document: { ...record.document, mode } }));
+    await this.refreshResolution();
+  }
+
+  async updateCollectionQuery(change: Partial<MappingCollectionQuery> | ((query: MappingCollectionQuery) => MappingCollectionQuery)): Promise<void> {
+    const mapping = this.requireMapping();
+    const current = mapping.document.mode.kind === "collection" ? mapping.document.mode.query : defaultCollectionQuery();
+    const next = typeof change === "function" ? change(cloneJson(current)) : { ...current, ...cloneJson(change) };
+    if (!Number.isSafeInteger(next.limit) || next.limit < 1) next.limit = 1;
+    if (next.limit > 1000) next.limit = 1000;
+    this.edit((record) => ({ ...record, document: { ...record.document, mode: { kind: "collection", query: cloneJson(next) } } }));
+    await this.refreshResolution();
+  }
+
+  async setCollectionPublication(publication: MappingCollectionQuery["publication"]): Promise<void> {
+    await this.updateCollectionQuery((query) => ({ ...query, publication }));
+  }
+
+  async setCollectionLimit(limit: number): Promise<void> {
+    await this.updateCollectionQuery((query) => ({ ...query, limit }));
+  }
+
+  async addCollectionCondition(condition: MappingCollectionCondition): Promise<void> {
+    await this.updateCollectionQuery((query) => ({ ...query, conditions: [...query.conditions, cloneJson(condition)] }));
+  }
+
+  async updateCollectionCondition(index: number, patch: Partial<MappingCollectionCondition>): Promise<void> {
+    await this.updateCollectionQuery((query) => ({
+      ...query,
+      conditions: query.conditions.map((condition, candidate) => candidate === index ? { ...condition, ...cloneJson(patch) } : condition),
+    }));
+  }
+
+  async removeCollectionCondition(index: number): Promise<void> {
+    await this.updateCollectionQuery((query) => ({ ...query, conditions: query.conditions.filter((_, candidate) => candidate !== index) }));
+  }
+
+  async addCollectionSort(sort: MappingCollectionQuery["sort"][number]): Promise<void> {
+    await this.updateCollectionQuery((query) => ({ ...query, sort: [...query.sort, cloneJson(sort)] }));
+  }
+
+  async updateCollectionSort(index: number, patch: Partial<MappingCollectionQuery["sort"][number]>): Promise<void> {
+    await this.updateCollectionQuery((query) => ({
+      ...query,
+      sort: query.sort.map((sort, candidate) => candidate === index ? { ...sort, ...cloneJson(patch) } : sort),
+    }));
+  }
+
+  async removeCollectionSort(index: number): Promise<void> {
+    await this.updateCollectionQuery((query) => ({ ...query, sort: query.sort.filter((_, candidate) => candidate !== index) }));
+  }
+
+  async setCollectionPins(pins: readonly MappingCollectionPin[]): Promise<void> {
+    await this.updateCollectionQuery((query) => ({ ...query, pins: [...pins].map((pin) => cloneJson(pin)) }));
+  }
+
   async selectContentModel(ref: ContentCatalogEntry["ref"]): Promise<void> {
     this.edit((record) => ({ ...record, document: { ...record.document, contentModel: { ...ref } } }));
     await this.refreshResolution();
@@ -220,16 +304,22 @@ export class MappingEditorController {
     const source = definition?.contentModel?.document.fields.find((field) => field.id === sourceFieldId);
     const descriptor = definition?.targets.find((item) => item.target.nodeId === target.nodeId && item.target.prop === target.prop);
     if (!source || !descriptor) throw new Error("Choose a current source and target field.");
-    const kind = compatibleTransforms(source.kind, descriptor)[0];
-    if (!kind) throw new Error(`${source.kind} is not compatible with ${descriptor.kind}.`);
+    const projection = sourceProjectionOptions(source).find((candidate) => compatibleTransformsForProjection(candidate, descriptor).length > 0);
+    const kind = projection ? compatibleTransformsForProjection(projection, descriptor)[0] : undefined;
+    if (!projection || !kind) throw new Error(`${source.kind} is not compatible with ${descriptor.kind}.`);
     const transform: MappingTransform = kind === "prefix" ? { kind, prefix: "" } : { kind };
-    const binding: MappingBinding = { id: this.idFactory("binding"), sourceFieldId, projection: { kind: "value" }, target: { ...target }, transform };
+    const binding: MappingBinding = { id: this.idFactory("binding"), sourceFieldId, projection: cloneJson(projection.projection), target: { ...target }, transform };
     this.edit((record) => ({ ...record, document: { ...record.document, bindings: [...record.document.bindings, binding] } }));
     await this.refreshResolution();
   }
 
-  async updateBinding(bindingId: string, patch: Partial<Pick<MappingBinding, "sourceFieldId" | "target" | "transform">>): Promise<void> {
+  async updateBinding(bindingId: string, patch: Partial<Pick<MappingBinding, "sourceFieldId" | "target" | "transform" | "projection">>): Promise<void> {
     this.edit((record) => ({ ...record, document: { ...record.document, bindings: record.document.bindings.map((binding) => binding.id === bindingId ? { ...binding, ...patch, ...(patch.target ? { target: { ...patch.target } } : {}), ...(patch.transform ? { transform: { ...patch.transform } } : {}) } : binding) } }));
+    await this.refreshResolution();
+  }
+
+  async updateBindingProjection(bindingId: string, projection: MappingBinding["projection"]): Promise<void> {
+    this.edit((record) => ({ ...record, document: { ...record.document, bindings: record.document.bindings.map((binding) => binding.id === bindingId ? { ...binding, projection: cloneJson(projection) } : binding) } }));
     await this.refreshResolution();
   }
 
@@ -248,7 +338,11 @@ export class MappingEditorController {
     const entry = this.current.entries.find((item) => item.id === id) ?? await this.loadEntry(id);
     const revision = ++this.refreshRevision;
     this.set({ ...this.current, entry, evaluation: null, previewStatus: "loading", message: "Testing sample Entry…" });
-    await this.evaluateCurrent(entry, revision);
+    if (this.current.mapping?.document.mode.kind === "collection" && this.current.definition && this.current.collectionEvaluation) {
+      await this.evaluateCollection(this.current.definition, this.current.collectionEvaluation, revision);
+    } else {
+      await this.evaluateCurrent(entry, revision);
+    }
   }
 
   async testDefinition(): Promise<void> { await this.refreshResolution(); }
@@ -274,6 +368,47 @@ export class MappingEditorController {
 
   async retrySave(): Promise<void> { if (this.current.mapping) { this.set({ ...this.current, saveStatus: "dirty" }); await this.flush(); } }
 
+  get hasAttachmentService(): boolean { return this.attachmentCallbacks !== undefined; }
+
+  async refreshAttachments(): Promise<void> {
+    if (!this.attachmentCallbacks) {
+      this.set({ ...this.current, attachments: { ...emptyMappingAttachmentState, phase: "unavailable", message: "Collection attachment service is unavailable." } });
+      return;
+    }
+    this.set({ ...this.current, attachments: { ...this.current.attachments, phase: "loading", message: null } });
+    try {
+      const snapshot = await this.attachmentCallbacks.list();
+      this.set({ ...this.current, attachments: { phase: "ready", snapshot, preview: null, message: null } });
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Collection attachments could not be loaded.";
+      this.set({ ...this.current, attachments: { phase: "error", snapshot: null, preview: null, message } });
+    }
+  }
+
+  async attachCollection(request: Parameters<NonNullable<MappingAttachmentCallbacks>["attach"]>[0]): Promise<void> {
+    if (!this.attachmentCallbacks) throw new Error("Collection attachment service is unavailable.");
+    await this.attachmentCallbacks.attach(request);
+    await this.attachmentCallbacks.flush?.();
+    await this.refreshAttachments();
+  }
+
+  async detachCollection(attachmentId: string): Promise<void> {
+    if (!this.attachmentCallbacks) throw new Error("Collection attachment service is unavailable.");
+    const attachment = this.current.attachments.snapshot?.attachments.find((item) => item.attachment.id === attachmentId)?.attachment;
+    if (!attachment) throw new Error("This collection attachment is no longer available.");
+    await this.attachmentCallbacks.detach(attachment);
+    await this.attachmentCallbacks.flush?.();
+    await this.refreshAttachments();
+  }
+
+  async previewCollectionAttachment(attachmentId: string): Promise<void> {
+    if (!this.attachmentCallbacks) throw new Error("Collection attachment service is unavailable.");
+    const attachment = this.current.attachments.snapshot?.attachments.find((item) => item.attachment.id === attachmentId)?.attachment;
+    if (!attachment) throw new Error("This collection attachment is no longer available.");
+    const preview = await this.attachmentCallbacks.preview(attachment);
+    this.set({ ...this.current, attachments: { ...this.current.attachments, phase: "ready", preview, message: preview.status === "ready" ? "Materialized attachment preview is current." : "Attachment preview has diagnostics." } });
+  }
+
   private async runInitialization(load: () => ReturnType<MappingProvider["initialization"]["initialize"]>, deepLink?: MappingDeepLinkRequest): Promise<void> {
     const deepLinkState: MappingDeepLinkState = deepLink ? { status: "loading", request: deepLink } : { status: "none" };
     this.set({ ...initialState, phase: "loading", message: "Loading Mapping library…", deepLink: deepLinkState });
@@ -283,6 +418,7 @@ export class MappingEditorController {
       if (outcome.status === "ready") {
         this.set({ ...initialState, phase: "ready", mappings: outcome.summaries, contentModels: content.entries, compositions: compositions.entries, catalogFailures: failures, message: "Mapping library ready.", deepLink: deepLinkState });
         await this.refreshLibraryDetails();
+        await this.refreshAttachments();
         if (deepLink) await this.openDeepLink(deepLink);
       } else if (outcome.status === "recovery-required") {
         this.set({
@@ -310,7 +446,7 @@ export class MappingEditorController {
   private async openLoadedRecord(record: MappingRecord): Promise<void> {
     if (this.current.mapping?.id === record.id) return;
     await this.flush();
-    this.set({ ...this.current, mapping: record, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, previewDocument: null, previewStatus: "loading", saveStatus: "saved", message: "Mapping loaded." });
+    this.set({ ...this.current, mapping: record, definition: null, entries: [], entryFailure: null, entry: null, evaluation: null, collectionEvaluation: null, collectionEvaluations: [], previewDocument: null, previewStatus: "loading", saveStatus: "saved", message: "Mapping loaded." });
     await this.refreshResolution();
   }
 
@@ -344,14 +480,37 @@ export class MappingEditorController {
     }
     if (revision !== this.refreshRevision) return;
     const selected = entries.find((entry) => entry.id === this.current.entry?.id) ?? entries[0] ?? null;
-    this.set({ ...this.current, definition, entries, entryFailure, entry: selected, evaluation: null, previewDocument: definition.composition?.document ?? null, previewStatus: definition.composition ? "loading" : "empty", message: entryFailure ? `Entry provider unavailable: ${entryFailure}` : definition.status === "ready" ? "Mapping definition is ready." : `${definition.diagnostics.length} readiness issue${definition.diagnostics.length === 1 ? "" : "s"}.` });
-    if (selected) await this.evaluateCurrent(selected, revision);
+    const collectionEvaluation = definition.contentModel && mapping.document.mode.kind === "collection"
+      ? evaluateCollectionQuery({ model: definition.contentModel, providerId: mapping.document.contentModel.providerId, entries, query: mapping.document.mode.query })
+      : null;
+    const effectiveEntries = collectionEvaluation?.entries ?? entries;
+    const effectiveSelected = effectiveEntries.find((entry) => entry.id === this.current.entry?.id) ?? effectiveEntries[0] ?? selected;
+    this.set({ ...this.current, definition, entries, entryFailure, entry: effectiveSelected, evaluation: null, collectionEvaluation, collectionEvaluations: [], previewDocument: definition.composition?.document ?? null, previewStatus: definition.composition ? "loading" : "empty", message: entryFailure ? `Entry provider unavailable: ${entryFailure}` : definition.status === "ready" ? "Mapping definition is ready." : `${definition.diagnostics.length} readiness issue${definition.diagnostics.length === 1 ? "" : "s"}.` });
+    if (collectionEvaluation && definition.status === "ready") await this.evaluateCollection(definition, collectionEvaluation, revision);
+    else if (selected) await this.evaluateCurrent(selected, revision);
   }
 
   private async evaluateCurrent(entry: ContentEntryRecord, expectedRevision = this.refreshRevision): Promise<void> {
     const mapping = this.requireMapping(); const evaluation = await evaluateMapping(mapping, entry, this.catalogs, this.manifest);
     if (expectedRevision !== this.refreshRevision) return;
     this.set({ ...this.current, evaluation, previewDocument: evaluation.document ?? null, previewStatus: evaluation.document ? "loading" : "empty", message: evaluation.status === "ready" ? `Entry test passed. ${evaluation.appliedBindingCount} binding${evaluation.appliedBindingCount === 1 ? "" : "s"} applied.` : "Entry test found blocking diagnostics." });
+  }
+
+  private async evaluateCollection(definition: MappingDefinitionResolution, query: MappingCollectionEvaluation, expectedRevision: number): Promise<void> {
+    if (!definition.composition) return;
+    const evaluations = query.entries.map((entry) => ({ entryId: entry.id, evaluation: evaluateResolvedMapping(definition, entry) }));
+    if (expectedRevision !== this.refreshRevision) return;
+    const materialized = materializeCollectionPreview(mappingPreviewIdentity(definition.mapping.id), definition.composition.document, evaluations);
+    const blocking = evaluations.flatMap(({ evaluation }) => evaluation.entryDiagnostics).filter((diagnostic) => diagnostic.severity === "blocking");
+    const first = evaluations[0]?.evaluation ?? null;
+    this.set({
+      ...this.current,
+      collectionEvaluations: evaluations.map(({ evaluation }) => evaluation),
+      evaluation: first,
+      previewDocument: materialized,
+      previewStatus: materialized ? "loading" : "empty",
+      message: blocking.length ? `${blocking.length} collection Entry diagnostic${blocking.length === 1 ? "" : "s"}.` : `Collection preview contains ${query.entries.length} ordered Entr${query.entries.length === 1 ? "y" : "ies"}.`,
+    });
   }
 
   private async loadEntry(id: string): Promise<ContentEntryRecord> {
@@ -379,6 +538,12 @@ export class MappingEditorController {
   private requireMapping(): MappingRecord { if (!this.current.mapping) throw new Error("No Mapping is open."); return this.current.mapping; }
   private set(state: MappingEditorState): void { this.current = state; for (const listener of [...this.listeners]) listener(state); }
 }
+
+function defaultCollectionQuery(): MappingCollectionQuery {
+  return { publication: "published-only", conditions: [], sort: [], pins: [], limit: 100 };
+}
+
+function mappingPreviewIdentity(mappingId: string): string { return `mapping-preview-${mappingId}`; }
 
 export function createMappingEditorController(
   provider: MappingProvider,

@@ -103,12 +103,14 @@
 .cms-mapping-arrow { display: block; margin-inline: auto; color: var(--color-faint); }
 .cms-mapping-status { display: inline-flex; min-width: 0; }
 .cms-mapping-transform { display: grid; gap: var(--sp-1); min-width: 0; }
-.cms-mapping-transform .cms-select-wrap, .cms-mapping-transform .cms-input { width: 100%; }
+.cms-mapping-transform .cms-select-wrap, .cms-mapping-transform .cms-input { width: 100%; min-width: 0; }
+.cms-mapping-transform .cms-select { min-width: 0; }
 
 /* The inline diagnostic under a broken row: the row's own explanation, so the
  * banner keeps its tone and only its paragraphs are reset. */
 .cms-mapping-row-banner p { margin: 0; }
 .cms-mapping-row-banner p + p { margin-block-start: var(--sp-1); }
+.cms-mapping-diagnostic__path { display: block; margin-block-end: var(--sp-1); color: var(--color-faint); font-family: var(--font-mono); font-size: .6875rem; }
 
 /* --------------------------------------------------------------------------
  * Unbound targets
@@ -180,6 +182,69 @@
 }
 
 .cms-mapping-preview-status { justify-content: flex-start; }
+
+/* --------------------------------------------------------------------------
+ * Collection query authoring
+ * -------------------------------------------------------------------------- */
+.cms-mapping-query__body { display: grid; gap: var(--sp-3); }
+.cms-mapping-query__nested { display: grid; gap: var(--sp-2); margin-block-start: var(--sp-2); }
+.cms-mapping-query__rows { display: grid; gap: var(--sp-1); }
+.cms-mapping-query__row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); align-items: center; }
+.cms-mapping-query__row > .cms-btn { justify-self: end; }
+.cms-mapping-query__exists,
+.cms-mapping-query__help,
+.cms-mapping-query__empty { margin: 0; color: var(--color-muted); font-size: .75rem; }
+.cms-mapping-query__pins,
+.cms-mapping-query__result ol { display: grid; gap: var(--sp-1); margin: 0; padding: 0; list-style: none; }
+.cms-mapping-query__pins li,
+.cms-mapping-query__result li { display: flex; gap: var(--sp-1); align-items: center; justify-content: space-between; min-width: 0; }
+.cms-mapping-query__pins li span:first-child,
+.cms-mapping-query__result li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cms-mapping-query__result { display: grid; gap: var(--sp-1); padding-block-start: var(--sp-2); border-block-start: 1px solid var(--color-border); }
+.cms-mapping-query__result-heading { display: flex; gap: var(--sp-1); align-items: center; justify-content: space-between; }
+.cms-mapping-query__result code,
+.cms-mapping-pin-picker__catalog code { overflow: hidden; color: var(--color-faint); font-family: var(--font-mono); font-size: .6875rem; text-overflow: ellipsis; white-space: nowrap; }
+.cms-mapping-query__diagnostics { display: grid; gap: var(--sp-2); }
+
+/* --------------------------------------------------------------------------
+ * Ordered pin dialog
+ * -------------------------------------------------------------------------- */
+.cms-mapping-pin-picker__catalog,
+.cms-mapping-pin-picker__order ol { display: grid; gap: var(--sp-1); margin: var(--sp-2) 0 0; padding: 0; list-style: none; }
+.cms-mapping-pin-picker__catalog li,
+.cms-mapping-pin-picker__order li,
+.cms-mapping-pin-picker__stale > div { display: flex; gap: var(--sp-2); align-items: center; justify-content: space-between; min-width: 0; padding: var(--sp-1) var(--sp-2); border: 1px solid var(--color-border); border-radius: var(--radius); }
+.cms-mapping-pin-picker__catalog .cms-check { min-width: 0; flex: 1; }
+.cms-mapping-pin-picker__catalog .cms-check__label { display: flex; gap: var(--sp-2); min-width: 0; align-items: baseline; justify-content: space-between; }
+.cms-mapping-pin-picker__catalog strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cms-mapping-pin-picker__stale { display: grid; gap: var(--sp-1); margin-block-start: var(--sp-2); }
+.cms-mapping-pin-picker__stale > strong,
+.cms-mapping-pin-picker__order h3 { margin: 0; color: var(--color-muted); font-size: .6875rem; letter-spacing: .05em; text-transform: uppercase; }
+.cms-mapping-pin-picker__order { margin-block-start: var(--sp-3); }
+.cms-mapping-pin-picker__order li > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cms-mapping-pin-picker__order-actions { display: inline-flex; flex: 0 0 auto; gap: var(--sp-1); }
+
+/* --------------------------------------------------------------------------
+ * Aggregate collection attachments
+ * -------------------------------------------------------------------------- */
+.cms-mapping-attachment { display: grid; gap: var(--sp-2); margin-block-start: var(--sp-3); padding-block-start: var(--sp-3); border-block-start: 1px solid var(--color-border); }
+.cms-mapping-attachment__status,
+.cms-mapping-attachment__ready { margin: 0; color: var(--color-muted); font-size: .75rem; }
+.cms-mapping-attachment__list { display: grid; gap: var(--sp-2); }
+.cms-mapping-attachment__item { display: grid; gap: var(--sp-2); padding: var(--sp-2); border: 1px solid var(--color-border); border-radius: var(--radius); }
+.cms-mapping-attachment__item header { display: flex; gap: var(--sp-2); align-items: flex-start; justify-content: space-between; min-width: 0; }
+.cms-mapping-attachment__item header > div { display: grid; gap: 2px; min-width: 0; }
+.cms-mapping-attachment__item header span { overflow: hidden; color: var(--color-muted); font-size: .6875rem; text-overflow: ellipsis; white-space: nowrap; }
+.cms-mapping-attachment__mapping { display: flex; gap: var(--sp-1); align-items: center; margin: 0; color: var(--color-muted); font-size: .75rem; }
+.cms-mapping-attachment__diagnostics { display: grid; gap: var(--sp-1); }
+.cms-mapping-attachment__actions { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.cms-mapping-attachment__preview { display: grid; gap: var(--sp-1); margin-block-start: var(--sp-2); }
+.cms-mapping-attachment__preview h4 { margin: 0; font-size: .75rem; }
+
+@media (min-width: 40rem) {
+  .cms-mapping-query__row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.2fr) auto; }
+  .cms-mapping-query__row[data-query-row="sort"] { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; }
+}
 
 /* --------------------------------------------------------------------------
  * Pickers
