@@ -40,14 +40,14 @@ describe("Content field/path navigation", () => {
     await waitFor(() => { expect(window.location.search).toContain("model=other"); expect(window.location.search).not.toContain("entry="); expect(window.location.search).not.toContain("field="); });
   });
 
-  it("focuses the exact reference-list row named by an incoming graph location", async () => {
+  it("focuses the exact nested reference-list row named by an incoming graph location", async () => {
     const people = createContentModelRecord({ name: "People", kind: "collection", fields: [{ id: "name", key: "name", label: "Name", required: true, kind: "text" }] }, { id: "people", timestamp: stamp });
     const alice = createContentEntryRecord("people", { name: "Alice" }, { id: "alice", timestamp: stamp }), bob = createContentEntryRecord("people", { name: "Bob" }, { id: "bob", timestamp: stamp });
-    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "authors", key: "authors", label: "Authors", required: false, kind: "reference-list", target: { providerId: "content-indexeddb", recordId: "people" }, ordered: false }] }, { id: "articles", timestamp: stamp });
-    const article = createContentEntryRecord("articles", { authors: [{ providerId: "content-indexeddb", modelId: "people", recordId: "alice" }, { providerId: "content-indexeddb", modelId: "people", recordId: "bob" }] }, { id: "article", timestamp: stamp });
-    window.history.replaceState(null, "", "/content?provider=content-indexeddb&model=articles&entry=article&field=authors&path=%2Fi%3A1");
+    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "details", key: "details", label: "Details", required: false, kind: "object", fields: [{ id: "authors", key: "authors", label: "Authors", required: false, kind: "reference-list", target: { providerId: "content-indexeddb", recordId: "people" }, ordered: false }] }] }, { id: "articles", timestamp: stamp });
+    const article = createContentEntryRecord("articles", { details: { authors: [{ providerId: "content-indexeddb", modelId: "people", recordId: "alice" }, { providerId: "content-indexeddb", modelId: "people", recordId: "bob" }] } }, { id: "article", timestamp: stamp });
+    window.history.replaceState(null, "", "/content?provider=content-indexeddb&model=articles&entry=article&field=details&path=%2Ff%3Aauthors%2Fi%3A1");
     render(<ContentApp provider={createMemoryContentProvider({ models: [people, articles], entries: [alice, bob, article] })} />);
-    await waitFor(() => expect(document.activeElement).toHaveAttribute("data-content-value-path", "/i:1"));
+    await waitFor(() => expect(document.activeElement).toHaveAttribute("data-content-value-path", "/f:authors/i:1"));
     expect(screen.queryByText(/requested field or structured value no longer exists/)).toBeNull();
   });
 

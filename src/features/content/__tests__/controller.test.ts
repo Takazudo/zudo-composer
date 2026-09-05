@@ -1,5 +1,5 @@
 import { createSequentialIdFactory } from "../../../shared";
-import { createContentEntryRecord, createContentModelRecord } from "../../../content";
+import { createContentEntryRecord, createContentModelRecord, type ContentSnapshot } from "../../../content";
 import { describe, expect, it, vi } from "vitest";
 import { createContentAuthoringController, CONTENT_ENTRY_PAGE_SIZE } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
@@ -90,6 +90,33 @@ describe("ContentAuthoringController", () => {
     await controller.deleteModel("articles"); expect(controller.state.models).toHaveLength(0);
   });
 
+  it("ignores delayed pagination and reload results after another model opens", async () => {
+    const a = createContentModelRecord({ name: "A", kind: "collection", fields: [] }, { id: "model-a", timestamp: "2026-01-01T00:00:00.000Z" });
+    const b = createContentModelRecord({ name: "B", kind: "collection", fields: [] }, { id: "model-b", timestamp: "2026-01-01T00:00:00.000Z" });
+    const entries = [...Array.from({ length: 26 }, (_, index) => createContentEntryRecord("model-a", {}, { id: `a-${index}`, timestamp: "2026-01-01T00:00:00.000Z" })), createContentEntryRecord("model-b", {}, { id: "b-entry", timestamp: "2026-01-01T00:00:00.000Z" })];
+    const provider = createMemoryContentProvider({ models: [a, b], entries }); const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("model-a");
+    const originalPage = provider.store.pageEntries; const delayedPage = deferred<Awaited<ReturnType<typeof originalPage>>>();
+    vi.spyOn(provider.store, "pageEntries").mockImplementation((modelId, options) => modelId === "model-a" && options?.cursor ? delayedPage.promise : originalPage(modelId, options));
+    const more = controller.loadMoreEntries(); await tick(); await controller.openModel("model-b"); delayedPage.resolve({ entries: [entries[25]!] }); await more;
+    expect(controller.state.model?.id).toBe("model-b"); expect(controller.state.entries.map((entry) => entry.id)).toEqual(["b-entry"]);
+
+    await controller.openModel("model-a");
+    const delayedReloadPage = deferred<Awaited<ReturnType<typeof originalPage>>>(), originalScan = provider.store.scanEntries, delayedScan = deferred<Awaited<ReturnType<typeof originalScan>>>();
+    vi.mocked(provider.store.pageEntries).mockImplementation((modelId, options) => modelId === "model-a" && !options?.cursor ? delayedReloadPage.promise : originalPage(modelId, options));
+    vi.spyOn(provider.store, "scanEntries").mockImplementation((modelId) => modelId === "model-a" ? delayedScan.promise : originalScan(modelId));
+    const reload = controller.reloadEntries(); await tick(); await controller.openModel("model-b"); delayedReloadPage.resolve({ entries: [] }); delayedScan.resolve(await originalScan("model-a")); await reload;
+    expect(controller.state.model?.id).toBe("model-b"); expect(controller.state.entries.map((entry) => entry.id)).toEqual(["b-entry"]);
+  });
+
+  it("rejects an Entry whose stored model identity does not match the open model", async () => {
+    const a = createContentModelRecord({ name: "A", kind: "collection", fields: [] }, { id: "model-a", timestamp: "2026-01-01T00:00:00.000Z" });
+    const b = createContentModelRecord({ name: "B", kind: "collection", fields: [] }, { id: "model-b", timestamp: "2026-01-01T00:00:00.000Z" });
+    const foreign = createContentEntryRecord("model-b", {}, { id: "foreign", timestamp: "2026-01-01T00:00:00.000Z" });
+    const controller = createContentAuthoringController(createMemoryContentProvider({ models: [a, b], entries: [foreign] })); await controller.initialize(); await controller.openModel("model-a");
+    await expect(controller.openEntry("foreign")).rejects.toThrow("does not belong to the open Content model");
+    expect(controller.state.entry).toBeNull();
+  });
+
   it("keeps the selected model and Entry when deleting another model", async () => {
     const provider = createMemoryContentProvider();
     await provider.store.putModel(createContentModelRecord({ name: "Other", kind: "collection", fields: [] }, { id: "other", timestamp: "2026-01-01T00:00:00.000Z" }));
@@ -122,6 +149,31 @@ describe("ContentAuthoringController", () => {
     expect(controller.state.publicationState).toBe("published");
     controller.updateEntryValue("title", "Working change");
     expect(controller.state.publicationState).toBe("published-pending");
+  });
+
+  it("does not let an earlier A baseline read overwrite an A→B→A selection", async () => {
+    const model = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "title", key: "title", label: "Title", required: true, kind: "text" }] }, { id: "articles", timestamp: "2026-01-01T00:00:00.000Z" });
+    const a = { ...createContentEntryRecord("articles", { title: "A" }, { id: "a", timestamp: "2026-01-01T00:00:00.000Z" }), lifecycle: "published" as const }, b = { ...createContentEntryRecord("articles", { title: "B" }, { id: "b", timestamp: "2026-01-01T00:00:00.000Z" }), lifecycle: "published" as const };
+    const provider = createMemoryContentProvider({ models: [model], entries: [a, b] });
+    const reads = [deferred<readonly ContentSnapshot[]>(), deferred<readonly ContentSnapshot[]>(), deferred<readonly ContentSnapshot[]>()]; let call = 0;
+    const controller = createContentAuthoringController(provider, { loadActivatedBaseline: () => reads[call++]!.promise }); await controller.initialize(); await controller.openModel("articles");
+    await controller.openEntry("a"); await controller.openEntry("b"); await controller.openEntry("a");
+    reads[2]!.resolve([{ providerId: provider.descriptor.id, mutationToken: 1, models: [model], entries: [a] }]); await tick(); expect(controller.state.publicationState).toBe("published");
+    reads[0]!.resolve([{ providerId: provider.descriptor.id, mutationToken: 1, models: [model], entries: [] }]); reads[1]!.resolve([{ providerId: provider.descriptor.id, mutationToken: 1, models: [model], entries: [b] }]); await tick();
+    expect(controller.state.entry?.id).toBe("a"); expect(controller.state.publicationState).toBe("published");
+  });
+
+  it("does not let an earlier A graph read overwrite an A→B→A selection", async () => {
+    const people = createContentModelRecord({ name: "People", kind: "collection", fields: [] }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
+    const owners = createContentModelRecord({ name: "Owners", kind: "collection", fields: [{ id: "person", key: "person", label: "Person", required: false, kind: "reference", target: { providerId: "content-indexeddb", recordId: "people" } }] }, { id: "owners", timestamp: "2026-01-01T00:00:00.000Z" });
+    const a = createContentEntryRecord("people", {}, { id: "a", timestamp: "2026-01-01T00:00:00.000Z" }), b = createContentEntryRecord("people", {}, { id: "b", timestamp: "2026-01-01T00:00:00.000Z" }), owner = createContentEntryRecord("owners", { person: { providerId: "content-indexeddb", modelId: "people", recordId: "a" } }, { id: "owner", timestamp: "2026-01-01T00:00:00.000Z" });
+    const provider = createMemoryContentProvider({ models: [people, owners], entries: [a, b, owner] }); const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("people");
+    const readAll = provider.store.readAll, stale = deferred<Awaited<ReturnType<typeof readAll>>>(); let first = true;
+    vi.spyOn(provider.store, "readAll").mockImplementation(() => { if (first) { first = false; return stale.promise; } return readAll(); });
+    await controller.openEntry("a"); await controller.openEntry("b"); await controller.openEntry("a");
+    await vi.waitFor(() => expect(controller.state.incoming).toHaveLength(1));
+    const old = await readAll(); stale.resolve({ ...old, entries: old.entries.filter((entry) => entry.id !== "owner") }); await tick();
+    expect(controller.state.entry?.id).toBe("a"); expect(controller.state.incoming).toHaveLength(1);
   });
 
   it("does not claim whether a published Entry is pending without an activated baseline", async () => {
@@ -168,7 +220,7 @@ describe("ContentAuthoringController", () => {
     expect(controller.state.entry?.id).toBe("second");
   });
 
-  it("fails closed before deleting an Entry referenced by another provider", async () => {
+  it("refuses deletion when more than one registered provider cannot share an atomic transaction", async () => {
     const people = createContentModelRecord({ name: "People", kind: "collection", fields: [] }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
     const person = createContentEntryRecord("people", {}, { id: "person", timestamp: "2026-01-01T00:00:00.000Z" });
     const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "author", key: "author", label: "Author", required: false, kind: "reference", target: { providerId: "content-indexeddb", recordId: "people" } }] }, { id: "articles", timestamp: "2026-01-01T00:00:00.000Z" });
@@ -176,25 +228,31 @@ describe("ContentAuthoringController", () => {
     const primary = createMemoryContentProvider({ models: [people], entries: [person] });
     const secondary = createMemoryContentProvider({ models: [articles], entries: [article], providerId: "editorial", providerLabel: "Editorial" });
     const controller = createContentAuthoringController(primary, { providers: [primary, secondary] }); await controller.initialize(); await controller.openModel("people"); await controller.openEntry("person");
-    await expect(controller.deleteEntry("person")).rejects.toThrow(/editorial\/article references this entry.*not attempted/);
+    await expect(controller.deleteEntry("person")).rejects.toThrow(/not attempted because registered Content providers cannot share an atomic transaction/i);
     expect((await primary.store.getEntry("person")).status).toBe("loaded");
-    vi.spyOn(secondary.store, "readAll").mockRejectedValueOnce(new Error("offline"));
-    await expect(controller.deleteEntry("person")).rejects.toThrow(/provider could not be read.*not attempted/i);
   });
 
-  it("blocks cross-provider model targets, inverse-owning fields, and every destructive action on a dangling graph", async () => {
-    const people = createContentModelRecord({ name: "People", kind: "collection", fields: [], presentation: { groups: [], views: [], inverses: [{ id: "articles", label: "Articles", source: { providerId: "editorial", recordId: "articles" }, fieldId: "author" }] } }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
+  it("atomically binds single-provider model/field blockers and rejects every deletion on a dangling graph", async () => {
+    const people = createContentModelRecord({ name: "People", kind: "collection", fields: [], presentation: { groups: [], views: [], inverses: [{ id: "articles", label: "Articles", source: { providerId: "content-indexeddb", recordId: "articles" }, fieldId: "author" }] } }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
     const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "author", key: "author", label: "Author", required: false, kind: "reference", target: { providerId: "content-indexeddb", recordId: "people" } }] }, { id: "articles", timestamp: "2026-01-01T00:00:00.000Z" });
-    const primary = createMemoryContentProvider({ models: [people], entries: [] });
-    const secondary = createMemoryContentProvider({ models: [articles], entries: [], providerId: "editorial", providerLabel: "Editorial" });
-    const primaryController = createContentAuthoringController(primary, { providers: [primary, secondary] }); await primaryController.initialize(); await primaryController.openModel("people");
-    await expect(primaryController.deleteModel("people")).rejects.toThrow(/targets this model.*not attempted/i);
-    const secondaryController = createContentAuthoringController(secondary, { providers: [primary, secondary] }); await secondaryController.initialize(); await secondaryController.openModel("articles");
-    await expect(secondaryController.removeField("author")).rejects.toThrow(/Inverse articles.*depends on this field.*not attempted/i);
+    const primary = createMemoryContentProvider({ models: [people, articles], entries: [] });
+    const controller = createContentAuthoringController(primary); await controller.initialize(); await controller.openModel("people");
+    await expect(controller.deleteModel("people")).rejects.toThrow(/targets this model.*not attempted/i);
+    await controller.openModel("articles");
+    await expect(controller.removeField("author")).rejects.toThrow(/Inverse articles.*depends on this field.*not attempted/i);
 
     const dangling = createContentEntryRecord("articles", { author: { providerId: "content-indexeddb", modelId: "people", recordId: "missing" } }, { id: "dangling", timestamp: "2026-01-01T00:00:00.000Z" });
-    await secondary.store.putEntry(dangling); await secondaryController.reloadEntries(); await secondaryController.openEntry("dangling");
-    await expect(secondaryController.deleteEntry("dangling")).rejects.toThrow(/unresolved providers or records.*not attempted/i);
+    await primary.store.putEntry(dangling); await controller.reloadEntries(); await controller.openEntry("dangling");
+    await expect(controller.deleteEntry("dangling")).rejects.toThrow(/unresolved providers or records.*not attempted/i);
+  });
+
+  it("binds a verified single-provider deletion to its captured mutation token", async () => {
+    const provider = createMemoryContentProvider(); const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("articles"); await controller.openEntry("entry-1");
+    const transact = provider.store.transact;
+    vi.spyOn(provider.store, "transact").mockImplementationOnce(async (mutation) => { const model = await provider.store.getModel("articles"); if (model.status === "loaded") await provider.store.putModel(model.record); return transact(mutation); });
+    await expect(controller.deleteEntry("entry-1")).rejects.toThrow(/mutation token changed/i);
+    expect((await provider.store.getEntry("entry-1")).status).toBe("loaded");
+    expect(() => controller.updateEntryValue("title", "Still editable")).not.toThrow(); await controller.flushSessions();
   });
 
   it("keeps quarantine explicit and starts fresh only on request", async () => {
