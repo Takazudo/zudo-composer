@@ -108,7 +108,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   const acceptVisibleSelection = () => {
     if (!controller.state.model) return;
     if (!intentAccepted) controller.selectView(null);
-    setIntentError(null); setError(null); setIntentAccepted(true);
+    setDeepSelection(null); setIntentError(null); setError(null); setIntentAccepted(true);
   };
   useEffect(() => {
     if (appliedIntent.current || state.phase !== "ready") return;
@@ -133,7 +133,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   useEffect(() => {
     if (!intentAccepted || state.phase !== "ready") return;
     if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") return;
-    window.history.replaceState(null, "", state.model ? contentHref(provider.descriptor.id, state.model.id, state.entry?.id, state.viewId, deepSelection) : CONTENT_ROUTE);
+    window.history.replaceState(null, "", state.model ? contentHref(provider.descriptor.id, state.model.id, state.entry?.id, state.viewId, state.entry ? deepSelection : null) : CONTENT_ROUTE);
     notifyRouteSelection();
   }, [deepSelection, intentAccepted, state.phase, state.model?.id, state.entry?.id, state.viewId]);
 
@@ -145,7 +145,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
     if (!target) { setIntentError(`The requested field or structured value no longer exists. Open Fields and choose a current value.`); return; }
     setIntentError(null);
     target.scrollIntoView?.({ block: "center" });
-    (target.matches("input,select,textarea,button") ? target : target.querySelector<HTMLElement>("input,select,textarea,button"))?.focus();
+    (target.matches("input,select,textarea,button") || target.hasAttribute("tabindex") ? target : target.querySelector<HTMLElement>("input,select,textarea,button"))?.focus();
   }, [deepSelection, entryTab, state.entry?.id, state.model?.updatedAt]);
 
   const fields = state.model?.document.fields ?? [];
@@ -350,7 +350,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             <PaneHeader
               title={!state.model ? "All models" : schemaMode ? "Schema" : relationshipsMode ? "Relationships" : state.entry ? "Entry" : "Entries"}
               actions={state.entry ? (<>
-                <Chip tone={state.publicationState === "draft" ? "plain" : state.publicationState === "published-pending" ? "warn" : "accent"}>{state.publicationState === "published-pending" ? "Published · pending changes" : state.publicationState === "published" ? "Published" : "Draft"}</Chip>
+                <Chip tone={state.publicationState === "draft" ? "plain" : state.publicationState === "published-pending" || state.publicationState === "published-baseline-unavailable" ? "warn" : "accent"}>{state.publicationState === "published-pending" ? "Published · pending changes" : state.publicationState === "published-baseline-unavailable" ? "Published · baseline unavailable" : state.publicationState === "published" ? "Published" : "Draft"}</Chip>
                 <StatusChip
                   class="sg-content-completeness"
                   state="custom"

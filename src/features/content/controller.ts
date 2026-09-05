@@ -6,6 +6,7 @@ import {
   diagnoseContentEntryCompleteness,
   applyContentInverseMutation,
   contentEntryDigest,
+  getContentDeletionBlockers,
   readContentGraph,
   type ContentEntryRecord,
   type ContentFieldDefinition,
@@ -56,7 +57,7 @@ export interface ContentAuthoringState {
   graphMessage: string;
   snapshots: readonly ContentSnapshot[];
   incoming: readonly { owner: ContentGraphLocation; ordered: boolean }[];
-  publicationState: "draft" | "published" | "published-pending";
+  publicationState: "draft" | "published" | "published-pending" | "published-baseline-unavailable";
 }
 
 const initialState: ContentAuthoringState = {
@@ -78,17 +79,23 @@ export class ContentAuthoringController {
   private readonly mediaProvider?: ContentMediaCatalogSource;
   private readonly loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]>;
   private baselineEntry: ContentEntryRecord | null = null;
+  private baselineAvailable = false;
   private modelQueue: SaveQueue<ContentModelRecord> | null = null;
   private entryQueue: SaveQueue<ContentEntryRecord> | null = null;
   private unsubscribeModel: (() => void) | null = null;
   private unsubscribeEntry: (() => void) | null = null;
+  private readonly queueStates: Record<"model" | "entry", { active: boolean; status: Exclude<ContentSaveStatus, "pristine">; error: Error | null }> = {
+    model: { active: false, status: "saved", error: null }, entry: { active: false, status: "saved", error: null },
+  };
+  private modelRequestId = 0;
+  private entryRequestId = 0;
   /** Invalidates an in-flight completeness sweep when the library reloads under it. */
   private scanGeneration = 0;
 
   constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; mediaProvider?: ContentMediaCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> } = {}) {
     this.idFactory = options.idFactory ?? createUuidIdFactory();
     this.now = options.now ?? (() => new Date().toISOString());
-    this.providers = options.providers ?? [provider];
+    this.providers = [...new Map([provider, ...(options.providers ?? [])].map((candidate) => [candidate.store.provider.id, candidate])).values()];
     this.mediaProvider = options.mediaProvider;
     this.loadActivatedBaseline = options.loadActivatedBaseline;
     this.current = { ...initialState, providerId: provider.descriptor.id, providerLabel: provider.descriptor.label };
@@ -114,15 +121,21 @@ export class ContentAuthoringController {
   }
 
   async openModel(id: string): Promise<void> {
-    if (this.current.model?.id === id) return;
+    const requestId = ++this.modelRequestId;
+    this.entryRequestId++;
+    if (this.current.model?.id === id) { this.ensureCurrentQueues(); return; }
     await this.flushSessions();
+    if (requestId !== this.modelRequestId) return;
     const outcome = await this.provider.store.getModel(id);
+    if (requestId !== this.modelRequestId) return;
     if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Content model was not found." : "This model is unreadable and has been preserved.");
-    await this.closeQueues();
     const [page, snapshot] = await Promise.all([
       this.provider.store.pageEntries(id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
       this.provider.store.scanEntries(id),
     ]);
+    if (requestId !== this.modelRequestId) return;
+    await this.closeQueues();
+    if (requestId !== this.modelRequestId) return;
     this.installModelQueue(outcome.record);
     this.set({ ...this.current, phase: "ready", viewId: null, model: outcome.record, entries: page.entries, entry: null,
       usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, workMode: "entries", saveStatus: "pristine", message: "Model loaded.",
@@ -146,6 +159,7 @@ export class ContentAuthoringController {
       this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
       this.entryQueue = null;
       await queue.close();
+      this.resetQueueState("entry");
     }
     const [page, snapshot] = await Promise.all([
       this.provider.store.pageEntries(model.id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
@@ -197,6 +211,7 @@ export class ContentAuthoringController {
   async removeField(fieldId: string): Promise<void> {
     const model = this.requireModel();
     await this.flushSessions();
+    await this.assertDeletionAllowed({ kind: "field", ref: { providerId: this.provider.descriptor.id, recordId: model.id }, fieldId });
     await this.provider.store.removeField(model.id, fieldId);
     const outcome = await this.provider.store.getModel(model.id);
     if (outcome.status !== "loaded") throw new Error("The updated model could not be reloaded.");
@@ -204,6 +219,7 @@ export class ContentAuthoringController {
     this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
     this.entryQueue = null;
     await entryQueue?.close();
+    this.resetQueueState("entry");
     this.installModelQueue(outcome.record);
     const [page, snapshot] = await Promise.all([
       this.provider.store.pageEntries(model.id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
@@ -239,37 +255,42 @@ export class ContentAuthoringController {
   }
 
   async openEntry(id: string): Promise<void> {
-    if (this.current.entry?.id === id) return;
-    if (this.entryQueue) {
-      const queue = this.entryQueue;
-      await queue.flush();
+    const requestId = ++this.entryRequestId;
+    if (this.current.entry?.id === id) { this.ensureCurrentQueues(); return; }
+    const previousQueue = this.entryQueue;
+    if (previousQueue) await previousQueue.flush();
+    if (requestId !== this.entryRequestId) return;
+    const outcome = await this.provider.store.getEntry(id);
+    if (requestId !== this.entryRequestId) return;
+    if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Entry was not found." : "This Entry is unreadable and has been preserved.");
+    if (previousQueue) {
       this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
       this.entryQueue = null;
-      await queue.close();
+      await previousQueue.close();
+      this.resetQueueState("entry");
     }
-    const outcome = await this.provider.store.getEntry(id);
-    if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Entry was not found." : "This Entry is unreadable and has been preserved.");
-    this.entryQueue = createSaveQueue({ ref: { providerId: this.provider.descriptor.id, recordId: outcome.record.id }, initialRecord: outcome.record,
-      write: ({ record }) => this.provider.store.putEntry(record) });
-    this.unsubscribeEntry = this.subscribeQueue(this.entryQueue);
+    if (requestId !== this.entryRequestId) return;
+    this.installEntryQueue(outcome.record);
     // Queue construction publishes its initial `saved` state synchronously;
     // that only says the persisted record was loaded, not that this route has
     // authored a change during this session.
-    this.baselineEntry = null;
-    this.set({ ...this.current, entry: outcome.record, workMode: "entries", saveStatus: "pristine", message: "Entry loaded.", incoming: [], publicationState: outcome.record.lifecycle });
+    this.baselineEntry = null; this.baselineAvailable = false;
+    this.set({ ...this.current, entry: outcome.record, workMode: "entries", saveStatus: this.aggregateSaveStatus(), message: "Entry loaded.", incoming: [], publicationState: outcome.record.lifecycle === "draft" ? "draft" : "published-baseline-unavailable" });
     void this.refreshGraph(outcome.record);
     void this.refreshPublication(outcome.record);
   }
 
   async inspectSchema(): Promise<void> {
+    this.entryRequestId++;
     if (this.entryQueue) {
       const queue = this.entryQueue;
       await queue.flush();
       this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
       this.entryQueue = null;
       await queue.close();
+      this.resetQueueState("entry");
     }
-    this.set({ ...this.current, entry: null, workMode: "model-fields", message: "Model fields ready." });
+    this.set({ ...this.current, entry: null, workMode: "model-fields", saveStatus: this.aggregateSaveStatus(), message: "Model fields ready." });
   }
 
   browseEntries(): void {
@@ -392,11 +413,15 @@ export class ContentAuthoringController {
   }
 
   async deleteEntry(id: string): Promise<void> {
+    await this.flushSessions();
+    const stored = this.current.entry?.id === id ? { status: "loaded" as const, record: this.current.entry } : await this.provider.store.getEntry(id);
+    const modelId = stored.status === "loaded" ? stored.record.modelId : this.requireModel().id;
+    await this.assertDeletionAllowed({ kind: "entry", ref: { providerId: this.provider.descriptor.id, modelId, recordId: id } });
     if (this.current.entry?.id === id && this.entryQueue) {
       const queue = this.entryQueue;
-      await queue.flush();
       this.unsubscribeEntry?.(); this.unsubscribeEntry = null;
       this.entryQueue = null;
+      this.resetQueueState("entry");
       await queue.close();
     }
     await this.provider.store.deleteEntry(id);
@@ -410,7 +435,9 @@ export class ContentAuthoringController {
   }
 
   async deleteModel(id: string): Promise<void> {
-    if (this.current.model?.id === id) { await this.flushSessions(); await this.closeQueues(); }
+    await this.flushSessions();
+    await this.assertDeletionAllowed({ kind: "model", ref: { providerId: this.provider.descriptor.id, recordId: id } });
+    if (this.current.model?.id === id) await this.closeQueues();
     await this.provider.store.deleteModel(id); await this.refreshModels();
     const entryCounts = { ...this.current.entryCounts }; delete entryCounts[id];
     const incompleteCounts = { ...this.current.incompleteCounts }; delete incompleteCounts[id];
@@ -418,8 +445,15 @@ export class ContentAuthoringController {
     this.set({ ...this.current, entryCounts, incompleteCounts, model: deletingCurrentModel ? null : this.current.model, entries: deletingCurrentModel ? [] : this.current.entries, usedFieldIds: deletingCurrentModel ? [] : this.current.usedFieldIds, entry: deletingCurrentModel ? null : this.current.entry, workMode: "entries", message: "Model and its Entries deleted." });
   }
 
-  retrySave(): void { (this.entryQueue ?? this.modelQueue)?.retry(); }
-  async flushSessions(): Promise<void> { await this.entryQueue?.flush(); await this.modelQueue?.flush(); }
+  retrySave(): void {
+    if (this.queueStates.entry.status === "error") this.entryQueue?.retry();
+    if (this.queueStates.model.status === "error") this.modelQueue?.retry();
+  }
+  async flushSessions(): Promise<void> {
+    const outcomes = await Promise.allSettled([this.entryQueue?.flush(), this.modelQueue?.flush()].filter((value): value is Promise<void> => value !== undefined));
+    const failures = outcomes.flatMap((outcome) => outcome.status === "rejected" ? [outcome.reason instanceof Error ? outcome.reason.message : "Save failed."] : []);
+    if (failures.length) throw new Error(failures.join("; "));
+  }
 
   completeness(entry = this.current.entry) { return entry && this.current.model ? diagnoseContentEntryCompleteness(this.current.model, entry) : []; }
 
@@ -444,7 +478,16 @@ export class ContentAuthoringController {
     this.unsubscribeModel?.(); void this.modelQueue?.close();
     this.modelQueue = createSaveQueue({ ref: { providerId: this.provider.descriptor.id, recordId: record.id }, initialRecord: record,
       write: ({ record: draft }) => this.provider.store.putModel(draft) });
-    this.unsubscribeModel = this.subscribeQueue(this.modelQueue);
+    this.unsubscribeModel = this.subscribeQueue(this.modelQueue, "model");
+  }
+  private installEntryQueue(record: ContentEntryRecord): void {
+    this.entryQueue = createSaveQueue({ ref: { providerId: this.provider.descriptor.id, recordId: record.id }, initialRecord: record,
+      write: ({ record: draft }) => this.provider.store.putEntry(draft) });
+    this.unsubscribeEntry = this.subscribeQueue(this.entryQueue, "entry");
+  }
+  private ensureCurrentQueues(): void {
+    if (this.current.model && !this.modelQueue) this.installModelQueue(this.current.model);
+    if (this.current.entry && !this.entryQueue) this.installEntryQueue(this.current.entry);
   }
   private async closeQueues(): Promise<void> {
     const entryQueue = this.entryQueue;
@@ -453,6 +496,7 @@ export class ContentAuthoringController {
     this.unsubscribeModel?.(); this.unsubscribeModel = null;
     this.entryQueue = null;
     this.modelQueue = null;
+    this.resetQueueState("entry"); this.resetQueueState("model");
     await entryQueue?.close(); await modelQueue?.close();
   }
 
@@ -462,17 +506,30 @@ export class ContentAuthoringController {
    * Content route exposes it as pristine. Every later queue transition keeps
    * the normal saved/dirty/saving/error vocabulary.
    */
-  private subscribeQueue<TRecord extends ContentModelRecord | ContentEntryRecord>(queue: SaveQueue<TRecord>): () => void {
+  private subscribeQueue<TRecord extends ContentModelRecord | ContentEntryRecord>(queue: SaveQueue<TRecord>, slot: "model" | "entry"): () => void {
     let initial = true;
     return queue.subscribe((state) => {
       if (initial) {
         initial = false;
-        this.set({ ...this.current, saveStatus: "pristine" });
+        this.resetQueueState(slot);
+        this.set({ ...this.current, saveStatus: this.aggregateSaveStatus() });
         return;
       }
-      this.set({ ...this.current, saveStatus: queueStatus(state),
-        message: state.status === "error" ? state.error.message : state.status === "saved" ? "All changes saved." : state.status === "saving" ? "Saving changes…" : "Unsaved changes." });
+      this.queueStates[slot] = { active: true, status: queueStatus(state), error: state.status === "error" ? state.error : null };
+      const saveStatus = this.aggregateSaveStatus();
+      const errors = Object.values(this.queueStates).flatMap((item) => item.status === "error" && item.error ? [item.error.message] : []);
+      this.set({ ...this.current, saveStatus,
+        message: saveStatus === "error" ? errors.join("; ") : saveStatus === "saved" ? "All changes saved." : saveStatus === "saving" ? "Saving changes…" : "Unsaved changes." });
     });
+  }
+  private resetQueueState(slot: "model" | "entry"): void { this.queueStates[slot] = { active: false, status: "saved", error: null }; }
+  private aggregateSaveStatus(): ContentSaveStatus {
+    const states = Object.values(this.queueStates).filter((state) => state.active);
+    if (!states.length) return "pristine";
+    if (states.some((state) => state.status === "error")) return "error";
+    if (states.some((state) => state.status === "saving")) return "saving";
+    if (states.some((state) => state.status === "dirty")) return "dirty";
+    return "saved";
   }
   /**
    * Fill in the navigator's warn dots after the library is already usable.
@@ -529,17 +586,26 @@ export class ContentAuthoringController {
     this.set({ ...this.current, graphStatus: read.index.complete ? "ready" : "unavailable", graphMessage: read.index.complete ? "" : "Some providers or records could not be resolved.", snapshots: read.snapshots, incoming: read.index.incoming(ref).map(({ owner, ordered }) => ({ owner, ordered })) });
   }
   private async refreshPublication(entry: ContentEntryRecord): Promise<void> {
-    if (!this.loadActivatedBaseline) return;
+    if (!this.loadActivatedBaseline) { if (entry.lifecycle === "published" && this.current.entry?.id === entry.id) this.set({ ...this.current, publicationState: "published-baseline-unavailable" }); return; }
     try {
       const snapshots = await this.loadActivatedBaseline();
       if (this.current.entry?.id !== entry.id) return;
+      this.baselineAvailable = true;
       this.baselineEntry = snapshots.find((snapshot) => snapshot.providerId === this.provider.descriptor.id)?.entries.find((candidate) => candidate.id === entry.id && candidate.modelId === entry.modelId) ?? null;
       this.set({ ...this.current, publicationState: this.publicationState(this.current.entry) });
-    } catch { /* An unavailable release baseline cannot justify a pending-change claim. */ }
+    } catch { if (this.current.entry?.id === entry.id && entry.lifecycle === "published") this.set({ ...this.current, publicationState: "published-baseline-unavailable" }); }
   }
   private publicationState(entry: ContentEntryRecord): ContentAuthoringState["publicationState"] {
     if (entry.lifecycle === "draft") return "draft";
-    return this.baselineEntry && contentEntryDigest(this.baselineEntry) !== contentEntryDigest(entry) ? "published-pending" : "published";
+    if (!this.baselineAvailable) return "published-baseline-unavailable";
+    return !this.baselineEntry || contentEntryDigest(this.baselineEntry) !== contentEntryDigest(entry) ? "published-pending" : "published";
+  }
+  private async assertDeletionAllowed(target: Parameters<typeof getContentDeletionBlockers>[1]): Promise<void> {
+    const graph = await readContentGraph(this.providers.map((provider) => provider.store));
+    if (graph.status !== "ready") throw new Error(`${graph.message} Deletion was not attempted.`);
+    if (!graph.index.complete) throw new Error("The complete Content graph has unresolved providers or records. Deletion was not attempted.");
+    const blockers = getContentDeletionBlockers(graph.index, target);
+    if (blockers.length) throw new Error(`${blockers.map((blocker) => blocker.message).join(" ")} Deletion was not attempted.`);
   }
   private set(state: ContentAuthoringState): void { this.current = state; for (const listener of [...this.listeners]) listener(state); }
 }

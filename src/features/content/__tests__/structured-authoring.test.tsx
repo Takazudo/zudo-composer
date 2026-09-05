@@ -2,8 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/pr
 import { afterEach, describe, expect, it } from "vitest";
 import type { JSX } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { createContentEntryRecord, createContentModelRecord, type ContentEntryRecord } from "../../../content";
-import { ContentEntryAuthor } from "../content-author";
+import { createContentEntryRecord, createContentModelRecord, type ContentEntryRecord, type ContentFieldDefinition } from "../../../content";
+import { ContentEntryAuthor, ContentSchemaAuthor } from "../content-author";
 import { ContentRawView } from "../content-workspace";
 import { createContentAuthoringController, type ContentAuthoringController } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
@@ -15,6 +15,11 @@ function Harness({ controller }: { controller: ContentAuthoringController }): JS
   const [state, setState] = useState(controller.state);
   useEffect(() => controller.subscribe(setState), [controller]);
   return <ContentEntryAuthor state={state} controller={controller} run={run} />;
+}
+function SchemaHarness({ controller }: { controller: ContentAuthoringController }): JSX.Element {
+  const [state, setState] = useState(controller.state);
+  useEffect(() => controller.subscribe(setState), [controller]);
+  return <ContentSchemaAuthor state={state} controller={controller} run={run} onRemove={() => undefined} />;
 }
 
 describe("generic structured Content authoring", () => {
@@ -79,5 +84,16 @@ describe("generic structured Content authoring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose from Media" }));
     fireEvent.click(screen.getByRole("button", { name: "Choose hero" }));
     expect(controller.state.entry?.values.hero).toMatchObject({ kind: "image", asset: { providerId: "media-files", assetId: "hero" } });
+  });
+
+  it("edits ordered choice options structurally without a delimiter codec", async () => {
+    const model = createContentModelRecord({ name: "Cards", kind: "collection", fields: [{ id: "tone", key: "tone", label: "Tone", required: false, kind: "choice", options: [{ value: "warm|muted", label: "Warm\nand muted" }, { value: "cool", label: "Cool" }] }] }, { id: "cards", timestamp: stamp });
+    const provider = createMemoryContentProvider({ models: [model], entries: [] }); const controller = createContentAuthoringController(provider);
+    await controller.initialize(); await controller.openModel("cards"); render(<SchemaHarness controller={controller} />);
+    expect(screen.getByRole("textbox", { name: "Value for option 1 in Tone" })).toHaveValue("warm|muted");
+    expect(screen.getByRole("textbox", { name: "Label for option 1 in Tone" })).toHaveValue("Warm\nand muted");
+    fireEvent.input(screen.getByRole("textbox", { name: "Label for option 1 in Tone" }), { target: { value: "Warm | quiet\nline two" } });
+    fireEvent.click(screen.getByRole("button", { name: "Move option 1 down" }));
+    await waitFor(() => expect((controller.state.model!.document.fields[0] as Extract<ContentFieldDefinition, { kind: "choice" }>).options).toEqual([{ value: "cool", label: "Cool" }, { value: "warm|muted", label: "Warm | quiet\nline two" }]));
   });
 });
