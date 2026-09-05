@@ -13,7 +13,7 @@ import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
 import { ContentRouteContent } from "./features/content";
 import { MappingRouteContent } from "./features/mapping";
-import { MediaRouteContent, createMediaContentServices } from "./features/media";
+import { MediaFieldPicker, MediaRouteContent, createMediaContentServices } from "./features/media";
 import { SitemapperRouteContent } from "./features/sitemapper";
 import { SiteDelivery } from "./features/delivery/site-delivery";
 import { isSitePath } from "./features/delivery/routing";
@@ -180,7 +180,7 @@ export function App({ themeController, integration }: AppProps = {}) {
   if (!ready) content = <main class="route-placeholder"><h1>Open workspace</h1><p>{error ? "The workspace is unavailable. Retry opening it, or create a new workspace from the configured source. Existing drafts remain stored." : "Opening the selected workspace…"}</p><Button disabled={busy} onClick={() => void retry()}>Retry opening</Button><Button disabled={busy} onClick={() => void replaceWorkspace(() => providers.workspace.reset())}>Create fresh workspace</Button></main>;
   else if (intent.status === "invalid" || !providerKnown) content = <main class="route-placeholder"><h1>Invalid workspace link</h1><p role="alert">{intent.status === "invalid" ? intent.message : "The requested provider is unavailable. No other record was selected."}</p></main>;
   else if (path === "/composer") content = <ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} />;
-  else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} />;
+  else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} renderMediaPicker={(request) => <MediaFieldPicker provider={providers.mediaProvider} {...request} />} />;
   else if (path === "/mapping") content = <MappingRouteContent provider={target?.route === "mapping" ? providers.mappingProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
   else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} contentServices={mediaContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;

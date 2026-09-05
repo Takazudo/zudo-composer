@@ -6,6 +6,8 @@ import { createWorkspaceSaveRegistry } from "../workspace-sessions";
 import { harness, mappingRecord } from "../../features/mapping/__tests__/harness";
 import { activeComponentProvider } from "../../features/composer/active-pack";
 import { createMediaContentServices } from "../../features/media";
+import { MediaFieldPicker, MediaRouteContent } from "../../features/media";
+import { ContentRouteContent } from "../../features/content";
 import { notifyPersistenceChange } from "../../shared/persistence-generation";
 import { CONTENT_DATABASE_NAME } from "../../content";
 import { workspaceDatabaseName } from "../workspace-storage";
@@ -17,10 +19,14 @@ vi.mock("../dashboard", async () => {
 });
 vi.mock("../workspace-summary", () => ({ createWorkspaceSummary: () => ({ counts: async () => ({ content: { status: "unavailable" }, compositions: { status: "unavailable" }, mappings: { status: "unavailable" }, sitemaps: { status: "unavailable" }, media: { status: "absent" } }), dispose: () => undefined }) }));
 vi.mock("../../features/composer/chrome/composer-app", () => ({ default: () => <h1>Composition editor</h1> }));
-vi.mock("../../features/content", () => ({ ContentRouteContent: () => <h1>Content editor</h1> }));
+vi.mock("../../features/content", () => ({ ContentRouteContent: vi.fn(() => <h1>Content editor</h1>) }));
 vi.mock("../../features/media", async () => {
   const { createMediaContentServices } = await import("../../media/integration/content");
-  return { MediaRouteContent: () => <h1>Media editor</h1>, createMediaContentServices: vi.fn(createMediaContentServices) };
+  return {
+    MediaRouteContent: vi.fn(() => <h1>Media editor</h1>),
+    MediaFieldPicker: vi.fn(() => <div>Media field picker</div>),
+    createMediaContentServices: vi.fn(createMediaContentServices),
+  };
 });
 vi.mock("../../features/sitemapper", () => ({ SitemapperRouteContent: () => <h1>Sitemap editor</h1> }));
 vi.mock("../../features/delivery/site-delivery", () => ({ SiteDelivery: () => <h1>Visitor website</h1> }));
@@ -35,8 +41,27 @@ function workspace(id = "one") {
     contentCatalog: { listModels: async () => ({ entries: [], failures: [] }) }, compositionCatalog: { listCompositions: async () => ({ entries: [], failures: [] }) },
   };
 }
-afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, "", "/"); });
+afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, "", "/"); vi.clearAllMocks(); });
 describe("application workspace lifetime", () => {
+  it("adapts Content field picking and exact Media usage locations without feature globals", async () => {
+    const mediaProvider = { descriptor: { id: "media-files" } };
+    const integration = { ...workspace(), mediaProvider };
+    window.history.replaceState(null, "", "/content?provider=content-indexeddb&model=articles");
+    render(<App integration={integration as unknown as ProductionProviderIntegration} />);
+    await screen.findByRole("heading", { name: "Content editor" });
+    const contentProps = vi.mocked(ContentRouteContent).mock.lastCall![0];
+    const picker = contentProps.renderMediaPicker!({ kind: "card", onSelect: vi.fn(), onClose: vi.fn() }) as { type: unknown; props: { provider?: unknown; kind: string } };
+    expect(picker.type).toBe(MediaFieldPicker);
+    expect(picker.props).toMatchObject({ provider: mediaProvider, kind: "card" });
+
+    fireEvent.click(screen.getByRole("link", { name: "Media" }));
+    await screen.findByRole("heading", { name: "Media editor" });
+    const mediaProps = vi.mocked(MediaRouteContent).mock.lastCall![0];
+    expect(mediaProps.usageHref!({ providerId: "content-indexeddb", modelId: "articles", entryId: "entry-1", fieldId: "body", valuePath: ["cards", 2] }))
+      .toBe("/content?provider=content-indexeddb&model=articles&entry=entry-1&field=body&path=%2Ff%3Acards%2Fi%3A2");
+    expect(mediaProps.usageHref!({ providerId: "content-indexeddb", modelId: "articles", entryId: "entry-1", fieldId: "hero", valuePath: [] }))
+      .toBe("/content?provider=content-indexeddb&model=articles&entry=entry-1&field=hero");
+  });
   it("invalidates Media usage only for the exact workspace Content database", async () => {
     const integration = workspace();
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
