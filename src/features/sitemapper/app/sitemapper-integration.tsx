@@ -7,7 +7,7 @@ import type { JSX } from "preact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../../app/chrome-context";
 import { useWorkspace } from "../../../app/workspace-context";
-import type { WorkspaceRecord } from "../../../app/workspace-storage";
+import { workspaceDatabaseName, type WorkspaceRecord } from "../../../app/workspace-storage";
 import { notifyRouteSelection } from "../../../app/route-intents";
 import { EditorBody, EditorChrome, RecordTitle } from "../../../components/editor-chrome";
 import { DuplicateIcon, EditIcon, EllipsisIcon, MinusIcon, PlusIcon, TrashIcon } from "../../../components/icons";
@@ -15,6 +15,9 @@ import { useLibraryConfirm } from "../../../components/library-page";
 import { ConfirmDialog, Menu, MenuItem, MenuSeparator, useMenu } from "../../../components/overlay";
 import { Banner, Button, SegmentedControl } from "../../../components/ui";
 import { cloneJson, createUuidIdFactory, type IdFactory } from "../../../shared";
+import { subscribePersistenceChanges } from "../../../shared/persistence-generation";
+import { CONTENT_DATABASE_NAME } from "../../../content/storage/indexeddb/types";
+import { MAPPING_DATABASE_NAME } from "../../../mapping/storage/indexeddb/types";
 import type { CompositionCatalog } from "../../../sitemapper/catalog";
 import type { SitemapRecord, SitemapStore } from "../../../sitemapper/library";
 import type { SitemapNode } from "../../../sitemapper/model";
@@ -99,15 +102,18 @@ export function SitemapperIntegration({
   const [recordError, setRecordError] = useState<string | null>(null);
   const [compositions, setCompositions] = useState<ReadonlyMap<string, { name: string; providerLabel: string }>>(new Map());
   const [routeExpansionState, setRouteExpansionState] = useState<{ document: typeof document; expansion: SitemapRouteExpansion } | null>(null);
+  const [catalogEpoch, setCatalogEpoch] = useState(0);
   const [workspaceMetadata, setWorkspaceMetadata] = useState<WorkspaceRecord | null>(null);
   const [metadataBusy, setMetadataBusy] = useState(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [deleteBlocked, setDeleteBlocked] = useState(false);
   const confirm = useLibraryConfirm();
   const overflowRef = useRef<HTMLButtonElement | null>(null);
   const overflow = useMenu(overflowRef, { align: "end" });
   const recordIdFactoryRef = useRef(recordIdFactory ?? createUuidIdFactory());
   const nowRef = useRef(now ?? (() => new Date().toISOString()));
   const navigateRef = useRef(navigate);
+  const routeExpansionEpochRef = useRef(0);
   navigateRef.current = navigate;
 
   const index = useMemo(() => indexDocument(document), [document]);
@@ -140,6 +146,22 @@ export function SitemapperIntegration({
     return () => { live = false; unsubscribe(); };
   }, [workspaceIntegration]);
 
+  useEffect(() => {
+    if (!workspaceIntegration?.workspace.id) return undefined;
+    const workspaceId = workspaceIntegration.workspace.id;
+    let contentDatabase: string;
+    let mappingDatabase: string;
+    try {
+      contentDatabase = workspaceDatabaseName(CONTENT_DATABASE_NAME, workspaceId);
+      mappingDatabase = workspaceDatabaseName(MAPPING_DATABASE_NAME, workspaceId);
+    } catch {
+      return undefined;
+    }
+    return subscribePersistenceChanges((database) => {
+      if (database === contentDatabase || database === mappingDatabase) setCatalogEpoch((current) => current + 1);
+    });
+  }, [workspaceIntegration]);
+
   // The deep link's `?page=` selects once, and only when it names a real page.
   const appliedIntentRef = useRef(false);
   useEffect(() => {
@@ -160,12 +182,13 @@ export function SitemapperIntegration({
   useEffect(() => {
     if (!mappingCatalog) { setRouteExpansionState(null); return; }
     let active = true;
+    const epoch = ++routeExpansionEpochRef.current;
     void expandSitemapRoutes({ document, catalog: mappingCatalog.routes, policy: "authoring-preview" }).then((expansion) => {
-      if (!active) return;
+      if (!active || routeExpansionEpochRef.current !== epoch) return;
       setRouteExpansionState({ document, expansion });
     });
     return () => { active = false; };
-  }, [document, mappingCatalog]);
+  }, [document, mappingCatalog, catalogEpoch]);
 
   // Composition names are read once per catalog: every canvas node, Tree row
   // and inspector card says the same thing about a page's source.
@@ -253,10 +276,27 @@ export function SitemapperIntegration({
 
   const deleteRecord = async (): Promise<void> => {
     setRecordError(null);
+    setDeleteBlocked(false);
     try {
+      if (workspaceIntegration) {
+        const currentMetadata = await workspaceIntegration.workspace.metadata();
+        if (currentMetadata.metadata.activeSitemap.providerId === providerId && currentMetadata.metadata.activeSitemap.recordId === record.id) {
+          setDeleteBlocked(true);
+          setRecordError("This is the active Sitemap. Select another Sitemap as active before deleting it.");
+          return;
+        }
+      }
       // Close the save queue first: a write still in flight would put the
       // record straight back after the delete.
-      controller.flushPropUpdates();
+      await controller.flushPersistence();
+      if (workspaceIntegration) {
+        const currentMetadata = await workspaceIntegration.workspace.metadata();
+        if (currentMetadata.metadata.activeSitemap.providerId === providerId && currentMetadata.metadata.activeSitemap.recordId === record.id) {
+          setDeleteBlocked(true);
+          setRecordError("This is the active Sitemap. Select another Sitemap as active before deleting it.");
+          return;
+        }
+      }
       await controller.queue.close();
       await store.delete(record.id);
       navigateRef.current?.(SITEMAPPER_ROUTE);
@@ -286,10 +326,14 @@ export function SitemapperIntegration({
   };
 
   const editNavigation = useCallback((menu: SitemapMenu, command: SitemapNavigationCommand): void => {
-    // Kept as a small adapter so NavigationPane can never mutate the document
+    // Kept as a small bridge so NavigationPane can never mutate the document
     // directly; the controller queue owns every persisted edit.
     controller.dispatch({ type: "editNavigation", menu, command });
   }, [controller.dispatch]);
+
+  const changeView = useCallback((next: SitemapView): void => {
+    if (!controller.flushNavigationDrafts()) setView(next);
+  }, [controller.flushNavigationDrafts]);
 
   const saveStatus = controller.state.saveStatus;
   // A Mapping route family owns its own routes and takes no authored children,
@@ -300,7 +344,7 @@ export function SitemapperIntegration({
   // The one case with nowhere to go: the single root page is itself a Mapping.
   const canAddPage = addTargetId !== null || document.root.length === 0;
   const notice = recordError || controller.lastError || metadataError
-    ? <Banner tone="err">{recordError ?? controller.lastError ?? metadataError}</Banner>
+    ? <Banner tone="err" action={deleteBlocked ? <a class="cms-btn cms-btn--ghost cms-btn--xs" href={SITEMAPPER_ROUTE}>Choose another Sitemap</a> : undefined}>{recordError ?? controller.lastError ?? metadataError}</Banner>
     : controller.canUndoRemove
       ? <Banner tone="info">Page removed. <Button size="xs" variant="ghost" onClick={() => { controller.undoRemove(); }}>Undo remove</Button></Banner>
       : null;
@@ -320,7 +364,7 @@ export function SitemapperIntegration({
             label="View"
             size="sm"
             value={view}
-            onChange={setView}
+            onChange={changeView}
             options={[{ value: "canvas", label: "Canvas" }, { value: "outline", label: "Outline" }, { value: "routes", label: "Routes" }, { value: "navigation", label: "Navigation" }]}
           />
           <div class="sg-sitemapper-zoom" role="group" aria-label="Zoom">
@@ -405,7 +449,11 @@ export function SitemapperIntegration({
               else dispatch({ type: "addChild", parentId: request.parentId, title: request.title, atIndex: request.index });
             }}
             onAddChild={addChild}
-            onRename={(pageId) => {
+            onRename={(pageId, title) => {
+              if (title !== undefined) {
+                dispatch({ type: "updateProps", pageId, patch: { title } });
+                return;
+              }
               const node = index.byId.get(pageId)?.node;
               if (node) setNameDialog({ kind: "page", pageId, title: node.title });
             }}
@@ -416,6 +464,8 @@ export function SitemapperIntegration({
         }
         main={
           view === "outline" ? (
+            <div class="sg-sitemapper-view-stack">
+              <div class="sg-sitemapper-main__notice">{notice}</div>
             <PagesPane
               document={document}
               outline={outline}
@@ -428,7 +478,11 @@ export function SitemapperIntegration({
                 else dispatch({ type: "addChild", parentId: request.parentId, title: request.title, atIndex: request.index });
               }}
               onAddChild={addChild}
-              onRename={(pageId) => {
+              onRename={(pageId, title) => {
+                if (title !== undefined) {
+                  dispatch({ type: "updateProps", pageId, patch: { title } });
+                  return;
+                }
                 const node = index.byId.get(pageId)?.node;
                 if (node) setNameDialog({ kind: "page", pageId, title: node.title });
               }}
@@ -439,6 +493,7 @@ export function SitemapperIntegration({
               heading="Outline"
               class="sg-sitemapper-outline-pane"
             />
+            </div>
           ) : view === "routes" ? (
             <RoutePreviewPane
               document={document}
@@ -446,6 +501,7 @@ export function SitemapperIntegration({
               expansion={routeExpansion}
               selectedId={selectedId}
               onSelect={(pageId) => dispatch({ type: "select", pageId })}
+              notice={notice}
             />
           ) : view === "navigation" ? (
             <NavigationPane
@@ -454,6 +510,9 @@ export function SitemapperIntegration({
               selectedId={selectedId}
               onSelect={(pageId) => dispatch({ type: "select", pageId })}
               onEdit={editNavigation}
+              onDraft={controller.updateNavigationDebounced}
+              onFlush={controller.flushNavigationDrafts}
+              notice={notice}
             />
           ) : (
             <CanvasPane

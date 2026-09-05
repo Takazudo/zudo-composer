@@ -75,6 +75,12 @@ export function clampCanvasZoom(zoom: number): number {
   return Math.min(MAX_CANVAS_ZOOM, Math.max(MIN_CANVAS_ZOOM, Math.round(zoom * 100) / 100));
 }
 
+export function fitCanvasZoom(viewportWidth: number, viewportHeight: number, contentWidth: number, contentHeight: number): number {
+  const widthScale = contentWidth > 0 ? viewportWidth / contentWidth : MAX_CANVAS_ZOOM;
+  const heightScale = contentHeight > 0 ? viewportHeight / contentHeight : MAX_CANVAS_ZOOM;
+  return clampCanvasZoom(Math.min(widthScale, heightScale));
+}
+
 export function SitemapCanvas({
   document,
   routes,
@@ -176,7 +182,14 @@ export function SitemapCanvas({
   const fit = useCallback(() => {
     const scroller = scrollRef.current;
     if (!scroller || !layout || layout.width === 0) return;
-    onZoomChange(clampCanvasZoom(scroller.clientWidth / layout.width));
+    const nextZoom = fitCanvasZoom(scroller.clientWidth, scroller.clientHeight, layout.width, layout.height);
+    onZoomChange(nextZoom);
+    requestAnimationFrame(() => {
+      const current = scrollRef.current;
+      if (!current) return;
+      current.scrollLeft = Math.max(0, (layout.width * nextZoom - current.clientWidth) / 2);
+      current.scrollTop = Math.max(0, (layout.height * nextZoom - current.clientHeight) / 2);
+    });
   }, [layout, onZoomChange]);
 
   const beginPan = useCallback((event: PointerEvent): void => {

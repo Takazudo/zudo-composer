@@ -5,6 +5,7 @@
 
 import type { ComponentChildren, JSX } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { useWorkspace } from "../../../app/workspace-context";
 import { DuplicateIcon, EditIcon, PlusIcon, SitemapperIcon, TrashIcon } from "../../../components/icons";
 import {
   BulkBar,
@@ -133,10 +134,22 @@ export function SitemapLibrary({
   const [busy, setBusy] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<NameDialogState | null>(null);
+  const workspace = useWorkspace();
+  const workspaceIntegration = workspace?.integration;
+
+  const assertNoActiveDeletion = useCallback(async (ids?: readonly string[]): Promise<void> => {
+    if (!workspaceIntegration) return;
+    const metadata = await workspaceIntegration.workspace.metadata();
+    const active = metadata.metadata.activeSitemap;
+    if (active.providerId !== provider.descriptor?.id) return;
+    if (ids !== undefined && !ids.includes(active.recordId)) return;
+    throw new Error("The active Sitemap cannot be deleted. Select another Sitemap as active first.");
+  }, [provider, workspaceIntegration]);
 
   const initialize = useCallback(async (mode: "initialize" | "retry" | "startFresh") => {
     setBusy(true);
     try {
+      if (mode === "startFresh") await assertNoActiveDeletion();
       setOutcome(await provider.initialization[mode]());
       setOperationError(null);
     } catch (reason) {
@@ -144,7 +157,7 @@ export function SitemapLibrary({
     } finally {
       setBusy(false);
     }
-  }, [provider]);
+  }, [assertNoActiveDeletion, provider]);
 
   useEffect(() => { void initialize("initialize"); }, [initialize]);
 
@@ -243,6 +256,7 @@ export function SitemapLibrary({
     // still drop the records that are actually gone, or the list lies.
     const deleted = new Set<string>();
     try {
+      await assertNoActiveDeletion(ids);
       for (const id of ids) {
         await provider.store.delete(id);
         deleted.add(id);
@@ -275,6 +289,7 @@ export function SitemapLibrary({
     setBusy(true);
     setOperationError(null);
     try {
+      await assertNoActiveDeletion(summaries.map((summary) => summary.id));
       await provider.store.clear();
       setOutcome({ status: "ready", summaries: [] });
       selection.clear();

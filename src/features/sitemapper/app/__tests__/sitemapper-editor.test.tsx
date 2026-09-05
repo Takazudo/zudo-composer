@@ -4,7 +4,13 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { ChromeContext, createChromeStore } from "../../../../app/chrome-context";
+import { WorkspaceContext } from "../../../../app/workspace-context";
+import type { ProductionProviderIntegration } from "../../../../app/provider-integration";
+import { createWorkspaceSaveRegistry } from "../../../../app/workspace-sessions";
+import { workspaceDatabaseName } from "../../../../app/workspace-storage";
 import { createSequentialIdFactory } from "../../../../shared";
+import { notifyPersistenceChange } from "../../../../shared/persistence-generation";
+import { CONTENT_DATABASE_NAME } from "../../../../content/storage/indexeddb/types";
 import type { CompositionCatalog } from "../../../../sitemapper/catalog";
 import type { SitemapRecord, SitemapStore } from "../../../../sitemapper/library";
 import { SitemapperIntegration } from "../sitemapper-integration";
@@ -194,5 +200,55 @@ describe("Sitemapper editor chrome", () => {
 
     await waitFor(() => expect(store.delete).toHaveBeenCalledWith("walk-map"));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper"));
+  });
+
+  it("refreshes route expansion after an external Content persistence change without accepting stale results", async () => {
+    const model = createContentModelRecord({ name: "Drafts", kind: "collection", fields: [{ id: "slug", key: "slug", label: "Slug", kind: "slug", required: true }] }, { id: "drafts" });
+    const draft = createContentEntryRecord(model.id, { slug: "draft-path" }, { id: "draft" });
+    const value = record();
+    value.document.root[0]!.source = { kind: "mapping", ref: { providerId: "mapping", recordId: "mapped" }, route: { kind: "entry-field", fieldId: "slug" } };
+    const mapping: MappingRecord = { id: "mapped", createdAt: draft.createdAt, updatedAt: draft.updatedAt, document: { schemaVersion: 2, id: "mapped", name: "Mapped", contentModel: { providerId: "content", recordId: model.id }, composition: { providerId: "indexeddb", recordId: "page" }, mode: { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 10 } }, bindings: [] } };
+    const mappingCatalog = { list: async () => ({ status: "listed" as const, entries: [], failures: [] }), routes: { list: async () => ({ status: "listed" as const, entries: [], failures: [] }), resolveMapping: async () => ({ status: "resolved" as const, record: mapping }), resolveDefinitionReadiness: async () => ({ status: "ready" as const }), resolveContentSnapshot: async () => ({ status: "resolved" as const, model, snapshot: { model, entries: [draft], count: 1, diagnostics: [] } }) } };
+    const sessions = createWorkspaceSaveRegistry();
+    const integration = { sessions, workspace: { id: "workspace", metadata: async () => ({ metadata: { activeSitemap: { providerId: "sitemap-indexeddb", recordId: "other" } } }) }, subscribeChanges: () => () => undefined } as unknown as ProductionProviderIntegration;
+    const expand = vi.spyOn(routeServices, "expandSitemapRoutes");
+    render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><ChromeContext.Provider value={createChromeStore()}><SitemapperIntegration providerId="sitemap-indexeddb" record={value} store={fakeStore()} catalog={catalog} mappingCatalog={mappingCatalog} /></ChromeContext.Provider></WorkspaceContext.Provider>);
+    await waitFor(() => expect(expand).toHaveBeenCalledTimes(1));
+    notifyPersistenceChange(workspaceDatabaseName(CONTENT_DATABASE_NAME, "workspace"));
+    await waitFor(() => expect(expand).toHaveBeenCalledTimes(2));
+    expand.mockRestore();
+  });
+
+  it("blocks deleting the active Sitemap before closing its save queue", async () => {
+    const { store, navigate } = renderEditor();
+    const sessions = createWorkspaceSaveRegistry();
+    const integration = {
+      sessions,
+      workspace: {
+        id: "workspace",
+        metadata: async () => ({ metadata: { activeSitemap: { providerId: "sitemap-indexeddb", recordId: "walk-map" } } }),
+      },
+      subscribeChanges: () => () => undefined,
+    } as unknown as ProductionProviderIntegration;
+    cleanup();
+    render(
+      <WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}>
+        <ChromeContext.Provider value={createChromeStore()}>
+          <SitemapperIntegration
+            providerId="sitemap-indexeddb"
+            record={record()}
+            store={store}
+            catalog={catalog}
+            navigate={navigate}
+          />
+        </ChromeContext.Provider>
+      </WorkspaceContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "More sitemap actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete Walk map?" })).getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("This is the active Sitemap. Select another Sitemap as active before deleting it.")).toBeInTheDocument();
+    expect(store.delete).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

@@ -12,6 +12,7 @@ export interface RoutePreviewPaneProps {
   expansion: SitemapRouteExpansion | null;
   selectedId: string | null;
   onSelect: (nodeId: string) => void;
+  notice?: JSX.Element | null;
 }
 
 export function routeIdentity(route: DerivedSitemapRoute): string {
@@ -43,7 +44,7 @@ function statusFor(route: DerivedSitemapRoute, diagnostics: readonly SitemapRout
   return routeDiagnostics(route, diagnostics).some((diagnostic) => diagnostic.severity !== "nonblocking") ? "blocked" : "ready";
 }
 
-export function RoutePreviewPane({ document, authoredRoutes, expansion, selectedId, onSelect }: RoutePreviewPaneProps): JSX.Element {
+export function RoutePreviewPane({ document, authoredRoutes, expansion, selectedId, onSelect, notice }: RoutePreviewPaneProps): JSX.Element {
   const routes = expansion?.routes ?? [];
   const diagnostics = expansion?.diagnostics ?? [];
   const nodes = indexDocument(document).byId;
@@ -90,19 +91,29 @@ export function RoutePreviewPane({ document, authoredRoutes, expansion, selected
 
   const globalDiagnostics = diagnostics.filter((diagnostic) => diagnostic.nodeId === "");
   const orphanDiagnostics = diagnostics.filter((diagnostic) => diagnostic.nodeId !== "" && !routes.some((route) => route.nodeId === diagnostic.nodeId && (diagnostic.entryId === undefined || diagnostic.entryId === route.entryId) && (diagnostic.path === undefined || diagnostic.path === route.pathname)));
+  const diagnosticBanner = (diagnostic: SitemapRouteDiagnostic, key: string): JSX.Element => (
+    <Banner
+      key={key}
+      tone={diagnostic.severity === "nonblocking" ? "warn" : "err"}
+      action={diagnostic.nodeId ? <Button size="xs" variant="ghost" onClick={() => onSelect(diagnostic.nodeId)}>Inspect node</Button> : undefined}
+    >
+      {diagnostic.message}
+    </Banner>
+  );
 
   return (
     <Pane variant="canvas" label="Route preview" class="sg-sitemapper-main sg-sitemapper-route-preview">
       <PaneHeader title="Route preview" count={expansion?.derivedRouteCount ?? 0} />
       <PaneBody class="sg-sitemapper-main__body">
+        <div class="sg-sitemapper-main__notice">{notice}</div>
         {expansion === null ? (
           <div class="sg-sitemapper-view-empty"><p role="status">Route expansion is unavailable until the Mapping catalog is ready.</p></div>
         ) : (
           <>
-            {globalDiagnostics.length || (routes.length === 0 && orphanDiagnostics.length) ? (
+            {globalDiagnostics.length || orphanDiagnostics.length ? (
               <div class="sg-sitemapper-route-preview__diagnostics">
-                {globalDiagnostics.map((diagnostic, index) => <Banner key={`${diagnostic.code}:${index}`} tone={diagnostic.severity === "nonblocking" ? "warn" : "err"}>{diagnostic.message}</Banner>)}
-                {routes.length === 0 ? orphanDiagnostics.map((diagnostic, index) => <Banner key={`orphan:${diagnostic.code}:${index}`} tone={diagnostic.severity === "nonblocking" ? "warn" : "err"}>{diagnostic.message}</Banner>) : null}
+                {globalDiagnostics.map((diagnostic, index) => diagnosticBanner(diagnostic, `${diagnostic.code}:${index}`))}
+                {orphanDiagnostics.map((diagnostic, index) => diagnosticBanner(diagnostic, `orphan:${diagnostic.code}:${index}`))}
               </div>
             ) : null}
             <div class="sg-sitemapper-route-preview__table">

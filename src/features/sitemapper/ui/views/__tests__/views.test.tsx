@@ -55,9 +55,34 @@ describe("Sitemapper unified views", () => {
     });
   });
 
+  it("stages focused label edits with a flush callback instead of waiting for blur", () => {
+    const onDraft = vi.fn();
+    const onFlush = vi.fn();
+    const onEdit = vi.fn();
+    render(<NavigationPane document={document} expansion={expansion} selectedId={null} onSelect={vi.fn()} onEdit={onEdit} onDraft={onDraft} onFlush={onFlush} />);
+    const label = screen.getByRole("textbox", { name: "primary menu label for home-link" });
+    fireEvent.input(label, { target: { value: "Start" } });
+    expect(onDraft).toHaveBeenCalledWith("primary", "home-link", { label: "Start" });
+    expect(onEdit).not.toHaveBeenCalled();
+    fireEvent.blur(label);
+    expect(onFlush).toHaveBeenCalledOnce();
+  });
+
   it("keeps provider-qualified route identity in concrete rows", () => {
     const first = { ...expansion.routes[0]!, selectedEntry: { providerId: "content-a", modelId: "model", recordId: "entry" }, entryId: "entry" };
     const second = { ...first, selectedEntry: { providerId: "content-b", modelId: "model", recordId: "entry" } };
     expect(routeIdentity(first)).not.toBe(routeIdentity(second));
+  });
+
+  it("keeps blocking diagnostics without routes visible and navigable", () => {
+    const onSelect = vi.fn();
+    const broken: SitemapRouteExpansion = {
+      ...expansion,
+      diagnostics: [{ code: "mapping-not-found", nodeId: "broken", message: "The assigned Mapping was not found." }],
+    };
+    render(<RoutePreviewPane document={document} authoredRoutes={new Map([["home", "/"]])} expansion={broken} selectedId={null} onSelect={onSelect} />);
+    expect(screen.getByText("The assigned Mapping was not found.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Inspect node" }));
+    expect(onSelect).toHaveBeenCalledWith("broken");
   });
 });

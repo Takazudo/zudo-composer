@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SitemapDocument, SitemapNode } from "../../../../../sitemapper/model";
 import { SITEMAP_SCHEMA_VERSION } from "../../../../../sitemapper/model";
 import type { PageSourceLabel } from "../page-source";
-import SitemapCanvas, { clampCanvasZoom, MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM } from "../sitemap-canvas";
+import SitemapCanvas, { clampCanvasZoom, fitCanvasZoom, MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM } from "../sitemap-canvas";
 
 class ResizeObserverStub {
   observe(): void {}
@@ -121,6 +121,12 @@ describe("SitemapCanvas", () => {
     expect(clampCanvasZoom(5)).toBe(MAX_CANVAS_ZOOM);
     expect(clampCanvasZoom(0)).toBe(MIN_CANVAS_ZOOM);
     expect(clampCanvasZoom(0.7549)).toBe(0.75);
+  });
+
+  it("fits against the limiting viewport dimension, including tall maps", () => {
+    expect(fitCanvasZoom(1000, 500, 1000, 2000)).toBe(0.4);
+    expect(fitCanvasZoom(500, 1000, 1000, 500)).toBe(0.5);
+    expect(fitCanvasZoom(2000, 2000, 1000, 1000)).toBe(MAX_CANVAS_ZOOM);
   });
 
   it("exposes explicit layout choices while keeping Auto as the responsive default", async () => {

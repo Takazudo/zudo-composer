@@ -20,7 +20,7 @@ export interface PagesPaneProps {
   onExpandedChange: (ids: readonly string[]) => void;
   onAdd: (request: OutlineAddRequest) => void;
   onAddChild: (pageId: string) => void;
-  onRename: (pageId: string) => void;
+  onRename: (pageId: string, title?: string) => void;
   onMove: (pageId: string, direction: "up" | "down") => void;
   onDuplicate: (pageId: string) => void;
   onDelete: (pageId: string) => void;
@@ -88,6 +88,7 @@ export function PagesPane({
           onExpandedChange={onExpandedChange}
           canInsert={canInsert}
           onAdd={onAdd}
+          onRename={onRename}
           addLabel={(parent) => (parent === null ? "Add root page" : "Add page")}
           legend={<Legend />}
           renderActions={(node) => {

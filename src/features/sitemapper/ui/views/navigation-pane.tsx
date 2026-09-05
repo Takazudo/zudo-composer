@@ -10,6 +10,7 @@ import { safeNavigationUrl } from "../../../../sitemapper/model/validate";
 import { resolveSitemapNavigation, sameSitemapEntry } from "../../../../sitemapper/routes/navigation";
 import type { DerivedSitemapRoute, SitemapRouteExpansion } from "../../../../sitemapper/routes";
 import { routeIdentity } from "./route-preview-pane";
+import type { SitemapperNavigationPatch } from "../../app/use-sitemapper-controller";
 
 export interface NavigationPaneProps {
   document: SitemapDocument;
@@ -17,6 +18,9 @@ export interface NavigationPaneProps {
   selectedId: string | null;
   onSelect: (nodeId: string) => void;
   onEdit: (menu: "primary" | "footer", command: { kind: "put"; item: SitemapNavigationItem; index: number } | { kind: "remove"; id: string }) => void;
+  onDraft?: (menu: "primary" | "footer", itemId: string, patch: SitemapperNavigationPatch) => void;
+  onFlush?: () => void;
+  notice?: JSX.Element | null;
 }
 
 function destinationForRoute(route: DerivedSitemapRoute): SitemapNavigationDestination {
@@ -52,7 +56,7 @@ function routeTitle(route: DerivedSitemapRoute): string {
   return `${route.pathname} · ${route.displayTitle}${route.selectedEntry ? ` · ${route.selectedEntry.recordId}` : ""}`;
 }
 
-export function NavigationPane({ document, expansion, selectedId, onSelect, onEdit }: NavigationPaneProps): JSX.Element {
+export function NavigationPane({ document, expansion, selectedId, onSelect, onEdit, onDraft, onFlush, notice }: NavigationPaneProps): JSX.Element {
   const routes = expansion?.routes ?? [];
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [externalUrl, setExternalUrl] = useState("");
@@ -112,8 +116,12 @@ export function NavigationPane({ document, expansion, selectedId, onSelect, onEd
             size="sm"
             aria-label={`${menu} menu label for ${item.id}`}
             value={drafts[labelKey] ?? item.label}
-            onInput={(event) => setDrafts((current) => ({ ...current, [labelKey]: event.currentTarget.value }))}
-            onBlur={() => commitText(menu, item, "label")}
+            onInput={(event) => {
+              const value = event.currentTarget.value;
+              setDrafts((current) => ({ ...current, [labelKey]: value }));
+              onDraft?.(menu, item.id, { label: value });
+            }}
+            onBlur={() => onDraft ? onFlush?.() : commitText(menu, item, "label")}
           />
           <Checkbox
             checked={item.visible}
@@ -153,8 +161,12 @@ export function NavigationPane({ document, expansion, selectedId, onSelect, onEd
               size="sm"
               aria-label={`${item.label} external URL`}
               value={drafts[urlKey] ?? item.destination.url}
-              onInput={(event) => setDrafts((current) => ({ ...current, [urlKey]: event.currentTarget.value }))}
-              onBlur={() => commitText(menu, item, "url")}
+              onInput={(event) => {
+                const value = event.currentTarget.value;
+                setDrafts((current) => ({ ...current, [urlKey]: value }));
+                onDraft?.(menu, item.id, { destination: { kind: "external", url: value } });
+              }}
+              onBlur={() => onDraft ? onFlush?.() : commitText(menu, item, "url")}
             />
           ) : (
             <>
@@ -190,6 +202,7 @@ export function NavigationPane({ document, expansion, selectedId, onSelect, onEd
     <Pane variant="canvas" label="Navigation" class="sg-sitemapper-main sg-sitemapper-navigation">
       <PaneHeader title="Navigation" count={document.navigation.primary.length + document.navigation.footer.length} />
       <PaneBody class="sg-sitemapper-main__body">
+        <div class="sg-sitemapper-main__notice">{notice}</div>
         <div class="sg-sitemapper-navigation__body">
           {renderMenu("primary", "Primary menu")}
           {renderMenu("footer", "Footer menu")}
