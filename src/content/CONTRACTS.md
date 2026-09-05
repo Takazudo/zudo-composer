@@ -117,6 +117,14 @@ unpublish candidates. `selectContentPublicationCandidate(working,baseline,
 selections)` overlays only selected publish/delete/unpublish entry actions onto
 published baseline entries. Unselected published entries retain baseline
 values; unselected new drafts are excluded. It takes all schemas from working.
+Selection actions must match current state: publish accepts entries absent from
+the published baseline, or changed entries that retain published intent; delete
+requires a baseline entry absent from working; unpublish requires a baseline
+entry whose current working lifecycle is draft. Publishing an unchanged baseline
+entry or overriding explicit unpublish intent is rejected. A stale unpublish
+selection cannot remove an entry whose published intent was restored. An entry
+absent from baseline remains eligible as new even if its working published
+intent survived a previous generation-guarded reconciliation.
 The caller must validate the resulting whole-project candidate, including
 retained baseline records, before review/build/activation. An incompatible
 schema change must block that release. These helpers do not activate anything.

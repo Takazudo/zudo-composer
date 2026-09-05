@@ -52,6 +52,41 @@ describe("Complete provider-qualified Content graph", () => {
 });
 
 describe("Explicit publication selection", () => {
+  const publicationStates = [
+    { name: "missing everywhere", baseline: false, current: undefined, allowed: [] },
+    { name: "new draft", baseline: false, current: entry("a"), allowed: ["publish"] },
+    { name: "published intent absent from baseline", baseline: false, current: { ...entry("a"), lifecycle: "published" }, allowed: ["publish"] },
+    { name: "deleted baseline entry", baseline: true, current: undefined, allowed: ["delete"] },
+    { name: "unchanged published entry", baseline: true, current: { ...entry("a"), lifecycle: "published" }, allowed: [] },
+    { name: "changed published entry", baseline: true, current: { ...entry("a", "edited"), lifecycle: "published" }, allowed: ["publish"] },
+    { name: "explicit unpublish intent", baseline: true, current: entry("a"), allowed: ["unpublish"] },
+    { name: "edited explicit unpublish intent", baseline: true, current: entry("a", "edited"), allowed: ["unpublish"] },
+  ] as const;
+
+  for (const state of publicationStates) for (const action of ["publish", "delete", "unpublish"] as const) {
+    it(`${action} validates ${state.name}`, () => {
+      const baseline = snapshot(state.baseline ? [{ ...entry("a"), lifecycle: "published" }] : []);
+      const working = snapshot(state.current ? [state.current] : []);
+      const original = structuredClone({ baseline, working });
+      const select = () => selectContentPublicationCandidate([working], [baseline], [{ ref: ref("a"), action }]);
+      if ((state.allowed as readonly string[]).includes(action)) {
+        const result = select();
+        expect(result[0]!.entries).toEqual(action === "publish" ? [{ ...state.current, lifecycle: "published" }] : []);
+      } else expect(select).toThrow();
+      expect({ baseline, working }).toEqual(original);
+    });
+  }
+
+  it("rejects a stale unpublish selection after published intent is restored", () => {
+    const baseline = snapshot([{ ...entry("a"), lifecycle: "published" }]);
+    const unpublished = snapshot([entry("a")]);
+    expect(getContentPublicationChanges([unpublished], [baseline])).toEqual([{ ref: ref("a"), kind: "unpublish" }]);
+    const restored = snapshot([{ ...entry("a"), lifecycle: "published" }]);
+    expect(getContentPublicationChanges([restored], [baseline])).toEqual([]);
+    expect(() => selectContentPublicationCandidate([restored], [baseline], [{ ref: ref("a"), action: "unpublish" }])).toThrow("does not match");
+    expect(selectContentPublicationCandidate([restored], [baseline], [])[0]!.entries).toEqual(baseline.entries);
+  });
+
   it("retains unselected published B baseline while publishing edited A and excluding new drafts", () => {
     const baseline = snapshot(["a", "b", "deleted", "unpublish"].map((id) => ({ ...entry(id, `old ${id}`), lifecycle: "published" as const })));
     const working = snapshot([{ ...entry("a", "new a"), lifecycle: "published" }, { ...entry("b", "new b"), lifecycle: "published" }, entry("unpublish"), entry("new")]);
