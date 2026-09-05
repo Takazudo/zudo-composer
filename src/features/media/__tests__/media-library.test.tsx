@@ -7,6 +7,17 @@ import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 describe("Media workspace", () => {
+  it("subscribes to usage changes only while an inspector asset is active", async () => {
+    const { provider, filesystem } = await providerFixture();
+    await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const stop = vi.fn(), subscribe = vi.fn(() => stop);
+    render(<MediaApp provider={provider} contentServices={completeServices({ subscribeChanges: subscribe })} intent={{ status: "none" }} />);
+    const inspect = await screen.findByRole("button", { name: "Inspect hero.png" });
+    expect(subscribe).not.toHaveBeenCalled(); fireEvent.click(inspect);
+    await waitFor(() => expect(subscribe).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(screen.getByRole("complementary", { name: "Asset details" })).getByRole("button", { name: "Close", exact: true }));
+    await waitFor(() => expect(stop).toHaveBeenCalledTimes(1));
+  });
   it("keeps missing asset links handled until an explicit link retry", async () => {
     const { provider, filesystem } = await providerFixture();
     const asset = await filesystem.upload({ fileName: "late.png", declaredMediaType: "image/png", bytes: PNG });

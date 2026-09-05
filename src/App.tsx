@@ -159,7 +159,7 @@ export function App({ themeController, integration }: AppProps = {}) {
   // One read model for the whole chrome; the rail's counts come from it, and
   // the Dashboard route reuses this instance rather than initializing a second.
   const workspaceSummary = useMemo(() => createWorkspaceSummary(providers), [providers]);
-  const mediaContentServices = useMemo(() => createMediaContentServices(providers.contentProviders, () => providers.sessions.flush()), [providers]);
+  const mediaContentServices = useMemo(() => createMediaContentServices(providers.contentProviders, () => providers.sessions.flush(), (listener) => workspaceSummary.subscribe?.(listener) ?? (() => undefined)), [providers, workspaceSummary]);
   useEffect(() => () => workspaceSummary.dispose?.(), [workspaceSummary]);
   const path = new URL(location, window.location.origin).pathname;
   useEffect(() => { if (path === "/sitemapper") void providers.compositionCatalog.listCompositions().catch(() => undefined); }, [path, providers]);

@@ -15,14 +15,22 @@ async function content() {
   return provider;
 }
 describe("injected complete Media / Content integration", () => {
-  it("observes provider token changes outside the Media insertion service", async () => {
-    const provider = await content(); const service = createMediaContentServices([provider], async () => undefined);
-    const listener = vi.fn(); const stop = service.subscribeChanges(listener);
-    try {
-      await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
-      await provider.store.deleteEntry("entry-39");
-      await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2), { timeout: 2000 });
-    } finally { stop(); }
+  it("shares one lazy event subscription without reading Content and releases it at zero consumers", async () => {
+    const provider = await content(); const read = vi.spyOn(provider.store, "readAll");
+    let emit!: () => void; const detach = vi.fn();
+    const subscribe = vi.fn((listener: () => void) => { emit = listener; return detach; });
+    const service = createMediaContentServices([provider], async () => undefined, subscribe);
+    expect(subscribe).not.toHaveBeenCalled();
+    const inspector = vi.fn(), dialog = vi.fn();
+    const stopInspector = service.subscribeChanges(inspector), stopDialog = service.subscribeChanges(dialog);
+    expect(subscribe).toHaveBeenCalledTimes(1); emit();
+    expect(inspector).toHaveBeenCalledTimes(1); expect(dialog).toHaveBeenCalledTimes(1);
+    expect(read).not.toHaveBeenCalled();
+    stopInspector(); expect(detach).not.toHaveBeenCalled(); emit();
+    expect(inspector).toHaveBeenCalledTimes(1); expect(dialog).toHaveBeenCalledTimes(2);
+    stopDialog(); stopDialog(); expect(detach).toHaveBeenCalledTimes(1);
+    const stopAgain = service.subscribeChanges(inspector); expect(subscribe).toHaveBeenCalledTimes(2);
+    stopAgain(); expect(detach).toHaveBeenCalledTimes(2); expect(read).not.toHaveBeenCalled();
   });
   it("persists image/link/card text through Content CAS without storing Media notes", async () => {
     const provider = await content(); const service = createMediaContentServices([provider], async () => ({ status: "ready" }));

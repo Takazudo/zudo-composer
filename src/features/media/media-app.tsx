@@ -167,7 +167,7 @@ function MediaInspector({ record, controller, dimensions, usageHref, onClose, on
   const [scan, setScan] = useState<MediaUsageScan | null>(null);
   const [contentGeneration, setContentGeneration] = useState(0);
   const scanEpoch = useRef(0);
-  useEffect(() => controller.contentServices?.subscribeChanges(() => { scanEpoch.current++; setScan(null); setContentGeneration((value) => value + 1); }), [controller]);
+  useEffect(() => record ? controller.contentServices?.subscribeChanges(() => { scanEpoch.current++; setScan(null); setContentGeneration((value) => value + 1); }) : undefined, [controller, record?.id]);
   useEffect(() => { const epoch = ++scanEpoch.current; setScan(null); if (record) void controller.scan(record).then((value) => { if (scanEpoch.current === epoch) setScan(value); }); return () => { scanEpoch.current++; }; }, [controller, record?.id, controller.state.snapshot?.mutationToken, contentGeneration]);
   if (!record) return <aside class="sg-media-inspector" aria-label="Asset details"><header><strong>Asset details</strong></header><p class="sg-media-empty">Select an asset to inspect its file, metadata and Content uses.</p></aside>;
   const writable = controller.capability("metadata") && record.state === "active" && !controller.state.busy;

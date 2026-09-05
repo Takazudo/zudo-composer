@@ -24,8 +24,10 @@ export interface MediaContentServices {
 }
 
 /** Domain-only adapter. Enumerates whole provider snapshots, never UI pages. */
-export function createMediaContentServices(providers: readonly ContentProvider[], flush: () => Promise<unknown>): MediaContentServices {
+export function createMediaContentServices(providers: readonly ContentProvider[], flush: () => Promise<unknown>, subscribeChanges: (listener: () => void) => () => void = () => () => undefined): MediaContentServices {
   const stores = providers.map(({ store }) => store);
+  const listeners = new Set<() => void>();
+  let stopChanges: (() => void) | undefined;
   const capture = async () => {
     const result = await flush();
     if (result && typeof result === "object" && "status" in result && result.status !== "ready") throw new Error("Save pending Content changes before inspecting Media uses.");
@@ -34,21 +36,16 @@ export function createMediaContentServices(providers: readonly ContentProvider[]
   };
   return {
     subscribeChanges(listener) {
-      let stopped = false, running = false, previous: string | undefined;
-      // Providers have no cross-tab event contract. Observe authoritative tokens,
-      // not a UI-local counter; failures invalidate the last complete display too.
-      const check = async () => {
-        if (running || stopped) return;
-        running = true;
-        let next: string;
-        try { next = JSON.stringify(await Promise.all(stores.map(async (store) => { const snapshot = await store.readAll(); return [snapshot.providerId, snapshot.mutationToken]; }))); }
-        catch { next = "unavailable"; }
-        running = false;
-        if (!stopped && next !== previous) { previous = next; listener(); }
+      const subscription = () => listener();
+      listeners.add(subscription);
+      if (!stopChanges) {
+        try { stopChanges = subscribeChanges(() => { for (const notify of [...listeners]) notify(); }); }
+        catch (error) { listeners.delete(subscription); throw error; }
+      }
+      return () => {
+        listeners.delete(subscription);
+        if (!listeners.size && stopChanges) { const stop = stopChanges; stopChanges = undefined; stop(); }
       };
-      void check();
-      const timer = setInterval(() => { void check(); }, 1000);
-      return () => { stopped = true; clearInterval(timer); };
     },
     async scan(asset) {
       try {
