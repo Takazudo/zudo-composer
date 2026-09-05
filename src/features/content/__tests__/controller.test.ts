@@ -108,6 +108,21 @@ describe("ContentAuthoringController", () => {
     expect(controller.state.model?.id).toBe("model-b"); expect(controller.state.entries.map((entry) => entry.id)).toEqual(["b-entry"]);
   });
 
+  it("invalidates delayed pagination on every same-model reload even when the cursor is unchanged", async () => {
+    const model = createContentModelRecord({ name: "Many", kind: "collection", fields: [] }, { id: "many", timestamp: "2026-01-01T00:00:00.000Z" });
+    const entries = Array.from({ length: 26 }, (_, index) => createContentEntryRecord("many", {}, { id: `entry-${index}`, timestamp: "2026-01-01T00:00:00.000Z" }));
+    const provider = createMemoryContentProvider({ models: [model], entries });
+    const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("many");
+    const originalPage = provider.store.pageEntries, delayed = deferred<Awaited<ReturnType<typeof originalPage>>>();
+    vi.spyOn(provider.store, "pageEntries").mockImplementation((modelId, options) => options?.cursor ? delayed.promise : originalPage(modelId, options));
+    const more = controller.loadMoreEntries(); await tick();
+    await controller.reloadEntries();
+    expect(controller.state.nextCursor).toBe("25");
+    delayed.resolve({ entries: [entries[25]!] }); await more;
+    expect(controller.state.entries).toHaveLength(25);
+    expect(controller.state.entries.some((entry) => entry.id === "entry-25")).toBe(false);
+  });
+
   it("rejects an Entry whose stored model identity does not match the open model", async () => {
     const a = createContentModelRecord({ name: "A", kind: "collection", fields: [] }, { id: "model-a", timestamp: "2026-01-01T00:00:00.000Z" });
     const b = createContentModelRecord({ name: "B", kind: "collection", fields: [] }, { id: "model-b", timestamp: "2026-01-01T00:00:00.000Z" });
@@ -249,10 +264,39 @@ describe("ContentAuthoringController", () => {
   it("binds a verified single-provider deletion to its captured mutation token", async () => {
     const provider = createMemoryContentProvider(); const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("articles"); await controller.openEntry("entry-1");
     const transact = provider.store.transact;
-    vi.spyOn(provider.store, "transact").mockImplementationOnce(async (mutation) => { const model = await provider.store.getModel("articles"); if (model.status === "loaded") await provider.store.putModel(model.record); return transact(mutation); });
+    vi.spyOn(provider.store, "transact").mockImplementationOnce(async (mutation) => { const entry = await provider.store.getEntry("entry-1"); if (entry.status === "loaded") await provider.store.putEntry({ ...entry.record, values: { ...entry.record.values, title: "Concurrent title" } }); return transact(mutation); });
     await expect(controller.deleteEntry("entry-1")).rejects.toThrow(/mutation token changed/i);
     expect((await provider.store.getEntry("entry-1")).status).toBe("loaded");
-    expect(() => controller.updateEntryValue("title", "Still editable")).not.toThrow(); await controller.flushSessions();
+    expect(controller.state.entry?.values.title).toBe("Concurrent title");
+    expect(controller.state.conflictRecovery).toMatchObject({ authoritativeReady: true, canReapply: true });
+    expect(() => controller.updateEntryValue("title", "Must choose first")).toThrow("No Entry is open");
+    expect(controller.state.entry?.values.title).toBe("Concurrent title");
+    controller.discardConflictDraft();
+    controller.updateEntryValue("title", "Explicit edit"); await controller.flushSessions();
+    const saved = await provider.store.getEntry("entry-1"); expect(saved.status === "loaded" && saved.record.values.title).toBe("Explicit edit");
+  });
+
+  it("keeps queues detached when deletion commits but the authoritative refresh fails", async () => {
+    const provider = createMemoryContentProvider(); const controller = createContentAuthoringController(provider);
+    await controller.initialize(); await controller.openModel("articles"); await controller.openEntry("entry-1");
+    vi.spyOn(provider.store, "scanEntries").mockRejectedValueOnce(new Error("post-commit scan offline"));
+    await expect(controller.deleteEntry("entry-1")).rejects.toThrow("post-commit scan offline");
+    expect((await provider.store.getEntry("entry-1")).status).toBe("not-found");
+    expect(controller.state.phase).toBe("error"); expect(controller.state.message).toContain("committed");
+    expect(() => controller.updateEntryValue("title", "stale overwrite")).toThrow("No Entry is open");
+    await controller.retryInitialization();
+    expect(controller.state.phase).toBe("ready"); expect(controller.state.entryCounts.articles).toBe(0);
+  });
+
+  it("does not enter Relationships after its graph refresh is superseded", async () => {
+    const provider = createMemoryContentProvider(); const controller = createContentAuthoringController(provider);
+    await controller.initialize(); await controller.openModel("articles"); await controller.openEntry("entry-1"); await tick();
+    const originalRead = provider.store.readAll, delayed = deferred<Awaited<ReturnType<typeof originalRead>>>();
+    vi.spyOn(provider.store, "readAll").mockImplementationOnce(() => delayed.promise);
+    const inspect = controller.inspectRelationships(); await tick();
+    await controller.inspectSchema();
+    delayed.resolve(await originalRead()); await inspect;
+    expect(controller.state.workMode).toBe("model-fields"); expect(controller.state.entry).toBeNull();
   });
 
   it("keeps quarantine explicit and starts fresh only on request", async () => {

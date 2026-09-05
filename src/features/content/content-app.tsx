@@ -369,9 +369,14 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
               {error || state.saveStatus === "error" ? (
                 <Banner
                   tone="err"
-                  action={state.saveStatus === "error" ? <Button size="sm" onClick={() => controller.retrySave()}>Retry save</Button> : undefined}
+                  action={state.conflictRecovery ? (
+                    state.conflictRecovery.authoritativeReady ? <>
+                      <Button size="sm" onClick={() => run(() => controller.discardConflictDraft())}>Use latest</Button>
+                      <Button size="sm" disabled={!state.conflictRecovery.canReapply} onClick={() => run(() => controller.reconcileConflictDraft())}>Reapply my draft</Button>
+                    </> : <Button size="sm" onClick={() => run(() => controller.reloadConflictAuthoritative())}>Retry latest</Button>
+                  ) : state.saveStatus === "error" ? <Button size="sm" onClick={() => controller.retrySave()}>Retry save</Button> : undefined}
                 >
-                  {error ?? state.message}
+                  {error ?? state.conflictRecovery?.message ?? state.message}
                 </Banner>
               ) : null}
               {notice ? <Banner tone="info">{notice}</Banner> : null}
