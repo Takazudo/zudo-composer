@@ -7,7 +7,7 @@ import {
   MEDIA_TYPES,
   mediaVersionUrl,
 } from "./types";
-import type { MediaRecord, MediaType, MediaSnapshot, MediaFolder } from "./types";
+import type { MediaRecord, MediaType, MediaSnapshot, MediaFolder, MediaVersionRef, MediaVersionPin, MediaPinManifest } from "./types";
 
 const RECORD_KEYS = ["id", "revision", "createdAt", "updatedAt", "document"] as const;
 const DOCUMENT_KEYS = ["schemaVersion", "id", "fileName", "folderId", "note", "state", "currentVersionId", "versions"] as const;
@@ -140,6 +140,32 @@ export function validateMediaRecord(value: unknown): MediaValidation {
 
 export function isMediaRevision(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+export function mediaPinKey(ref: MediaVersionRef): string {
+  return JSON.stringify([ref.providerId, ref.assetId, ref.versionId]);
+}
+export function validateMediaVersionRef(value: unknown): value is MediaVersionRef {
+  return isPlainObject(value) && exactKeys(value, ["providerId", "assetId", "versionId"])
+    && isSafeRecordId(value.providerId) && isSafeRecordId(value.assetId) && isValidMediaChecksum(value.versionId);
+}
+export function validateMediaVersionPin(value: unknown, expected?: MediaVersionRef): value is MediaVersionPin {
+  if (!isPlainObject(value) || !exactKeys(value, ["providerId", "assetId", "versionId", "checksum", "byteLength", "mediaType", "url"])) return false;
+  const ref = { providerId: value.providerId, assetId: value.assetId, versionId: value.versionId };
+  return validateMediaVersionRef(ref) && value.checksum === ref.versionId
+    && isValidMediaType(value.mediaType) && isValidMediaByteLength(value.byteLength) && value.byteLength > 0
+    && value.url === mediaVersionUrl(ref.versionId, value.mediaType)
+    && (expected === undefined || (validateMediaVersionRef(expected) && mediaPinKey(ref) === mediaPinKey(expected)));
+}
+export function validateMediaPinManifest(value: unknown, expected?: readonly MediaVersionRef[]): value is MediaPinManifest {
+  if (!isPlainObject(value) || !exactKeys(value, ["schemaVersion", "pins"]) || value.schemaVersion !== 1
+    || !Array.isArray(value.pins) || !value.pins.every((pin) => validateMediaVersionPin(pin))) return false;
+  const keys = (value.pins as MediaVersionPin[]).map(mediaPinKey);
+  if (keys.some((key, index) => index > 0 && keys[index - 1]! >= key)) return false;
+  if (expected === undefined) return true;
+  if (!Array.isArray(expected) || !expected.every(validateMediaVersionRef)) return false;
+  const requested = [...new Set(expected.map(mediaPinKey))].sort();
+  return keys.length === requested.length && keys.every((key, index) => key === requested[index]);
 }
 
 export function validateMediaFolder(value: unknown): value is MediaFolder {

@@ -17,7 +17,7 @@ import { SafeRootFilesystem, streamingAtomicReplace, type StreamingAtomicWriteRe
 import type { FilesystemMediaStoreOptions, MediaUploadInput, SniffedMedia, MediaReplaceInput } from "./types";
 
 const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
-const BYTES_DIRECTORY = "public/uploaded-media";
+const BYTES_DIRECTORY = "versions";
 const EMPTY_TOKEN = "0".repeat(64);
 
 class MediaCatalogRecoveryError extends MediaPersistenceError {
@@ -440,7 +440,7 @@ export class FilesystemMediaStore implements VersionedMediaStore {
   private versionPath(url: string): string {
     if (!/^\/uploaded-media\/sha256-[a-f0-9]{64}\.(png|jpg|gif|webp|pdf)$/.test(url))
       throw operationError("get", "validation", "Invalid immutable Media URL.");
-    return this.filesystem.ownedPath("public" + url);
+    return this.filesystem.ownedPath(BYTES_DIRECTORY + "/" + url.slice("/uploaded-media/".length));
   }
   private assertCatalog(snapshot: MediaSnapshot): void {
     if (!validateMediaSnapshot(snapshot)) throw operationError("metadata", "validation", "Invalid Media metadata graph: check names, revisions, versions, folder parents, cycles, collisions and trash state.");
@@ -470,10 +470,13 @@ export class FilesystemMediaStore implements VersionedMediaStore {
         rethrow(operation, "write-failed", "Could not acquire Media mutation lock.", cause);
       }
       let lockStats: Stats | undefined;
+      let uncertain = false;
       try {
         lockStats = await lock.stat();
         await lock.writeFile(JSON.stringify({ pid: process.pid, createdAt: this.now() }));
         await lock.sync();
+        await this.syncDirectory(operation, this.filesystem.realRoot);
+        await this.syncDirectory(operation, this.bytesDirectory.path);
         const snapshot = await this.readCatalog();
         signal?.throwIfAborted();
         if (expectedToken !== undefined && expectedToken !== snapshot.mutationToken) throw operationError(operation, "conflict", "Media snapshot changed; reload before retrying.");
@@ -483,20 +486,23 @@ export class FilesystemMediaStore implements VersionedMediaStore {
         await this.assertDirectories(operation);
         await this.commitCatalog(operation, snapshot, signal);
         return structuredClone(result);
-      } catch (cause) { rethrow(operation, "write-failed", "Could not commit Media mutation.", cause); }
+      } catch (cause) {
+        uncertain = cause instanceof MediaPersistenceError && cause.code === "commit-uncertain";
+        rethrow(operation, "write-failed", "Could not commit Media mutation.", cause);
+      }
       finally {
         await lock.close().catch(() => undefined);
         // Cleanup failure must not report a committed mutation as failed.
         try {
           await this.filesystem.assertRoot(operation);
           const current = await this.filesystem.operations.lstat(lockPath);
-          if (lockStats && current.isFile() && !current.isSymbolicLink() && sameFile(current, lockStats)) await this.filesystem.operations.unlink(lockPath);
+          if (!uncertain && lockStats && current.isFile() && !current.isSymbolicLink() && sameFile(current, lockStats)) await this.filesystem.operations.unlink(lockPath);
         } catch { /* Retained lock fails closed on next mutation. */ }
       }
     });
   }
-  /** No fallible work after the catalog rename: an acknowledged failure must
-   * never mean that a replacement actually changed the current version. */
+  /** Post-rename durability failures are explicitly uncertain, never reported
+   * as ordinary failed/unchanged mutations. The retained lock blocks retries. */
   private async commitCatalog(operation: MediaPersistenceOperation, snapshot: MediaSnapshot, signal?: AbortSignal): Promise<void> {
     const path = this.catalogPath();
     const temporary = await this.filesystem.openTemporaryFile(operation, path);
@@ -511,10 +517,25 @@ export class FilesystemMediaStore implements VersionedMediaStore {
       signal?.throwIfAborted();
       await this.filesystem.operations.rename(temporary.path, path);
       committed = true;
+      try { await this.syncDirectory(operation, this.filesystem.realRoot); }
+      catch (cause) { throw operationError(operation, "commit-uncertain", "Catalog rename completed but directory durability is uncertain. Inspect the exact catalog/token and retained lock before recovery; do not retry blindly.", cause); }
     } finally {
       await temporary.handle.close().catch(() => undefined);
       if (!committed) await this.filesystem.operations.unlink(temporary.path).catch(() => undefined);
     }
+  }
+  private async syncDirectory(operation: MediaPersistenceOperation, path: string): Promise<void> {
+    let handle;
+    try {
+      await this.filesystem.assertRoot(operation);
+      await this.assertDirectories(operation);
+      handle = await this.filesystem.operations.open(path, constants.O_RDONLY | NO_FOLLOW | (constants.O_DIRECTORY ?? 0));
+      const opened = await handle.stat();
+      const current = await this.filesystem.operations.lstat(path);
+      if (!opened.isDirectory() || current.isSymbolicLink() || !sameFile(opened, current)) throw operationError(operation, "blocked", "Media directory changed before durability sync.");
+      await handle.sync();
+    } catch (cause) { rethrow(operation, "write-failed", "Media directory fsync is required but failed or is unsupported.", cause); }
+    finally { await handle?.close().catch(() => undefined); }
   }
   private async stageBytes(input: MediaReplaceInput, expected?: StreamingAtomicWriteResult, expectedType?: string): Promise<StagedMedia> {
     await this.assertDirectories("put");
@@ -541,7 +562,7 @@ export class FilesystemMediaStore implements VersionedMediaStore {
     await this.assertDirectories("put");
     const path = this.versionPath(url);
     const integrity = await this.verifyBytes("put", path, staged.result.byteLength, staged.result.checksum);
-    if (integrity === undefined) return;
+    if (integrity === undefined) { await this.syncDirectory("put", this.bytesDirectory.path); return; }
     if (integrity !== "missing") throw operationError("put", "bytes-missing", "Existing immutable bytes are corrupted; replacement cannot overwrite them.");
     // link is an atomic create-if-absent; even a racing uncooperative creator
     // cannot have its bytes overwritten by our publication.
@@ -552,6 +573,7 @@ export class FilesystemMediaStore implements VersionedMediaStore {
       if (errorCode(cause) === "EEXIST") throw operationError("put", "conflict", "Immutable Media byte path appeared during publication; retry.");
       rethrow("put", "write-failed", "Could not publish immutable Media bytes.", cause);
     }
+    await this.syncDirectory("put", this.bytesDirectory.path);
   }
   private async removeStage(path: string): Promise<void> {
     try {

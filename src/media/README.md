@@ -11,6 +11,12 @@ no migration reader, production authoring API, permanent purge, or version GC.
 `summarizeMedia(record)` derives list metadata including both URLs and revision.
 Version IDs equal their SHA-256 checksum. Reusing identical bytes reuses the
 version, while still advancing metadata revision and the provider token.
+Managed bytes live in private `media-store/versions`, outside Vite's publicDir.
+Development exact URLs require catalog membership and verified bytes; direct
+source and `/@fs` access to `media-store` is blocked. Uncommitted crash artifacts
+remain private and cannot enter Vite's public-directory copy. Production inputs
+remain the committed static public assets until release compilation explicitly
+selects a catalog-verified pin manifest and copies those exact private versions.
 
 ## Consumer contract
 
@@ -67,9 +73,18 @@ kernel-exclusive `.mutation.lock` protects metadata across cooperating processes
 the per-record revision is checked again under that lock after streaming. The
 new catalog and token switch together via one atomic rename. All failures before
 that point leave the old catalog/head and old byte versions unchanged. A failed
-catalog commit can leave harmless unreferenced immutable bytes; no GC removes
+catalog commit can leave private unreferenced immutable bytes; no GC removes
 them. `put(record, bytes)` is a validated, create-only single-version import, not
 a way around replacement CAS.
+
+Directory fsync support is checked before any metadata mutation. Published byte
+entries are synced before the catalog references them, and the catalog parent is
+synced after rename before success is acknowledged. Unsupported/failed preflight
+or byte-publication sync reports a typed write failure with the old catalog intact.
+A failure syncing the parent after catalog rename reports non-retryable
+`commit-uncertain`: the visible head may have changed, durability is unknown, and
+the writer lock is retained. Inspect the exact catalog/token and filesystem state
+before recovery; never treat this outcome as an unchanged head or blindly retry.
 
 Reads remain possible while a writer holds the lock. A retained lock after a
 crash fails closed: inspect `.mutation.lock`, confirm that no writer is running,

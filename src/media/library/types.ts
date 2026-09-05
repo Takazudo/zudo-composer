@@ -58,7 +58,7 @@ export type MediaPersistenceErrorCode =
   | "versionchange"
   | "unsupported-version"
   | "validation"
-  | "conflict" | "recovery-required"
+  | "conflict" | "recovery-required" | "commit-uncertain"
   | "not-found"
   | "bytes-missing"
   | "read-failed"

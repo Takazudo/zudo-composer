@@ -10,7 +10,7 @@
 import { constants } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { resolve } from "node:path";
+import { resolve, posix } from "node:path";
 
 /** @typedef {import("../src/composer/library/types.ts").CompositionRecord} CompositionRecord */
 /** @typedef {{url?: string, method?: string, protocol?: "http" | "https", headers: Record<string, string | undefined>, body?: string}} DevRequest */
@@ -29,7 +29,7 @@ export const MEDIA_FILE_PROVIDER_METADATA_HEADER = "x-zudo-composer-media-metada
 export const MEDIA_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 export const MEDIA_FILE_PROVIDER_ROOT = "media-store";
 const MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/octet-stream"]);
-const MEDIA_FILE_PROVIDER_BYTES_DIRECTORY = "public/uploaded-media";
+const MEDIA_FILE_PROVIDER_BYTES_DIRECTORY = "versions";
 const MEDIA_FILE_PROVIDER_BYTE_PATTERN = /^\/uploaded-media\/(sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/;
 const MEDIA_CONTENT_TYPE_BY_EXTENSION = Object.freeze({
   png: "image/png",
@@ -178,6 +178,7 @@ function mediaOperationError(value, operation) {
   if (code === "not-found") return errorResponse(404, code, "The Media asset, folder or exact version does not exist.", operation);
   if (code === "bytes-missing") return errorResponse(409, code, "Retained Media bytes are missing or corrupted.", operation);
   if (code === "recovery-required") return errorResponse(409, code, "Media catalog requires manual recovery. Source and all versions are preserved; inspect catalog.json.", operation);
+  if (code === "commit-uncertain") return errorResponse(409, code, "Media catalog rename completed but durability is uncertain. Inspect its exact token/state and retained writer lock before recovery; do not retry blindly.", operation);
   if (code === "read-failed") return errorResponse(503, code, "Local media files could not be read. Check directory permissions and retry.", operation);
   if (code === "write-failed" || code === "transaction-failed") return errorResponse(500, code, "Local media files could not be updated. Check permissions and free space, then retry.", operation);
   return errorResponse(500, "unknown", "The local media provider failed unexpectedly. Retry or restart the development server.", operation);
@@ -226,6 +227,14 @@ export function createMediaFileMiddleware(options) {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
 
     const pathname = typeof req.url === "string" ? req.url.split("?", 1)[0] : undefined;
+    // Vite can otherwise expose files below its project root via /@fs or
+    // ordinary source-file URLs, even when they are outside publicDir.
+    try {
+      const decoded = typeof pathname === "string" ? posix.normalize(decodeURIComponent(pathname)) : "";
+      if (/(?:^|\/)media-store(?:\/|$)/.test(decoded)) {
+        res.statusCode = 404; res.setHeader("cache-control", "no-store"); res.end(); return;
+      }
+    } catch { res.statusCode = 400; res.end(); return; }
     const authoring = typeof pathname === "string" ? /^\/uploaded-media\/asset-([a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?)$/.exec(pathname) : undefined;
     if (authoring && options.createStore) {
       res.setHeader("cache-control", "no-store");
@@ -247,6 +256,16 @@ export function createMediaFileMiddleware(options) {
     const extension = fileName.slice(fileName.lastIndexOf(".") + 1);
     const contentType = MEDIA_CONTENT_TYPE_BY_EXTENSION[extension];
     if (contentType === undefined) return next();
+    // Private version bytes are reachable only through retained catalog refs.
+    // Never fall through to Vite for a managed but uncommitted checksum URL.
+    try {
+      const store = options.createStore ? await options.createStore() : undefined;
+      const snapshot = store ? await store.snapshot() : undefined;
+      const record = snapshot?.records.find((record) => record.document.versions.some((version) => version.url === pathname));
+      const version = record?.document.versions.find((version) => version.url === pathname);
+      if (!record || !version) { res.statusCode = 404; res.setHeader("cache-control", "no-store"); res.end(); return; }
+      await store.resolveVersion({ providerId: store.provider.id, assetId: record.id, versionId: version.id });
+    } catch { sendMediaFileError(res); return; }
     // Resolve the configured project once (e.g. macOS /var -> /private/var),
     // then reject links inside its owned media-store subtree.
     let projectRoot;
@@ -260,7 +279,7 @@ export function createMediaFileMiddleware(options) {
     // O_NOFOLLOW only protects the final component; reject symlinked parents too.
     const parents = [];
     try {
-      for (const relative of [MEDIA_FILE_PROVIDER_ROOT, `${MEDIA_FILE_PROVIDER_ROOT}/public`, `${MEDIA_FILE_PROVIDER_ROOT}/${MEDIA_FILE_PROVIDER_BYTES_DIRECTORY}`]) {
+      for (const relative of [MEDIA_FILE_PROVIDER_ROOT, `${MEDIA_FILE_PROVIDER_ROOT}/${MEDIA_FILE_PROVIDER_BYTES_DIRECTORY}`]) {
         const path = resolve(projectRoot, relative);
         const directory = await lstatFile(path);
         if (directory.isSymbolicLink() || !directory.isDirectory() || await realpathFile(path) !== path) return next();

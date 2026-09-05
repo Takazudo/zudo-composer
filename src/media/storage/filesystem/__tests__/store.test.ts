@@ -20,9 +20,55 @@ function options(root: string, extra: Partial<FilesystemMediaStoreOptions> = {})
   return { mediaStoreRoot: root, idFactory: () => `asset-${++sequence}`, now: () => "2026-09-01T00:00:00.000Z", ...extra };
 }
 const upload = (store: Awaited<ReturnType<typeof createFilesystemMediaStore>>, folderId?: string) => store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG, folderId });
-const bytePath = (root: string, bytes = PNG) => join(root, "public", mediaVersionUrl(digest(bytes), bytes === PDF ? "application/pdf" : "image/png"));
+const bytePath = (root: string, bytes = PNG) => join(root, "versions", mediaVersionUrl(digest(bytes), bytes === PDF ? "application/pdf" : "image/png").split("/").at(-1)!);
 
 describe("versioned global Media store", () => {
+  it("syncs byte-directory publication before the catalog and catalog parent before acknowledgment", async () => {
+    const root = await fs.realpath(await sandbox()); const events: string[] = [];
+    const store = await createFilesystemMediaStore(options(root, { operations: {
+      open: async (path, flags, mode) => {
+        const handle = await fs.open(path, flags, mode);
+        if ((await handle.stat()).isDirectory()) {
+          const sync = handle.sync.bind(handle);
+          handle.sync = async () => { events.push(path.endsWith("/versions") ? "versions-sync" : "catalog-parent-sync"); await sync(); };
+        }
+        return handle;
+      },
+      link: async (from, to) => { await fs.link(from, to); events.push("version-link"); },
+      rename: async (from, to) => { await fs.rename(from, to); if (to.endsWith("catalog.json")) events.push("catalog-rename"); },
+    } }));
+    await upload(store); events.push("acknowledged");
+    expect(events.slice(events.indexOf("version-link"))).toEqual(["version-link", "versions-sync", "catalog-rename", "catalog-parent-sync", "acknowledged"]);
+  });
+  it.each(["preflight", "publication", "catalog"])("fails truthfully on %s directory fsync errors", async (failure) => {
+    const root = await fs.realpath(await sandbox()); const initial = await createFilesystemMediaStore(options(root));
+    const record = await upload(initial); const before = await initial.snapshot();
+    let linked = false; let renamed = false;
+    const store = await createFilesystemMediaStore(options(root, { operations: {
+      open: async (path, flags, mode) => {
+        const handle = await fs.open(path, flags, mode);
+        if ((await handle.stat()).isDirectory()) {
+          const sync = handle.sync.bind(handle);
+          handle.sync = async () => {
+            if (failure === "preflight" || (failure === "publication" && linked) || (failure === "catalog" && renamed)) throw Object.assign(new Error("directory fsync unavailable"), { code: "EINVAL" });
+            await sync();
+          };
+        }
+        return handle;
+      },
+      link: async (from, to) => { await fs.link(from, to); linked = true; },
+      rename: async (from, to) => { await fs.rename(from, to); if (to.endsWith("catalog.json")) renamed = true; },
+    } }));
+    await expect(store.replace(record.id, { bytes: PDF }, { expectedRevision: 1 })).rejects.toMatchObject({ code: failure === "catalog" ? "commit-uncertain" : "write-failed" });
+    if (failure === "catalog") {
+      expect((await initial.snapshot()).mutationToken).not.toBe(before.mutationToken);
+      await expect(initial.trash(record.id, { expectedRevision: 2 })).rejects.toMatchObject({ code: "conflict" });
+      expect(await fs.readFile(join(root, ".mutation.lock"), "utf8")).toContain('"pid"');
+    } else {
+      expect(await initial.snapshot()).toEqual(before);
+      expect(renamed).toBe(false);
+    }
+  });
   it("persists one current catalog, derives signatures and exposes detached snapshots", async () => {
     const root = await sandbox(); const store = await createFilesystemMediaStore(options(root));
     const before = await store.mutationToken();

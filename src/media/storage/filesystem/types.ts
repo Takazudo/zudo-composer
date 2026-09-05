@@ -6,7 +6,7 @@ import type { MediaByteSource, MediaType } from "../../library";
 export interface FilesystemMediaStoreOperations extends SafeRootFilesystemOperations { link: typeof link }
 
 export interface FilesystemMediaStoreOptions {
-  /** The fixed `media-store` directory containing records/ and public/. */
+  /** The fixed `media-store` directory containing catalog.json, private versions/ and static public/. */
   mediaStoreRoot: string;
   /** Test/fault-injection seam. Omitted methods use Node's filesystem. */
   operations?: Partial<FilesystemMediaStoreOperations>;

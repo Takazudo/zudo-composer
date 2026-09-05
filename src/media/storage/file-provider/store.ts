@@ -11,7 +11,7 @@ import {
   type MediaSummary,
   type MediaMutationPrecondition, type MediaMetadataPatch, type MediaFolderPatch, type MediaListOptions,
 } from "../../library";
-import { loadMediaRecord, validateMediaSnapshot, validateMediaFolder, type MediaSnapshot, type MediaFolder, type MediaVersionRef, type MediaVersionPin, type MediaPinManifest } from "../../model";
+import { loadMediaRecord, validateMediaSnapshot, validateMediaFolder, validateMediaVersionRef, validateMediaVersionPin, validateMediaPinManifest, type MediaSnapshot, type MediaFolder, type MediaVersionRef, type MediaVersionPin, type MediaPinManifest } from "../../model";
 import type { MediaFileProvider, MediaFileProviderConfig, MediaFileProviderStore } from "./types";
 
 type WireOperation = "initialize" | "list" | "get" | "upload" | "delete" | "clear" | "snapshot" | "replace" | "metadata" | "trash" | "restore" | "create-folder" | "update-folder" | "trash-folder" | "restore-folder" | "resolve-version" | "pin-manifest";
@@ -24,7 +24,7 @@ function operationFor(value: WireOperation): MediaPersistenceOperation {
 }
 function normalizeErrorCode(value: string): MediaPersistenceErrorCode {
   if (value === "body-too-large") return "validation";
-  return ["unavailable", "blocked", "unsupported-version", "validation", "not-found", "bytes-missing", "read-failed", "write-failed", "transaction-failed", "conflict", "recovery-required"].includes(value)
+  return ["unavailable", "blocked", "unsupported-version", "validation", "not-found", "bytes-missing", "read-failed", "write-failed", "transaction-failed", "conflict", "recovery-required", "commit-uncertain"].includes(value)
     ? value as MediaPersistenceErrorCode
     : "unknown";
 }
@@ -61,8 +61,20 @@ class BrowserFileProviderMediaStore implements MediaFileProviderStore {
   updateFolder(id: string, patch: MediaFolderPatch, precondition: MediaMutationPrecondition) { return this.json<MediaFolder>("update-folder", { patch, precondition }, id); }
   trashFolder(id: string, precondition: MediaMutationPrecondition) { return this.json<MediaFolder>("trash-folder", { precondition }, id); }
   restoreFolder(id: string, precondition: MediaMutationPrecondition) { return this.json<MediaFolder>("restore-folder", { precondition }, id); }
-  resolveVersion(ref: MediaVersionRef) { return this.json<MediaVersionPin>("resolve-version", { ref }); }
-  pinManifest(refs: readonly MediaVersionRef[]) { return this.json<MediaPinManifest>("pin-manifest", { refs }); }
+  async resolveVersion(ref: MediaVersionRef): Promise<MediaVersionPin> {
+    if (!validateMediaVersionRef(ref) || ref.providerId !== this.provider.id) throw persistenceError("pin", "validation", "An exact version reference for this Media provider is required.");
+    ref = structuredClone(ref);
+    const pin = await this.json<unknown>("resolve-version", { ref });
+    if (!validateMediaVersionPin(pin, ref)) throw persistenceError("pin", "validation", "Media pin does not match the exact requested version.");
+    return pin;
+  }
+  async pinManifest(refs: readonly MediaVersionRef[]): Promise<MediaPinManifest> {
+    if (!Array.isArray(refs) || !refs.every((ref) => validateMediaVersionRef(ref) && ref.providerId === this.provider.id)) throw persistenceError("pin", "validation", "Exact version references for this Media provider are required.");
+    refs = structuredClone(refs);
+    const manifest = await this.json<unknown>("pin-manifest", { refs });
+    if (!validateMediaPinManifest(manifest, refs)) throw persistenceError("pin", "validation", "Media pin manifest is malformed, incomplete, duplicated or unsorted.");
+    return manifest;
+  }
   private json<T>(operation: WireOperation, value: unknown, id?: string): Promise<T> { return this.request(operation, id, JSON.stringify(value)); }
   async get(id: string): Promise<MediaLoadOutcome> {
     const result = await this.request<MediaLoadOutcome>("get", id);
