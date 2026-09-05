@@ -113,6 +113,20 @@ describe("SiteProject compiler", () => {
     expect(result).toMatchObject({ status: "blocked", diagnostics: [expect.objectContaining({ code: "attachment-node-id-conflict", entry: { providerId: "content-indexeddb", recordId: "a" } })] });
   });
 
+  it("preflights the node budget before cloning the next oversized repeat", async () => {
+    const owner = globalTemplate("owner"); delete owner.document.publication;
+    const large = composition("landing");
+    large.document.root = Array.from({ length: 5_001 }, (_, index) => ({ id: `large-${index}`, componentId: "leaf", componentVersion: 1, props: { title: String(index) }, slots: {} }));
+    const itemMapping = mapping("landing");
+    itemMapping.document.bindings = [];
+    itemMapping.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit: 2 } };
+    const value = project({ root: page("home", undefined, { kind: "composition", ref: { providerId: "indexeddb", recordId: "owner" } }), compositions: [owner, large], entries: [entry("a"), entry("b")], mappings: [itemMapping], attachments: [{ id: "feed", order: 0, composition: { providerId: "indexeddb", recordId: "owner" }, target: { nodeId: "owner-root", slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: "article-page" } }] });
+    const before = structuredClone(value);
+    const result = await compile(value);
+    expect(result).toMatchObject({ status: "blocked", diagnostics: [expect.objectContaining({ code: "attachment-materialization-limit", pathname: "/" })] });
+    expect(value).toEqual(before);
+  });
+
   it("enforces attachment slot cardinality", async () => {
     const owner = globalTemplate("owner");
     delete owner.document.publication;
