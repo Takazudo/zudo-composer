@@ -67,6 +67,20 @@ describe("SiteProject provider integration", () => {
     if (compiled.status === "ready") expect(compiled.build.routes).toHaveLength(7);
   });
 
+  it("does not turn Mapping save-session generation changes into attachment notifications", async () => {
+    const current = integration();
+    await current.initialization.initialize();
+    const changed = vi.fn();
+    const stop = current.mappingAttachmentService.subscribe?.(changed);
+    const session = current.sessions.register({ feature: "test", providerId: "mapping-indexeddb" }, { flush: async () => undefined });
+    session.changed();
+    await Promise.resolve();
+    expect(changed).not.toHaveBeenCalled();
+    session.detach();
+    await current.sessions.flush();
+    stop?.();
+  });
+
   it("provides a real provider-qualified attachment aggregate with CAS persistence and materialized preview", async () => {
     const current = integration();
     expect(await current.initialization.initialize()).toEqual({ status: "ready" });
@@ -93,11 +107,65 @@ describe("SiteProject provider integration", () => {
     expect(JSON.stringify(after.attachments[0]!.materializedDocument)).toContain("__zudo_collection_");
     const preview = await current.mappingAttachmentService.preview(attachment);
     expect(preview.status).toBe("ready");
+    let mutated = false;
+    await expect(current.mappingAttachmentService.withMappingMutation({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" }, async () => { mutated = true; })).rejects.toThrow(/attached/);
+    expect(mutated).toBe(false);
     await expect(current.mappingAttachmentService.assertMappingDeletable({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" })).rejects.toThrow(/attached/);
 
     await current.mappingAttachmentService.detach(attachment);
     expect((await current.workspace.metadata()).metadata.collectionAttachments).toEqual([]);
     await expect(current.mappingAttachmentService.assertMappingDeletable({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" })).resolves.toBeUndefined();
+  });
+
+  it("keeps stale attachment records detachable and scopes compiler diagnostics to their own edge", async () => {
+    const current = integration();
+    await current.initialization.initialize();
+    const linked = await current.compositionProviders[0]!.store.get("journal-entry-page");
+    if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
+    const detachedDocument = structuredClone(linked.record.document);
+    delete detachedDocument.binding;
+    await current.compositionProviders[0]!.store.put({ ...linked.record, document: detachedDocument });
+
+    const attachments = [
+      { id: "valid-attachment", order: 0, composition: { providerId: "indexeddb" as const, recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-indexeddb" as const, recordId: "journal-entry-mapping" } },
+      { id: "stale-attachment", order: 1, composition: { providerId: "indexeddb" as const, recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "missing-slot" }, mapping: { providerId: "mapping-indexeddb" as const, recordId: "journal-entry-mapping" } },
+    ];
+    const metadata = await current.workspace.metadata();
+    await current.workspace.updateMetadata(metadata.mutationToken, { collectionAttachments: attachments });
+
+    const snapshot = await current.mappingAttachmentService.list();
+    const valid = snapshot.attachments.find((item) => item.attachment.id === "valid-attachment");
+    const stale = snapshot.attachments.find((item) => item.attachment.id === "stale-attachment");
+    expect(valid?.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain("attachment-target-invalid");
+    expect(stale).toMatchObject({ target: { slotLabel: "Missing named slot", nodeId: "home-copy-stack", slotId: "missing-slot" } });
+    expect(stale?.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ severity: "blocking" })]));
+
+    await current.mappingAttachmentService.detach(stale!.attachment);
+    expect((await current.workspace.metadata()).metadata.collectionAttachments).toHaveLength(1);
+    await current.mappingAttachmentService.detach(valid!.attachment);
+    expect((await current.workspace.metadata()).metadata.collectionAttachments).toEqual([]);
+  });
+
+  it("serializes attachment writes from two integrations sharing one workspace", async () => {
+    const factories = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
+    const first = integration(factories);
+    await first.initialization.initialize();
+    const linked = await first.compositionProviders[0]!.store.get("journal-entry-page");
+    if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
+    const detachedDocument = structuredClone(linked.record.document);
+    delete detachedDocument.binding;
+    await first.compositionProviders[0]!.store.put({ ...linked.record, document: detachedDocument });
+    const second = integration(factories);
+    await second.initialization.initialize();
+    const target = (await first.mappingAttachmentService.list()).targets.find((candidate) => candidate.composition.recordId === "home-page" && candidate.nodeId === "home-copy-stack" && candidate.slotId === "content");
+    if (!target) throw new Error("Expected the sample home stack named slot.");
+    const request = { composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } };
+
+    const outcomes = await Promise.allSettled([first.mappingAttachmentService.attach(request), second.mappingAttachmentService.attach(request)]);
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === "rejected")).toHaveLength(1);
+    expect((await first.workspace.metadata()).metadata.collectionAttachments).toHaveLength(1);
+    await first.mappingAttachmentService.detach((await first.mappingAttachmentService.list()).attachments[0]!.attachment);
   });
 
   it("is idempotent, preserves an authoring edit, and detaches snapshots from the checked-in sample", async () => {

@@ -285,7 +285,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     }
   };
 
-  const snapshotNow = async (capture?: WorkspaceCapture): Promise<SiteProject> => {
+  const snapshotNow = async (capture?: WorkspaceCapture, allowAttachmentDiagnostics = false): Promise<SiteProject> => {
     if (!project) throw activated.error!;
     const authored = capture?.values.workspace as WorkspaceRecord | undefined ?? await storage.open(workspaceId);
     if (!authored) throw new ProviderIntegrationError("snapshot", "Workspace metadata is unavailable.");
@@ -301,7 +301,11 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     for (const declared of next.providers.mappings) { const provider = byDomain.mappings.get(browserProviderIdFor("mappings", declared.id) as "mapping-indexeddb"); if (!provider || !("readAll" in provider.store)) throw new ProviderIntegrationError("snapshot", `Mapping provider "${declared.id}" lacks atomic snapshot support.`); declared.records = [...(capture ? capture.values[`mappings:${declared.id}`] as readonly MappingRecord[] : await (provider.store as unknown as MappingSnapshotStore).readAll())]; }
     for (const declared of next.providers.sitemaps) { const provider = byDomain.sitemaps.get(browserProviderIdFor("sitemaps", declared.id) as "sitemap-indexeddb"); if (!provider || !isSitemapCollectionStore(provider.store)) throw new ProviderIntegrationError("snapshot", `Sitemap provider "${declared.id}" lacks atomic snapshot support.`); declared.records = [...(capture ? capture.values[`sitemaps:${declared.id}`] as readonly SitemapRecord[] : await provider.store.readAll())]; }
     const result = validateSiteProject(next, activeSiteProjectValidationContext);
-    if (!result.ok) throw new ProviderIntegrationError("snapshot", `Provider snapshot is not coherent: ${result.diagnostics.map((item) => `${item.path}: ${item.message}`).join("; ")}`);
+    if (!result.ok) {
+      const onlyAttachmentDiagnostics = result.diagnostics.length > 0 && result.diagnostics.every((item) => item.path.startsWith("$.collectionAttachments"));
+      if (!allowAttachmentDiagnostics || !onlyAttachmentDiagnostics) throw new ProviderIntegrationError("snapshot", `Provider snapshot is not coherent: ${result.diagnostics.map((item) => `${item.path}: ${item.message}`).join("; ")}`);
+      return canonicalizeSiteProject(next);
+    }
     return canonicalizeSiteProject(result.project);
   };
 
@@ -477,7 +481,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   const getCurrentSiteProject = async (): Promise<SiteProjectSnapshotOutcome> => {
     const value = await capture(false);
     if (value.status !== "ready") return { status: "error", error: new ProviderIntegrationError("snapshot", value.status === "unavailable" ? `${value.source}: ${value.error.message}` : value.status === "save-failed" ? value.failures.map((failure) => `${failure.feature}/${failure.providerId}/${failure.recordId ?? "operation"}: ${failure.error.message}`).join("; ") : `Workspace changed during capture: ${value.sources.join(", ")}.`) };
-    try { return { status: "ready", project: await snapshotNow(value.capture) }; }
+    try { return { status: "ready", project: await snapshotNow(value.capture, true) }; }
     catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Snapshot validation failed.") }; }
   };
   const subscribeChanges = (listener: () => void) => {
@@ -489,8 +493,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     getCurrentSiteProject,
     workspace,
     componentCatalog: activeComponentProvider.catalog,
-    flush: () => sessions.flush(),
-    subscribe: subscribeChanges,
+    subscribe: (listener) => subscribePersistenceChanges((database) => { if (database === WORKSPACE_DATABASE_NAME || database.endsWith(`-workspace-v1-${workspaceId}`)) listener(); }),
   });
   return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, mediaProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, mappingAttachmentService, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle, workspace, sessions,
     subscribeChanges,

@@ -66,7 +66,9 @@ export interface MappingAttachmentCallbacks {
   preview(attachment: SiteProjectCollectionAttachment): Promise<MappingAttachmentPreview>;
   /** Mapping deletion must prove no persisted aggregate edge references it. */
   assertMappingDeletable(mapping: MappingRecordRef): Promise<void>;
-  /** Flushes a queued aggregate mutation, when the owner uses staged writes. */
+  /** Serialize destructive Mapping mutations with attachment writes under the workspace lock. `null` means all Mappings. */
+  withMappingMutation<T>(mapping: MappingRecordRef | null, action: () => Promise<T>): Promise<T>;
+  /** Waits for queued aggregate mutations before the owning save session settles. */
   flush?(): Promise<void>;
   /** Durable change notifications belong to the owner service, not the pane. */
   subscribe?(listener: () => void): () => void;

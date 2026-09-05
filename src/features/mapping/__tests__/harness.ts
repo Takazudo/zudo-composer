@@ -212,6 +212,7 @@ export function harness(
     async detach() {},
     async preview() { return { status: "unavailable", effectiveEntries: [], diagnostics: [] }; },
     async assertMappingDeletable() {},
+    async withMappingMutation(_mapping, action) { return action(); },
   };
   const controller = new MappingEditorController(
     provider,

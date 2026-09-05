@@ -108,6 +108,15 @@ describe("MappingEditorController", () => {
     expect(h.records.has(source.id)).toBe(true);
   });
 
+  it("fails closed for Mapping clear and start fresh without attachment mutation protection", async () => {
+    const source = mappingRecord();
+    const h = harness([source], RESOLVED_ENTRIES, { attachments: undefined });
+    await h.controller.initialize();
+    await expect(h.controller.clear()).rejects.toThrow(/Clearing Mappings/);
+    await expect(h.controller.startFresh()).rejects.toThrow(/start fresh/);
+    expect(h.records.has(source.id)).toBe(true);
+  });
+
   it("preserves broken references until explicitly repaired", async () => {
     const broken = createMappingRecord({
       id: "mapping-broken",
@@ -240,6 +249,7 @@ describe("MappingEditorController", () => {
       async detach(received) { requests.push(`detach:${received.id}`); snapshot = { ...snapshot, attachments: [] }; },
       async preview() { return { status: "ready", document: composition.document, staticFallback: composition.document, effectiveEntries: [entry], diagnostics: [] }; },
       async assertMappingDeletable() {},
+      async withMappingMutation(_mapping, action) { return action(); },
     };
     const h = harness([source], RESOLVED_ENTRIES, { attachments: callbacks });
     await h.controller.initialize();
@@ -252,5 +262,62 @@ describe("MappingEditorController", () => {
     await h.controller.detachCollection(attachment.id);
     expect(requests.at(-1)).toBe("detach:feed");
     expect(h.controller.state.attachments.snapshot?.attachments).toHaveLength(0);
+  });
+
+  it("keeps list and preview request epochs independent while rejecting a late preview after selection refresh", async () => {
+    const source = mappingRecord([]);
+    source.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 10 } };
+    const attachment = { id: "feed", order: 0, composition: { ...COMPOSITION_REF }, target: { nodeId: HEADING_NODE, slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: source.id } } as const;
+    const item: MappingAttachmentItem = {
+      attachment,
+      target: { composition: { ...COMPOSITION_REF }, compositionName: "Article page", nodeId: HEADING_NODE, slotId: "body", slotLabel: "Body", componentId: "ui.section-heading", cardinality: "many" },
+      mapping: { providerId: "mapping-indexeddb", recordId: source.id },
+      mappingName: source.document.name,
+      effectiveEntries: [entry],
+      staticFallback: composition.document,
+      diagnostics: [],
+    };
+    let listCalls = 0;
+    let releaseList!: () => void;
+    let listStarted!: () => void;
+    const listGate = new Promise<void>((resolve) => { releaseList = resolve; });
+    const listStartedGate = new Promise<void>((resolve) => { listStarted = resolve; });
+    let releasePreview!: () => void;
+    let previewStarted!: () => void;
+    const previewGate = new Promise<void>((resolve) => { releasePreview = resolve; });
+    const previewStartedGate = new Promise<void>((resolve) => { previewStarted = resolve; });
+    const snapshot: MappingAttachmentSnapshot = { targets: [item.target], attachments: [item] };
+    const callbacks: MappingAttachmentCallbacks = {
+      async list() {
+        listCalls += 1;
+        if (listCalls === 1) return snapshot;
+        listStarted();
+        await listGate;
+        return snapshot;
+      },
+      async attach() {},
+      async detach() {},
+      async preview() {
+        previewStarted();
+        await previewGate;
+        return { status: "ready", document: composition.document, staticFallback: composition.document, effectiveEntries: [entry], diagnostics: [] };
+      },
+      async assertMappingDeletable() {},
+      async withMappingMutation(_mapping, action) { return action(); },
+    };
+    const h = harness([source], RESOLVED_ENTRIES, { attachments: callbacks });
+    await h.controller.initialize();
+    await h.controller.open(source.id);
+
+    const refreshing = h.controller.refreshAttachments();
+    await listStartedGate;
+    const previewing = h.controller.previewCollectionAttachment(attachment.id);
+    await previewStartedGate;
+    releasePreview();
+    await previewing;
+    expect(h.controller.state.attachments.preview?.status).toBe("ready");
+    releaseList();
+    await refreshing;
+    expect(h.controller.state.attachments.preview).toBeNull();
   });
 });

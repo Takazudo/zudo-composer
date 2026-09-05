@@ -14,7 +14,6 @@ interface MappingAttachmentServiceOptions {
     updateMetadata(expectedToken: number, patch: { collectionAttachments?: readonly SiteProjectCollectionAttachment[] }): Promise<WorkspaceRecord>;
   };
   componentCatalog: ComponentCatalog;
-  flush(): Promise<{ status: "ready"; generation: number } | { status: "failed"; failures: readonly { error: Error }[] } | { status: "changed" }>;
   subscribe(listener: () => void): () => void;
 }
 
@@ -32,6 +31,19 @@ interface ResolvedAttachmentData {
 }
 
 function errorMessage(cause: unknown, fallback: string): string { return cause instanceof Error && cause.message ? cause.message : fallback; }
+
+const workspaceMutationLocks = new Map<string, Promise<unknown>>();
+
+async function withWorkspaceMutationLock<T>(workspaceId: string, action: () => Promise<T>): Promise<T> {
+  const name = `zudo-composer-workspace-mapping-${workspaceId}`;
+  if (typeof navigator !== "undefined" && navigator.locks) return navigator.locks.request(name, action);
+  const previous = workspaceMutationLocks.get(name) ?? Promise.resolve();
+  const next = previous.then(action, action);
+  const settled = next.then(() => undefined, () => undefined);
+  workspaceMutationLocks.set(name, settled);
+  try { return await next; }
+  finally { if (workspaceMutationLocks.get(name) === settled) workspaceMutationLocks.delete(name); }
+}
 
 function refKey(ref: { providerId: string; recordId: string }): string { return `${ref.providerId}\u0000${ref.recordId}`; }
 function targetKey(composition: { providerId: string; recordId: string }, nodeId: string, slotId: string): string { return `${composition.providerId}\u0000${composition.recordId}\u0000${nodeId}\u0000${slotId}`; }
@@ -81,10 +93,24 @@ function attachmentTargets(project: SiteProject, componentCatalog: ComponentCata
   return targets;
 }
 
+function placeholderTarget(project: SiteProject, attachment: SiteProjectCollectionAttachment): MappingAttachmentTarget {
+  const composition = projectComposition(project, attachment.composition);
+  return {
+    composition: { providerId: attachment.composition.providerId, recordId: attachment.composition.recordId },
+    compositionName: composition?.document.name ?? `Missing Composition (${attachment.composition.recordId})`,
+    nodeId: attachment.target.nodeId,
+    slotId: attachment.target.slotId,
+    slotLabel: "Missing named slot",
+    componentId: "missing-component",
+    cardinality: "many",
+  };
+}
+
 function compilerDiagnostics(compilation: SiteProjectCompilation, attachmentId: string): MappingAttachmentDiagnostic[] {
   if (compilation.status === "ready") return [];
+  const attachmentPath = `$.collectionAttachments[?(@.id==${JSON.stringify(attachmentId)})]`;
   return compilation.diagnostics
-    .filter((diagnostic) => diagnostic.path.includes(attachmentId) || diagnostic.code.startsWith("attachment-"))
+    .filter((diagnostic) => diagnostic.path === "$.collectionAttachments" || diagnostic.path.startsWith(attachmentPath))
     .map((diagnostic) => ({ code: diagnostic.code, severity: "blocking" as const, message: diagnostic.message, path: diagnostic.path }));
 }
 
@@ -101,7 +127,6 @@ function queryDiagnostics(diagnostics: readonly { code: string; severity: "block
 
 export function createMappingAttachmentService(options: MappingAttachmentServiceOptions): MappingAttachmentCallbacks {
   let operation = Promise.resolve();
-  let flushDepth = 0;
 
   async function coherent(): Promise<ProjectContext> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -118,6 +143,26 @@ export function createMappingAttachmentService(options: MappingAttachmentService
     const next = operation.then(action, action);
     operation = next.then(() => undefined, () => undefined);
     return next;
+  }
+
+  async function withWorkspaceOperation<T>(action: () => Promise<T>): Promise<T> {
+    const metadata = await options.workspace.metadata();
+    return withWorkspaceMutationLock(metadata.id, action);
+  }
+
+  function assertMappingReferences(project: SiteProject, mapping: MappingRecordRef | null): void {
+    const referenced = project.collectionAttachments.some((attachment) => mapping === null || refKey(attachment.mapping) === refKey(mapping));
+    if (!referenced) return;
+    if (mapping === null) throw new Error("Mapping mutations are blocked because collection attachments are still persisted. Detach every collection attachment first.");
+    throw new Error("This Mapping is attached to a Composition named slot. Detach every collection attachment before mutating it.");
+  }
+
+  async function withMappingMutation<T>(mapping: MappingRecordRef | null, action: () => Promise<T>): Promise<T> {
+    return withWorkspaceOperation(async () => {
+      const context = await coherent();
+      assertMappingReferences(context.project, mapping);
+      return action();
+    });
   }
 
   async function resolveData(project: SiteProject, attachment: SiteProjectCollectionAttachment): Promise<ResolvedAttachmentData> {
@@ -147,8 +192,7 @@ export function createMappingAttachmentService(options: MappingAttachmentService
         items.push({ attachment, target: data.target, mapping: attachment.mapping, mappingName: data.mappingName, effectiveEntries: data.effectiveEntries, ...(materializedDocument ? { materializedDocument } : {}), staticFallback: data.staticFallback, diagnostics: [...data.diagnostics, ...compilerDiagnostics(compilation, attachment.id)] });
       } catch (cause) {
         const target = attachmentTargets(project, options.componentCatalog).find((candidate) => targetKey(candidate.composition, candidate.nodeId, candidate.slotId) === targetKey(attachment.composition, attachment.target.nodeId, attachment.target.slotId));
-        if (!target) continue;
-        items.push({ attachment, target, mapping: attachment.mapping, mappingName: attachment.mapping.recordId, effectiveEntries: [], staticFallback: dataFallback(project, attachment), diagnostics: [{ code: "attachment-invalid", severity: "blocking", message: errorMessage(cause, "Collection attachment could not be resolved."), path: `$.collectionAttachments[?(@.id==${JSON.stringify(attachment.id)})]` }] });
+        items.push({ attachment, target: target ?? placeholderTarget(project, attachment), mapping: attachment.mapping, mappingName: attachment.mapping.recordId, effectiveEntries: [], staticFallback: dataFallback(project, attachment), diagnostics: [{ code: "attachment-invalid", severity: "blocking", message: errorMessage(cause, "Collection attachment could not be resolved."), path: `$.collectionAttachments[?(@.id==${JSON.stringify(attachment.id)})]` }] });
       }
     }
     return { targets: attachmentTargets(project, options.componentCatalog), attachments: items };
@@ -157,7 +201,7 @@ export function createMappingAttachmentService(options: MappingAttachmentService
   function dataFallback(project: SiteProject, attachment: SiteProjectCollectionAttachment): CompositionDocument | undefined { return projectComposition(project, attachment.composition)?.document; }
 
   async function attach(request: Parameters<MappingAttachmentCallbacks["attach"]>[0]): Promise<void> {
-    return withOperation(async () => {
+    return withOperation(() => withWorkspaceOperation(async () => {
       const context = await coherent();
       const composition = projectComposition(context.project, request.composition);
       const mapping = projectMapping(context.project, request.mapping);
@@ -176,11 +220,11 @@ export function createMappingAttachmentService(options: MappingAttachmentService
       const attachmentDiagnostics = compilerDiagnostics(compilation, id);
       if (attachmentDiagnostics.some((diagnostic) => diagnostic.severity === "blocking")) throw new Error(attachmentDiagnostics.map((diagnostic) => diagnostic.message).join("; "));
       await options.workspace.updateMetadata(context.metadata.mutationToken, { collectionAttachments: candidate.collectionAttachments });
-    });
+    }));
   }
 
   async function detach(attachment: SiteProjectCollectionAttachment): Promise<void> {
-    return withOperation(async () => {
+    return withOperation(() => withWorkspaceOperation(async () => {
       const context = await coherent();
       const current = context.project.collectionAttachments.find((candidate) => candidate.id === attachment.id);
       if (!current || attachmentIdentity(current) !== attachmentIdentity(attachment)) throw new Error("Collection attachment changed; reload before detaching.");
@@ -188,9 +232,9 @@ export function createMappingAttachmentService(options: MappingAttachmentService
       const candidate = structuredClone(context.project);
       candidate.collectionAttachments = next;
       const validation = validateSiteProject(candidate, activeSiteProjectValidationContext);
-      if (!validation.ok) throw new Error(validation.diagnostics.map((diagnostic) => diagnostic.message).join("; "));
+      if (!validation.ok && validation.diagnostics.some((diagnostic) => !diagnostic.path.startsWith("$.collectionAttachments"))) throw new Error(validation.diagnostics.map((diagnostic) => diagnostic.message).join("; "));
       await options.workspace.updateMetadata(context.metadata.mutationToken, { collectionAttachments: next });
-    });
+    }));
   }
 
   async function preview(attachment: SiteProjectCollectionAttachment): Promise<MappingAttachmentPreview> {
@@ -205,8 +249,10 @@ export function createMappingAttachmentService(options: MappingAttachmentService
   }
 
   async function assertMappingDeletable(mapping: MappingRecordRef): Promise<void> {
-    const { project } = await coherent();
-    if (project.collectionAttachments.some((attachment) => refKey(attachment.mapping) === refKey(mapping))) throw new Error("This Mapping is attached to a Composition named slot. Detach every collection attachment before deleting it.");
+    await withOperation(() => withWorkspaceOperation(async () => {
+      const { project } = await coherent();
+      assertMappingReferences(project, mapping);
+    }));
   }
 
   return {
@@ -215,20 +261,8 @@ export function createMappingAttachmentService(options: MappingAttachmentService
     detach,
     preview,
     assertMappingDeletable,
-    async flush() {
-      // The Mapping save-session flush calls this callback as part of its own
-      // handle. Guard the re-entry so a durable attachment action can ask the
-      // registry to settle editor drafts without recursively flushing itself.
-      if (flushDepth > 0) return;
-      flushDepth += 1;
-      try {
-        const outcome = await options.flush();
-        if (outcome.status === "failed") throw new Error(outcome.failures.map(({ error }) => error.message).join("; "));
-        if (outcome.status === "changed") throw new Error("Edits changed while saving. Finish the edit and try again.");
-      } finally {
-        flushDepth -= 1;
-      }
-    },
+    withMappingMutation,
+    async flush() { await operation; },
     subscribe: options.subscribe,
   };
 }

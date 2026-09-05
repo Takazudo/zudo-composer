@@ -90,6 +90,10 @@ export interface MappingEditorControllerOptions {
   attachments?: MappingAttachmentCallbacks;
 }
 
+function attachmentSelectionKey(attachment: { id: string; composition: { providerId: string; recordId: string }; target: { nodeId: string; slotId: string }; mapping: { providerId: string; recordId: string } }): string {
+  return `${attachment.id}\u0000${attachment.composition.providerId}\u0000${attachment.composition.recordId}\u0000${attachment.target.nodeId}\u0000${attachment.target.slotId}\u0000${attachment.mapping.providerId}\u0000${attachment.mapping.recordId}`;
+}
+
 export function compatibleTransforms(sourceKind: ContentModelRecord["document"]["fields"][number]["kind"], target: MappingTargetDescriptor): readonly MappingTransform["kind"][] {
   const candidates: readonly MappingTransform[] = [
     { kind: "identity" }, { kind: "date-medium" }, { kind: "truncate-160" }, { kind: "prefix", prefix: "" },
@@ -105,7 +109,8 @@ export class MappingEditorController {
   private readonly attachmentCallbacks?: MappingAttachmentCallbacks;
   private refreshRevision = 0;
   private pendingFlush: Promise<void> | null = null;
-  private attachmentRequestRevision = 0;
+  private attachmentListRequestRevision = 0;
+  private attachmentPreviewRequestRevision = 0;
 
   constructor(
     readonly provider: MappingProvider,
@@ -126,7 +131,10 @@ export class MappingEditorController {
 
   async initialize(deepLink?: MappingDeepLinkRequest): Promise<void> { await this.runInitialization(() => this.provider.initialization.initialize(), deepLink); }
   async retryInitialization(): Promise<void> { await this.runInitialization(() => this.provider.initialization.retry()); }
-  async startFresh(): Promise<void> { await this.runInitialization(() => this.provider.initialization.startFresh()); }
+  async startFresh(): Promise<void> {
+    const attachments = this.requireAttachmentMutation("Mapping start fresh is blocked because collection attachments could not be verified.");
+    await attachments.withMappingMutation(null, () => this.runInitialization(() => this.provider.initialization.startFresh()));
+  }
 
   /** Creates the record and returns its id; the route navigates to it. */
   async create(name: string, contentModel: ContentCatalogEntry["ref"], composition: CompositionCatalogEntry["ref"]): Promise<string> {
@@ -213,18 +221,22 @@ export class MappingEditorController {
   }
 
   async delete(id: string): Promise<void> {
-    if (!this.attachmentCallbacks) throw new Error("Mapping deletion is blocked because collection attachments could not be verified.");
-    await this.attachmentCallbacks.assertMappingDeletable({ providerId: this.provider.descriptor.id, recordId: id });
-    await this.flush(); await this.provider.store.delete(id); await this.refreshLibrary();
-    if (this.current.mapping?.id === id) await this.close();
-    this.set({ ...this.current, message: "Mapping deleted." });
+    const attachments = this.requireAttachmentMutation("Mapping deletion is blocked because collection attachments could not be verified.");
+    await attachments.withMappingMutation({ providerId: this.provider.descriptor.id, recordId: id }, async () => {
+      await this.flush(); await this.provider.store.delete(id); await this.refreshLibrary();
+      if (this.current.mapping?.id === id) await this.close();
+      this.set({ ...this.current, message: "Mapping deleted." });
+    });
   }
 
   async clear(): Promise<void> {
-    await this.flush();
-    await this.provider.store.clear();
-    await this.refreshLibrary();
-    this.set({ ...this.current, phase: "ready", recoveryMessage: null, message: "Mapping library ready." });
+    const attachments = this.requireAttachmentMutation("Clearing Mappings is blocked because collection attachments could not be verified.");
+    await attachments.withMappingMutation(null, async () => {
+      await this.flush();
+      await this.provider.store.clear();
+      await this.refreshLibrary();
+      this.set({ ...this.current, phase: "ready", recoveryMessage: null, message: "Mapping library ready." });
+    });
   }
 
   rename(name: string): void { if (name.trim()) this.edit((record) => ({ ...record, document: { ...record.document, name } })); }
@@ -373,19 +385,27 @@ export class MappingEditorController {
 
   get hasAttachmentService(): boolean { return this.attachmentCallbacks !== undefined; }
 
+  private requireAttachmentMutation(message: string): MappingAttachmentCallbacks {
+    if (!this.attachmentCallbacks?.withMappingMutation) throw new Error(message);
+    return this.attachmentCallbacks;
+  }
+
   async refreshAttachments(): Promise<void> {
-    const requestRevision = ++this.attachmentRequestRevision;
+    const requestRevision = ++this.attachmentListRequestRevision;
     if (!this.attachmentCallbacks) {
+      this.attachmentPreviewRequestRevision += 1;
       this.set({ ...this.current, attachments: { ...emptyMappingAttachmentState, phase: "unavailable", message: "Collection attachment service is unavailable." } });
       return;
     }
     this.set({ ...this.current, attachments: { ...this.current.attachments, phase: "loading", message: null } });
     try {
       const snapshot = await this.attachmentCallbacks.list();
-      if (requestRevision !== this.attachmentRequestRevision) return;
+      if (requestRevision !== this.attachmentListRequestRevision) return;
+      this.attachmentPreviewRequestRevision += 1;
       this.set({ ...this.current, attachments: { phase: "ready", snapshot, preview: null, message: null } });
     } catch (reason) {
-      if (requestRevision !== this.attachmentRequestRevision) return;
+      if (requestRevision !== this.attachmentListRequestRevision) return;
+      this.attachmentPreviewRequestRevision += 1;
       const message = reason instanceof Error ? reason.message : "Collection attachments could not be loaded.";
       this.set({ ...this.current, attachments: { phase: "error", snapshot: null, preview: null, message } });
     }
@@ -411,11 +431,11 @@ export class MappingEditorController {
     if (!this.attachmentCallbacks) throw new Error("Collection attachment service is unavailable.");
     const attachment = this.current.attachments.snapshot?.attachments.find((item) => item.attachment.id === attachmentId)?.attachment;
     if (!attachment) throw new Error("This collection attachment is no longer available.");
-    const requestRevision = ++this.attachmentRequestRevision;
-    const targetKey = `${attachment.composition.providerId}/${attachment.composition.recordId}/${attachment.target.nodeId}/${attachment.target.slotId}`;
+    const requestRevision = ++this.attachmentPreviewRequestRevision;
+    const selectionKey = attachmentSelectionKey(attachment);
     const preview = await this.attachmentCallbacks.preview(attachment);
     const current = this.current.attachments.snapshot?.attachments.find((item) => item.attachment.id === attachmentId)?.attachment;
-    if (requestRevision !== this.attachmentRequestRevision || !current || `${current.composition.providerId}/${current.composition.recordId}/${current.target.nodeId}/${current.target.slotId}` !== targetKey) return;
+    if (requestRevision !== this.attachmentPreviewRequestRevision || !current || attachmentSelectionKey(current) !== selectionKey) return;
     this.set({ ...this.current, attachments: { ...this.current.attachments, phase: "ready", preview, message: preview.status === "ready" ? "Materialized attachment preview is current." : "Attachment preview has diagnostics." } });
   }
 
