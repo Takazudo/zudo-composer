@@ -20,6 +20,10 @@ export interface OutlineTreeContextValue {
   commitAdd: (target: OutlineInsertTarget, title: string) => void;
   /** The insert point whose inline editor is open, if any. */
   editing: OutlineInsertTarget | null;
+  pending: OutlineInsertTarget | null;
+  renamingId: string | null;
+  commitRename: (id: string, title: string) => void;
+  cancelRename: () => void;
   cancelEdit: () => void;
   addLabel: (parent: OutlineNode | null) => string;
   registerRow: (id: string, element: HTMLElement | null) => void;

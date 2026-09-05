@@ -26,12 +26,12 @@ export interface MenuViewport {
 }
 
 export type MenuAlign = "start" | "end";
-export type MenuSide = "bottom" | "top";
+export type MenuSide = "bottom" | "top" | "right" | "left";
 
 export interface MenuPlacement {
   /** Inline edge the menu lines up with: `start` = anchor's left, `end` = anchor's right. */
   readonly align?: MenuAlign;
-  /** Preferred block side. Flips to the other side when that one has more room. */
+  /** Preferred side. Flips to the opposite side when that one has more room. */
   readonly side?: MenuSide;
   /** Distance between the anchor and the menu. */
   readonly gap?: number;
@@ -79,6 +79,21 @@ export function computeMenuPosition(
   const margin = placement.margin ?? MENU_VIEWPORT_MARGIN;
   const align = placement.align ?? "start";
   const preferredSide = placement.side ?? "bottom";
+
+  if (preferredSide === "right" || preferredSide === "left") {
+    const roomRight = viewport.width - anchor.left - anchor.width - gap - margin;
+    const roomLeft = anchor.left - gap - margin;
+    const preferredRoom = preferredSide === "right" ? roomRight : roomLeft;
+    const oppositeRoom = preferredSide === "right" ? roomLeft : roomRight;
+    const side = size.width > preferredRoom && oppositeRoom > preferredRoom
+      ? preferredSide === "right" ? "left" : "right"
+      : preferredSide;
+    const maxHeight = Math.max(0, viewport.height - margin * 2);
+    const height = Math.min(size.height, maxHeight);
+    const left = clamp(side === "right" ? anchor.left + anchor.width + gap : anchor.left - size.width - gap,
+      margin, viewport.width - size.width - margin);
+    return { left, top: clamp(anchor.top, margin, viewport.height - height - margin), maxHeight, side };
+  }
 
   const anchorBottom = anchor.top + anchor.height;
   const roomBelow = viewport.height - anchorBottom - gap - margin;

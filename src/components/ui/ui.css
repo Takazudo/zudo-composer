@@ -708,3 +708,4 @@
   .cms-switch__track::after { transition-duration: .01ms; }
   .cms-status__spinner { animation-duration: .01ms; animation-iteration-count: 1; }
 }
+.cms-disclosure { border-radius: 0; }

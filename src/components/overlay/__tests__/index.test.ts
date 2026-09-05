@@ -34,6 +34,7 @@ describe("overlay module", () => {
       "MenuRadioItem",
       "MenuSection",
       "MenuSeparator",
+      "MenuSubmenu",
       "OverlayPortal",
       "computeMenuPosition",
       "useMenu",

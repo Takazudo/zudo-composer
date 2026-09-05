@@ -100,6 +100,7 @@ export function Dialog({
       // Handled here rather than left to `cancel`, so the contract holds in
       // environments where `<dialog>` has no modal behaviour of its own.
       event.preventDefault();
+      event.stopPropagation();
       onClose();
       return;
     }

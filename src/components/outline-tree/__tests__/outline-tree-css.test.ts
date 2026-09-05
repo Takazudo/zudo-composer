@@ -99,7 +99,9 @@ describe("outline-tree.css", () => {
     const coarse = atRule("@media (pointer: coarse)");
     expect(coarse).toContain("--tree-row: 44px");
     expect(coarse).toContain("--tree-cat-row: 44px");
-    expect(coarse).toContain("inset-block: -22px");
+    expect(coarse).toContain(".cms-tree-insert { height: 44px; }");
+    expect(coarse).toContain("inset-block: 0");
+    expect(coarse).toContain("width: 44px; height: 44px");
     expect(coarse).toContain("opacity: .55");
     expect(coarse).toContain("pointer-events: auto");
   });

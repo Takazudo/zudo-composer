@@ -95,6 +95,7 @@ export function useMenu(triggerRef: MenuTriggerRef, options: UseMenuOptions = {}
         else openMenu("first");
       },
       onKeyDown: (event) => {
+        if (event.isComposing || event.keyCode === 229) return;
         if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
           // Enter/Space would otherwise fire the click handler too, toggling twice.
           event.preventDefault();
@@ -109,6 +110,7 @@ export function useMenu(triggerRef: MenuTriggerRef, options: UseMenuOptions = {}
         }
         if (event.key === "Escape" && open) {
           event.preventDefault();
+          event.stopPropagation();
           closeMenu();
         }
       },
