@@ -84,6 +84,7 @@ export class MappingEditorController {
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
   private refreshRevision = 0;
+  private pendingFlush: Promise<void> | null = null;
 
   constructor(
     readonly provider: MappingProvider,
@@ -255,10 +256,20 @@ export class MappingEditorController {
   setPreviewCurrent(): void { if (this.current.previewDocument) this.set({ ...this.current, previewStatus: "current", message: "Preview is current." }); }
 
   async flush(): Promise<void> {
-    const record = this.current.mapping; if (!record || this.current.saveStatus === "saved") return;
-    this.set({ ...this.current, saveStatus: "saving", message: "Saving Mapping…" });
-    try { await this.provider.store.put(record); await this.refreshLibrary(); this.set({ ...this.current, saveStatus: "saved", message: "All changes saved." }); }
-    catch (reason) { this.set({ ...this.current, saveStatus: "error", message: reason instanceof Error ? reason.message : "Mapping save failed." }); throw reason; }
+    if (this.pendingFlush) return this.pendingFlush;
+    const drain = async () => {
+      while (this.current.mapping && this.current.saveStatus !== "saved") {
+        const record = this.current.mapping;
+        this.set({ ...this.current, saveStatus: "saving", message: "Saving Mapping…" });
+        try {
+          await this.provider.store.put(record);
+          await this.refreshLibrary();
+          if (this.current.mapping === record) this.set({ ...this.current, saveStatus: "saved", message: "All changes saved." });
+        } catch (reason) { this.set({ ...this.current, saveStatus: "error", message: reason instanceof Error ? reason.message : "Mapping save failed." }); throw reason; }
+      }
+    };
+    this.pendingFlush = drain();
+    try { await this.pendingFlush; } finally { this.pendingFlush = null; }
   }
 
   async retrySave(): Promise<void> { if (this.current.mapping) { this.set({ ...this.current, saveStatus: "dirty" }); await this.flush(); } }
@@ -348,7 +359,7 @@ export class MappingEditorController {
     if (outcome.status === "resolved") return outcome.entry;
     throw new Error(outcome.status === "not-found" ? "Sample Entry could not be found in the selected Content provider." : outcome.reason);
   }
-  private async refreshLibrary(): Promise<void> { this.set({ ...this.current, mappings: await this.provider.store.list() }); await this.refreshLibraryDetails(); }
+  private async refreshLibrary(): Promise<void> { const mappings = await this.provider.store.list(); this.set({ ...this.current, mappings }); await this.refreshLibraryDetails(); }
   private async refreshLibraryDetails(): Promise<void> {
     const details: Record<string, MappingLibraryDetail> = {};
     await Promise.all(this.current.mappings.map(async (summary) => {

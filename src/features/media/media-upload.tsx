@@ -1,5 +1,6 @@
 import type { JSX, RefObject, TargetedEvent } from "preact";
 import { useCallback, useEffect, useReducer, useRef, useState } from "preact/hooks";
+import { useWorkspace } from "../../app/workspace-context";
 import { MEDIA_MAX_BYTE_LENGTH, type MediaRecord } from "../../media";
 import { UploadIcon, XMarkIcon } from "../../components/icons";
 import { Button, Chip, type ChipTone } from "../../components/ui";
@@ -66,6 +67,9 @@ function messageForError(reason: unknown): string {
 }
 
 export function useMediaUpload({ store, refresh, now = Date.now }: UseMediaUploadOptions): MediaUploadController {
+  const integration = useWorkspace()?.integration;
+  const pending = useRef<Promise<void>>(Promise.resolve());
+  const sessionRef = useRef<ReturnType<NonNullable<typeof integration>["sessions"]["register"]> | null>(null);
   const [state, dispatch] = useReducer(reduceMediaUploadDrop, initialMediaUploadState);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,6 +79,12 @@ export function useMediaUpload({ store, refresh, now = Date.now }: UseMediaUploa
   // reducer: a rejected claim leaves the reducer's state untouched, and the two
   // counters would drift apart the first time a drop landed on a busy queue.
   const batch = useRef(0);
+  useEffect(() => {
+    if (!integration) return;
+    const session = integration.sessions.register({ feature: "Media upload", providerId: integration.mediaProvider?.descriptor.id ?? "media-unavailable", workspaceId: integration.workspace.id }, { flush: () => pending.current });
+    sessionRef.current = session;
+    return () => { session.detach(); sessionRef.current = null; };
+  }, [integration]);
 
   useEffect(() => () => { alive.current = false; }, []);
 
@@ -97,8 +107,10 @@ export function useMediaUpload({ store, refresh, now = Date.now }: UseMediaUploa
       });
     });
     dispatch({ type: "claim", source, batch: claimed, files });
+    sessionRef.current?.changed();
 
-    void (async () => {
+    pending.current = (async () => {
+      const failures: string[] = [];
       try {
         for (const [index, file] of files.entries()) {
           const id = mediaUploadItemId(source, claimed, index);
@@ -107,19 +119,23 @@ export function useMediaUpload({ store, refresh, now = Date.now }: UseMediaUploa
             const record = await store.upload(file);
             if (alive.current) dispatch({ type: "stored", id, fileName: record.document.fileName });
           } catch (reason) {
+            failures.push(messageForError(reason));
             if (alive.current) dispatch({ type: "failed", id, message: messageForError(reason) });
           }
         }
         try {
           await refresh();
         } catch (reason) {
+          failures.push(messageForError(reason));
           if (alive.current) dispatch({ type: "reject", message: messageForError(reason) });
         }
+        if (failures.length) throw new Error(failures.join("; "));
       } finally {
         ingestGuard.current.busy = false;
         if (alive.current) dispatch({ type: "settled" });
       }
     })();
+    void pending.current.catch(() => undefined); // The panel and shared save barrier both retain the failure.
     return true;
   }, [now, refresh, store]);
 

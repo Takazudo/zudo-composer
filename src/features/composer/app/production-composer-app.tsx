@@ -34,6 +34,7 @@ import {
   type ReuseConsumerLifecycleOutcome,
 } from "../../../composer/browser";
 import { notifyRouteSelection, parseIntent } from "../../../app/route-intents";
+import { useWorkspace } from "../../../app/workspace-context";
 import { Banner, Button, EmptyState } from "../../../components/ui";
 import type { ComposerComponentProvider } from "../active-pack";
 import { CompositionLibrary } from "../library";
@@ -126,7 +127,7 @@ function lifecycleOutcomeMessage(outcome: Exclude<ReuseConsumerLifecycleOutcome,
 function browserNavigation(): ComposerBrowserNavigation {
   return {
     read: () => ({ pathname: window.location.pathname, search: window.location.search, hash: window.location.hash }),
-    push: (url) => { window.history.pushState(null, "", url); notifyRouteSelection(); },
+    push: (url) => { window.history.pushState(null, "", url); notifyRouteSelection("push"); },
     replace: (url) => { window.history.replaceState(null, "", url); notifyRouteSelection(); },
     subscribe: (listener) => {
       let scheduled = false;
@@ -189,6 +190,7 @@ export function ProductionComposerApp({
   preview,
   readIntentSearch,
 }: ProductionComposerAppProps): JSX.Element {
+  const workspaceIntegration = useWorkspace()?.integration;
   const reuseManifest = componentProvider.catalog;
   const navigation = useMemo(
     () => injectedNavigation ?? browserNavigation(),
@@ -254,6 +256,18 @@ export function ProductionComposerApp({
   stateRef.current = state;
   const activeRef = state?.view === "detail" ? routeRef(state.route) : null;
   const activeProvider = activeRef ? providersById.get(activeRef.providerId) : undefined;
+  const editorSession = state?.view === "detail" ? state.session as ProductionDetailSession : null;
+  useEffect(() => {
+    if (!workspaceIntegration || !editorSession) return;
+    const ref = editorSession.queue.ref;
+    const registered = workspaceIntegration.sessions.register({ feature: "Composition", ...ref, workspaceId: workspaceIntegration.workspace.id }, {
+      flush: async () => { editorSession.flushPendingProps(ref); await editorSession.queue.flush(); },
+      retry: () => editorSession.queue.retry(),
+    });
+    let revision = editorSession.queue.state.draftRevision;
+    const unsubscribe = editorSession.queue.subscribe((next) => { if (revision !== next.draftRevision) { revision = next.draftRevision; registered.changed(); } });
+    return () => { unsubscribe(); registered.detach(); };
+  }, [workspaceIntegration, editorSession]);
   const activeReuseService = useMemo(
     () => (activeProvider ? createCompositionReuseService(activeProvider.store, reuseManifest) : null),
     [activeProvider],

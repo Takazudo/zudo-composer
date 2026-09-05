@@ -80,7 +80,7 @@ export function SitemapperIntegration({
   idFactory,
   now,
 }: SitemapperIntegrationProps): JSX.Element {
-  const controller = useSitemapperController({ record, store, idFactory, now });
+  const controller = useSitemapperController({ record, providerId, store, idFactory, now });
   const document = controller.state.document;
   const selectedId = controller.state.selectedId;
   const dispatch = controller.dispatch;

@@ -286,15 +286,25 @@ so the host updates navigation without remounting that editor.
 
 `useWorkspace()` exposes the current integration, `navigate`, `reset`, `open`,
 busy state and visible failure. Feature factories consume `integration.sessions`
-as described above; later feature owners must register their debounced drafts
-and pending operations. Shell navigation and browser traversal await this shared
-barrier before changing route. Mapping and Sitemap wrappers route imperative
+as described above. Current Mapping and Content controllers, Composition queues
+and pending props, Sitemap queues and debounced props, and Media upload batches
+register live flush handles. Detaching presentation retains pending writes and
+failures. Shell navigation and browser traversal await this shared barrier before
+changing route. A document-level listener covers body-portaled menu links too.
+Rejected browser traversal returns to the current history entry without replacing
+its destination, preserving usable Back/Forward history. Mapping and Sitemap wrappers route imperative
 navigation through the same callback. Summary subscriptions refresh Overview and
 rail counts after integration change notifications; subscriptions are disposed
 on replacement. Retry opens existing data. Reset swaps the integration only after
 `workspace.reset()` returns its initialized replacement; failure preserves the
 old workspace. Active Sitemap selection uses metadata CAS and registers its
 pending write with shared sessions.
+
+Content keeps the selected declarative `viewId` in presentation state. The Entry
+form follows its ordered field IDs without changing model data or completeness
+checks. Missing views remain explicit errors with the original query available
+for repair. A model/entry/view intent must finish successfully before selection
+updates rewrite the address bar.
 
 Review & release explicitly reports its unavailable release services until the
 release integration lands. Website preview labels the current visitor route as

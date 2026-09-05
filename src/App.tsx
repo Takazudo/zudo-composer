@@ -49,13 +49,16 @@ export function App({ themeController, integration }: AppProps = {}) {
   const [ready, setReady] = useState(false);
   const navigationTicket = useRef(0);
   const replacing = useRef(false);
+  const historyIndex = useRef<number>(Number.isInteger(window.history.state?.workspaceIndex) ? window.history.state.workspaceIndex : 0);
+  const traversal = useRef<{ phase: "restoring" | "waiting" | "committing"; target: string; targetIndex: number; delta: number } | null>(null);
+  useEffect(() => { window.history.replaceState({ ...window.history.state, workspaceIndex: historyIndex.current }, ""); }, []);
   const flush = async () => {
     const outcome = await providers.sessions.flush();
     if (outcome.status === "failed") throw new Error(outcome.failures.map((failure) => `${failure.feature} (${failure.providerId}${failure.recordId ? ` / ${failure.recordId}` : ""}): ${failure.error.message}`).join("; "));
     if (outcome.status === "changed") throw new Error("Edits changed while saving. Finish the edit and try navigation again.");
   };
   const navigate = async (href: string, replace = false): Promise<boolean> => {
-    if (replacing.current) return false;
+    if (replacing.current || traversal.current) return false;
     const ticket = ++navigationTicket.current;
     setBusy(true); setError(null);
     try {
@@ -66,7 +69,10 @@ export function App({ themeController, integration }: AppProps = {}) {
       if (isSitePath(url.pathname) || url.pathname === "/composer/preview") { window.location.assign(url.href); return true; }
       const next = url.pathname + url.search + url.hash;
       if (next !== locationRef.current) setRouteEpoch((value) => value + 1);
-      if (replace || next !== locationRef.current) window.history[replace ? "replaceState" : "pushState"](null, "", next);
+      if (replace || next !== locationRef.current) {
+        if (!replace) historyIndex.current++;
+        window.history[replace ? "replaceState" : "pushState"]({ workspaceIndex: historyIndex.current }, "", next);
+      }
       setLocation(next);
       requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus());
       return true;
@@ -74,7 +80,7 @@ export function App({ themeController, integration }: AppProps = {}) {
     finally { if (ticket === navigationTicket.current) setBusy(false); }
   };
   const replaceWorkspace = async (action: () => Promise<ProductionProviderIntegration>): Promise<boolean> => {
-    if (replacing.current || busy) return false;
+    if (replacing.current || traversal.current || busy) return false;
     replacing.current = true;
     setBusy(true); setError(null);
     try { await flush(); const replacement = await action(); setProviders(replacement); setReady(true); return true; }
@@ -103,16 +109,52 @@ export function App({ themeController, integration }: AppProps = {}) {
       // must not independently transition before the workspace save barrier.
       event.stopImmediatePropagation();
       const target = window.location.pathname + window.location.search + window.location.hash;
-      window.history.replaceState(null, "", locationRef.current);
-      void navigate(target, true);
+      const transition = traversal.current;
+      if (transition?.phase === "committing") {
+        historyIndex.current = transition.targetIndex;
+        window.history.replaceState({ ...window.history.state, workspaceIndex: historyIndex.current }, "");
+        traversal.current = null;
+        setRouteEpoch((value) => value + 1); setLocation(target); setBusy(false);
+        requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus());
+        return;
+      }
+      if (transition?.phase === "restoring") {
+        if (Number.isInteger(event.state?.workspaceIndex) && event.state.workspaceIndex !== historyIndex.current) { window.history.go(historyIndex.current - event.state.workspaceIndex); return; }
+        transition.phase = "waiting";
+        void flush().then(() => { if (traversal.current !== transition) return; transition.phase = "committing"; window.history.go(transition.delta); }).catch((cause: unknown) => {
+          if (traversal.current !== transition) return;
+          traversal.current = null; setBusy(false); setError(cause instanceof Error ? cause.message : "Navigation failed.");
+        });
+        return;
+      }
+      const targetIndex = Number.isInteger(event.state?.workspaceIndex) ? event.state.workspaceIndex as number : historyIndex.current - 1;
+      const delta = targetIndex - historyIndex.current;
+      if (!delta) return;
+      navigationTicket.current++; // Supersede any pending link navigation before rolling back.
+      // Restore the current entry by traversal, never by overwriting the
+      // destination. A rejected flush leaves Back/Forward history intact.
+      traversal.current = { phase: "restoring", target, targetIndex, delta };
+      setBusy(true); setError(null); window.history.go(-delta);
     };
-    const selection = () => {
+    const selection = (event: Event) => {
       const next = window.location.pathname + window.location.search + window.location.hash;
+      if ((event as CustomEvent).detail === "push") historyIndex.current++;
+      window.history.replaceState({ ...window.history.state, workspaceIndex: historyIndex.current }, "");
       locationRef.current = next; setLocation(next);
+    };
+    const click = (event: MouseEvent) => {
+      if (isSitePath(new URL(locationRef.current, window.location.origin).pathname)) return;
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !(event.target instanceof Element)) return;
+      const anchor = event.target.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.getAttribute("aria-disabled") === "true") return;
+      const url = new URL(anchor.href);
+      if (url.origin !== window.location.origin || !["/", "/content", "/composer", "/mapping", "/sitemapper", "/media", "/review", "/website-preview", "/site"].includes(url.pathname)) return;
+      event.preventDefault(); void navigate(url.href);
     };
     window.addEventListener("popstate", pop, true);
     window.addEventListener("workspace-route-selection", selection);
-    return () => { window.removeEventListener("popstate", pop, true); window.removeEventListener("workspace-route-selection", selection); };
+    document.addEventListener("click", click);
+    return () => { window.removeEventListener("popstate", pop, true); window.removeEventListener("workspace-route-selection", selection); document.removeEventListener("click", click); };
   });
   // One read model for the whole chrome; the rail's counts come from it, and
   // the Dashboard route reuses this instance rather than initializing a second.
@@ -136,14 +178,7 @@ export function App({ themeController, integration }: AppProps = {}) {
   else if (path === "/review") content = <main class="route-placeholder"><h1>Review & release</h1><p>Release checks and activation are not available in this workspace yet.</p><p>Preview does not approve or publish changes.</p></main>;
   else if (path === "/website-preview") content = <WebsitePreview />;
   else content = <NotFound />;
-  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><div onClick={(event) => {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !(event.target instanceof Element)) return;
-    const anchor = event.target.closest("a[href]") as HTMLAnchorElement | null;
-    if (!anchor || anchor.target || anchor.hasAttribute("download")) return;
-    const url = new URL(anchor.href);
-    if (url.origin !== window.location.origin || !["/", "/content", "/composer", "/mapping", "/sitemapper", "/media", "/review", "/website-preview", "/site"].includes(url.pathname)) return;
-    event.preventDefault(); void navigate(url.href);
-  }}><Shell path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}><div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></div></WorkspaceContext.Provider>;
+  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}><div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
 }
 
 function WebsitePreview() {

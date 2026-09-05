@@ -14,6 +14,19 @@ import {
 } from "./harness";
 
 describe("MappingEditorController", () => {
+  it("drains newer edits accepted during an in-flight shared flush", async () => {
+    const source = mappingRecord([READY_BINDING]); const h = harness([source]);
+    await h.controller.initialize(); await h.controller.open(source.id);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const original = h.provider.store.put.bind(h.provider.store);
+    const put = vi.spyOn(h.provider.store, "put").mockImplementationOnce(async (record) => { await gate; await original(record); });
+    h.controller.rename("First"); const pending = h.controller.flush();
+    h.controller.rename("Newest"); const joined = h.controller.flush();
+    release(); await Promise.all([pending, joined]);
+    expect(put).toHaveBeenCalledTimes(2); expect(h.records.get(source.id)?.document.name).toBe("Newest");
+    expect(h.controller.state.saveStatus).toBe("saved");
+  });
   it("creates, resolves, binds, evaluates, saves, reloads, reorders and deletes", async () => {
     const h = harness();
     await h.controller.initialize();

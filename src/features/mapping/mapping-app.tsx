@@ -2,6 +2,7 @@
 /** @jsxImportSource preact */
 
 import type { JSX } from "preact";
+import { useWorkspace } from "../../app/workspace-context";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Banner, Button } from "../../components/ui";
 import type { ContentCatalog } from "../../content";
@@ -45,6 +46,7 @@ function defaultNavigate(href: string): void {
 }
 
 export function MappingApp(props: MappingRouteContentProps): JSX.Element {
+  const integration = useWorkspace()?.integration;
   const controller = useMemo(
     () => props.controller ?? createMappingEditorController(
       props.provider,
@@ -65,6 +67,13 @@ export function MappingApp(props: MappingRouteContentProps): JSX.Element {
   const parsedDeepLink = useMemo(() => parseMappingDeepLink({ pathname: routePathname, search: routeSearch }), [routePathname, routeSearch]);
 
   useEffect(() => controller.subscribe(setState), [controller]);
+  useEffect(() => {
+    if (!integration) return;
+    const session = integration.sessions.register({ feature: "Mapping", providerId: props.provider.descriptor.id, workspaceId: integration.workspace.id }, { flush: () => controller.flush() });
+    let draft = controller.state.mapping;
+    const unsubscribe = controller.subscribe((next) => { if (draft !== next.mapping) { draft = next.mapping; session.changed(); } });
+    return () => { unsubscribe(); session.detach(); };
+  }, [controller, integration, props.provider]);
   useEffect(() => {
     if (initializationStarted.current || controller.state.phase !== "idle") return;
     initializationStarted.current = true;

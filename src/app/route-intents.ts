@@ -17,7 +17,7 @@ const PARAMS: Record<RouteIntentRoute, readonly string[]> = { composer: ["provid
 export const isIntentProviderId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(value);
 
 /** Editors publish their own accepted selection without asking the host to remount them. */
-export function notifyRouteSelection(): void { window.dispatchEvent(new Event("workspace-route-selection")); }
+export function notifyRouteSelection(action: "push" | "replace" = "replace"): void { window.dispatchEvent(new CustomEvent("workspace-route-selection", { detail: action })); }
 
 /** Exact paths and single-valued query fields. No hash routes or identity fallback. */
 export function parseIntent(input?: RouteIntentLocation | URL | string): RouteIntentParseOutcome {

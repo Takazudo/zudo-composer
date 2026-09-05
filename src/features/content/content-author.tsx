@@ -255,10 +255,12 @@ export interface ContentEntryAuthorProps {
  */
 export function ContentEntryAuthor({ state, controller, run }: ContentEntryAuthorProps): JSX.Element {
   const entry = state.entry!;
-  const fields = state.model!.document.fields;
+  const allFields = state.model!.document.fields;
+  const view = state.model!.document.presentation?.views.find((item) => item.id === state.viewId);
+  const fields = view ? view.fieldIds.flatMap((id) => allFields.filter((field) => field.id === id)) : allFields;
   // The auto-slug source is the field the spec names, not whatever happens to
   // be first: a `text` field keyed `title`.
-  const titleField = fields.find((field) => field.kind === "text" && field.key === "title") ?? null;
+  const titleField = allFields.find((field) => field.kind === "text" && field.key === "title") ?? null;
 
   // The host rebuilds `run` every render; the effect below reaches it through a
   // ref so its dependency list stays a statement about the Entry, not the host.

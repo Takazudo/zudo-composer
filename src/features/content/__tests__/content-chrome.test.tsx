@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ContentApp } from "../content-app";
 import { createContentAuthoringController } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
+import { createContentEntryRecord, createContentModelRecord } from "../../../content";
 
 // Vitest runs without `globals`, so Testing Library never installs its own
 // auto-cleanup and a second render would query against both trees.
@@ -27,6 +28,20 @@ function unload(): boolean {
 }
 
 describe("Content route intents", () => {
+  it("applies the pinned view field list and retains its query identity", async () => {
+    const model = createContentModelRecord({ name: "People", kind: "collection", fields: [
+      { id: "title", key: "title", label: "Title", kind: "text", required: true },
+      { id: "summary", key: "summary", label: "Summary", kind: "text", required: false },
+      { id: "private", key: "private", label: "Private detail", kind: "text", required: false },
+    ] }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
+    model.document.presentation = { groups: [], inverses: [], views: [{ id: "contact", label: "Contact", fieldIds: ["summary"] }] };
+    const entry = createContentEntryRecord(model.id, { title: "Person", summary: "Visible" }, { id: "person", timestamp: model.createdAt });
+    visit("/content?provider=content-indexeddb&model=people&entry=person&view=contact");
+    render(<ContentApp provider={createMemoryContentProvider({ models: [model], entries: [entry] })} />);
+    expect(await screen.findByRole("textbox", { name: "Summary" })).toHaveValue("Visible");
+    expect(screen.queryByRole("textbox", { name: "Private detail" })).toBeNull();
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("view")).toBe("contact"));
+  });
   it("opens the model and Entry the link names", async () => {
     visit("/content?provider=content-indexeddb&model=articles&entry=entry-1");
     render(<ContentApp provider={createMemoryContentProvider()} />);
@@ -35,6 +50,12 @@ describe("Content route intents", () => {
     await waitFor(() => expect(title).toHaveValue("Hello"));
     const tree = screen.getByRole("tree", { name: "Content" });
     expect(within(tree).getByRole("treeitem", { name: /^Hello/ })).toHaveAttribute("aria-selected", "true");
+  });
+  it("keeps an unavailable view explicit instead of rewriting it to the model route", async () => {
+    visit("/content?provider=content-indexeddb&model=articles&view=missing");
+    render(<ContentApp provider={createMemoryContentProvider()} />);
+    expect(await screen.findByText('Content view "missing" is unavailable for this model.')).toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get("view")).toBe("missing");
   });
 
   it("reports a malformed link instead of quietly opening the bare route", async () => {

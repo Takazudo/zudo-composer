@@ -1,4 +1,5 @@
 import type { JSX } from "preact";
+import { useWorkspace } from "../../app/workspace-context";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../app/chrome-context";
 import { formatIntent, notifyRouteSelection, parseIntent } from "../../app/route-intents";
@@ -44,8 +45,8 @@ function statusOf(status: ContentSaveStatus, detail: string, onRetry: () => void
   }
 }
 
-function contentHref(providerId: string, modelId: string, entryId?: string): string {
-  return formatIntent(entryId === undefined ? { route: "content", providerId, modelId } : { route: "content", providerId, modelId, entryId });
+function contentHref(providerId: string, modelId: string, entryId?: string, viewId?: string | null): string {
+  return formatIntent({ route: "content", providerId, modelId, ...(entryId ? { entryId } : {}), ...(viewId ? { viewId } : {}) });
 }
 
 /**
@@ -58,6 +59,7 @@ function contentHref(providerId: string, modelId: string, entryId?: string): str
  * remains authoritative and the app chrome owns where its state is shown.
  */
 export function ContentApp({ provider, controller: supplied, componentProvider, createPreviewSource }: ContentRouteContentProps): JSX.Element {
+  const integration = useWorkspace()?.integration;
   const controller = useMemo(() => supplied ?? createContentAuthoringController(provider), [provider, supplied]);
   const [state, setState] = useState<ContentAuthoringState>(controller.state);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +71,15 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   const overflow = useMenu(overflowRef, { align: "end" });
 
   useEffect(() => controller.subscribe(setState), [controller]);
+  useEffect(() => {
+    if (!integration) return;
+    const session = integration.sessions.register({ feature: "Content", providerId: provider.descriptor.id, workspaceId: integration.workspace.id }, { flush: () => controller.flushSessions(), retry: () => controller.retrySave() });
+    let model = controller.state.model, entry = controller.state.entry;
+    const unsubscribe = controller.subscribe((next) => {
+      if (model !== next.model || entry !== next.entry) { model = next.model; entry = next.entry; session.changed(); }
+    });
+    return () => { unsubscribe(); session.detach(); };
+  }, [controller, integration, provider]);
   useEffect(() => { if (controller.state.phase === "idle") void controller.initialize(); }, [controller]);
 
   const run = (action: () => void | Promise<void>) => {
@@ -83,17 +94,20 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   // just prepared. A malformed link is reported rather than silently opening
   // the bare route.
   const appliedIntent = useRef(false);
+  const [intentAccepted, setIntentAccepted] = useState(false);
   useEffect(() => {
     if (appliedIntent.current || state.phase !== "ready") return;
     appliedIntent.current = true;
     const outcome = parseIntent();
     if (outcome.status === "invalid") { setError(outcome.message); return; }
-    if (outcome.status !== "matched" || outcome.intent.route !== "content") return;
+    if (outcome.status !== "matched" || outcome.intent.route !== "content") { setIntentAccepted(true); return; }
     const intent = outcome.intent;
     if (intent.providerId !== provider.descriptor.id) { setError("The requested Content provider is unavailable."); return; }
     run(async () => {
       await controller.openModel(intent.modelId);
+      controller.selectView(intent.viewId ?? null);
       if (intent.entryId !== undefined) await controller.openEntry(intent.entryId);
+      setIntentAccepted(true);
     });
   }, [controller, state.phase]);
 
@@ -101,11 +115,11 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   // author is looking at. `replaceState` keeps it out of the history stack —
   // choosing a record is not a navigation.
   useEffect(() => {
-    if (!appliedIntent.current || state.phase !== "ready") return;
+    if (!intentAccepted || state.phase !== "ready") return;
     if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") return;
-    window.history.replaceState(null, "", state.model ? contentHref(provider.descriptor.id, state.model.id, state.entry?.id) : CONTENT_ROUTE);
+    window.history.replaceState(null, "", state.model ? contentHref(provider.descriptor.id, state.model.id, state.entry?.id, state.viewId) : CONTENT_ROUTE);
     notifyRouteSelection();
-  }, [state.phase, state.model?.id, state.entry?.id]);
+  }, [intentAccepted, state.phase, state.model?.id, state.entry?.id, state.viewId]);
 
   const fields = state.model?.document.fields ?? [];
   const entryName = state.entry ? contentEntryLabel(state.entry, fields) : "";
