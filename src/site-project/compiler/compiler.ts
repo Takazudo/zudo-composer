@@ -64,10 +64,13 @@ function compositionSelector(ref: SiteProjectRecordRef): string {
 
 function refKey(ref: SiteProjectRecordRef): string { return `${ref.providerId}\u0000${ref.recordId}`; }
 function findCompositionNode(nodes: readonly CompositionNode[], id: string): CompositionNode | undefined { for (const node of nodes) { if (node.id === id) return node; for (const children of Object.values(node.slots)) { const found = findCompositionNode(children, id); if (found) return found; } } return undefined; }
-function cloneRepeatedNodes(nodes: readonly CompositionNode[], prefix: string): CompositionNode[] {
-  return nodes.map((node) => ({ ...structuredClone(node), id: `${prefix}--${node.id}`, slots: Object.fromEntries(Object.entries(node.slots).map(([slotId, children]) => [slotId, cloneRepeatedNodes(children, prefix)])) }));
+function repeatIdentityPart(value: string): string { return `${value.length.toString(36)}_${value}`; }
+function repeatedNodeId(attachmentId: string, entryId: string, nodeId: string): string { return `__zudo_collection_${repeatIdentityPart(attachmentId)}_${repeatIdentityPart(entryId)}_${repeatIdentityPart(nodeId)}`; }
+function cloneRepeatedNodes(nodes: readonly CompositionNode[], attachmentId: string, entryId: string): CompositionNode[] {
+  return nodes.map((node) => ({ ...structuredClone(node), id: repeatedNodeId(attachmentId, entryId, node.id), slots: Object.fromEntries(Object.entries(node.slots).map(([slotId, children]) => [slotId, cloneRepeatedNodes(children, attachmentId, entryId)])) }));
 }
 function countNodes(nodes: readonly CompositionNode[]): number { return nodes.reduce((count, node) => count + 1 + Object.values(node.slots).reduce((sum, children) => sum + countNodes(children), 0), 0); }
+function nodeIds(nodes: readonly CompositionNode[]): string[] { return nodes.flatMap((node) => [node.id, ...Object.values(node.slots).flatMap(nodeIds)]); }
 
 function compareOptional(left: string | undefined, right: string | undefined): number {
   return compareUnicodeCodePoints(left ?? "", right ?? "");
@@ -305,6 +308,7 @@ export async function compileSiteProject(
       .filter((item) => refKey(item.composition) === ownerKey)
       .sort((left, right) => left.order - right.order || compareUnicodeCodePoints(left.id, right.id));
     const occupied = new Set<string>();
+    const occupiedNodeIds = new Set(nodeIds(document.root));
     let total = countNodes(document.root);
     for (const attachment of attachments) {
       const attachmentPath = `$.collectionAttachments[?(@.id==${JSON.stringify(attachment.id)})]`;
@@ -330,7 +334,11 @@ export async function compileSiteProject(
         if (evaluation.status !== "ready" || !evaluation.document) { diagnostics.push({ severity: "blocking", code: "attachment-entry-mapping-blocked", message: `Collection Entry "${entry.id}" could not be mapped.`, path: attachmentPath, ...routeContext, entry: { providerId: mapping.document.contentModel.providerId, recordId: entry.id } }); return undefined; }
         const nested = await materializeCollectionAttachments(mapping.document.composition, evaluation.document, routeContext, [...stack, ownerKey]);
         if (!nested) return undefined;
-        const repeated = cloneRepeatedNodes(nested.root, `${attachment.id}--${entry.id}`);
+        const repeated = cloneRepeatedNodes(nested.root, attachment.id, entry.id);
+        const repeatedIds = nodeIds(repeated);
+        const repeatedIdSet = new Set(repeatedIds);
+        if (repeatedIdSet.size !== repeatedIds.length || repeatedIds.some((id) => occupiedNodeIds.has(id))) { diagnostics.push({ severity: "blocking", code: "attachment-node-id-conflict", message: `Stable repeated node identity for Entry "${entry.id}" conflicts with an authored or generated node.`, path: attachmentPath, ...routeContext, entry: { providerId: mapping.document.contentModel.providerId, recordId: entry.id } }); return undefined; }
+        for (const id of repeatedIds) occupiedNodeIds.add(id);
         if (slot.accepts && repeated.some((node) => !slot.accepts!.includes(node.componentId))) { diagnostics.push({ severity: "blocking", code: "attachment-slot-incompatible", message: `Mapped roots for Entry "${entry.id}" are not accepted by the target slot.`, path: attachmentPath, ...routeContext }); return undefined; }
         roots.push(...repeated);
         total += countNodes(repeated);
@@ -386,6 +394,7 @@ export async function compileSiteProject(
   };
 
   for (const item of expansion.diagnostics) {
+    if (item.severity === "nonblocking") continue;
     const indexed = indexedNodes.get(item.nodeId);
     if (!indexed) continue;
     const source = indexed.node.source;

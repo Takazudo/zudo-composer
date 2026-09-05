@@ -146,6 +146,8 @@ export function project(options: {
   attachments?: SiteProjectCollectionAttachment[];
 } = {}): SiteProject {
   const root = options.root ?? page("home", undefined, { kind: "composition", ref: { providerId: "indexeddb", recordId: "landing" } });
+  const mappings = options.mappings ?? [mapping()];
+  if (!options.mappings && root.source.kind === "mapping" && root.source.route.kind === "entry-field") mappings[0]!.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 100 } };
   return {
     schemaVersion: 2,
     id: "compiler-site",
@@ -154,7 +156,7 @@ export function project(options: {
     providers: {
       compositions: [{ id: "indexeddb", records: options.compositions ?? [composition("landing", "Static")] }],
       content: [{ id: "content-indexeddb", models: [options.contentModel ?? model()], entries: options.entries ?? [] }],
-      mappings: [{ id: "mapping-indexeddb", records: options.mappings ?? [mapping()] }],
+      mappings: [{ id: "mapping-indexeddb", records: mappings }],
       sitemaps: [{ id: "sitemap-indexeddb", records: [{ id: "main", createdAt: timestamp, updatedAt: timestamp, document: { schemaVersion: 2, id: "main", name: "Main", root: [root] } }] }],
     },
     activeSitemap: { providerId: "sitemap-indexeddb", recordId: "main" },

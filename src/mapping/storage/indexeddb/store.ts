@@ -4,7 +4,7 @@ import { decodeMappingRecord, MAPPING_PROVIDERS, summarizeMapping, validateMappi
 import { MAPPING_SCHEMA_VERSION } from "../../model";
 import type { MappingLoadOutcome, MappingRecord, MappingSeed, MappingStore, MappingSummary, MappingPersistenceOperation } from "../../model";
 import { mapMappingOperationalError, mappingPersistenceError, requestResult, transactionComplete, type IndexedDbMappingRuntime } from "./provider";
-import { MAPPING_META_KEYS, MAPPING_META_STORE_NAME, MAPPING_RECORDS_STORE_NAME } from "./types";
+import { MAPPING_DATABASE_VERSION, MAPPING_META_KEYS, MAPPING_META_STORE_NAME, MAPPING_RECORDS_STORE_NAME } from "./types";
 
 export class IndexedDbMappingStore implements MappingStore {
   readonly provider = MAPPING_PROVIDERS.indexeddb;
@@ -65,13 +65,12 @@ export class IndexedDbMappingStore implements MappingStore {
     await this.run("seed", "readwrite", async (store) => { for (const record of seed.mappings) { const raw = await requestResult(store.get(record.id)); if (raw === undefined) store.put(record); else this.decode(raw, "seed"); } });
   }
   async clear(): Promise<void> { await this.run("clear", "readwrite", async (store) => { for (const raw of await requestResult(store.getAll())) this.decode(raw, "clear"); store.clear(); }); }
-  async forceClear(): Promise<void> { await this.run("clear", "readwrite", async (store) => { store.clear(); }); }
   async scanForInitialization(operation: "list" | "initialize" = "initialize"): Promise<{ summaries: MappingSummary[]; failures: { id: string; status: "invalid" | "future-schema"; version?: number }[] }> {
     return this.run(operation, "readonly", async (store) => {
       const values = await requestResult(store.getAll()) as unknown[];
       const metaRecords = await requestResult(store.transaction.objectStore(MAPPING_META_STORE_NAME).getAll()) as unknown[];
       const meta = metaRecords.find((value) => (value as { key?: unknown })?.key === MAPPING_META_KEYS.schema);
-      if (metaRecords.length !== 2 || !meta || typeof meta !== "object" || Object.keys(meta).sort().join(",") !== "databaseVersion,key,mappingRecordSchemaVersion" || (meta as { databaseVersion?: unknown }).databaseVersion !== 1 || (meta as { mappingRecordSchemaVersion?: unknown }).mappingRecordSchemaVersion !== MAPPING_SCHEMA_VERSION) throw mappingPersistenceError(operation, "unsupported-version", "Mapping database schema metadata is missing or unsupported.", false);
+      if (metaRecords.length !== 2 || !meta || typeof meta !== "object" || Object.keys(meta).sort().join(",") !== "databaseVersion,key,mappingRecordSchemaVersion" || (meta as { databaseVersion?: unknown }).databaseVersion !== MAPPING_DATABASE_VERSION || (meta as { mappingRecordSchemaVersion?: unknown }).mappingRecordSchemaVersion !== MAPPING_SCHEMA_VERSION) throw mappingPersistenceError(operation, "unsupported-version", "Mapping database schema metadata is missing or unsupported.", false);
       await readMutationToken(store.transaction, MAPPING_META_STORE_NAME);
       const summaries: MappingSummary[] = [];
       const failures: { id: string; status: "invalid" | "future-schema"; version?: number }[] = [];

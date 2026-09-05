@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ContentEntrySnapshot, ContentModelRecord } from "../../../content";
-import type { MappingRecord } from "../../../mapping";
+import type { MappingCollectionQuery, MappingRecord } from "../../../mapping";
 import { SITEMAP_SCHEMA_VERSION, type SitemapDocument, type SitemapNode } from "../../model";
 import { authoredPath, expandSitemapRoutes } from "../expand";
 import type { MappingRouteCatalog } from "../types";
 
 const stamp = "2026-08-29T00:00:00.000Z";
-const mapping = (): MappingRecord => ({ id: "mapping", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 2, id: "mapping", name: "Articles", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "indexeddb", recordId: "article" }, mode: { kind: "single" }, bindings: [] } });
+const defaultQuery: MappingCollectionQuery = { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 100 };
+const mapping = (mode: "single" | "collection" = "collection", query: MappingCollectionQuery = defaultQuery): MappingRecord => ({ id: "mapping", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 2, id: "mapping", name: "Articles", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "indexeddb", recordId: "article" }, mode: mode === "single" ? { kind: "single" } : { kind: "collection", query }, bindings: [] } });
 const model = (kind: "single" | "collection" = "collection", fieldKind: "slug" | "text" = "slug"): ContentModelRecord => ({ id: "articles", createdAt: stamp, updatedAt: stamp, document: { description: "", schemaVersion: 1, id: "articles", name: "Articles", kind, fields: [
   { id: "slug", key: "slug", label: "Slug", required: true, kind: fieldKind },
   { id: "title", key: "title", label: "Title", required: false, kind: "text" },
@@ -16,7 +17,7 @@ const model = (kind: "single" | "collection" = "collection", fieldKind: "slug" |
 const snapshot = (values: readonly unknown[]): ContentEntrySnapshot => ({ model: model(), count: values.length, diagnostics: [], entries: values.map((value, index) => ({ lifecycle: "draft" as const, generation: 0, schemaVersion: 1, id: `entry-${index}`, modelId: "articles", createdAt: stamp, updatedAt: stamp, values: { slug: value as never, title: `Title ${index}` } })) });
 const page = (id: string, slug: string, source: SitemapNode["source"] = { kind: "unassigned" }, children: SitemapNode[] = []): SitemapNode => ({ id, title: id, slug, source, children });
 const document = (root: SitemapNode): SitemapDocument => ({ schemaVersion: SITEMAP_SCHEMA_VERSION, id: "site", name: "Site", root: [root] });
-const catalog = (options: { kind?: "single" | "collection"; values?: readonly unknown[]; fieldKind?: "slug" | "text"; readinessDiagnostic?: { code: string; message: string } } = {}): MappingRouteCatalog => ({ list: vi.fn(), resolveMapping: vi.fn(async () => ({ status: "resolved" as const, record: mapping() })), resolveDefinitionReadiness: vi.fn(async () => options.readinessDiagnostic ? ({ status: "blocked" as const, diagnostics: [options.readinessDiagnostic] }) : ({ status: "ready" as const })), resolveContentSnapshot: vi.fn(async () => ({ status: "resolved" as const, model: model(options.kind, options.fieldKind), snapshot: snapshot(options.values ?? ["first", "second"]) })) });
+const catalog = (options: { kind?: "single" | "collection"; mappingMode?: "single" | "collection"; query?: MappingCollectionQuery; values?: readonly unknown[]; fieldKind?: "slug" | "text"; readinessDiagnostic?: { code: string; message: string } } = {}): MappingRouteCatalog => ({ list: vi.fn(), resolveMapping: vi.fn(async () => ({ status: "resolved" as const, record: mapping(options.mappingMode ?? (options.kind === "single" ? "single" : "collection"), options.query) })), resolveDefinitionReadiness: vi.fn(async () => options.readinessDiagnostic ? ({ status: "blocked" as const, diagnostics: [options.readinessDiagnostic] }) : ({ status: "ready" as const })), resolveContentSnapshot: vi.fn(async () => ({ status: "resolved" as const, model: model(options.kind, options.fieldKind), snapshot: snapshot(options.values ?? ["first", "second"]) })) });
 const source = (route: { kind: "single" } | { kind: "entry-field"; fieldId: string; titleFieldId?: string }): SitemapNode["source"] => ({ kind: "mapping", ref: { providerId: "mapping", recordId: "mapping" }, route });
 
 describe("Sitemapper route expansion", () => {
@@ -31,6 +32,22 @@ describe("Sitemapper route expansion", () => {
     expect(result.routes.map((route) => [route.pathname, route.entryId])).toEqual([["/articles/one", "entry-0"], ["/articles/caf%C3%A9", "entry-1"]]);
     expect(result).toMatchObject({ derivedRouteCount: 2, samplePath: "/articles/one", diagnostics: [] });
     expect(node.children).toEqual([]);
+  });
+
+  it("honors collection query filters, pins, stable sort, dedupe, and limit while surfacing nonblocking diagnostics", async () => {
+    const query: MappingCollectionQuery = { publication: "include-drafts", conditions: [{ fieldId: "title", operator: "not-equals", value: "Title 2" }], sort: [{ fieldId: "title", direction: "desc" }], pins: [{ providerId: "content", modelId: "articles", recordId: "entry-0" }, { providerId: "content", modelId: "articles", recordId: "missing" }], limit: 2 };
+    const result = await expandSitemapRoutes({ document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ values: ["zero", "one", "two"], query }) });
+    expect(result.routes.map((route) => route.entryId)).toEqual(["entry-0", "entry-1"]);
+    expect(result.diagnostics).toEqual([expect.objectContaining({ code: "collection-query-pin-not-found", severity: "nonblocking", entryId: "missing" })]);
+    expect(result.nodes.get("articles")).toMatchObject({ status: "ready", mapping: { entryCount: 2 } });
+  });
+
+  it("blocks collection routes on stale query fields", async () => {
+    const query: MappingCollectionQuery = { ...defaultQuery, conditions: [{ fieldId: "gone", operator: "exists" }] };
+    const result = await expandSitemapRoutes({ document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ query }) });
+    expect(result.routes).toEqual([]);
+    expect(result.diagnostics).toEqual([expect.objectContaining({ code: "collection-query-stale-query-field", severity: "blocking" })]);
+    expect(result.nodes.get("articles")?.status).toBe("blocked");
   });
 
   it("retains ancestor-aware canonical output for every node", async () => {
@@ -94,8 +111,8 @@ describe("Sitemapper route expansion", () => {
   );
 
   it("diagnoses both route-mode mismatches and missing/non-slug fields", async () => {
-    const singleMismatch = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "single" }))), catalog: catalog({ kind: "collection" }) });
-    const collectionMismatch = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ kind: "single" }) });
+    const singleMismatch = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ kind: "collection", mappingMode: "single" }) });
+    const collectionMismatch = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "single" }))), catalog: catalog({ kind: "single", mappingMode: "collection" }) });
     const missing = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "gone" }))), catalog: catalog() });
     const wrong = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ fieldKind: "text" }) });
     expect([singleMismatch, collectionMismatch, missing, wrong].map((result) => result.diagnostics[0]?.code)).toEqual(["wrong-route-mode", "wrong-route-mode", "route-field-missing", "route-field-not-slug"]);

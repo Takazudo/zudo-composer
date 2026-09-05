@@ -20,14 +20,22 @@ function compareValues(left: JsonValue | undefined, right: JsonValue | undefined
   return compareUnicodeCodePoints(String(a), String(b));
 }
 
+function canonicalJson(value: JsonValue | undefined): string {
+  if (value === undefined) return "undefined";
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const object = value as Readonly<Record<string, JsonValue>>;
+  return `{${Object.keys(object).sort(compareUnicodeCodePoints).map((key) => `${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;
+}
+
 function conditionMatches(value: JsonValue | undefined, condition: MappingCollectionQuery["conditions"][number]): boolean {
   if (condition.operator === "exists") return value !== undefined && value !== null && !(typeof value === "string" && value.trim() === "");
   if (condition.operator === "contains") {
     if (typeof value === "string" && typeof condition.value === "string") return value.includes(condition.value);
-    if (Array.isArray(value)) return value.some((item) => JSON.stringify(item) === JSON.stringify(condition.value));
+    if (Array.isArray(value)) return value.some((item) => canonicalJson(item) === canonicalJson(condition.value));
     return false;
   }
-  const equal = JSON.stringify(value) === JSON.stringify(condition.value);
+  const equal = canonicalJson(value) === canonicalJson(condition.value);
   return condition.operator === "equals" ? equal : !equal;
 }
 
@@ -95,5 +103,5 @@ export function evaluateCollectionQuery(options: {
 }
 
 export function isScalarQueryField(field: ContentFieldDefinition): boolean {
-  return !["object", "list", "media-use", "reference-list"].includes(field.kind);
+  return !["object", "list", "media-use", "reference", "reference-list"].includes(field.kind);
 }

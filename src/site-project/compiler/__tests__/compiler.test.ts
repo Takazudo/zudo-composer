@@ -48,6 +48,7 @@ describe("SiteProject compiler", () => {
     const first = entry("a", "Alpha"); first.values.related = { providerId: "content-indexeddb", modelId: "articles", recordId: "b" };
     const second = entry("b", "Beta"); second.values.related = { providerId: "content-indexeddb", modelId: "articles", recordId: "a" };
     const routeMapping = mapping();
+    routeMapping.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 100 } };
     routeMapping.document.bindings[0] = { ...routeMapping.document.bindings[0]!, sourceFieldId: "related", projection: { kind: "route-link" } };
     const result = await compile(project({ root: page("articles", "articles", mappingSource()), contentModel, entries: [first, second], mappings: [routeMapping] }));
     expect(result.status).toBe("ready");
@@ -85,9 +86,31 @@ describe("SiteProject compiler", () => {
     if (result.status !== "ready") return;
     const children = result.build.routes[0]!.composition.document.root[0]!.slots.body!;
     expect(children.map((node) => node.props.title)).toEqual(["Zulu", "Alpha", "Beta"]);
-    expect(children.map((node) => node.id)).toEqual(["feed--z--landing-leaf", "feed--a--landing-leaf", "feed--b--landing-leaf"]);
+    expect(children.map((node) => node.id)).toEqual(["__zudo_collection_4_feed_1_z_c_landing-leaf", "__zudo_collection_4_feed_1_a_c_landing-leaf", "__zudo_collection_4_feed_1_b_c_landing-leaf"]);
     expect(value).toEqual(before);
     expect(result.build.routes[0]!.modules.some((item) => item.code.includes("Zulu"))).toBe(true);
+  });
+
+  it("uses injective length-prefixed repeat identities for adversarial valid ids", async () => {
+    const compileIdentity = async (attachmentId: string, entryId: string) => {
+      const owner = globalTemplate("owner"); delete owner.document.publication;
+      const itemMapping = mapping("landing"); itemMapping.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit: 1 } };
+      const result = await compile(project({ root: page("home", undefined, { kind: "composition", ref: { providerId: "indexeddb", recordId: "owner" } }), compositions: [owner, composition("landing")], entries: [entry(entryId)], mappings: [itemMapping], attachments: [{ id: attachmentId, order: 0, composition: { providerId: "indexeddb", recordId: "owner" }, target: { nodeId: "owner-root", slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: "article-page" } }] }));
+      expect(result.status).toBe("ready");
+      return result.status === "ready" ? result.build.routes[0]!.composition.document.root[0]!.slots.body![0]!.id : "";
+    };
+    const left = await compileIdentity("a--b", "c");
+    const right = await compileIdentity("a", "b--c");
+    expect(left).not.toBe(right);
+    expect([left, right]).toEqual(["__zudo_collection_4_a--b_1_c_c_landing-leaf", "__zudo_collection_1_a_4_b--c_c_landing-leaf"]);
+  });
+
+  it("preflights repeated identities against authored node ids", async () => {
+    const owner = globalTemplate("owner"); delete owner.document.publication;
+    owner.document.root[0]!.slots.body!.push({ id: "__zudo_collection_4_feed_1_a_c_landing-leaf", componentId: "leaf", componentVersion: 1, props: { title: "Authored" }, slots: {} });
+    const itemMapping = mapping("landing"); itemMapping.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit: 1 } };
+    const result = await compile(project({ root: page("home", undefined, { kind: "composition", ref: { providerId: "indexeddb", recordId: "owner" } }), compositions: [owner, composition("landing")], entries: [entry("a")], mappings: [itemMapping], attachments: [{ id: "feed", order: 0, composition: { providerId: "indexeddb", recordId: "owner" }, target: { nodeId: "owner-root", slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: "article-page" } }] }));
+    expect(result).toMatchObject({ status: "blocked", diagnostics: [expect.objectContaining({ code: "attachment-node-id-conflict", entry: { providerId: "content-indexeddb", recordId: "a" } })] });
   });
 
   it("enforces attachment slot cardinality", async () => {
@@ -151,7 +174,7 @@ describe("SiteProject compiler", () => {
   });
 
   it("blocks wrong Mapping route modes and invalid Entry slugs", async () => {
-    const wrongMode = await compile(project({ root: page("articles", "articles", mappingSource("single")), entries: [entry("one")] }));
+    const wrongMode = await compile(project({ root: page("articles", "articles", mappingSource()), entries: [entry("one")], mappings: [mapping()] }));
     expect(wrongMode).toMatchObject({ status: "blocked", diagnostics: [expect.objectContaining({ code: "wrong-route-mode", pathname: "/articles" })] });
 
     const invalidSlug = await compile(project({ root: page("articles", "articles", mappingSource()), entries: [entry("bad", "Bad", "bad/path")] }));
@@ -218,11 +241,13 @@ describe("SiteProject compiler", () => {
   });
 
   it("plans every mapped linked variant separately and deduplicates an unchanged dependency", async () => {
+    const linkedMapping = mapping("linked");
+    linkedMapping.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 100 } };
     const result = await compile(project({
       root: page("linked", "linked", mappingSource()),
       compositions: [globalTemplate(), linkedComposition()],
       entries: [entry("one", "One"), entry("two", "Two")],
-      mappings: [mapping("linked")],
+      mappings: [linkedMapping],
     }));
     expect(result.status).toBe("ready");
     if (result.status !== "ready") return;

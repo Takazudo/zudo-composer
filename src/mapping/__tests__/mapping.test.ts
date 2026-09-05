@@ -90,6 +90,24 @@ describe("Mapping model and resolver", () => {
     expect(contained).toMatchObject({ status: "ready", entries: [{ id: "tagged" }], diagnostics: [] });
   });
 
+  it("uses canonical structural equality and rejects reference sorting", () => {
+    const objectFields = [{ id: "left", key: "left", label: "Left", required: true, kind: "text" as const }, { id: "right", key: "right", label: "Right", required: true, kind: "text" as const }];
+    const richModel: ContentModelRecord = { ...model, document: { ...model.document, fields: [
+      ...model.document.fields,
+      { id: "payload", key: "payload", label: "Payload", required: false, kind: "object", fields: objectFields },
+      { id: "items", key: "items", label: "Items", required: false, kind: "list", item: { kind: "object", fields: objectFields } },
+      { id: "related", key: "related", label: "Related", required: false, kind: "reference", target: { providerId: "content", recordId: "articles" } },
+    ] } };
+    const candidate = { ...entry({ payload: { left: "a", right: "b" }, items: [{ left: "a", right: "b" }] }), id: "candidate" };
+    const canonical = evaluateCollectionQuery({ model: richModel, providerId: "content", entries: [candidate], query: { publication: "include-drafts", conditions: [
+      { fieldId: "payload", operator: "equals", value: { right: "b", left: "a" } },
+      { fieldId: "items", operator: "contains", value: { right: "b", left: "a" } },
+    ], sort: [], pins: [], limit: 5 } });
+    expect(canonical.entries.map((item) => item.id)).toEqual(["candidate"]);
+    const referenceSort = evaluateCollectionQuery({ model: richModel, providerId: "content", entries: [candidate], query: { publication: "include-drafts", conditions: [], sort: [{ fieldId: "related", direction: "asc" }], pins: [], limit: 5 } });
+    expect(referenceSort).toMatchObject({ status: "blocked", diagnostics: [{ code: "unsupported-query-field", fieldId: "related" }] });
+  });
+
   it("projects structured, media, reference, and explicit route-link values without object coercion", () => {
     const richField = { id: "meta", key: "meta", label: "Meta", required: false, kind: "object" as const, fields: [{ id: "label", key: "label", label: "Label", required: false, kind: "text" as const }] };
     const richEntry = { ...entry({}), values: { meta: { label: "Exact" } } };
@@ -155,6 +173,29 @@ describe("IndexedDB Mapping provider", () => {
   it("supports CRUD, deterministic idempotent seed, and startFresh reseeding", async () => { const seeded = mapping(); const provider = createIndexedDbMappingProvider({ idbFactory: new FDBFactory(), seed: { mappings: [seeded] } }); expect(await provider.initialization.initialize()).toMatchObject({ status: "ready", summaries: [{ id: seeded.id }] }); await provider.store.seed({ mappings: [{ ...seeded, document: { ...seeded.document, name: "Changed" } }] }); expect((await provider.store.get(seeded.id))).toMatchObject({ status: "loaded", record: { document: { name: "Article landing" } } }); await provider.store.put({ ...seeded, updatedAt: "2026-08-30T00:00:00.000Z", document: { ...seeded.document, name: "Updated" } }); expect(await provider.store.list()).toMatchObject([{ name: "Updated" }]); expect(await provider.store.delete(seeded.id)).toBe(true); expect(await provider.store.delete(seeded.id)).toBe(false); expect(await provider.initialization.startFresh()).toMatchObject({ status: "ready", summaries: [{ id: seeded.id }] }); });
   it("exposes listed/resolved Mapping catalog outcomes", async () => { const provider = createIndexedDbMappingProvider({ idbFactory: new FDBFactory() }); await provider.initialization.initialize(); await provider.store.put(mapping()); const catalog = createMappingCatalog([{ descriptor: provider.descriptor, store: provider.store }]); expect(await catalog.list()).toMatchObject({ status: "listed", entries: [{ ref: { providerId: "mapping-indexeddb", recordId: "article-landing" } }], failures: [] }); expect(await catalog.resolve({ providerId: "mapping-indexeddb", recordId: "article-landing" })).toMatchObject({ status: "resolved", record: { id: "article-landing" } }); expect(await catalog.resolve({ providerId: "missing", recordId: "article-landing" })).toEqual({ status: "not-found" }); });
   it("quarantines malformed/future records until explicit startFresh", async () => { const factory = new FDBFactory(); const provider = createIndexedDbMappingProvider({ idbFactory: factory }); await provider.initialization.initialize(); const db = await request(factory.open(MAPPING_DATABASE_NAME)); const tx = db.transaction(MAPPING_RECORDS_STORE_NAME, "readwrite"); tx.objectStore(MAPPING_RECORDS_STORE_NAME).put({ id: "bad", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: MAPPING_SCHEMA_VERSION + 1 } }); await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close(); const recovery = await provider.initialization.retry(); expect(recovery).toMatchObject({ status: "recovery-required", recovery: { reason: "future-schema", sourcePreserved: true, affectedRecordIds: ["bad"] } }); await expect(provider.store.list()).rejects.toMatchObject({ code: "validation" }); await expect(provider.store.put(createMappingRecord({ ...mapping().document, id: "bad", createdAt: stamp }))).rejects.toMatchObject({ code: "validation" }); await expect(provider.store.delete("bad")).rejects.toMatchObject({ code: "validation" }); await expect(provider.store.clear()).rejects.toMatchObject({ code: "validation" }); expect(await provider.initialization.startFresh()).toEqual({ status: "ready", summaries: [] }); });
+  it("preserves a physical v1 database until startFresh replaces it with exact v2 metadata", async () => {
+    const factory = new FDBFactory();
+    const opening = factory.open(MAPPING_DATABASE_NAME, 1);
+    opening.onupgradeneeded = () => {
+      const records = opening.result.createObjectStore(MAPPING_RECORDS_STORE_NAME, { keyPath: "id" });
+      records.createIndex(MAPPING_UPDATED_AT_INDEX, ["updatedAt", "id"]);
+      records.put({ id: "legacy", updatedAt: stamp });
+      const meta = opening.result.createObjectStore(MAPPING_META_STORE_NAME, { keyPath: "key" });
+      meta.put({ key: "mutation", token: 0 });
+      meta.put({ key: "schema", databaseVersion: 1, mappingRecordSchemaVersion: 1 });
+    };
+    (await request(opening)).close();
+    const provider = createIndexedDbMappingProvider({ idbFactory: factory });
+    expect(await provider.initialization.initialize()).toMatchObject({ status: "error", error: { code: "unsupported-version" } });
+    const preserved = await request(factory.open(MAPPING_DATABASE_NAME, 1));
+    expect(await request(preserved.transaction(MAPPING_RECORDS_STORE_NAME).objectStore(MAPPING_RECORDS_STORE_NAME).get("legacy"))).toEqual({ id: "legacy", updatedAt: stamp });
+    preserved.close();
+    expect(await provider.initialization.startFresh()).toEqual({ status: "ready", summaries: [] });
+    const current = await request(factory.open(MAPPING_DATABASE_NAME));
+    expect(current.version).toBe(2);
+    expect(await request(current.transaction(MAPPING_META_STORE_NAME).objectStore(MAPPING_META_STORE_NAME).get("schema"))).toEqual({ key: "schema", databaseVersion: 2, mappingRecordSchemaVersion: 2 });
+    current.close();
+  });
   it("keeps createdAt immutable on update", async () => { const provider = createIndexedDbMappingProvider({ idbFactory: new FDBFactory() }); await provider.initialization.initialize(); const record = mapping(); await provider.store.put(record); await expect(provider.store.put({ ...record, createdAt: "2026-08-30T00:00:00.000Z", updatedAt: "2026-08-30T00:00:00.000Z" })).rejects.toMatchObject({ code: "validation", retryable: false }); });
   it("types unavailable, blocked, abort, newer-version, and versionchange states", async () => { expect(await createIndexedDbMappingProvider({ idbFactory: null }).initialization.initialize()).toMatchObject({ status: "error", error: { code: "unavailable", retryable: true } }); const blockedRequest = {} as IDBOpenDBRequest; const blockedFactory = { open: () => { queueMicrotask(() => blockedRequest.onblocked?.(new Event("blocked") as IDBVersionChangeEvent)); return blockedRequest; } } as unknown as IDBFactory; expect(await createIndexedDbMappingProvider({ idbFactory: blockedFactory }).initialization.initialize()).toMatchObject({ status: "error", error: { code: "blocked", retryable: true } }); expect(mapMappingOperationalError("put", "readwrite", new DOMException("aborted", "AbortError"))).toMatchObject({ code: "transaction-failed", retryable: true }); const newerFactory = new FDBFactory(); const newer = await request(newerFactory.open(MAPPING_DATABASE_NAME, MAPPING_DATABASE_VERSION + 1)); newer.close(); expect(await createIndexedDbMappingProvider({ idbFactory: newerFactory }).initialization.initialize()).toMatchObject({ status: "error", error: { code: "unsupported-version", retryable: false } }); const factory = new FDBFactory(); const provider = createIndexedDbMappingProvider({ idbFactory: factory }); await provider.initialization.initialize(); const upgrade = await request(factory.open(MAPPING_DATABASE_NAME, MAPPING_DATABASE_VERSION + 1)); upgrade.close(); await expect(provider.store.list()).rejects.toMatchObject({ code: "versionchange", retryable: true }); });
 });

@@ -1,4 +1,5 @@
 import type { ContentEntryRecord } from "../../content";
+import { evaluateCollectionQuery } from "../../mapping/resolver/collection";
 import { isSitemapDisplayTitleFieldKind, type SitemapNode } from "../model";
 import type { DerivedSitemapRoute, ExpandSitemapRoutesOptions, SitemapMappingRouteMetadata, SitemapNodeRouteInfo, SitemapRouteDiagnostic, SitemapRouteExpansion } from "./types";
 
@@ -107,15 +108,24 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
         let content;
         try { content = await catalog.resolveContentSnapshot(resolved.record); }
         catch (error) { content = { status: "provider-error" as const, reason: error instanceof Error ? error.message : "Content snapshot provider failed." }; }
+        let routeEntries: readonly ContentEntryRecord[] = [];
+        let queryBlocked = false;
         if (content.status !== "resolved") {
           const code = content.status === "not-found" ? "content-model-not-found" : content.status === "invalid" ? "content-model-invalid" : "content-provider-failure";
           diagnose(node, code, content.status === "not-found" ? "The Mapping Content model was not found." : content.reason);
         } else {
+          routeEntries = content.snapshot.entries;
+          if (resolved.record.document.mode.kind === "collection" && content.model.document.kind === "collection") {
+            const query = evaluateCollectionQuery({ model: content.model, providerId: resolved.record.document.contentModel.providerId, entries: content.snapshot.entries, query: resolved.record.document.mode.query });
+            routeEntries = query.entries;
+            queryBlocked = query.status === "blocked";
+            for (const item of query.diagnostics) diagnose(node, `collection-query-${item.code}`, item.message, { severity: item.severity, ...(item.entryId ? { entryId: item.entryId } : {}) });
+          }
           mappingMetadataByNode.set(node.id, {
             name: resolved.record.document.name,
             model: content.model.document.name,
             kind: content.model.document.kind,
-            entryCount: content.snapshot.count,
+            entryCount: routeEntries.length,
             slugFields: content.model.document.fields
               .filter((field) => field.kind === "slug")
               .map((field) => ({ id: field.id, label: field.label })),
@@ -125,12 +135,14 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
           });
         }
         if (readiness.status === "ready" && content.status === "resolved") {
-          if (mappingSource.route.kind === "single") {
-            if (content.model.document.kind !== "single") diagnose(node, "wrong-route-mode", "Collection mappings require an Entry slug field route.");
+          if (resolved.record.document.mode.kind === "single") {
+            if (mappingSource.route.kind !== "single") diagnose(node, "wrong-route-mode", "Single Mappings require the single route mode.");
             else emit({ pathname: base, nodeId: node.id, sourceKind: "mapping" });
+          } else if (mappingSource.route.kind !== "entry-field") {
+            diagnose(node, "wrong-route-mode", "Collection Mappings require an Entry slug field route.");
           } else if (content.model.document.kind !== "collection") {
-            diagnose(node, "wrong-route-mode", "Single Content mappings require the single route mode.");
-          } else {
+            diagnose(node, "wrong-route-mode", "Collection Mappings require a collection Content model.");
+          } else if (!queryBlocked) {
             const fieldId = mappingSource.route.fieldId;
             const field = content.model.document.fields.find((candidate) => candidate.id === fieldId);
             if (!field) diagnose(node, "route-field-missing", "The selected Entry route field no longer exists.");
@@ -141,7 +153,7 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
               if (titleFieldId !== undefined && !titleField) diagnose(node, "title-field-missing", "The selected Entry title field no longer exists.");
               else if (titleField && !isSitemapDisplayTitleFieldKind(titleField.kind)) diagnose(node, "title-field-not-textual", "The selected Entry title field is not a suitable textual field.");
               else {
-                for (const entry of content.snapshot.entries) {
+                for (const entry of routeEntries) {
                   const segment = entrySegment((entry as ContentEntryRecord).values[field.id]);
                   if (!segment.ok) {
                     diagnose(node, segment.missing ? "entry-slug-missing" : "entry-slug-invalid", segment.missing ? "Entry slug is missing or empty." : "Entry slug contains a forbidden route delimiter.", { entryId: entry.id });
@@ -170,7 +182,7 @@ export async function expandSitemapRoutes({ document, catalog }: ExpandSitemapRo
     nodes.set(nodeId, {
       derivedRouteCount: nodeRoutes.length,
       ...(nodeRoutes[0] ? { samplePath: nodeRoutes[0].pathname } : {}),
-      status: nodeDiagnostics.length === 0 ? "ready" : "blocked",
+      status: nodeDiagnostics.some((item) => item.severity !== "nonblocking") ? "blocked" : "ready",
       diagnostics: nodeDiagnostics,
       ...(mappingMetadataByNode.get(nodeId) ? { mapping: mappingMetadataByNode.get(nodeId) } : {}),
     });
