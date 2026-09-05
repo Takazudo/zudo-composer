@@ -93,7 +93,7 @@ export interface ComposerController {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  add: (target: InsertionTarget, componentId: string) => void;
+  add: (target: InsertionTarget, componentId: string) => string | null;
   rename: (name: string) => void;
   updateProps: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing, removeProps?: readonly string[]) => void;
   /**

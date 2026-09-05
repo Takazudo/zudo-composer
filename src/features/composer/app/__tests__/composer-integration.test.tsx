@@ -439,6 +439,16 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     expect(code).toContain("Stack");
     expect(code.indexOf("SplitLayout")).toBeLessThan(code.indexOf("Stack"));
   });
+
+  it("keeps the shared tree pending-insert session through the chooser and restores its exact origin focus", async () => {
+    const s = setup(undefined, makeAbcDocument());
+    const origin = within(s.tree()).getByRole("button", { name: "Insert before Split Layout" });
+    fireEvent.click(origin);
+    fireEvent.click(within(s.chooser()).getByRole("button", { name: "Text" }));
+
+    expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.text, FIXTURE_IDS.split]);
+    await waitFor(() => expect(document.activeElement).toBe(origin));
+  });
 });
 
 describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {

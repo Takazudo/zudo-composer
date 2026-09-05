@@ -55,6 +55,14 @@ export interface UseComposerIntegrationOptions {
 export interface ComposerChooserState {
   open: boolean;
   target: InsertionTarget | null;
+  session?: ComposerInsertSession;
+}
+
+/** Composer projection of the shared tree's pending-insert transaction. */
+export interface ComposerInsertSession {
+  resolveTarget: () => InsertionTarget | null;
+  complete: () => void;
+  cancel: () => void;
 }
 
 export interface ComposerIntegrationApi {
@@ -68,8 +76,9 @@ export interface ComposerIntegrationApi {
   /** Set + persist the canvas viewport. */
   setViewport: (viewport: ComposerCanvasViewport) => void;
   chooser: ComposerChooserState;
-  openChooser: (target: InsertionTarget) => void;
+  openChooser: (target: InsertionTarget, session?: ComposerInsertSession) => void;
   closeChooser: () => void;
+  completeChooser: () => void;
   exportState: UseComposerExportResult;
   /** Latest parent-app resolver outcome for this provider-qualified record. */
   reuseResolution: GlobalTemplateResolutionOutcome | null;
@@ -92,7 +101,7 @@ export interface ComposerIntegrationApi {
   /** Canvas insert point → open the shared parent chooser for that exact target. */
   handleCanvasRequestAdd: (target: InsertionTarget) => void;
   /** Chooser confirm → add the component at the captured target. */
-  handleChooserAdd: (target: InsertionTarget, componentId: string) => void;
+  handleChooserAdd: (target: InsertionTarget, componentId: string) => boolean;
   /** Chooser expand-ancestors → reveal the freshly added node in the tree. */
   handleExpandAncestors: (nodeIds: string[]) => void;
   /** Keyboard remove → remove the given (selected) node. */
@@ -220,10 +229,21 @@ export function useComposerIntegration(
   );
 
   const [chooser, setChooser] = useState<ComposerChooserState>({ open: false, target: null });
-  const openChooser = useCallback((target: InsertionTarget) => {
-    setChooser({ open: true, target });
+  const chooserRef = useRef(chooser);
+  chooserRef.current = chooser;
+  const openChooser = useCallback((target: InsertionTarget, session?: ComposerInsertSession) => {
+    chooserRef.current.session?.cancel();
+    setChooser({ open: true, target, ...(session ? { session } : {}) });
   }, []);
-  const closeChooser = useCallback(() => setChooser({ open: false, target: null }), []);
+  const closeChooser = useCallback(() => {
+    chooserRef.current.session?.cancel();
+    setChooser({ open: false, target: null });
+  }, []);
+  const completeChooser = useCallback(() => {
+    chooserRef.current.session?.complete();
+    setChooser({ open: false, target: null });
+  }, []);
+  useEffect(() => () => chooserRef.current.session?.cancel(), []);
 
   // The export hook takes a document RESOLVER, and it's the controller's
   // `flushPropUpdates` (issue Takazudo/zudo-sg#291): a debounce-pending inspector edit lands —
@@ -259,7 +279,7 @@ export function useComposerIntegration(
   );
 
   const handleChooserAdd = useCallback(
-    (target: InsertionTarget, componentId: string) => controller.add(target, componentId),
+    (target: InsertionTarget, componentId: string) => controller.add(target, componentId) === null,
     [controller],
   );
 
@@ -316,6 +336,7 @@ export function useComposerIntegration(
     chooser,
     openChooser,
     closeChooser,
+    completeChooser,
     exportState,
     reuseResolution,
     titleFor,

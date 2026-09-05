@@ -1,16 +1,18 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 import "../../test-support/cleanup";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   COMPOSITION_PROVIDERS,
+  COMPOSITION_SCHEMA_VERSION,
   CompositionPersistenceError,
   type CompositionInitializationOutcome,
   type CompositionSummary,
   type ReuseCatalogEntry,
 } from "../../../../composer/browser";
 import { CompositionLibrary } from "../composition-library";
+import { fixtureComponentProvider } from "../../test-support/fixture-pack";
 import type {
   CompositionLibraryIntents,
   CompositionLibraryProviderCapability,
@@ -72,6 +74,7 @@ function fakeIntents(overrides: Partial<CompositionLibraryIntents> = {}): Compos
       documentName: "Alpha layout",
       outcome: { status: "ready" as const, kind: "ordinary" as const, generation: { ok: true, blocked: false, code: "export code", diagnostics: { byId: new Map(), opaqueIds: [] }, imports: [], nodeOrder: [] } as never },
     })),
+    resolvePreview: vi.fn(async (ref) => ({ status: "not-found" as const, ref, message: "No fixture preview." })),
     ...overrides,
   };
 }
@@ -80,7 +83,7 @@ function renderLibrary(
   intents = fakeIntents(),
   providers: readonly CompositionLibraryProviderCapability[] = defaultProviders,
 ) {
-  render(<CompositionLibrary providers={providers} initialProviderId="indexeddb" intents={intents} />);
+  render(<CompositionLibrary componentProvider={fixtureComponentProvider} providers={providers} initialProviderId="indexeddb" intents={intents} />);
   return intents;
 }
 
@@ -91,6 +94,67 @@ async function waitForLibrary(): Promise<void> {
 const dataRows = () => screen.getAllByRole("row").slice(1);
 
 describe("CompositionLibrary data and capability states", () => {
+  it("offers Cards/List views and resolves a provider-qualified inert runtime preview", async () => {
+    const intents = fakeIntents({
+      initialize: vi.fn(async () => ready([ALPHA])),
+      resolvePreview: vi.fn(async (ref) => ({
+        status: "ready" as const,
+        ref,
+        revision: "record-revision",
+        snapshot: {
+          localRecordId: ref.recordId,
+          document: {
+            schemaVersion: COMPOSITION_SCHEMA_VERSION,
+            id: ref.recordId,
+            name: "Alpha layout",
+            root: [],
+          },
+        },
+      })),
+    });
+    renderLibrary(intents);
+    await waitForLibrary();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+    const cards = screen.getByLabelText("Composition cards");
+    const card = within(cards).getByRole("article");
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" }));
+    const frame = card.querySelector("iframe")!;
+    expect(frame).toHaveAttribute("sandbox");
+    expect(frame).toHaveAttribute("tabindex", "-1");
+    expect(frame).toHaveClass("sg-composition-preview__frame");
+
+    fireEvent.click(within(card).getByRole("button", { name: "Preview" }));
+    const dialog = screen.getByRole("dialog", { name: "Preview — Alpha layout" });
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Phone" }));
+    expect(within(dialog).getByRole("radio", { name: "Phone" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    fireEvent.click(screen.getByRole("radio", { name: "List" }));
+    expect(screen.getByRole("table", { name: "Compositions" })).toBeInTheDocument();
+  });
+
+  it("bounds card iframe mounting to the near-visible observer window", async () => {
+    let report!: (entries: Array<{ isIntersecting: boolean }>) => void;
+    const disconnect = vi.fn();
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: typeof report) { report = callback; }
+      observe() {}
+      disconnect = disconnect;
+    });
+    const intents = fakeIntents({ initialize: vi.fn(async () => ready([ALPHA])) });
+    renderLibrary(intents);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+
+    expect(intents.resolvePreview).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Composition cards").querySelector("iframe")).toBeNull();
+    act(() => report([{ isIntersecting: true }]));
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledOnce());
+    expect(screen.getByLabelText("Composition cards").querySelector("iframe")).not.toBeNull();
+    act(() => report([{ isIntersecting: false }]));
+    expect(screen.getByLabelText("Composition cards").querySelector("iframe")).toBeNull();
+  });
+
   it("shows Plain/Pattern/Global template kind chips and node counts", async () => {
     const plain = summary("plain", "Plain page");
     const pattern = { ...summary("pattern", "Callout", LATE), publicationKind: "pattern" as const };

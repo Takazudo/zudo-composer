@@ -25,7 +25,7 @@ import type {
 } from "../../../../composer/browser";
 import { RailCollapseButton, useEditorChrome } from "../../../../components/editor-chrome";
 import { ArrowRightIcon, EllipsisIcon, PlusIcon, RefreshIcon } from "../../../../components/icons";
-import { OutlineTree, type OutlineInsertTarget, type OutlineNode } from "../../../../components/outline-tree";
+import { OutlineTree, type OutlineInsertSession, type OutlineInsertTarget, type OutlineNode } from "../../../../components/outline-tree";
 import { Banner, Button, Pane, PaneBody, PaneHeader } from "../../../../components/ui";
 import type { ComponentDefinition } from "../../active-pack";
 import { buildCatalogById } from "./tree-helpers";
@@ -44,6 +44,12 @@ export interface SelectedSlot {
   slotId: string;
 }
 
+interface ComposerTreeInsertSession {
+  resolveTarget: () => InsertionTarget | null;
+  complete: () => void;
+  cancel: () => void;
+}
+
 export interface ComposerStructurePaneProps {
   document: CompositionDocument;
   /** The single app-layer `createComponentCatalog(entries)` derivation — never re-derived here. */
@@ -60,7 +66,7 @@ export interface ComposerStructurePaneProps {
   onSelectSlot: (slot: SelectedSlot | null) => void;
   /** The document row was chosen — the virtual-root context. */
   onSelectDocument: () => void;
-  onOpenChooser: (target: InsertionTarget) => void;
+  onOpenChooser: (target: InsertionTarget, session?: ComposerTreeInsertSession) => void;
   /** Opens the node menu (Copy / Cut / Duplicate / Delete). */
   onOpenNodeMenu: (nodeId: string, trigger: HTMLElement) => void;
   /** Opens the insert menu (Add component… / Paste here). */
@@ -142,6 +148,8 @@ export function ComposerStructurePane({
     () => buildComposerOutline({ document, manifest, catalogById, readOnly }),
     [catalogById, document, manifest, readOnly],
   );
+  const outlineRef = useRef(outline);
+  outlineRef.current = outline;
 
   // What the author closed, not what is open: a composition the editor has just
   // loaded shows its whole structure.
@@ -196,9 +204,20 @@ export function ComposerStructurePane({
     return !readOnly && insertionTargetFor(outline, target.parentId, target.index) !== null;
   }
 
-  function requestInsert(target: OutlineInsertTarget): void {
+  function requestInsert(target: OutlineInsertTarget, session: OutlineInsertSession): void {
     const insertion = insertionTargetFor(outline, target.parentId, target.index);
-    if (insertion) onOpenChooser(insertion);
+    if (insertion) {
+      onOpenChooser(insertion, {
+        resolveTarget: () => {
+          const resolved = session.resolveTarget();
+          return resolved
+            ? insertionTargetFor(outlineRef.current, resolved.parentId, resolved.index)
+            : null;
+        },
+        complete: () => session.complete(),
+        cancel: session.cancel,
+      });
+    }
   }
 
   /** The Add / More pair a row shows on hover and keyboard focus. */

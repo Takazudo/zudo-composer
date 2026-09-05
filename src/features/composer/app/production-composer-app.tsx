@@ -565,7 +565,26 @@ export function ProductionComposerApp({
         await activeProvider.store.put(record);
         return summarizeComposition(record);
       },
-      delete: (ref) => provider(ref.providerId).store.delete(ref.recordId),
+      delete: async (ref) => {
+        const activeProvider = provider(ref.providerId);
+        const loaded = await activeProvider.store.get(ref.recordId);
+        if (loaded.status === "not-found") return false;
+        if (loaded.status !== "loaded") throw new Error(failedLoadMessage(loaded));
+        if (loaded.record.document.publication?.kind !== "global-template") {
+          return activeProvider.store.delete(ref.recordId);
+        }
+        const outcome = await createCompositionReuseLifecycleService(activeProvider, {
+          manifest: reuseManifest,
+          nodeIdFactory,
+          now: () => nowRef.current(),
+        }).deleteSource(ref);
+        if (outcome.status === "deleted") return true;
+        if (outcome.status === "not-found") return false;
+        if (outcome.status === "blocked") {
+          throw new Error(`Cannot delete this Global template while ${outcome.dependents.length} consumer${outcome.dependents.length === 1 ? " is" : "s are"} still linked.`);
+        }
+        throw new Error(outcome.message);
+      },
       clear: (providerId) => provider(providerId).store.clear(),
       exportJsx: async (ref) => {
         const activeProvider = provider(ref.providerId);
@@ -579,6 +598,50 @@ export function ProductionComposerApp({
         }
         const outcome = generateBrowserJsxExport({ record, manifest: reuseManifest, resolution });
         return { documentName: record.document.name, outcome };
+      },
+      resolvePreview: async (ref) => {
+        const activeProvider = provider(ref.providerId);
+        const loaded = await activeProvider.store.get(ref.recordId);
+        if (loaded.status !== "loaded") {
+          return {
+            status: "not-found" as const,
+            ref,
+            message: failedLoadMessage(loaded),
+          };
+        }
+        const record = cloneJson(loaded.record);
+        if (!record.document.binding) {
+          return {
+            status: "ready" as const,
+            ref,
+            revision: record.updatedAt,
+            snapshot: { document: record.document, localRecordId: record.id },
+          };
+        }
+        const resolution = await createCompositionReuseService(activeProvider.store, reuseManifest).resolve(record);
+        if (resolution.status !== "resolved") {
+          return {
+            status: "blocked" as const,
+            ref,
+            message: resolution.status === "incompatible-local-root"
+              ? resolution.message
+              : `Linked template preview is unavailable (${resolution.status.replaceAll("-", " ")}).`,
+          };
+        }
+        return {
+          status: "ready" as const,
+          ref,
+          revision: `${record.updatedAt}:${resolution.source.updatedAt}`,
+          snapshot: {
+            document: record.document,
+            localRecordId: record.id,
+            linked: {
+              sourceRecordId: resolution.source.id,
+              sourceDocument: cloneJson(resolution.source.document),
+              outlet: cloneJson(resolution.outlet),
+            },
+          },
+        };
       },
     };
   }, [idFactory, navigate, nodeIdFactory, providersById, reuseManifest]);
@@ -731,6 +794,7 @@ export function ProductionComposerApp({
         {transitionError && <Banner tone="err">{errorText(transitionError)}</Banner>}
         {intentOutcome.status === "invalid" && <Banner tone="err">{intentOutcome.message}</Banner>}
         <CompositionLibrary
+          componentProvider={componentProvider}
           providers={availableProviders}
           initialProviderId={preferredProviderId}
           intents={libraryIntents}
