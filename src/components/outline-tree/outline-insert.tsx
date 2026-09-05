@@ -134,7 +134,7 @@ export function OutlineAddRow({ parent, target, depth }: AddRowProps) {
       {isSameTarget(tree.editing, target) ? (
         <OutlineInlineEditor target={target} depth={depth} label={label} />
       ) : (
-        <button class={cx("cms-tree-add", isSameTarget(tree.pending, target) && "is-active")} type="button" onClick={(event) => { event.currentTarget.focus(); tree.requestInsert(target); }}>
+        <button ref={(element) => tree.registerTerminal(target.parentId, element)} class={cx("cms-tree-add", isSameTarget(tree.pending, target) && "is-active")} type="button" onClick={(event) => { event.currentTarget.focus(); tree.requestInsert(target); }}>
           <span class="cms-tree-add__btn" aria-hidden="true">
             <PlusIcon size="xs" />
           </span>
@@ -155,7 +155,7 @@ export function OutlineAddRoot({ target }: { target: OutlineInsertTarget }) {
     return <OutlineInlineEditor target={target} depth={0} label={label} variant="root" />;
   }
   return (
-    <button class={cx("cms-tree-add-root", isSameTarget(tree.pending, target) && "is-active")} type="button" onClick={(event) => { event.currentTarget.focus(); tree.requestInsert(target); }}>
+    <button ref={(element) => tree.registerTerminal(null, element)} class={cx("cms-tree-add-root", isSameTarget(tree.pending, target) && "is-active")} type="button" onClick={(event) => { event.currentTarget.focus(); tree.requestInsert(target); }}>
       <PlusIcon size="sm" />
       {label}
     </button>

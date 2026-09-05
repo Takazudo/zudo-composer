@@ -8,6 +8,27 @@ import type { OutlineInsertSession, OutlineNode } from "../types";
 const leaf = (id: string): OutlineNode => ({ id, title: id, kind: "leaf" });
 
 describe("workspace tree transactions", () => {
+  it.each([
+    ["root", "Escape"], ["root", "Cancel"], ["child", "Escape"], ["child", "Cancel"],
+  ])("restores the remounted terminal %s control after %s", (kind, action) => {
+    const nodes: OutlineNode[] = kind === "root" ? [] : [{ id: "slot", title: "body", kind: "group" }];
+    render(<OutlineTree nodes={nodes} onAdd={vi.fn()} />);
+    const label = kind === "root" ? "Add root item" : "Add item";
+    const origin = screen.getByRole("button", { name: label });
+    fireEvent.click(origin);
+    expect(origin.isConnected).toBe(false);
+    if (action === "Escape") fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+    else fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: label })).toHaveFocus();
+  });
+
+  it("falls back to the tree when a terminal child origin disappears", () => {
+    const { rerender, container } = render(<OutlineTree nodes={[{ id: "slot", title: "body", kind: "group" }]} onAdd={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add item" }));
+    rerender(<OutlineTree nodes={[]} onAdd={vi.fn()} />);
+    expect(container.querySelector(".cms-tree")).toHaveFocus();
+  });
+
   it("keeps a chooser anchored to the sibling through reorder and restores its insertion button", () => {
     let session!: OutlineInsertSession;
     const request = (_target: unknown, next: OutlineInsertSession) => { session = next; };

@@ -55,7 +55,9 @@ also return `"inline"`. `onAdd(request)` may return the inserted node ID for
 focus restoration; synchronous void handlers also get inserted-row focus when
 exactly their newly rendered child can be identified. Escape/Cancel returns to
 the originating row or insertion button, with a connected tree fallback if the
-origin was removed. Enter/Escape do not commit/cancel during IME composition.
+origin was removed. Terminal Add controls are resolved by their owning parent
+when cancellation recreates the button DOM node. Enter/Escape do not
+commit/cancel during IME composition.
 
 An external chooser receives a transaction as the second callback argument:
 
@@ -109,7 +111,10 @@ cancels. Renaming a branch preserves its descendants and row geometry.
 Use `MenuSubmenu label="Arrange"` inside `Menu`, with ordinary `MenuItem`
 children that call the host's actual reorder commands. Right/Enter/Space opens;
 Left/Escape closes the innermost surface and focuses its trigger. Selecting an
-action closes the owning menu chain; clicking inside a nested portal does not
+action or pressing Tab/ShiftTab exits the entire owning menu chain and returns
+focus to its root trigger; a following Tab continues through the page. Menu and
+section IDs are allocated across portal roots so every ARIA reference resolves
+to its own surface. Clicking inside a nested portal does not
 dismiss ancestors. Outside pointer dismissal closes the chain without stealing
 the pointer's destination focus. Side menus prefer the right and flip/clamp at
 viewport edges through the existing placement helper. Portal context is passed

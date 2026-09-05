@@ -1,4 +1,5 @@
-import { useCallback, useId, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useMemo, useRef, useState } from "preact/hooks";
+import { allocateOverlayId } from "./overlay-id";
 import type { JSX } from "preact";
 import type { MenuPlacement } from "./menu-position";
 
@@ -48,7 +49,7 @@ export interface MenuController {
 
 export function useMenu(triggerRef: MenuTriggerRef, options: UseMenuOptions = {}): MenuController {
   const { align, side, gap, margin, onOpenChange } = options;
-  const id = `cms-menu-${useId()}`;
+  const [id] = useState(() => allocateOverlayId("menu"));
   const [open, setOpen] = useState(false);
   const [focusIntent, setFocusIntent] = useState<MenuFocusIntent>("first");
   const onOpenChangeRef = useRef(onOpenChange);

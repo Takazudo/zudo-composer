@@ -1,5 +1,6 @@
 import { createContext, type ComponentChildren, type JSX } from "preact";
-import { useContext, useId, useLayoutEffect, useRef } from "preact/hooks";
+import { useContext, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { allocateOverlayId } from "./overlay-id";
 import { CheckIcon, type IconComponent } from "../icons";
 import { computeMenuPosition } from "./menu-position";
 import { OverlayPortal } from "./portal";
@@ -239,6 +240,7 @@ function MenuSurface({ controller, label, class: className, children, parent }: 
       event.preventDefault();
       event.stopPropagation();
       closeMenu();
+      parent?.close();
       return;
     }
 
@@ -444,7 +446,7 @@ export interface MenuSectionProps {
 
 /** A titled run of items. `role="group"` keeps the title out of the item sequence. */
 export function MenuSection({ title, children }: MenuSectionProps): JSX.Element {
-  const titleId = `cms-menu-section-${useId()}`;
+  const [titleId] = useState(() => allocateOverlayId("menu-section"));
   return (
     <div class="cms-menu__section" role="group" aria-labelledby={titleId}>
       <div id={titleId} class="cms-menu__title">{title}</div>
