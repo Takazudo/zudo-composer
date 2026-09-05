@@ -1,5 +1,6 @@
 import type { ContentEntrySnapshot, ContentModelRecord } from "../../content";
 import type { MappingCatalog, MappingCatalogEntry, MappingRecord } from "../../mapping";
+import type { MappingCollectionDiagnosticCode } from "../../mapping";
 import type { MappingRef, SitemapDocument } from "../model";
 
 export type SitemapRouteDiagnosticCode =
@@ -8,9 +9,11 @@ export type SitemapRouteDiagnosticCode =
   | "wrong-route-mode" | "route-field-missing" | "route-field-not-slug"
   | "title-field-missing" | "title-field-not-textual"
   | "entry-slug-missing" | "entry-slug-invalid" | "incompatible-mapping"
-  | "route-fragment-invalid" | "route-collision" | "unsupported-external-base";
+  | "route-fragment-invalid" | "route-collision" | "unsupported-external-base"
+  | `collection-query-${MappingCollectionDiagnosticCode}`;
 
 export interface SitemapRouteDiagnostic {
+  severity?: "blocking" | "nonblocking";
   code: SitemapRouteDiagnosticCode;
   message: string;
   nodeId: string;

@@ -51,6 +51,7 @@ describe("Mapping binding rows", () => {
     const drifted = mappingRecord([{
       id: "binding-gone",
       sourceFieldId: "field-removed",
+      projection: { kind: "value" },
       target: { nodeId: "node-removed", prop: "gone" },
       transform: { kind: "identity" },
     }]);

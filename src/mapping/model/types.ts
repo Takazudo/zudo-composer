@@ -4,9 +4,38 @@ import type { ContentModelRef } from "../../content/catalog";
 import type { ContentFieldDefinition } from "../../content/model";
 import type { RecordId } from "../../shared";
 
-export const MAPPING_SCHEMA_VERSION = 1 as const;
+export const MAPPING_SCHEMA_VERSION = 2 as const;
+
+export type MappingMode =
+  | { kind: "single" }
+  | { kind: "collection"; query: MappingCollectionQuery };
+
+export type MappingCollectionConditionOperator = "equals" | "not-equals" | "contains" | "exists";
+export interface MappingCollectionCondition {
+  fieldId: RecordId;
+  operator: MappingCollectionConditionOperator;
+  value?: JsonValue;
+}
+export interface MappingCollectionSort { fieldId: RecordId; direction: "asc" | "desc" }
+export interface MappingCollectionPin { providerId: string; modelId: RecordId; recordId: RecordId }
+export interface MappingCollectionQuery {
+  publication: "published-only" | "include-drafts";
+  conditions: MappingCollectionCondition[];
+  sort: MappingCollectionSort[];
+  pins: MappingCollectionPin[];
+  limit: number;
+}
 
 export interface MappingTarget { nodeId: string; prop: string }
+
+export type MappingSourceProjection =
+  | { kind: "value" }
+  | { kind: "object-field"; fieldIds: readonly RecordId[] }
+  | { kind: "media-asset-ref" }
+  | { kind: "media-text"; field: "alt" | "caption" | "label" | "title" | "description" }
+  | { kind: "reference-id" }
+  | { kind: "reference-list-ids" }
+  | { kind: "route-link" };
 
 export type MappingTransform =
   /** Preserve the scalar value exactly when the source and target domains agree. */
@@ -21,6 +50,7 @@ export type MappingTransform =
 export interface MappingBinding {
   id: RecordId;
   sourceFieldId: RecordId;
+  projection: MappingSourceProjection;
   target: MappingTarget;
   transform: MappingTransform;
 }
@@ -31,6 +61,7 @@ export interface MappingDocument {
   name: string;
   contentModel: ContentModelRef;
   composition: CompositionRecordRef;
+  mode: MappingMode;
   bindings: MappingBinding[];
 }
 
@@ -52,6 +83,24 @@ export type MappingValidationCode =
   | "invalid-timestamp" | "invalid-timestamp-order" | "not-json-safe"
   | "malformed-document" | "future-schema" | "invalid-ref"
   | "invalid-binding" | "duplicate-binding-id" | "malformed-transform";
+export type MappingCollectionDiagnosticCode =
+  | "collection-required" | "stale-query-field" | "unsupported-query-field" | "invalid-condition-value"
+  | "pin-provider-mismatch" | "pin-model-mismatch" | "pin-not-found" | "pin-ineligible"
+  | "empty-source" | "route-context-unavailable" | "route-context-ambiguous";
+
+export interface MappingCollectionDiagnostic {
+  code: MappingCollectionDiagnosticCode;
+  severity: "blocking" | "nonblocking";
+  message: string;
+  fieldId?: RecordId;
+  entryId?: RecordId;
+}
+
+export interface MappingCollectionEvaluation {
+  status: "ready" | "blocked";
+  entries: readonly import("../../content/model").ContentEntryRecord[];
+  diagnostics: readonly MappingCollectionDiagnostic[];
+}
 
 export interface MappingValidationIssue {
   code: MappingValidationCode;
@@ -96,7 +145,7 @@ export type MappingDefinitionDiagnosticCode =
   | "composition-not-found" | "composition-invalid" | "composition-provider-error"
   | "source-field-missing" | "target-node-missing" | "component-missing"
   | "component-version-mismatch" | "target-field-missing" | "structured-target-unsupported" | "duplicate-target"
-  | "incompatible-binding" | "invalid-transform-config";
+  | "source-projection-invalid" | "incompatible-binding" | "invalid-transform-config";
 
 export interface MappingDefinitionDiagnostic {
   scope: "definition";
@@ -110,7 +159,8 @@ export interface MappingDefinitionDiagnostic {
 
 export type MappingEntryDiagnosticCode =
   | "entry-model-mismatch" | "required-value-missing" | "optional-value-missing"
-  | "invalid-source-value" | "invalid-canonical-date" | "select-option-invalid";
+  | "invalid-source-value" | "source-projection-invalid" | "route-context-unavailable"
+  | "route-context-ambiguous" | "invalid-canonical-date" | "select-option-invalid";
 
 export interface MappingEntryDiagnostic {
   scope: "entry";
@@ -181,7 +231,8 @@ export interface MappingSeedOptions {
   name: string;
   contentModel: ContentModelRef;
   composition: CompositionRecordRef;
-  bindings?: readonly MappingBinding[];
+  bindings?: readonly (Omit<MappingBinding, "projection"> & { projection?: MappingSourceProjection })[];
+  mode?: MappingMode;
   createdAt: string;
   updatedAt?: string;
 }

@@ -58,6 +58,7 @@ function mappingRecord(id: string, compositionRecordId = "hero"): MappingRecord 
       name: `Mapping ${id}`,
       contentModel: { providerId: "content-indexeddb", recordId: "journal" },
       composition: { providerId: "indexeddb", recordId: compositionRecordId },
+      mode: { kind: "single" },
       bindings: [],
     },
   };

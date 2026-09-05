@@ -44,7 +44,7 @@ const catalog = createComponentCatalog(activeSiteProjectValidationContext.compon
 describe("sample SiteProject", () => {
   it("is a deterministic provider-scoped aggregate with an exact record inventory", () => {
     expect(project).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: "sample-studio-site",
       name: "Sample Studio",
       componentPack: { contractVersion: 2, packId: "@zudo-sg/ui", packVersion: "1.0.0" },

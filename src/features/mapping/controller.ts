@@ -223,7 +223,7 @@ export class MappingEditorController {
     const kind = compatibleTransforms(source.kind, descriptor)[0];
     if (!kind) throw new Error(`${source.kind} is not compatible with ${descriptor.kind}.`);
     const transform: MappingTransform = kind === "prefix" ? { kind, prefix: "" } : { kind };
-    const binding: MappingBinding = { id: this.idFactory("binding"), sourceFieldId, target: { ...target }, transform };
+    const binding: MappingBinding = { id: this.idFactory("binding"), sourceFieldId, projection: { kind: "value" }, target: { ...target }, transform };
     this.edit((record) => ({ ...record, document: { ...record.document, bindings: [...record.document.bindings, binding] } }));
     await this.refreshResolution();
   }

@@ -20,7 +20,7 @@ import type {
   SiteProjectValidationContext,
 } from "./types";
 
-const PROJECT_KEYS = ["schemaVersion", "id", "name", "componentPack", "providers", "activeSitemap"] as const;
+const PROJECT_KEYS = ["schemaVersion", "id", "name", "componentPack", "providers", "activeSitemap", "collectionAttachments"] as const;
 const PACK_KEYS = ["contractVersion", "packId", "packVersion"] as const;
 const PROVIDERS_KEYS = ["compositions", "content", "mappings", "sitemaps"] as const;
 const RECORD_PROVIDER_KEYS = ["id", "records"] as const;
@@ -126,7 +126,7 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
     return { ok: false, diagnostics: [{ severity: "error", code: "not-json-safe", path: "$", message: "SiteProject must contain only JSON-safe values." }] };
   }
   if (!exactKeys(value, PROJECT_KEYS)) {
-    diagnostic(diagnostics, "invalid-keys", "$", "SiteProject must contain exactly schemaVersion, id, name, componentPack, providers, and activeSitemap.");
+    diagnostic(diagnostics, "invalid-keys", "$", "SiteProject must contain exactly schemaVersion, id, name, componentPack, providers, activeSitemap, and collectionAttachments.");
     return { ok: false, diagnostics };
   }
   if (typeof value.schemaVersion === "number" && value.schemaVersion > SITE_PROJECT_SCHEMA_VERSION) {
@@ -213,6 +213,10 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
   validateRecordProviders("compositions", value.providers.compositions, compositions, validateCompositionRecord);
   validateRecordProviders("mappings", value.providers.mappings, mappings, validateMappingRecord);
   validateRecordProviders("sitemaps", value.providers.sitemaps, sitemaps, validateSitemapRecord);
+
+  if (!Array.isArray(value.collectionAttachments)) {
+    diagnostic(diagnostics, "invalid-project", "$.collectionAttachments", "collectionAttachments must be an array.");
+  }
 
   if (!Array.isArray(value.providers.content)) {
     diagnostic(diagnostics, "invalid-provider", "$.providers.content", "content must be an array of provider collections.");
@@ -358,6 +362,45 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
           diagnostic(diagnostics, "dangling-mapping-target", `${bindingPath}.target.prop`, `Mapping target field ${JSON.stringify(binding.target.prop)} is not an available scalar field on node ${JSON.stringify(binding.target.nodeId)}.`);
         }
       });
+    });
+  }
+
+  if (Array.isArray(value.collectionAttachments)) {
+    const ids = new Set<string>();
+    const targets = new Set<string>();
+    value.collectionAttachments.forEach((raw, index) => {
+      const path = `$.collectionAttachments[${index}]`;
+      if (!isPlainObject(raw) || !exactKeys(raw, ["id", "order", "composition", "target", "mapping"])
+        || !isSafeRecordId(raw.id) || !Number.isSafeInteger(raw.order) || Number(raw.order) < 0
+        || !validateRefShape(raw.composition) || !validateRefShape(raw.mapping)
+        || !isPlainObject(raw.target) || !exactKeys(raw.target, ["nodeId", "slotId"])
+        || typeof raw.target.nodeId !== "string" || !raw.target.nodeId || typeof raw.target.slotId !== "string" || !raw.target.slotId) {
+        diagnostic(diagnostics, "invalid-collection-attachment", path, "Collection attachment shape is invalid.");
+        return;
+      }
+      if (ids.has(raw.id)) diagnostic(diagnostics, "duplicate-collection-attachment", `${path}.id`, `Duplicate collection attachment ${JSON.stringify(raw.id)}.`);
+      ids.add(raw.id);
+      const compositionRef = raw.composition as { providerId: string; recordId: string };
+      const mappingRef = raw.mapping as { providerId: string; recordId: string };
+      const attachmentTarget = raw.target as { nodeId: string; slotId: string };
+      const targetKey = `${compositionRef.providerId}\u0000${compositionRef.recordId}\u0000${attachmentTarget.nodeId}\u0000${attachmentTarget.slotId}`;
+      if (targets.has(targetKey)) diagnostic(diagnostics, "attachment-slot-conflict", `${path}.target`, "Only one collection attachment may own a named slot.");
+      targets.add(targetKey);
+      const composition = compositions.get(compositionRef.providerId)?.find((record) => record.id === compositionRef.recordId);
+      if (!composition) { diagnostic(diagnostics, "attachment-composition-not-found", `${path}.composition`, "Attachment owner Composition was not found in its provider."); return; }
+      const mapping = mappings.get(mappingRef.providerId)?.find((record) => record.id === mappingRef.recordId);
+      if (!mapping) { diagnostic(diagnostics, "attachment-mapping-not-found", `${path}.mapping`, "Attachment collection Mapping was not found in its provider."); return; }
+      if (mapping.document.mode.kind !== "collection") diagnostic(diagnostics, "attachment-mapping-not-collection", `${path}.mapping`, "Attachment Mapping must use collection mode.");
+      const node = (() => {
+        const visit = (nodes: typeof composition.document.root): typeof composition.document.root[number] | undefined => {
+          for (const candidate of nodes) { if (candidate.id === attachmentTarget.nodeId) return candidate; for (const children of Object.values(candidate.slots)) { const found = visit(children); if (found) return found; } }
+          return undefined;
+        };
+        return visit(composition.document.root);
+      })();
+      if (!node) { diagnostic(diagnostics, "attachment-target-not-found", `${path}.target.nodeId`, "Attachment target node was not found in the owner Composition."); return; }
+      const component = componentCatalog?.get(node.componentId);
+      if (component && !component.slots.some((slot) => slot.id === attachmentTarget.slotId)) diagnostic(diagnostics, "attachment-slot-not-found", `${path}.target.slotId`, "Attachment target is not a current named component slot.");
     });
   }
 
