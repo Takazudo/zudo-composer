@@ -7,6 +7,7 @@ import { activeComponentProvider } from "../features/composer/active-pack";
 import { createContentPreviewSource, type ContentPreviewSource } from "../features/content/preview-source";
 import { createFileProviderMediaProvider, type MediaFileProvider } from "../media";
 import type { MappingContentEntryCatalog } from "../features/mapping";
+import type { MappingAttachmentCallbacks } from "../features/mapping/attachments";
 import { createCompositionCatalog as createMappingCompositionCatalog, createIndexedDbMappingProvider, createMappingCatalog, MappingPersistenceError, resolveMappingDefinition, type CompositionCatalog as MappingCompositionCatalog, type MappingCatalog, type MappingInitializationOutcome, type MappingProvider, type MappingRecord } from "../mapping";
 import { browserProviderIdFor, canonicalizeSiteProject, validateSiteProject, type SiteProject, type SiteProjectDomain } from "../site-project";
 import { createCompositionCatalog, createMappingAssignmentCatalog, type CompositionCatalog } from "../sitemapper/catalog";
@@ -18,6 +19,7 @@ import { createWorkspaceStorage, projectFromWorkspace, workspaceScopedFactory, w
 import { createWorkspaceSaveRegistry, type WorkspaceSaveRegistry } from "./workspace-sessions";
 import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture, type WorkspaceCaptureOutcome, type WorkspaceSnapshotSource } from "./workspace-snapshot";
 import { subscribePersistenceChanges } from "../shared/persistence-generation";
+import { createMappingAttachmentService } from "./mapping-attachment-service";
 
 export class ProviderIntegrationError extends Error {
   readonly name = "ProviderIntegrationError";
@@ -103,6 +105,7 @@ export interface ProductionProviderIntegration {
   mediaProvider: MediaFileProvider | undefined;
   createContentPreviewSource(): ContentPreviewSource;
   mappingContentEntries: MappingContentEntryCatalog; mappingProviders: readonly MappingProvider[]; mappingProvider: MappingProvider; mappingCatalog: MappingCatalog;
+  mappingAttachmentService: MappingAttachmentCallbacks;
   sitemapProvider: SitemapProvider; sitemapperMappingCatalog: MappingAssignmentCatalog;
   initialization: { initialize(): Promise<ProviderIntegrationOutcome>; retry(): Promise<ProviderIntegrationOutcome>; startFresh(): Promise<ProviderIntegrationOutcome> };
   getCurrentSiteProject(): Promise<SiteProjectSnapshotOutcome>;
@@ -110,7 +113,7 @@ export interface ProductionProviderIntegration {
 export interface WorkspaceLifecycle {
   readonly id: string | undefined;
   metadata(): Promise<WorkspaceRecord>;
-  updateMetadata(expectedToken: number, patch: { name?: string; activeSitemap?: SiteProject["activeSitemap"] }): Promise<WorkspaceRecord>;
+  updateMetadata(expectedToken: number, patch: { name?: string; activeSitemap?: SiteProject["activeSitemap"]; collectionAttachments?: readonly SiteProject["collectionAttachments"][number][] }): Promise<WorkspaceRecord>;
   reconcileBaseline(capture: WorkspaceCapture, revision: string): Promise<"applied" | "changed">;
   open(id: string): Promise<ProductionProviderIntegration>;
   create(project: SiteProject, baselineRevision: string): Promise<ProductionProviderIntegration>;
@@ -471,19 +474,32 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       return create(initialProject, initialRevision);
     },
   };
-  return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, mediaProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle, workspace, sessions,
-    subscribeChanges(listener: () => void) { const stopStorage = subscribePersistenceChanges((database) => { if (database === WORKSPACE_DATABASE_NAME || database === "media" || database === "compositions:files" || database.endsWith(`-workspace-v1-${workspaceId}`)) listener(); }); const stopSessions = sessions.subscribe(listener); return () => { stopStorage(); stopSessions(); }; },
+  const getCurrentSiteProject = async (): Promise<SiteProjectSnapshotOutcome> => {
+    const value = await capture(false);
+    if (value.status !== "ready") return { status: "error", error: new ProviderIntegrationError("snapshot", value.status === "unavailable" ? `${value.source}: ${value.error.message}` : value.status === "save-failed" ? value.failures.map((failure) => `${failure.feature}/${failure.providerId}/${failure.recordId ?? "operation"}: ${failure.error.message}`).join("; ") : `Workspace changed during capture: ${value.sources.join(", ")}.`) };
+    try { return { status: "ready", project: await snapshotNow(value.capture) }; }
+    catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Snapshot validation failed.") }; }
+  };
+  const subscribeChanges = (listener: () => void) => {
+    const stopStorage = subscribePersistenceChanges((database) => { if (database === WORKSPACE_DATABASE_NAME || database === "media" || database === "compositions:files" || database.endsWith(`-workspace-v1-${workspaceId}`)) listener(); });
+    const stopSessions = sessions.subscribe(listener);
+    return () => { stopStorage(); stopSessions(); };
+  };
+  const mappingAttachmentService = createMappingAttachmentService({
+    getCurrentSiteProject,
+    workspace,
+    componentCatalog: activeComponentProvider.catalog,
+    flush: () => sessions.flush(),
+    subscribe: subscribeChanges,
+  });
+  return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, mediaProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, mappingAttachmentService, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle, workspace, sessions,
+    subscribeChanges,
     captureWorkspace: async (): Promise<WorkspaceProjectCaptureOutcome> => {
       const outcome = await capture(true);
       if (outcome.status !== "ready") return outcome;
       try { return { ...outcome, project: await snapshotNow(outcome.capture) }; }
       catch (cause) { return { status: "unavailable", source: "project-validation", error: integrationError("snapshot", cause, "Project validation failed.") }; }
     }, isCaptureCurrent,
-    getCurrentSiteProject: async (): Promise<SiteProjectSnapshotOutcome> => {
-      const value = await capture(false);
-      if (value.status !== "ready") return { status: "error", error: new ProviderIntegrationError("snapshot", value.status === "unavailable" ? `${value.source}: ${value.error.message}` : value.status === "save-failed" ? value.failures.map((failure) => `${failure.feature}/${failure.providerId}/${failure.recordId ?? "operation"}: ${failure.error.message}`).join("; ") : `Workspace changed during capture: ${value.sources.join(", ")}.`) };
-      try { return { status: "ready", project: await snapshotNow(value.capture) }; }
-      catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Snapshot validation failed.") }; }
-    },
+    getCurrentSiteProject,
   });
 }

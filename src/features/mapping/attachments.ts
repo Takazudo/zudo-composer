@@ -52,7 +52,7 @@ export interface MappingAttachmentPreview {
  *
  * Mapping owns the authoring surface; the aggregate service owns project
  * metadata, conflict validation, deterministic materialization and persistence.
- * Keeping this seam callback-based lets the route consume the #236 contract
+ * Keeping this seam callback-based lets the route consume the shared contract
  * without reaching into SiteProject storage or duplicating compiler rules.
  */
 export interface MappingAttachmentCallbacks {
@@ -64,6 +64,8 @@ export interface MappingAttachmentCallbacks {
   }): Promise<MappingAttachmentItem | void>;
   detach(attachment: SiteProjectCollectionAttachment): Promise<void>;
   preview(attachment: SiteProjectCollectionAttachment): Promise<MappingAttachmentPreview>;
+  /** Mapping deletion must prove no persisted aggregate edge references it. */
+  assertMappingDeletable(mapping: MappingRecordRef): Promise<void>;
   /** Flushes a queued aggregate mutation, when the owner uses staged writes. */
   flush?(): Promise<void>;
   /** Durable change notifications belong to the owner service, not the pane. */

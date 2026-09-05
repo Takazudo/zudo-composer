@@ -5,7 +5,7 @@ import type { JSX } from "preact";
 import { useMemo } from "preact/hooks";
 import { CollectionIcon, FilterIcon, MinusIcon, PlusIcon, SortIcon } from "../../components/icons";
 import { Banner, Button, Chip, EmptyState, Field, Input, PaneSection, Select } from "../../components/ui";
-import type { ContentFieldDefinition, ContentModelRecord } from "../../content";
+import type { ContentFieldDefinition, ContentModelRecord, ContentValueSchema } from "../../content";
 import { isScalarQueryField } from "../../mapping";
 import type { MappingCollectionCondition, MappingCollectionConditionOperator, MappingCollectionQuery, MappingCollectionSort } from "../../mapping";
 import type { MappingEditorState } from "./controller";
@@ -32,6 +32,7 @@ export function CollectionQueryPane({ state, onModeChange, onQueryChange, onOpen
   const model = state.definition?.contentModel ?? null;
   const query = mode.kind === "collection" ? mode.query : null;
   const fields = useMemo(() => queryFields(model), [model]);
+  const unsupportedFields = useMemo(() => model?.document.fields.filter((field) => !isSupportedQueryField(field)) ?? [], [model]);
 
   return (
     <PaneSection title="Query" class="cms-mapping-query" action={<Chip tone={mode.kind === "collection" ? "ok" : "neutral"}>{mode.kind === "collection" ? "Collection" : "Single"}</Chip>}>
@@ -59,6 +60,7 @@ export function CollectionQueryPane({ state, onModeChange, onQueryChange, onOpen
               <option value="include-drafts">Include drafts</option>
             </Select>
           </Field>
+          {unsupportedFields.length ? <p class="cms-mapping-query__help" role="status">Structured, media and reference fields are unavailable for deterministic query authoring: {unsupportedFields.map((field) => field.label).join(", ")}.</p> : null}
           <ConditionEditor query={query} fields={fields} onChange={onQueryChange} />
           <SortEditor query={query} fields={fields} onChange={onQueryChange} />
           <PaneSection title="Ordered pins" class="cms-mapping-query__nested" action={<Button size="sm" variant="ghost" onClick={onOpenPins}><PlusIcon size="sm" />Choose</Button>}>
@@ -105,10 +107,20 @@ function ConditionRow({ condition, index, fields, onChange }: { condition: Mappi
 function ConditionValue({ field, condition, index, onChange }: { field: ContentFieldDefinition; condition: MappingCollectionCondition; index: number; onChange: CollectionQueryPaneProps["onQueryChange"] }): JSX.Element {
   const value = condition.value;
   const update = (next: unknown) => onChange((query) => ({ ...query, conditions: query.conditions.map((item, candidate) => candidate === index ? { ...item, value: next as MappingCollectionCondition["value"] } : item) }));
-  if (field.kind === "list") return <Input size="sm" type={field.item.kind === "number" ? "number" : "text"} aria-label={`Filter ${index + 1} value`} value={value === undefined || value === null ? "" : String(value)} onInput={(event) => update(field.item.kind === "number" ? Number(event.currentTarget.value) : event.currentTarget.value)} />;
+  if (field.kind === "list") {
+    if (!isPrimitiveQuerySchema(field.item)) return <span class="cms-mapping-query__exists">Structured list values are unsupported; remove this filter.</span>;
+    if (field.item.kind === "choice") return <Select size="sm" aria-label={`Filter ${index + 1} value`} value={typeof value === "string" ? value : ""} onChange={(event) => update(event.currentTarget.value)}>{field.item.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select>;
+    if (field.item.kind === "boolean") return <Select size="sm" aria-label={`Filter ${index + 1} value`} value={typeof value === "boolean" ? String(value) : "false"} onChange={(event) => update(event.currentTarget.value === "true")}><option value="true">True</option><option value="false">False</option></Select>;
+    return <Input size="sm" type={queryInputType(field.item)} aria-label={`Filter ${index + 1} value`} value={value === undefined || value === null ? "" : String(value)} onInput={(event) => update(field.item.kind === "number" ? Number(event.currentTarget.value) : event.currentTarget.value)} />;
+  }
   if (field.kind === "choice") return <Select size="sm" aria-label={`Filter ${index + 1} value`} value={typeof value === "string" ? value : ""} onChange={(event) => update(event.currentTarget.value)}>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select>;
   if (field.kind === "boolean") return <Select size="sm" aria-label={`Filter ${index + 1} value`} value={typeof value === "boolean" ? String(value) : "false"} onChange={(event) => update(event.currentTarget.value === "true")}><option value="true">True</option><option value="false">False</option></Select>;
-  return <Input size="sm" type={field.kind === "number" ? "number" : field.kind === "date" ? "date" : "text"} aria-label={`Filter ${index + 1} value`} value={value === undefined || value === null ? "" : String(value)} onInput={(event) => update(field.kind === "number" ? Number(event.currentTarget.value) : event.currentTarget.value)} />;
+  return <Input size="sm" type={queryInputType(field)} aria-label={`Filter ${index + 1} value`} value={value === undefined || value === null ? "" : String(value)} onInput={(event) => update(field.kind === "number" ? Number(event.currentTarget.value) : event.currentTarget.value)} />;
+}
+
+function queryInputType(schema: ContentValueSchema): "text" | "number" | "date" | "color" | "url" {
+  if (schema.kind === "number" || schema.kind === "date" || schema.kind === "color" || schema.kind === "url") return schema.kind;
+  return "text";
 }
 
 function SortEditor({ query, fields, onChange }: { query: MappingCollectionQuery; fields: readonly ContentFieldDefinition[]; onChange: CollectionQueryPaneProps["onQueryChange"] }): JSX.Element {
@@ -128,7 +140,15 @@ function SortRow({ sort, index, fields, allFields, onChange }: { sort: MappingCo
 }
 
 function queryFields(model: ContentModelRecord | null): readonly ContentFieldDefinition[] {
-  return model?.document.fields.filter((field) => isScalarQueryField(field) || field.kind === "list") ?? [];
+  return model?.document.fields.filter(isSupportedQueryField) ?? [];
+}
+
+function isPrimitiveQuerySchema(schema: ContentValueSchema): boolean {
+  return ["text", "long-text", "markdown", "number", "boolean", "date", "slug", "color", "url", "choice"].includes(schema.kind);
+}
+
+function isSupportedQueryField(field: ContentFieldDefinition): boolean {
+  return isScalarQueryField(field) || (field.kind === "list" && isPrimitiveQuerySchema(field.item));
 }
 
 function createCondition(field: ContentFieldDefinition, operator: MappingCollectionConditionOperator): MappingCollectionCondition {
@@ -140,7 +160,12 @@ function defaultFieldValue(field: ContentFieldDefinition): string | number | boo
   if (field.kind === "boolean") return false;
   if (field.kind === "number") return 0;
   if (field.kind === "choice") return field.options[0]?.value ?? "";
-  if (field.kind === "list") return "";
+  if (field.kind === "list") {
+    if (field.item.kind === "boolean") return false;
+    if (field.item.kind === "number") return 0;
+    if (field.item.kind === "choice") return field.item.options[0]?.value ?? "";
+    return "";
+  }
   return "";
 }
 

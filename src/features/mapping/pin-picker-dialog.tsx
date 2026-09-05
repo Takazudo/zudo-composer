@@ -22,6 +22,10 @@ export interface PinPickerDialogProps {
   onClose: () => void;
 }
 
+function pinKey(pin: Pick<MappingCollectionPin, "providerId" | "modelId" | "recordId">): string {
+  return `${pin.providerId}\u0000${pin.modelId}\u0000${pin.recordId}`;
+}
+
 export function PinPickerDialog({ open, entries, model, providerId, currentPins, publication, onSave, onClose }: PinPickerDialogProps): JSX.Element {
   const searchRef = useRef<HTMLInputElement | null>(null);
   const [search, setSearch] = useState("");
@@ -36,19 +40,20 @@ export function PinPickerDialog({ open, entries, model, providerId, currentPins,
   }
 
   const catalog = useMemo(() => {
-    const pinned = new Set(pins.map((pin) => pin.recordId));
+    const pinned = new Set(pins.map(pinKey));
     const modelEntries = entries.filter((entry) => entry.modelId === model?.id);
-    return [...modelEntries.filter((entry) => pinned.has(entry.id)), ...modelEntries.filter((entry) => !pinned.has(entry.id)).sort((left, right) => left.id.localeCompare(right.id))];
-  }, [entries, model?.id, pins]);
+    return [...modelEntries.filter((entry) => pinned.has(pinKey({ providerId, modelId: entry.modelId, recordId: entry.id }))), ...modelEntries.filter((entry) => !pinned.has(pinKey({ providerId, modelId: entry.modelId, recordId: entry.id }))).sort((left, right) => left.id.localeCompare(right.id))];
+  }, [entries, model?.id, pins, providerId]);
   const visible = catalog.filter((entry) => `${entry.id} ${entryLabel(entry, model)}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   const stale = pins.filter((pin) => pin.providerId !== providerId || pin.modelId !== model?.id || !entries.some((entry) => entry.id === pin.recordId && entry.modelId === model?.id && (publication === "include-drafts" || entry.lifecycle !== "draft")));
 
   function toggle(entry: ContentEntryRecord, checked: boolean): void {
+    const key = pinKey({ providerId, modelId: entry.modelId, recordId: entry.id });
     if (checked) {
-      if (pins.some((pin) => pin.recordId === entry.id)) return;
+      if (pins.some((pin) => pinKey(pin) === key)) return;
       setPins([...pins, { providerId, modelId: entry.modelId, recordId: entry.id }]);
     } else {
-      setPins(pins.filter((pin) => pin.recordId !== entry.id));
+      setPins(pins.filter((pin) => pinKey(pin) !== key));
     }
   }
 
@@ -73,9 +78,9 @@ export function PinPickerDialog({ open, entries, model, providerId, currentPins,
       <Input elementRef={searchRef} type="search" icon={SearchIcon} aria-label="Filter source Entries" placeholder={`Search ${catalog.length} Entries…`} value={search} onInput={(event) => setSearch(event.currentTarget.value)} />
       {model === null ? <EmptyState inline icon={SearchIcon} title="Resolve a collection Content model first." /> : null}
       {model && catalog.length === 0 ? <EmptyState inline icon={SearchIcon} title="No eligible Entries in the source catalog." /> : null}
-      {stale.length ? <section class="cms-mapping-pin-picker__stale"><strong>Stale pins</strong>{stale.map((pin) => <div key={`${pin.providerId}/${pin.modelId}/${pin.recordId}`}><span>{pin.recordId}</span><Button iconOnly variant="ghost" size="sm" aria-label={`Remove stale pin ${pin.recordId}`} onClick={() => setPins(pins.filter((candidate) => candidate.recordId !== pin.recordId))}><XMarkIcon size="sm" /></Button></div>)}</section> : null}
-      {visible.length ? <ul class="cms-mapping-pin-picker__catalog">{visible.map((entry) => <li key={entry.id}><Checkbox disabled={publication === "published-only" && entry.lifecycle === "draft"} label={<><strong>{entryLabel(entry, model)}</strong><code>{entry.id}{entry.lifecycle === "draft" ? " · draft" : ""}</code></>} checked={pins.some((pin) => pin.recordId === entry.id)} onCheckedChange={(checked) => toggle(entry, checked)} /></li>)}</ul> : null}
-      {pins.length ? <section class="cms-mapping-pin-picker__order"><h3>Pin order</h3><ol>{pins.map((pin, index) => { const entry = entries.find((candidate) => candidate.id === pin.recordId); return <li key={`${pin.providerId}/${pin.modelId}/${pin.recordId}`}><span>{entry ? entryLabel(entry, model) : pin.recordId}</span><span class="cms-mapping-pin-picker__order-actions"><Button iconOnly variant="ghost" size="sm" disabled={index === 0} aria-label={`Move pin ${pin.recordId} up`} onClick={() => move(index, -1)}><ChevronUpIcon size="sm" /></Button><Button iconOnly variant="ghost" size="sm" disabled={index === pins.length - 1} aria-label={`Move pin ${pin.recordId} down`} onClick={() => move(index, 1)}><ChevronDownIcon size="sm" /></Button></span></li>; })}</ol></section> : null}
+      {stale.length ? <section class="cms-mapping-pin-picker__stale"><strong>Stale pins</strong>{stale.map((pin) => <div key={pinKey(pin)}><span>{pin.recordId}</span><Button iconOnly variant="ghost" size="sm" aria-label={`Remove stale pin ${pin.recordId}`} onClick={() => setPins(pins.filter((candidate) => pinKey(candidate) !== pinKey(pin)))}><XMarkIcon size="sm" /></Button></div>)}</section> : null}
+      {visible.length ? <ul class="cms-mapping-pin-picker__catalog">{visible.map((entry) => <li key={entry.id}><Checkbox disabled={publication === "published-only" && entry.lifecycle === "draft"} label={<><strong>{entryLabel(entry, model)}</strong><code>{entry.id}{entry.lifecycle === "draft" ? " · draft" : ""}</code></>} checked={pins.some((pin) => pinKey(pin) === pinKey({ providerId, modelId: entry.modelId, recordId: entry.id }))} onCheckedChange={(checked) => toggle(entry, checked)} /></li>)}</ul> : null}
+      {pins.length ? <section class="cms-mapping-pin-picker__order"><h3>Pin order</h3><ol>{pins.map((pin, index) => { const entry = pin.providerId === providerId ? entries.find((candidate) => candidate.id === pin.recordId && candidate.modelId === pin.modelId) : undefined; return <li key={pinKey(pin)}><span>{entry ? entryLabel(entry, model) : pin.recordId}</span><span class="cms-mapping-pin-picker__order-actions"><Button iconOnly variant="ghost" size="sm" disabled={index === 0} aria-label={`Move pin ${pin.recordId} up`} onClick={() => move(index, -1)}><ChevronUpIcon size="sm" /></Button><Button iconOnly variant="ghost" size="sm" disabled={index === pins.length - 1} aria-label={`Move pin ${pin.recordId} down`} onClick={() => move(index, 1)}><ChevronDownIcon size="sm" /></Button></span></li>; })}</ol></section> : null}
     </Dialog>
   );
 }

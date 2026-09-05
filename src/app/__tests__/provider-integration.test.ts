@@ -67,6 +67,39 @@ describe("SiteProject provider integration", () => {
     if (compiled.status === "ready") expect(compiled.build.routes).toHaveLength(7);
   });
 
+  it("provides a real provider-qualified attachment aggregate with CAS persistence and materialized preview", async () => {
+    const current = integration();
+    expect(await current.initialization.initialize()).toEqual({ status: "ready" });
+    const linked = await current.compositionProviders[0]!.store.get("journal-entry-page");
+    if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
+    const detachedDocument = structuredClone(linked.record.document);
+    delete detachedDocument.binding;
+    await current.compositionProviders[0]!.store.put({ ...linked.record, document: detachedDocument });
+
+    const before = await current.mappingAttachmentService.list();
+    const target = before.targets.find((candidate) => candidate.composition.recordId === "home-page" && candidate.nodeId === "home-copy-stack" && candidate.slotId === "content");
+    if (!target) throw new Error("Expected the sample home stack named slot.");
+    expect(before.attachments).toEqual([]);
+
+    await current.mappingAttachmentService.attach({ composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } });
+    const metadata = await current.workspace.metadata();
+    expect(metadata.metadata.collectionAttachments).toHaveLength(1);
+    const attachment = metadata.metadata.collectionAttachments[0]!;
+    expect(attachment).toMatchObject({ composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } });
+
+    const after = await current.mappingAttachmentService.list();
+    expect(after.attachments).toHaveLength(1);
+    expect(after.attachments[0]!.effectiveEntries.map((entry) => entry.id)).toEqual(["article-small-loops", "article-moving-parts", "article-first-question"]);
+    expect(JSON.stringify(after.attachments[0]!.materializedDocument)).toContain("__zudo_collection_");
+    const preview = await current.mappingAttachmentService.preview(attachment);
+    expect(preview.status).toBe("ready");
+    await expect(current.mappingAttachmentService.assertMappingDeletable({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" })).rejects.toThrow(/attached/);
+
+    await current.mappingAttachmentService.detach(attachment);
+    expect((await current.workspace.metadata()).metadata.collectionAttachments).toEqual([]);
+    await expect(current.mappingAttachmentService.assertMappingDeletable({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" })).resolves.toBeUndefined();
+  });
+
   it("is idempotent, preserves an authoring edit, and detaches snapshots from the checked-in sample", async () => {
     const current = integration(); await current.initialization.initialize(); await current.initialization.initialize();
     const before = await current.compositionProviders[0]!.store.get("services-page");

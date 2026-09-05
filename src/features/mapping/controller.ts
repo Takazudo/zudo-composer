@@ -105,6 +105,7 @@ export class MappingEditorController {
   private readonly attachmentCallbacks?: MappingAttachmentCallbacks;
   private refreshRevision = 0;
   private pendingFlush: Promise<void> | null = null;
+  private attachmentRequestRevision = 0;
 
   constructor(
     readonly provider: MappingProvider,
@@ -147,7 +148,7 @@ export class MappingEditorController {
     const source = outcome.record.document;
     const duplicateId = this.idFactory(source.name);
     const timestamp = this.now();
-    const record = createMappingRecord({ id: duplicateId, name: `${source.name} copy`, contentModel: source.contentModel, composition: source.composition, bindings: cloneJson(source.bindings), createdAt: timestamp });
+    const record = createMappingRecord({ id: duplicateId, name: `${source.name} copy`, contentModel: source.contentModel, composition: source.composition, mode: cloneJson(source.mode), bindings: cloneJson(source.bindings), createdAt: timestamp });
     await this.requireFreshRecordId(duplicateId);
     await this.provider.store.put(record);
     await this.refreshLibrary();
@@ -212,6 +213,8 @@ export class MappingEditorController {
   }
 
   async delete(id: string): Promise<void> {
+    if (!this.attachmentCallbacks) throw new Error("Mapping deletion is blocked because collection attachments could not be verified.");
+    await this.attachmentCallbacks.assertMappingDeletable({ providerId: this.provider.descriptor.id, recordId: id });
     await this.flush(); await this.provider.store.delete(id); await this.refreshLibrary();
     if (this.current.mapping?.id === id) await this.close();
     this.set({ ...this.current, message: "Mapping deleted." });
@@ -371,6 +374,7 @@ export class MappingEditorController {
   get hasAttachmentService(): boolean { return this.attachmentCallbacks !== undefined; }
 
   async refreshAttachments(): Promise<void> {
+    const requestRevision = ++this.attachmentRequestRevision;
     if (!this.attachmentCallbacks) {
       this.set({ ...this.current, attachments: { ...emptyMappingAttachmentState, phase: "unavailable", message: "Collection attachment service is unavailable." } });
       return;
@@ -378,8 +382,10 @@ export class MappingEditorController {
     this.set({ ...this.current, attachments: { ...this.current.attachments, phase: "loading", message: null } });
     try {
       const snapshot = await this.attachmentCallbacks.list();
+      if (requestRevision !== this.attachmentRequestRevision) return;
       this.set({ ...this.current, attachments: { phase: "ready", snapshot, preview: null, message: null } });
     } catch (reason) {
+      if (requestRevision !== this.attachmentRequestRevision) return;
       const message = reason instanceof Error ? reason.message : "Collection attachments could not be loaded.";
       this.set({ ...this.current, attachments: { phase: "error", snapshot: null, preview: null, message } });
     }
@@ -405,7 +411,11 @@ export class MappingEditorController {
     if (!this.attachmentCallbacks) throw new Error("Collection attachment service is unavailable.");
     const attachment = this.current.attachments.snapshot?.attachments.find((item) => item.attachment.id === attachmentId)?.attachment;
     if (!attachment) throw new Error("This collection attachment is no longer available.");
+    const requestRevision = ++this.attachmentRequestRevision;
+    const targetKey = `${attachment.composition.providerId}/${attachment.composition.recordId}/${attachment.target.nodeId}/${attachment.target.slotId}`;
     const preview = await this.attachmentCallbacks.preview(attachment);
+    const current = this.current.attachments.snapshot?.attachments.find((item) => item.attachment.id === attachmentId)?.attachment;
+    if (requestRevision !== this.attachmentRequestRevision || !current || `${current.composition.providerId}/${current.composition.recordId}/${current.target.nodeId}/${current.target.slotId}` !== targetKey) return;
     this.set({ ...this.current, attachments: { ...this.current.attachments, phase: "ready", preview, message: preview.status === "ready" ? "Materialized attachment preview is current." : "Attachment preview has diagnostics." } });
   }
 

@@ -58,6 +58,7 @@ describe("MappingEditorController", () => {
 
   it("duplicates a stored record under a fresh id without touching the original", async () => {
     const source = mappingRecord([READY_BINDING]);
+    source.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [{ fieldId: "field-title", operator: "contains", value: "Hello" }], sort: [{ fieldId: "field-date", direction: "desc" }], pins: [{ providerId: CONTENT_REF.providerId, modelId: CONTENT_REF.recordId, recordId: entry.id }], limit: 7 } };
     const h = harness([source]);
     await h.controller.initialize();
     const duplicateId = await h.controller.duplicate(source.id);
@@ -67,6 +68,9 @@ describe("MappingEditorController", () => {
     expect(copy.document.name).toBe("Article Mapping copy");
     expect(copy.document.id).toBe(duplicateId);
     expect(copy.document.bindings).toEqual(source.document.bindings);
+    expect(copy.document.mode).toEqual(source.document.mode);
+    expect(copy.document.contentModel).toEqual(source.document.contentModel);
+    expect(copy.document.composition).toEqual(source.document.composition);
     expect(h.records.get(source.id)!.document.name).toBe("Article Mapping");
     expect(h.controller.state.mappings.map((summary) => summary.id).sort()).toEqual([duplicateId, source.id].sort());
   });
@@ -94,6 +98,14 @@ describe("MappingEditorController", () => {
     await expect(h.controller.duplicate(existing.id)).rejects.toThrow(/already exists/);
     expect(h.records.size).toBe(1);
     expect(h.records.get("taken")!.document.name).toBe("Already here");
+  });
+
+  it("fails closed when deleting a Mapping without an attachment snapshot service", async () => {
+    const source = mappingRecord();
+    const h = harness([source], RESOLVED_ENTRIES, { attachments: undefined });
+    await h.controller.initialize();
+    await expect(h.controller.delete(source.id)).rejects.toThrow(/could not be verified/);
+    expect(h.records.has(source.id)).toBe(true);
   });
 
   it("preserves broken references until explicitly repaired", async () => {
@@ -227,6 +239,7 @@ describe("MappingEditorController", () => {
       async attach(request) { requests.push(`${request.composition.providerId}/${request.composition.recordId}:${request.target.nodeId}.${request.target.slotId}:${request.mapping.providerId}/${request.mapping.recordId}`); snapshot = { ...snapshot, attachments: [item] }; },
       async detach(received) { requests.push(`detach:${received.id}`); snapshot = { ...snapshot, attachments: [] }; },
       async preview() { return { status: "ready", document: composition.document, staticFallback: composition.document, effectiveEntries: [entry], diagnostics: [] }; },
+      async assertMappingDeletable() {},
     };
     const h = harness([source], RESOLVED_ENTRIES, { attachments: callbacks });
     await h.controller.initialize();

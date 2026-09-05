@@ -23,15 +23,16 @@ export interface MappingAttachmentPaneProps {
 
 export function MappingAttachmentPane({ state, mapping, controller, componentProvider, run }: MappingAttachmentPaneProps): JSX.Element | null {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [fallbackId, setFallbackId] = useState<string | null>(null);
+  const [fallbackSelection, setFallbackSelection] = useState<{ attachmentId: string; targetKey: string } | null>(null);
   const confirm = useLibraryConfirm();
   if (mapping.document.mode.kind !== "collection") return null;
 
   const attachments = state.attachments.snapshot?.attachments.filter((item) => item.mapping.providerId === controller.provider.descriptor.id && item.mapping.recordId === mapping.id) ?? [];
   const occupied = new Set(attachments.map((item) => attachmentTargetKey(item.target)));
   const targets = state.attachments.snapshot?.targets.filter((target) => !occupied.has(attachmentTargetKey(target))) ?? [];
-  const previewItem = state.attachments.snapshot?.attachments.find((item) => item.attachment.id === fallbackId);
-  const previewDocument = fallbackId && previewItem?.staticFallback ? previewItem.staticFallback : state.attachments.preview?.document ?? attachments[0]?.materializedDocument ?? null;
+  const previewItem = fallbackSelection ? state.attachments.snapshot?.attachments.find((item) => item.attachment.id === fallbackSelection.attachmentId && attachmentTargetKey(item.target) === fallbackSelection.targetKey) : undefined;
+  const fallbackActive = Boolean(previewItem?.staticFallback);
+  const previewDocument = fallbackActive ? previewItem!.staticFallback! : state.attachments.preview?.document ?? attachments[0]?.materializedDocument ?? null;
 
   return (
     <PaneSection title="Composition attachment" class="cms-mapping-attachment" action={<Button size="sm" variant="ghost" disabled={!controller.hasAttachmentService || targets.length === 0} onClick={() => setDialogOpen(true)}><LinkIcon size="sm" />Attach</Button>}>
@@ -43,9 +44,9 @@ export function MappingAttachmentPane({ state, mapping, controller, componentPro
         <header><div><strong>{item.target.compositionName}</strong><span>{item.target.slotLabel} · {item.target.nodeId}.{item.target.slotId}</span></div><Chip tone={item.diagnostics.some((diagnostic) => diagnostic.severity === "blocking") ? "err" : "ok"}>{item.effectiveEntries.length} records</Chip></header>
         <p class="cms-mapping-attachment__mapping"><ComposerIcon size="xs" /> {item.mappingName}</p>
         {item.diagnostics.length ? <div class="cms-mapping-attachment__diagnostics">{item.diagnostics.map((diagnostic) => <Banner key={`${diagnostic.code}:${diagnostic.path ?? ""}`} tone={diagnostic.severity === "blocking" ? "err" : "warn"} title={diagnostic.code}>{diagnostic.message}</Banner>)}</div> : <p class="cms-mapping-attachment__ready">Effective ordered records are materialized by the aggregate compiler.</p>}
-        <div class="cms-mapping-attachment__actions"><Button size="sm" variant="ghost" disabled={item.diagnostics.some((diagnostic) => diagnostic.severity === "blocking")} onClick={() => { setFallbackId(null); run(() => controller.previewCollectionAttachment(item.attachment.id)); }}><EyeIcon size="sm" />Preview materialized</Button><Button size="sm" variant="ghost" disabled={!item.staticFallback} onClick={() => setFallbackId(item.attachment.id)}>Inspect static fallback</Button><Button size="sm" variant="ghost" onClick={() => confirm.request({ title: `Detach ${item.target.slotLabel}?`, message: "The owner Composition and collection Mapping remain unchanged. This only removes the aggregate attachment.", confirmLabel: "Detach", tone: "danger", onConfirm: () => run(() => controller.detachCollection(item.attachment.id)) })}><TrashIcon size="sm" />Detach</Button></div>
+        <div class="cms-mapping-attachment__actions"><Button size="sm" variant="ghost" disabled={item.diagnostics.some((diagnostic) => diagnostic.severity === "blocking")} onClick={() => { setFallbackSelection(null); run(() => controller.previewCollectionAttachment(item.attachment.id)); }}><EyeIcon size="sm" />Preview materialized</Button><Button size="sm" variant="ghost" disabled={!item.staticFallback} onClick={() => setFallbackSelection({ attachmentId: item.attachment.id, targetKey: attachmentTargetKey(item.target) })}>Inspect static fallback</Button><Button size="sm" variant="ghost" onClick={() => confirm.request({ title: `Detach ${item.target.slotLabel}?`, message: "The owner Composition and collection Mapping remain unchanged. This only removes the aggregate attachment.", confirmLabel: "Detach", tone: "danger", onConfirm: () => run(() => controller.detachCollection(item.attachment.id)) })}><TrashIcon size="sm" />Detach</Button></div>
       </article>)}</div> : null}
-      {previewDocument ? <section class="cms-mapping-attachment__preview"><h4>{fallbackId ? "Static fallback" : "Materialized attachment preview"}</h4><MappingPreviewHost componentProvider={componentProvider} document={previewDocument} loading={state.attachments.preview?.status === "ready" && !fallbackId} /></section> : null}
+      {previewDocument ? <section class="cms-mapping-attachment__preview"><h4>{fallbackActive ? "Static fallback" : "Materialized attachment preview"}</h4><MappingPreviewHost componentProvider={componentProvider} document={previewDocument} loading={state.attachments.preview?.status === "ready" && !fallbackActive} /></section> : null}
       <AttachCollectionDialog open={dialogOpen} targets={targets} onClose={() => setDialogOpen(false)} onSubmit={(target) => run(async () => { await controller.attachCollection({ composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: controller.provider.descriptor.id, recordId: mapping.id } }); setDialogOpen(false); })} />
       <ConfirmDialog {...confirm.dialogProps} />
     </PaneSection>

@@ -1,4 +1,5 @@
-import type { SiteProject } from "../site-project";
+import { isSiteProjectProviderId, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project";
+import { isSafeRecordId } from "../shared";
 import { notifyPersistenceChange, requestValue } from "../shared/persistence-generation";
 
 export const WORKSPACE_DATABASE_NAME = "zudo-composer-workspaces-v1";
@@ -36,6 +37,31 @@ function metadata(project: SiteProject): WorkspaceProjectMetadata {
     sitemaps: copy.providers.sitemaps.map(({ id }) => ({ id })),
   } };
 }
+
+function validAttachmentShape(value: unknown): value is SiteProjectCollectionAttachment {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  const ref = (candidate: unknown, domain: "compositions" | "mappings"): candidate is { providerId: string; recordId: string } => {
+    if (!candidate || typeof candidate !== "object") return false;
+    const value = candidate as Record<string, unknown>;
+    return Object.keys(value).length === 2 && typeof value.providerId === "string" && isSiteProjectProviderId(domain, value.providerId) && isSafeRecordId(value.recordId);
+  };
+  const target = item.target;
+  return Object.keys(item).length === 5
+    && isSafeRecordId(item.id)
+    && Number.isSafeInteger(item.order) && Number(item.order) >= 0
+    && ref(item.composition, "compositions") && ref(item.mapping, "mappings")
+    && !!target && typeof target === "object"
+    && Object.keys(target as object).length === 2
+    && typeof (target as Record<string, unknown>).nodeId === "string" && Boolean((target as Record<string, unknown>).nodeId)
+    && typeof (target as Record<string, unknown>).slotId === "string" && Boolean((target as Record<string, unknown>).slotId);
+}
+
+function validateCollectionAttachments(value: unknown): value is readonly SiteProjectCollectionAttachment[] {
+  if (!Array.isArray(value) || !value.every(validAttachmentShape)) return false;
+  const ids = new Set<string>();
+  return value.every((attachment) => !ids.has(attachment.id) && (ids.add(attachment.id), true));
+}
 export function projectFromWorkspace(record: WorkspaceRecord): SiteProject {
   const copy = structuredClone(record.metadata);
   return { ...copy, providers: {
@@ -63,7 +89,7 @@ export function createWorkspaceStorage(factory: IDBFactory | null | undefined) {
     finally { db.close(); }
   }
   function validate(value: unknown): WorkspaceRecord {
-    if (!value || typeof value !== "object" || (value as WorkspaceRecord).schemaVersion !== 1 || !Number.isSafeInteger((value as WorkspaceRecord).mutationToken) || (value as WorkspaceRecord).mutationToken < 0 || !["seeding", "ready"].includes((value as WorkspaceRecord).status) || !(value as WorkspaceRecord).metadata || typeof (value as WorkspaceRecord).baselineRevision !== "string") throw new Error("Workspace metadata is invalid; explicit recovery is required.");
+    if (!value || typeof value !== "object" || (value as WorkspaceRecord).schemaVersion !== 1 || !Number.isSafeInteger((value as WorkspaceRecord).mutationToken) || (value as WorkspaceRecord).mutationToken < 0 || !["seeding", "ready"].includes((value as WorkspaceRecord).status) || !(value as WorkspaceRecord).metadata || !validateCollectionAttachments((value as WorkspaceRecord).metadata.collectionAttachments) || typeof (value as WorkspaceRecord).baselineRevision !== "string") throw new Error("Workspace metadata is invalid; explicit recovery is required.");
     return value as WorkspaceRecord;
   }
   return {
@@ -98,13 +124,17 @@ export function createWorkspaceStorage(factory: IDBFactory | null | undefined) {
         return record;
       });
     },
-    async update(id: string, expectedToken: number, patch: { name?: string; activeSitemap?: SiteProject["activeSitemap"]; baselineRevision?: string }): Promise<WorkspaceRecord> {
+    async update(id: string, expectedToken: number, patch: { name?: string; activeSitemap?: SiteProject["activeSitemap"]; baselineRevision?: string; collectionAttachments?: readonly SiteProjectCollectionAttachment[] }): Promise<WorkspaceRecord> {
       return transaction("readwrite", async (records) => {
         const record = validate(await requestValue(records.get(id)));
         if (record.status !== "ready" || record.mutationToken !== expectedToken) throw new Error("Workspace metadata changed; reload before applying this update.");
         if (record.mutationToken === Number.MAX_SAFE_INTEGER) throw new Error("Workspace mutation generation is exhausted.");
         if (patch.name !== undefined) { if (!patch.name.trim()) throw new Error("Workspace name is required."); record.metadata.name = patch.name; }
         if (patch.activeSitemap !== undefined) record.metadata.activeSitemap = structuredClone(patch.activeSitemap);
+        if (patch.collectionAttachments !== undefined) {
+          if (!validateCollectionAttachments(patch.collectionAttachments)) throw new Error("Collection attachment metadata is malformed.");
+          record.metadata.collectionAttachments = patch.collectionAttachments.map((attachment) => structuredClone(attachment));
+        }
         if (patch.baselineRevision !== undefined) { if (!/^[a-f0-9]{64}$/.test(patch.baselineRevision)) throw new Error("Invalid baseline revision."); record.baselineRevision = patch.baselineRevision; }
         record.mutationToken++;
         records.put(record);
