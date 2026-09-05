@@ -55,6 +55,19 @@ async function seedRaw(factory: IDBFactory, value: unknown): Promise<void> {
 }
 
 describe("IndexedDB Sitemap provider", () => {
+  it("coalesces concurrent startFresh recreation and emits exactly one persistence notification", async () => {
+    const factory = new FDBFactory(); const provider = createIndexedDbSitemapProvider({ idbFactory: factory });
+    await provider.initialization.initialize(); await provider.store.put(record("old"));
+    const changed = vi.fn(); const stop = subscribePersistenceChanges(changed);
+    const deletion = vi.spyOn(factory, "deleteDatabase");
+    try {
+      const results = await Promise.all([provider.initialization.startFresh(), provider.initialization.startFresh(), provider.initialization.startFresh()]);
+      expect(results).toEqual(Array.from({ length: 3 }, () => ({ status: "ready", summaries: [] })));
+      expect(deletion).toHaveBeenCalledTimes(1);
+      expect(changed).toHaveBeenCalledTimes(1); expect(changed).toHaveBeenCalledWith(SITEMAPPER_DATABASE_NAME);
+      expect(await provider.store.list()).toEqual([]);
+    } finally { stop(); deletion.mockRestore(); }
+  });
   it.each([false, true])("preserves old physical/schema metadata until explicit reset (has records: %s)", async (hasRecords) => {
     const factory = new FDBFactory();
     const open = factory.open(SITEMAPPER_DATABASE_NAME, 1);

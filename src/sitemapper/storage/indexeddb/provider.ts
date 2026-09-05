@@ -135,7 +135,9 @@ export class IndexedDbSitemapRuntime {
         request.onblocked = () => undefined;
         request.onerror = () => reject(sitemapPersistenceError("clear", "write-failed", "Starting fresh Sitemap storage could not replace the database.", true, request.error));
       });
-      return (await this.openDatabase()).db.name;
+      const database = (await this.openDatabase()).db.name;
+      notifyPersistenceChange(database);
+      return database;
     });
     this.replacing = run;
     void run.finally(() => { if (this.replacing === run) this.replacing = undefined; }).catch(() => undefined);
@@ -331,8 +333,7 @@ export function createIndexedDbSitemapProvider(
       },
       startFresh: async () => {
         try {
-          const database = await runtime.replaceWithCurrentDatabase();
-          notifyPersistenceChange(database);
+          await runtime.replaceWithCurrentDatabase();
           if (options.seed) await store.seed(options.seed);
           return { status: "ready", summaries: await store.list() };
         } catch (error) {
