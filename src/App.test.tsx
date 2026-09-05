@@ -65,8 +65,8 @@ describe('App', () => {
     renderApp();
 
     expect(await screen.findByRole('heading', { name: 'Media' })).toBeInTheDocument();
-    expect(screen.getByText('Media file provider not connected')).toBeInTheDocument();
-    expect(screen.getByText(/browsing and uploading media both need the development file provider/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /upload/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /new folder/i })).toBeDisabled();
     expect(request).not.toHaveBeenCalled();
   });
 

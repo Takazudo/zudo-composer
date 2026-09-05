@@ -39,13 +39,13 @@ describe("Media Markdown consumption", () => {
     const library = render(<MediaApp provider={mediaProvider} controller={mediaController} intent={{ status: "none" }} />);
     // The Markdown reference lives in the detail panel, so the asset has to be
     // the one the panel is showing before it can be copied.
-    fireEvent.click(await screen.findByRole("button", { name: "Show details for hero image.png" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect hero image.png" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy Markdown" }));
     await waitFor(() => expect(writeClipboard).toHaveBeenCalledOnce());
     library.unmount();
 
     const markdown = writeClipboard.mock.calls[0]![0];
-    expect(markdown).toBe("![hero image](/uploaded-media/media-hero-image.png)");
+    expect(markdown).toBe("![hero image](/uploaded-media/asset-hero-image)");
 
     const model: ContentModelRecord = {
       id: "articles",
@@ -138,7 +138,7 @@ describe("Media Markdown consumption", () => {
     await waitFor(() => {
       const image = container.querySelector("img");
       expect(image).toHaveAttribute("alt", "hero image");
-      expect(image).toHaveAttribute("src", "/uploaded-media/media-hero-image.png");
+      expect(image).toHaveAttribute("src", "/uploaded-media/asset-hero-image");
     });
   });
 });
