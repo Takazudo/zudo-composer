@@ -78,7 +78,8 @@ function project(): SiteProject {
     createdAt: timestamp,
     updatedAt: timestamp,
     document: {
-      schemaVersion: 2 as const,
+      schemaVersion: 3 as const,
+      navigation: { primary: [], footer: [] },
       id: "main",
       name: "Main",
       root: [{ id: "home", title: "Home", source: { kind: "mapping" as const, ref: { providerId: "mapping-indexeddb", recordId: "article-page" }, route: { kind: "single" as const } }, children: [] }],

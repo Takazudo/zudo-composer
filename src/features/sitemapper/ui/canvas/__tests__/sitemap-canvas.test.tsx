@@ -27,7 +27,7 @@ beforeAll(() => {
 
 const page = (id: string, children: SitemapNode[] = []): SitemapNode => ({ id, title: id, source: { kind: "unassigned" }, children });
 const doc = (root: SitemapNode[] = [page("Home", [page("Child")])]): SitemapDocument => ({
-  schemaVersion: SITEMAP_SCHEMA_VERSION,
+  schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] },
   id: "canvas-test",
   name: "Canvas test",
   root,

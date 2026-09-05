@@ -22,7 +22,7 @@ function record(id = "product-map", name = "Product map", unassigned = true): Si
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     document: {
-      schemaVersion: 2,
+      schemaVersion: 3, navigation: { primary: [], footer: [] },
       id,
       name,
       root: [{

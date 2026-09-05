@@ -8,6 +8,23 @@ function code(value: unknown): string {
 }
 
 describe("isStructurallyValidDocument", () => {
+  it("requires independent current navigation and validates external/qualified targets exactly", () => {
+    const valid = document();
+    valid.navigation.primary = [{ id: "chosen", label: "Chosen", visible: true, destination: { kind: "route", nodeId: "home", entry: { providerId: "content", modelId: "articles", recordId: "one" }, ancestors: [] } }];
+    expect(code(valid)).toBe("ok");
+    expect(code({ ...valid, navigation: undefined })).toBe("invalid-navigation");
+    expect(code({ ...valid, schemaVersion: 2 })).toBe("unsupported-schema-version");
+    for (const url of ["javascript:alert(1)", "//example.com", "https://user:pass@example.com", "https://example.com/\\evil", " https://example.com", "https://example.com/\npath"]) {
+      valid.navigation.footer = [{ id: "external", label: "External", visible: true, destination: { kind: "external", url } }];
+      expect(code(valid)).toBe("invalid-navigation");
+    }
+    valid.navigation.footer = []; valid.navigation.primary.push(structuredClone(valid.navigation.primary[0]!));
+    expect(code(valid)).toBe("invalid-navigation");
+  });
+  it("rejects pathological authored depth before recursive JSON validation", () => {
+    let root = node("leaf"); for (let index = 0; index < 130; index++) root = node(`depth-${index}`, [root]);
+    expect(code(document([root]))).toBe("tree-limit");
+  });
   it("accepts the exact current shape and returns the typed document", () => {
     const value = document([
       {
@@ -77,10 +94,10 @@ describe("isStructurallyValidDocument", () => {
     expect(code(value)).toBe("invalid-source");
   });
 
-  it("accepts the exact source union and rejects Mapping nodes with authored children", () => {
+  it("accepts the exact source union including Mapping nodes with authored children", () => {
     const mapping = { kind: "mapping" as const, ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field" as const, fieldId: "slug", titleFieldId: "title" } };
     expect(code(document([{ ...node("articles"), source: mapping }]))).toBe("ok");
-    expect(code(document([{ ...node("articles", [node("synthetic")]), source: mapping }]))).toBe("mapping-children");
+    expect(code(document([{ ...node("articles", [node("synthetic")]), source: mapping }]))).toBe("ok");
     expect(code(document([{ ...node("articles"), source: { ...mapping, route: { kind: "single", fieldId: "slug" } } } as never]))).toBe("invalid-source");
     expect(code(document([{ ...node("articles"), source: { ...mapping, route: { ...mapping.route, titleFieldId: "../bad" } } } as never]))).toBe("invalid-source");
     expect(code(document([{ ...node("articles"), source: { ...mapping, route: { ...mapping.route, extra: true } } } as never]))).toBe("invalid-source");

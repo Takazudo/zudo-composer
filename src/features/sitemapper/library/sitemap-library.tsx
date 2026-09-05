@@ -65,7 +65,7 @@ function newRecord(id: string, name: string, timestamp: string): SitemapRecord {
     createdAt: timestamp,
     updatedAt: timestamp,
     document: {
-      schemaVersion: SITEMAP_SCHEMA_VERSION,
+      schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] },
       id,
       name,
       root: [{ id: `${id}-home`, title: "Home", source: { kind: "unassigned" }, children: [] }],

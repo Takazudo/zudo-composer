@@ -12,7 +12,7 @@ import type { SitemapRecord } from "..";
 
 function record(id = "site-map"): SitemapRecord {
   const document: SitemapDocument = {
-    schemaVersion: SITEMAP_SCHEMA_VERSION,
+    schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] },
     id,
     name: "Site map",
     root: [{

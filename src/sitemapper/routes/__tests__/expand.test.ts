@@ -4,6 +4,8 @@ import type { MappingCollectionQuery, MappingRecord } from "../../../mapping";
 import { SITEMAP_SCHEMA_VERSION, type SitemapDocument, type SitemapNode } from "../../model";
 import { authoredPath, expandSitemapRoutes } from "../expand";
 import type { MappingRouteCatalog } from "../types";
+import { resolveSitemapNavigation } from "../navigation";
+import { editSitemapNavigation } from "../../commands/navigation";
 
 const stamp = "2026-08-29T00:00:00.000Z";
 const defaultQuery: MappingCollectionQuery = { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 100 };
@@ -16,11 +18,66 @@ const model = (kind: "single" | "collection" = "collection", fieldKind: "slug" |
 ] } });
 const snapshot = (values: readonly unknown[]): ContentEntrySnapshot => ({ model: model(), count: values.length, diagnostics: [], entries: values.map((value, index) => ({ lifecycle: "draft" as const, generation: 0, schemaVersion: 1, id: `entry-${index}`, modelId: "articles", createdAt: stamp, updatedAt: stamp, values: { slug: value as never, title: `Title ${index}` } })) });
 const page = (id: string, slug: string, source: SitemapNode["source"] = { kind: "unassigned" }, children: SitemapNode[] = []): SitemapNode => ({ id, title: id, slug, source, children });
-const document = (root: SitemapNode): SitemapDocument => ({ schemaVersion: SITEMAP_SCHEMA_VERSION, id: "site", name: "Site", root: [root] });
+const document = (root: SitemapNode): SitemapDocument => ({ schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] }, id: "site", name: "Site", root: [root] });
 const catalog = (options: { kind?: "single" | "collection"; mappingMode?: "single" | "collection"; query?: MappingCollectionQuery; values?: readonly unknown[]; fieldKind?: "slug" | "text"; readinessDiagnostic?: { code: string; message: string } } = {}): MappingRouteCatalog => ({ list: vi.fn(), resolveMapping: vi.fn(async () => ({ status: "resolved" as const, record: mapping(options.mappingMode ?? (options.kind === "single" ? "single" : "collection"), options.query) })), resolveDefinitionReadiness: vi.fn(async () => options.readinessDiagnostic ? ({ status: "blocked" as const, diagnostics: [options.readinessDiagnostic] }) : ({ status: "ready" as const })), resolveContentSnapshot: vi.fn(async () => ({ status: "resolved" as const, model: model(options.kind, options.fieldKind), snapshot: snapshot(options.values ?? ["first", "second"]) })) });
 const source = (route: { kind: "single" } | { kind: "entry-field"; fieldId: string; titleFieldId?: string }): SitemapNode["source"] => ({ kind: "mapping", ref: { providerId: "mapping", recordId: "mapping" }, route });
 
 describe("Sitemapper route expansion", () => {
+  it("expands Cartesian children under concrete parents with qualified ancestor identity", async () => {
+    const child = page("child", "child", source({ kind: "entry-field", fieldId: "slug", titleFieldId: "title" }), [page("details", "details")]);
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("parent", "parent", source({ kind: "entry-field", fieldId: "slug" }), [child])), catalog: catalog({ values: ["one", "two"] }) });
+    expect(result.routes).toHaveLength(10);
+    const detail = result.routes.find((route) => route.pathname === "/parent/two/child/one/details")!;
+    expect(detail.ancestors).toEqual([
+      { nodeId: "parent", pathname: "/parent/two", displayTitle: "parent", selectedEntry: { providerId: "content", modelId: "articles", recordId: "entry-1" } },
+      { nodeId: "child", pathname: "/parent/two/child/one", displayTitle: "Title 0", selectedEntry: { providerId: "content", modelId: "articles", recordId: "entry-0" } },
+    ]);
+  });
+  it("preflights the Cartesian cap without materializing large route families", async () => {
+    let root = page("leaf", "leaf", source({ kind: "entry-field", fieldId: "slug" }));
+    for (let i = 0; i < 5; i++) root = page(`level-${i}`, `level-${i}`, source({ kind: "entry-field", fieldId: "slug" }), [root]);
+    const injected = catalog({ values: Array.from({ length: 10 }, (_, index) => `e-${index}`) });
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(root), catalog: injected });
+    expect(result.routes).toEqual([]); expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: "route-limit" }));
+    expect(injected.resolveContentSnapshot).toHaveBeenCalledTimes(6);
+  });
+  it("permits exactly 10,000 routes and blocks the next larger Cartesian family", async () => {
+    const children = Array.from({ length: 9 }, (_, index) => page(`child-${index}`, `child-${index}`));
+    const root = page("family", "family", source({ kind: "entry-field", fieldId: "slug" }), children);
+    const injected = catalog({ values: Array.from({ length: 1000 }, (_, index) => `slug-${index}`), query: { ...defaultQuery, limit: 1000 } });
+    const exact = await expandSitemapRoutes({ document: document(root), catalog: injected, policy: "authoring-preview" });
+    expect(exact.routes).toHaveLength(10000); expect(exact.diagnostics).toEqual([]);
+    root.children.push(page("overflow", "overflow"));
+    const over = await expandSitemapRoutes({ document: document(root), catalog: injected, policy: "authoring-preview" });
+    expect(over.routes).toHaveLength(0); expect(over.diagnostics[0]?.code).toBe("route-limit");
+  });
+  it("requires explicit preview policy for drafts and validates fixed collection entry ownership", async () => {
+    const entry = { providerId: "content", modelId: "articles", recordId: "entry-1" };
+    const doc = document(page("fixed", "chosen", { kind: "mapping", ref: { providerId: "mapping", recordId: "mapping" }, route: { kind: "selected-entry", entry } }));
+    const release = await expandSitemapRoutes({ document: doc, catalog: catalog() });
+    expect(release.routes).toEqual([]); expect(release.diagnostics[0]?.code).toBe("entry-ineligible");
+    const preview = await expandSitemapRoutes({ document: doc, catalog: catalog(), policy: "authoring-preview" });
+    expect(preview.routes).toHaveLength(1); expect(preview.routes[0]).toMatchObject({ pathname: "/chosen", selectedEntry: entry });
+    entry.providerId = "other";
+    expect((await expandSitemapRoutes({ document: doc, catalog: catalog(), policy: "authoring-preview" })).diagnostics[0]?.code).toBe("selected-entry-invalid");
+    const family = document(page("all", "all", source({ kind: "entry-field", fieldId: "slug" })));
+    expect((await expandSitemapRoutes({ document: family, catalog: catalog() })).routes).toHaveLength(0);
+  });
+  it("resolves independent concrete menus and diagnoses ambiguous, stale and unsafe destinations", async () => {
+    const doc = document(page("parent", "parent", source({ kind: "entry-field", fieldId: "slug" }), [page("child", "child")]));
+    const expansion = await expandSitemapRoutes({ document: doc, catalog: catalog(), policy: "authoring-preview" });
+    const parentEntry = { providerId: "content", modelId: "articles", recordId: "entry-1" };
+    doc.navigation.primary = [{ id: "ambiguous", label: "Family", visible: true, destination: { kind: "route", nodeId: "child" } }];
+    doc.navigation.footer = [{ id: "concrete", label: "Selected child", visible: true, destination: { kind: "route", nodeId: "child", ancestors: [{ nodeId: "parent", entry: parentEntry }] } }, { id: "external", label: "External", visible: true, destination: { kind: "external", url: "https://example.com/shop" } }];
+    const resolved = resolveSitemapNavigation(doc.navigation, expansion.routes);
+    expect(resolved.diagnostics[0]?.code).toBe("navigation-ambiguous");
+    expect(resolved.footer.map(({ href }) => href)).toEqual(["/parent/second/child", "https://example.com/shop"]);
+    const removed = editSitemapNavigation(doc, "primary", { kind: "remove", id: "ambiguous" });
+    expect(removed.ok).toBe(true); if (!removed.ok) return;
+    expect(removed.document.root).toEqual(doc.root); expect(removed.document.navigation.footer).toEqual(doc.navigation.footer);
+    doc.navigation.primary = [{ id: "stale", label: "Stale", visible: true, destination: { kind: "route", nodeId: "gone" } }, { id: "unsafe", label: "Unsafe", visible: true, destination: { kind: "external", url: "javascript:alert(1)" } }];
+    expect(resolveSitemapNavigation(doc.navigation, expansion.routes).diagnostics.map(({ code }) => code)).toEqual(["navigation-stale", "navigation-unsafe"]);
+  });
   it("normalizes nested fragments, root, and Unicode as encoded path segments", () => {
     expect(authoredPath(["/", "docs// café ", "e\u0301"])).toBe("/docs/%20caf%C3%A9%20/%C3%A9");
     expect(authoredPath(["/"])).toBe("/");
@@ -28,7 +85,7 @@ describe("Sitemapper route expansion", () => {
 
   it("expands one collection node in stable snapshot order without synthetic nodes", async () => {
     const node = page("articles", "/articles/", source({ kind: "entry-field", fieldId: "slug" }));
-    const result = await expandSitemapRoutes({ document: document(node), catalog: catalog({ values: ["one", "café"] }) });
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(node), catalog: catalog({ values: ["one", "café"] }) });
     expect(result.routes.map((route) => [route.pathname, route.entryId])).toEqual([["/articles/one", "entry-0"], ["/articles/caf%C3%A9", "entry-1"]]);
     expect(result).toMatchObject({ derivedRouteCount: 2, samplePath: "/articles/one", diagnostics: [] });
     expect(node.children).toEqual([]);
@@ -36,7 +93,7 @@ describe("Sitemapper route expansion", () => {
 
   it("honors collection query filters, pins, stable sort, dedupe, and limit while surfacing nonblocking diagnostics", async () => {
     const query: MappingCollectionQuery = { publication: "include-drafts", conditions: [{ fieldId: "title", operator: "not-equals", value: "Title 2" }], sort: [{ fieldId: "title", direction: "desc" }], pins: [{ providerId: "content", modelId: "articles", recordId: "entry-0" }, { providerId: "content", modelId: "articles", recordId: "missing" }], limit: 2 };
-    const result = await expandSitemapRoutes({ document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ values: ["zero", "one", "two"], query }) });
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ values: ["zero", "one", "two"], query }) });
     expect(result.routes.map((route) => route.entryId)).toEqual(["entry-0", "entry-1"]);
     expect(result.diagnostics).toEqual([expect.objectContaining({ code: "collection-query-pin-not-found", severity: "nonblocking", entryId: "missing" })]);
     expect(result.nodes.get("articles")).toMatchObject({ status: "ready", mapping: { entryCount: 2 } });
@@ -44,7 +101,7 @@ describe("Sitemapper route expansion", () => {
 
   it("blocks collection routes on stale query fields", async () => {
     const query: MappingCollectionQuery = { ...defaultQuery, conditions: [{ fieldId: "gone", operator: "exists" }] };
-    const result = await expandSitemapRoutes({ document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ query }) });
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ query }) });
     expect(result.routes).toEqual([]);
     expect(result.diagnostics).toEqual([expect.objectContaining({ code: "collection-query-stale-query-field", severity: "blocking" })]);
     expect(result.nodes.get("articles")?.status).toBe("blocked");
@@ -52,7 +109,7 @@ describe("Sitemapper route expansion", () => {
 
   it("retains ancestor-aware canonical output for every node", async () => {
     const child = page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }));
-    const result = await expandSitemapRoutes({ document: document(page("docs", "docs", undefined, [child])), catalog: catalog({ values: ["first"] }) });
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("docs", "docs", undefined, [child])), catalog: catalog({ values: ["first"] }) });
     expect(result.nodes.get("articles")).toEqual({
       derivedRouteCount: 1,
       samplePath: "/docs/articles/first",
@@ -75,7 +132,7 @@ describe("Sitemapper route expansion", () => {
     ["incompatible-binding", "The source and target types are incompatible."],
   ])("blocks route generation for Mapping definition diagnostic %s", async (code, message) => {
     const injected = catalog({ readinessDiagnostic: { code, message } });
-    const result = await expandSitemapRoutes({ document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: injected });
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: injected });
     expect(result.routes).toEqual([]);
     expect(result.diagnostics).toEqual([expect.objectContaining({ code: "incompatible-mapping", nodeId: "articles", message })]);
     expect(result.nodes.get("articles")).toMatchObject({ derivedRouteCount: 0, status: "blocked", mapping: { entryCount: 2 } });
@@ -83,17 +140,17 @@ describe("Sitemapper route expansion", () => {
   });
 
   it.each(["", " ", "a/b", "a?b", "a#b", ".", ".."])("diagnoses forbidden Entry slug %j", async (value) => {
-    const result = await expandSitemapRoutes({ document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ values: [value] }) });
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ values: [value] }) });
     expect(result.diagnostics[0]?.code).toBe(value.trim() ? "entry-slug-invalid" : "entry-slug-missing");
     expect(result.derivedRouteCount).toBe(0);
   });
 
   it("diagnoses malformed Unicode in authored fragments and Entry slugs without throwing", async () => {
     const malformed = "\uD800";
-    const authored = await expandSitemapRoutes({ document: document(page("bad", malformed)), catalog: catalog() });
+    const authored = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("bad", malformed)), catalog: catalog() });
     expect(authored.diagnostics).toEqual([expect.objectContaining({ code: "route-fragment-invalid", nodeId: "bad" })]);
     expect(authored.routes).toEqual([]);
-    const entry = await expandSitemapRoutes({ document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ values: [malformed] }) });
+    const entry = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("articles", "articles", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ values: [malformed] }) });
     expect(entry.diagnostics).toEqual([expect.objectContaining({ code: "entry-slug-invalid", entryId: "entry-0" })]);
     expect(entry.routes).toEqual([]);
     expect(() => authoredPath([malformed])).not.toThrow();
@@ -103,7 +160,7 @@ describe("Sitemapper route expansion", () => {
     "blocks authored dot-path form %j before it can escape or collide after normalization",
     async (slug) => {
       const root = page("site", "site", undefined, [page("bad", slug), page("admin", "admin")]);
-      const result = await expandSitemapRoutes({ document: document(root), catalog: catalog() });
+      const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(root), catalog: catalog() });
       expect(result.routes.map((route) => route.pathname)).toEqual(["/site", "/site/admin"]);
       expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: "route-fragment-invalid", nodeId: "bad" }));
       expect(result.nodes.get("bad")).toMatchObject({ status: "blocked", derivedRouteCount: 0 });
@@ -111,30 +168,30 @@ describe("Sitemapper route expansion", () => {
   );
 
   it("diagnoses both route-mode mismatches and missing/non-slug fields", async () => {
-    const singleMismatch = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ kind: "collection", mappingMode: "single" }) });
-    const collectionMismatch = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "single" }))), catalog: catalog({ kind: "single", mappingMode: "collection" }) });
-    const missing = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "gone" }))), catalog: catalog() });
-    const wrong = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ fieldKind: "text" }) });
+    const singleMismatch = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ kind: "collection", mappingMode: "single" }) });
+    const collectionMismatch = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("p", "p", source({ kind: "single" }))), catalog: catalog({ kind: "single", mappingMode: "collection" }) });
+    const missing = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("p", "p", source({ kind: "entry-field", fieldId: "gone" }))), catalog: catalog() });
+    const wrong = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug" }))), catalog: catalog({ fieldKind: "text" }) });
     expect([singleMismatch, collectionMismatch, missing, wrong].map((result) => result.diagnostics[0]?.code)).toEqual(["wrong-route-mode", "wrong-route-mode", "route-field-missing", "route-field-not-slug"]);
   });
 
   it("blocks stale or non-textual configured Entry title fields", async () => {
-    const missing = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug", titleFieldId: "gone" }))), catalog: catalog() });
-    const wrong = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug", titleFieldId: "count" }))), catalog: catalog() });
+    const missing = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug", titleFieldId: "gone" }))), catalog: catalog() });
+    const wrong = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug", titleFieldId: "count" }))), catalog: catalog() });
     expect([missing, wrong].map((result) => result.diagnostics[0]?.code)).toEqual(["title-field-missing", "title-field-not-textual"]);
     expect(missing.routes).toEqual([]);
     expect(wrong.routes).toEqual([]);
   });
 
   it("reports static/static, static/generated, and generated/generated collisions case-sensitively", async () => {
-    const staticStatic = await expandSitemapRoutes({ document: document(page("root", "/", undefined, [page("a", "same"), page("b", "same"), page("case", "Same")])), catalog: catalog() });
+    const staticStatic = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("root", "/", undefined, [page("a", "same"), page("b", "same"), page("case", "Same")])), catalog: catalog() });
     expect(staticStatic.diagnostics.map((item) => item.code)).toContain("route-collision");
     const generated = page("generated", "/", source({ kind: "entry-field", fieldId: "slug" }));
-    const staticGenerated = await expandSitemapRoutes({ document: document(page("root", "/", undefined, [page("static", "same"), generated])), catalog: catalog({ values: ["same", "same"] }) });
-    expect(staticGenerated.diagnostics.filter((item) => item.code === "route-collision").map((item) => item.nodeId)).toEqual(["static", "generated", "static", "generated"]);
+    const staticGenerated = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("root", "/", undefined, [page("static", "same"), generated])), catalog: catalog({ values: ["same", "same"] }) });
+    expect(staticGenerated.diagnostics.filter((item) => item.code === "route-collision").map((item) => item.nodeId)).toEqual(["static", "generated", "generated"]);
     expect(staticGenerated.nodes.get("generated")?.status).toBe("blocked");
     expect(staticGenerated.nodes.get("static")?.status).toBe("blocked");
-    const generatedGenerated = await expandSitemapRoutes({ document: document(page("root", "/", undefined, [page("first", "/", source({ kind: "entry-field", fieldId: "slug" })), page("second", "/", source({ kind: "entry-field", fieldId: "slug" }))])), catalog: catalog({ values: ["same"] }) });
+    const generatedGenerated = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("root", "/", undefined, [page("first", "/", source({ kind: "entry-field", fieldId: "slug" })), page("second", "/", source({ kind: "entry-field", fieldId: "slug" }))])), catalog: catalog({ values: ["same"] }) });
     expect(generatedGenerated.diagnostics.filter((item) => item.code === "route-collision").map((item) => item.nodeId)).toEqual(["first", "second"]);
     expect(generatedGenerated.nodes.get("first")?.status).toBe("blocked");
     expect(generatedGenerated.nodes.get("second")?.status).toBe("blocked");
@@ -142,7 +199,7 @@ describe("Sitemapper route expansion", () => {
   });
 
   it("reports canonically equivalent Unicode authored routes as one normalized collision", async () => {
-    const result = await expandSitemapRoutes({
+    const result = await expandSitemapRoutes({ policy: "authoring-preview",
       document: document(page("root", "/", undefined, [page("decomposed", "e\u0301"), page("composed", "é")])),
       catalog: catalog(),
     });
@@ -151,16 +208,16 @@ describe("Sitemapper route expansion", () => {
   });
 
   it("diagnoses unsupported external bases and provider outcomes", async () => {
-    const external = await expandSitemapRoutes({ document: document(page("external", "https://example.com", source({ kind: "single" }))), catalog: catalog({ kind: "single" }) });
+    const external = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("external", "https://example.com", source({ kind: "single" }))), catalog: catalog({ kind: "single" }) });
     expect(external.diagnostics[0]?.code).toBe("unsupported-external-base");
     const failed = catalog(); failed.resolveMapping = vi.fn(async () => ({ status: "provider-error" as const, reason: "offline" }));
-    const result = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "single" }))), catalog: failed });
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("p", "p", source({ kind: "single" }))), catalog: failed });
     expect(result.diagnostics[0]).toMatchObject({ code: "mapping-provider-failure", message: "offline" });
   });
 
   it("uses exactly one Content snapshot so count, sample, and full routes agree", async () => {
     const injected = catalog({ values: ["one", "two"] });
-    const result = await expandSitemapRoutes({ document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug" }))), catalog: injected });
+    const result = await expandSitemapRoutes({ policy: "authoring-preview", document: document(page("p", "p", source({ kind: "entry-field", fieldId: "slug" }))), catalog: injected });
     expect(injected.resolveContentSnapshot).toHaveBeenCalledTimes(1);
     expect(result.derivedRouteCount).toBe(result.routes.length);
     expect(result.samplePath).toBe(result.routes[0]?.pathname);

@@ -1,7 +1,7 @@
 import type { ContentEntrySnapshot, ContentModelRecord } from "../../content";
 import type { MappingCatalog, MappingCatalogEntry, MappingRecord } from "../../mapping";
 import type { MappingCollectionDiagnosticCode } from "../../mapping";
-import type { MappingRef, SitemapDocument } from "../model";
+import type { MappingRef, SitemapDocument, SitemapEntryRef } from "../model";
 
 export type SitemapRouteDiagnosticCode =
   | "mapping-not-found" | "mapping-invalid" | "mapping-provider-failure"
@@ -10,6 +10,7 @@ export type SitemapRouteDiagnosticCode =
   | "title-field-missing" | "title-field-not-textual"
   | "entry-slug-missing" | "entry-slug-invalid" | "incompatible-mapping"
   | "route-fragment-invalid" | "route-collision" | "unsupported-external-base"
+  | "route-limit" | "invalid-tree" | "selected-entry-invalid" | "entry-ineligible" | "single-entry-count"
   | `collection-query-${MappingCollectionDiagnosticCode}`;
 
 export interface SitemapRouteDiagnostic {
@@ -26,7 +27,13 @@ export interface DerivedSitemapRoute {
   nodeId: string;
   sourceKind: "unassigned" | "composition" | "mapping";
   entryId?: string;
+  selectedEntry?: SitemapEntryRef;
+  displayTitle: string;
+  ancestors: readonly SitemapRouteAncestor[];
 }
+export interface SitemapRouteAncestor { nodeId: string; pathname: string; displayTitle: string; selectedEntry?: SitemapEntryRef }
+export type SitemapPublicationPolicy = "authoring-preview" | "release";
+export const MAX_SITEMAP_ROUTES = 10000;
 
 export interface SitemapRouteExpansion {
   routes: readonly DerivedSitemapRoute[];
@@ -82,6 +89,7 @@ export interface MappingAssignmentCatalog {
 }
 
 export interface ExpandSitemapRoutesOptions {
+  policy?: SitemapPublicationPolicy;
   document: SitemapDocument;
   catalog: Pick<MappingRouteCatalog, "resolveMapping" | "resolveDefinitionReadiness" | "resolveContentSnapshot">;
 }

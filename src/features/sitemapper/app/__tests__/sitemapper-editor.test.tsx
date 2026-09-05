@@ -35,7 +35,7 @@ function record(): SitemapRecord {
     createdAt: "2026-04-01T00:00:00.000Z",
     updatedAt: "2026-04-01T00:00:00.000Z",
     document: {
-      schemaVersion: 2,
+      schemaVersion: 3, navigation: { primary: [], footer: [] },
       id: "walk-map",
       name: "Walk map",
       root: [{

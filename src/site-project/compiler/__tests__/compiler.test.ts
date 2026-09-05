@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isSafeRecordId } from "../../../shared";
 import { compileSiteProject } from "../../index";
+import { breadcrumbs } from "../../../features/delivery/chrome";
 import {
   componentCatalog,
   composition,
@@ -17,6 +18,52 @@ import {
 const compile = (value = project()) => compileSiteProject(value, { componentCatalog });
 
 describe("SiteProject compiler", () => {
+  it("compiles nested Cartesian contexts and breadcrumbs without selecting the first repeated ancestor", async () => {
+    const value = project({ root: page("parent", "parent", mappingSource("entry-field", "title"), [page("child", "child", mappingSource("entry-field", "title"), [page("details", "details", { kind: "composition", ref: { providerId: "indexeddb", recordId: "landing" } })])]), entries: [entry("a", "Alpha"), entry("b", "Beta")] });
+    const result = await compile(value); expect(result.status).toBe("ready"); if (result.status !== "ready") return;
+    expect(result.build.routes).toHaveLength(10);
+    expect(new Set(result.build.routes.map((route) => route.composition.routeRecordId)).size).toBe(10);
+    const route = result.build.routes.find(({ pathname }) => pathname === "/parent/b/child/a/details")!;
+    expect(route.ancestors[0]).toMatchObject({ pathname: "/parent/b", selectedEntry: { providerId: "content-indexeddb", modelId: "articles", recordId: "b" } });
+    expect(breadcrumbs(value.providers.sitemaps[0]!.records[0]!.document, result.build.routes, "details", route.pathname).map(({ title, href }) => [title, href])).toEqual([["Beta", "/site/parent/b"], ["Alpha", "/site/parent/b/child/a"], ["details", "/site/parent/b/child/a/details"]]);
+    expect(result.build.activeSitemap).toEqual(value.activeSitemap);
+  });
+  it("compiles a selected collection entry and uses explicit preview/release draft policy", async () => {
+    const mapped = mapping(); mapped.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 100 } };
+    const selected = entry("chosen", "Chosen"); selected.lifecycle = "draft";
+    const value = project({ root: page("fixed", "fixed", { kind: "mapping", ref: { providerId: "mapping-indexeddb", recordId: mapped.id }, route: { kind: "selected-entry", entry: { providerId: "content-indexeddb", modelId: "articles", recordId: selected.id } } }), mappings: [mapped], entries: [selected, entry("other")] });
+    const released = await compile(value); expect(released.status).toBe("blocked");
+    const preview = await compileSiteProject(value, { componentCatalog, policy: "authoring-preview" });
+    expect(preview.status).toBe("ready"); if (preview.status !== "ready") return;
+    expect(preview.build.routes).toHaveLength(1); expect(preview.build.routes[0]).toMatchObject({ pathname: "/fixed", selectedEntry: { recordId: "chosen", providerId: "content-indexeddb", modelId: "articles" } });
+  });
+  it("compiles independent menu destinations and blocks an ambiguous generated family", async () => {
+    const value = project({ root: page("articles", "articles", mappingSource()), entries: [entry("a"), entry("b")] });
+    const sitemap = value.providers.sitemaps[0]!.records[0]!.document;
+    sitemap.navigation.primary = [{ id: "family", label: "Family", visible: true, destination: { kind: "route", nodeId: "articles" } }];
+    expect((await compile(value)).status).toBe("blocked");
+    sitemap.navigation.primary[0]!.destination = { kind: "route", nodeId: "articles", entry: { providerId: "content-indexeddb", modelId: "articles", recordId: "b" } };
+    sitemap.navigation.footer = [{ id: "shop", label: "External shop", visible: true, destination: { kind: "external", url: "https://example.com/shop" } }];
+    const result = await compile(value); expect(result.status).toBe("ready"); if (result.status !== "ready") return;
+    expect(result.build.navigation.primary[0]?.href).toBe("/articles/b"); expect(result.build.navigation.footer[0]).toMatchObject({ href: "https://example.com/shop", external: true });
+  });
+  it("materializes collection route links within each concrete ancestor family", async () => {
+    const owner = globalTemplate("owner"); delete owner.document.publication;
+    const articles = model(); articles.document.fields.push({ id: "related", key: "related", label: "Related", required: true, kind: "reference", target: { providerId: "content-indexeddb", recordId: "articles" } });
+    const items = [entry("a"), entry("b")]; for (const item of items) item.values.related = { providerId: "content-indexeddb", modelId: "articles", recordId: item.id };
+    const itemMapping = mapping(); itemMapping.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit: 100 } };
+    itemMapping.document.bindings[0] = { ...itemMapping.document.bindings[0]!, sourceFieldId: "related", projection: { kind: "route-link" } };
+    const groups = model(); groups.id = groups.document.id = "groups";
+    const groupEntries = [entry("g1"), entry("g2")]; for (const item of groupEntries) item.modelId = "groups";
+    const groupMapping = mapping("owner"); groupMapping.id = groupMapping.document.id = "group-page"; groupMapping.document.contentModel.recordId = "groups"; groupMapping.document.bindings = []; groupMapping.document.mode = structuredClone(itemMapping.document.mode);
+    const value = project({ root: page("groups", "groups", { kind: "mapping", ref: { providerId: "mapping-indexeddb", recordId: "group-page" }, route: { kind: "entry-field", fieldId: "slug" } }, [page("items", "items", mappingSource())]), compositions: [owner, composition("landing")], contentModel: articles, entries: [...items, ...groupEntries], mappings: [groupMapping, itemMapping], attachments: [{ id: "cards", order: 0, composition: { providerId: "indexeddb", recordId: "owner" }, target: { nodeId: "owner-root", slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: itemMapping.id } }] });
+    value.providers.content[0]!.models.push(groups);
+    const result = await compile(value); expect(result.status).toBe("ready"); if (result.status !== "ready") return;
+    for (const group of ["g1", "g2"]) {
+      const route = result.build.routes.find(({ pathname }) => pathname === `/groups/${group}`)!;
+      expect(route.composition.document.root[0]!.slots.body!.map((node) => node.props.title)).toEqual([`/groups/${group}/items/a`, `/groups/${group}/items/b`]);
+    }
+  });
   it("compiles a static Composition into a concrete synthetic route target", async () => {
     const result = await compile();
     expect(result.status).toBe("ready");
@@ -222,7 +269,7 @@ describe("SiteProject compiler", () => {
     const result = await compile(project({ root: page("articles", "articles", mappingSource()), entries: [invalid] }));
     expect(result.status).toBe("blocked");
     if (result.status !== "blocked") return;
-    expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: "mapping-required-value-missing", entry: { providerId: "content-indexeddb", recordId: "bad" }, pathname: "/articles/bad" }));
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: "mapping-required-value-missing", entry: { providerId: "content-indexeddb", modelId: "articles", recordId: "bad" }, pathname: "/articles/bad" }));
   });
 
   it("materializes linked-template context but plans JSX from the evaluated local document", async () => {

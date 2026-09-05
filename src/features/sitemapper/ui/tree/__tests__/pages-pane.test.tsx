@@ -11,7 +11,7 @@ import { PagesPane } from "../pages-pane";
 afterEach(cleanup);
 
 function documentOf(root: SitemapNode[]): SitemapDocument {
-  return { schemaVersion: SITEMAP_SCHEMA_VERSION, id: "pages", name: "Pages", root };
+  return { schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] }, id: "pages", name: "Pages", root };
 }
 
 const page = (id: string, title = id, children: SitemapNode[] = []): SitemapNode =>

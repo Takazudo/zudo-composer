@@ -4,11 +4,12 @@ import type { SitemapDocument } from "../../../sitemapper/model/types";
 import { breadcrumbs, footerNavigation, primaryNavigation } from "../chrome";
 import { isSitePath, matchSiteRoute, normalizeDeliveryLinks, safeDeliveryHref, siteRoutePathname, toSiteHref } from "../routing";
 
-const sitemap: SitemapDocument = { schemaVersion: 2, id: "map", name: "Map", root: [{ id: "home", title: "Home", source: { kind: "unassigned" }, children: [
+const menu = ["home", "about", "journal"].map((id) => ({ id, label: id[0]!.toUpperCase() + id.slice(1), visible: true, destination: { kind: "route" as const, nodeId: id } }));
+const sitemap: SitemapDocument = { schemaVersion: 3, navigation: { primary: menu, footer: structuredClone(menu) }, id: "map", name: "Map", root: [{ id: "home", title: "Home", source: { kind: "unassigned" }, children: [
   { id: "about", title: "About", slug: "about", source: { kind: "unassigned" }, children: [] },
   { id: "journal", title: "Journal", slug: "journal", source: { kind: "unassigned" }, children: [{ id: "entry", title: "Article", source: { kind: "unassigned" }, children: [] }] },
 ] }] };
-const route = (pathname: string, id: string, displayTitle = id) => ({ pathname, displayTitle, sitemapNode: { id, path: `$${id}` } }) as SiteCompiledRoute;
+const route = (pathname: string, id: string, displayTitle = id) => ({ pathname, displayTitle, source: { kind: "composition", ref: { providerId: "test", recordId: id } }, ancestors: id === "home" ? [] : [{ nodeId: "home", pathname: "/", displayTitle: "Home" }, ...(id === "entry" ? [{ nodeId: "journal", pathname: "/journal", displayTitle: "Journal" }] : [])], sitemapNode: { id, path: `$${id}` }, modules: [], composition: { local: { providerId: "test", recordId: id }, routeRecordId: id, document: { schemaVersion: 2, id, name: id, root: [] } } }) as SiteCompiledRoute;
 const routes = [route("/", "home", "Home"), route("/about", "about", "About"), route("/journal", "journal", "Journal"), route("/journal/first", "entry", "First"), route("/journal/second", "entry", "Second")];
 
 describe("delivery routing", () => {
@@ -54,9 +55,9 @@ describe("delivery routing", () => {
 describe("Sitemap-derived chrome", () => {
   it("uses authored order and ready route node identities", () => {
     expect(primaryNavigation(sitemap, routes, "entry", "/journal/second")).toEqual([
-      { id: "home", title: "Home", href: "/site", active: true, current: false },
-      { id: "about", title: "About", href: "/site/about", active: false, current: false },
-      { id: "journal", title: "Journal", href: "/site/journal", active: true, current: false },
+      { id: "home", title: "Home", href: "/site", active: true, current: false, external: false },
+      { id: "about", title: "About", href: "/site/about", active: false, current: false, external: false },
+      { id: "journal", title: "Journal", href: "/site/journal", active: true, current: false, external: false },
     ]);
     expect(breadcrumbs(sitemap, routes, "entry", "/journal/second").map(({ id, title, href }) => [id, title, href])).toEqual([["home", "Home", "/site"], ["journal", "Journal", "/site/journal"], ["entry", "Second", "/site/journal/second"]]);
     expect(footerNavigation(sitemap, routes, "entry", "/journal/second").map(({ href }) => href)).toEqual(["/site", "/site/about", "/site/journal"]);
@@ -67,6 +68,7 @@ describe("compiled route prefixing", () => {
   it("links a legal /site compiler route below the delivery boundary", () => {
     const nested = { ...sitemap, root: [{ ...sitemap.root[0]!, children: [...sitemap.root[0]!.children, { id: "site", title: "Site", slug: "site", source: { kind: "unassigned" as const }, children: [] }] }] };
     const nestedRoutes = [...routes, route("/site", "site")];
+    nested.navigation = { ...nested.navigation, primary: [...nested.navigation.primary, { id: "site", label: "Site", visible: true, destination: { kind: "route", nodeId: "site" } }] };
     expect(primaryNavigation(nested, nestedRoutes, "site", "/site").at(-1)?.href).toBe("/site/site");
   });
 });

@@ -15,7 +15,7 @@ export function createSampleSitemap(): SitemapDocument {
   };
 
   return {
-    schemaVersion: SITEMAP_SCHEMA_VERSION,
+    schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] },
     id: "sample-sitemap",
     name: "Sample sitemap",
     root: [

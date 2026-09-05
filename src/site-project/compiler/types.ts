@@ -2,8 +2,11 @@ import type { CompositionDocument } from "../../composer/model/types";
 import type { ComponentCatalog } from "../../composer/model/types";
 import type { LinkedJsxModuleKind } from "../../composer/source/plan-linked-jsx";
 import type { SiteProject, SiteProjectRecordRef } from "../model/types";
+import type { SitemapEntryRef } from "../../sitemapper/model";
+import type { SitemapPublicationPolicy, SitemapRouteAncestor, ResolvedSitemapNavigation } from "../../sitemapper/routes";
 
 export interface CompileSiteProjectOptions {
+  policy?: SitemapPublicationPolicy;
   /** Manifest-only catalog used by Mapping, reuse, and JSX generation. */
   componentCatalog: ComponentCatalog;
 }
@@ -51,12 +54,14 @@ export interface SiteCompiledRoute {
   displayTitle: string;
   sitemapNode: { id: string; path: string };
   source: SiteCompiledRouteSource;
-  selectedEntry?: SiteProjectRecordRef;
+  selectedEntry?: SitemapEntryRef;
+  ancestors: readonly SitemapRouteAncestor[];
   composition: SiteCompiledRouteComposition;
   modules: readonly SiteCompiledModule[];
 }
 
 export interface SiteBuildPlan {
+  navigation: ResolvedSitemapNavigation;
   projectId: string;
   activeSitemap: SiteProjectRecordRef;
   routes: readonly SiteCompiledRoute[];

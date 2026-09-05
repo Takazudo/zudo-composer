@@ -5,10 +5,11 @@
 // invariants. Valid no-ops retain the original document reference so consumers
 // may safely memoize work on document identity.
 
-import { cloneJson, isJsonSafe, isPlainObject, isSafeRecordId } from "../../shared";
+import { cloneJson, isJsonSafe, isPlainObject } from "../../shared";
 import type { IdFactory } from "../../shared";
 import { indexDocument } from "../model";
 import type { SitemapDocument, SitemapNode, SitemapPageSource } from "../model";
+import { validSitemapSource, isStructurallyValidDocument } from "../model/validate";
 
 export type SitemapCommandErrorCode =
   | "node-not-found"
@@ -18,8 +19,7 @@ export type SitemapCommandErrorCode =
   | "root-cardinality"
   | "root-removal"
   | "descendant-cycle"
-  | "id-collision"
-  | "mapping-children";
+  | "id-collision";
 
 export interface SitemapPagePropsPatch {
   title?: string;
@@ -92,6 +92,7 @@ export function addRootPage(
 
   const next = cloneJson(document);
   next.root.push({ id, title, source: { kind: "unassigned" }, children: [] });
+  if (!isStructurallyValidDocument(next).ok) return failure("invalid-patch", "The resulting Sitemap exceeds current schema bounds.");
   return { ok: true, document: next, selectedId: id, insertedId: id, changed: true };
 }
 
@@ -106,7 +107,6 @@ export function addChildPage(
   const index = indexDocument(document);
   const parent = index.byId.get(parentId)?.node;
   if (!parent) return failure("node-not-found", `Parent page "${parentId}" was not found`);
-  if (parent.source.kind === "mapping") return failure("mapping-children", "Mapping-source pages cannot have authored children");
 
   const insertionIndex = atIndex ?? parent.children.length;
   if (!validIndex(insertionIndex, parent.children.length)) {
@@ -119,6 +119,7 @@ export function addChildPage(
   const next = cloneJson(document);
   const nextParent = indexDocument(next).byId.get(parentId)!.node;
   nextParent.children.splice(insertionIndex, 0, { id, title, source: { kind: "unassigned" }, children: [] });
+  if (!isStructurallyValidDocument(next).ok) return failure("invalid-patch", "The resulting Sitemap exceeds current schema bounds.");
   return { ok: true, document: next, selectedId: id, insertedId: id, changed: true };
 }
 
@@ -149,41 +150,23 @@ export function addSiblingPage(
   const next = cloneJson(document);
   const nextSiblings = childrenOf(next, location.parentId)!;
   nextSiblings.splice(insertionIndex, 0, { id, title, source: { kind: "unassigned" }, children: [] });
+  if (!isStructurallyValidDocument(next).ok) return failure("invalid-patch", "The resulting Sitemap exceeds current schema bounds.");
   return { ok: true, document: next, selectedId: id, insertedId: id, changed: true };
 }
 
 const PAGE_PROP_KEYS = new Set(["title", "slug", "source", "notes"]);
 
-function validRef(value: unknown): boolean {
-  return isPlainObject(value)
-    && Object.keys(value).length === 2
-    && Object.hasOwn(value, "providerId")
-    && Object.hasOwn(value, "recordId")
-    && typeof value.providerId === "string"
-    && value.providerId.length > 0
-    && isSafeRecordId(value.recordId);
-}
-
-function validSource(value: unknown): value is SitemapPageSource {
-  if (!isPlainObject(value) || typeof value.kind !== "string") return false;
-  if (value.kind === "unassigned") return Object.keys(value).length === 1;
-  if (value.kind === "composition") return Object.keys(value).length === 2 && validRef(value.ref);
-  if (value.kind !== "mapping" || Object.keys(value).length !== 3 || !validRef(value.ref) || !isPlainObject(value.route)) return false;
-  return value.route.kind === "single"
-    ? Object.keys(value.route).length === 1
-    : value.route.kind === "entry-field"
-      && (Object.keys(value.route).length === 2 || Object.keys(value.route).length === 3)
-      && Object.keys(value.route).every((key) => key === "kind" || key === "fieldId" || key === "titleFieldId")
-      && isSafeRecordId(value.route.fieldId)
-      && (!Object.hasOwn(value.route, "titleFieldId") || isSafeRecordId(value.route.titleFieldId));
-}
+function validSource(value: unknown): value is SitemapPageSource { return validSitemapSource(value); }
 
 function equalSource(a: unknown, b: SitemapPageSource): boolean {
   if (!validSource(a) || a.kind !== b.kind) return false;
   if (a.kind === "unassigned" || b.kind === "unassigned") return a.kind === b.kind;
   if (a.ref.providerId !== b.ref.providerId || a.ref.recordId !== b.ref.recordId) return false;
   if (a.kind === "composition" || b.kind === "composition") return a.kind === b.kind;
-  return a.route.kind === b.route.kind && (a.route.kind === "single" || (b.route.kind === "entry-field" && a.route.fieldId === b.route.fieldId && a.route.titleFieldId === b.route.titleFieldId));
+  if (a.route.kind !== b.route.kind) return false;
+  if (a.route.kind === "single") return true;
+  if (a.route.kind === "entry-field" && b.route.kind === "entry-field") return a.route.fieldId === b.route.fieldId && a.route.titleFieldId === b.route.titleFieldId;
+  return a.route.kind === "selected-entry" && b.route.kind === "selected-entry" && a.route.entry.providerId === b.route.entry.providerId && a.route.entry.modelId === b.route.entry.modelId && a.route.entry.recordId === b.route.entry.recordId;
 }
 
 function validPatchValue(key: string, value: unknown): boolean {
@@ -200,7 +183,6 @@ export function updatePageProps(
   patch: SitemapPagePropsPatch,
 ): SitemapCommandResult {
   const location = indexDocument(document).byId.get(pageId);
-  const requestedSource = patch.source;
   if (!location) return failure("node-not-found", `Page "${pageId}" was not found`);
   if (!isPlainObject(patch) || !isJsonSafe(patch)) {
     return failure("invalid-patch", "Page property patch must be a JSON-safe object");
@@ -225,9 +207,6 @@ export function updatePageProps(
     return { ok: true, document, selectedId: pageId, changed: false };
   }
 
-  if (requestedSource?.kind === "mapping" && location.node.children.length > 0) {
-    return failure("mapping-children", "Move or remove authored children before assigning a Mapping");
-  }
 
   const next = cloneJson(document);
   const node = indexDocument(next).byId.get(pageId)!.node as SitemapNode & Record<string, unknown>;
@@ -235,6 +214,7 @@ export function updatePageProps(
     if (value === null) delete node[key];
     else node[key] = cloneJson(value as object | string) as unknown;
   }
+  if (!isStructurallyValidDocument(next).ok) return failure("invalid-patch", "The resulting Sitemap exceeds current schema bounds.");
   return { ok: true, document: next, selectedId: pageId, changed: true };
 }
 
@@ -280,6 +260,7 @@ export function removePage(
       ?? siblings[location.index - 1]?.id
       ?? location.parentId;
   }
+  if (!isStructurallyValidDocument(next).ok) return failure("invalid-patch", "The resulting Sitemap exceeds current schema bounds.");
   return { ok: true, document: next, selectedId: repaired, changed: true };
 }
 
@@ -349,6 +330,7 @@ export function duplicatePage(
   const next = cloneJson(document);
   const siblings = childrenOf(next, location.parentId)!;
   siblings.splice(location.index + 1, 0, cloned.node);
+  if (!isStructurallyValidDocument(next).ok) return failure("invalid-patch", "The resulting Sitemap exceeds current schema bounds.");
   return {
     ok: true,
     document: next,
@@ -379,16 +361,13 @@ export function movePage(
   }
   const target = childrenOf(document, targetParentId, index);
   if (!target) return failure("node-not-found", `Target parent page "${targetParentId}" was not found`);
-  if (targetParentId !== null && index.byId.get(targetParentId)?.node.source.kind === "mapping") {
-    return failure("mapping-children", "Mapping-source pages cannot have authored children");
-  }
   if (!validIndex(targetIndex, target.length)) {
     return failure("invalid-index", `Target index ${targetIndex} is out of bounds`);
   }
 
   const sameList = source.parentId === targetParentId;
   if (!sameList && targetParentId === null) {
-    return failure("root-cardinality", "Sitemap v1 allows exactly one root page");
+    return failure("root-cardinality", "The current Sitemap schema allows exactly one root page");
   }
   const insertionIndex = sameList && source.index < targetIndex ? targetIndex - 1 : targetIndex;
   if (sameList && insertionIndex === source.index) {
@@ -401,6 +380,7 @@ export function movePage(
   const [detached] = sourceList.splice(source.index, 1);
   const targetList = childrenOf(next, targetParentId, nextIndex)!;
   targetList.splice(insertionIndex, 0, detached!);
+  if (!isStructurallyValidDocument(next).ok) return failure("invalid-patch", "The resulting Sitemap exceeds current schema bounds.");
   return { ok: true, document: next, selectedId: pageId, changed: true };
 }
 
@@ -425,5 +405,6 @@ export function reorderPage(
     nextSiblings[targetIndex]!,
     nextSiblings[location.index]!,
   ];
+  if (!isStructurallyValidDocument(next).ok) return failure("invalid-patch", "The resulting Sitemap exceeds current schema bounds.");
   return { ok: true, document: next, selectedId: pageId, changed: true };
 }

@@ -92,7 +92,7 @@ function sitemapNode(id: string, title: string, source: SitemapNode["source"], c
 }
 
 function sitemapRecord(id: string, updatedAt: string, root: SitemapNode[]): SitemapRecord {
-  return { id, createdAt: AT(1), updatedAt, document: { schemaVersion: SITEMAP_SCHEMA_VERSION, id, name: `Sitemap ${id}`, root } };
+  return { id, createdAt: AT(1), updatedAt, document: { schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] }, id, name: `Sitemap ${id}`, root } };
 }
 
 function mediaSummary(id: string, updatedAt: string, mediaType: MediaSummary["mediaType"], byteLength: number): MediaSummary {
