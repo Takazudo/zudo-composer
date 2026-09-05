@@ -90,7 +90,10 @@ export function createWorkspaceStorage(factory: IDBFactory | null | undefined) {
     async complete(id: string): Promise<WorkspaceRecord> {
       return transaction("readwrite", async (records, selection) => {
         const record = validate(await requestValue(records.get(id)));
-        if (record.status !== "ready") { record.status = "ready"; delete record.seed; record.mutationToken++; records.put(record); }
+        if (record.status !== "ready") {
+          if (record.mutationToken === Number.MAX_SAFE_INTEGER) throw new Error("Workspace mutation generation is exhausted.");
+          record.status = "ready"; delete record.seed; record.mutationToken++; records.put(record);
+        }
         selection.put(id, "active");
         return record;
       });

@@ -66,6 +66,19 @@ describe("workspace save and capture lifetime", () => {
 });
 
 describe("durable mutable workspace", () => {
+  it("preserves a seeding record and the prior selection when completion token is exhausted", async () => {
+    const opts = options(); const current = createProductionProviderIntegration(opts); await current.initialization.initialize();
+    const storage = createWorkspaceStorage(opts.compositionIdbFactory);
+    const seeding = await storage.create(opts.project, revision, "exhausted");
+    const exhausted = { ...seeding, mutationToken: Number.MAX_SAFE_INTEGER };
+    const db = await requestValue(opts.compositionIdbFactory.open("zudo-composer-workspaces-v1"));
+    const tx = db.transaction("workspaces", "readwrite");
+    const done = new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); });
+    tx.objectStore("workspaces").put(exhausted); await done; db.close();
+    await expect(storage.complete("exhausted")).rejects.toThrow("generation is exhausted");
+    expect(await storage.open("exhausted")).toEqual(exhausted);
+    expect((await storage.open())!.id).toBe(current.workspace.id);
+  });
   it.each(["composition", "mapping", "sitemap"] as const)("%s tokens persist atomically across instances, delete/clear, abort and exhaustion", async (domain) => {
     const factory = new IDBFactory();
     const make = () => domain === "composition" ? createIndexedDbCompositionProvider({ idbFactory: factory, seed: [] }) : domain === "mapping" ? createIndexedDbMappingProvider({ idbFactory: factory }) : createIndexedDbSitemapProvider({ idbFactory: factory });

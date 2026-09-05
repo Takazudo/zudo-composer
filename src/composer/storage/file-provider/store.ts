@@ -277,7 +277,14 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
 
   private async request<T>(operation: WireOperation, fields: Record<string, unknown> = {}): Promise<T> {
     const response = await this.fetchJson<T>(operation, fields);
-    if (response.ok) { if (operation !== "snapshot" && operation !== "list" && operation !== "get") notifyPersistenceChange("compositions:files"); return response.result; }
+    if (response.ok) {
+      const deleted = operation === "delete" && response.result === true;
+      const lifecycleDeleted = operation === "delete-with-dependency-check"
+        && typeof response.result === "object" && response.result !== null
+        && "status" in response.result && response.result.status === "deleted";
+      if (operation === "clear" || deleted || lifecycleDeleted) notifyPersistenceChange("compositions:files");
+      return response.result;
+    }
     throw this.fromServerError(persistenceOperation(operation), response.error);
   }
 

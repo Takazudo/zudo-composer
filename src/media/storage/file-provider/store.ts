@@ -129,7 +129,7 @@ class BrowserFileProviderMediaStore implements MediaFileProviderStore {
       if (result.status !== "loaded" || result.record.id !== id) throw persistenceError(operationFor(operation), "validation", "Media mutation returned an invalid record.");
     }
     if (operation.endsWith("folder") && (!validateMediaFolder(payload.result) || (id !== undefined && payload.result.id !== id))) throw persistenceError("folder", "validation", "Media mutation returned an invalid folder.");
-    if (["upload", "replace", "metadata", "trash", "restore", "create-folder", "update-folder", "trash-folder", "restore-folder"].includes(operation)) notifyPersistenceChange("media");
+    if ((operation === "delete" && payload.result === true) || ["upload", "replace", "metadata", "trash", "restore", "create-folder", "update-folder", "trash-folder", "restore-folder"].includes(operation)) notifyPersistenceChange("media");
     return payload.result;
   }
 }
