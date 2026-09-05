@@ -242,6 +242,7 @@ export async function compileSiteProject(
   if (options.mediaLock && !validateMediaReferenceLock(options.mediaLock)) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-lock-invalid", message: "The exact-version Media lock is invalid.", path: "$.mediaLock" }] };
   const media = resolveSiteProjectMedia(project, options.componentCatalog, { lock: options.mediaLock });
   const mediaMissing = media.index.references.filter(({ ref }) => !options.mediaLock || !resolvePinnedMedia(ref, options.mediaLock));
+  if ((options.policy ?? "release") === "release" && !media.index.complete) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-impact-incomplete", message: "Managed Media inspection is incomplete. " + media.index.advisory.map(({ reason }) => reason).join(" "), path: "$.mediaLock" }] };
   if ((options.policy ?? "release") === "release" && media.index.advisory.some(({ value }) => value && isImmutableMediaUrl(value))) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-lock-required", message: "An immutable Media URL has no verified lock association.", path: "$.mediaLock" }] };
   if ((options.policy ?? "release") === "release" && mediaMissing.length) return { status: "blocked", routes: [], diagnostics: mediaMissing.map(({ location }) => ({ severity: "blocking", code: "media-lock-required", message: "Required managed Media must be captured in an exact-version lock before release compilation.", path: JSON.stringify(location) })) };
   project = media.project;
@@ -509,7 +510,7 @@ export async function compileSiteProject(
     if (!localDocument) continue;
     const resolvedMedia = resolveCompositionMedia(localDocument, options.componentCatalog, { lock: options.mediaLock });
     const unresolvedMedia = resolvedMedia.index.references.filter(({ ref }) => !options.mediaLock || !resolvePinnedMedia(ref, options.mediaLock));
-    if ((options.policy ?? "release") === "release" && (unresolvedMedia.length || resolvedMedia.index.advisory.some(({ value }) => value && isImmutableMediaUrl(value)))) { diagnostics.push({ severity: "blocking", code: "media-lock-required", message: "Materialized Media is absent from the exact-version lock.", path: indexed.path, pathname: expanded.pathname, nodeId: node.id }); continue; }
+    if ((options.policy ?? "release") === "release" && (!resolvedMedia.index.complete || unresolvedMedia.length || resolvedMedia.index.advisory.some(({ value }) => value && isImmutableMediaUrl(value)))) { diagnostics.push({ severity: "blocking", code: "media-lock-required", message: "Materialized Media is incomplete or absent from the exact-version lock.", path: indexed.path, pathname: expanded.pathname, nodeId: node.id }); continue; }
     localDocument = resolvedMedia.document;
     const providerId = localRef!.providerId;
     const cycle = bindingCycle(providerId, localRef!.recordId, { ...localRecord, document: localDocument }, (ref) => adapters.compositions.catalog.resolve(ref));

@@ -513,6 +513,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     return () => { stopStorage(); stopSessions(); };
   };
   const mappingAttachmentService = createMappingAttachmentService({
+    mediaStore: mediaProvider?.store,
     getCurrentSiteProject,
     workspace,
     componentCatalog: activeComponentProvider.catalog,

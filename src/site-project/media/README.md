@@ -14,6 +14,15 @@ alongside the captured asset revision, head and catalog mutation token.
 lock explicitly to `compileSiteProject`; required managed references without pins
 block compilation. The compiler never fetches a mutable Media head itself.
 
+Live visitor delivery and Mapping attachment previews use
+`compileWithCapturedMedia`: capture once from the injected store, verify exact
+bytes/metadata and coherent project revision around compilation, then pass the
+captured lock. Failure blocks without recapturing latest or retrying implicitly.
+Identityless URLs always use that injected provider identity; impact inspection
+without the identity is incomplete. Malformed or unsupported managed-looking
+values block release and preview, even when no valid reference was collected.
+Already immutable preview URLs remain exact and need no mutable provider lookup.
+
 `resolveSiteProjectMedia` and `inspectSiteProjectMedia` expose provider-qualified
 Content fields, Composition properties, Markdown source ranges, rendered routes,
 and materialization source nodes plus entry chains. Supported string destinations

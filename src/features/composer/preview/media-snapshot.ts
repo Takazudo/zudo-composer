@@ -12,8 +12,10 @@ function resolverFor(store: VersionedMediaStore | undefined) {
   let resolver = resolvers.get(store); if (!resolver) { resolver = new LiveMediaReferenceResolver(store); resolvers.set(store, resolver); } return resolver;
 }
 export async function resolvePreviewMediaSnapshot(snapshot: ComposerPreviewSnapshot, catalog: ComponentCatalog, resolver: LiveMediaReferenceResolver) {
-  const local = resolveCompositionMedia(snapshot.document, catalog);
-  const linked = snapshot.linked ? resolveCompositionMedia(snapshot.linked.sourceDocument, catalog) : undefined;
+  const identity = { providerId: resolver.store?.provider.id, preservePinnedUrls: true };
+  const local = resolveCompositionMedia(snapshot.document, catalog, identity);
+  const linked = snapshot.linked ? resolveCompositionMedia(snapshot.linked.sourceDocument, catalog, identity) : undefined;
+  if (!local.index.complete || linked?.index.complete === false) return { status: "blocked" as const, message: "Media inspection is incomplete. " + [...local.index.advisory, ...(linked?.index.advisory ?? [])].map(({ reason }) => reason).join(" ") };
   const refs = [...local.index.references, ...(linked?.index.references ?? [])].map(({ ref }) => ref);
   if (!refs.length) return { status: "ready" as const, snapshot };
   const result = await resolver.resolve(refs);
@@ -26,7 +28,12 @@ export function useMediaResolvedPreviewSnapshot(snapshot: ComposerPreviewSnapsho
   const store = useWorkspace()?.integration.mediaProvider?.store;
   const resolver = useMemo(() => resolverFor(store), [store]);
   const [generation, setGeneration] = useState(0);
-  const hasManaged = useMemo(() => enabled && snapshot !== null && (resolveCompositionMedia(snapshot.document, catalog).index.references.length > 0 || (snapshot.linked && resolveCompositionMedia(snapshot.linked.sourceDocument, catalog).index.references.length > 0)), [snapshot, catalog, enabled]);
+  const hasManaged = useMemo(() => {
+    if (!enabled || !snapshot) return false;
+    const identity = { providerId: store?.provider.id, preservePinnedUrls: true };
+    const indices = [resolveCompositionMedia(snapshot.document, catalog, identity).index, ...(snapshot.linked ? [resolveCompositionMedia(snapshot.linked.sourceDocument, catalog, identity).index] : [])];
+    return indices.some((index) => !index.complete || index.references.length > 0);
+  }, [snapshot, catalog, enabled, store]);
   const [resolved, setResolved] = useState<{ source: ComposerPreviewSnapshot; generation: number; value: ComposerPreviewSnapshot | null; error?: string } | null>(null);
   useEffect(() => hasManaged ? resolver.subscribeChanges(() => { setGeneration((value) => value + 1); }) : undefined, [resolver, hasManaged]);
   useEffect(() => {

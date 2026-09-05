@@ -11,16 +11,21 @@ import type { MediaImpactIndex, MediaImpactLocation } from "./types";
 
 const URL_PROPERTIES = new Set(["src", "href", "poster", "url"]);
 const managedHint = (value: string) => value.includes("/uploaded-media/asset-") || value.includes("/uploaded-media/sha256-");
-export interface MediaImpactOptions { snapshot?: MediaSnapshot; lock?: MediaReferenceLock; providerId?: string; routes?: readonly SiteCompiledRoute[] }
+export interface MediaImpactOptions { snapshot?: MediaSnapshot; lock?: MediaReferenceLock; providerId?: string; routes?: readonly SiteCompiledRoute[]; preservePinnedUrls?: boolean }
 function collector(options: MediaImpactOptions = {}) {
   const index: MediaImpactIndex = { complete: true, references: [], advisory: [] };
   const advisory = (location: MediaImpactLocation, reason: string, value: string, unknown = false) => { index.advisory.push({ location, reason, value }); if (unknown) index.complete = false; };
   const url = (value: string, location: MediaImpactLocation): string => {
-    const ref = parseManagedMediaUrl(value, options.providerId ?? options.lock?.providerId ?? "media-files");
+    // Preview consumers may already receive compiled exact output. Such URLs
+    // are not mutable authoring references and must never resolve a latest head.
+    if (options.preservePinnedUrls && isImmutableMediaUrl(value)) return value;
+    const providerId = options.providerId ?? options.lock?.providerId;
+    if (!providerId && managedHint(value)) { advisory(location, "Managed URL requires an available Media provider identity.", value, true); return value; }
+    const ref = providerId ? parseManagedMediaUrl(value, providerId) : undefined;
     if (ref) { index.references.push({ ref, location }); return options.lock ? resolvePinnedMedia(ref, options.lock)?.url ?? value : value; }
     if (isImmutableMediaUrl(value)) {
       const matches = options.lock?.pins.filter((pin) => pin.url === value).map(({ providerId, assetId, versionId }) => ({ providerId, assetId, versionId }))
-        ?? options.snapshot?.records.flatMap((record) => record.document.versions.filter((version) => version.url === value).map((version) => ({ providerId: options.providerId ?? "media-files", assetId: record.id, versionId: version.id })));
+        ?? options.snapshot?.records.flatMap((record) => record.document.versions.filter((version) => version.url === value).map((version) => ({ providerId: providerId!, assetId: record.id, versionId: version.id })));
       if (matches?.length) for (const exact of matches) index.references.push({ ref: exact, location });
       else advisory(location, "Immutable Media URL has no known asset/version association.", value, true);
       return value;

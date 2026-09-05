@@ -2,7 +2,9 @@ import type { ComponentCatalog, CompositionDocument, CompositionNode } from "../
 import type { CompositionRecordRef } from "../composer/library";
 import { evaluateCollectionQuery, type MappingRecordRef } from "../mapping";
 import type { MappingAttachmentCallbacks, MappingAttachmentDiagnostic, MappingAttachmentItem, MappingAttachmentPreview, MappingAttachmentSnapshot, MappingAttachmentTarget } from "../features/mapping/attachments";
-import { compileSiteProject, type SiteProjectCompilation } from "../site-project/compiler";
+import { type SiteProjectCompilation } from "../site-project/compiler";
+import { compileWithCapturedMedia } from "../site-project/media/compile";
+import type { VersionedMediaStore } from "../media/library";
 import { browserProviderIdFor, validateSiteProject, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project";
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
 import type { WorkspaceRecord } from "./workspace-storage";
@@ -14,6 +16,7 @@ interface MappingAttachmentServiceOptions {
     updateMetadata(expectedToken: number, patch: { collectionAttachments?: readonly SiteProjectCollectionAttachment[] }): Promise<WorkspaceRecord>;
   };
   componentCatalog: ComponentCatalog;
+  mediaStore?: VersionedMediaStore;
   subscribe(listener: () => void): () => void;
 }
 
@@ -110,7 +113,7 @@ function compilerDiagnostics(compilation: SiteProjectCompilation, attachmentId: 
   if (compilation.status === "ready") return [];
   const attachmentPath = `$.collectionAttachments[?(@.id==${JSON.stringify(attachmentId)})]`;
   return compilation.diagnostics
-    .filter((diagnostic) => diagnostic.path === "$.collectionAttachments" || diagnostic.path.startsWith(attachmentPath))
+    .filter((diagnostic) => diagnostic.path === "$.mediaLock" || diagnostic.path === "$.collectionAttachments" || diagnostic.path.startsWith(attachmentPath))
     .map((diagnostic) => ({ code: diagnostic.code, severity: "blocking" as const, message: diagnostic.message, path: diagnostic.path }));
 }
 
@@ -178,7 +181,7 @@ export function createMappingAttachmentService(options: MappingAttachmentService
   }
 
   async function compile(project: SiteProject): Promise<SiteProjectCompilation> {
-    return compileSiteProject(project, { componentCatalog: options.componentCatalog });
+    return compileWithCapturedMedia(project, { catalog: options.componentCatalog, mediaStore: options.mediaStore, readProject: async () => (await coherent(false)).project });
   }
 
   async function list(): Promise<MappingAttachmentSnapshot> {

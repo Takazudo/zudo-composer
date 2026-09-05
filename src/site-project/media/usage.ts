@@ -16,7 +16,7 @@ export function createProjectMediaUsageInspection(options: { readProject(): Prom
       if (pending) return pending;
       const run = (async () => {
         const project = await options.readProject(), revision = serializeSiteProject(project);
-        const index = await inspectSiteProjectMedia(project, options.catalog, await options.mediaStore?.snapshot());
+        const index = await inspectSiteProjectMedia(project, options.catalog, await options.mediaStore?.snapshot(), options.mediaStore?.provider.id);
         if (serializeSiteProject(await options.readProject()) !== revision) { index.complete = false; index.advisory.push({ location: { domain: "materialization", providerId: project.activeSitemap.providerId, recordId: project.activeSitemap.recordId, valuePath: [] }, reason: "Project changed during impact inspection." }); }
         return { index, revision };
       })();

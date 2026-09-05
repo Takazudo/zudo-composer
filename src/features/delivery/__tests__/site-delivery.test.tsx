@@ -6,7 +6,8 @@ import { createProductionProviderIntegration, ProviderIntegrationError, type Pro
 import { activeComponentProvider } from "../../composer/active-pack";
 import { loadSampleSiteProject } from "../../../site-project/sample";
 import { serializeSiteProject } from "../../../site-project/model/canonical";
-import { SiteDelivery } from "../site-delivery";
+import { SiteDelivery, loadDeliverySnapshot } from "../site-delivery";
+import { providerFixture, PNG } from "../../media/__tests__/versioned-fixture";
 
 afterEach(cleanup);
 const sample = () => loadSampleSiteProject({ componentPack: activeComponentProvider.manifest });
@@ -16,6 +17,19 @@ function fixture(project = sample()): ProductionProviderIntegration {
 }
 
 describe("SiteDelivery", () => {
+  it("captures exact managed Media for visitor output and blocks missing provider or corrupt bytes", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const asset = await filesystem.upload({ fileName: "download.png", declaredMediaType: "image/png", bytes: PNG });
+    const project = sample();
+    project.providers.compositions[0]!.records.find(({ id }) => id === "home-page")!.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-media/asset-${asset.id}`, children: "Download" }, slots: {} });
+    const providers = fixture(project); providers.mediaProvider = provider;
+    const result = await loadDeliverySnapshot(providers);
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") expect(result.build.routes.find(({ pathname }) => pathname === "/")!.composition.document.root.find(({ id }) => id === "download")!.props.href).toBe(asset.document.versions[0]!.url);
+    expect((await loadDeliverySnapshot(fixture(project))).status).toBe("compiler-error");
+    vi.spyOn(provider.store, "resolveVersion").mockRejectedValue(new Error("Corrupt bytes"));
+    expect((await loadDeliverySnapshot(providers)).status).toBe("compiler-error");
+  });
   it.each([
     ["/site", "Clear ideas, carefully shaped"],
     ["/site/services", "Ways to work together"],

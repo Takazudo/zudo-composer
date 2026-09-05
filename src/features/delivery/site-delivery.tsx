@@ -1,7 +1,8 @@
 import { Component, type ComponentChildren, type JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { ProductionProviderIntegration } from "../../app/provider-integration";
-import { compileSiteProject, type SiteBuildPlan, type SiteCompiledRoute } from "../../site-project/compiler";
+import { type SiteBuildPlan, type SiteCompiledRoute } from "../../site-project/compiler";
+import { compileWithCapturedMedia } from "../../site-project/media/compile";
 import { validateSiteProject, type SiteProject } from "../../site-project";
 import type { SitemapDocument } from "../../sitemapper/model/types";
 import { breadcrumbs, footerNavigation, primaryNavigation } from "./chrome";
@@ -27,7 +28,7 @@ export async function loadDeliverySnapshot(providers: ProductionProviderIntegrat
     if (snapshot.status === "error") return { status: "provider-error", message: snapshot.error.message, retryable: snapshot.error.retryable };
     const validated = validateSiteProject(snapshot.project, { componentPack: providers.componentProvider.manifest });
     if (!validated.ok) return { status: "validation-error", message: validated.diagnostics.map(({ message }) => message).join(" ") };
-    const compilation = await compileSiteProject(validated.project, { componentCatalog: providers.componentProvider.catalog, policy: "release" });
+    const compilation = await compileWithCapturedMedia(validated.project, { catalog: providers.componentProvider.catalog, mediaStore: providers.mediaProvider?.store, readProject: async () => { const current = await providers.getCurrentSiteProject({ flushSessions: false }); if (current.status !== "ready") throw current.error; return current.project; } });
     if (compilation.status === "blocked") return { status: "compiler-error", message: compilation.diagnostics.map(({ message }) => message).join(" ") };
     const sitemap = activeSitemap(validated.project);
     return sitemap ? { status: "ready", project: validated.project, build: compilation.build, sitemap } : { status: "validation-error", message: "The active Sitemap is unavailable." };

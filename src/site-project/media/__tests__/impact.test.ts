@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { compileWithCapturedMedia } from "../compile";
+import { createProjectMediaUsageInspection } from "../usage";
+import type { VersionedMediaStore } from "../../../media/library";
 import { createComponentCatalog } from "../../../composer/model/types";
 import { componentCatalog, project, entry } from "../../compiler/__tests__/fixtures";
 import { resolveSiteProjectMedia } from "../impact";
@@ -14,6 +17,28 @@ const catalog = createComponentCatalog({ kind: "zudo-composer/component-pack", c
 ] }] });
 const lock: MediaReferenceLock = { schemaVersion: 1, providerId: "media-files", mutationToken: "b".repeat(64), pins: [{ providerId: "media-files", assetId: "asset", versionId: checksum, checksum, mediaType: "image/png", byteLength: 12, url: mediaVersionUrl(checksum, "image/png"), metadataRevision: 1, headVersionId: checksum }] };
 describe("provider-qualified media impact", () => {
+  it("captures and compiles identityless URLs with the actual provider and guards boundary changes", async () => {
+    const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = "/uploaded-media/asset-asset";
+    const record = createMediaRecord({ fileName: "image.png", checksum, byteLength: 12, mediaType: "image/png" }, { id: "asset" });
+    const snapshot = { schemaVersion: 2 as const, mutationToken: "b".repeat(64), folders: [], records: [record] };
+    const pin = { ...lock.pins[0]!, providerId: "custom-media" };
+    const resolveVersion = vi.fn(async (ref) => { expect(ref.providerId).toBe("custom-media"); const { metadataRevision, headVersionId, ...exact } = pin; expect(metadataRevision).toBe(1); expect(headVersionId).toBe(checksum); return exact; });
+    const store = { provider: { id: "custom-media" }, snapshot: async () => structuredClone(snapshot), mutationToken: async () => snapshot.mutationToken, resolveVersion } as unknown as VersionedMediaStore;
+    const result = await compileWithCapturedMedia(value, { catalog, mediaStore: store, readProject: async () => value });
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") expect(result.build.routes[0]!.composition.document.root[0]!.props.href).toBe(pin.url);
+    const inspection = await createProjectMediaUsageInspection({ readProject: async () => value, catalog, mediaStore: store }).read();
+    expect(inspection.index.complete).toBe(true);
+    expect(inspection.index.references.every(({ ref }) => ref.providerId === "custom-media")).toBe(true);
+    expect((await compileWithCapturedMedia(value, { catalog, mediaStore: store, readProject: async () => ({ ...value, name: "Changed" }) })).status).toBe("blocked");
+    expect((await compileWithCapturedMedia(value, { catalog, mediaStore: store, readProject: async () => { snapshot.mutationToken = "c".repeat(64); return value; } })).status).toBe("blocked");
+    resolveVersion.mockRejectedValue(new Error("Corrupt bytes"));
+    expect((await compileWithCapturedMedia(value, { catalog, mediaStore: store, readProject: async () => value })).status).toBe("blocked");
+  });
+  it.each(["/uploaded-media/asset-bad?query", "raw /uploaded-media/asset-asset"])("blocks unsupported managed text before release: %s", async (href) => {
+    const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = href;
+    expect((await compileSiteProject(value, { componentCatalog: catalog, mediaLock: lock })).status).toBe("blocked");
+  });
   it("indexes typed Content and nested declared props, preserving arbitrary text and external URLs", () => {
     const value = project(); const model = value.providers.content[0]!.models[0]!;
     model.document.fields.push({ id: "hero", key: "hero", label: "Hero", required: false, kind: "media-use", use: "image" });
@@ -35,7 +60,7 @@ describe("provider-qualified media impact", () => {
     expect(result.status).toBe("ready"); if (result.status !== "ready") return;
     expect(result.build.routes[0]!.composition.document.root[0]!.props.href).toBe(lock.pins[0]!.url);
     const media = createMediaRecord({ fileName: "image.png", checksum, byteLength: 12, mediaType: "image/png" }, { id: "asset" });
-    const index = resolveSiteProjectMedia(value, catalog, { snapshot: { schemaVersion: 2, mutationToken: "b".repeat(64), folders: [], records: [media] }, routes: result.build.routes }).index;
+    const index = resolveSiteProjectMedia(value, catalog, { providerId: "media-files", snapshot: { schemaVersion: 2, mutationToken: "b".repeat(64), folders: [], records: [media] }, routes: result.build.routes }).index;
     expect(index.references.some(({ location }) => location.domain === "materialization" && location.pathname === "/")).toBe(true);
     const rendered = result.build.routes[0]!;
     rendered.materializationSources = [{ renderedNodeId: rendered.composition.document.root[0]!.id, providerId: "indexeddb", recordId: "card-source", nodeId: "original-link", attachmentId: "cards", entries: [{ providerId: "content-indexeddb", modelId: "articles", recordId: "one" }] }];
