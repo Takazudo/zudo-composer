@@ -48,6 +48,9 @@ export interface SitemapperController {
   flushPropUpdates: () => SitemapDocument;
   flushPersistence: () => Promise<void>;
   retrySave: () => void;
+  /** Undo only the most recent local remove while no later mutation occurred. */
+  canUndoRemove: boolean;
+  undoRemove: () => string | null;
 }
 
 function statusFromQueue(state: SaveQueueState<SitemapRecord>): SitemapperSaveStatus {
@@ -97,13 +100,20 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
   const [lastError, setLastError] = useState<string | null>(null);
   const pendingRef = useRef<Map<string, SitemapPagePropsPatch>>(new Map());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mutationRevisionRef = useRef(0);
+  const undoRemoveRef = useRef<{ document: SitemapDocument; selectedId: string | null; revision: number } | null>(null);
 
   const applyAction = useCallback((action: SitemapperAction): string | null => {
-    const result = applySitemapperAction(stateRef.current!, action, idFactoryRef.current);
+    const prior = stateRef.current!;
+    const result = applySitemapperAction(prior, action, idFactoryRef.current);
     setLastError(result.error);
     if (result.error) return result.error;
     let next = result.state;
     if (result.documentChanged) {
+      mutationRevisionRef.current += 1;
+      undoRemoveRef.current = action.type === "remove"
+        ? { document: cloneJson(prior.document), selectedId: prior.selectedId, revision: mutationRevisionRef.current }
+        : null;
       recordRef.current = {
         ...recordRef.current,
         updatedAt: nowRef.current(),
@@ -190,6 +200,33 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
     }
   }, [flushPropUpdates]);
 
+  const undoRemove = useCallback((): string | null => {
+    flushPropUpdates();
+    const undo = undoRemoveRef.current;
+    if (!undo || undo.revision !== mutationRevisionRef.current) return null;
+    const current = stateRef.current!;
+    const document = cloneJson(undo.document);
+    const nextState: SitemapperControllerState = {
+      ...current,
+      document,
+      selectedId: undo.selectedId,
+      saveStatus: { kind: "dirty" },
+    };
+    mutationRevisionRef.current += 1;
+    undoRemoveRef.current = null;
+    recordRef.current = { ...recordRef.current, updatedAt: nowRef.current(), document };
+    try {
+      queueRef.current!.edit(queueRef.current!.ref, recordRef.current);
+      nextState.saveStatus = statusFromQueue(queueRef.current!.state);
+    } catch (error) {
+      nextState.saveStatus = { kind: "error", reason: error instanceof Error ? error.message : "Sitemap persistence failed." };
+    }
+    stateRef.current = nextState;
+    setState(nextState);
+    setLastError(null);
+    return null;
+  }, [flushPropUpdates]);
+
   const flushRef = useRef(flushPropUpdates);
   flushRef.current = flushPropUpdates;
   useEffect(() => {
@@ -233,5 +270,7 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
     flushPropUpdates,
     flushPersistence,
     retrySave,
+    canUndoRemove: undoRemoveRef.current !== null && undoRemoveRef.current.revision === mutationRevisionRef.current,
+    undoRemove,
   };
 }

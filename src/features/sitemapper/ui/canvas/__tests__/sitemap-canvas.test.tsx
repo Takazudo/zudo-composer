@@ -123,6 +123,14 @@ describe("SitemapCanvas", () => {
     expect(clampCanvasZoom(0.7549)).toBe(0.75);
   });
 
+  it("exposes explicit layout choices while keeping Auto as the responsive default", async () => {
+    const callbacks = { ...props(), layoutPreference: "auto" as const, onLayoutPreferenceChange: vi.fn() };
+    render(<SitemapCanvas {...callbacks} />);
+    expect(screen.getByRole("radiogroup", { name: "Layout" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Outline" }));
+    expect(callbacks.onLayoutPreferenceChange).toHaveBeenCalledWith("outline");
+  });
+
   it("wires Create Home page on an empty document", () => {
     const callbacks = props(doc([]));
     const { container } = render(<SitemapCanvas {...callbacks} />);

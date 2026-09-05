@@ -6,6 +6,8 @@
 import type { JSX } from "preact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../../app/chrome-context";
+import { useWorkspace } from "../../../app/workspace-context";
+import type { WorkspaceRecord } from "../../../app/workspace-storage";
 import { notifyRouteSelection } from "../../../app/route-intents";
 import { EditorBody, EditorChrome, RecordTitle } from "../../../components/editor-chrome";
 import { DuplicateIcon, EditIcon, EllipsisIcon, MinusIcon, PlusIcon, TrashIcon } from "../../../components/icons";
@@ -17,6 +19,7 @@ import type { CompositionCatalog } from "../../../sitemapper/catalog";
 import type { SitemapRecord, SitemapStore } from "../../../sitemapper/library";
 import type { SitemapNode } from "../../../sitemapper/model";
 import { indexDocument } from "../../../sitemapper/model";
+import type { SitemapMenu, SitemapNavigationCommand } from "../../../sitemapper/commands/navigation";
 import {
   expandSitemapRoutes,
   type MappingAssignmentCatalog,
@@ -26,11 +29,13 @@ import {
 import { SitemapNameDialog } from "../library/name-dialog";
 import { CanvasPane, type SitemapView } from "../ui/canvas/canvas-pane";
 import type { PageSourceLabel } from "../ui/canvas/page-source";
-import { clampCanvasZoom } from "../ui/canvas/sitemap-canvas";
+import { clampCanvasZoom, type CanvasLayoutPreference } from "../ui/canvas/sitemap-canvas";
 import { InspectorPanel } from "../ui/inspector/inspector-panel";
 import { buildSitemapOutline } from "../ui/tree/outline-model";
 import { PagesPane } from "../ui/tree/pages-pane";
 import { countDescendants } from "../ui/tree/tree-helpers";
+import { NavigationPane } from "../ui/views/navigation-pane";
+import { RoutePreviewPane } from "../ui/views/route-preview-pane";
 import type { SitemapperSaveStatus } from "./controller-model";
 import { sitemapperHref, SITEMAPPER_ROUTE } from "./sitemapper-intent";
 import { useSitemapperController } from "./use-sitemapper-controller";
@@ -81,16 +86,22 @@ export function SitemapperIntegration({
   now,
 }: SitemapperIntegrationProps): JSX.Element {
   const controller = useSitemapperController({ record, providerId, store, idFactory, now });
+  const workspace = useWorkspace();
+  const workspaceIntegration = workspace?.integration;
   const document = controller.state.document;
   const selectedId = controller.state.selectedId;
   const dispatch = controller.dispatch;
 
   const [view, setView] = useState<SitemapView>("canvas");
   const [zoom, setZoom] = useState(1);
+  const [layoutPreference, setLayoutPreference] = useState<CanvasLayoutPreference>("auto");
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
   const [compositions, setCompositions] = useState<ReadonlyMap<string, { name: string; providerLabel: string }>>(new Map());
   const [routeExpansionState, setRouteExpansionState] = useState<{ document: typeof document; expansion: SitemapRouteExpansion } | null>(null);
+  const [workspaceMetadata, setWorkspaceMetadata] = useState<WorkspaceRecord | null>(null);
+  const [metadataBusy, setMetadataBusy] = useState(false);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
   const confirm = useLibraryConfirm();
   const overflowRef = useRef<HTMLButtonElement | null>(null);
   const overflow = useMenu(overflowRef, { align: "end" });
@@ -103,8 +114,31 @@ export function SitemapperIntegration({
   const outline = useMemo(() => buildSitemapOutline(document), [document]);
   const selectedNode: SitemapNode | null = selectedId ? index.byId.get(selectedId)?.node ?? null : null;
   const routeExpansion = routeExpansionState?.document === document ? routeExpansionState.expansion : null;
+  const activeSitemap = workspaceMetadata?.metadata.activeSitemap.providerId === providerId
+    && workspaceMetadata.metadata.activeSitemap.recordId === record.id;
 
   useBreadcrumb([{ label: "Sitemaps", href: SITEMAPPER_ROUTE }, { label: document.name }]);
+
+  useEffect(() => {
+    if (!workspaceIntegration) {
+      setWorkspaceMetadata(null);
+      return undefined;
+    }
+    let live = true;
+    const readMetadata = (): void => {
+      void workspaceIntegration.workspace.metadata().then((next) => {
+        if (live) {
+          setWorkspaceMetadata(next);
+          setMetadataError(null);
+        }
+      }).catch((reason: unknown) => {
+        if (live) setMetadataError(reason instanceof Error ? reason.message : "Workspace metadata is unavailable.");
+      });
+    };
+    readMetadata();
+    const unsubscribe = workspaceIntegration.subscribeChanges(readMetadata);
+    return () => { live = false; unsubscribe(); };
+  }, [workspaceIntegration]);
 
   // The deep link's `?page=` selects once, and only when it names a real page.
   const appliedIntentRef = useRef(false);
@@ -231,6 +265,32 @@ export function SitemapperIntegration({
     }
   };
 
+  const setActiveSitemap = async (): Promise<void> => {
+    if (!workspaceIntegration) {
+      setMetadataError("Workspace metadata is unavailable in this editor.");
+      return;
+    }
+    setMetadataBusy(true);
+    setMetadataError(null);
+    try {
+      const current = await workspaceIntegration.workspace.metadata();
+      const next = await workspaceIntegration.workspace.updateMetadata(current.mutationToken, {
+        activeSitemap: { providerId: providerId as WorkspaceRecord["metadata"]["activeSitemap"]["providerId"], recordId: record.id },
+      });
+      setWorkspaceMetadata(next);
+    } catch (reason) {
+      setMetadataError(reason instanceof Error ? reason.message : "The active Sitemap could not be changed.");
+    } finally {
+      setMetadataBusy(false);
+    }
+  };
+
+  const editNavigation = useCallback((menu: SitemapMenu, command: SitemapNavigationCommand): void => {
+    // Kept as a small adapter so NavigationPane can never mutate the document
+    // directly; the controller queue owns every persisted edit.
+    controller.dispatch({ type: "editNavigation", menu, command });
+  }, [controller.dispatch]);
+
   const saveStatus = controller.state.saveStatus;
   // A Mapping route family owns its own routes and takes no authored children,
   // so the toolbar's Add page adds beside it rather than going dead.
@@ -239,6 +299,11 @@ export function SitemapperIntegration({
     : selectedId ?? document.root[0]?.id ?? null;
   // The one case with nowhere to go: the single root page is itself a Mapping.
   const canAddPage = addTargetId !== null || document.root.length === 0;
+  const notice = recordError || controller.lastError || metadataError
+    ? <Banner tone="err">{recordError ?? controller.lastError ?? metadataError}</Banner>
+    : controller.canUndoRemove
+      ? <Banner tone="info">Page removed. <Button size="xs" variant="ghost" onClick={() => { controller.undoRemove(); }}>Undo remove</Button></Banner>
+      : null;
 
   return (
     <EditorChrome
@@ -256,7 +321,7 @@ export function SitemapperIntegration({
             size="sm"
             value={view}
             onChange={setView}
-            options={[{ value: "tree", label: "Tree" }, { value: "canvas", label: "Canvas" }]}
+            options={[{ value: "canvas", label: "Canvas" }, { value: "outline", label: "Outline" }, { value: "routes", label: "Routes" }, { value: "navigation", label: "Navigation" }]}
           />
           <div class="sg-sitemapper-zoom" role="group" aria-label="Zoom">
             <Button size="xs" variant="ghost" iconOnly aria-label="Zoom out" disabled={view !== "canvas"} onClick={() => setZoom((current) => clampCanvasZoom(current - ZOOM_STEP))}>
@@ -271,6 +336,16 @@ export function SitemapperIntegration({
       }
       right={
         <>
+          {metadataError ? <span class="sg-sitemapper-metadata-error" role="alert">{metadataError}</span> : null}
+          <Button
+            size="sm"
+            variant={activeSitemap ? "ghost" : "primary"}
+            disabled={activeSitemap || metadataBusy || !workspaceIntegration}
+            onClick={() => void setActiveSitemap()}
+          >
+            {activeSitemap ? "Active Sitemap" : metadataBusy ? "Setting active…" : "Set active"}
+          </Button>
+          <a class="cms-btn cms-btn--ghost cms-btn--sm" href="/site" target="_blank" rel="noreferrer">Visitor preview</a>
           <Button
             disabled={!canAddPage}
             title={canAddPage ? undefined : "The root page is a Mapping route family, which takes no authored children."}
@@ -340,24 +415,66 @@ export function SitemapperIntegration({
           />
         }
         main={
-          <CanvasPane
-            document={document}
-            routes={outline.routes}
-            sources={sources}
-            routeInfo={routeExpansion?.nodes ?? NO_ROUTE_INFO}
-            view={view}
-            selectedId={selectedId}
-            zoom={zoom}
-            notice={recordError || controller.lastError ? (
-              <Banner tone="err">{recordError ?? controller.lastError}</Banner>
-            ) : null}
-            onZoomChange={setZoom}
-            onSelect={(pageId) => dispatch({ type: "select", pageId })}
-            onAddChild={addChild}
-            onDuplicate={(pageId) => dispatch({ type: "duplicate", pageId })}
-            onDelete={requestDelete}
-            onCreateRoot={() => dispatch({ type: "addRoot", title: "Home" })}
-          />
+          view === "outline" ? (
+            <PagesPane
+              document={document}
+              outline={outline}
+              selectedId={selectedId}
+              expandedIds={controller.state.expandedIds}
+              onSelect={(pageId) => dispatch({ type: "select", pageId })}
+              onExpandedChange={(pageIds) => dispatch({ type: "setExpandedIds", pageIds })}
+              onAdd={(request) => {
+                if (request.parentId === null) dispatch({ type: "addRoot", title: request.title });
+                else dispatch({ type: "addChild", parentId: request.parentId, title: request.title, atIndex: request.index });
+              }}
+              onAddChild={addChild}
+              onRename={(pageId) => {
+                const node = index.byId.get(pageId)?.node;
+                if (node) setNameDialog({ kind: "page", pageId, title: node.title });
+              }}
+              onMove={(pageId, direction) => dispatch({ type: "reorder", pageId, direction })}
+              onDuplicate={(pageId) => dispatch({ type: "duplicate", pageId })}
+              onDelete={requestDelete}
+              showCollapseButton={false}
+              heading="Outline"
+              class="sg-sitemapper-outline-pane"
+            />
+          ) : view === "routes" ? (
+            <RoutePreviewPane
+              document={document}
+              authoredRoutes={outline.routes}
+              expansion={routeExpansion}
+              selectedId={selectedId}
+              onSelect={(pageId) => dispatch({ type: "select", pageId })}
+            />
+          ) : view === "navigation" ? (
+            <NavigationPane
+              document={document}
+              expansion={routeExpansion}
+              selectedId={selectedId}
+              onSelect={(pageId) => dispatch({ type: "select", pageId })}
+              onEdit={editNavigation}
+            />
+          ) : (
+            <CanvasPane
+              document={document}
+              routes={outline.routes}
+              sources={sources}
+              routeInfo={routeExpansion?.nodes ?? NO_ROUTE_INFO}
+              view="canvas"
+              selectedId={selectedId}
+              zoom={zoom}
+              layoutPreference={layoutPreference}
+              onLayoutPreferenceChange={setLayoutPreference}
+              notice={notice}
+              onZoomChange={setZoom}
+              onSelect={(pageId) => dispatch({ type: "select", pageId })}
+              onAddChild={addChild}
+              onDuplicate={(pageId) => dispatch({ type: "duplicate", pageId })}
+              onDelete={requestDelete}
+              onCreateRoot={() => dispatch({ type: "addRoot", title: "Home" })}
+            />
+          )
         }
         inspector={
           <InspectorPanel

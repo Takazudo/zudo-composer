@@ -92,4 +92,21 @@ describe("useSitemapperController", () => {
     act(() => { result.current.flushPropUpdates(); });
     expect(result.current.state.saveStatus).toEqual({ kind: "saved" });
   });
+
+  it("restores an exact removed subtree only before another mutation", () => {
+    const { result } = setup();
+    act(() => { result.current.dispatch({ type: "remove", pageId: "child" }); });
+    expect(result.current.canUndoRemove).toBe(true);
+    act(() => { result.current.undoRemove(); });
+    expect(result.current.state.document.root[0]!.children).toEqual([
+      { id: "child", title: "Child", source: { kind: "unassigned" }, children: [] },
+    ]);
+    expect(result.current.canUndoRemove).toBe(false);
+
+    act(() => { result.current.dispatch({ type: "remove", pageId: "child" }); });
+    act(() => { result.current.dispatch({ type: "rename", name: "Changed" }); });
+    expect(result.current.canUndoRemove).toBe(false);
+    expect(result.current.undoRemove()).toBeNull();
+    expect(result.current.state.document.root[0]!.children).toEqual([]);
+  });
 });
