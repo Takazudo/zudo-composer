@@ -25,11 +25,12 @@ export const MEDIA_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_media_file_provide
 export const MEDIA_FILE_PROVIDER_OPERATION_HEADER = "x-zudo-composer-media-operation";
 export const MEDIA_FILE_PROVIDER_FILE_NAME_HEADER = "x-zudo-composer-media-file-name";
 export const MEDIA_FILE_PROVIDER_RECORD_ID_HEADER = "x-zudo-composer-media-record-id";
+export const MEDIA_FILE_PROVIDER_METADATA_HEADER = "x-zudo-composer-media-metadata";
 export const MEDIA_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 export const MEDIA_FILE_PROVIDER_ROOT = "media-store";
-const MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
+const MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/octet-stream"]);
 const MEDIA_FILE_PROVIDER_BYTES_DIRECTORY = "public/uploaded-media";
-const MEDIA_FILE_PROVIDER_BYTE_PATTERN = /^\/uploaded-media\/(media-[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?\.(?:png|jpg|gif|webp|pdf))$/;
+const MEDIA_FILE_PROVIDER_BYTE_PATTERN = /^\/uploaded-media\/(sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/;
 const MEDIA_CONTENT_TYPE_BY_EXTENSION = Object.freeze({
   png: "image/png",
   jpg: "image/jpeg",
@@ -171,8 +172,12 @@ function mediaOperationError(value, operation) {
     return errorResponse(413, "body-too-large", `Upload exceeds the ${MEDIA_UPLOAD_MAX_BYTES}-byte limit. Choose a file no larger than 25 MiB.`, operation);
   }
   const code = typeof value?.code === "string" ? value.code : "unknown";
-  if (code === "validation") return errorResponse(422, code, "The media upload is invalid or uses an unsupported file signature.", operation);
+  if (code === "validation") return errorResponse(422, code, "Invalid Media request. Check metadata, revision preconditions, folder parents/names/trash state, and the allowed file signature and size.", operation);
   if (code === "blocked") return errorResponse(409, code, "A filesystem safety check blocked the media operation.", operation);
+  if (code === "conflict") return errorResponse(409, code, "Media changed or another writer holds the mutation lock. Reload and retry. After a server crash, verify no writer is running before manual .mutation.lock recovery.", operation);
+  if (code === "not-found") return errorResponse(404, code, "The Media asset, folder or exact version does not exist.", operation);
+  if (code === "bytes-missing") return errorResponse(409, code, "Retained Media bytes are missing or corrupted.", operation);
+  if (code === "recovery-required") return errorResponse(409, code, "Media catalog requires manual recovery. Source and all versions are preserved; inspect catalog.json.", operation);
   if (code === "read-failed") return errorResponse(503, code, "Local media files could not be read. Check directory permissions and retry.", operation);
   if (code === "write-failed" || code === "transaction-failed") return errorResponse(500, code, "Local media files could not be updated. Check permissions and free space, then retry.", operation);
   return errorResponse(500, "unknown", "The local media provider failed unexpectedly. Retry or restart the development server.", operation);
@@ -211,15 +216,30 @@ function sendMediaFileError(res) {
 /**
  * Serve an uploaded media byte file directly from the development store.
  *
- * @param {{projectRoot: string, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open}}} options
+ * @param {{projectRoot: string, createStore?: () => Promise<any>, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open, realpath?: typeof fsPromises.realpath}}} options
  */
 export function createMediaFileMiddleware(options) {
   const lstatFile = options.operations?.lstat ?? fsPromises.lstat;
   const openFile = options.operations?.open ?? fsPromises.open;
+  const realpathFile = options.operations?.realpath ?? fsPromises.realpath;
   return async function mediaFileMiddleware(req, res, next) {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
 
     const pathname = typeof req.url === "string" ? req.url.split("?", 1)[0] : undefined;
+    const authoring = typeof pathname === "string" ? /^\/uploaded-media\/asset-([a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?)$/.exec(pathname) : undefined;
+    if (authoring && options.createStore) {
+      res.setHeader("cache-control", "no-store");
+      res.setHeader("x-content-type-options", "nosniff");
+      try {
+        const result = await (await options.createStore()).get(authoring[1]);
+        if (result.status !== "loaded" || result.record.document.state !== "active") { res.statusCode = 404; res.end(); return; }
+        const version = result.record.document.versions.find((version) => version.id === result.record.document.currentVersionId);
+        res.statusCode = 307;
+        res.setHeader("location", version.url);
+        res.end();
+      } catch { sendMediaFileError(res); }
+      return;
+    }
     const match = pathname === undefined ? undefined : MEDIA_FILE_PROVIDER_BYTE_PATTERN.exec(pathname);
     const fileName = match?.[1];
     if (fileName === undefined) return next();
@@ -227,7 +247,29 @@ export function createMediaFileMiddleware(options) {
     const extension = fileName.slice(fileName.lastIndexOf(".") + 1);
     const contentType = MEDIA_CONTENT_TYPE_BY_EXTENSION[extension];
     if (contentType === undefined) return next();
-    const filePath = resolve(options.projectRoot, MEDIA_FILE_PROVIDER_ROOT, MEDIA_FILE_PROVIDER_BYTES_DIRECTORY, fileName);
+    // Resolve the configured project once (e.g. macOS /var -> /private/var),
+    // then reject links inside its owned media-store subtree.
+    let projectRoot;
+    try { projectRoot = await realpathFile(options.projectRoot); }
+    catch (cause) {
+      if (isMissingMediaFileError(cause)) return next();
+      sendMediaFileError(res); return;
+    }
+    const filePath = resolve(projectRoot, MEDIA_FILE_PROVIDER_ROOT, MEDIA_FILE_PROVIDER_BYTES_DIRECTORY, fileName);
+
+    // O_NOFOLLOW only protects the final component; reject symlinked parents too.
+    const parents = [];
+    try {
+      for (const relative of [MEDIA_FILE_PROVIDER_ROOT, `${MEDIA_FILE_PROVIDER_ROOT}/public`, `${MEDIA_FILE_PROVIDER_ROOT}/${MEDIA_FILE_PROVIDER_BYTES_DIRECTORY}`]) {
+        const path = resolve(projectRoot, relative);
+        const directory = await lstatFile(path);
+        if (directory.isSymbolicLink() || !directory.isDirectory() || await realpathFile(path) !== path) return next();
+        parents.push({ path, stats: directory });
+      }
+    } catch (cause) {
+      if (isMissingMediaFileError(cause)) return next();
+      sendMediaFileError(res); return;
+    }
 
     let before;
     try {
@@ -244,6 +286,12 @@ export function createMediaFileMiddleware(options) {
     try {
       handle = await openFile(filePath, constants.O_RDONLY | NO_FOLLOW);
       opened = await handle.stat();
+      for (const parent of parents) {
+        const current = await lstatFile(parent.path);
+        if (current.isSymbolicLink() || !current.isDirectory() || !sameMediaFile(current, parent.stats) || await realpathFile(parent.path) !== parent.path) {
+          await closeMediaFile(handle); return next();
+        }
+      }
     } catch (cause) {
       await closeMediaFile(handle);
       if (isMissingMediaFileError(cause) || mediaErrorCode(cause) === "ELOOP") return next();
@@ -260,7 +308,8 @@ export function createMediaFileMiddleware(options) {
       res.statusCode = 200;
       res.setHeader("content-type", contentType);
       res.setHeader("content-length", String(opened.size));
-      res.setHeader("cache-control", "no-cache");
+      res.setHeader("cache-control", "public, max-age=31536000, immutable");
+      res.setHeader("x-content-type-options", "nosniff");
       res.end();
       return;
     }
@@ -298,7 +347,8 @@ export function createMediaFileMiddleware(options) {
       res.statusCode = 200;
       res.setHeader("content-type", contentType);
       res.setHeader("content-length", String(opened.size));
-      res.setHeader("cache-control", "no-cache");
+      res.setHeader("cache-control", "public, max-age=31536000, immutable");
+      res.setHeader("x-content-type-options", "nosniff");
       stream.pipe(res);
     } catch (cause) {
       onStreamError(cause);
@@ -315,7 +365,7 @@ export function createMediaFileMiddleware(options) {
 export function createMediaUploadMiddleware(options) {
   const maxBodyBytes = options.maxBodyBytes ?? MEDIA_UPLOAD_MAX_BYTES;
   return async function mediaUploadMiddleware(req, res) {
-    const acceptedMediaTypes = req.headers[MEDIA_FILE_PROVIDER_OPERATION_HEADER] === "upload"
+    const acceptedMediaTypes = ["upload", "replace"].includes(req.headers[MEDIA_FILE_PROVIDER_OPERATION_HEADER])
       ? MEDIA_TYPES
       : new Set(["application/json"]);
     const headError = validateRequestHead(
@@ -330,7 +380,7 @@ export function createMediaUploadMiddleware(options) {
       return;
     }
     const operation = req.headers[MEDIA_FILE_PROVIDER_OPERATION_HEADER];
-    if (!["initialize", "list", "get", "upload", "delete", "clear"].includes(operation)) {
+    if (!["initialize", "list", "get", "upload", "replace", "delete", "clear", "snapshot", "metadata", "trash", "restore", "create-folder", "update-folder", "trash-folder", "restore-folder", "resolve-version", "pin-manifest"].includes(operation)) {
       sendConnectResponse(res, errorResponse(400, "invalid-request", "A valid media operation header is required."));
       return;
     }
@@ -344,13 +394,47 @@ export function createMediaUploadMiddleware(options) {
     const onAborted = () => controller.abort(new Error("request-aborted"));
     req.once("aborted", onAborted);
     try {
+      const binary = operation === "upload" || operation === "replace";
+      let data = {};
+      if (binary) {
+        const header = req.headers[MEDIA_FILE_PROVIDER_METADATA_HEADER];
+        if (header !== undefined) {
+          if (typeof header !== "string" || header.length > 8192) throw Object.assign(new Error("Invalid Media metadata header"), { code: "validation" });
+          try { data = JSON.parse(decodeURIComponent(header)); } catch { throw Object.assign(new Error("Invalid Media metadata header"), { code: "validation" }); }
+        }
+      } else {
+        const body = await readBody(req, COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES);
+        try { data = body === "" ? {} : JSON.parse(body); } catch { throw Object.assign(new Error("Invalid Media JSON"), { code: "validation" }); }
+      }
+      if (!isPlainObject(data)) throw Object.assign(new Error("Invalid Media request"), { code: "validation" });
+      const fields = {
+        initialize: [], get: [], clear: [], snapshot: [],
+        list: ["state", "folderId"], upload: ["folderId", "note", "expectedMutationToken"],
+        replace: ["precondition"], delete: ["precondition"], trash: ["precondition"], restore: ["precondition"],
+        metadata: ["patch", "precondition"], "create-folder": ["input", "expectedMutationToken"],
+        "update-folder": ["patch", "precondition"], "trash-folder": ["precondition"], "restore-folder": ["precondition"],
+        "resolve-version": ["ref"], "pin-manifest": ["refs"],
+      };
+      if (Object.keys(data).some((key) => !fields[operation].includes(key))) throw Object.assign(new Error("Unsupported Media request field"), { code: "validation" });
       const store = await options.createStore();
+      const id = req.headers[MEDIA_FILE_PROVIDER_RECORD_ID_HEADER] ?? "";
       let result;
       switch (operation) {
         case "initialize": result = await store.initialize(); break;
-        case "list": result = await store.list(); break;
+        case "list": result = await store.list(data); break;
+        case "snapshot": result = await store.snapshot(); break;
         case "get": result = await store.get(req.headers[MEDIA_FILE_PROVIDER_RECORD_ID_HEADER] ?? ""); break;
-        case "delete": result = await store.delete(req.headers[MEDIA_FILE_PROVIDER_RECORD_ID_HEADER] ?? ""); break;
+        case "delete": result = await store.delete(id, data.precondition); break;
+        case "metadata": result = await store.updateMetadata(id, data.patch, data.precondition); break;
+        case "trash": result = await store.trash(id, data.precondition); break;
+        case "restore": result = await store.restore(id, data.precondition); break;
+        case "create-folder": result = await store.createFolder(data.input, data.expectedMutationToken); break;
+        case "update-folder": result = await store.updateFolder(id, data.patch, data.precondition); break;
+        case "trash-folder": result = await store.trashFolder(id, data.precondition); break;
+        case "restore-folder": result = await store.restoreFolder(id, data.precondition); break;
+        case "resolve-version": result = await store.resolveVersion(data.ref); break;
+        case "pin-manifest": result = await store.pinManifest(data.refs); break;
+        case "replace": result = await store.replace(id, { bytes: req.iterator({ destroyOnReturn: false }), signal: controller.signal }, data.precondition); break;
         case "clear": await store.clear(); result = null; break;
         case "upload": {
           const fileName = decodeMediaFileName(req.headers[MEDIA_FILE_PROVIDER_FILE_NAME_HEADER]);
@@ -363,6 +447,9 @@ export function createMediaUploadMiddleware(options) {
             declaredMediaType: req.headers["content-type"] ?? "",
             bytes: req.iterator({ destroyOnReturn: false }),
             signal: controller.signal,
+            folderId: data.folderId,
+            note: data.note,
+            expectedMutationToken: data.expectedMutationToken,
           });
           break;
         }
@@ -370,7 +457,7 @@ export function createMediaUploadMiddleware(options) {
       if (!isDeadResponse(req, res)) sendConnectResponse(res, json(200, { ok: true, result }));
     } catch (cause) {
       if (!isDeadResponse(req, res) && !controller.signal.aborted) {
-        const response = cause?.code === "BYTE_CAP_EXCEEDED"
+        const response = cause?.code === "BYTE_CAP_EXCEEDED" || cause?.code === "BODY_TOO_LARGE"
           ? errorResponse(413, "body-too-large", `Upload exceeds the ${maxBodyBytes}-byte limit. Choose a smaller file.`, operation)
           : mediaOperationError(cause, operation);
         sendConnectResponse(res, response);
@@ -718,6 +805,7 @@ export default function composerFileProviderPlugin() {
         mediaOperationHeader: MEDIA_FILE_PROVIDER_OPERATION_HEADER,
         mediaFileNameHeader: MEDIA_FILE_PROVIDER_FILE_NAME_HEADER,
         mediaRecordIdHeader: MEDIA_FILE_PROVIDER_RECORD_ID_HEADER,
+        mediaMetadataHeader: MEDIA_FILE_PROVIDER_METADATA_HEADER,
       })};\n`;
     },
     async configureServer(server) {
@@ -789,7 +877,7 @@ export default function composerFileProviderPlugin() {
         sendConnectResponse(res, await handler({ ...requestHead, body }));
       });
       // Vite's public-dir middleware serves only files in its startup-scanned publicFiles Set (updated by chokidar), so a file uploaded during the session otherwise gets the SPA shell until the watcher catches up (#180).
-      server.middlewares.use(createMediaFileMiddleware({ projectRoot }));
+      server.middlewares.use(createMediaFileMiddleware({ projectRoot, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: resolve(projectRoot, MEDIA_FILE_PROVIDER_ROOT) }) }));
     },
   };
 }

@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -17,6 +18,8 @@ import plugin, {
   MEDIA_FILE_PROVIDER_ENDPOINT,
   MEDIA_FILE_PROVIDER_FILE_NAME_HEADER,
   MEDIA_FILE_PROVIDER_OPERATION_HEADER,
+  MEDIA_FILE_PROVIDER_RECORD_ID_HEADER,
+  MEDIA_FILE_PROVIDER_METADATA_HEADER,
   MEDIA_FILE_PROVIDER_ROOT,
   MEDIA_UPLOAD_MAX_BYTES,
   createComposerFileProviderMiddleware,
@@ -341,7 +344,7 @@ describe("media upload request boundary and core integration", () => {
     expect(res.end).toHaveBeenCalledTimes(1);
     expect(res.setHeader).toHaveBeenCalledWith("cache-control", "no-store");
     expect(res.setHeader).toHaveBeenCalledWith("x-content-type-options", "nosniff");
-    expect(await readFile(join(sandbox, "media-store/public/uploaded-media/media-pixel.png"))).toEqual(Buffer.from(bytes));
+    expect(await readFile(join(sandbox, `media-store/public/uploaded-media/sha256-${createHash("sha256").update(bytes).digest("hex")}.png`))).toEqual(Buffer.from(bytes));
   });
 
   it("rejects request-head failures before opening a store", async () => {
@@ -362,6 +365,54 @@ describe("media upload request boundary and core integration", () => {
       expect(res.setHeader).toHaveBeenCalledWith("cache-control", "no-store");
       expect(res.setHeader).toHaveBeenCalledWith("x-content-type-options", "nosniff");
       expect(String(res.end.mock.calls[0]![0])).not.toContain(CAPABILITY);
+    }
+    expect(createStore).not.toHaveBeenCalled();
+  });
+
+  it("transports JSON folder/metadata CAS, streamed replacement, exact pins and retained trash", async () => {
+    let sequence = 0;
+    const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, "media-store"), idFactory: () => `asset-${++sequence}` });
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: async () => store });
+    const send = async (operation: string, data: unknown = {}, id?: string, bytes?: Uint8Array) => {
+      const headers = { ...mediaRequest([]).headers, "content-type": bytes ? "application/pdf" : "application/json",
+        [MEDIA_FILE_PROVIDER_OPERATION_HEADER]: operation,
+        ...(id === undefined ? {} : { [MEDIA_FILE_PROVIDER_RECORD_ID_HEADER]: id }),
+        ...(bytes === undefined ? {} : { [MEDIA_FILE_PROVIDER_METADATA_HEADER]: encodeURIComponent(JSON.stringify(data)) }),
+      };
+      const res = connectResponse();
+      await handler(mediaRequest([bytes ?? new TextEncoder().encode(JSON.stringify(data))], { headers }), res);
+      return { status: res.statusCode, body: JSON.parse(res.end.mock.calls[0]![0] as string) };
+    };
+    const folder = (await send("create-folder", { input: { name: "Files", parentId: null }, expectedMutationToken: await store.mutationToken() })).body.result;
+    const record = await store.upload({ fileName: "original.pdf", declaredMediaType: "application/pdf", bytes: new TextEncoder().encode("%PDF-1.7\noriginal") });
+    expect((await send("metadata", { patch: { folderId: folder.id, note: "Transport" }, precondition: { expectedRevision: 1 } }, record.id)).status).toBe(200);
+    const replacement = new TextEncoder().encode("%PDF-1.7\nreplacement");
+    expect((await send("replace", { precondition: { expectedRevision: 1 } }, record.id, replacement)).status).toBe(409);
+    const replaced = await send("replace", { precondition: { expectedRevision: 2 } }, record.id, replacement);
+    expect(replaced.status).toBe(200); expect(replaced.body.result.document.versions).toHaveLength(2);
+    const ref = { providerId: store.provider.id, assetId: record.id, versionId: record.document.currentVersionId };
+    expect((await send("resolve-version", { ref })).body.result.versionId).toBe(ref.versionId);
+    expect((await send("trash", { precondition: { expectedRevision: 3 } }, record.id)).status).toBe(200);
+    expect((await send("list")).body.result).toEqual([]);
+    expect((await send("restore", { precondition: { expectedRevision: 4 } }, record.id)).status).toBe(200);
+    expect((await send("snapshot")).body.result.mutationToken).toBe(await store.mutationToken());
+    expect((await send("delete", {}, record.id)).status).toBe(422);
+    expect((await send("clear")).status).toBe(409);
+  });
+
+  it("rejects malformed JSON and binary metadata without invoking mutations", async () => {
+    const createStore = vi.fn();
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore });
+    for (const [operation, contentType, header, body] of [
+      ["replace", "application/pdf", "%not-json", ""],
+      ["metadata", "application/json", "", "{broken"],
+      ["metadata", "application/json", "", '{"unexpected":true}'],
+    ]) {
+      const res = connectResponse();
+      await handler(mediaRequest([new TextEncoder().encode(body)], { headers: { ...mediaRequest([]).headers,
+        "content-type": contentType!, [MEDIA_FILE_PROVIDER_OPERATION_HEADER]: operation!, [MEDIA_FILE_PROVIDER_METADATA_HEADER]: header!,
+      } }), res);
+      expect(res.statusCode).toBe(422);
     }
     expect(createStore).not.toHaveBeenCalled();
   });
@@ -507,6 +558,26 @@ describe("dev/build registration boundary", () => {
   }
 
   describe("uploaded-media direct serving", () => {
+    it("resolves authoring URLs to latest while an old exact URL still serves its bytes", async () => {
+      const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, "media-store") });
+      const original = new TextEncoder().encode("%PDF-1.7\nold immutable version");
+      const record = await store.upload({ fileName: "paper.pdf", declaredMediaType: "application/pdf", bytes: original });
+      const oldUrl = record.document.versions[0]!.url;
+      const replacement = await store.replace(record.id, { bytes: new TextEncoder().encode("%PDF-1.7\nnew immutable version") }, { expectedRevision: 1 });
+      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, createStore: async () => store });
+      const response = mediaResponse();
+      await invokeRegistered([middleware], mediaRequest("GET", `/uploaded-media/asset-${record.id}`), response);
+      expect(response.statusCode).toBe(307); expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.headers.location).toBe(replacement.document.versions[1]!.url);
+      const exact = mediaResponse(); await invokeRegistered([middleware], mediaRequest("GET", oldUrl), exact);
+      expect(await responseBytes(exact)).toEqual(Buffer.from(original));
+      await store.trash(record.id, { expectedRevision: 2 });
+      const trashed = mediaResponse(); await invokeRegistered([middleware], mediaRequest("GET", `/uploaded-media/asset-${record.id}`), trashed);
+      expect(trashed.statusCode).toBe(404);
+      const retained = mediaResponse(); await invokeRegistered([middleware], mediaRequest("GET", oldUrl), retained);
+      expect(await responseBytes(retained)).toEqual(Buffer.from(original));
+    });
+
     it("serves files created after middleware registration with the stored byte type", async () => {
       const { middlewares } = await setupServeServer();
       const variants = [
@@ -518,7 +589,7 @@ describe("dev/build registration boundary", () => {
       ] as const;
 
       for (const [extension, contentType, bytes] of variants) {
-        const fileName = `media-${extension}.${extension}`;
+        const fileName = `sha256-${createHash("sha256").update(bytes).digest("hex")}.${extension}`;
         await writeMediaBytes(fileName, bytes);
         const response = mediaResponse();
         await invokeRegistered(middlewares, mediaRequest("GET", `/uploaded-media/${fileName}?cache=after-upload`), response);
@@ -527,7 +598,8 @@ describe("dev/build registration boundary", () => {
         expect(response.headers).toEqual({
           "content-type": contentType,
           "content-length": String(bytes.byteLength),
-          "cache-control": "no-cache",
+          "cache-control": "public, max-age=31536000, immutable",
+          "x-content-type-options": "nosniff",
         });
         await expect(responseBytes(response)).resolves.toEqual(Buffer.from(bytes));
       }
@@ -536,16 +608,17 @@ describe("dev/build registration boundary", () => {
     it("returns headers and no body for HEAD", async () => {
       const { middlewares } = await setupServeServer();
       const bytes = Uint8Array.from([1, 2, 3, 4]);
-      await writeMediaBytes("media-head.pdf", bytes);
+      await writeMediaBytes("sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf", bytes);
       const response = mediaResponse();
 
-      await invokeRegistered(middlewares, mediaRequest("HEAD", "/uploaded-media/media-head.pdf"), response);
+      await invokeRegistered(middlewares, mediaRequest("HEAD", "/uploaded-media/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf"), response);
 
       expect(response.statusCode).toBe(200);
       expect(response.headers).toEqual({
         "content-type": "application/pdf",
         "content-length": String(bytes.byteLength),
-        "cache-control": "no-cache",
+        "cache-control": "public, max-age=31536000, immutable",
+          "x-content-type-options": "nosniff",
       });
       await expect(responseBytes(response)).resolves.toEqual(Buffer.alloc(0));
     });
@@ -555,7 +628,7 @@ describe("dev/build registration boundary", () => {
       const response = mediaResponse();
       const next = vi.fn();
 
-      await invokeRegistered(middlewares, mediaRequest("GET", "/uploaded-media/media-missing.png"), response, next);
+      await invokeRegistered(middlewares, mediaRequest("GET", "/uploaded-media/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png"), response, next);
 
       expect(next).toHaveBeenCalledTimes(1);
       expect(response.statusCode).toBe(0);
@@ -621,11 +694,11 @@ describe("dev/build registration boundary", () => {
       await mkdir(bytesRoot, { recursive: true });
       const outside = join(sandbox, "outside-media.png");
       await writeFile(outside, Buffer.from("outside"));
-      await symlink(outside, join(bytesRoot, "media-link.png"));
-      await mkdir(join(bytesRoot, "media-directory.png"));
+      await symlink(outside, join(bytesRoot, "sha256-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png"));
+      await mkdir(join(bytesRoot, "sha256-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.png"));
       const middleware = createMediaFileMiddleware({ projectRoot: sandbox });
 
-      for (const fileName of ["media-link.png", "media-directory.png"]) {
+      for (const fileName of ["sha256-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png", "sha256-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.png"]) {
         const next = vi.fn();
         await invokeRegistered([middleware], mediaRequest("GET", `/uploaded-media/${fileName}`), mediaResponse(), next);
         expect(next).toHaveBeenCalledTimes(1);
@@ -633,12 +706,12 @@ describe("dev/build registration boundary", () => {
     });
 
     it("returns a plain-text 500 for non-missing open failures", async () => {
-      await writeMediaBytes("media-denied.png", Uint8Array.from([1, 2, 3]));
+      await writeMediaBytes("sha256-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png", Uint8Array.from([1, 2, 3]));
       const open = vi.fn().mockRejectedValue(Object.assign(new Error("permission denied"), { code: "EACCES" }));
       const middleware = createMediaFileMiddleware({ projectRoot: sandbox, operations: { open } });
       const response = mediaResponse();
 
-      await invokeRegistered([middleware], mediaRequest("GET", "/uploaded-media/media-denied.png"), response);
+      await invokeRegistered([middleware], mediaRequest("GET", "/uploaded-media/sha256-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png"), response);
 
       expect(open).toHaveBeenCalledTimes(1);
       expect(response.statusCode).toBe(500);

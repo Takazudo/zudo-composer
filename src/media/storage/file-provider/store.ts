@@ -1,6 +1,7 @@
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
 import {
   MEDIA_PROVIDERS,
+  MEDIA_VERSIONED_CAPABILITIES,
   MediaPersistenceError,
   type MediaInitializationOutcome,
   type MediaLoadOutcome,
@@ -8,17 +9,22 @@ import {
   type MediaPersistenceOperation,
   type MediaRecord,
   type MediaSummary,
+  type MediaMutationPrecondition, type MediaMetadataPatch, type MediaFolderPatch, type MediaListOptions,
 } from "../../library";
-import { loadMediaRecord } from "../../model";
+import { loadMediaRecord, validateMediaSnapshot, validateMediaFolder, type MediaSnapshot, type MediaFolder, type MediaVersionRef, type MediaVersionPin, type MediaPinManifest } from "../../model";
 import type { MediaFileProvider, MediaFileProviderConfig, MediaFileProviderStore } from "./types";
 
-type WireOperation = "initialize" | "list" | "get" | "upload" | "delete" | "clear";
+type WireOperation = "initialize" | "list" | "get" | "upload" | "delete" | "clear" | "snapshot" | "replace" | "metadata" | "trash" | "restore" | "create-folder" | "update-folder" | "trash-folder" | "restore-folder" | "resolve-version" | "pin-manifest";
 type ProtocolResponse<T> = { ok: true; result: T } | { ok: false; error: { code: string; message: string; operation?: string } };
 
-function operationFor(value: WireOperation): MediaPersistenceOperation { return value === "upload" ? "put" : value; }
+function operationFor(value: WireOperation): MediaPersistenceOperation {
+  if (value.endsWith("folder")) return "folder";
+  if (value === "resolve-version" || value === "pin-manifest") return "pin";
+  return value === "upload" ? "put" : value as MediaPersistenceOperation;
+}
 function normalizeErrorCode(value: string): MediaPersistenceErrorCode {
   if (value === "body-too-large") return "validation";
-  return ["unavailable", "blocked", "unsupported-version", "validation", "not-found", "bytes-missing", "read-failed", "write-failed", "transaction-failed"].includes(value)
+  return ["unavailable", "blocked", "unsupported-version", "validation", "not-found", "bytes-missing", "read-failed", "write-failed", "transaction-failed", "conflict", "recovery-required"].includes(value)
     ? value as MediaPersistenceErrorCode
     : "unknown";
 }
@@ -38,9 +44,26 @@ function isProtocolResponse<T>(value: unknown): value is ProtocolResponse<T> {
 
 class BrowserFileProviderMediaStore implements MediaFileProviderStore {
   readonly provider = MEDIA_PROVIDERS.files;
+  readonly capabilities = MEDIA_VERSIONED_CAPABILITIES;
   constructor(private readonly config: MediaFileProviderConfig, private readonly fetchImpl: typeof fetch) {}
   initialize() { return this.request<MediaInitializationOutcome>("initialize"); }
-  list() { return this.request<readonly MediaSummary[]>("list"); }
+  list(options: MediaListOptions = {}) { return this.json<readonly MediaSummary[]>("list", options); }
+  async snapshot(): Promise<MediaSnapshot> {
+    const value = await this.request<MediaSnapshot>("snapshot");
+    if (!validateMediaSnapshot(value)) throw persistenceError("snapshot", "validation", "Media snapshot is invalid.");
+    return value;
+  }
+  async mutationToken() { return (await this.snapshot()).mutationToken; }
+  updateMetadata(id: string, patch: MediaMetadataPatch, precondition: MediaMutationPrecondition) { return this.json<MediaRecord>("metadata", { patch, precondition }, id); }
+  trash(id: string, precondition: MediaMutationPrecondition) { return this.json<MediaRecord>("trash", { precondition }, id); }
+  restore(id: string, precondition: MediaMutationPrecondition) { return this.json<MediaRecord>("restore", { precondition }, id); }
+  createFolder(input: { name: string; parentId: string | null }, expectedMutationToken: string) { return this.json<MediaFolder>("create-folder", { input, expectedMutationToken }); }
+  updateFolder(id: string, patch: MediaFolderPatch, precondition: MediaMutationPrecondition) { return this.json<MediaFolder>("update-folder", { patch, precondition }, id); }
+  trashFolder(id: string, precondition: MediaMutationPrecondition) { return this.json<MediaFolder>("trash-folder", { precondition }, id); }
+  restoreFolder(id: string, precondition: MediaMutationPrecondition) { return this.json<MediaFolder>("restore-folder", { precondition }, id); }
+  resolveVersion(ref: MediaVersionRef) { return this.json<MediaVersionPin>("resolve-version", { ref }); }
+  pinManifest(refs: readonly MediaVersionRef[]) { return this.json<MediaPinManifest>("pin-manifest", { refs }); }
+  private json<T>(operation: WireOperation, value: unknown, id?: string): Promise<T> { return this.request(operation, id, JSON.stringify(value)); }
   async get(id: string): Promise<MediaLoadOutcome> {
     const result = await this.request<MediaLoadOutcome>("get", id);
     if (result.status !== "loaded") return result;
@@ -49,18 +72,24 @@ class BrowserFileProviderMediaStore implements MediaFileProviderStore {
     return decoded;
   }
   put(): Promise<void> { return Promise.reject(persistenceError("put", "blocked", "The development media provider accepts new files through upload().")); }
-  delete(id: string) { return this.request<boolean>("delete", id); }
-  async clear() { await this.request<null>("clear"); }
-  upload(file: Blob & { name: string }) {
+  delete(id: string, precondition?: MediaMutationPrecondition) { return this.json<boolean>("delete", { precondition }, id); }
+  clear(): Promise<void> { return Promise.reject(persistenceError("clear", "blocked", "Permanent purge and automatic reset are unavailable. Retained Media versions require explicit recovery.")); }
+  upload(file: Blob & { name: string }, options: { folderId?: string | null; note?: string; expectedMutationToken?: string } = {}) {
     if (file.size > this.config.mediaMaxBodyBytes) return Promise.reject(persistenceError("put", "validation", `Upload exceeds the ${this.config.mediaMaxBodyBytes}-byte limit. Choose a smaller file.`));
-    return this.request<MediaRecord>("upload", undefined, file, file.type || "application/octet-stream", file.name).then((record) => {
+    return this.request<MediaRecord>("upload", undefined, file, file.type || "application/octet-stream", file.name, options).then((record) => {
       const decoded = loadMediaRecord(record);
       if (decoded.status !== "loaded") throw persistenceError("put", "validation", "The development media provider returned an invalid uploaded record.");
       return decoded.record;
     });
   }
-  private async request<T>(operation: WireOperation, id?: string, body: BodyInit = "", contentType = "application/json", fileName?: string): Promise<T> {
+  replace(id: string, file: Blob, precondition: MediaMutationPrecondition): Promise<MediaRecord> {
+    if (file.size > this.config.mediaMaxBodyBytes) return Promise.reject(persistenceError("replace", "validation", "Replacement exceeds the 25 MiB limit."));
+    return this.request<MediaRecord>("replace", id, file, file.type || "application/octet-stream", undefined, { precondition });
+  }
+  private async request<T>(operation: WireOperation, id?: string, body: BodyInit = "", contentType = "application/json", fileName?: string, metadata?: unknown): Promise<T> {
     let response: Response;
+    const encodedMetadata = metadata === undefined ? undefined : encodeURIComponent(JSON.stringify(metadata));
+    if (encodedMetadata !== undefined && encodedMetadata.length > 8192) throw persistenceError(operationFor(operation), "validation", "Upload metadata header exceeds 8 KiB. Add a longer note with updateMetadata after uploading.");
     try {
       const headers: Record<string, string> = {
         "content-type": contentType,
@@ -69,6 +98,7 @@ class BrowserFileProviderMediaStore implements MediaFileProviderStore {
       };
       if (id !== undefined) headers[this.config.mediaRecordIdHeader] = id;
       if (fileName !== undefined) headers[this.config.mediaFileNameHeader] = encodeURIComponent(fileName);
+      if (encodedMetadata !== undefined) headers[this.config.mediaMetadataHeader] = encodedMetadata;
       response = await this.fetchImpl(this.config.mediaEndpoint, { method: "POST", headers, body, cache: "no-store", credentials: "same-origin" });
     } catch (cause) {
       throw persistenceError(operationFor(operation), "unavailable", "The development media provider is unavailable. Confirm `pnpm dev` is running and retry.", cause);
@@ -80,6 +110,12 @@ class BrowserFileProviderMediaStore implements MediaFileProviderStore {
       const code = normalizeErrorCode(payload.error.code);
       throw persistenceError(operationFor(operation), code, payload.error.message);
     }
+    if (!response.ok) throw persistenceError(operationFor(operation), "unknown", "The Media provider returned an unsuccessful HTTP status with a success envelope.");
+    if (["replace", "metadata", "trash", "restore"].includes(operation)) {
+      const result = loadMediaRecord(payload.result);
+      if (result.status !== "loaded" || result.record.id !== id) throw persistenceError(operationFor(operation), "validation", "Media mutation returned an invalid record.");
+    }
+    if (operation.endsWith("folder") && (!validateMediaFolder(payload.result) || (id !== undefined && payload.result.id !== id))) throw persistenceError("folder", "validation", "Media mutation returned an invalid folder.");
     return payload.result;
   }
 }
@@ -99,5 +135,7 @@ export function createFileProviderMediaProvider(options: CreateFileProviderMedia
     try { return await store.initialize(); }
     catch (error) { return { status: "error", error: error instanceof MediaPersistenceError ? error : persistenceError("initialize", "unknown", "Media storage initialization failed.", error) }; }
   };
-  return { descriptor: MEDIA_PROVIDERS.files, store, initialization: { initialize, retry: initialize, startFresh: async () => { await store.clear(); return initialize(); } } };
+  return { descriptor: MEDIA_PROVIDERS.files, store, initialization: { initialize, retry: initialize,
+    startFresh: async () => ({ status: "error", error: persistenceError("clear", "blocked", "Automatic reset is unavailable. Media source and all versions are preserved for recovery.") }),
+  } };
 }

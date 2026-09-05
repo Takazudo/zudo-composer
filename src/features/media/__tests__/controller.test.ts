@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMediaRecord, type MediaSummary, type MediaType } from "../../../media";
+import { createMediaRecord, summarizeMedia, type MediaSummary, type MediaType } from "../../../media";
 import { createMediaLibraryController, mediaMarkdown, mediaPublicFileName, mediaUrl } from "../controller";
 import { createMemoryMediaProvider } from "../fixtures";
 
 const checksum = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
 function record(id: string, fileName = `${id}.png`) { return createMediaRecord({ fileName, mediaType: "image/png", byteLength: 3, checksum }, { id, timestamp: "2026-01-01T00:00:00.000Z" }); }
-function summary(id: string, fileName = `${id}.png`): MediaSummary { const source = record(id, fileName); return { ...source, ...source.document }; }
+function summary(id: string, fileName = `${id}.png`): MediaSummary { return summarizeMedia(record(id, fileName)); }
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((done) => { resolve = done; }); return { promise, resolve }; }
 
 describe("MediaLibraryController", () => {
@@ -55,7 +55,7 @@ describe("MediaLibraryController", () => {
     ["application/pdf", "pdf"],
   ] as const)("derives the id-keyed public filename for %s", (mediaType, extension) => {
     const source = createMediaRecord({ fileName: "original.upload", mediaType: mediaType as MediaType, byteLength: 3, checksum }, { id: "asset-1", timestamp: "2026-01-01T00:00:00.000Z" });
-    const asset = { ...source, ...source.document };
+    const asset = summarizeMedia(source);
     expect(mediaPublicFileName(asset)).toBe(`media-asset-1.${extension}`);
     expect(mediaUrl(asset)).toBe(`/uploaded-media/media-asset-1.${extension}`);
   });
@@ -120,7 +120,7 @@ describe("MediaLibraryController", () => {
     const valid = record("valid");
     vi.spyOn(provider.initialization, "initialize").mockResolvedValue({
       status: "recovery-required",
-      summaries: [{ ...valid, ...valid.document }],
+      summaries: [summarizeMedia(valid)],
       recovery: { kind: "quarantined", reason: "future-schema", sourcePreserved: true, affectedRecordIds: ["future"], message: "A newer record was preserved." },
     });
     const controller = createMediaLibraryController(provider);

@@ -2,262 +2,240 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { spawn } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
-import { createMediaRecord } from "../../../library";
-import { MEDIA_FILE_NAME_MAX_LENGTH } from "../../../model";
+import { createMediaRecord, currentMediaVersion } from "../../../library";
+import { MEDIA_MAX_BYTE_LENGTH, MEDIA_SCHEMA_VERSION, mediaVersionUrl } from "../../../model";
 import { createFilesystemMediaStore } from "../store";
+import type { FilesystemMediaStoreOptions } from "../types";
 
 const sandboxes: string[] = [];
-const PNG_BYTES = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
-const PDF_BYTES = new TextEncoder().encode("%PDF-1.7\nfixture");
-
-async function sandbox(): Promise<string> {
-  const root = await fs.mkdtemp(join(tmpdir(), "zudo-media-store-"));
-  sandboxes.push(root);
-  return root;
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+const PDF = new TextEncoder().encode("%PDF-1.7\nsynthetic version");
+const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+async function sandbox() { const root = await fs.mkdtemp(join(tmpdir(), "zudo-media-store-")); sandboxes.push(root); return root; }
+afterEach(async () => { await Promise.all(sandboxes.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))); });
+function options(root: string, extra: Partial<FilesystemMediaStoreOptions> = {}): FilesystemMediaStoreOptions {
+  let sequence = 0;
+  return { mediaStoreRoot: root, idFactory: () => `asset-${++sequence}`, now: () => "2026-09-01T00:00:00.000Z", ...extra };
 }
+const upload = (store: Awaited<ReturnType<typeof createFilesystemMediaStore>>, folderId?: string) => store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG, folderId });
+const bytePath = (root: string, bytes = PNG) => join(root, "public", mediaVersionUrl(digest(bytes), bytes === PDF ? "application/pdf" : "image/png"));
 
-afterEach(async () => {
-  await Promise.all(sandboxes.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
-});
-
-function options(root: string, extra: Record<string, unknown> = {}) {
-  return {
-    mediaStoreRoot: root,
-    idFactory: () => "safe-id",
-    randomToken: () => "fixed-safe-token",
-    now: () => "2026-08-31T00:00:00.000Z",
-    ...extra,
-  };
-}
-
-function paths(root: string, extension = "png") {
-  return {
-    record: join(root, "records", "media-safe-id.json"),
-    bytes: join(root, "public", "uploaded-media", `media-safe-id.${extension}`),
-  };
-}
-
-describe("FilesystemMediaStore", () => {
-  it("quarantines malformed and future-schema records during initialization", async () => {
-    const root = await sandbox();
-    const store = await createFilesystemMediaStore(options(root));
-    await store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES });
-    const futurePath = join(root, "records", "media-future.json");
-    const malformedPath = join(root, "records", "media-malformed.json");
-    await fs.writeFile(futurePath, JSON.stringify({
-      id: "future",
-      createdAt: "2026-08-31T00:00:00.000Z",
-      updatedAt: "2026-08-31T00:00:00.000Z",
-      document: { schemaVersion: 2 },
-    }));
-    await fs.writeFile(malformedPath, "{broken");
-
-    await expect(store.initialize()).resolves.toMatchObject({
-      status: "recovery-required",
-      summaries: [{ id: "safe-id" }],
-      recovery: {
-        reason: "future-schema",
-        sourcePreserved: true,
-        affectedRecordIds: ["future", "malformed"],
-        foundSchemaVersion: 2,
-      },
+describe("versioned global Media store", () => {
+  it("persists one current catalog, derives signatures and exposes detached snapshots", async () => {
+    const root = await sandbox(); const store = await createFilesystemMediaStore(options(root));
+    const before = await store.mutationToken();
+    const record = await store.upload({ fileName: "report.bin", declaredMediaType: "image/png", bytes: PDF });
+    expect(currentMediaVersion(record)).toMatchObject({ mediaType: "application/pdf", checksum: digest(PDF), byteLength: PDF.byteLength });
+    expect(await fs.readFile(bytePath(root, PDF))).toEqual(Buffer.from(PDF));
+    const snapshot = await store.snapshot();
+    expect(snapshot.schemaVersion).toBe(MEDIA_SCHEMA_VERSION); expect(snapshot.mutationToken).not.toBe(before);
+    snapshot.records[0]!.document.fileName = "detached.pdf";
+    expect((await store.list())[0]!.fileName).toBe("report.bin");
+    expect(await (await createFilesystemMediaStore(options(root))).mutationToken()).toBe(snapshot.mutationToken);
+  });
+  it("retains every immutable byte version after replace, rename, move, trash and restore", async () => {
+    const root = await sandbox(); const store = await createFilesystemMediaStore(options(root));
+    const original = await upload(store);
+    const ref = { providerId: store.provider.id, assetId: original.id, versionId: original.document.currentVersionId };
+    const pin = await store.resolveVersion(ref);
+    const replaced = await store.replace(original.id, { bytes: PDF }, { expectedRevision: 1 });
+    expect(replaced.revision).toBe(2); expect(replaced.id).toBe(original.id); expect(replaced.document.versions).toHaveLength(2);
+    const folder = await store.createFolder({ name: "Documents", parentId: null }, await store.mutationToken());
+    const renamed = await store.updateMetadata(original.id, { fileName: "renamed.pdf", folderId: folder.id, note: "Notes" }, { expectedRevision: 2 });
+    expect(renamed.document.currentVersionId).toBe(digest(PDF));
+    const trashed = await store.trash(original.id, { expectedRevision: 3 });
+    expect(await store.list()).toEqual([]); expect(await store.list({ state: "trash" })).toHaveLength(1);
+    expect(await store.resolveVersion(ref)).toEqual(pin);
+    expect(await store.pinManifest([ref, ref])).toEqual({ schemaVersion: 1, pins: [pin] });
+    const restored = await store.restore(original.id, { expectedRevision: trashed.revision });
+    expect(restored.document.state).toBe("active");
+    expect(await fs.readFile(bytePath(root))).toEqual(Buffer.from(PNG));
+    expect(await fs.readFile(bytePath(root, PDF))).toEqual(Buffer.from(PDF));
+    await expect(store.clear()).rejects.toMatchObject({ code: "blocked" });
+    await expect(store.delete(original.id)).rejects.toMatchObject({ code: "validation" });
+  });
+  it("rejects stale per-asset and provider-wide CAS without changing token or head", async () => {
+    const root = await sandbox(); const one = await createFilesystemMediaStore(options(root)); const original = await upload(one);
+    const two = await createFilesystemMediaStore(options(root)); const oldToken = await one.mutationToken();
+    await two.updateMetadata(original.id, { note: "Other tab" }, { expectedRevision: 1 });
+    const current = await one.snapshot(); expect(current.mutationToken).not.toBe(oldToken);
+    await expect(one.replace(original.id, { bytes: PDF }, { expectedRevision: 1 })).rejects.toMatchObject({ code: "conflict" });
+    await expect(one.updateMetadata(original.id, { note: "stale" }, { expectedRevision: 2, expectedMutationToken: oldToken })).rejects.toMatchObject({ code: "conflict" });
+    expect(await one.snapshot()).toEqual(current);
+  });
+  it("enforces the same revision precondition across independent Node processes", async () => {
+    const root = await sandbox(); const store = await createFilesystemMediaStore(options(root)); const original = await upload(store);
+    const source = `import {createFilesystemMediaStore} from './src/media/storage/filesystem/store.ts';
+      const store = await createFilesystemMediaStore({mediaStoreRoot:process.argv[1]});
+      try { await store.updateMetadata(process.argv[2], {note:process.argv[3]}, {expectedRevision:1}); process.stdout.write('ok'); }
+      catch(error) { process.stdout.write(error.code); }`;
+    const run = (note: string) => new Promise<string>((resolve, reject) => {
+      const child = spawn(process.execPath, ["--import", "tsx", "--input-type=module", "-e", source, root, original.id, note], { cwd: process.cwd(), timeout: 15000 });
+      let output = ""; let errors = "";
+      child.stdout.on("data", (chunk) => { output += String(chunk); }); child.stderr.on("data", (chunk) => { errors += String(chunk); });
+      child.on("error", reject); child.on("close", (code) => { if (code === 0) resolve(output); else reject(new Error(errors)); });
     });
-    await expect(fs.readFile(futurePath, "utf8")).resolves.toContain('"schemaVersion":2');
-    await expect(fs.readFile(malformedPath, "utf8")).resolves.toBe("{broken");
+    expect((await Promise.all([run("one"), run("two")])).sort()).toEqual(["conflict", "ok"]);
+    expect((await store.snapshot()).records[0]!.revision).toBe(2);
+  }, 20000);
+  it("fails closed on existing locks and leaves reads available", async () => {
+    const root = await sandbox(); const store = await createFilesystemMediaStore(options(root)); const record = await upload(store);
+    await fs.writeFile(join(root, ".mutation.lock"), "another writer");
+    await expect(store.trash(record.id, { expectedRevision: 1 })).rejects.toMatchObject({ code: "conflict" });
+    expect((await store.list())[0]!.revision).toBe(1);
+    expect(await fs.readFile(join(root, ".mutation.lock"), "utf8")).toBe("another writer");
   });
-
-  it("commits bytes first and leaves a list-skipped orphan if metadata commit fails", async () => {
-    const root = await sandbox();
-    const store = await createFilesystemMediaStore(options(root, {
-      operations: {
-        rename: async (from: string, to: string) => {
-          if (to.endsWith(".json")) throw Object.assign(new Error("injected metadata failure"), { code: "EIO" });
-          await fs.rename(from, to);
-        },
-      },
-    }));
-
-    await expect(store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES }))
-      .rejects.toMatchObject({ operation: "put", code: "write-failed" });
-    await expect(fs.readFile(paths(root).bytes)).resolves.toEqual(Buffer.from(PNG_BYTES));
-    await expect(fs.stat(paths(root).record)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(store.list()).resolves.toEqual([]);
+  it("defines folder collisions, cycles, and trash/restore parents without disk paths", async () => {
+    const store = await createFilesystemMediaStore(options(await sandbox()));
+    const first = await store.createFolder({ name: "Photos", parentId: null }, await store.mutationToken());
+    const child = await store.createFolder({ name: "Children", parentId: first.id }, await store.mutationToken());
+    await expect(store.updateFolder(first.id, { parentId: child.id }, { expectedRevision: 1 })).rejects.toMatchObject({ code: "validation" });
+    await expect(store.createFolder({ name: "photos", parentId: null }, await store.mutationToken())).rejects.toMatchObject({ code: "validation" });
+    await expect(store.updateFolder(child.id, { parentId: "missing" }, { expectedRevision: 1 })).rejects.toMatchObject({ code: "validation" });
+    await expect(store.trashFolder(first.id, { expectedRevision: 1 })).rejects.toMatchObject({ code: "validation" });
+    const moved = await store.updateFolder(child.id, { parentId: null, name: "Moved" }, { expectedRevision: 1 });
+    const collision = await store.createFolder({ name: "moved", parentId: first.id }, await store.mutationToken());
+    await expect(store.updateFolder(collision.id, { parentId: null }, { expectedRevision: 1 })).rejects.toMatchObject({ code: "validation" });
+    await store.trashFolder(collision.id, { expectedRevision: 1 });
+    await expect(store.updateFolder(child.id, { name: "Stale" }, { expectedRevision: 1 })).rejects.toMatchObject({ code: "conflict" });
+    await store.updateFolder(child.id, { parentId: first.id }, { expectedRevision: moved.revision });
+    const asset = await upload(store, child.id);
+    await expect(store.trashFolder(child.id, { expectedRevision: 3 })).rejects.toMatchObject({ code: "validation" });
+    await store.trash(asset.id, { expectedRevision: 1 });
+    await store.trashFolder(child.id, { expectedRevision: 3 });
+    await store.trashFolder(first.id, { expectedRevision: 1 });
+    await expect(store.restore(asset.id, { expectedRevision: 2 })).rejects.toMatchObject({ code: "validation" });
+    await expect(store.restoreFolder(child.id, { expectedRevision: 4 })).rejects.toMatchObject({ code: "validation" });
+    await store.createFolder({ name: "PHOTOS", parentId: null }, await store.mutationToken());
+    await expect(store.restoreFolder(first.id, { expectedRevision: 2 })).rejects.toMatchObject({ code: "validation" });
   });
-
-  it("mints the id and derives PDF metadata and extension from a signature that disagrees with the declaration", async () => {
-    const root = await sandbox();
+  it("leaves old head and all old bytes unchanged when metadata commit fails and supports retry", async () => {
+    const root = await sandbox(); let fail = false;
+    const store = await createFilesystemMediaStore(options(root, { operations: { rename: async (from, to) => {
+      if (fail && to.endsWith("catalog.json")) throw Object.assign(new Error("injected"), { code: "EIO" });
+      await fs.rename(from, to);
+    } } }));
+    const record = await upload(store); const snapshot = await store.snapshot(); fail = true;
+    await expect(store.replace(record.id, { bytes: PDF }, { expectedRevision: 1 })).rejects.toMatchObject({ code: "write-failed" });
+    expect(await store.snapshot()).toEqual(snapshot); expect(await fs.readFile(bytePath(root))).toEqual(Buffer.from(PNG));
+    expect(await fs.readFile(bytePath(root, PDF))).toEqual(Buffer.from(PDF)); // Harmless retained orphan, never visible as a version.
+    fail = false; await store.replace(record.id, { bytes: PDF }, { expectedRevision: 1 });
+    expect((await store.snapshot()).records[0]!.document.currentVersionId).toBe(digest(PDF));
+  });
+  it.each(["signature", "cap", "stream", "abort"])("preserves head/token on replacement %s failure", async (failure) => {
+    const root = await sandbox(); const store = await createFilesystemMediaStore(options(root)); const record = await upload(store);
+    const before = await store.snapshot(); const controller = new AbortController();
+    const bytes = (async function* () {
+      if (failure === "signature") { yield new Uint8Array(12); return; }
+      yield PNG;
+      if (failure === "cap") { for (let i = 0; i < 26; i++) yield new Uint8Array(1024 * 1024); }
+      if (failure === "stream") throw new Error("broken stream");
+      if (failure === "abort") { controller.abort(new Error("aborted")); yield PDF; }
+    })();
+    await expect(store.replace(record.id, { bytes, signal: controller.signal }, { expectedRevision: 1 })).rejects.toBeDefined();
+    expect(await store.snapshot()).toEqual(before); expect(await fs.readFile(bytePath(root))).toEqual(Buffer.from(PNG));
+    expect((await fs.readdir(root)).filter((name) => name.endsWith(".stage") || name.endsWith(".tmp"))).toEqual([]);
+  });
+  it("accepts exactly the streamed 25 MiB ceiling", async () => {
+    const store = await createFilesystemMediaStore(options(await sandbox()));
+    const bytes = (async function* () { yield PNG; yield new Uint8Array(MEDIA_MAX_BYTE_LENGTH - PNG.length); })();
+    const record = await store.upload({ fileName: "large.png", declaredMediaType: "image/png", bytes });
+    expect(currentMediaVersion(record).byteLength).toBe(MEDIA_MAX_BYTE_LENGTH);
+  });
+  it("never overwrites a byte path that races immutable publication", async () => {
+    const root = await sandbox(); let inject = false;
+    const store = await createFilesystemMediaStore(options(root, { operations: { link: async (from, to) => {
+      if (inject) await fs.writeFile(to, "racing bytes", { flag: "wx" });
+      await fs.link(from, to);
+    } } }));
+    const record = await upload(store); const before = await store.snapshot(); inject = true;
+    await expect(store.replace(record.id, { bytes: PDF }, { expectedRevision: 1 })).rejects.toMatchObject({ code: "conflict" });
+    expect(await store.snapshot()).toEqual(before);
+    expect(await fs.readFile(bytePath(root, PDF), "utf8")).toBe("racing bytes");
+    expect(await fs.readFile(bytePath(root))).toEqual(Buffer.from(PNG));
+  });
+  it("captures caller-owned metadata and revision preconditions before awaits", async () => {
+    const store = await createFilesystemMediaStore(options(await sandbox())); const record = await upload(store);
+    const patch = { note: "captured" }; const precondition = { expectedRevision: 1 };
+    const save = store.updateMetadata(record.id, patch, precondition);
+    patch.note = "late change"; precondition.expectedRevision = 999;
+    expect((await save).document.note).toBe("captured");
+    const replacementPrecondition = { expectedRevision: 2 };
+    const replace = store.replace(record.id, { bytes: PDF }, replacementPrecondition);
+    replacementPrecondition.expectedRevision = 999;
+    expect((await replace).revision).toBe(3);
+  });
+  it("observes cancellation immediately before the catalog commit point", async () => {
+    const root = await sandbox(); const controller = new AbortController(); let cancel = false;
     const store = await createFilesystemMediaStore(options(root));
-    const record = await store.upload({ fileName: "report.bin", declaredMediaType: "image/png", bytes: PDF_BYTES });
-
-    expect(record).toMatchObject({
-      id: "safe-id",
-      document: { id: "safe-id", fileName: "report.bin", mediaType: "application/pdf", byteLength: PDF_BYTES.byteLength },
-    });
-    await expect(fs.readFile(paths(root, "pdf").bytes)).resolves.toEqual(Buffer.from(PDF_BYTES));
-    await expect(fs.stat(join(root, "public", "uploaded-media", "media-safe-id.png"))).rejects.toMatchObject({ code: "ENOENT" });
+    const record = await upload(store); const before = await store.snapshot();
+    // Trigger cancellation after the new byte version is published, while
+    // commitCatalog verifies its replacement target.
+    const replacementStore = await createFilesystemMediaStore(options(root, { operations: {
+      link: async (from, to) => { await fs.link(from, to); cancel = true; },
+      lstat: async (path) => { const result = await fs.lstat(path); if (cancel && path.endsWith("catalog.json")) controller.abort(new Error("cancel before catalog rename")); return result; },
+    } }));
+    await expect(replacementStore.replace(record.id, { bytes: PDF, signal: controller.signal }, { expectedRevision: 1 })).rejects.toMatchObject({ code: "write-failed" });
+    expect(await store.snapshot()).toEqual(before);
   });
-
-  it("bounds display filenames and rejects controls without using them as paths", async () => {
-    const root = await sandbox();
-    const store = await createFilesystemMediaStore(options(root));
-    await expect(store.upload({ fileName: `${"a".repeat(MEDIA_FILE_NAME_MAX_LENGTH)}\n`, declaredMediaType: "image/png", bytes: PNG_BYTES }))
-      .rejects.toMatchObject({ code: "validation" });
-    await expect(store.upload({ fileName: "../pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES }))
-      .rejects.toMatchObject({ code: "validation" });
-    await expect(fs.readdir(join(root, "records"))).resolves.toEqual([]);
+  it("detects missing/corrupted exact bytes independently of the current head", async () => {
+    const root = await sandbox(); const store = await createFilesystemMediaStore(options(root)); const record = await upload(store);
+    await store.replace(record.id, { bytes: PDF }, { expectedRevision: 1 });
+    const ref = { providerId: store.provider.id, assetId: record.id, versionId: digest(PNG) };
+    await fs.writeFile(bytePath(root), "corrupted");
+    await expect(store.resolveVersion(ref)).rejects.toMatchObject({ code: "bytes-missing" });
+    expect((await store.get(record.id)).status).toBe("loaded");
+    await expect(store.replace(record.id, { bytes: PNG }, { expectedRevision: 2 })).rejects.toMatchObject({ code: "bytes-missing" });
+    await fs.unlink(bytePath(root, PDF));
+    expect(await store.get(record.id)).toMatchObject({ status: "bytes-missing", reason: "missing" });
+    expect(await store.list()).toHaveLength(1);
+    await expect(store.resolveVersion({ ...ref, providerId: "other" })).rejects.toMatchObject({ code: "validation" });
   });
-
+  it("imports only new valid single versions with verified bytes", async () => {
+    const store = await createFilesystemMediaStore(options(await sandbox()));
+    const record = createMediaRecord({ fileName: "import.png", mediaType: "image/png", byteLength: PNG.length, checksum: digest(PNG) }, { id: "imported" });
+    await expect(store.put(record, PDF)).rejects.toMatchObject({ code: "validation" });
+    await expect(store.put(record, Uint8Array.from([...PNG.slice(0, -1), 9]))).rejects.toMatchObject({ code: "validation" });
+    await store.put(record, PNG); await expect(store.put(record, PNG)).rejects.toMatchObject({ code: "conflict" });
+  });
   it.each(["../escape", "encoded%2fslash", "with/slash", ".hidden", "CAPS"])("rejects unsafe id %s", async (id) => {
     const store = await createFilesystemMediaStore(options(await sandbox()));
-    await expect(store.get(id)).rejects.toMatchObject({ operation: "get", code: "validation" });
-    await expect(store.delete(id)).rejects.toMatchObject({ operation: "delete", code: "validation" });
+    await expect(store.get(id)).rejects.toMatchObject({ code: "validation" });
+    await expect(store.delete(id)).rejects.toMatchObject({ code: "validation" });
   });
-
-  it("refuses a symlinked store root", async () => {
-    const parent = await sandbox();
-    const target = join(parent, "target");
-    const linked = join(parent, "linked");
-    await fs.mkdir(target);
-    await fs.symlink(target, linked, "dir");
-    await expect(createFilesystemMediaStore(options(linked))).rejects.toMatchObject({ code: "blocked" });
+  it("rejects display filename separators and controls", async () => {
+    const store = await createFilesystemMediaStore(options(await sandbox()));
+    for (const fileName of ["../pixel.png", "a\nb.png", "a".repeat(256)]) await expect(store.upload({ fileName, declaredMediaType: "image/png", bytes: PNG })).rejects.toMatchObject({ code: "validation" });
   });
-
-  it("refuses symlinked final byte and record paths", async () => {
-    const byteRoot = await sandbox();
-    const byteStore = await createFilesystemMediaStore(options(byteRoot));
-    const byteTarget = join(byteRoot, "outside-byte");
-    await fs.writeFile(byteTarget, "untouched");
-    await fs.symlink(byteTarget, paths(byteRoot).bytes);
-    await expect(byteStore.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES }))
-      .rejects.toMatchObject({ code: "blocked" });
-    await expect(fs.readFile(byteTarget, "utf8")).resolves.toBe("untouched");
-
-    const recordRoot = await sandbox();
-    const recordStore = await createFilesystemMediaStore(options(recordRoot));
-    const recordTarget = join(recordRoot, "outside-record");
-    await fs.writeFile(recordTarget, "untouched");
-    await fs.symlink(recordTarget, paths(recordRoot).record);
-    await expect(recordStore.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES }))
-      .rejects.toMatchObject({ code: "blocked" });
-    await expect(fs.readFile(recordTarget, "utf8")).resolves.toBe("untouched");
+  it("refuses symlinked roots, parents, catalog and immutable byte paths", async () => {
+    const parent = await sandbox(); await fs.mkdir(join(parent, "target")); await fs.symlink(join(parent, "target"), join(parent, "linked"));
+    await expect(createFilesystemMediaStore(options(join(parent, "linked")))).rejects.toMatchObject({ code: "blocked" });
+    for (const target of ["catalog", "bytes", "public"]) {
+      const root = await sandbox(); const store = await createFilesystemMediaStore(options(root)); const outside = join(root, "outside");
+      await fs.writeFile(outside, "untouched");
+      if (target === "public") { await fs.rename(join(root, "public"), join(root, "original-public")); await fs.symlink(join(root, "original-public"), join(root, "public")); }
+      else await fs.symlink(outside, target === "catalog" ? join(root, "catalog.json") : bytePath(root));
+      await expect(upload(store)).rejects.toMatchObject({ code: "blocked" }); expect(await fs.readFile(outside, "utf8")).toBe("untouched");
+    }
   });
-
-  it("detects root replacement before mutation", async () => {
-    const parent = await sandbox();
-    const root = join(parent, "media-store");
-    const store = await createFilesystemMediaStore(options(root));
-    await fs.rename(root, join(parent, "original"));
-    await fs.mkdir(root);
-
-    await expect(store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES }))
-      .rejects.toMatchObject({ code: "blocked" });
-    await expect(fs.readdir(root)).resolves.toEqual([]);
+  it("detects replaced roots and preserves malformed/future catalogs for recovery", async () => {
+    const parent = await sandbox(); const root = join(parent, "store"); const store = await createFilesystemMediaStore(options(root));
+    await fs.rename(root, join(parent, "old")); await fs.mkdir(root); await expect(upload(store)).rejects.toMatchObject({ code: "blocked" });
+    const fresh = await createFilesystemMediaStore(options(root));
+    for (const text of ["{broken", JSON.stringify({ schemaVersion: MEDIA_SCHEMA_VERSION + 1 })]) {
+      await fs.writeFile(join(root, "catalog.json"), text);
+      expect(await fresh.initialize()).toMatchObject({ status: "recovery-required", recovery: { sourcePreserved: true } });
+      await expect(upload(fresh)).rejects.toMatchObject({ code: "recovery-required" });
+      expect(await fs.readFile(join(root, "catalog.json"), "utf8")).toBe(text);
+    }
   });
-
-  it("stops a pending signature read when the upload is aborted", async () => {
-    const root = await sandbox();
-    const store = await createFilesystemMediaStore(options(root));
-    const controller = new AbortController();
-    const source = {
-      [Symbol.asyncIterator]() {
-        return {
-          next: () => new Promise<IteratorResult<Uint8Array>>(() => undefined),
-          return: async () => ({ done: true as const, value: undefined }),
-        };
-      },
-    };
-    const upload = store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: source, signal: controller.signal });
-    controller.abort(new Error("client aborted"));
-    await expect(upload).rejects.toThrow("client aborted");
-    await expect(fs.readdir(join(root, "records"))).resolves.toEqual([]);
-    await expect(fs.readdir(join(root, "public", "uploaded-media"))).resolves.toEqual([]);
-  });
-
-  it("keeps dangling records visible while get reports missing bytes", async () => {
-    const root = await sandbox();
-    const store = await createFilesystemMediaStore(options(root));
-    await store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES });
-    await fs.unlink(paths(root).bytes);
-
-    await expect(store.list()).resolves.toHaveLength(1);
-    await expect(store.get("safe-id")).resolves.toMatchObject({ status: "bytes-missing", reason: "missing" });
-  });
-
-  it("reports checksum mismatch as bytes-missing", async () => {
-    const root = await sandbox();
-    const store = await createFilesystemMediaStore(options(root));
-    await store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES });
-    await fs.writeFile(paths(root).bytes, Uint8Array.from([...PNG_BYTES.slice(0, -1), 9]));
-
-    await expect(store.get("safe-id")).resolves.toMatchObject({ status: "bytes-missing", reason: "checksum-mismatch" });
-  });
-
-  it("deletes the record first and a retry is idempotent after byte deletion fails", async () => {
-    const root = await sandbox();
-    const bytesPath = paths(root).bytes;
-    const store = await createFilesystemMediaStore(options(root, {
-      operations: {
-        unlink: async (path: string) => {
-          if (path.endsWith("/public/uploaded-media/media-safe-id.png")) throw Object.assign(new Error("injected byte failure"), { code: "EIO" });
-          await fs.unlink(path);
-        },
-      },
-    }));
-    await store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES });
-
-    await expect(store.delete("safe-id")).rejects.toMatchObject({ operation: "delete", code: "write-failed" });
-    await expect(fs.stat(paths(root).record)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(fs.readFile(bytesPath)).resolves.toEqual(Buffer.from(PNG_BYTES));
-    await expect(store.delete("safe-id")).resolves.toBe(false);
-  });
-
-  it("clear removes records and orphan bytes while preserving unowned files", async () => {
-    const root = await sandbox();
-    const store = await createFilesystemMediaStore(options(root));
-    await store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes: PNG_BYTES });
-    const bytesDirectory = join(root, "public", "uploaded-media");
-    await fs.writeFile(join(bytesDirectory, "media-orphan.pdf"), PDF_BYTES);
-    await fs.writeFile(join(bytesDirectory, "keep.txt"), "keep");
-
-    await store.clear();
-
-    await expect(fs.readdir(join(root, "records"))).resolves.toEqual([]);
-    await expect(fs.readdir(bytesDirectory)).resolves.toEqual(["keep.txt"]);
-  });
-
-  it("imports canonical records only when signature, length, and checksum agree", async () => {
-    const root = await sandbox();
-    const store = await createFilesystemMediaStore(options(root));
-    const checksum = createHash("sha256").update(PNG_BYTES).digest("hex");
-    const record = createMediaRecord({ fileName: "pixel.png", mediaType: "image/png", byteLength: PNG_BYTES.byteLength, checksum }, {
-      id: "imported-id",
-      timestamp: "2026-08-31T00:00:00.000Z",
-    });
-    await store.put(record, PNG_BYTES);
-    await expect(store.get("imported-id")).resolves.toMatchObject({ status: "loaded", record: { id: "imported-id" } });
-  });
-
-  it("rejects an import integrity mismatch before replacing existing bytes", async () => {
-    const root = await sandbox();
-    const store = await createFilesystemMediaStore(options(root));
-    await store.upload({ fileName: "original.png", declaredMediaType: "image/png", bytes: PNG_BYTES });
-    const expectedBytes = Uint8Array.from(PNG_BYTES);
-    expectedBytes[expectedBytes.length - 1] = 8;
-    const mismatchedBytes = Uint8Array.from(PNG_BYTES);
-    mismatchedBytes[mismatchedBytes.length - 1] = 9;
-    const replacement = createMediaRecord({
-      fileName: "replacement.png",
-      mediaType: "image/png",
-      byteLength: expectedBytes.byteLength,
-      checksum: createHash("sha256").update(expectedBytes).digest("hex"),
-    }, { id: "safe-id", timestamp: "2026-08-31T00:00:00.000Z" });
-
-    await expect(store.put(replacement, mismatchedBytes)).rejects.toMatchObject({ operation: "put", code: "validation" });
-    await expect(fs.readFile(paths(root).bytes)).resolves.toEqual(Buffer.from(PNG_BYTES));
-    await expect(store.get("safe-id")).resolves.toMatchObject({
-      status: "loaded",
-      record: { document: { fileName: "original.png" } },
-    });
+  it("aborts a stalled signature read promptly", async () => {
+    const root = await sandbox(); const store = await createFilesystemMediaStore(options(root)); const controller = new AbortController();
+    const bytes = { [Symbol.asyncIterator]() { return { next: () => new Promise<IteratorResult<Uint8Array>>(() => undefined) }; } };
+    const promise = store.upload({ fileName: "pixel.png", declaredMediaType: "image/png", bytes, signal: controller.signal });
+    controller.abort(new Error("client aborted")); await expect(promise).rejects.toThrow("client aborted");
+    expect(await store.list()).toEqual([]);
   });
 });
