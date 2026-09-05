@@ -15,6 +15,22 @@ async function content() {
   return provider;
 }
 describe("injected complete Media / Content integration", () => {
+  it("coalesces inspector and dialog scans for an asset/event while execution can force a fresh check", async () => {
+    const provider = await content(); const read = vi.spyOn(provider.store, "readAll");
+    let emit!: () => void; const flush = vi.fn(async () => undefined);
+    const service = createMediaContentServices([provider], flush, (listener) => { emit = listener; return () => undefined; });
+    const stopInspector = service.subscribeChanges(() => undefined), stopDialog = service.subscribeChanges(() => undefined);
+    const asset = { providerId: "media-files", assetId: "hero" };
+    try {
+      const inspector = service.scan(asset), dialog = service.scan(asset);
+      expect(inspector).toBe(dialog); await inspector;
+      // One graph capture reads a snapshot and verifies its token with a second read.
+      expect(service.scan(asset)).toBe(inspector); expect(read).toHaveBeenCalledTimes(2); expect(flush).toHaveBeenCalledTimes(1);
+      emit(); const next = service.scan(asset); expect(service.scan(asset)).toBe(next); await next;
+      expect(read).toHaveBeenCalledTimes(4); expect(flush).toHaveBeenCalledTimes(2); await service.scan(asset, true);
+      expect(read).toHaveBeenCalledTimes(6); expect(flush).toHaveBeenCalledTimes(3);
+    } finally { stopInspector(); stopDialog(); }
+  });
   it("shares one lazy event subscription without reading Content and releases it at zero consumers", async () => {
     const provider = await content(); const read = vi.spyOn(provider.store, "readAll");
     let emit!: () => void; const detach = vi.fn();

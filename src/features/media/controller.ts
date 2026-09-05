@@ -150,9 +150,9 @@ export class MediaLibraryController {
     const store = this.requireStore("restore");
     return this.mutate("Restore", async () => { for (const record of records) await store.restore(record.id, { expectedRevision: record.revision }); });
   }
-  async scan(record: MediaSummary): Promise<MediaUsageScan> {
+  async scan(record: MediaSummary, fresh = false): Promise<MediaUsageScan> {
     if (!this.contentServices) return { status: "unavailable", locations: [], tokens: {}, message: "Authoritative Content usage inspection is unavailable; trash is blocked." };
-    return this.contentServices.scan({ providerId: this.provider.descriptor.id, assetId: record.id });
+    return this.contentServices.scan({ providerId: this.provider.descriptor.id, assetId: record.id }, fresh);
   }
   async trash(records: readonly MediaSummary[]) {
     const store = this.requireStore("trash");
@@ -162,7 +162,7 @@ export class MediaLibraryController {
       records = records.map((record) => ownDrafts.has(record.id) ? this.current.records.find(({ id }) => id === record.id)! : record);
     }
     // Capture before registering this write, so a Content flush cannot wait on itself.
-    const scans = await Promise.all(records.map((record) => this.scan(record)));
+    const scans = await Promise.all(records.map((record) => this.scan(record, true)));
     if (scans.some((scan) => scan.status !== "complete" || scan.locations.length > 0)) throw new Error("Trash blocked: active Content uses or an incomplete authoritative scan remain.");
     return this.mutate("Trash", async () => {
       for (const [index, record] of records.entries()) {

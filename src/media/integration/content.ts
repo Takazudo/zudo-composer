@@ -17,7 +17,7 @@ export interface MediaInsertionTarget extends MediaContentLocation {
 }
 export interface MediaContentServices {
   subscribeChanges(listener: () => void): () => void;
-  scan(asset: MediaAssetRef): Promise<MediaUsageScan>;
+  scan(asset: MediaAssetRef, fresh?: boolean): Promise<MediaUsageScan>;
   isCurrent(scan: MediaUsageScan): Promise<boolean>;
   targets(): Promise<readonly MediaInsertionTarget[]>;
   insert(target: MediaInsertionTarget, value: MediaUse): Promise<void>;
@@ -28,6 +28,7 @@ export function createMediaContentServices(providers: readonly ContentProvider[]
   const stores = providers.map(({ store }) => store);
   const listeners = new Set<() => void>();
   let stopChanges: (() => void) | undefined;
+  const scans = new Map<string, Promise<MediaUsageScan>>();
   const capture = async () => {
     const result = await flush();
     if (result && typeof result === "object" && "status" in result && result.status !== "ready") throw new Error("Save pending Content changes before inspecting Media uses.");
@@ -39,15 +40,19 @@ export function createMediaContentServices(providers: readonly ContentProvider[]
       const subscription = () => listener();
       listeners.add(subscription);
       if (!stopChanges) {
-        try { stopChanges = subscribeChanges(() => { for (const notify of [...listeners]) notify(); }); }
+        try { stopChanges = subscribeChanges(() => { scans.clear(); for (const notify of [...listeners]) notify(); }); }
         catch (error) { listeners.delete(subscription); throw error; }
       }
       return () => {
         listeners.delete(subscription);
-        if (!listeners.size && stopChanges) { const stop = stopChanges; stopChanges = undefined; stop(); }
+        if (!listeners.size && stopChanges) { const stop = stopChanges; stopChanges = undefined; scans.clear(); stop(); }
       };
     },
-    async scan(asset) {
+    scan(asset, fresh = false) {
+      const key = JSON.stringify([asset.providerId, asset.assetId]);
+      const existing = scans.get(key);
+      if (!fresh && existing) return existing;
+      const pending = (async (): Promise<MediaUsageScan> => {
       try {
         const graph = await capture();
         if (graph.status !== "ready") return { status: "unavailable", locations: [], tokens: {}, message: graph.message };
@@ -63,6 +68,10 @@ export function createMediaContentServices(providers: readonly ContentProvider[]
           tokens: Object.fromEntries(graph.snapshots.map((snapshot) => [snapshot.providerId, snapshot.mutationToken])),
           message: graph.index.complete ? "Complete structured Content scan. Raw URL or Markdown references may also exist; this does not prove the asset is unused." : "The authoritative Content graph is incomplete; trash is blocked." };
       } catch (error) { return { status: "unavailable", locations: [], tokens: {}, message: error instanceof Error ? error.message : "Content scan unavailable." }; }
+      })();
+      scans.set(key, pending);
+      void pending.then((result) => { if ((!listeners.size || result.status !== "complete") && scans.get(key) === pending) scans.delete(key); });
+      return pending;
     },
     async isCurrent(scan) {
       if (scan.status !== "complete" || Object.keys(scan.tokens).length !== stores.length) return false;
@@ -123,6 +132,7 @@ export function createMediaContentServices(providers: readonly ContentProvider[]
       if (target.append && parent[key] !== undefined && !Array.isArray(parent[key])) throw new Error("The destination is no longer a list.");
       parent[key] = (target.append ? [...(parent[key] as JsonValue[] | undefined ?? []), value] : value) as unknown as JsonValue;
       await store.transact({ expectedMutationToken: target.mutationToken, operations: [{ kind: "put-entry", record }] });
+      scans.clear();
     },
   };
 }

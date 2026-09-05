@@ -5,6 +5,10 @@ import type { ProductionProviderIntegration } from "../provider-integration";
 import { createWorkspaceSaveRegistry } from "../workspace-sessions";
 import { harness, mappingRecord } from "../../features/mapping/__tests__/harness";
 import { activeComponentProvider } from "../../features/composer/active-pack";
+import { createMediaContentServices } from "../../features/media";
+import { notifyPersistenceChange } from "../../shared/persistence-generation";
+import { CONTENT_DATABASE_NAME } from "../../content";
+import { workspaceDatabaseName } from "../workspace-storage";
 
 vi.mock("../provider-integration", () => ({ createProductionProviderIntegration: () => { throw new Error("Inject the test workspace."); } }));
 vi.mock("../dashboard", async () => {
@@ -14,7 +18,10 @@ vi.mock("../dashboard", async () => {
 vi.mock("../workspace-summary", () => ({ createWorkspaceSummary: () => ({ counts: async () => ({ content: { status: "unavailable" }, compositions: { status: "unavailable" }, mappings: { status: "unavailable" }, sitemaps: { status: "unavailable" }, media: { status: "absent" } }), dispose: () => undefined }) }));
 vi.mock("../../features/composer/chrome/composer-app", () => ({ default: () => <h1>Composition editor</h1> }));
 vi.mock("../../features/content", () => ({ ContentRouteContent: () => <h1>Content editor</h1> }));
-vi.mock("../../features/media", () => ({ MediaRouteContent: () => <h1>Media editor</h1> }));
+vi.mock("../../features/media", async () => {
+  const { createMediaContentServices } = await import("../../media/integration/content");
+  return { MediaRouteContent: () => <h1>Media editor</h1>, createMediaContentServices: vi.fn(createMediaContentServices) };
+});
 vi.mock("../../features/sitemapper", () => ({ SitemapperRouteContent: () => <h1>Sitemap editor</h1> }));
 vi.mock("../../features/delivery/site-delivery", () => ({ SiteDelivery: () => <h1>Visitor website</h1> }));
 function workspace(id = "one") {
@@ -30,6 +37,24 @@ function workspace(id = "one") {
 }
 afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, "", "/"); });
 describe("application workspace lifetime", () => {
+  it("invalidates Media usage only for the exact workspace Content database", async () => {
+    const integration = workspace();
+    render(<App integration={integration as unknown as ProductionProviderIntegration} />);
+    await screen.findByRole("heading", { name: "Workspace one" });
+    const subscribe = vi.mocked(createMediaContentServices).mock.lastCall![2]!;
+    const listener = vi.fn(); const stop = subscribe(listener);
+    try {
+      notifyPersistenceChange("media");
+      notifyPersistenceChange(CONTENT_DATABASE_NAME);
+      notifyPersistenceChange(workspaceDatabaseName(CONTENT_DATABASE_NAME, "other"));
+      integration.sessions.register({ feature: "Media", providerId: "media-files" }, { flush: async () => undefined }).changed();
+      expect(listener).not.toHaveBeenCalled();
+      notifyPersistenceChange(workspaceDatabaseName(CONTENT_DATABASE_NAME, "one"));
+      expect(listener).toHaveBeenCalledTimes(1);
+    } finally { stop(); }
+    notifyPersistenceChange(workspaceDatabaseName(CONTENT_DATABASE_NAME, "one"));
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
   it.each(["rail", "portal"])("flushes real Mapping edits before %s navigation and retains failed edits", async (kind) => {
     const record = mappingRecord([]), h = harness([record]);
     const integration = { ...workspace(), mappingProvider: h.provider, mappingProviders: [h.provider], contentCatalog: h.content, mappingCompositionCatalog: h.compositions, mappingContentEntries: h.contentEntries, componentProvider: activeComponentProvider };

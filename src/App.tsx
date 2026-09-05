@@ -5,7 +5,9 @@ import { createProductionProviderIntegration, type ProductionProviderIntegration
 import { WorkspaceContext, useWorkspace } from "./app/workspace-context";
 import { parseIntent, formatIntent } from "./app/route-intents";
 import { Button } from "./components/ui";
-import type { WorkspaceRecord } from "./app/workspace-storage";
+import { workspaceDatabaseName, type WorkspaceRecord } from "./app/workspace-storage";
+import { CONTENT_DATABASE_NAME } from "./content";
+import { subscribePersistenceChanges } from "./shared/persistence-generation";
 import { Shell } from "./app/shell";
 import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
@@ -159,7 +161,14 @@ export function App({ themeController, integration }: AppProps = {}) {
   // One read model for the whole chrome; the rail's counts come from it, and
   // the Dashboard route reuses this instance rather than initializing a second.
   const workspaceSummary = useMemo(() => createWorkspaceSummary(providers), [providers]);
-  const mediaContentServices = useMemo(() => createMediaContentServices(providers.contentProviders, () => providers.sessions.flush(), (listener) => workspaceSummary.subscribe?.(listener) ?? (() => undefined)), [providers, workspaceSummary]);
+  const mediaContentServices = useMemo(() => createMediaContentServices(
+    providers.contentProviders,
+    () => providers.sessions.flush(),
+    (listener) => subscribePersistenceChanges((database) => {
+      const workspaceId = providers.workspace.id;
+      if (workspaceId && database === workspaceDatabaseName(CONTENT_DATABASE_NAME, workspaceId)) listener();
+    }),
+  ), [providers]);
   useEffect(() => () => workspaceSummary.dispose?.(), [workspaceSummary]);
   const path = new URL(location, window.location.origin).pathname;
   useEffect(() => { if (path === "/sitemapper") void providers.compositionCatalog.listCompositions().catch(() => undefined); }, [path, providers]);

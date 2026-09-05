@@ -19,11 +19,14 @@ nested structured uses. Trash requires a complete scan without typed uses and
 rechecks Content tokens immediately before each asset write. Content and Media
 are separate stores, so these checks are not a cross-domain atomic transaction.
 Raw URL/Markdown references remain advisory and never establish non-use.
-The injected `subscribeChanges` shares one workspace persistence/session event
+The injected `subscribeChanges` shares one Content-only persistence event
 subscription across active inspector and trash-dialog usage surfaces. No asset
 selected means no inspector subscription; the last subscriber releases the
-source. Events invalidate scans without polling or reading the Content graph.
-Active surfaces then refresh their captured usage snapshot as needed.
+source, filtered by the canonical Content database name and exact workspace
+database identity. Media/session events never trigger Content scans. Events
+invalidate scans without polling or reading the graph. Active surfaces share
+one cached scan per asset/event, including its in-flight promise; guarded trash
+execution forces a fresh authoritative scan and rechecks mutation tokens.
 
 `MediaFieldPicker` emits an awaited typed `MediaUse` callback to the invoking
 field; that field owns persistence. Route insertion uses Content transactions.
