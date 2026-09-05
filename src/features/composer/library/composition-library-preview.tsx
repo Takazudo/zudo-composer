@@ -18,13 +18,16 @@ const VIEWPORTS = {
   phone: { width: 390, height: 844, label: "Phone" },
 } as const;
 
-function useNearVisible(): { ref: (node: HTMLDivElement | null) => void; near: boolean } {
+/** Deterministic ceiling when IntersectionObserver is unavailable. */
+export const COMPOSITION_PREVIEW_FALLBACK_LIMIT = 4;
+
+function useNearVisible(fallbackNear: boolean): { ref: (node: HTMLDivElement | null) => void; near: boolean } {
   const [node, setNode] = useState<HTMLDivElement | null>(null);
   const [near, setNear] = useState(false);
   useEffect(() => {
     if (!node) return;
     if (typeof IntersectionObserver === "undefined") {
-      setNear(true);
+      setNear(fallbackNear);
       return;
     }
     const observer = new IntersectionObserver((entries) => {
@@ -32,7 +35,7 @@ function useNearVisible(): { ref: (node: HTMLDivElement | null) => void; near: b
     }, { rootMargin: "320px 0px" });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [node]);
+  }, [fallbackNear, node]);
   return { ref: setNode, near };
 }
 
@@ -105,14 +108,16 @@ export function CompositionLibraryPreview({
   componentProvider,
   intents,
   device,
+  fallbackNear,
 }: {
   row: CompositionSummary;
   providerId: CompositionRecordRef["providerId"];
   componentProvider: ComposerComponentProvider;
   intents: CompositionLibraryIntents;
   device: CompositionThumbnailDevice;
+  fallbackNear: boolean;
 }): JSX.Element {
-  const visibility = useNearVisible();
+  const visibility = useNearVisible(fallbackNear);
   const [outcome, setOutcome] = useState<CompositionLibraryPreviewOutcome | null>(null);
   const [loading, setLoading] = useState(false);
   const [rendered, setRendered] = useState(false);
@@ -136,7 +141,11 @@ export function CompositionLibraryPreview({
     void intents.resolvePreview(ref).then(
       (next) => {
         if (request !== generation.current) return;
-        setOutcome(next);
+        if (next.ref.providerId !== ref.providerId || next.ref.recordId !== ref.recordId) {
+          setOutcome({ status: "blocked", ref, message: "The provider returned a preview for a different Composition." });
+        } else {
+          setOutcome(next);
+        }
         setLoading(false);
       },
       (reason) => {

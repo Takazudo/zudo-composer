@@ -440,14 +440,26 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     expect(code.indexOf("SplitLayout")).toBeLessThan(code.indexOf("Stack"));
   });
 
-  it("keeps the shared tree pending-insert session through the chooser and restores its exact origin focus", async () => {
+  it("keeps the shared tree pending-insert session through the chooser and focuses the inserted row", async () => {
     const s = setup(undefined, makeAbcDocument());
-    const origin = within(s.tree()).getByRole("button", { name: "Insert before Split Layout" });
-    fireEvent.click(origin);
+    fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert before Split Layout" }));
     fireEvent.click(within(s.chooser()).getByRole("button", { name: "Text" }));
 
     expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.text, FIXTURE_IDS.split]);
-    await waitFor(() => expect(document.activeElement).toBe(origin));
+    await waitFor(() => expect(document.activeElement).toBe(s.treeRow("Text")));
+  });
+
+  it("uses the shared pending session for terminal Add and restores the terminal origin on cancel", async () => {
+    const s = setup();
+    const terminal = within(s.tree()).getByRole("button", { name: "Add component" });
+    fireEvent.click(terminal);
+    fireEvent.click(within(s.chooser()).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(terminal));
+
+    fireEvent.click(terminal);
+    fireEvent.click(within(s.chooser()).getByRole("button", { name: "Stack" }));
+    expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.stack]);
+    await waitFor(() => expect(document.activeElement).toBe(s.treeRow("Stack")));
   });
 });
 

@@ -228,6 +228,18 @@ describe("ComposerChooser — target capture survives a selection change", () =>
     expect(onAdd).toHaveBeenCalledWith(rightTarget, FIXTURE_IDS.box);
     expect(onAdd).not.toHaveBeenCalledWith(rootTarget, expect.anything());
   });
+
+  it("uses a shared terminal session's freshly resolved end target and completes with the inserted id", () => {
+    const currentEnd = { ...rightTarget, index: 3 };
+    const onAdd = vi.fn(() => ({ status: "inserted" as const, nodeId: "new-node" }));
+    const onComplete = vi.fn();
+    render(<ComposerChooser {...baseProps({ onAdd, onComplete, resolveTarget: () => currentEnd })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Box/ }));
+
+    expect(onAdd).toHaveBeenCalledWith(currentEnd, FIXTURE_IDS.box);
+    expect(onComplete).toHaveBeenCalledWith("new-node");
+  });
 });
 
 describe("ComposerChooser — search / category / constraint filters", () => {

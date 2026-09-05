@@ -46,7 +46,7 @@ export interface SelectedSlot {
 
 interface ComposerTreeInsertSession {
   resolveTarget: () => InsertionTarget | null;
-  complete: () => void;
+  complete: (insertedId?: string) => void;
   cancel: () => void;
 }
 
@@ -214,7 +214,7 @@ export function ComposerStructurePane({
             ? insertionTargetFor(outlineRef.current, resolved.parentId, resolved.index)
             : null;
         },
-        complete: () => session.complete(),
+        complete: (insertedId) => session.complete(insertedId),
         cancel: session.cancel,
       });
     }

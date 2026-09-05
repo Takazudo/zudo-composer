@@ -15,8 +15,10 @@ import { CompositionLibrary } from "../composition-library";
 import { fixtureComponentProvider } from "../../test-support/fixture-pack";
 import type {
   CompositionLibraryIntents,
+  CompositionLibraryPreviewOutcome,
   CompositionLibraryProviderCapability,
 } from "../library-contract";
+import { COMPOSITION_PREVIEW_FALLBACK_LIMIT } from "../composition-library-preview";
 
 const originalShowModal = HTMLDialogElement.prototype.showModal;
 const originalClose = HTMLDialogElement.prototype.close;
@@ -153,6 +155,68 @@ describe("CompositionLibrary data and capability states", () => {
     expect(screen.getByLabelText("Composition cards").querySelector("iframe")).not.toBeNull();
     act(() => report([{ isIntersecting: false }]));
     expect(screen.getByLabelText("Composition cards").querySelector("iframe")).toBeNull();
+  });
+
+  it("keeps the no-observer fallback bounded when many cards are rendered", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const rows = Array.from({ length: 10 }, (_, index) => summary(`row-${index}`, `Row ${index}`));
+    const intents = fakeIntents({ initialize: vi.fn(async () => ready(rows)) });
+    renderLibrary(intents);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledTimes(COMPOSITION_PREVIEW_FALLBACK_LIMIT));
+    expect(screen.getByLabelText("Composition cards").querySelectorAll("iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+    expect(screen.getAllByText("Preview loads when nearby")).toHaveLength(rows.length - COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+  });
+
+  it("invalidates same-id cards across providers and ignores the prior provider's late preview", async () => {
+    let resolveBrowser!: (outcome: CompositionLibraryPreviewOutcome) => void;
+    const browserPreview = new Promise<CompositionLibraryPreviewOutcome>((resolve) => { resolveBrowser = resolve; });
+    const shared = summary("shared", "Shared composition");
+    const providers: CompositionLibraryProviderCapability[] = [
+      { descriptor: COMPOSITION_PROVIDERS.indexeddb, available: true },
+      { descriptor: COMPOSITION_PROVIDERS.files, available: true },
+    ];
+    const intents = fakeIntents({
+      initialize: vi.fn(async () => ready([shared])),
+      resolvePreview: vi.fn(async (ref) => ref.providerId === "indexeddb"
+        ? browserPreview
+        : { status: "blocked" as const, ref, message: "Files provider preview." }),
+    });
+    renderLibrary(intents, providers);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "shared" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
+    expect(await screen.findByText("Files provider preview.")).toBeInTheDocument();
+    act(() => resolveBrowser({
+      status: "blocked",
+      ref: { providerId: "indexeddb", recordId: "shared" },
+      message: "Stale browser preview.",
+    }));
+    await Promise.resolve();
+    expect(screen.queryByText("Stale browser preview.")).toBeNull();
+    expect(screen.getByText("Files provider preview.")).toBeInTheDocument();
+  });
+
+  it("rejects a preview outcome whose provider-qualified identity does not match its card", async () => {
+    const intents = fakeIntents({
+      initialize: vi.fn(async () => ready([ALPHA])),
+      resolvePreview: vi.fn(async () => ({
+        status: "blocked" as const,
+        ref: { providerId: "files" as const, recordId: "alpha" },
+        message: "Wrong-provider payload.",
+      })),
+    });
+    renderLibrary(intents);
+    await waitForLibrary();
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+
+    expect(await screen.findByText("The provider returned a preview for a different Composition.")).toBeInTheDocument();
+    expect(screen.queryByText("Wrong-provider payload.")).toBeNull();
   });
 
   it("shows Plain/Pattern/Global template kind chips and node counts", async () => {

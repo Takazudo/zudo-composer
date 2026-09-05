@@ -61,7 +61,7 @@ export interface ComposerChooserState {
 /** Composer projection of the shared tree's pending-insert transaction. */
 export interface ComposerInsertSession {
   resolveTarget: () => InsertionTarget | null;
-  complete: () => void;
+  complete: (insertedId?: string) => void;
   cancel: () => void;
 }
 
@@ -78,7 +78,7 @@ export interface ComposerIntegrationApi {
   chooser: ComposerChooserState;
   openChooser: (target: InsertionTarget, session?: ComposerInsertSession) => void;
   closeChooser: () => void;
-  completeChooser: () => void;
+  completeChooser: (insertedId?: string) => void;
   exportState: UseComposerExportResult;
   /** Latest parent-app resolver outcome for this provider-qualified record. */
   reuseResolution: GlobalTemplateResolutionOutcome | null;
@@ -101,7 +101,7 @@ export interface ComposerIntegrationApi {
   /** Canvas insert point → open the shared parent chooser for that exact target. */
   handleCanvasRequestAdd: (target: InsertionTarget) => void;
   /** Chooser confirm → add the component at the captured target. */
-  handleChooserAdd: (target: InsertionTarget, componentId: string) => boolean;
+  handleChooserAdd: (target: InsertionTarget, componentId: string) => { status: "inserted"; nodeId: string } | { status: "rejected"; message: string };
   /** Chooser expand-ancestors → reveal the freshly added node in the tree. */
   handleExpandAncestors: (nodeIds: string[]) => void;
   /** Keyboard remove → remove the given (selected) node. */
@@ -239,8 +239,8 @@ export function useComposerIntegration(
     chooserRef.current.session?.cancel();
     setChooser({ open: false, target: null });
   }, []);
-  const completeChooser = useCallback(() => {
-    chooserRef.current.session?.complete();
+  const completeChooser = useCallback((insertedId?: string) => {
+    chooserRef.current.session?.complete(insertedId);
     setChooser({ open: false, target: null });
   }, []);
   useEffect(() => () => chooserRef.current.session?.cancel(), []);
@@ -279,7 +279,7 @@ export function useComposerIntegration(
   );
 
   const handleChooserAdd = useCallback(
-    (target: InsertionTarget, componentId: string) => controller.add(target, componentId) === null,
+    (target: InsertionTarget, componentId: string) => controller.add(target, componentId),
     [controller],
   );
 

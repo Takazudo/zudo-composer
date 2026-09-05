@@ -765,7 +765,17 @@ export function ProductionComposerApp({
       const session = state.session as ProductionDetailSession;
       await session.flushPendingProps(ref);
       await session.queue.flush();
-      await provider.store.delete(ref.recordId);
+      if (session.queue.state.draft.document.publication?.kind === "global-template") {
+        if (!activeLifecycleService) throw new Error("The active provider cannot verify Global-template dependencies.");
+        const outcome = await activeLifecycleService.deleteSource(ref);
+        if (outcome.status === "blocked") {
+          throw new Error(`Cannot delete this Global template while ${outcome.dependents.length} consumer${outcome.dependents.length === 1 ? " is" : "s are"} still linked.`);
+        }
+        if (outcome.status === "unavailable" || outcome.status === "load-error") throw new Error(outcome.message);
+        if (outcome.status === "not-found") throw new Error("This Composition no longer exists in the active provider.");
+      } else {
+        await provider.store.delete(ref.recordId);
+      }
     } catch (reason) {
       setDetailOperationError(
         reason instanceof Error ? reason.message : "The composition could not be deleted.",
@@ -775,7 +785,7 @@ export function ProductionComposerApp({
     // Replace history: the record this entry pointed at no longer exists, so
     // Back must not return to an editor for it.
     await navigate({ kind: "index" }, "replace", ref.providerId);
-  }, [navigate, providersById, state]);
+  }, [activeLifecycleService, navigate, providersById, state]);
 
   const availableProviders = useMemo(
     () => providers.map(({ descriptor }) => ({ descriptor, available: true })),

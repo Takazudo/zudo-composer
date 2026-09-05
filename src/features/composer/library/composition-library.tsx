@@ -53,7 +53,7 @@ import type {
   CompositionLibraryIntents,
   CompositionLibraryProviderCapability,
 } from "./library-contract";
-import { CompositionLibraryPreview, type CompositionThumbnailDevice } from "./composition-library-preview";
+import { COMPOSITION_PREVIEW_FALLBACK_LIMIT, CompositionLibraryPreview, type CompositionThumbnailDevice } from "./composition-library-preview";
 
 export interface CompositionLibraryProps {
   componentProvider: ComposerComponentProvider;
@@ -669,17 +669,18 @@ export function CompositionLibrary({
             })}
           /> : (
             <div class="cms-composition-library__cards" aria-label="Composition cards">
-              {query.rows.length === 0 ? <LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} /> : query.rows.map((row) => {
+              {query.rows.length === 0 ? <LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} /> : query.rows.map((row, index) => {
                 const href = contract.href!(row);
                 const tag = kindTag(row);
                 return (
-                  <article key={row.id} class="cms-composition-card">
+                  <article key={`${activeProviderId}:${row.id}`} class="cms-composition-card">
                     <CompositionLibraryPreview
                       row={row}
                       providerId={activeProviderId}
                       componentProvider={componentProvider}
                       intents={intents}
                       device={thumbnailDevice}
+                      fallbackNear={index < COMPOSITION_PREVIEW_FALLBACK_LIMIT}
                     />
                     <div class="cms-composition-card__body">
                       <div class="cms-composition-card__meta">
