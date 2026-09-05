@@ -1,6 +1,7 @@
 import { isSafeRecordId } from "../../../shared";
 import { advanceMutationToken, readMutationToken, notifyPersistenceChange, PersistenceGenerationError } from "../../../shared/persistence-generation";
 import { decodeMappingRecord, MAPPING_PROVIDERS, summarizeMapping, validateMappingRecord } from "../../model";
+import { MAPPING_SCHEMA_VERSION } from "../../model";
 import type { MappingLoadOutcome, MappingRecord, MappingSeed, MappingStore, MappingSummary, MappingPersistenceOperation } from "../../model";
 import { mapMappingOperationalError, mappingPersistenceError, requestResult, transactionComplete, type IndexedDbMappingRuntime } from "./provider";
 import { MAPPING_META_KEYS, MAPPING_META_STORE_NAME, MAPPING_RECORDS_STORE_NAME } from "./types";
@@ -70,7 +71,7 @@ export class IndexedDbMappingStore implements MappingStore {
       const values = await requestResult(store.getAll()) as unknown[];
       const metaRecords = await requestResult(store.transaction.objectStore(MAPPING_META_STORE_NAME).getAll()) as unknown[];
       const meta = metaRecords.find((value) => (value as { key?: unknown })?.key === MAPPING_META_KEYS.schema);
-      if (metaRecords.length !== 2 || !meta || typeof meta !== "object" || Object.keys(meta).sort().join(",") !== "databaseVersion,key,mappingRecordSchemaVersion" || (meta as { databaseVersion?: unknown }).databaseVersion !== 1 || (meta as { mappingRecordSchemaVersion?: unknown }).mappingRecordSchemaVersion !== 1) throw mappingPersistenceError(operation, "unsupported-version", "Mapping database schema metadata is missing or unsupported.", false);
+      if (metaRecords.length !== 2 || !meta || typeof meta !== "object" || Object.keys(meta).sort().join(",") !== "databaseVersion,key,mappingRecordSchemaVersion" || (meta as { databaseVersion?: unknown }).databaseVersion !== 1 || (meta as { mappingRecordSchemaVersion?: unknown }).mappingRecordSchemaVersion !== MAPPING_SCHEMA_VERSION) throw mappingPersistenceError(operation, "unsupported-version", "Mapping database schema metadata is missing or unsupported.", false);
       await readMutationToken(store.transaction, MAPPING_META_STORE_NAME);
       const summaries: MappingSummary[] = [];
       const failures: { id: string; status: "invalid" | "future-schema"; version?: number }[] = [];

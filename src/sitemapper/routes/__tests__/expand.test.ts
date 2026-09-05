@@ -6,7 +6,7 @@ import { authoredPath, expandSitemapRoutes } from "../expand";
 import type { MappingRouteCatalog } from "../types";
 
 const stamp = "2026-08-29T00:00:00.000Z";
-const mapping = (): MappingRecord => ({ id: "mapping", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 1, id: "mapping", name: "Articles", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "indexeddb", recordId: "article" }, bindings: [] } });
+const mapping = (): MappingRecord => ({ id: "mapping", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 2, id: "mapping", name: "Articles", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "indexeddb", recordId: "article" }, mode: { kind: "single" }, bindings: [] } });
 const model = (kind: "single" | "collection" = "collection", fieldKind: "slug" | "text" = "slug"): ContentModelRecord => ({ id: "articles", createdAt: stamp, updatedAt: stamp, document: { description: "", schemaVersion: 1, id: "articles", name: "Articles", kind, fields: [
   { id: "slug", key: "slug", label: "Slug", required: true, kind: fieldKind },
   { id: "title", key: "title", label: "Title", required: false, kind: "text" },

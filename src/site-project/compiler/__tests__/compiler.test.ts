@@ -42,6 +42,85 @@ describe("SiteProject compiler", () => {
     expect(result.build.modules[0]!.code).toContain("Mapped title");
   });
 
+  it("supplies provider-qualified route context to persisted route-link projections", async () => {
+    const contentModel = model();
+    contentModel.document.fields.push({ id: "related", key: "related", label: "Related", required: true, kind: "reference", target: { providerId: "content-indexeddb", recordId: "articles" } });
+    const first = entry("a", "Alpha"); first.values.related = { providerId: "content-indexeddb", modelId: "articles", recordId: "b" };
+    const second = entry("b", "Beta"); second.values.related = { providerId: "content-indexeddb", modelId: "articles", recordId: "a" };
+    const routeMapping = mapping();
+    routeMapping.document.bindings[0] = { ...routeMapping.document.bindings[0]!, sourceFieldId: "related", projection: { kind: "route-link" } };
+    const result = await compile(project({ root: page("articles", "articles", mappingSource()), contentModel, entries: [first, second], mappings: [routeMapping] }));
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.build.routes.map((route) => [route.pathname, route.composition.document.root[0]?.props.title])).toEqual([
+      ["/articles/a", "/articles/b"], ["/articles/b", "/articles/a"],
+    ]);
+  });
+
+  it("materializes a deterministic collection attachment into the delivered named slot without mutating sources", async () => {
+    const owner = globalTemplate("owner");
+    delete owner.document.publication;
+    const itemMapping = mapping("landing");
+    itemMapping.document.mode = {
+      kind: "collection",
+      query: {
+        publication: "published-only",
+        conditions: [],
+        sort: [{ fieldId: "title", direction: "asc" }],
+        pins: [{ providerId: "content-indexeddb", modelId: "articles", recordId: "z" }],
+        limit: 3,
+      },
+    };
+    const value = project({
+      root: page("home", undefined, { kind: "composition", ref: { providerId: "indexeddb", recordId: "owner" } }),
+      compositions: [owner, composition("landing", "Static")],
+      entries: [entry("b", "Beta"), entry("z", "Zulu"), entry("a", "Alpha")],
+      mappings: [itemMapping],
+      attachments: [{ id: "feed", order: 0, composition: { providerId: "indexeddb", recordId: "owner" }, target: { nodeId: "owner-root", slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: "article-page" } }],
+    });
+    const before = structuredClone(value);
+    const result = await compile(value);
+
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    const children = result.build.routes[0]!.composition.document.root[0]!.slots.body!;
+    expect(children.map((node) => node.props.title)).toEqual(["Zulu", "Alpha", "Beta"]);
+    expect(children.map((node) => node.id)).toEqual(["feed--z--landing-leaf", "feed--a--landing-leaf", "feed--b--landing-leaf"]);
+    expect(value).toEqual(before);
+    expect(result.build.routes[0]!.modules.some((item) => item.code.includes("Zulu"))).toBe(true);
+  });
+
+  it("enforces attachment slot cardinality", async () => {
+    const owner = globalTemplate("owner");
+    delete owner.document.publication;
+    owner.document.root[0]!.componentId = "single-shell";
+    const itemMapping = mapping("landing");
+    itemMapping.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit: 2 } };
+    const result = await compile(project({
+      root: page("home", undefined, { kind: "composition", ref: { providerId: "indexeddb", recordId: "owner" } }),
+      compositions: [owner, composition("landing")], entries: [entry("a"), entry("b")], mappings: [itemMapping],
+      attachments: [{ id: "feed", order: 0, composition: { providerId: "indexeddb", recordId: "owner" }, target: { nodeId: "owner-root", slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: "article-page" } }],
+    }));
+    expect(result).toMatchObject({ status: "blocked", diagnostics: [expect.objectContaining({ code: "attachment-slot-cardinality", pathname: "/" })] });
+  });
+
+  it("rejects recursive collection attachment graphs", async () => {
+    const ownerA = globalTemplate("owner-a"); delete ownerA.document.publication;
+    const ownerB = globalTemplate("owner-b"); delete ownerB.document.publication;
+    const mappingA = mapping("owner-a"); mappingA.id = "map-a"; mappingA.document.id = "map-a"; mappingA.document.bindings = [];
+    const mappingB = mapping("owner-b"); mappingB.id = "map-b"; mappingB.document.id = "map-b"; mappingB.document.bindings = [];
+    for (const record of [mappingA, mappingB]) record.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit: 1 } };
+    const result = await compile(project({
+      root: page("home", undefined, { kind: "composition", ref: { providerId: "indexeddb", recordId: "owner-a" } }),
+      compositions: [ownerA, ownerB], entries: [entry("one")], mappings: [mappingA, mappingB],
+      attachments: [
+        { id: "a-to-b", order: 0, composition: { providerId: "indexeddb", recordId: "owner-a" }, target: { nodeId: "owner-a-root", slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: "map-b" } },
+        { id: "b-to-a", order: 1, composition: { providerId: "indexeddb", recordId: "owner-b" }, target: { nodeId: "owner-b-root", slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: "map-a" } },
+      ],
+    }));
+    expect(result).toMatchObject({ status: "blocked", diagnostics: [expect.objectContaining({ code: "attachment-cycle", pathname: "/" })] });
+  });
+
   it("expands collection Entries with encoded Unicode routes and exact Entry selection", async () => {
     const result = await compile(project({ root: page("articles", "café", mappingSource("entry-field", "title")), entries: [entry("z", "Zulu", "東京"), entry("a", "Alpha", "crème brûlée")] }));
     expect(result.status).toBe("ready");

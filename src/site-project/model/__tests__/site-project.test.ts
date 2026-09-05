@@ -27,7 +27,7 @@ const manifest: ComponentPackManifest = {
     source: { module: "test-ui", exportKind: "named", exportName: "Hero" },
     defaults: {},
     fields: [{ prop: "title", label: "Title", schema: { type: "string" }, editor: { kind: "text" } }],
-    slots: [],
+    slots: [{ id: "body", prop: "body", label: "Body", cardinality: "many", accepts: ["hero"] }],
   }],
 };
 const context = { componentPack: manifest };
@@ -42,7 +42,7 @@ function project(): SiteProject {
       schemaVersion: 2 as const,
       id: "landing",
       name: "Landing",
-      root: [{ id: "hero-node", componentId: "hero", componentVersion: 1, props: { title: "Hello" }, slots: {} }],
+      root: [{ id: "hero-node", componentId: "hero", componentVersion: 1, props: { title: "Hello" }, slots: { body: [] } }],
     },
   };
   const model = {
@@ -50,10 +50,10 @@ function project(): SiteProject {
     createdAt: timestamp,
     updatedAt: timestamp,
     document: {
-      schemaVersion: 1 as const,
       id: "articles",
       name: "Articles",
       description: "",
+      schemaVersion: 1 as const,
       kind: "collection" as const,
       fields: [{ id: "title", key: "title", label: "Title", required: true, kind: "text" as const }],
     },
@@ -64,12 +64,13 @@ function project(): SiteProject {
     createdAt: timestamp,
     updatedAt: timestamp,
     document: {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       id: "article-page",
       name: "Article page",
       contentModel: { providerId: "content-indexeddb", recordId: "articles" },
       composition: { providerId: "indexeddb" as const, recordId: "landing" },
-      bindings: [{ id: "title-binding", sourceFieldId: "title", target: { nodeId: "hero-node", prop: "title" }, transform: { kind: "identity" as const } }],
+      mode: { kind: "single" as const },
+      bindings: [{ id: "title-binding", sourceFieldId: "title", projection: { kind: "value" as const }, target: { nodeId: "hero-node", prop: "title" }, transform: { kind: "identity" as const } }],
     },
   };
   const sitemap = {
@@ -98,6 +99,7 @@ function project(): SiteProject {
       sitemaps: [{ id: "sitemap-indexeddb", records: [sitemap] }],
     },
     activeSitemap: { providerId: "sitemap-indexeddb", recordId: "main" },
+    collectionAttachments: [],
   };
 }
 
@@ -134,6 +136,15 @@ describe("SiteProject contract", () => {
     expect(validateSiteProject(value, context)).toMatchObject({ ok: false, diagnostics: [expect.objectContaining({ code: "invalid-sitemap-title-field", path: "$.providers.sitemaps[0].records[0].document.root[0].source.route.titleFieldId" })] });
   });
 
+  it("validates provider-qualified collection attachment ownership and exclusive named slots", () => {
+    const value = project();
+    value.providers.mappings[0]!.records[0]!.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit: 10 } };
+    value.collectionAttachments = [{ id: "feed", order: 0, composition: { providerId: "indexeddb", recordId: "landing" }, target: { nodeId: "hero-node", slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: "article-page" } }];
+    expect(validateSiteProject(value, context).ok).toBe(true);
+    value.collectionAttachments.push({ ...structuredClone(value.collectionAttachments[0]!), id: "feed-two", order: 1 });
+    expect(validateSiteProject(value, context)).toMatchObject({ ok: false, diagnostics: [expect.objectContaining({ code: "attachment-slot-conflict", path: "$.collectionAttachments[1].target" })] });
+  });
+
   it("round-trips canonical JSON byte-stably independent of provider and record order", () => {
     const original = project();
     const permuted = structuredClone(original);
@@ -153,9 +164,9 @@ describe("SiteProject contract", () => {
 
   it.each([
     ["unknown top-level key", (value: MutableProject) => { value.extra = true; }, "invalid-keys", "$"],
-    ["future aggregate", (value: MutableProject) => { (value as { schemaVersion: number }).schemaVersion = 2; }, "future-schema", "$.schemaVersion"],
+    ["future aggregate", (value: MutableProject) => { (value as { schemaVersion: number }).schemaVersion = 3; }, "future-schema", "$.schemaVersion"],
     ["pack mismatch", (value: MutableProject) => { value.componentPack.packVersion = "2"; }, "component-pack-mismatch", "$.componentPack"],
-    ["future domain record", (value: MutableProject) => { (value.providers.mappings[0]!.records[0]!.document as { schemaVersion: number }).schemaVersion = 2; }, "malformed-record", "$.providers.mappings[0].records[0].document.schemaVersion"],
+    ["future domain record", (value: MutableProject) => { (value.providers.mappings[0]!.records[0]!.document as { schemaVersion: number }).schemaVersion = 3; }, "malformed-record", "$.providers.mappings[0].records[0].document.schemaVersion"],
     ["component schema mismatch", (value: MutableProject) => { value.providers.compositions[1]!.records[0]!.document.root[0]!.componentVersion = 2; }, "component-pack-incompatible", "$.providers.compositions[1].records[0].document.root[0]"],
     ["unknown provider", (value: MutableProject) => { (value.providers.compositions[0] as { id: string }).id = "arbitrary"; }, "unknown-provider", "$.providers.compositions[0].id"],
     ["duplicate provider", (value: MutableProject) => { value.providers.compositions.push(structuredClone(value.providers.compositions[1]!)); }, "duplicate-provider", "$.providers.compositions[2].id"],

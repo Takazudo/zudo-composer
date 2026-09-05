@@ -132,6 +132,7 @@ describe("Mapping editor", () => {
     const { container } = await editor([{
       id: "binding-gone",
       sourceFieldId: "field-removed",
+      projection: { kind: "value" },
       target: { nodeId: "node-removed", prop: "gone" },
       transform: { kind: "identity" },
     }]);

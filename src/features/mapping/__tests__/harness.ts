@@ -96,6 +96,7 @@ export const FILL_TARGET = { nodeId: GRID_NODE, prop: "fill" } as const;
 export const READY_BINDING: MappingBinding = {
   id: "binding-title",
   sourceFieldId: "field-title",
+  projection: { kind: "value" },
   target: { ...HEADING_TARGET },
   transform: { kind: "identity" },
 };
@@ -104,6 +105,7 @@ export const READY_BINDING: MappingBinding = {
 export const INCOMPATIBLE_BINDING: MappingBinding = {
   id: "binding-flag",
   sourceFieldId: "field-flag",
+  projection: { kind: "value" },
   target: { ...EYEBROW_TARGET },
   transform: { kind: "identity" },
 };
