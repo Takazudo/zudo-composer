@@ -70,7 +70,7 @@ export interface ComposerStructurePaneProps {
   /** Opens the node menu (Copy / Cut / Duplicate / Delete). */
   onOpenNodeMenu: (nodeId: string, trigger: HTMLElement) => void;
   /** Opens the insert menu (Add component… / Paste here). */
-  onOpenInsertMenu: (target: InsertionTarget, trigger: HTMLElement) => void;
+  onOpenInsertMenu: (target: InsertionTarget, trigger: HTMLElement, addComponent?: () => void) => void;
   /** Hides every mutating affordance — Preview mode. */
   readOnly?: boolean;
   /** Linked source status sits outside this strictly local component tree. */
@@ -150,6 +150,8 @@ export function ComposerStructurePane({
   );
   const outlineRef = useRef(outline);
   outlineRef.current = outline;
+  const treeHostRef = useRef<HTMLDivElement | null>(null);
+  const pendingDirectFocusId = useRef<string | null>(null);
 
   // What the author closed, not what is open: a composition the editor has just
   // loaded shows its whole structure.
@@ -220,6 +222,36 @@ export function ComposerStructurePane({
     }
   }
 
+  function openTerminalChooser(rowId: string, initialTarget: InsertionTarget, origin: HTMLElement): void {
+    let active = true;
+    onOpenChooser(initialTarget, {
+      resolveTarget: () => {
+        if (!active) return null;
+        const current = outlineRef.current.rows.get(rowId);
+        if (!current || (current.kind !== "document" && current.kind !== "slot")) return null;
+        return current.kind === "document"
+          ? insertionTargetFor(outlineRef.current, DOCUMENT_ROW_ID, current.childCount)
+          : insertionTargetFor(outlineRef.current, slotRowId(current.parentId, current.slotId), current.childCount);
+      },
+      complete: (insertedId) => {
+        if (!active) return;
+        active = false;
+        pendingDirectFocusId.current = insertedId ?? null;
+      },
+      cancel: () => {
+        if (!active) return;
+        active = false;
+        if (origin.isConnected) origin.focus();
+      },
+    });
+  }
+
+  useEffect(() => {
+    if (pendingDirectFocusId.current === null || pendingDirectFocusId.current !== selectedId) return;
+    pendingDirectFocusId.current = null;
+    treeHostRef.current?.querySelector<HTMLElement>('[role="treeitem"][aria-selected="true"]')?.focus();
+  }, [outline, selectedId]);
+
   /** The Add / More pair a row shows on hover and keyboard focus. */
   function renderActions(node: OutlineNode): ComponentChildren {
     if (readOnly) return null;
@@ -258,7 +290,7 @@ export function ComposerStructurePane({
           size="xs"
           iconOnly
           aria-label={`Add component to ${where}`}
-          onClick={() => onOpenChooser(target)}
+          onClick={(event) => openTerminalChooser(node.id, target, event.currentTarget as HTMLElement)}
         >
           <PlusIcon size="xs" />
         </Button>
@@ -268,7 +300,10 @@ export function ComposerStructurePane({
           iconOnly
           aria-label={`Insert options for ${where}`}
           title="Insert options"
-          onClick={(event) => onOpenInsertMenu(target, event.currentTarget as HTMLElement)}
+          onClick={(event) => {
+            const trigger = event.currentTarget as HTMLElement;
+            onOpenInsertMenu(target, trigger, () => openTerminalChooser(node.id, target, trigger));
+          }}
         >
           <EllipsisIcon size="xs" />
         </Button>
@@ -285,21 +320,23 @@ export function ComposerStructurePane({
       <PaneHeader title="Structure" count={outline.total} actions={<RailCollapseButton rail="nav" />} />
       <PaneBody>
         <LinkedBanner presentation={linkedPresentation} actions={linkedActions} />
-        <OutlineTree
-          label="Structure"
-          prefKey="composer"
-          nodes={outline.nodes}
-          selectedId={selectedRowId}
-          onSelect={handleSelect}
-          onOpen={() => setActivePane("insp")}
-          expandedIds={expandedIds}
-          onExpandedChange={handleExpandedChange}
-          canInsert={canInsert}
-          onRequestInsert={requestInsert}
-          addLabel={() => "Add component"}
-          renderActions={renderActions}
-          legend={<Legend />}
-        />
+        <div ref={treeHostRef}>
+          <OutlineTree
+            label="Structure"
+            prefKey="composer"
+            nodes={outline.nodes}
+            selectedId={selectedRowId}
+            onSelect={handleSelect}
+            onOpen={() => setActivePane("insp")}
+            expandedIds={expandedIds}
+            onExpandedChange={handleExpandedChange}
+            canInsert={canInsert}
+            onRequestInsert={requestInsert}
+            addLabel={() => "Add component"}
+            renderActions={renderActions}
+            legend={<Legend />}
+          />
+        </div>
       </PaneBody>
     </Pane>
   );

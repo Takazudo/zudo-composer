@@ -24,19 +24,17 @@ export const COMPOSITION_PREVIEW_FALLBACK_LIMIT = 4;
 function useNearVisible(fallbackNear: boolean): { ref: (node: HTMLDivElement | null) => void; near: boolean } {
   const [node, setNode] = useState<HTMLDivElement | null>(null);
   const [near, setNear] = useState(false);
+  const observerAvailable = typeof IntersectionObserver !== "undefined";
   useEffect(() => {
     if (!node) return;
-    if (typeof IntersectionObserver === "undefined") {
-      setNear(fallbackNear);
-      return;
-    }
+    if (!observerAvailable) return;
     const observer = new IntersectionObserver((entries) => {
       setNear(entries.some((entry) => entry.isIntersecting));
     }, { rootMargin: "320px 0px" });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [fallbackNear, node]);
-  return { ref: setNode, near };
+  }, [node, observerAvailable]);
+  return { ref: setNode, near: observerAvailable ? near : fallbackNear };
 }
 
 function message(outcome: Exclude<CompositionLibraryPreviewOutcome, { status: "ready" }>): string {
@@ -109,6 +107,8 @@ export function CompositionLibraryPreview({
   intents,
   device,
   fallbackNear,
+  dialogOpen,
+  onDialogOpenChange,
 }: {
   row: CompositionSummary;
   providerId: CompositionRecordRef["providerId"];
@@ -116,23 +116,25 @@ export function CompositionLibraryPreview({
   intents: CompositionLibraryIntents;
   device: CompositionThumbnailDevice;
   fallbackNear: boolean;
+  dialogOpen: boolean;
+  onDialogOpenChange: (open: boolean) => void;
 }): JSX.Element {
   const visibility = useNearVisible(fallbackNear);
   const [outcome, setOutcome] = useState<CompositionLibraryPreviewOutcome | null>(null);
   const [loading, setLoading] = useState(false);
   const [rendered, setRendered] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogDevice, setDialogDevice] = useState<CompositionThumbnailDevice>(device);
   const generation = useRef(0);
-  const shouldMount = visibility.near || dialogOpen;
+  const shouldLoad = visibility.near || dialogOpen;
+  const cardMounted = visibility.near && !dialogOpen;
   const ref = useMemo<CompositionRecordRef>(
     () => ({ providerId, recordId: row.id }),
     [providerId, row.id],
   );
 
   useEffect(() => {
-    if (!shouldMount) return;
+    if (!shouldLoad) return;
     const request = ++generation.current;
     setLoading(true);
     setRendered(false);
@@ -159,9 +161,9 @@ export function CompositionLibraryPreview({
       },
     );
     return () => { generation.current += 1; };
-  }, [intents, ref, row.updatedAt, shouldMount]);
+  }, [intents, ref, row.updatedAt, shouldLoad]);
 
-  const preview = shouldMount ? (
+  const preview = cardMounted ? (
     <FixedViewportPreview
       componentProvider={componentProvider}
       outcome={outcome}
@@ -171,13 +173,13 @@ export function CompositionLibraryPreview({
       onCurrent={() => setRendered(true)}
       onError={(error) => { setRuntimeError(error); setRendered(false); }}
     />
-  ) : <div class="cms-composition-card__deferred">Preview loads when nearby</div>;
+  ) : <div class="cms-composition-card__deferred">{dialogOpen ? "Preview shown in dialog" : "Preview loads when nearby"}</div>;
 
   return (
     <div ref={visibility.ref} class="cms-composition-card__preview">
       {preview}
       {runtimeError ? <div role="alert" class="cms-composition-card__preview-error">{runtimeError}</div> : null}
-      <Button size="xs" class="cms-composition-card__preview-button" onClick={() => { setDialogDevice(device); setDialogOpen(true); }}>
+      <Button size="xs" class="cms-composition-card__preview-button" onClick={() => { setDialogDevice(device); onDialogOpenChange(true); }}>
         <ExpandIcon size="xs" /> Preview
       </Button>
       <div class="cms-composition-card__caption">
@@ -189,8 +191,8 @@ export function CompositionLibraryPreview({
         size="wide"
         class="cms-composition-preview-dialog"
         title={`Preview — ${row.name}`}
-        onClose={() => setDialogOpen(false)}
-        footer={<button type="button" class="cms-dialog__action" onClick={() => setDialogOpen(false)}>Close</button>}
+        onClose={() => onDialogOpenChange(false)}
+        footer={<button type="button" class="cms-dialog__action" onClick={() => onDialogOpenChange(false)}>Close</button>}
       >
         <SegmentedControl<CompositionThumbnailDevice>
           label="Preview device"

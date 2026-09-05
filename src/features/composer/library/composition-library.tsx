@@ -273,6 +273,7 @@ export function CompositionLibrary({
   const [exportDialog, setExportDialog] = useState<ExportDialogState>(null);
   const [view, setView] = useState<"table" | "cards">("table");
   const [thumbnailDevice, setThumbnailDevice] = useState<CompositionThumbnailDevice>("desktop");
+  const [openPreviewKey, setOpenPreviewKey] = useState<string | null>(null);
 
   const startedRef = useRef(false);
   const createdForNavigationRef = useRef<CompositionSummary | null>(null);
@@ -287,6 +288,7 @@ export function CompositionLibrary({
       try {
         const result = await intents[mode](providerId);
         setActiveProviderId(providerId);
+        setOpenPreviewKey(null);
         setOutcome(result);
         if (result.status !== "error") onInitializationApplied?.(providerId, result);
         return result.status !== "error";
@@ -351,6 +353,16 @@ export function CompositionLibrary({
   });
   const selection = useLibrarySelection({ rows: summaries, visibleRows: query.rows, rowId: (row) => row.id });
   const confirm = useLibraryConfirm();
+  const previewDialogNeedsBudget = openPreviewKey !== null
+    && !query.rows.slice(0, COMPOSITION_PREVIEW_FALLBACK_LIMIT).some((row) => `${activeProviderId}:${row.id}` === openPreviewKey);
+
+  useEffect(() => {
+    if (openPreviewKey === null) return;
+    const prefix = `${activeProviderId}:`;
+    if (!openPreviewKey.startsWith(prefix) || !summaries.some((row) => `${prefix}${row.id}` === openPreviewKey)) {
+      setOpenPreviewKey(null);
+    }
+  }, [activeProviderId, openPreviewKey, summaries]);
 
   const commitSummary = (summary: CompositionSummary): void => {
     setOutcome((current) => (current?.status === "ready"
@@ -672,15 +684,18 @@ export function CompositionLibrary({
               {query.rows.length === 0 ? <LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} /> : query.rows.map((row, index) => {
                 const href = contract.href!(row);
                 const tag = kindTag(row);
+                const previewKey = `${activeProviderId}:${row.id}`;
                 return (
-                  <article key={`${activeProviderId}:${row.id}`} class="cms-composition-card">
+                  <article key={previewKey} class="cms-composition-card">
                     <CompositionLibraryPreview
                       row={row}
                       providerId={activeProviderId}
                       componentProvider={componentProvider}
                       intents={intents}
                       device={thumbnailDevice}
-                      fallbackNear={index < COMPOSITION_PREVIEW_FALLBACK_LIMIT}
+                      fallbackNear={index < COMPOSITION_PREVIEW_FALLBACK_LIMIT - (previewDialogNeedsBudget ? 1 : 0)}
+                      dialogOpen={openPreviewKey === previewKey}
+                      onDialogOpenChange={(open) => setOpenPreviewKey(open ? previewKey : null)}
                     />
                     <div class="cms-composition-card__body">
                       <div class="cms-composition-card__meta">

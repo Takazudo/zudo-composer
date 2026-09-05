@@ -168,6 +168,23 @@ describe("CompositionLibrary data and capability states", () => {
     await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledTimes(COMPOSITION_PREVIEW_FALLBACK_LIMIT));
     expect(screen.getByLabelText("Composition cards").querySelectorAll("iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
     expect(screen.getAllByText("Preview loads when nearby")).toHaveLength(rows.length - COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+
+    const firstCard = screen.getByRole("heading", { name: "Row 0" }).closest("article")!;
+    fireEvent.click(within(firstCard).getByRole("button", { name: "Preview" }));
+    let dialog = screen.getByRole("dialog", { name: "Preview — Row 0" });
+    expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Phone" }));
+    expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+
+    const deferredCard = screen.getByRole("heading", { name: "Row 5" }).closest("article")!;
+    fireEvent.click(within(deferredCard).getByRole("button", { name: "Preview" }));
+    dialog = screen.getByRole("dialog", { name: "Preview — Row 5" });
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "row-5" }));
+    expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
   });
 
   it("invalidates same-id cards across providers and ignores the prior provider's late preview", async () => {
