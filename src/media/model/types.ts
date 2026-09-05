@@ -78,7 +78,10 @@ export interface MediaSnapshot {
   folders: MediaFolder[];
 }
 
-export interface MediaVersionRef { providerId: string; assetId: string; versionId: string }
+/** Stable provider-qualified identity used by authoring references. */
+export interface MediaAssetRef { providerId: string; assetId: string }
+/** Exact immutable version identity used by release/pin operations. */
+export interface MediaVersionRef extends MediaAssetRef { versionId: string }
 export interface MediaVersionPin extends MediaVersionRef {
   checksum: string;
   byteLength: number;

@@ -47,6 +47,16 @@ selects a catalog-verified pin manifest and copies those exact private versions.
   references into a deterministically sorted `{schemaVersion: 1, pins}` manifest.
   Exact pins work for trashed assets and independently of the current head/token.
   A later compiler must verify/copy these pinned bytes into its immutable build.
+- Authoring fields store `MediaAssetRef {providerId,assetId}`, not a version.
+  `resolveCurrentMediaVersionRef(snapshot, asset)` selects the active head from
+  one validated snapshot. Because `MediaSnapshot` is provider-neutral, this
+  helper carries the asset's provider identity but cannot authenticate it;
+  `resolveCurrentMediaVersionPin(store, asset)` validates that identity against
+  the store before resolving, verifies the exact retained bytes, and re-reads
+  the durable mutation token, returning a retryable conflict if Media changed
+  during capture. Release code should resolve all deduplicated stable refs from
+  one snapshot, request an exact sorted pin manifest, and verify the token
+  again before approving it.
 
 `mediaAuthoringUrl(id)` produces `/uploaded-media/asset-<id>`. Development delivery
 resolves it to the active head with a non-cacheable redirect. Immutable URLs use

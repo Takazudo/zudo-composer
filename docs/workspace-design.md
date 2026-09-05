@@ -131,3 +131,29 @@ three-level Arrange menus near viewport edges, and light/dark focus styling.
 Use the CSS guidance from `accessibility/touch-target-sizing.mdx` and
 `states-and-transitions/hover-focus-active-states.mdx` in the CSS Wisdom docs
 for touch targets and distinct hover/focus states.
+
+## Content and Media snapshot boundary
+
+Content media-use values carry a stable provider-qualified
+`{providerId, assetId}` identity. Working records never persist a byte version:
+replacing an asset should update draft previews without rewriting Content.
+Release capture reads one validated Media snapshot, resolves each active asset
+head to an exact `{providerId, assetId, versionId}`, verifies retained bytes,
+builds a deterministic pin manifest, and rechecks the durable Media mutation
+token. A changed token invalidates the capture; an older exact pin stays valid
+and immutable.
+
+Content and Media stores each expose durable mutation tokens from their
+persistence boundary. Notifications are refresh hints only. A coherent
+cross-domain capture reads snapshots and checks the persisted tokens again;
+missing providers or changed tokens produce unavailable/changed outcomes and
+must never be interpreted as “unused.” Workspace coordination extends this
+same protocol to Composition, Mapping, and Sitemap stores.
+
+The current authoring transaction boundary is one Content provider. Complete
+provider-qualified graph reads are supported, but a relation write requiring
+multiple provider transactions fails before the first write. Rich Content
+kinds remain explicitly incompatible with scalar Mapping transforms until the
+structured Mapping contract consumes them. Provisional Content and Media
+schemas fail through their typed recovery paths; there are no compatibility
+readers or migrations.

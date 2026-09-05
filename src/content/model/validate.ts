@@ -154,7 +154,8 @@ function isEntryRef(value: unknown): value is { providerId: string; modelId: str
 }
 
 export function isContentMediaUse(value: unknown): value is ContentMediaUse {
-  if (!isPlainObject(value) || !isPlainObject(value.asset) || !exactKeys(value.asset, ["assetId"]) || !isSafeRecordId(value.asset.assetId)) return false;
+  if (!isPlainObject(value) || !isPlainObject(value.asset) || !exactKeys(value.asset, ["providerId", "assetId"])
+    || !isSafeRecordId(value.asset.providerId) || !isSafeRecordId(value.asset.assetId)) return false;
   switch (value.kind) {
     case "image": return exactKeys(value, ["kind", "asset", "alt", "decorative", "caption"]) && typeof value.alt === "string" && typeof value.decorative === "boolean" && typeof value.caption === "string" && (!value.decorative || value.alt === "");
     case "link": return exactKeys(value, ["kind", "asset", "label"]) && typeof value.label === "string";
