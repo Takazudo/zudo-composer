@@ -39,6 +39,7 @@ import {
 import { SITEMAP_SCHEMA_VERSION } from "../../../sitemapper/model";
 import { sitemapperHref } from "../app/sitemapper-intent";
 import { SitemapNameDialog } from "./name-dialog";
+import { withSitemapperWorkspaceLock } from "../app/sitemapper-workspace-lock";
 
 type NameDialogState = { kind: "create" } | { kind: "rename"; id: string; name: string };
 
@@ -149,8 +150,13 @@ export function SitemapLibrary({
   const initialize = useCallback(async (mode: "initialize" | "retry" | "startFresh") => {
     setBusy(true);
     try {
-      if (mode === "startFresh") await assertNoActiveDeletion();
-      setOutcome(await provider.initialization[mode]());
+      if (mode === "startFresh") {
+        const result = await withSitemapperWorkspaceLock(workspaceIntegration?.workspace.id, async () => {
+          await assertNoActiveDeletion();
+          return provider.initialization[mode]();
+        });
+        setOutcome(await result);
+      } else setOutcome(await provider.initialization[mode]());
       setOperationError(null);
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap library could not be initialized."));
@@ -256,11 +262,13 @@ export function SitemapLibrary({
     // still drop the records that are actually gone, or the list lies.
     const deleted = new Set<string>();
     try {
-      await assertNoActiveDeletion(ids);
-      for (const id of ids) {
-        await provider.store.delete(id);
-        deleted.add(id);
-      }
+      await withSitemapperWorkspaceLock(workspaceIntegration?.workspace.id, async () => {
+        await assertNoActiveDeletion(ids);
+        for (const id of ids) {
+          await provider.store.delete(id);
+          deleted.add(id);
+        }
+      });
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap could not be deleted."));
     } finally {
@@ -289,8 +297,10 @@ export function SitemapLibrary({
     setBusy(true);
     setOperationError(null);
     try {
-      await assertNoActiveDeletion(summaries.map((summary) => summary.id));
-      await provider.store.clear();
+      await withSitemapperWorkspaceLock(workspaceIntegration?.workspace.id, async () => {
+        await assertNoActiveDeletion(summaries.map((summary) => summary.id));
+        await provider.store.clear();
+      });
       setOutcome({ status: "ready", summaries: [] });
       selection.clear();
     } catch (reason) {

@@ -46,6 +46,7 @@ export interface SitemapCanvasProps {
 
 interface Measurements {
   readonly viewportWidth: number;
+  readonly viewportHeight: number;
   readonly heights: NodeHeights;
 }
 
@@ -53,8 +54,8 @@ function modeFromMediaQuery(query: Pick<MediaQueryList, "matches"> | undefined):
   return query?.matches ? "cluster" : "outline";
 }
 
-function sameMeasurements(previous: Measurements, width: number, heights: ReadonlyMap<string, number>): boolean {
-  if (previous.viewportWidth !== width || previous.heights.size !== heights.size) return false;
+function sameMeasurements(previous: Measurements, width: number, height: number, heights: ReadonlyMap<string, number>): boolean {
+  if (previous.viewportWidth !== width || previous.viewportHeight !== height || previous.heights.size !== heights.size) return false;
   for (const [id, height] of heights) {
     if (previous.heights.get(id) !== height) return false;
   }
@@ -81,6 +82,11 @@ export function fitCanvasZoom(viewportWidth: number, viewportHeight: number, con
   return clampCanvasZoom(Math.min(widthScale, heightScale));
 }
 
+export function canvasStageMargin(viewportSize: number, contentSize: number, zoom: number): number {
+  if (zoom <= 0) return 0;
+  return Math.max(0, (viewportSize - contentSize * zoom) / (2 * zoom));
+}
+
 export function SitemapCanvas({
   document,
   routes,
@@ -100,7 +106,7 @@ export function SitemapCanvas({
   const scrollRef = useRef<HTMLDivElement>(null);
   const nodeRefs = useRef(new Map<string, HTMLDivElement>());
   const frameRef = useRef<number | null>(null);
-  const [measurements, setMeasurements] = useState<Measurements>({ viewportWidth: 0, heights: new Map() });
+  const [measurements, setMeasurements] = useState<Measurements>({ viewportWidth: 0, viewportHeight: 0, heights: new Map() });
   const [mediaLayoutMode, setMediaLayoutMode] = useState<CanvasLayoutMode>(() => modeFromMediaQuery(
     typeof globalThis.matchMedia === "function" ? globalThis.matchMedia(DESKTOP_MEDIA_QUERY) : undefined,
   ));
@@ -134,14 +140,15 @@ export function SitemapCanvas({
     // zoom transform, and a transformed rect would feed a scaled height back
     // into the layout that produced it.
     const viewportWidth = scroller.clientWidth;
+    const viewportHeight = scroller.clientHeight;
     const heights = new Map<string, number>();
     for (const logical of logicalTree.nodes) {
       const element = nodeRefs.current.get(logical.node.id);
       if (element) heights.set(logical.node.id, Math.max(NODE_MIN_HEIGHT, element.offsetHeight));
     }
-    setMeasurements((previous) => sameMeasurements(previous, viewportWidth, heights)
+    setMeasurements((previous) => sameMeasurements(previous, viewportWidth, viewportHeight, heights)
       ? previous
-      : { viewportWidth, heights });
+      : { viewportWidth, viewportHeight, heights });
   }, [logicalTree]);
 
   const scheduleMeasure = useCallback(() => {
@@ -187,8 +194,8 @@ export function SitemapCanvas({
     requestAnimationFrame(() => {
       const current = scrollRef.current;
       if (!current) return;
-      current.scrollLeft = Math.max(0, (layout.width * nextZoom - current.clientWidth) / 2);
-      current.scrollTop = Math.max(0, (layout.height * nextZoom - current.clientHeight) / 2);
+      current.scrollLeft = 0;
+      current.scrollTop = 0;
     });
   }, [layout, onZoomChange]);
 
@@ -261,12 +268,21 @@ export function SitemapCanvas({
         {layout ? (
           <div
             class="sg-sitemapper-canvas__viewport"
-            style={{ width: `${layout.width * zoom}px`, height: `${layout.height * zoom}px` }}
+            style={{
+              width: `${Math.max(layout.width * zoom, measurements.viewportWidth)}px`,
+              height: `${Math.max(layout.height * zoom, measurements.viewportHeight)}px`,
+            }}
           >
             <div
               class="sg-sitemapper-canvas__stage"
               data-sg-layout={layout.mode}
-              style={{ width: `${layout.width}px`, height: `${layout.height}px`, transform: `scale(${zoom})` }}
+              style={{
+                width: `${layout.width}px`,
+                height: `${layout.height}px`,
+                transform: `scale(${zoom})`,
+                left: `${canvasStageMargin(Math.max(layout.width * zoom, measurements.viewportWidth), layout.width, zoom)}px`,
+                top: `${canvasStageMargin(Math.max(layout.height * zoom, measurements.viewportHeight), layout.height, zoom)}px`,
+              }}
             >
               <SitemapConnectors layout={layout} />
               {layout.nodes.map((rectangle) => {

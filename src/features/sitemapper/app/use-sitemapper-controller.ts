@@ -170,6 +170,8 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
       }, idFactoryRef.current);
       if (!result.error && result.documentChanged) {
         const next = result.state;
+        mutationRevisionRef.current += 1;
+        undoRemoveRef.current = null;
         recordRef.current = { ...recordRef.current, updatedAt: nowRef.current(), document: next.document };
         try {
           queueRef.current!.edit(queueRef.current!.ref, recordRef.current);
@@ -211,9 +213,10 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
   }, [flushPropUpdates]);
 
   const dispatch = useCallback((action: SitemapperAction): string | null => {
-    flushPropUpdates();
+    const flushError = flushNavigationDrafts();
+    if (flushError) return flushError;
     return applyAction(action);
-  }, [applyAction, flushPropUpdates]);
+  }, [applyAction, flushNavigationDrafts]);
 
   const updatePropsDebounced = useCallback((pageId: string, patch: SitemapPagePropsPatch): void => {
     pendingRef.current.set(pageId, { ...pendingRef.current.get(pageId), ...patch });
@@ -288,6 +291,7 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
 
   const undoRemove = useCallback((): string | null => {
     flushPropUpdates();
+    if (pendingNavigationErrorRef.current || pendingNavigationRef.current.size > 0) return null;
     const undo = undoRemoveRef.current;
     if (!undo || undo.revision !== mutationRevisionRef.current) return null;
     const current = stateRef.current!;

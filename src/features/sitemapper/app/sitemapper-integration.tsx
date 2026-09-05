@@ -39,6 +39,7 @@ import { PagesPane } from "../ui/tree/pages-pane";
 import { countDescendants } from "../ui/tree/tree-helpers";
 import { NavigationPane } from "../ui/views/navigation-pane";
 import { RoutePreviewPane } from "../ui/views/route-preview-pane";
+import { withSitemapperWorkspaceLock } from "./sitemapper-workspace-lock";
 import type { SitemapperSaveStatus } from "./controller-model";
 import { sitemapperHref, SITEMAPPER_ROUTE } from "./sitemapper-intent";
 import { useSitemapperController } from "./use-sitemapper-controller";
@@ -101,7 +102,7 @@ export function SitemapperIntegration({
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
   const [compositions, setCompositions] = useState<ReadonlyMap<string, { name: string; providerLabel: string }>>(new Map());
-  const [routeExpansionState, setRouteExpansionState] = useState<{ document: typeof document; expansion: SitemapRouteExpansion } | null>(null);
+  const [routeExpansionState, setRouteExpansionState] = useState<{ document: typeof document; epoch: number; expansion: SitemapRouteExpansion } | null>(null);
   const [catalogEpoch, setCatalogEpoch] = useState(0);
   const [workspaceMetadata, setWorkspaceMetadata] = useState<WorkspaceRecord | null>(null);
   const [metadataBusy, setMetadataBusy] = useState(false);
@@ -119,7 +120,7 @@ export function SitemapperIntegration({
   const index = useMemo(() => indexDocument(document), [document]);
   const outline = useMemo(() => buildSitemapOutline(document), [document]);
   const selectedNode: SitemapNode | null = selectedId ? index.byId.get(selectedId)?.node ?? null : null;
-  const routeExpansion = routeExpansionState?.document === document ? routeExpansionState.expansion : null;
+  const routeExpansion = routeExpansionState?.document === document && routeExpansionState.epoch === catalogEpoch ? routeExpansionState.expansion : null;
   const activeSitemap = workspaceMetadata?.metadata.activeSitemap.providerId === providerId
     && workspaceMetadata.metadata.activeSitemap.recordId === record.id;
 
@@ -158,7 +159,11 @@ export function SitemapperIntegration({
       return undefined;
     }
     return subscribePersistenceChanges((database) => {
-      if (database === contentDatabase || database === mappingDatabase) setCatalogEpoch((current) => current + 1);
+      if (database === contentDatabase || database === mappingDatabase) {
+        routeExpansionEpochRef.current += 1;
+        setRouteExpansionState(null);
+        setCatalogEpoch((current) => current + 1);
+      }
     });
   }, [workspaceIntegration]);
 
@@ -185,7 +190,9 @@ export function SitemapperIntegration({
     const epoch = ++routeExpansionEpochRef.current;
     void expandSitemapRoutes({ document, catalog: mappingCatalog.routes, policy: "authoring-preview" }).then((expansion) => {
       if (!active || routeExpansionEpochRef.current !== epoch) return;
-      setRouteExpansionState({ document, expansion });
+      setRouteExpansionState({ document, epoch: catalogEpoch, expansion });
+    }).catch(() => {
+      if (active && routeExpansionEpochRef.current === epoch) setRouteExpansionState(null);
     });
     return () => { active = false; };
   }, [document, mappingCatalog, catalogEpoch]);
@@ -278,29 +285,28 @@ export function SitemapperIntegration({
     setRecordError(null);
     setDeleteBlocked(false);
     try {
-      if (workspaceIntegration) {
-        const currentMetadata = await workspaceIntegration.workspace.metadata();
-        if (currentMetadata.metadata.activeSitemap.providerId === providerId && currentMetadata.metadata.activeSitemap.recordId === record.id) {
-          setDeleteBlocked(true);
-          setRecordError("This is the active Sitemap. Select another Sitemap as active before deleting it.");
-          return;
-        }
-      }
       // Close the save queue first: a write still in flight would put the
       // record straight back after the delete.
       await controller.flushPersistence();
-      if (workspaceIntegration) {
-        const currentMetadata = await workspaceIntegration.workspace.metadata();
-        if (currentMetadata.metadata.activeSitemap.providerId === providerId && currentMetadata.metadata.activeSitemap.recordId === record.id) {
-          setDeleteBlocked(true);
-          setRecordError("This is the active Sitemap. Select another Sitemap as active before deleting it.");
-          return;
+      await withSitemapperWorkspaceLock(workspaceIntegration?.workspace.id, async () => {
+        if (workspaceIntegration) {
+          const currentMetadata = await workspaceIntegration.workspace.metadata();
+          if (currentMetadata.metadata.activeSitemap.providerId === providerId && currentMetadata.metadata.activeSitemap.recordId === record.id) {
+            throw new Error("This is the active Sitemap. Select another Sitemap as active before deleting it.");
+          }
         }
-      }
-      await controller.queue.close();
-      await store.delete(record.id);
+        await controller.queue.close();
+        if (workspaceIntegration) {
+          const currentMetadata = await workspaceIntegration.workspace.metadata();
+          if (currentMetadata.metadata.activeSitemap.providerId === providerId && currentMetadata.metadata.activeSitemap.recordId === record.id) {
+            throw new Error("This is the active Sitemap. Select another Sitemap as active before deleting it.");
+          }
+        }
+        await store.delete(record.id);
+      });
       navigateRef.current?.(SITEMAPPER_ROUTE);
     } catch (reason) {
+      if (reason instanceof Error && reason.message === "This is the active Sitemap. Select another Sitemap as active before deleting it.") setDeleteBlocked(true);
       setRecordError(reason instanceof Error ? reason.message : "The Sitemap could not be deleted.");
     }
   };
@@ -313,11 +319,13 @@ export function SitemapperIntegration({
     setMetadataBusy(true);
     setMetadataError(null);
     try {
-      const current = await workspaceIntegration.workspace.metadata();
-      const next = await workspaceIntegration.workspace.updateMetadata(current.mutationToken, {
-        activeSitemap: { providerId: providerId as WorkspaceRecord["metadata"]["activeSitemap"]["providerId"], recordId: record.id },
+      await withSitemapperWorkspaceLock(workspaceIntegration.workspace.id, async () => {
+        const current = await workspaceIntegration.workspace.metadata();
+        const next = await workspaceIntegration.workspace.updateMetadata(current.mutationToken, {
+          activeSitemap: { providerId: providerId as WorkspaceRecord["metadata"]["activeSitemap"]["providerId"], recordId: record.id },
+        });
+        setWorkspaceMetadata(next);
       });
-      setWorkspaceMetadata(next);
     } catch (reason) {
       setMetadataError(reason instanceof Error ? reason.message : "The active Sitemap could not be changed.");
     } finally {

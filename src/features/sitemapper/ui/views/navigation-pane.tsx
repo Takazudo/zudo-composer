@@ -144,6 +144,7 @@ export function NavigationPane({ document, expansion, selectedId, onSelect, onEd
               size="sm"
               aria-label={`${item.label} destination`}
               value={destinationValue}
+              disabled={expansion === null && item.destination.kind === "route"}
               onChange={(event) => {
                 const value = event.currentTarget.value;
                 if (value === "external") return;
@@ -175,6 +176,7 @@ export function NavigationPane({ document, expansion, selectedId, onSelect, onEd
                 <Button
                   size="xs"
                   variant="ghost"
+                  disabled={expansion === null}
                   onClick={() => updateItem(menu, item, { destination: { kind: "route", nodeId: item.destination.kind === "route" ? item.destination.nodeId : "" } })}
                 >Clear generated selection</Button>
               ) : null}

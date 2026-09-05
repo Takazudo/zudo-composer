@@ -120,6 +120,34 @@ describe("useSitemapperController", () => {
     expect(result.current.state.document.navigation.primary[0]?.label).toBe("Corrected");
   });
 
+  it("blocks later actions while an invalid navigation draft remains pending", () => {
+    const value = record();
+    value.document.navigation.primary = [{ id: "home-link", label: "Home", visible: true, destination: { kind: "route", nodeId: "home" } }];
+    const { result } = renderHook(() => useSitemapperController({ record: value, write: vi.fn(async () => undefined) }));
+    act(() => result.current.updateNavigationDebounced("primary", "home-link", { label: "" }));
+    let error: string | null = null;
+    act(() => { error = result.current.dispatch({ type: "rename", name: "Blocked" }); });
+    expect(error).toMatch(/Navigation/);
+    expect(result.current.state.document.name).toBe("Map");
+    act(() => result.current.updateNavigationDebounced("primary", "home-link", { label: "Home page" }));
+    act(() => { result.current.flushNavigationDrafts(); });
+    act(() => { result.current.dispatch({ type: "rename", name: "Allowed" }); });
+    expect(result.current.state.document.name).toBe("Allowed");
+  });
+
+  it("invalidates remove undo after a successful navigation draft flush", () => {
+    const value = record();
+    value.document.navigation.primary = [{ id: "home-link", label: "Home", visible: true, destination: { kind: "route", nodeId: "home" } }];
+    const { result } = renderHook(() => useSitemapperController({ record: value, write: vi.fn(async () => undefined) }));
+    act(() => { result.current.dispatch({ type: "remove", pageId: "child" }); });
+    expect(result.current.canUndoRemove).toBe(true);
+    act(() => result.current.updateNavigationDebounced("primary", "home-link", { label: "Start" }));
+    act(() => { result.current.flushNavigationDrafts(); });
+    expect(result.current.canUndoRemove).toBe(false);
+    expect(result.current.undoRemove()).toBeNull();
+    expect(result.current.state.document.root[0]!.children).toEqual([]);
+  });
+
   it("restores an exact removed subtree only before another mutation", () => {
     const { result } = setup();
     act(() => { result.current.dispatch({ type: "remove", pageId: "child" }); });
