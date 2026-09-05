@@ -58,18 +58,22 @@ export class MediaLibraryController {
   }
   retryInitialization() { return this.initialize(); }
   async reload() {
+    if (this.current.busy) throw new Error("Wait for the pending operation before inspecting current state.");
     await this.refresh();
-    if (!this.current.busy && !this.current.uncertain && this.drafts.size === 0) this.pending = Promise.resolve();
+    if (this.current.phase !== "ready" || (this.store && !this.current.snapshot)) throw new Error("Authoritative Media inspection did not complete.");
+    this.pending = Promise.resolve();
+    this.set({ uncertain: false, notice: { tone: "info", text: "Authoritative state reloaded. Inspect current records before starting a new operation; unsaved drafts retain their original revisions." } });
   }
   async refresh() {
     const request = ++this.request;
+    this.set({ phase: "loading" });
     try {
       const snapshot = this.store ? await this.store.snapshot() : null;
       const records = snapshot ? snapshot.records.map(summarizeMedia) : await this.provider.store.list();
       if (request === this.request) this.set({ snapshot, records, phase: "ready", errorMessage: null, recoveryMessage: null });
     } catch (error) { if (request === this.request) this.set({ phase: "error", errorMessage: message(error) }); throw error; }
   }
-  capability(name: keyof NonNullable<MediaFileProviderStore["capabilities"]>): boolean { return !this.current.uncertain && this.store?.capabilities[name] === true; }
+  capability(name: keyof NonNullable<MediaFileProviderStore["capabilities"]>): boolean { return this.current.phase === "ready" && !this.current.uncertain && this.store?.capabilities[name] === true; }
   private requireStore(capability: keyof MediaFileProviderStore["capabilities"]): MediaFileProviderStore {
     if (!this.store || !this.capability(capability)) throw new Error(`Media ${capability} is unavailable for this provider.`);
     return this.store;
@@ -79,7 +83,7 @@ export class MediaLibraryController {
     if (this.flushing) return this.flushing;
     const run = Promise.resolve().then(async () => {
       await this.pending;
-      for (const id of [...this.drafts.keys()]) await this.saveDraft(id);
+      while (this.drafts.size) await this.saveDraft(this.drafts.keys().next().value!);
     });
     this.flushing = run;
     void run.finally(() => { if (this.flushing === run) this.flushing = undefined; }).catch(() => undefined);
@@ -104,9 +108,15 @@ export class MediaLibraryController {
   }
   private mutate<T>(label: string, task: () => Promise<T>): Promise<T> {
     if (this.current.busy) return Promise.reject(new Error("Wait for the current Media operation to finish."));
+    if (this.current.phase !== "ready" || this.current.uncertain) return Promise.reject(new Error("Reload authoritative Media state before making changes."));
     const pending = Promise.resolve().then(async () => {
-      try { const result = await task(); await this.refresh(); this.set({ notice: { tone: "info", text: `${label} saved.` } }); return result; }
+      let committed = false;
+      try { const result = await task(); committed = true; await this.refresh(); this.set({ notice: { tone: "info", text: `${label} saved.` } }); return result; }
       catch (error) {
+        if (committed) {
+          const stale = Object.assign(new Error(`${label} was committed, but the refreshed library could not be read. Do not retry the write; reload authoritative state.`), { code: "committed-stale" });
+          this.set({ uncertain: true }); this.reportFailure(stale); throw stale;
+        }
         if (error && typeof error === "object" && "code" in error && error.code === "commit-uncertain") this.set({ uncertain: true });
         await this.refresh().catch(() => undefined); this.reportFailure(error); throw error;
       }

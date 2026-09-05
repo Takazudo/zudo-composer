@@ -23,5 +23,5 @@ export async function providerFixture() {
   return { provider, filesystem, root };
 }
 export function completeServices(overrides: Partial<MediaContentServices> = {}): MediaContentServices {
-  return { scan: async () => ({ status: "complete", locations: [], tokens: {}, message: "Complete structured scan; raw references may exist." }), isCurrent: async () => true, targets: async () => [], insert: async () => { throw new Error("No test insertion configured."); }, ...overrides };
+  return { subscribeChanges: () => () => undefined, scan: async () => ({ status: "complete", locations: [], tokens: {}, message: "Complete structured scan; raw references may exist." }), isCurrent: async () => true, targets: async () => [], insert: async () => { throw new Error("No test insertion configured."); }, ...overrides };
 }

@@ -1,5 +1,5 @@
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createContentModelRecord, createContentEntryRecord, createIndexedDbContentProvider } from "../../../content";
 import { createMediaContentServices, type MediaUse } from "../content";
 
@@ -15,6 +15,15 @@ async function content() {
   return provider;
 }
 describe("injected complete Media / Content integration", () => {
+  it("observes provider token changes outside the Media insertion service", async () => {
+    const provider = await content(); const service = createMediaContentServices([provider], async () => undefined);
+    const listener = vi.fn(); const stop = service.subscribeChanges(listener);
+    try {
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+      await provider.store.deleteEntry("entry-39");
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    } finally { stop(); }
+  });
   it("persists image/link/card text through Content CAS without storing Media notes", async () => {
     const provider = await content(); const service = createMediaContentServices([provider], async () => ({ status: "ready" }));
     const asset = { providerId: "media-files", assetId: "hero" };

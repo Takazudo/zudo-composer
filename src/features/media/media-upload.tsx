@@ -124,7 +124,7 @@ export function useMediaUpload({ store, refresh, now = Date.now }: UseMediaUploa
             if (alive.current) dispatch({ type: "stored", id, fileName: record.document.fileName });
           } catch (reason) {
             // Uncertain commits require exact-state inspection, not duplicate uploads.
-            if (!(reason && typeof reason === "object" && "code" in reason && reason.code === "commit-uncertain")) retryFiles.current.set(id, file);
+            if (!(reason && typeof reason === "object" && "code" in reason && (reason.code === "commit-uncertain" || reason.code === "committed-stale"))) retryFiles.current.set(id, file);
             failures.push(messageForError(reason));
             if (alive.current) dispatch({ type: "failed", id, message: messageForError(reason) });
           }

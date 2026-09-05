@@ -5,6 +5,49 @@ import { createMediaLibraryController, mediaMarkdown } from "../controller";
 import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture";
 
 describe("versioned Media controller", () => {
+  it("never exposes a retryable upload failure after the write committed", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const snapshot = vi.spyOn(filesystem, "snapshot").mockRejectedValue(new Error("Read failed"));
+    await expect(controller.upload(new File([PNG], "committed.png", { type: "image/png" }), null)).rejects.toMatchObject({ code: "committed-stale" });
+    expect(controller.state.uncertain).toBe(true); expect(controller.capability("replace")).toBe(false);
+    await expect(controller.reload()).rejects.toThrow("Read failed"); expect(controller.state.uncertain).toBe(true);
+    snapshot.mockRestore(); await controller.reload();
+    expect(controller.state.records).toHaveLength(1); expect(controller.state.uncertain).toBe(false);
+    expect(controller.capability("replace")).toBe(true); await expect(controller.flush()).resolves.toBeUndefined();
+  });
+  it("drains newer same-ID drafts before resolving the save barrier", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const original = filesystem.updateMetadata.bind(filesystem);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const update = vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => { await gate; return original(...args); });
+    controller.draftMetadata(summarizeMedia(record), { note: "First" });
+    const flushed = controller.flush(); await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    controller.draftMetadata(summarizeMedia(record), { note: "Newer" }); release(); await flushed;
+    expect(update).toHaveBeenCalledTimes(2); expect(controller.hasDraft(record.id)).toBe(false);
+    expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { note: "Newer" } } });
+  });
+  it("recovers uncertain outcomes only after deliberate authoritative inspection", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    vi.spyOn(filesystem, "upload").mockRejectedValueOnce(Object.assign(new Error("Inspect storage"), { code: "commit-uncertain" }));
+    await expect(controller.upload(new File([PNG], "uncertain.png", { type: "image/png" }), null)).rejects.toMatchObject({ code: "commit-uncertain" });
+    expect(controller.state.uncertain).toBe(true);
+    await controller.refresh(); expect(controller.state.uncertain).toBe(true);
+    await controller.reload(); expect(controller.state.uncertain).toBe(false);
+  });
+  it("fails closed for every mutation capability while loading or unreadable", async () => {
+    const { provider, filesystem } = await providerFixture(); const controller = createMediaLibraryController(provider);
+    expect(controller.capability("trash")).toBe(false); await controller.initialize();
+    const snapshot = vi.spyOn(filesystem, "snapshot").mockRejectedValue(new Error("Offline"));
+    const refresh = controller.refresh(); expect(controller.capability("replace")).toBe(false);
+    await expect(refresh).rejects.toThrow("Offline");
+    for (const capability of ["metadata", "trash", "restore", "folders", "replace"] as const) expect(controller.capability(capability)).toBe(false);
+    expect(() => controller.restore([])).toThrow("unavailable"); snapshot.mockRestore();
+  });
   it("persists metadata drafts through detached workspace-session flush", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });

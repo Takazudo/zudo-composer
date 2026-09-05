@@ -16,6 +16,7 @@ export interface MediaInsertionTarget extends MediaContentLocation {
   kind: MediaUse["kind"]; append: boolean; mutationToken: number;
 }
 export interface MediaContentServices {
+  subscribeChanges(listener: () => void): () => void;
   scan(asset: MediaAssetRef): Promise<MediaUsageScan>;
   isCurrent(scan: MediaUsageScan): Promise<boolean>;
   targets(): Promise<readonly MediaInsertionTarget[]>;
@@ -32,6 +33,23 @@ export function createMediaContentServices(providers: readonly ContentProvider[]
     return readContentGraph(stores);
   };
   return {
+    subscribeChanges(listener) {
+      let stopped = false, running = false, previous: string | undefined;
+      // Providers have no cross-tab event contract. Observe authoritative tokens,
+      // not a UI-local counter; failures invalidate the last complete display too.
+      const check = async () => {
+        if (running || stopped) return;
+        running = true;
+        let next: string;
+        try { next = JSON.stringify(await Promise.all(stores.map(async (store) => { const snapshot = await store.readAll(); return [snapshot.providerId, snapshot.mutationToken]; }))); }
+        catch { next = "unavailable"; }
+        running = false;
+        if (!stopped && next !== previous) { previous = next; listener(); }
+      };
+      void check();
+      const timer = setInterval(() => { void check(); }, 1000);
+      return () => { stopped = true; clearInterval(timer); };
+    },
     async scan(asset) {
       try {
         const graph = await capture();

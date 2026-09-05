@@ -2,10 +2,48 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MediaApp } from "../media-app";
 import { MediaFieldPicker } from "../media-use-picker";
+import { createMediaLibraryController } from "../controller";
 import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture";
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 describe("Media workspace", () => {
+  it("keeps missing asset links handled until an explicit link retry", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const asset = await filesystem.upload({ fileName: "late.png", declaredMediaType: "image/png", bytes: PNG });
+    const snapshot = await filesystem.snapshot();
+    const read = vi.spyOn(filesystem, "snapshot").mockResolvedValue({ ...snapshot, records: [] });
+    const controller = createMediaLibraryController(provider);
+    render(<MediaApp provider={provider} controller={controller} intent={{ status: "matched", intent: { route: "media", providerId: provider.descriptor.id, assetId: asset.id } }} />);
+    await screen.findByText(/link targets a missing or unavailable/);
+    read.mockRestore(); await controller.reload();
+    await screen.findByRole("button", { name: "Inspect late.png" });
+    expect(screen.queryByRole("heading", { name: "late.png" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry asset link" }));
+    await screen.findByRole("heading", { name: "late.png" });
+    expect(screen.queryByText(/link targets a missing or unavailable/)).toBeNull();
+  });
+  it("surfaces malformed asset intent without selecting another asset", async () => {
+    const { provider } = await providerFixture();
+    render(<MediaApp provider={provider} intent={{ status: "invalid", message: "Malformed Media asset identity" }} />);
+    expect(await screen.findByText("Malformed Media asset identity")).toBeTruthy();
+  });
+  it("invalidates displayed usage claims when the injected Content generation changes", async () => {
+    const { provider, filesystem } = await providerFixture();
+    await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    let invalidate!: () => void;
+    const services = completeServices({ subscribeChanges: (listener) => { invalidate = listener; return () => undefined; } });
+    const scan = vi.spyOn(services, "scan").mockResolvedValue({ status: "complete", locations: [], tokens: {}, message: "Old complete snapshot" });
+    render(<MediaApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
+    await screen.findByText("Old complete snapshot");
+    let finish!: (value: Awaited<ReturnType<typeof services.scan>>) => void;
+    scan.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    invalidate(); await screen.findByText("Checking structured Content uses…");
+    expect(screen.queryByText("Old complete snapshot")).toBeNull();
+    await waitFor(() => expect(finish).toBeTypeOf("function"));
+    finish({ status: "complete", locations: [], tokens: {}, message: "New complete snapshot" });
+    await screen.findByText("New complete snapshot");
+  });
   it("uses the shared insertion session for an exact between-folder index", async () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.createFolder({ name: "A", parentId: null }, await filesystem.mutationToken());
