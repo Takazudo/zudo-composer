@@ -157,7 +157,7 @@ export function project(options: {
       compositions: [{ id: "indexeddb", records: options.compositions ?? [composition("landing", "Static")] }],
       content: [{ id: "content-indexeddb", models: [options.contentModel ?? model()], entries: options.entries ?? [] }],
       mappings: [{ id: "mapping-indexeddb", records: mappings }],
-      sitemaps: [{ id: "sitemap-indexeddb", records: [{ id: "main", createdAt: timestamp, updatedAt: timestamp, document: { schemaVersion: 2, id: "main", name: "Main", root: [root] } }] }],
+      sitemaps: [{ id: "sitemap-indexeddb", records: [{ id: "main", createdAt: timestamp, updatedAt: timestamp, document: { schemaVersion: 3, navigation: { primary: [], footer: [] }, id: "main", name: "Main", root: [root] } }] }],
     },
     activeSitemap: { providerId: "sitemap-indexeddb", recordId: "main" },
     collectionAttachments: options.attachments ?? [],

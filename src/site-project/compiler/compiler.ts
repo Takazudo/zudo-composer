@@ -13,6 +13,7 @@ import type { MappingDefinitionResolution, MappingRecord } from "../../mapping/m
 import type { SitemapNode } from "../../sitemapper/model/types";
 import { authoredPath, expandSitemapRoutes } from "../../sitemapper/routes/expand";
 import type { DerivedSitemapRoute, SitemapRouteDiagnostic } from "../../sitemapper/routes/types";
+import { resolveSitemapNavigation, sameSitemapEntry } from "../../sitemapper/routes/navigation";
 import { compareUnicodeCodePoints } from "../model/canonical";
 import { createInMemorySiteProjectAdapters } from "../model/memory";
 import type { SiteProject, SiteProjectRecordRef } from "../model/types";
@@ -130,7 +131,7 @@ function routeIdentity(
   active: SiteProjectRecordRef,
   occupied: Set<string>,
 ): string {
-  const values = [project.id, active.providerId, active.recordId, route.nodeId, route.entryId ?? "", route.pathname];
+  const values = [project.id, active.providerId, active.recordId, route.nodeId, route.selectedEntry, route.ancestors.map(({ nodeId, selectedEntry }) => ({ nodeId, selectedEntry })), route.pathname];
   const input = JSON.stringify(values);
   const base = `site-route-${stableHash(input, 0xcbf29ce484222325n)}${stableHash(input, 0x84222325cbf29ce4n)}`;
   let id = base;
@@ -332,14 +333,14 @@ export async function compileSiteProject(
       const prepared = await prepareMapping(mapping);
       if (prepared.definition.status !== "ready" || !prepared.definition.composition || prepared.content.status !== "resolved") { diagnostics.push({ severity: "blocking", code: "attachment-mapping-blocked", message: "Collection attachment Mapping definition could not be resolved.", path: attachmentPath, ...routeContext }); return undefined; }
       if (prepared.definition.composition.document.binding) { diagnostics.push({ severity: "blocking", code: "attachment-linked-source-unsupported", message: "Collection attachments require a detached Mapping Composition.", path: attachmentPath, ...routeContext }); return undefined; }
-      const query = evaluateCollectionQuery({ model: prepared.content.model, providerId: mapping.document.contentModel.providerId, entries: prepared.content.snapshot.entries, query: mapping.document.mode.query });
+      const query = evaluateCollectionQuery({ model: prepared.content.model, providerId: mapping.document.contentModel.providerId, entries: prepared.content.snapshot.entries, query: { ...mapping.document.mode.query, publication: options.policy === "authoring-preview" ? mapping.document.mode.query.publication : "published-only" } });
       for (const item of query.diagnostics) if (item.severity === "blocking") diagnostics.push({ severity: "blocking", code: `attachment-${item.code}`, message: item.message, path: attachmentPath, ...routeContext, ...(item.entryId ? { entry: { providerId: mapping.document.contentModel.providerId, recordId: item.entryId } } : {}) });
       if (query.status === "blocked") return undefined;
       const roots: CompositionNode[] = [];
       for (const entry of query.entries) {
         const remaining = nodeBudget - total;
         if (countNodes(prepared.definition.composition.document.root) > remaining) { diagnostics.push({ severity: "blocking", code: "attachment-materialization-limit", message: `Collection attachment materialization exceeds the ${MAX_MATERIALIZED_NODES.toLocaleString("en-US")} component-node limit.`, path: attachmentPath, ...routeContext }); return undefined; }
-        const evaluation = evaluateResolvedMapping(prepared.definition, entry, { routeResolver: routeProjectionResolver });
+        const evaluation = evaluateResolvedMapping(prepared.definition, entry, { routeResolver: routeProjectionResolver(routeContext.pathname) });
         if (evaluation.status !== "ready" || !evaluation.document) { diagnostics.push({ severity: "blocking", code: "attachment-entry-mapping-blocked", message: `Collection Entry "${entry.id}" could not be mapped.`, path: attachmentPath, ...routeContext, entry: { providerId: mapping.document.contentModel.providerId, recordId: entry.id } }); return undefined; }
         const nested = await materializeCollectionAttachments(mapping.document.composition, evaluation.document, routeContext, [...stack, ownerKey], remaining);
         if (!nested) return undefined;
@@ -362,6 +363,7 @@ export async function compileSiteProject(
   };
 
   const expansion = await expandSitemapRoutes({
+    policy: options.policy ?? "release",
     document: adapters.activeSitemap.document,
     catalog: {
       async resolveMapping(ref) {
@@ -380,28 +382,19 @@ export async function compileSiteProject(
     },
   });
 
-  const routeProjectionPaths = new Map<string, Set<string>>();
-  for (const route of expansion.routes) {
-    const indexed = indexedNodes.get(route.nodeId);
-    if (indexed?.node.source.kind !== "mapping") continue;
-    const mapping = adapters.mappings.catalog.resolve(indexed.node.source.ref);
-    if (!mapping) continue;
-    const prepared = await prepareMapping(mapping);
-    const entryId = route.entryId ?? (prepared.content.status === "resolved" && prepared.content.snapshot.entries.length === 1 ? prepared.content.snapshot.entries[0]!.id : undefined);
-    if (!entryId) continue;
-    const key = `${mapping.document.contentModel.providerId}\u0000${mapping.document.contentModel.recordId}\u0000${entryId}`;
-    const paths = routeProjectionPaths.get(key) ?? new Set<string>();
-    paths.add(route.pathname);
-    routeProjectionPaths.set(key, paths);
-  }
-  const routeProjectionResolver: MappingRouteProjectionResolver = {
+  const routeProjectionResolver = (pathname: string): MappingRouteProjectionResolver => ({
     resolve(ref) {
-      const paths = routeProjectionPaths.get(`${ref.providerId}\u0000${ref.modelId}\u0000${ref.recordId}`);
-      if (!paths?.size) return { status: "unavailable" };
-      if (paths.size > 1) return { status: "ambiguous" };
-      return { status: "resolved", href: [...paths][0]! };
+      const current = expansion.routes.find((route) => route.pathname === pathname);
+      const context = current ? [...current.ancestors, { nodeId: current.nodeId, selectedEntry: current.selectedEntry }] : [];
+      const candidates = expansion.routes.filter((route) => sameSitemapEntry(route.selectedEntry, ref) && route.ancestors.every((part) => {
+        const existing = context.find((item) => item.nodeId === part.nodeId);
+        return !existing || sameSitemapEntry(existing.selectedEntry, part.selectedEntry);
+      }));
+      if (!candidates.length) return { status: "unavailable" };
+      if (candidates.length !== 1) return { status: "ambiguous" };
+      return { status: "resolved", href: candidates[0]!.pathname };
     },
-  };
+  });
 
   for (const item of expansion.diagnostics) {
     if (item.severity === "nonblocking") continue;
@@ -447,8 +440,8 @@ export async function compileSiteProject(
     let localRef: SiteProjectRecordRef;
     let localRecord: CompositionRecord | undefined;
     let localDocument: CompositionDocument | undefined;
-    let selectedEntry: SiteProjectRecordRef | undefined;
-    let displayTitle = node.title;
+    let selectedEntry = expanded.selectedEntry;
+    const displayTitle = expanded.displayTitle;
 
     if (node.source.kind === "composition") {
       source = { kind: "composition", ref: { ...node.source.ref } };
@@ -487,12 +480,8 @@ export async function compileSiteProject(
         diagnostics.push({ severity: "blocking", code: "entry-not-found", message: "The route Entry was not found in the prepared Content snapshot.", path: indexed.path, pathname: expanded.pathname, nodeId: node.id, ...(missingEntry ? { entry: missingEntry } : {}) });
         continue;
       }
-      selectedEntry = { providerId: mapping.document.contentModel.providerId, recordId: entry.id };
-      if (node.source.route.kind === "entry-field" && node.source.route.titleFieldId !== undefined) {
-        const entryTitle = entry.values[node.source.route.titleFieldId];
-        if (typeof entryTitle === "string" && entryTitle.trim().length > 0) displayTitle = entryTitle;
-      }
-      const evaluation = evaluateResolvedMapping(definition, entry, { routeResolver: routeProjectionResolver });
+      selectedEntry = { providerId: mapping.document.contentModel.providerId, modelId: entry.modelId, recordId: entry.id };
+      const evaluation = evaluateResolvedMapping(definition, entry, { routeResolver: routeProjectionResolver(expanded.pathname) });
       for (const item of evaluation.entryDiagnostics.filter((candidate) => candidate.severity === "blocking")) {
         diagnostics.push({ severity: "blocking", code: `mapping-${item.code}`, message: item.message, path: entrySelector(selectedEntry), pathname: expanded.pathname, nodeId: node.id, entry: selectedEntry });
       }
@@ -575,6 +564,7 @@ export async function compileSiteProject(
     routes.push({
       pathname: expanded.pathname,
       displayTitle,
+      ancestors: expanded.ancestors,
       sitemapNode: { id: node.id, path: indexed.path },
       source,
       ...(selectedEntry ? { selectedEntry } : {}),
@@ -608,11 +598,15 @@ export async function compileSiteProject(
     }
   }
   diagnostics.sort(compareDiagnostics);
+  const navigation = resolveSitemapNavigation(adapters.activeSitemap.document.navigation, expansion.routes.filter((expanded) => routes.some((route) => route.pathname === expanded.pathname && route.sitemapNode.id === expanded.nodeId)));
+  for (const item of navigation.diagnostics) diagnostics.push({ severity: "blocking", code: item.code, message: item.message, path: `${selector("sitemaps", active.providerId, "records", active.recordId)}["document"]["navigation"][${JSON.stringify(item.menu)}][?(@.id==${JSON.stringify(item.itemId)})]` });
+  diagnostics.sort(compareDiagnostics);
   if (diagnostics.length > 0) return { status: "blocked", routes, diagnostics };
   return {
     status: "ready",
     build: {
       projectId: snapshot.id,
+      navigation,
       activeSitemap: { ...active },
       routes,
       modules: [...modulesBySpecifier.values()].sort(compareModules),

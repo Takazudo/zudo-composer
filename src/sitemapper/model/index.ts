@@ -13,6 +13,11 @@ export type {
   SitemapDocument,
   SitemapNode,
   SitemapSchemaVersion,
+  SitemapEntryRef,
+  SitemapAncestorSelection,
+  SitemapNavigationDestination,
+  SitemapNavigationItem,
+  SitemapNavigation,
 } from "./types";
 export { isSitemapDisplayTitleFieldKind, SITEMAP_DISPLAY_TITLE_FIELD_KINDS, SITEMAP_SCHEMA_VERSION } from "./types";
 

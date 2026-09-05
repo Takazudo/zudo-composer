@@ -19,7 +19,8 @@ import {
   sitemapPersistenceError,
   transactionComplete,
 } from "./provider";
-import { SITEMAPS_STORE_NAME, META_STORE_NAME } from "./types";
+import { SITEMAPS_STORE_NAME, META_STORE_NAME, SITEMAPPER_DATABASE_VERSION, SITEMAPPER_META_KEYS } from "./types";
+import { SITEMAP_SCHEMA_VERSION } from "../../model";
 
 interface InitializationFailure {
   id: string;
@@ -145,12 +146,6 @@ export class IndexedDbSitemapStore implements SitemapStore {
     });
   }
 
-  async forceClear(): Promise<void> {
-    await this.run("clear", "readwrite", async (store) => {
-      await requestResult(store.clear());
-    });
-  }
-
   async scanForInitialization(): Promise<SitemapInitializationScan> {
     return this.scan("initialize");
   }
@@ -197,6 +192,12 @@ export class IndexedDbSitemapStore implements SitemapStore {
     }
     const done = transactionComplete(transaction);
     try {
+      const metaRecords = await requestResult(transaction.objectStore(META_STORE_NAME).getAll()) as unknown[];
+      const schema = metaRecords.find((value) => value && typeof value === "object" && "key" in value && value.key === SITEMAPPER_META_KEYS.schema);
+      const mutation = metaRecords.find((value) => value && typeof value === "object" && "key" in value && value.key === "mutation");
+      if (metaRecords.length !== 2 || !schema || typeof schema !== "object" || Object.keys(schema).sort().join(",") !== "databaseVersion,key,recordSchemaVersion" || !("databaseVersion" in schema) || schema.databaseVersion !== SITEMAPPER_DATABASE_VERSION || !("recordSchemaVersion" in schema) || schema.recordSchemaVersion !== SITEMAP_SCHEMA_VERSION || !mutation || Object.keys(mutation).sort().join(",") !== "key,token") {
+        throw sitemapPersistenceError(operation, "unsupported-version", "Sitemap database metadata is missing or unsupported. The source was preserved; explicit reset is required.", false);
+      }
       await readMutationToken(transaction);
       const result = await action(transaction.objectStore(SITEMAPS_STORE_NAME));
       if (mode === "readwrite") await advanceMutationToken(transaction);

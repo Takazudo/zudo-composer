@@ -10,7 +10,7 @@ export function node(
 
 export function document(root: SitemapNode[] = [node("home")]): SitemapDocument {
   return {
-    schemaVersion: SITEMAP_SCHEMA_VERSION,
+    schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] },
     id: "site-map",
     name: "Site map",
     root,

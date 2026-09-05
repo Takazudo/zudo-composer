@@ -27,7 +27,7 @@ export async function loadDeliverySnapshot(providers: ProductionProviderIntegrat
     if (snapshot.status === "error") return { status: "provider-error", message: snapshot.error.message, retryable: snapshot.error.retryable };
     const validated = validateSiteProject(snapshot.project, { componentPack: providers.componentProvider.manifest });
     if (!validated.ok) return { status: "validation-error", message: validated.diagnostics.map(({ message }) => message).join(" ") };
-    const compilation = await compileSiteProject(validated.project, { componentCatalog: providers.componentProvider.catalog });
+    const compilation = await compileSiteProject(validated.project, { componentCatalog: providers.componentProvider.catalog, policy: "release" });
     if (compilation.status === "blocked") return { status: "compiler-error", message: compilation.diagnostics.map(({ message }) => message).join(" ") };
     const sitemap = activeSitemap(validated.project);
     return sitemap ? { status: "ready", project: validated.project, build: compilation.build, sitemap } : { status: "validation-error", message: "The active Sitemap is unavailable." };

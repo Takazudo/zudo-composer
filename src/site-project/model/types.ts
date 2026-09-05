@@ -102,6 +102,7 @@ export type SiteProjectDiagnosticCode =
   | "dangling-sitemap-route-field"
   | "dangling-sitemap-title-field"
   | "invalid-sitemap-title-field"
+  | "invalid-sitemap-selected-entry"
   | "invalid-collection-attachment"
   | "duplicate-collection-attachment"
   | "attachment-composition-not-found"

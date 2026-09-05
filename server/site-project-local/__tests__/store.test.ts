@@ -196,11 +196,11 @@ describe("LocalSiteProjectStore", () => {
     const store = createLocalSiteProjectStore({ testRoot });
     const applied = await store.apply({ project: makeProject(), expectedRevision: null, expectedActive: null });
     if (applied.status !== "ok") throw new Error("apply failed");
-    const build: SiteBuildPlan = { projectId: "compiler-site", activeSitemap: { providerId: "sitemap-indexeddb", recordId: "main" }, routes: [], modules: [] };
+    const build: SiteBuildPlan = { navigation: { primary: [], footer: [], diagnostics: [] }, projectId: "compiler-site", activeSitemap: { providerId: "sitemap-indexeddb", recordId: "main" }, routes: [], modules: [] };
     await expect(store.publish({ projectId: "compiler-site", revision: applied.value.revision, build })).resolves.toEqual({ status: "ok" });
     await expect(store.publish({ projectId: "compiler-site", revision: applied.value.revision, build })).resolves.toEqual({ status: "ok" });
     const pointer = await readFile(join(testRoot, "active-build.json"), "utf8");
-    const different: SiteBuildPlan = { ...build, routes: [{ pathname: "/", displayTitle: "Home", sitemapNode: { id: "x", path: "/" }, source: { kind: "composition" as const, ref: { providerId: "p", recordId: "r" } }, composition: { local: { providerId: "p", recordId: "r" }, routeRecordId: "r", document: { schemaVersion: 2 as const, id: "r", name: "r", root: [] } }, modules: [] }] };
+    const different: SiteBuildPlan = { ...build, routes: [{ ancestors: [], pathname: "/", displayTitle: "Home", sitemapNode: { id: "x", path: "/" }, source: { kind: "composition" as const, ref: { providerId: "p", recordId: "r" } }, composition: { local: { providerId: "p", recordId: "r" }, routeRecordId: "r", document: { schemaVersion: 2 as const, id: "r", name: "r", root: [] } }, modules: [] }] };
     await expect(store.publish({ projectId: "compiler-site", revision: applied.value.revision, build: different })).resolves.toEqual(expect.objectContaining({ status: "unavailable" }));
     await expect(readFile(join(testRoot, "active-build.json"), "utf8")).resolves.toBe(pointer);
 
@@ -234,6 +234,7 @@ describe("LocalSiteProjectStore", () => {
     const applied = await store.apply({ project: makeProject(), expectedRevision: null, expectedActive: null });
     if (applied.status !== "ok") throw new Error("apply failed");
     const build: SiteBuildPlan = {
+      navigation: { primary: [], footer: [], diagnostics: [] },
       projectId: "compiler-site",
       activeSitemap: { providerId: "sitemap-indexeddb", recordId: "main" },
       routes: [],

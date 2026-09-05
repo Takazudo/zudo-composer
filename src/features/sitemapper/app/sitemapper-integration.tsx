@@ -126,7 +126,7 @@ export function SitemapperIntegration({
   useEffect(() => {
     if (!mappingCatalog) { setRouteExpansionState(null); return; }
     let active = true;
-    void expandSitemapRoutes({ document, catalog: mappingCatalog.routes }).then((expansion) => {
+    void expandSitemapRoutes({ document, catalog: mappingCatalog.routes, policy: "authoring-preview" }).then((expansion) => {
       if (!active) return;
       setRouteExpansionState({ document, expansion });
     });

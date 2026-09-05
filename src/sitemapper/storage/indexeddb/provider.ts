@@ -7,6 +7,7 @@ import type {
   SitemapRecoveryOutcome,
 } from "../../library";
 import { SITEMAP_SCHEMA_VERSION } from "../../model";
+import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import { IndexedDbSitemapStore } from "./store";
 import {
   META_STORE_NAME,
@@ -79,6 +80,7 @@ export class IndexedDbSitemapRuntime {
   readonly factory: IDBFactory | null | undefined;
   private connection: SitemapOpenConnection | undefined;
   private opening: Promise<SitemapOpenConnection> | undefined;
+  private replacing: Promise<string> | undefined;
 
   constructor(options: IndexedDbSitemapProviderOptions) {
     this.factory = options.idbFactory === undefined
@@ -87,6 +89,7 @@ export class IndexedDbSitemapRuntime {
   }
 
   async open(operation: SitemapPersistenceOperation): Promise<SitemapOpenConnection> {
+    if (this.replacing) await this.replacing;
     if (this.connection) {
       if (this.connection.invalidated) {
         throw sitemapPersistenceError(
@@ -116,6 +119,29 @@ export class IndexedDbSitemapRuntime {
 
   prepareRetry(): void {
     if (this.connection?.invalidated) this.connection = undefined;
+  }
+
+  replaceWithCurrentDatabase(): Promise<string> {
+    if (this.replacing) return this.replacing;
+    const run = Promise.resolve().then(async () => {
+      await this.opening?.catch(() => undefined);
+      this.connection?.db.close(); this.connection = undefined;
+      if (!this.factory) throw sitemapPersistenceError("clear", "unavailable", "IndexedDB is unavailable in this browser context.", true);
+      await new Promise<void>((resolve, reject) => {
+        const request = this.factory!.deleteDatabase(SITEMAPPER_DATABASE_NAME);
+        request.onsuccess = () => resolve();
+        // A blocked deletion is still live. Never return a failure that could
+        // encourage a retry while this request may later delete the source.
+        request.onblocked = () => undefined;
+        request.onerror = () => reject(sitemapPersistenceError("clear", "write-failed", "Starting fresh Sitemap storage could not replace the database.", true, request.error));
+      });
+      const database = (await this.openDatabase()).db.name;
+      notifyPersistenceChange(database);
+      return database;
+    });
+    this.replacing = run;
+    void run.finally(() => { if (this.replacing === run) this.replacing = undefined; }).catch(() => undefined);
+    return run;
   }
 
   private openDatabase(): Promise<SitemapOpenConnection> {
@@ -307,7 +333,7 @@ export function createIndexedDbSitemapProvider(
       },
       startFresh: async () => {
         try {
-          await store.forceClear();
+          await runtime.replaceWithCurrentDatabase();
           if (options.seed) await store.seed(options.seed);
           return { status: "ready", summaries: await store.list() };
         } catch (error) {

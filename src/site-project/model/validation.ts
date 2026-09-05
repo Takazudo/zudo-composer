@@ -434,6 +434,16 @@ export function validateSiteProject(value: unknown, context: SiteProjectValidati
             : `Sitemap ${source.kind} target ${JSON.stringify(recordRefKey(ref.providerId, ref.recordId))} does not exist.`);
           return;
         }
+        if (source.kind === "mapping" && isPlainObject(source.route) && source.route.kind === "selected-entry") {
+          const mapping = target as SiteProject["providers"]["mappings"][number]["records"][number];
+          const ref = source.route.entry as { providerId: string; modelId: string; recordId: string };
+          const modelRef = mapping.document.contentModel;
+          const model = contentModels.get(modelRef.providerId)?.find((candidate) => candidate.id === modelRef.recordId);
+          const entry = contentEntries.get(ref.providerId)?.find((candidate) => candidate.id === ref.recordId);
+          if (model?.document.kind !== "collection" || mapping.document.mode.kind !== "collection" || ref.providerId !== modelRef.providerId || ref.modelId !== modelRef.recordId || entry?.modelId !== ref.modelId) {
+            diagnostic(diagnostics, "invalid-sitemap-selected-entry", `${sourcePath}.route.entry`, "Selected route Entry must belong to this collection Mapping's provider and model.");
+          }
+        }
         if (source.kind === "mapping" && isPlainObject(source.route) && source.route.kind === "entry-field") {
           const mapping = target as SiteProject["providers"]["mappings"][number]["records"][number];
           const modelRef = mapping.document.contentModel;

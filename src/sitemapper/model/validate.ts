@@ -22,7 +22,8 @@ export type SitemapValidationFailureCode =
   | "invalid-node-title"
   | "invalid-node-slug"
   | "invalid-source"
-  | "mapping-children"
+  | "invalid-navigation"
+  | "tree-limit"
   | "invalid-node-notes"
   | "invalid-children"
   | "cycle"
@@ -32,7 +33,7 @@ export type SitemapValidationResult =
   | { ok: true; document: SitemapDocument }
   | { ok: false; code: SitemapValidationFailureCode; path: string };
 
-const DOCUMENT_KEYS = ["schemaVersion", "id", "name", "root"] as const;
+const DOCUMENT_KEYS = ["schemaVersion", "id", "name", "root", "navigation"] as const;
 const NODE_REQUIRED_KEYS = ["id", "title", "source", "children"] as const;
 const NODE_OPTIONAL_KEYS = ["slug", "notes"] as const;
 const REF_KEYS = ["providerId", "recordId"] as const;
@@ -57,7 +58,37 @@ function validRef(value: unknown): boolean {
     && isSafeRecordId(value.recordId);
 }
 
-function validSource(value: unknown): boolean {
+export function validSitemapEntryRef(value: unknown): boolean {
+  return isPlainObject(value) && hasExactKeys(value, ["providerId", "modelId", "recordId"])
+    && typeof value.providerId === "string" && value.providerId.length > 0 && isSafeRecordId(value.modelId) && isSafeRecordId(value.recordId);
+}
+export function safeNavigationUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !value || value.trim() !== value || value.includes("\\") || Array.from(value).some((point) => point.charCodeAt(0) <= 32 || point.charCodeAt(0) === 127)) return false;
+  try { const url = new URL(value); return (url.protocol === "https:" || url.protocol === "http:") && !!url.hostname && !url.username && !url.password; } catch { return false; }
+}
+export function validSitemapNavigation(value: unknown): boolean {
+  if (!isPlainObject(value) || !hasExactKeys(value, ["primary", "footer"])) return false;
+  return [value.primary, value.footer].every((menu) => {
+    if (!Array.isArray(menu) || menu.length > 10000) return false;
+    const ids = new Set<string>();
+    return menu.every((item: unknown) => {
+      if (!isPlainObject(item) || !hasExactKeys(item, ["id", "label", "visible", "destination"]) || !isSafeRecordId(item.id) || ids.has(item.id) || typeof item.label !== "string" || !item.label.trim() || typeof item.visible !== "boolean") return false;
+      ids.add(item.id); const target = item.destination;
+      if (!isPlainObject(target)) return false;
+      if (target.kind === "external") return hasExactKeys(target, ["kind", "url"]) && safeNavigationUrl(target.url);
+      if (target.kind !== "route" || !hasExactKeys(target, ["kind", "nodeId"], ["entry", "ancestors"]) || typeof target.nodeId !== "string" || !target.nodeId) return false;
+      if (Object.hasOwn(target, "entry") && !validSitemapEntryRef(target.entry)) return false;
+      if (!Object.hasOwn(target, "ancestors")) return true;
+      if (!Array.isArray(target.ancestors) || target.ancestors.length > 128) return false;
+      const ancestors = new Set<string>();
+      return target.ancestors.every((ancestor: unknown) => {
+        if (!isPlainObject(ancestor) || !hasExactKeys(ancestor, ["nodeId", "entry"]) || typeof ancestor.nodeId !== "string" || !ancestor.nodeId || ancestors.has(ancestor.nodeId) || !validSitemapEntryRef(ancestor.entry)) return false;
+        ancestors.add(ancestor.nodeId); return true;
+      });
+    });
+  });
+}
+export function validSitemapSource(value: unknown): boolean {
   if (!isPlainObject(value) || typeof value.kind !== "string") return false;
   if (value.kind === "unassigned") return hasExactKeys(value, ["kind"]);
   if (value.kind === "composition") {
@@ -66,6 +97,7 @@ function validSource(value: unknown): boolean {
   if (value.kind !== "mapping" || !hasExactKeys(value, ["kind", "ref", "route"]) || !validRef(value.ref)) return false;
   const route = value.route;
   if (!isPlainObject(route) || typeof route.kind !== "string") return false;
+  if (route.kind === "selected-entry") return hasExactKeys(route, ["kind", "entry"]) && validSitemapEntryRef(route.entry);
   return route.kind === "single"
     ? hasExactKeys(route, ["kind"])
     : route.kind === "entry-field" && hasExactKeys(route, ["kind", "fieldId"], ["titleFieldId"])
@@ -79,6 +111,7 @@ function validateNode(
   seenIds: Set<string>,
   ancestors: Set<object>,
 ): SitemapValidationResult | undefined {
+  if (ancestors.size > 128 || seenIds.size >= 10000) return failure("tree-limit", path);
   if (!isPlainObject(value)) return failure("invalid-node-keys", path);
   if (ancestors.has(value)) return failure("cycle", path);
   ancestors.add(value);
@@ -100,11 +133,8 @@ function validateNode(
     if (Object.hasOwn(value, "notes") && typeof value.notes !== "string") {
       return failure("invalid-node-notes", `${path}.notes`);
     }
-    if (!validSource(value.source)) return failure("invalid-source", `${path}.source`);
+    if (!validSitemapSource(value.source)) return failure("invalid-source", `${path}.source`);
     if (!Array.isArray(value.children)) return failure("invalid-children", `${path}.children`);
-    if ((value.source as { kind?: string }).kind === "mapping" && value.children.length > 0) {
-      return failure("mapping-children", `${path}.children`);
-    }
 
     for (let index = 0; index < value.children.length; index += 1) {
       const childFailure = validateNode(
@@ -132,6 +162,7 @@ export function isStructurallyValidDocument(value: unknown): SitemapValidationRe
     return failure("invalid-document-id", "$.id");
   }
   if (typeof value.name !== "string") return failure("invalid-document-name", "$.name");
+  if (!validSitemapNavigation(value.navigation)) return failure("invalid-navigation", "$.navigation");
   if (!Array.isArray(value.root) || value.root.length !== 1) {
     return failure("root-cardinality", "$.root");
   }
