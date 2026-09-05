@@ -23,6 +23,20 @@ const upload = (store: Awaited<ReturnType<typeof createFilesystemMediaStore>>, f
 const bytePath = (root: string, bytes = PNG) => join(root, "versions", mediaVersionUrl(digest(bytes), bytes === PDF ? "application/pdf" : "image/png").split("/").at(-1)!);
 
 describe("versioned global Media store", () => {
+  it("persists exact sibling insertion and moves with snapshot CAS", async () => {
+    const root = await sandbox(); const store = await createFilesystemMediaStore(options(root));
+    const create = async (name: string, index: number, parentId: string | null = null) => store.createFolder({ name, parentId, index }, await store.mutationToken());
+    const a = await create("A", 0); const c = await create("C", 1); const b = await create("B", 1);
+    expect((await store.snapshot()).folders.map(({ name }) => name)).toEqual(["A", "B", "C"]);
+    const before = await store.mutationToken();
+    await store.updateFolder(c.id, { index: 0 }, { expectedRevision: c.revision, expectedMutationToken: before });
+    await expect(store.updateFolder(b.id, { index: 0 }, { expectedRevision: b.revision, expectedMutationToken: before })).rejects.toMatchObject({ code: "conflict" });
+    await store.updateFolder(b.id, { parentId: a.id, index: 0 }, { expectedRevision: b.revision, expectedMutationToken: await store.mutationToken() });
+    const snapshot = await (await createFilesystemMediaStore(options(root))).snapshot();
+    expect(snapshot.folders.filter(({ parentId }) => parentId === null).map(({ name }) => name)).toEqual(["C", "A"]);
+    expect(snapshot.folders.filter(({ parentId }) => parentId === a.id).map(({ name }) => name)).toEqual(["B"]);
+    await expect(create("Outside", 10)).rejects.toMatchObject({ code: "validation" });
+  });
   it("syncs byte-directory publication before the catalog and catalog parent before acknowledgment", async () => {
     const root = await fs.realpath(await sandbox()); const events: string[] = [];
     const store = await createFilesystemMediaStore(options(root, { operations: {

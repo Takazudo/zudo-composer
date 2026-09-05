@@ -41,6 +41,18 @@ function setup(
 }
 
 describe("Media upload", () => {
+  it("retries a failed file explicitly and never offers blind uncertain-commit retry", async () => {
+    const upload = vi.fn<MediaUploadStore["upload"]>().mockRejectedValueOnce(new Error("temporary write failure")).mockResolvedValue(record("retry.png"));
+    const { input } = setup(upload);
+    fireEvent.change(input, { target: { files: [file("retry.png")] } });
+    const retry = await screen.findByRole("button", { name: "Retry upload" });
+    await waitFor(() => expect(retry).toBeEnabled()); fireEvent.click(retry);
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText("Stored", { exact: true })).toBeTruthy());
+    upload.mockRejectedValueOnce(Object.assign(new Error("Inspect exact catalog state"), { code: "commit-uncertain" }));
+    fireEvent.change(input, { target: { files: [file("uncertain.png")] } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Retry upload" })).toBeDisabled());
+  });
   it("offers the explicit native picker, resets it before awaiting, and allows a same-file re-pick", async () => {
     const first = deferred<MediaRecord>();
     const upload = vi.fn<MediaUploadStore["upload"]>().mockReturnValueOnce(first.promise).mockResolvedValue(record("same.png"));
