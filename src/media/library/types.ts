@@ -100,7 +100,7 @@ export interface MediaMutationPrecondition {
   expectedMutationToken?: string;
 }
 export interface MediaMetadataPatch { fileName?: string; folderId?: string | null; note?: string }
-export interface MediaFolderPatch { name?: string; parentId?: string | null }
+export interface MediaFolderPatch { name?: string; parentId?: string | null; index?: number }
 export interface MediaListOptions { state?: "active" | "trash" | "all"; folderId?: string | null }
 export const MEDIA_VERSIONED_CAPABILITIES = Object.freeze({ folders: true, metadata: true, replace: true,
   trash: true, restore: true, exactVersions: true, snapshot: true, permanentDelete: false } as const);
@@ -113,7 +113,7 @@ export interface VersionedMediaStore extends MediaStore {
   updateMetadata(id: string, patch: MediaMetadataPatch, precondition: MediaMutationPrecondition): Promise<MediaRecord>;
   trash(id: string, precondition: MediaMutationPrecondition): Promise<MediaRecord>;
   restore(id: string, precondition: MediaMutationPrecondition): Promise<MediaRecord>;
-  createFolder(input: { name: string; parentId: string | null }, expectedMutationToken: string): Promise<MediaFolder>;
+  createFolder(input: { name: string; parentId: string | null; index?: number }, expectedMutationToken: string): Promise<MediaFolder>;
   updateFolder(id: string, patch: MediaFolderPatch, precondition: MediaMutationPrecondition): Promise<MediaFolder>;
   trashFolder(id: string, precondition: MediaMutationPrecondition): Promise<MediaFolder>;
   restoreFolder(id: string, precondition: MediaMutationPrecondition): Promise<MediaFolder>;

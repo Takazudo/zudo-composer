@@ -3,15 +3,17 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Dashboard } from "./app/dashboard";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "./app/provider-integration";
 import { WorkspaceContext, useWorkspace } from "./app/workspace-context";
-import { parseIntent } from "./app/route-intents";
+import { parseIntent, formatIntent } from "./app/route-intents";
 import { Button } from "./components/ui";
-import type { WorkspaceRecord } from "./app/workspace-storage";
+import { workspaceDatabaseName, type WorkspaceRecord } from "./app/workspace-storage";
+import { CONTENT_DATABASE_NAME } from "./content";
+import { subscribePersistenceChanges } from "./shared/persistence-generation";
 import { Shell } from "./app/shell";
 import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
 import { ContentRouteContent } from "./features/content";
 import { MappingRouteContent } from "./features/mapping";
-import { MediaRouteContent } from "./features/media";
+import { MediaRouteContent, createMediaContentServices } from "./features/media";
 import { SitemapperRouteContent } from "./features/sitemapper";
 import { SiteDelivery } from "./features/delivery/site-delivery";
 import { isSitePath } from "./features/delivery/routing";
@@ -159,6 +161,14 @@ export function App({ themeController, integration }: AppProps = {}) {
   // One read model for the whole chrome; the rail's counts come from it, and
   // the Dashboard route reuses this instance rather than initializing a second.
   const workspaceSummary = useMemo(() => createWorkspaceSummary(providers), [providers]);
+  const mediaContentServices = useMemo(() => createMediaContentServices(
+    providers.contentProviders,
+    () => providers.sessions.flush(),
+    (listener) => subscribePersistenceChanges((database) => {
+      const workspaceId = providers.workspace.id;
+      if (workspaceId && database === workspaceDatabaseName(CONTENT_DATABASE_NAME, workspaceId)) listener();
+    }),
+  ), [providers]);
   useEffect(() => () => workspaceSummary.dispose?.(), [workspaceSummary]);
   const path = new URL(location, window.location.origin).pathname;
   useEffect(() => { if (path === "/sitemapper") void providers.compositionCatalog.listCompositions().catch(() => undefined); }, [path, providers]);
@@ -173,7 +183,7 @@ export function App({ themeController, integration }: AppProps = {}) {
   else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} />;
   else if (path === "/mapping") content = <MappingRouteContent provider={target?.route === "mapping" ? providers.mappingProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
-  else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} />;
+  else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} contentServices={mediaContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;
   else if (path === "/") content = <Dashboard summary={workspaceSummary} />;
   else if (path === "/review") content = <main class="route-placeholder"><h1>Review & release</h1><p>Release checks and activation are not available in this workspace yet.</p><p>Preview does not approve or publish changes.</p></main>;
   else if (path === "/website-preview") content = <WebsitePreview />;

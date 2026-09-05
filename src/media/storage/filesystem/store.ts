@@ -336,8 +336,8 @@ export class FilesystemMediaStore implements VersionedMediaStore {
   clear(): Promise<void> {
     return Promise.reject(operationError("clear", "blocked", "Permanent purge is unavailable. Trash individual assets with metadata preconditions."));
   }
-  createFolder(input: { name: string; parentId: string | null }, expectedMutationToken: string): Promise<MediaFolder> {
-    if (!isPlainObject(input) || Object.keys(input).length !== 2 || !("name" in input) || !("parentId" in input)) return Promise.reject(operationError("folder", "validation", "Folder input requires name and parentId."));
+  createFolder(input: { name: string; parentId: string | null; index?: number }, expectedMutationToken: string): Promise<MediaFolder> {
+    if (!isPlainObject(input) || Object.keys(input).some((key) => !["name", "parentId", "index"].includes(key)) || !("name" in input) || !("parentId" in input)) return Promise.reject(operationError("folder", "validation", "Folder input requires name and parentId."));
     if (typeof expectedMutationToken !== "string") return Promise.reject(operationError("folder", "validation", "Folder creation requires a snapshot mutation token."));
     input = structuredClone(input);
     return this.mutate("folder", expectedMutationToken, async (snapshot) => {
@@ -345,17 +345,29 @@ export class FilesystemMediaStore implements VersionedMediaStore {
       const folder: MediaFolder = { id: this.mintId(snapshot), name: input.name, parentId: input.parentId,
         state: "active", revision: 1, createdAt: timestamp, updatedAt: timestamp };
       snapshot.folders.push(folder);
+      if (input.index !== undefined) this.placeFolder(snapshot, folder, input.index);
       return folder;
     });
   }
   updateFolder(id: string, patch: MediaFolderPatch, precondition: MediaMutationPrecondition): Promise<MediaFolder> {
-    if (!patch || Object.keys(patch).length === 0 || Object.keys(patch).some((key) => !["name", "parentId"].includes(key)))
+    if (!patch || Object.keys(patch).length === 0 || Object.keys(patch).some((key) => !["name", "parentId", "index"].includes(key)))
       return Promise.reject(operationError("folder", "validation", "Unsupported or empty folder patch."));
     patch = structuredClone(patch);
-    return this.editFolder(id, precondition, (folder) => {
+    if (patch.index !== undefined && precondition?.expectedMutationToken === undefined) return Promise.reject(operationError("folder", "validation", "Indexed folder moves require the snapshot token."));
+    return this.editFolder(id, precondition, (folder, snapshot) => {
       if (folder.state !== "active") throw operationError("folder", "validation", "Restore the folder before editing it.");
-      Object.assign(folder, structuredClone(patch));
+      const { index, ...metadata } = patch;
+      Object.assign(folder, metadata);
+      if (index !== undefined) this.placeFolder(snapshot, folder, index);
     });
+  }
+  private placeFolder(snapshot: MediaSnapshot, folder: MediaFolder, index: number): void {
+    const remaining = snapshot.folders.filter(({ id }) => id !== folder.id);
+    const siblings = remaining.filter((item) => item.parentId === folder.parentId && item.state === "active");
+    if (!Number.isSafeInteger(index) || index < 0 || index > siblings.length) throw operationError("folder", "validation", "Folder insertion index is outside the current sibling list.");
+    const before = siblings[index];
+    remaining.splice(before ? remaining.indexOf(before) : remaining.length, 0, folder);
+    snapshot.folders = remaining;
   }
   trashFolder(id: string, precondition: MediaMutationPrecondition): Promise<MediaFolder> {
     return this.editFolder(id, precondition, (folder, snapshot) => {

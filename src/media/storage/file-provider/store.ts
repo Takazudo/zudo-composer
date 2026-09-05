@@ -58,7 +58,7 @@ class BrowserFileProviderMediaStore implements MediaFileProviderStore {
   updateMetadata(id: string, patch: MediaMetadataPatch, precondition: MediaMutationPrecondition) { return this.json<MediaRecord>("metadata", { patch, precondition }, id); }
   trash(id: string, precondition: MediaMutationPrecondition) { return this.json<MediaRecord>("trash", { precondition }, id); }
   restore(id: string, precondition: MediaMutationPrecondition) { return this.json<MediaRecord>("restore", { precondition }, id); }
-  createFolder(input: { name: string; parentId: string | null }, expectedMutationToken: string) { return this.json<MediaFolder>("create-folder", { input, expectedMutationToken }); }
+  createFolder(input: { name: string; parentId: string | null; index?: number }, expectedMutationToken: string) { return this.json<MediaFolder>("create-folder", { input, expectedMutationToken }); }
   updateFolder(id: string, patch: MediaFolderPatch, precondition: MediaMutationPrecondition) { return this.json<MediaFolder>("update-folder", { patch, precondition }, id); }
   trashFolder(id: string, precondition: MediaMutationPrecondition) { return this.json<MediaFolder>("trash-folder", { precondition }, id); }
   restoreFolder(id: string, precondition: MediaMutationPrecondition) { return this.json<MediaFolder>("restore-folder", { precondition }, id); }

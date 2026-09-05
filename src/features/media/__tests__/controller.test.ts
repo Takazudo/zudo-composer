@@ -1,143 +1,103 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMediaRecord, summarizeMedia, type MediaSummary, type MediaType } from "../../../media";
-import { createMediaLibraryController, mediaMarkdown, mediaPublicFileName, mediaUrl } from "../controller";
-import { createMemoryMediaProvider } from "../fixtures";
+import { summarizeMedia } from "../../../media";
+import { createWorkspaceSaveRegistry } from "../../../app/workspace-sessions";
+import { createMediaLibraryController, mediaMarkdown } from "../controller";
+import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture";
 
-const checksum = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
-function record(id: string, fileName = `${id}.png`) { return createMediaRecord({ fileName, mediaType: "image/png", byteLength: 3, checksum }, { id, timestamp: "2026-01-01T00:00:00.000Z" }); }
-function summary(id: string, fileName = `${id}.png`): MediaSummary { return summarizeMedia(record(id, fileName)); }
-function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((done) => { resolve = done; }); return { promise, resolve }; }
-
-describe("MediaLibraryController", () => {
-  it("publishes the store's listing and leaves no stale loading state behind", async () => {
-    const controller = createMediaLibraryController(createMemoryMediaProvider({ records: [record("hero")] }));
-    expect(controller.state).toMatchObject({ phase: "idle", records: [], errorMessage: null, notice: null });
-    await controller.initialize();
-    expect(controller.state).toMatchObject({ phase: "ready", records: [{ id: "hero" }], errorMessage: null });
+describe("versioned Media controller", () => {
+  it("never exposes a retryable upload failure after the write committed", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const snapshot = vi.spyOn(filesystem, "snapshot").mockRejectedValue(new Error("Read failed"));
+    await expect(controller.upload(new File([PNG], "committed.png", { type: "image/png" }), null)).rejects.toMatchObject({ code: "committed-stale" });
+    expect(controller.state.uncertain).toBe(true); expect(controller.capability("replace")).toBe(false);
+    await expect(controller.reload()).rejects.toThrow("Read failed"); expect(controller.state.uncertain).toBe(true);
+    snapshot.mockRestore(); await controller.reload();
+    expect(controller.state.records).toHaveLength(1); expect(controller.state.uncertain).toBe(false);
+    expect(controller.capability("replace")).toBe(true); await expect(controller.flush()).resolves.toBeUndefined();
   });
-
-  it("surfaces injected initialization failures and can retry", async () => {
-    const provider = createMemoryMediaProvider({ records: [record("hero")] });
-    const initialize = vi.spyOn(provider.initialization, "initialize").mockRejectedValueOnce(new Error("list offline"));
-    const controller = createMediaLibraryController(provider);
-    await controller.initialize();
-    expect(controller.state).toMatchObject({ phase: "error", errorMessage: "list offline" });
-    initialize.mockRestore();
-    await controller.retryInitialization();
-    expect(controller.state).toMatchObject({ phase: "ready", records: [{ id: "hero" }], errorMessage: null });
+  it("drains newer same-ID drafts before resolving the save barrier", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const original = filesystem.updateMetadata.bind(filesystem);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const update = vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => { await gate; return original(...args); });
+    controller.draftMetadata(summarizeMedia(record), { note: "First" });
+    const flushed = controller.flush(); await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    controller.draftMetadata(summarizeMedia(record), { note: "Newer" }); release(); await flushed;
+    expect(update).toHaveBeenCalledTimes(2); expect(controller.hasDraft(record.id)).toBe(false);
+    expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { note: "Newer" } } });
   });
-
-  it("ignores a stale listing response that resolves after a newer request", async () => {
-    const provider = createMemoryMediaProvider();
-    const older = deferred<readonly MediaSummary[]>(); const newer = deferred<readonly MediaSummary[]>();
-    vi.spyOn(provider.store, "list").mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
-    const controller = createMediaLibraryController(provider);
-    const first = controller.refresh(); const second = controller.refresh();
-    newer.resolve([summary("newer")]); await second;
-    older.resolve([summary("older")]); await first;
-    expect(controller.state.records.map(({ id }) => id)).toEqual(["newer"]);
+  it("recovers uncertain outcomes only after deliberate authoritative inspection", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    vi.spyOn(filesystem, "upload").mockRejectedValueOnce(Object.assign(new Error("Inspect storage"), { code: "commit-uncertain" }));
+    await expect(controller.upload(new File([PNG], "uncertain.png", { type: "image/png" }), null)).rejects.toMatchObject({ code: "commit-uncertain" });
+    expect(controller.state.uncertain).toBe(true);
+    await controller.refresh(); expect(controller.state.uncertain).toBe(true);
+    await controller.reload(); expect(controller.state.uncertain).toBe(false);
   });
-
-  it("does not publish async completions after disposal", async () => {
-    const provider = createMemoryMediaProvider(); const pending = deferred<readonly MediaSummary[]>();
-    vi.spyOn(provider.store, "list").mockReturnValueOnce(pending.promise);
-    const controller = createMediaLibraryController(provider); const listener = vi.fn(); controller.subscribe(listener);
-    const refresh = controller.refresh(); controller.dispose(); pending.resolve([summary("late")]); await refresh;
-    expect(controller.state.records).toEqual([]);
-    expect(listener).toHaveBeenCalledTimes(1);
+  it("fails closed for every mutation capability while loading or unreadable", async () => {
+    const { provider, filesystem } = await providerFixture(); const controller = createMediaLibraryController(provider);
+    expect(controller.capability("trash")).toBe(false); await controller.initialize();
+    const snapshot = vi.spyOn(filesystem, "snapshot").mockRejectedValue(new Error("Offline"));
+    const refresh = controller.refresh(); expect(controller.capability("replace")).toBe(false);
+    await expect(refresh).rejects.toThrow("Offline");
+    for (const capability of ["metadata", "trash", "restore", "folders", "replace"] as const) expect(controller.capability(capability)).toBe(false);
+    expect(() => controller.restore([])).toThrow("unavailable"); snapshot.mockRestore();
   });
-
-  it.each([
-    ["image/png", "png"],
-    ["image/jpeg", "jpg"],
-    ["image/gif", "gif"],
-    ["image/webp", "webp"],
-    ["application/pdf", "pdf"],
-  ] as const)("derives the id-keyed public filename for %s", (mediaType, extension) => {
-    const source = createMediaRecord({ fileName: "original.upload", mediaType: mediaType as MediaType, byteLength: 3, checksum }, { id: "asset-1", timestamp: "2026-01-01T00:00:00.000Z" });
-    const asset = summarizeMedia(source);
-    expect(mediaPublicFileName(asset)).toBe(`media-asset-1.${extension}`);
-    expect(mediaUrl(asset)).toBe(`/uploaded-media/media-asset-1.${extension}`);
+  it("persists metadata drafts through detached workspace-session flush", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const registry = createWorkspaceSaveRegistry();
+    const session = registry.register({ feature: "Media", providerId: provider.descriptor.id }, { flush: () => controller.flush() });
+    controller.draftMetadata(summarizeMedia(record), { fileName: "renamed.png", note: "Internal note" }); session.changed();
+    controller.dispose(); session.detach();
+    expect((await registry.flush()).status).toBe("ready");
+    expect(await filesystem.get(record.id)).toMatchObject({ status: "loaded", record: { document: { fileName: "renamed.png", note: "Internal note" } } });
   });
-
-  it("copies renderable Markdown and treats reference results as advisory data", async () => {
-    const writeClipboard = vi.fn(); const scanReferences = vi.fn().mockResolvedValue(["Content: Home"]);
-    const controller = createMediaLibraryController(createMemoryMediaProvider({ records: [record("hero", "hero image.png")] }), { writeClipboard, scanReferences });
-    await controller.initialize(); const asset = controller.state.records[0]!;
-    await controller.copyMarkdown(asset); await controller.scanDeleteReferences(asset);
-    expect(writeClipboard).toHaveBeenCalledWith("![hero image](/uploaded-media/media-hero.png)");
-    expect(mediaMarkdown(asset)).toBe("![hero image](/uploaded-media/media-hero.png)");
-    expect(scanReferences).toHaveBeenCalledWith("/uploaded-media/media-hero.png");
-    expect(controller.state.referenceScan).toEqual({ status: "complete", mediaId: "hero", references: ["Content: Home"] });
+  it("preserves identity and old versions through move, replace, guarded trash and restore", async () => {
+    const { provider, filesystem } = await providerFixture(); const contentServices = completeServices();
+    const original = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider, { contentServices }); await controller.initialize();
+    const folder = await controller.createFolder("Assets", null, 0, controller.state.snapshot!.mutationToken);
+    await controller.move(controller.state.records, folder.id);
+    await controller.replace(controller.state.records[0]!, new File([PDF], "new.pdf", { type: "application/pdf" }));
+    expect(controller.state.records[0]!.id).toBe(original.id);
+    expect(controller.state.snapshot!.records[0]!.document.versions).toHaveLength(2);
+    await controller.trash(controller.state.records); expect(controller.state.records[0]!.state).toBe("trash");
+    await controller.restore(controller.state.records); expect(controller.state.records[0]!.state).toBe("active");
+    expect(mediaMarkdown(controller.state.records[0]!)).toContain(`/uploaded-media/asset-${original.id}`);
+    expect(await filesystem.resolveVersion({ providerId: provider.descriptor.id, assetId: original.id, versionId: original.document.currentVersionId })).toBeDefined();
   });
-
-  it("copies the public URL and reports each copy as one dismissible notice", async () => {
-    const writeClipboard = vi.fn();
-    const controller = createMediaLibraryController(createMemoryMediaProvider({ records: [record("hero")] }), { writeClipboard });
-    await controller.initialize(); const asset = controller.state.records[0]!;
-    await controller.copyUrl(asset);
-    expect(writeClipboard).toHaveBeenCalledWith("/uploaded-media/media-hero.png");
-    expect(controller.state.notice).toEqual({ tone: "info", text: "Copied the public URL for hero.png." });
-    controller.clearNotice();
-    expect(controller.state.notice).toBeNull();
+  it.each(["unavailable", "incomplete", "used", "changed"])("blocks trash when safety is %s", async (condition) => {
+    const { provider, filesystem } = await providerFixture();
+    await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const services = completeServices({ scan: async () => ({ status: condition === "incomplete" ? "incomplete" : condition === "unavailable" ? "unavailable" : "complete", locations: condition === "used" ? [{} as never] : [], tokens: {}, message: "Guard" }), isCurrent: async () => condition !== "changed" });
+    const controller = createMediaLibraryController(provider, { contentServices: services }); await controller.initialize();
+    await expect(controller.trash(controller.state.records)).rejects.toThrow();
+    expect((await filesystem.list())[0]!.state).toBe("active");
   });
-
-  it("escapes structural Markdown characters in display filenames", () => {
-    expect(mediaMarkdown(summary("diagram", "hero [draft].png"))).toBe(String.raw`![hero \[draft\]](/uploaded-media/media-diagram.png)`);
+  it("rejects stale metadata and reports the actual state after a partial bulk failure", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const one = await filesystem.upload({ fileName: "one.png", declaredMediaType: "image/png", bytes: PNG });
+    const two = await filesystem.upload({ fileName: "two.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const folder = await filesystem.createFolder({ name: "Destination", parentId: null }, await filesystem.mutationToken());
+    await filesystem.updateMetadata(two.id, { note: "Other tab" }, { expectedRevision: 1 });
+    await expect(controller.move([summarizeMedia(one), summarizeMedia(two)], folder.id)).rejects.toMatchObject({ code: "conflict" });
+    expect(controller.state.records.find(({ id }) => id === one.id)!.folderId).toBe(folder.id);
+    expect(controller.state.records.find(({ id }) => id === two.id)!.folderId).toBe(null);
+    expect(controller.state.notice?.tone).toBe("err");
   });
-
-  it("drops every asset a bulk delete actually removed, and reports the one that failed", async () => {
-    const provider = createMemoryMediaProvider({ records: [record("one"), record("two"), record("three")] });
-    const controller = createMediaLibraryController(provider);
-    await controller.initialize();
-    const byId = new Map(controller.state.records.map((asset) => [asset.id, asset]));
-    vi.spyOn(provider.store, "delete").mockImplementation(async (id) => {
-      if (id === "two") throw new Error("The store went away.");
-      return true;
-    });
-
-    await controller.deleteMedia([byId.get("one")!, byId.get("two")!, byId.get("three")!]);
-    // "one" is gone, "two" failed and stopped the run, so "three" was never tried.
-    expect(controller.state.records.map(({ id }) => id)).toEqual(["three", "two"]);
-    expect(controller.state.notice).toEqual({ tone: "err", text: "The store went away." });
-  });
-
-  it("names the single asset it deleted and counts a bulk deletion", async () => {
-    const provider = createMemoryMediaProvider({ records: [record("one"), record("two")] });
-    const controller = createMediaLibraryController(provider);
-    await controller.initialize();
-    const [first, second] = controller.state.records;
-
-    await controller.deleteMedia([first!]);
-    expect(controller.state.notice).toEqual({ tone: "info", text: `Deleted ${first!.fileName}.` });
-    await controller.deleteMedia([second!]);
-    expect(controller.state.records).toEqual([]);
-    expect(await provider.store.list()).toEqual([]);
-  });
-
-  it("keeps a quarantine visible across the refresh an upload triggers", async () => {
-    const provider = createMemoryMediaProvider({ records: [record("valid")] });
-    const valid = record("valid");
-    vi.spyOn(provider.initialization, "initialize").mockResolvedValue({
-      status: "recovery-required",
-      summaries: [summarizeMedia(valid)],
-      recovery: { kind: "quarantined", reason: "future-schema", sourcePreserved: true, affectedRecordIds: ["future"], message: "A newer record was preserved." },
-    });
-    const controller = createMediaLibraryController(provider);
-    await controller.initialize();
-    expect(controller.state).toMatchObject({ phase: "recovery", recoveryMessage: "A newer record was preserved." });
-
-    // A listing reports only the records that read correctly, so it is no
-    // answer to the quarantine.
-    await controller.refresh();
-    expect(controller.state).toMatchObject({ phase: "recovery", records: [{ id: "valid" }] });
-  });
-
-  it("reports a failure raised by a caller-run action as an error notice", () => {
-    const controller = createMediaLibraryController(createMemoryMediaProvider());
-    controller.reportFailure(new Error("Clipboard access is unavailable."));
-    expect(controller.state.notice).toEqual({ tone: "err", text: "Clipboard access is unavailable." });
-    controller.reportFailure("not an error");
-    expect(controller.state.notice).toEqual({ tone: "err", text: "Media action failed." });
+  it("does not enable writes based on a method name without capabilities", async () => {
+    const { provider } = await providerFixture();
+    const readonly = { ...provider, store: { provider: provider.descriptor, list: provider.store.list, get: provider.store.get, put: provider.store.put, delete: provider.store.delete, clear: provider.store.clear, upload: vi.fn() } };
+    const controller = createMediaLibraryController(readonly);
+    expect(controller.capability("replace")).toBe(false);
+    expect(() => controller.upload(new File([PNG], "x.png"), null)).toThrow("unavailable");
   });
 });
