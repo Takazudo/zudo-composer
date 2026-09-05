@@ -13,7 +13,15 @@ export type ContentModelKind = "collection" | "single";
 
 export interface ContentRecordRef { providerId: string; recordId: RecordId }
 export interface ContentEntryRef extends ContentRecordRef { modelId: RecordId }
-export interface ContentAssetRef { assetId: string }
+/**
+ * Stable authoring identity for a managed Media asset.
+ *
+ * Content deliberately does not persist a versionId: the current Media head
+ * may change while a draft is being edited. The provider-qualified shape is
+ * shared structurally with MediaAssetRef so release can add an exact version
+ * without losing which Media provider owns the asset.
+ */
+export type ContentAssetRef = { providerId: string; assetId: string };
 export type ContentMediaUse =
   | { kind: "image"; asset: ContentAssetRef; alt: string; decorative: boolean; caption: string }
   | { kind: "link"; asset: ContentAssetRef; label: string }

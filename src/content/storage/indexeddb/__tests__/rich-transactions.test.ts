@@ -25,7 +25,7 @@ describe("Rich Content transactions and durable snapshots", () => {
       { id: "image", key: "image", label: "Image", required: false, kind: "media-use", use: "image" },
     ] };
     const schema = model(); schema.document.fields.push(rich); await store.putModel(schema);
-    const saved = entry("a"); saved.values.details = { choices: ["a", "a"], image: { kind: "image", asset: { assetId: "asset" }, alt: "A", decorative: false, caption: "B" } };
+    const saved = entry("a"); saved.values.details = { choices: ["a", "a"], image: { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, alt: "A", decorative: false, caption: "B" } };
     await store.putEntry(saved);
     const snapshot = await store.readAll(); expect(snapshot.entries[0]!.values).toEqual(saved.values);
     const changed = structuredClone(schema); (changed.document.fields[2] as typeof rich).fields[0] = { id: "choices", key: "choices", label: "Choices", required: true, kind: "list", item: { kind: "choice", options: [{ value: "b", label: "B" }] } };

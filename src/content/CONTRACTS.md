@@ -21,9 +21,12 @@ depth is bounded at 16. Models retain collection/single cardinality.
   unique references. Stored order is always preserved, including ordered edits.
 - `object`: nested `fields`; `list`: recursive `item` schema.
 - `media-use`: schema selects `use: "image" | "link" | "card"`. Values contain
-  `{kind,asset:{assetId}}` plus image `{alt,decorative,caption}`, link `{label}`,
+  `{kind,asset:{providerId,assetId}}` plus image `{alt,decorative,caption}`, link `{label}`,
   or card `{title,description}`. Decorative image alt must be empty. Asset notes
-  never supply alt. Byte versions are pinned by the Media/release layer.
+  never supply alt. The provider-qualified asset identity is stable authoring
+  data; it deliberately has no version ID. The Media/release layer resolves the
+  current active head under a durable mutation token and pins the exact
+  immutable version in a release candidate.
 
 `isValueValidForField` validates saved types and date/URL/choice/ref/media
 semantics. Date/URL empty strings and absent required fields remain savable.

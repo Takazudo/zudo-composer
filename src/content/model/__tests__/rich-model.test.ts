@@ -17,9 +17,9 @@ describe("Rich Content schema", () => {
     [{ kind: "reference", target }, ref], [{ kind: "reference-list", target, ordered: true }, [ref]],
     [{ kind: "object", fields: [field({ kind: "boolean" }, "flag")] }, { flag: false }],
     [{ kind: "list", item: { kind: "number" } }, [0, 1]],
-    [{ kind: "media-use", use: "image" }, { kind: "image", asset: { assetId: "asset" }, alt: "A diagram", decorative: false, caption: "Caption" }],
-    [{ kind: "media-use", use: "link" }, { kind: "link", asset: { assetId: "asset" }, label: "Read the PDF" }],
-    [{ kind: "media-use", use: "card" }, { kind: "card", asset: { assetId: "asset" }, title: "Card title", description: "Card details" }],
+    [{ kind: "media-use", use: "image" }, { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, alt: "A diagram", decorative: false, caption: "Caption" }],
+    [{ kind: "media-use", use: "link" }, { kind: "link", asset: { providerId: "media-files", assetId: "asset" }, label: "Read the PDF" }],
+    [{ kind: "media-use", use: "card" }, { kind: "card", asset: { providerId: "media-files", assetId: "asset" }, title: "Card title", description: "Card details" }],
   ] as const)("round trips %j", (schema, value) => {
     const model = createContentModelRecord({ name: "Items", kind: "collection", description: "Rich content", fields: [field(structuredClone(schema) as ContentValueSchema)] }, { id: "items", timestamp });
     const entry = createContentEntryRecord("items", { value }, { id: "entry", timestamp });
@@ -36,8 +36,8 @@ describe("Rich Content schema", () => {
     expect(isValueValidForField({ kind: "choice", options: [{ value: "a", label: "A" }] }, "b")).toBe(false);
     expect(isValueValidForField({ kind: "reference", target }, { ...ref, modelId: "wrong" })).toBe(false);
     expect(isValueValidForField({ kind: "reference-list", target, ordered: true }, [ref, ref])).toBe(false);
-    expect(isValueValidForField({ kind: "media-use", use: "image" }, { kind: "image", asset: { assetId: "asset" }, notes: "Not alt" })).toBe(false);
-    expect(isValueValidForField({ kind: "media-use", use: "image" }, { kind: "image", asset: { assetId: "asset" }, alt: "Wrong", decorative: true, caption: "" })).toBe(false);
+    expect(isValueValidForField({ kind: "media-use", use: "image" }, { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, notes: "Not alt" })).toBe(false);
+    expect(isValueValidForField({ kind: "media-use", use: "image" }, { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, alt: "Wrong", decorative: true, caption: "" })).toBe(false);
   });
 
   it("keeps empty required lists incomplete and false/zero complete, including nested values", () => {
@@ -48,7 +48,7 @@ describe("Rich Content schema", () => {
       field({ kind: "object", fields: [field({ kind: "text" }, "title")] }, "object"),
       field({ kind: "media-use", use: "image" }, "image"),
     ] }, { id: "items", timestamp });
-    const entry = createContentEntryRecord("items", { flag: false, number: 0, list: [], refs: [], object: {}, image: { kind: "image", asset: { assetId: "asset" }, alt: "", decorative: false, caption: "" } }, { id: "entry", timestamp });
+    const entry = createContentEntryRecord("items", { flag: false, number: 0, list: [], refs: [], object: {}, image: { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, alt: "", decorative: false, caption: "" } }, { id: "entry", timestamp });
     expect(diagnoseContentEntryCompleteness(model, entry).map((issue) => issue.path)).toEqual([["list"], ["refs"], ["object", "title"], ["image"]]);
     expect(isValueValidForField(model.document.fields[5]!, entry.values.image)).toBe(true);
   });
@@ -67,7 +67,7 @@ describe("Rich Content schema", () => {
   });
 
   it("projects only per-use media text and traverses ordered nested leaves", () => {
-    const use = { kind: "image" as const, asset: { assetId: "asset" }, alt: "Per-use alt", decorative: false, caption: "Caption" };
+    const use = { kind: "image" as const, asset: { providerId: "media-files", assetId: "asset" }, alt: "Per-use alt", decorative: false, caption: "Caption" };
     expect(projectContentMediaUse(use, "/immutable.png")).toEqual({ src: "/immutable.png", alt: "Per-use alt", decorative: false, caption: "Caption" });
     const model = createContentModelRecord({ name: "Items", kind: "collection", fields: [field({ kind: "list", item: { kind: "object", fields: [field({ kind: "media-use", use: "image" }, "image")] } })] }, { id: "items", timestamp });
     const entry = createContentEntryRecord("items", { value: [{ image: use }, { image: use }] }, { id: "entry", timestamp });

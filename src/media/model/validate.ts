@@ -7,7 +7,7 @@ import {
   MEDIA_TYPES,
   mediaVersionUrl,
 } from "./types";
-import type { MediaRecord, MediaType, MediaSnapshot, MediaFolder, MediaVersionRef, MediaVersionPin, MediaPinManifest } from "./types";
+import type { MediaRecord, MediaType, MediaSnapshot, MediaFolder, MediaAssetRef, MediaVersionRef, MediaVersionPin, MediaPinManifest } from "./types";
 
 const RECORD_KEYS = ["id", "revision", "createdAt", "updatedAt", "document"] as const;
 const DOCUMENT_KEYS = ["schemaVersion", "id", "fileName", "folderId", "note", "state", "currentVersionId", "versions"] as const;
@@ -145,9 +145,13 @@ export function isMediaRevision(value: unknown): value is number {
 export function mediaPinKey(ref: MediaVersionRef): string {
   return JSON.stringify([ref.providerId, ref.assetId, ref.versionId]);
 }
+export function validateMediaAssetRef(value: unknown): value is MediaAssetRef {
+  return isPlainObject(value) && exactKeys(value, ["providerId", "assetId"])
+    && isSafeRecordId(value.providerId) && isSafeRecordId(value.assetId);
+}
 export function validateMediaVersionRef(value: unknown): value is MediaVersionRef {
   return isPlainObject(value) && exactKeys(value, ["providerId", "assetId", "versionId"])
-    && isSafeRecordId(value.providerId) && isSafeRecordId(value.assetId) && isValidMediaChecksum(value.versionId);
+    && validateMediaAssetRef({ providerId: value.providerId, assetId: value.assetId }) && isValidMediaChecksum(value.versionId);
 }
 export function validateMediaVersionPin(value: unknown, expected?: MediaVersionRef): value is MediaVersionPin {
   if (!isPlainObject(value) || !exactKeys(value, ["providerId", "assetId", "versionId", "checksum", "byteLength", "mediaType", "url"])) return false;
