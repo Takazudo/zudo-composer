@@ -130,6 +130,9 @@ describe("SitemapCanvas", () => {
     expect(canvasStageMargin(1000, 500, 1)).toBe(250);
     expect(canvasStageMargin(500, 1000, 0.5)).toBe(0);
     expect(canvasStageMargin(800, 100, 1)).toBe(350);
+    expect(canvasStageMargin(1000, 500, 0.4)).toBe(400);
+    expect(canvasStageMargin(1000, 500, 0.5)).toBe(375);
+    expect(canvasStageMargin(1000, 500, MAX_CANVAS_ZOOM)).toBe(125);
   });
 
   it("exposes explicit layout choices while keeping Auto as the responsive default", async () => {

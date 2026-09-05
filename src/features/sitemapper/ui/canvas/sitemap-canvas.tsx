@@ -84,7 +84,9 @@ export function fitCanvasZoom(viewportWidth: number, viewportHeight: number, con
 
 export function canvasStageMargin(viewportSize: number, contentSize: number, zoom: number): number {
   if (zoom <= 0) return 0;
-  return Math.max(0, (viewportSize - contentSize * zoom) / (2 * zoom));
+  // The stage is positioned outside its own scale transform, so this is a
+  // visual pixel margin. Dividing by zoom would double it at 50%.
+  return Math.max(0, (viewportSize - contentSize * zoom) / 2);
 }
 
 export function SitemapCanvas({
