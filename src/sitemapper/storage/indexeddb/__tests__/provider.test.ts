@@ -1,5 +1,7 @@
 import { IDBFactory as FDBFactory } from "fake-indexeddb";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { subscribePersistenceChanges } from "../../../../shared/persistence-generation";
+import { workspaceDatabaseName, workspaceScopedFactory } from "../../../../app/workspace-storage";
 import { isSitemapCollectionStore, SitemapPersistenceError } from "../../../library";
 import type { SitemapRecord } from "../../../library";
 import { SITEMAP_SCHEMA_VERSION } from "../../../model";
@@ -53,6 +55,51 @@ async function seedRaw(factory: IDBFactory, value: unknown): Promise<void> {
 }
 
 describe("IndexedDB Sitemap provider", () => {
+  it.each([false, true])("preserves old physical/schema metadata until explicit reset (has records: %s)", async (hasRecords) => {
+    const factory = new FDBFactory();
+    const open = factory.open(SITEMAPPER_DATABASE_NAME, 1);
+    const old = { ...record("old"), document: { ...record("old").document, schemaVersion: 2 } };
+    open.onupgradeneeded = () => {
+      const records = open.result.createObjectStore(SITEMAPS_STORE_NAME, { keyPath: "id" }); records.createIndex(UPDATED_AT_INDEX_NAME, "updatedAt");
+      if (hasRecords) records.put(old);
+      const meta = open.result.createObjectStore(META_STORE_NAME, { keyPath: "key" });
+      meta.put({ key: "schema", databaseVersion: 1, recordSchemaVersion: 2 }); meta.put({ key: "mutation", token: 0 });
+    };
+    (await request(open)).close();
+    const provider = createIndexedDbSitemapProvider({ idbFactory: factory });
+    expect(await provider.initialization.initialize()).toMatchObject({ status: "error", error: { code: "unsupported-version" } });
+    const preserved = await request(factory.open(SITEMAPPER_DATABASE_NAME, 1));
+    expect(await request(preserved.transaction(SITEMAPS_STORE_NAME).objectStore(SITEMAPS_STORE_NAME).getAll())).toEqual(hasRecords ? [old] : []);
+    preserved.close();
+    expect(await provider.initialization.startFresh()).toEqual({ status: "ready", summaries: [] });
+    const current = await inspectDatabase(factory); expect(current.version).toBe(3);
+    expect(await request(current.transaction(META_STORE_NAME).objectStore(META_STORE_NAME).get("schema"))).toEqual({ key: "schema", databaseVersion: 3, recordSchemaVersion: 3 });
+    current.close();
+  });
+  it("rejects stale metadata in an empty current physical database on every operation", async () => {
+    const factory = new FDBFactory(); const provider = createIndexedDbSitemapProvider({ idbFactory: factory });
+    await provider.initialization.initialize(); const db = await inspectDatabase(factory);
+    const tx = db.transaction(META_STORE_NAME, "readwrite"); tx.objectStore(META_STORE_NAME).put({ key: "schema", databaseVersion: 3, recordSchemaVersion: 2 }); await complete(tx); db.close();
+    expect(await provider.initialization.initialize()).toMatchObject({ status: "error", error: { code: "unsupported-version" } });
+    await expect(provider.store.put(record("new"))).rejects.toMatchObject({ code: "unsupported-version" });
+    expect(await provider.initialization.startFresh()).toMatchObject({ status: "ready" });
+    await expect(provider.store.put(record("new"))).resolves.toBeUndefined();
+  });
+  it("keeps blocked reset pending until deletion completes and notifies the exact workspace database", async () => {
+    const rawFactory = new FDBFactory(); const factory = workspaceScopedFactory(rawFactory, () => "sitemap-reset")!;
+    const provider = createIndexedDbSitemapProvider({ idbFactory: factory }); await provider.initialization.initialize();
+    await provider.store.put(record("old"));
+    const blocker = await inspectDatabase(factory); let blocked = false;
+    blocker.onversionchange = () => { blocked = true; };
+    const changed = vi.fn(); const stop = subscribePersistenceChanges(changed);
+    let settled = false;
+    const reset = provider.initialization.startFresh().then((result) => { settled = true; return result; });
+    await vi.waitFor(() => expect(blocked).toBe(true));
+    expect(settled).toBe(false); expect(changed).not.toHaveBeenCalled();
+    blocker.close(); expect(await reset).toEqual({ status: "ready", summaries: [] });
+    expect(changed).toHaveBeenCalledWith(workspaceDatabaseName(SITEMAPPER_DATABASE_NAME, "sitemap-reset")); stop();
+    expect(await provider.store.list()).toEqual([]);
+  });
   it("seeds multiple records atomically, preserves edits, and snapshots the collection", async () => {
     const provider = createIndexedDbSitemapProvider({ idbFactory: new FDBFactory(), seed: [record("alpha"), record("beta")] });
     expect(await provider.initialization.initialize()).toMatchObject({ status: "ready", summaries: expect.any(Array) });

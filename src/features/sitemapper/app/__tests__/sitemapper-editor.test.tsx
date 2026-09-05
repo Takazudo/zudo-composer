@@ -8,6 +8,9 @@ import { createSequentialIdFactory } from "../../../../shared";
 import type { CompositionCatalog } from "../../../../sitemapper/catalog";
 import type { SitemapRecord, SitemapStore } from "../../../../sitemapper/library";
 import { SitemapperIntegration } from "../sitemapper-integration";
+import * as routeServices from "../../../../sitemapper/routes";
+import { createContentModelRecord, createContentEntryRecord } from "../../../../content";
+import type { MappingRecord } from "../../../../mapping";
 
 class ResizeObserverStub {
   observe(): void {}
@@ -91,6 +94,18 @@ function toolbar(): HTMLElement {
 }
 
 describe("Sitemapper editor chrome", () => {
+  it.each(["entry-field", "selected-entry"] as const)("expands draft %s authoring routes with explicit preview policy", async (kind) => {
+    const model = createContentModelRecord({ name: "Drafts", kind: "collection", fields: [{ id: "slug", key: "slug", label: "Slug", kind: "slug", required: true }] }, { id: "drafts" });
+    const draft = createContentEntryRecord(model.id, { slug: "draft-path" }, { id: "draft" });
+    const value = record(); value.document.root[0]!.children = [];
+    value.document.root[0]!.source = { kind: "mapping", ref: { providerId: "mapping", recordId: "mapped" }, route: kind === "entry-field" ? { kind, fieldId: "slug" } : { kind, entry: { providerId: "content", modelId: model.id, recordId: draft.id } } };
+    const mapping: MappingRecord = { id: "mapped", createdAt: draft.createdAt, updatedAt: draft.updatedAt, document: { schemaVersion: 2, id: "mapped", name: "Mapped", contentModel: { providerId: "content", recordId: model.id }, composition: { providerId: "indexeddb", recordId: "page" }, mode: { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 10 } }, bindings: [] } };
+    const expand = vi.spyOn(routeServices, "expandSitemapRoutes");
+    render(<ChromeContext.Provider value={createChromeStore()}><SitemapperIntegration providerId="sitemap-indexeddb" record={value} store={fakeStore()} catalog={catalog} mappingCatalog={{ list: async () => ({ status: "listed" as const, entries: [], failures: [] }), routes: { list: async () => ({ status: "listed" as const, entries: [], failures: [] }), resolveMapping: async () => ({ status: "resolved", record: mapping }), resolveDefinitionReadiness: async () => ({ status: "ready" }), resolveContentSnapshot: async () => ({ status: "resolved", model, snapshot: { model, entries: [draft], count: 1, diagnostics: [] } }) } }} /></ChromeContext.Provider>);
+    await waitFor(() => expect(expand).toHaveBeenCalledWith(expect.objectContaining({ policy: "authoring-preview" })));
+    const result = await expand.mock.results[0]!.value;
+    expect(result.routes).toHaveLength(1); expect(result.routes[0].selectedEntry.recordId).toBe("draft"); expand.mockRestore();
+  });
   it("publishes its breadcrumb and save state to the application chrome", async () => {
     const { chrome } = renderEditor();
 
