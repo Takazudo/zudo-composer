@@ -2,10 +2,11 @@
  * Outline tree — no row moves (epic #156, issue #162).
  *
  * The insert affordance is the whole reason this spec exists. Between every
- * pair of sibling rows sits a container that is 0px high at all times; its hit
+ * pair of sibling rows sits a container that is 0px high on fine pointers; its hit
  * zone, dashed line, `+` tile and inline editor are all absolutely positioned
  * on the row boundary. That technique is only worth anything if it is true in a
  * real browser, so the proof is the one thing a unit test cannot give:
+ * Coarse pointers reserve a dedicated 44px insertion row. The proof compares
  * `getBoundingClientRect()` of every row, before and after hovering a gap and
  * while its inline editor is open.
  *
@@ -143,12 +144,20 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
   const hit = gap.locator(".cms-tree-insert__hit");
   const tile = gap.locator(".cms-tree-insert__btn");
 
-  await test.step("the container costs no height and its hit zone is reachable", async () => {
-    expect(await gap.evaluate((element) => element.getBoundingClientRect().height)).toBe(0);
+  await test.step("fine pointers use a boundary; coarse pointers reserve a dedicated insertion row", async () => {
+    expect(await gap.evaluate((element) => element.getBoundingClientRect().height)).toBe(coarseLane ? 44 : 0);
     const hitBox = await hit.boundingBox();
     expect(hitBox).not.toBeNull();
-    // ±0.55rem on a fine pointer, ±22px on a coarse one.
+    // ±0.55rem on a fine pointer; the full reserved row on a coarse pointer.
     expect(hitBox!.height).toBeGreaterThanOrEqual(coarseLane ? 40 : 16);
+    if (coarseLane) {
+      const tileBox = await tile.boundingBox();
+      expect(tileBox!.height).toBeGreaterThanOrEqual(44);
+      expect(tileBox!.width).toBeGreaterThanOrEqual(44);
+      const gapBox = await gap.boundingBox();
+      expect(tileBox!.y).toBeGreaterThanOrEqual(gapBox!.y);
+      expect(tileBox!.y + tileBox!.height).toBeLessThanOrEqual(gapBox!.y + gapBox!.height);
+    }
   });
 
   await hit.scrollIntoViewIfNeeded();
@@ -192,11 +201,13 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
 
     await input.press("Escape");
     await expect(editor).toHaveCount(0);
+    await expect(tile).toBeFocused();
     expect(await readGeometry(page)).toEqual(baseline);
   });
 
   await test.step("the affordance hides again and leaves the rows where they were", async () => {
     await page.mouse.move(0, 0);
+    await page.getByRole("treeitem").first().focus();
     if (!coarseLane) await expect.poll(() => opacityOf(tile)).toBe(0);
     expect(await readGeometry(page)).toEqual(baseline);
   });

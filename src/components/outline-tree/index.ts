@@ -10,6 +10,7 @@ export { OutlineTree } from "./outline-tree";
 export type {
   OutlineAddRequest,
   OutlineInsertTarget,
+  OutlineInsertSession,
   OutlineNode,
   OutlineNodeKind,
   OutlineStatus,

@@ -103,3 +103,41 @@ export function isSameTarget(a: OutlineInsertTarget | null, b: OutlineInsertTarg
   if (a === null || b === null) return a === b;
   return a.parentId === b.parentId && a.index === b.index;
 }
+
+export function insertSiblings(nodes: readonly OutlineNode[], parentId: string | null): readonly OutlineNode[] | null {
+  if (parentId === null) return nodes;
+  for (const node of nodes) {
+    if (node.id === parentId) return node.kind === "leaf" ? null : childrenOf(node);
+    const found = insertSiblings(childrenOf(node), parentId);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/** Build once per tree revision; rendering each gap must not scan the whole tree. */
+export function indexInsertLists(nodes: readonly OutlineNode[]): ReadonlyMap<string | null, readonly OutlineNode[]> {
+  const lists = new Map<string | null, readonly OutlineNode[]>([[null, nodes]]);
+  const walk = (siblings: readonly OutlineNode[]) => {
+    for (const node of siblings) {
+      if (node.kind === "leaf") continue;
+      const children = childrenOf(node);
+      lists.set(node.id, children);
+      walk(children);
+    }
+  };
+  walk(nodes);
+  return lists;
+}
+
+export interface OutlineInsertAnchor {
+  parentId: string | null;
+  /** First/between points follow this sibling; terminal points follow the list end. */
+  beforeId: string | null;
+}
+
+export function resolveInsertAnchor(nodes: readonly OutlineNode[], anchor: OutlineInsertAnchor): OutlineInsertTarget | null {
+  const siblings = insertSiblings(nodes, anchor.parentId);
+  if (siblings === null) return null;
+  const index = anchor.beforeId === null ? siblings.length : siblings.findIndex((node) => node.id === anchor.beforeId);
+  return index < 0 ? null : { parentId: anchor.parentId, index };
+}

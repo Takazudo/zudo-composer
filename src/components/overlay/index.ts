@@ -31,6 +31,8 @@ export {
   MenuRadioItem,
   MenuSection,
   MenuSeparator,
+  MenuSubmenu,
+  type MenuSubmenuProps,
   type MenuCheckedItemProps,
   type MenuItemProps,
   type MenuProps,

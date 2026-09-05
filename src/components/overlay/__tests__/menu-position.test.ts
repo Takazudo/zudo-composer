@@ -85,3 +85,11 @@ describe("computeMenuPosition", () => {
     expect(clamped.left).toBe(viewport.width - size.width - 24);
   });
 });
+it("places nested menus beside the trigger and flips left at the viewport edge", () => {
+  const size = { width: 180, height: 100 };
+  const viewport = { width: 800, height: 600 };
+  expect(computeMenuPosition({ left: 100, top: 80, width: 180, height: 30 }, size, viewport, { side: "right" }))
+    .toEqual({ left: 284, top: 80, maxHeight: 584, side: "right" });
+  expect(computeMenuPosition({ left: 620, top: 550, width: 160, height: 30 }, size, viewport, { side: "right" }))
+    .toEqual({ left: 436, top: 492, maxHeight: 584, side: "left" });
+});

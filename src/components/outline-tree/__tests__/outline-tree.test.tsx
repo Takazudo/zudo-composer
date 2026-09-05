@@ -335,10 +335,10 @@ describe("keyboard", () => {
     const { rerender } = render(<OutlineTree nodes={NODES} onRequestInsert={onRequestInsert} />);
     focus(item("overview"));
     fireEvent.keyDown(item("overview"), { key: "a" });
-    expect(onRequestInsert).toHaveBeenLastCalledWith({ parentId: "products", index: 1 });
+    expect(onRequestInsert).toHaveBeenLastCalledWith({ parentId: "products", index: 1 }, expect.any(Object));
 
     fireEvent.keyDown(item("home"), { key: "+" });
-    expect(onRequestInsert).toHaveBeenLastCalledWith({ parentId: null, index: 1 });
+    expect(onRequestInsert).toHaveBeenLastCalledWith({ parentId: null, index: 1 }, expect.any(Object));
 
     rerender(<OutlineTree nodes={NODES} onRequestInsert={onRequestInsert} canInsert={() => false} />);
     onRequestInsert.mockClear();
@@ -380,9 +380,9 @@ describe("keyboard", () => {
 describe("insert affordance", () => {
   it("puts a zero-height insert point between every pair of siblings, with its hit zone and tile", () => {
     const { container } = render(<OutlineTree nodes={NODES} onAdd={vi.fn()} addLabel={addLabel} />);
-    // 1 between the two categories, 2 under Home, 1 under Products.
+    // First + between: 2 roots, 3 under Home, 2 under Products, 1 under Docs.
     const gaps = container.querySelectorAll(".cms-tree-insert");
-    expect(gaps).toHaveLength(4);
+    expect(gaps).toHaveLength(8);
     for (const gap of gaps) {
       expect(gap.querySelector(".cms-tree-insert__hit")).toHaveAttribute("aria-hidden", "true");
       expect(gap.querySelector(".cms-tree-insert__btn")).not.toBeNull();
@@ -390,9 +390,9 @@ describe("insert affordance", () => {
     const rootGap = container.querySelector<HTMLElement>(".cms-tree__nodes > .cms-tree-insert");
     expect(rootGap).toHaveClass("cms-tree-insert--root");
     expect(rootGap?.style.getPropertyValue("--depth")).toBe("0");
-    // Products' own gap comes first in document order, then Home's two.
+    // First gaps precede each parent's own children, including single children.
     const nested = [...container.querySelectorAll<HTMLElement>(".cms-tree-children > .cms-tree-insert")];
-    expect(nested.map((gap) => gap.style.getPropertyValue("--depth"))).toEqual(["2", "1", "1"]);
+    expect(nested.map((gap) => gap.style.getPropertyValue("--depth"))).toEqual(["1", "2", "2", "1", "1", "2"]);
     expect(screen.getByRole("button", { name: "Insert before Pricing" })).toBeInTheDocument();
   });
 
@@ -413,7 +413,7 @@ describe("insert affordance", () => {
   it("gates every insert point through canInsert", () => {
     const canInsert = vi.fn(({ parentId }: { parentId: string | null }) => parentId === "products");
     const { container } = render(<OutlineTree nodes={NODES} onAdd={vi.fn()} canInsert={canInsert} addLabel={addLabel} />);
-    expect(container.querySelectorAll(".cms-tree-insert")).toHaveLength(1);
+    expect(container.querySelectorAll(".cms-tree-insert")).toHaveLength(2);
     expect(container.querySelectorAll(".cms-tree-add-wrap")).toHaveLength(1);
     expect(container.querySelector(".cms-tree-add-root")).toBeNull();
     expect(canInsert).toHaveBeenCalledWith({ parentId: "products", index: 2 });
@@ -425,7 +425,7 @@ describe("adding a node", () => {
     const onRequestInsert = vi.fn();
     const { rerender } = render(<OutlineTree nodes={NODES} onRequestInsert={onRequestInsert} onAdd={vi.fn()} addLabel={addLabel} />);
     fireEvent.click(screen.getByRole("button", { name: "Insert before Pricing" }));
-    expect(onRequestInsert).toHaveBeenCalledWith({ parentId: "products", index: 1 });
+    expect(onRequestInsert).toHaveBeenCalledWith({ parentId: "products", index: 1 }, expect.objectContaining({ resolveTarget: expect.any(Function), cancel: expect.any(Function), complete: expect.any(Function) }));
     expect(screen.queryByRole("textbox")).toBeNull();
 
     onRequestInsert.mockReturnValue("inline");

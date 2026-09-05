@@ -1,7 +1,7 @@
 import type { ComponentChildren } from "preact";
 
 /**
- * `category` is the root level: a `»` mark, no connectors, and a caret flush
+ * `category` is the root level: a `»` mark, no connectors, and a disclosure flush
  * against the pane edge. `group` and `leaf` hang off the dashed connectors.
  */
 export type OutlineNodeKind = "category" | "group" | "leaf";
@@ -44,6 +44,14 @@ export interface OutlineAddRequest extends OutlineInsertTarget {
   title: string;
 }
 
+/** One chooser transaction. Stale sessions cannot affect a newer request. */
+export interface OutlineInsertSession {
+  /** Recheck immediately before writing: null means the anchor was removed or locked. */
+  resolveTarget: () => OutlineInsertTarget | null;
+  complete: (insertedId?: string) => void;
+  cancel: () => void;
+}
+
 export interface OutlineTreeProps {
   nodes: readonly OutlineNode[];
   /** Accessible name of the tree. */
@@ -67,8 +75,11 @@ export interface OutlineTreeProps {
    * return `"inline"` for the tree's inline title editor. With no handler at
    * all the tree edits inline, which is the useful default.
    */
-  onRequestInsert?: (target: OutlineInsertTarget) => "inline" | void;
-  onAdd?: (request: OutlineAddRequest) => void;
+  onRequestInsert?: (target: OutlineInsertTarget, session: OutlineInsertSession) => "inline" | void;
+  onAdd?: (request: OutlineAddRequest) => string | void;
+  /** F2 opens the shared inline editor. Omit for read-only titles. */
+  onRename?: (id: string, title: string) => void;
+  canRename?: (node: OutlineNode) => boolean;
   /** Label for the terminal add row; `null` is the root list. */
   addLabel?: (parent: OutlineNode | null) => string;
   showToolbar?: boolean;
