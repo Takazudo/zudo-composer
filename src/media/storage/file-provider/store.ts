@@ -1,4 +1,5 @@
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
+import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import {
   MEDIA_PROVIDERS,
   MEDIA_VERSIONED_CAPABILITIES,
@@ -128,6 +129,7 @@ class BrowserFileProviderMediaStore implements MediaFileProviderStore {
       if (result.status !== "loaded" || result.record.id !== id) throw persistenceError(operationFor(operation), "validation", "Media mutation returned an invalid record.");
     }
     if (operation.endsWith("folder") && (!validateMediaFolder(payload.result) || (id !== undefined && payload.result.id !== id))) throw persistenceError("folder", "validation", "Media mutation returned an invalid folder.");
+    if (["upload", "replace", "metadata", "trash", "restore", "create-folder", "update-folder", "trash-folder", "restore-folder"].includes(operation)) notifyPersistenceChange("media");
     return payload.result;
   }
 }

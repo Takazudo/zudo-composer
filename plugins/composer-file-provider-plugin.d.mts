@@ -54,7 +54,7 @@ export function createComposerFileProviderMiddleware(options: {
     provideJsx(record: CompositionRecord, request: unknown): string | { status: "generated"; code: string } | { status: "blocked"; reason: string };
   }): Promise<Pick<
     FilesystemCompositionStore,
-    "list" | "get" | "put" | "delete" | "clear" | "deleteWithDependencyCheck" | "unpublishWithDependencyCheck" | "saveLifecycleRecord"
+    "list" | "get" | "put" | "delete" | "clear" | "deleteWithDependencyCheck" | "unpublishWithDependencyCheck" | "saveLifecycleRecord" | "snapshot"
   >>;
 }): (request: DevRequest) => Promise<DevResponse>;
 

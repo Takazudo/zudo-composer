@@ -157,3 +157,94 @@ kinds remain explicitly incompatible with scalar Mapping transforms until the
 structured Mapping contract consumes them. Provisional Content and Media
 schemas fail through their typed recovery paths; there are no compatibility
 readers or migrations.
+
+## Workspace lifetime and capture
+
+`ProductionProviderIntegration.workspace` owns mutable identity independently
+from active source revision/build. The registry is `zudo-composer-workspaces-v1`;
+provider databases are `<provider-database>-workspace-v1-<workspaceId>`. No old
+revision database is read, migrated or deleted. The default first open reserves
+`initial` once; the fixed seed manifest is persisted before any provider boot.
+Browser Web Locks serialize initial multi-database seeding across tabs. A failed
+seed retains its original manifest for retry; ready workspaces never seed again.
+Missing selected workspaces, provider databases or malformed metadata require
+explicit recovery, never silent reconstruction from activated source.
+
+`workspace.open(id)` returns an initialized integration for that existing
+workspace. `create(project, baselineRevision)` and `loadExample(...)` allocate a
+new ID; `reset()` creates a new workspace from the source supplied to this
+integration. They return the replacement integration only after provider
+initialization and atomic registry selection succeed. The shell swaps integration
+then; an old integration continues to address its old drafts. A failed creation
+may leave an unselected namespace, which this workflow never deletes. The old
+`initialization.startFresh()` entry point fails with `code: "reset-required"`
+without writes; recovery UI uses `workspace.reset()` and handles its returned
+integration. An unavailable source can still open the selected existing workspace;
+to reset it, supply a valid project to `loadExample`.
+
+`workspace.metadata()` returns authored project metadata and its durable token.
+`updateMetadata(expectedToken, {name?, activeSitemap?})` persists changes with a
+metadata transaction precondition. `getCurrentSiteProject()` composes that
+metadata with a coherent four-provider capture, so active Sitemap selection is
+real authoring data. It deliberately does not require Media for ordinary live
+project preview. `captureWorkspace()` additionally requires Media and returns
+`{status: "ready", project, capture}` or explicit `changed`, `unavailable`, or
+`save-failed` outcomes. `capture.values` includes the metadata, domain snapshots
+and Media snapshot under `workspace`, `compositions:<logical-id>`,
+`content:<logical-id>`, `mappings:<logical-id>`, `sitemaps:<logical-id>` and
+`media:<provider-id>`; Media is not a fifth SiteProject provider.
+
+Feature controllers register with the application-owned `integration.sessions`:
+
+```ts
+const session = integration.sessions.register(
+  { feature: "Content", providerId, recordId, workspaceId: integration.workspace.id },
+  { flush: () => queue.flush(), retry: () => queue.retry() },
+);
+// Every accepted draft, before its debounce/write:
+session.changed();
+// Unmount: detach presentation; the registry retains outstanding flush handles.
+session.detach();
+void queue.close();
+```
+
+`SaveQueue.close()` refuses further edits and drains the newest queued draft even
+behind an active write. Closed queues retain error state and support flush/retry.
+The registry retains failed detached handles and reports feature/provider/record
+details. Its barrier retries if session generations change during flushing.
+Later feature UI integrations must register all debounced saves and Media
+operations; an unregistered in-memory edit cannot be observed by storage.
+Replacement integrations share the same registry, so outstanding old-workspace
+handles and failures remain reachable after a workspace switch too.
+
+Composition, Mapping and Sitemap stores implement optional `snapshot()` and
+`mutationToken()` capabilities. IndexedDB snapshots contain `{records,
+mutationToken}` from one transaction; every committed record mutation, including
+seed/delete/clear, advances the token in the same transaction. Abort preserves
+both, clear never resets it, and safe-integer exhaustion fails closed. Content's
+`readAll()` and Media's `snapshot()` supply their existing durable tokens.
+Filesystem Composition uses validated, sorted canonical content SHA-256
+fingerprints, repeated reads and bounded conflict detection, including external
+same-inode edits. This is a content precondition, not a filesystem transaction;
+it neither emits derived JSX nor claims a lock over external editors.
+
+Capture reads all durable tokens before any snapshots, checks embedded tokens,
+then reads all tokens again. Any difference retries up to three times or returns
+`changed`; flush and notifications alone never establish coherence. A provider
+without these capabilities is unavailable for coherent capture. The capture
+remains an immutable point-in-time value; `isCaptureCurrent(capture)` checks its
+workspace/session/provider tokens as a release precondition. Call it before
+approval/apply, then pin the approved capture for build/activation. Changes after
+staging invalidate currentness but never mutate the staged capture. Baseline-only
+`reconcileBaseline(capture, revision)` skips when its checked generations changed
+and CAS-updates only workspace metadata; it never writes any provider record.
+Content lifecycle reconciliation separately uses Content's atomic per-record
+generation plus digest preconditions. There is no cross-provider write
+transaction and no release activation or hosted transport here.
+
+Committed storage notifications and session changes invalidate cached summaries
+through `subscribeChanges`; `WorkspaceSummary.dispose?.()` removes its listener.
+BroadcastChannel messages are refresh hints. Delayed/dropped messages cannot
+bypass persisted-token checks. Direct external filesystem changes are caught on
+the next capture/read; external processes do not promise browser wakeups.
+Sidebar/theme/pin preferences never enter metadata or capture tokens.

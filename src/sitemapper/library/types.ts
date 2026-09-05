@@ -84,6 +84,8 @@ export class SitemapPersistenceError extends Error {
 }
 
 export interface SitemapStore {
+  snapshot?(): Promise<import("../../shared/persistence-generation").PersistedSnapshot<SitemapRecord>>;
+  mutationToken?(): Promise<number | string>;
   list(): Promise<readonly SitemapSummary[]>;
   get(id: string): Promise<SitemapRecordLoadOutcome>;
   put(record: SitemapRecord): Promise<void>;

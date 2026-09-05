@@ -159,6 +159,8 @@ export class MappingPersistenceError extends Error {
 
 export interface MappingSummary { id: RecordId; name: string; createdAt: string; updatedAt: string; bindingCount: number }
 export interface MappingStore {
+  snapshot?(): Promise<import("../../shared/persistence-generation").PersistedSnapshot<MappingRecord>>;
+  mutationToken?(): Promise<number | string>;
   readonly provider: typeof MAPPING_PROVIDERS.indexeddb;
   list(): Promise<readonly MappingSummary[]>;
   get(id: string): Promise<MappingLoadOutcome>;

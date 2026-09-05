@@ -1,3 +1,4 @@
+import { advanceMutationToken, readMutationToken, notifyPersistenceChange, PersistenceGenerationError } from "../../../shared/persistence-generation";
 import {
   compareSitemapSummariesNewestFirst,
   loadSitemapRecord,
@@ -18,7 +19,7 @@ import {
   sitemapPersistenceError,
   transactionComplete,
 } from "./provider";
-import { SITEMAPS_STORE_NAME } from "./types";
+import { SITEMAPS_STORE_NAME, META_STORE_NAME } from "./types";
 
 interface InitializationFailure {
   id: string;
@@ -32,6 +33,23 @@ export interface SitemapInitializationScan {
 
 export class IndexedDbSitemapStore implements SitemapStore {
   constructor(private readonly runtime: IndexedDbSitemapRuntime) {}
+
+  async mutationToken(): Promise<number> {
+    return this.run("list", "readonly", (store) => readMutationToken(store.transaction));
+  }
+
+  async snapshot(): Promise<{ mutationToken: number; records: readonly SitemapRecord[] }> {
+    return this.run("list", "readonly", async (store) => {
+      const token = await readMutationToken(store.transaction);
+      const raw = await requestResult(store.getAll()) as unknown[];
+      const records = raw.map((value) => {
+        const loaded = loadSitemapRecord(value);
+        if (loaded.status !== "loaded") throw sitemapPersistenceError("list", "validation", "Invalid Sitemap snapshot.", false);
+        return loaded.record;
+      });
+      return { mutationToken: token, records };
+    });
+  }
 
   async list(): Promise<readonly SitemapSummary[]> {
     const scan = await this.scan("list");
@@ -173,17 +191,22 @@ export class IndexedDbSitemapStore implements SitemapStore {
     }
     let transaction: IDBTransaction;
     try {
-      transaction = connection.db.transaction(SITEMAPS_STORE_NAME, mode);
+      transaction = connection.db.transaction([SITEMAPS_STORE_NAME, META_STORE_NAME], mode);
     } catch (error) {
       throw mapSitemapOperationalError(operation, mode, error);
     }
     const done = transactionComplete(transaction);
     try {
+      await readMutationToken(transaction);
       const result = await action(transaction.objectStore(SITEMAPS_STORE_NAME));
+      if (mode === "readwrite") await advanceMutationToken(transaction);
       await done;
+      if (mode === "readwrite") notifyPersistenceChange(connection.db.name);
       return result;
     } catch (error) {
+      try { transaction.abort(); } catch { /* Already completed. */ }
       void done.catch(() => undefined);
+      if (error instanceof PersistenceGenerationError) throw sitemapPersistenceError(operation, error.code, error.message, false);
       throw mapSitemapOperationalError(operation, mode, error);
     }
   }

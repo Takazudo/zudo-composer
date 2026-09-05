@@ -581,6 +581,9 @@ function validateEnvelope(payload) {
     return { error: "Request body must be a JSON object with an operation." };
   }
   switch (payload.operation) {
+    case "snapshot":
+      if (hasExactKeys(payload, ["operation"])) return { operation: "snapshot" };
+      break;
     case "list": {
       if (!hasExactKeys(payload, ["operation", "outputsById"])) break;
       const outputsById = parseOutputsById(payload.outputsById);
@@ -641,7 +644,7 @@ function validateEnvelope(payload) {
  *   maxBodyBytes?: number,
  *   validateRecord: (value: unknown) => {ok: true, record: CompositionRecord} | {ok: false, issue: {message: string}},
  *   createStore: (options: {provideJsx: (record: CompositionRecord, request: unknown) => string | {status: "generated", code: string} | {status: "blocked", reason: string}}) => Promise<{
- *     list(): Promise<unknown>, get(id: string): Promise<unknown>,
+ *     list(): Promise<unknown>, get(id: string): Promise<unknown>, snapshot(): Promise<unknown>,
  *     put(record: CompositionRecord, jsx?: string): Promise<unknown>,
  *     delete(id: string): Promise<boolean>, clear(): Promise<void>,
  *     deleteWithDependencyCheck(id: string): Promise<unknown>,
@@ -687,6 +690,8 @@ export function createComposerFileProviderMiddleware(options) {
       });
 
       switch (envelope.operation) {
+        case "snapshot":
+          return json(200, { ok: true, result: await store.snapshot() });
         case "list":
           return json(200, { ok: true, result: await store.list() });
         case "get":

@@ -158,6 +158,7 @@ export class IndexedDbSitemapRuntime {
           const sitemaps = request.result.createObjectStore(SITEMAPS_STORE_NAME, { keyPath: "id" });
           sitemaps.createIndex(UPDATED_AT_INDEX_NAME, "updatedAt", { unique: false });
           const meta = request.result.createObjectStore(META_STORE_NAME, { keyPath: "key" });
+          meta.put({ key: "mutation", token: 0 });
           meta.put({
             key: SITEMAPPER_META_KEYS.schema,
             databaseVersion: SITEMAPPER_DATABASE_VERSION,
@@ -216,6 +217,17 @@ export class IndexedDbSitemapRuntime {
         const db = request.result;
         if (settled) {
           db.close();
+          return;
+        }
+        try {
+          const names = [...db.objectStoreNames].sort();
+          if (names.join(",") !== [META_STORE_NAME, SITEMAPS_STORE_NAME].sort().join(",")) throw new Error("Unexpected object stores.");
+          const tx = db.transaction([META_STORE_NAME, SITEMAPS_STORE_NAME], "readonly");
+          const records = tx.objectStore(SITEMAPS_STORE_NAME); const meta = tx.objectStore(META_STORE_NAME);
+          if (records.keyPath !== "id" || records.autoIncrement || [...records.indexNames].join(",") !== UPDATED_AT_INDEX_NAME || records.index(UPDATED_AT_INDEX_NAME).keyPath !== "updatedAt" || records.index(UPDATED_AT_INDEX_NAME).unique || meta.keyPath !== "key" || meta.autoIncrement || meta.indexNames.length) throw new Error("Unexpected object store shape.");
+        } catch (cause) {
+          settled = true; db.close();
+          reject(sitemapPersistenceError("initialize", "unsupported-version", "Sitemapper database has an unsupported physical schema.", false, cause));
           return;
         }
         settled = true;

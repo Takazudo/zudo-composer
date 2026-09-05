@@ -47,6 +47,15 @@ beforeEach(() => {
 });
 
 describe("browser file-provider adapter", () => {
+  it("reads validated persisted snapshots without derived-output planning", async () => {
+    const result = { mutationToken: "a".repeat(64), records: [record()] };
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result }));
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock })!;
+    expect(await store.snapshot!()).toEqual(result);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]!.body))).toEqual({ operation: "snapshot" });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: { ...result, records: [{}] } }));
+    await expect(store.snapshot!()).rejects.toMatchObject({ code: "validation" });
+  });
   it("plans put output from the server-supplied closure without exposing paths", async () => {
     const value = record();
     fetchMock
