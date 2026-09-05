@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createMediaRecord, type MediaType } from "../../../media";
+import { createMediaRecord, summarizeMedia, type MediaType } from "../../../media";
 import { formatBytes, formatPixelSize, isMediaImage, mediaCaption, mediaTypeLabel } from "../media-format";
 
 const CHECKSUM = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
 
 function summary(mediaType: MediaType, byteLength: number) {
   const source = createMediaRecord({ fileName: "asset.bin", mediaType, byteLength, checksum: CHECKSUM }, { id: "asset", timestamp: "2026-01-01T00:00:00.000Z" });
-  return { ...source, ...source.document };
+  return summarizeMedia(source);
 }
 
 describe("media formatting", () => {

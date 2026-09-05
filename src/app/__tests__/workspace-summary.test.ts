@@ -94,7 +94,8 @@ function sitemapRecord(id: string, updatedAt: string, root: SitemapNode[]): Site
 }
 
 function mediaSummary(id: string, updatedAt: string, mediaType: MediaSummary["mediaType"], byteLength: number): MediaSummary {
-  return { id, fileName: `${id}.file`, mediaType, byteLength, checksum: "a".repeat(64), createdAt: AT(1), updatedAt };
+  return { id, fileName: `${id}.file`, mediaType, byteLength, checksum: "a".repeat(64), createdAt: AT(1), updatedAt,
+    revision: 1, folderId: null, note: "", state: "active", versionId: "a".repeat(64), url: "/uploaded-media/fixture", authoringUrl: `/uploaded-media/asset-${id}` };
 }
 
 const emptyCatalog: ComponentCatalog = {

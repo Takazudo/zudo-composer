@@ -3,11 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { DEV_CONFIG } = vi.hoisted(() => ({ DEV_CONFIG: {
   mediaEndpoint: "/media-dev", capability: "secret", capabilityHeader: "x-cap",
   mediaMaxBodyBytes: 25, mediaOperationHeader: "x-operation",
-  mediaFileNameHeader: "x-file-name", mediaRecordIdHeader: "x-record-id",
+  mediaFileNameHeader: "x-file-name", mediaRecordIdHeader: "x-record-id", mediaMetadataHeader: "x-metadata",
 } }));
 vi.mock("virtual:composer-file-provider-config", () => ({ fileProviderConfig: DEV_CONFIG }));
 
 import { createFileProviderMediaProvider } from "../store";
+import { createMediaRecord } from "../../../library";
 
 const response = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), {
   status, headers: { "content-type": "application/json" },
@@ -17,7 +18,7 @@ beforeEach(() => { fetchMock = vi.fn<typeof fetch>(); });
 
 describe("browser media file provider", () => {
   it("uses the shared capability and bounded header metadata for raw uploads", async () => {
-    const record = { id: "media-1", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", document: { schemaVersion: 1, id: "media-1", fileName: "hero image.png", mediaType: "image/png", byteLength: 8, checksum: "a".repeat(64) } };
+    const record = createMediaRecord({ fileName: "hero image.png", mediaType: "image/png", byteLength: 8, checksum: "a".repeat(64) }, { id: "media-1", timestamp: "2026-01-01T00:00:00.000Z" });
     fetchMock.mockResolvedValue(response({ ok: true, result: record }));
     const provider = createFileProviderMediaProvider({ fetch: fetchMock })!;
     const file = new File([new Uint8Array(8)], "hero image.png", { type: "image/png" });
@@ -53,14 +54,42 @@ describe("browser media file provider", () => {
       .rejects.toMatchObject({ code: "validation", operation: "put", retryable: false });
   });
 
-  it("adapts initialization, list, get, delete, clear and startFresh", async () => {
+  it("streams explicit replacement with metadata CAS and validates its response", async () => {
+    const record = createMediaRecord({ fileName: "hero.png", mediaType: "image/png", byteLength: 8, checksum: "a".repeat(64) }, { id: "hero" });
+    fetchMock.mockResolvedValue(response({ ok: true, result: record }));
+    const store = createFileProviderMediaProvider({ fetch: fetchMock })!.store;
+    const file = new Blob([new Uint8Array(8)], { type: "image/png" });
+    await expect(store.replace("hero", file, { expectedRevision: 1 })).resolves.toEqual(record);
+    const init = fetchMock.mock.calls[0]![1]!; const headers = new Headers(init.headers);
+    expect(init.body).toBe(file); expect(headers.get("x-operation")).toBe("replace");
+    expect(headers.get("x-record-id")).toBe("hero");
+    expect(JSON.parse(decodeURIComponent(headers.get("x-metadata")!))).toEqual({ precondition: { expectedRevision: 1 } });
+    fetchMock.mockResolvedValue(response({ ok: false, error: { code: "conflict", message: "Reload" } }, 409));
+    await expect(store.replace("hero", file, { expectedRevision: 1 })).rejects.toMatchObject({ code: "conflict", retryable: false });
+    fetchMock.mockResolvedValue(response({ ok: true, result: { id: "hero" } }));
+    await expect(store.replace("hero", file, { expectedRevision: 1 })).rejects.toMatchObject({ code: "validation" });
+  });
+
+  it("reads persisted tokens, exposes unavailable purge, and rejects oversized header metadata", async () => {
+    const store = createFileProviderMediaProvider({ fetch: fetchMock })!.store;
+    const snapshot = { schemaVersion: 2, mutationToken: "a".repeat(64), records: [], folders: [] };
+    fetchMock.mockResolvedValue(response({ ok: true, result: snapshot }));
+    expect(await store.mutationToken()).toBe(snapshot.mutationToken);
+    expect(store.capabilities.permanentDelete).toBe(false);
+    fetchMock.mockClear();
+    await expect(store.upload(new File([new Uint8Array(8)], "hero.png"), { note: "あ".repeat(2000) })).rejects.toMatchObject({ code: "validation" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("adapts initialization and truthfully refuses destructive startFresh", async () => {
     const summary = { id: "hero", fileName: "hero.png", mediaType: "image/png", byteLength: 8, checksum: "a".repeat(64), createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
     fetchMock.mockResolvedValue(response({ ok: true, result: { status: "ready", summaries: [summary] } }));
     const provider = createFileProviderMediaProvider({ fetch: fetchMock })!;
     await expect(provider.initialization.initialize()).resolves.toEqual({ status: "ready", summaries: [summary] });
     expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get("x-operation")).toBe("initialize");
-    fetchMock.mockReset().mockResolvedValueOnce(response({ ok: true, result: null })).mockResolvedValueOnce(response({ ok: true, result: { status: "ready", summaries: [] } }));
-    await expect(provider.initialization.startFresh()).resolves.toEqual({ status: "ready", summaries: [] });
-    expect(fetchMock.mock.calls.map((call) => new Headers(call[1]?.headers).get("x-operation"))).toEqual(["clear", "initialize"]);
+    fetchMock.mockReset();
+    await expect(provider.initialization.startFresh()).resolves.toMatchObject({ status: "error", error: { code: "blocked" } });
+    await expect(provider.store.clear()).rejects.toMatchObject({ code: "blocked" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

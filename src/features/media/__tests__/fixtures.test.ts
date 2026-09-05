@@ -48,7 +48,7 @@ describe("in-memory Media provider", () => {
 
   it("quarantines malformed fixture metadata until startFresh", async () => {
     const valid = media("valid");
-    const future = { ...valid, id: "future", document: { ...valid.document, id: "future", schemaVersion: 2 } };
+    const future = { ...valid, id: "future", document: { ...valid.document, id: "future", schemaVersion: 3 } };
     const provider = createMemoryMediaProvider({ records: [valid, future as never] });
     expect(await provider.initialization.initialize()).toMatchObject({
       status: "recovery-required",
