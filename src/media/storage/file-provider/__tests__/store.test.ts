@@ -9,6 +9,7 @@ vi.mock("virtual:composer-file-provider-config", () => ({ fileProviderConfig: DE
 
 import { createFileProviderMediaProvider } from "../store";
 import { createMediaRecord } from "../../../library";
+import { mediaVersionUrl } from "../../../model";
 
 const response = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), {
   status, headers: { "content-type": "application/json" },
@@ -17,6 +18,45 @@ let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 beforeEach(() => { fetchMock = vi.fn<typeof fetch>(); });
 
 describe("browser media file provider", () => {
+  const ref = { providerId: "media-files", assetId: "hero", versionId: "a".repeat(64) };
+  const pin = { ...ref, checksum: ref.versionId, byteLength: 8, mediaType: "image/png", url: mediaVersionUrl(ref.versionId, "image/png") };
+  it.each([
+    { extra: true }, { providerId: "other" }, { assetId: "other" }, { versionId: "b".repeat(64) },
+    { checksum: "A".repeat(64) }, { byteLength: 0 }, { byteLength: 25 * 1024 * 1024 + 1 },
+    { mediaType: "text/html" }, { url: "https://other.invalid/file.png" }, { url: "/uploaded-media/other.png" },
+  ])("rejects malformed or mismatched exact pins: %s", async (patch) => {
+    fetchMock.mockResolvedValue(response({ ok: true, result: { ...pin, ...patch } }));
+    await expect(createFileProviderMediaProvider({ fetch: fetchMock })!.store.resolveVersion(ref)).rejects.toMatchObject({ code: "validation", operation: "pin", retryable: false });
+  });
+  it("requires exact deterministic deduplicated manifest coverage", async () => {
+    const otherRef = { ...ref, assetId: "zebra" }; const otherPin = { ...pin, ...otherRef };
+    const store = createFileProviderMediaProvider({ fetch: fetchMock })!.store;
+    for (const result of [
+      { schemaVersion: 2, pins: [pin, otherPin] }, { schemaVersion: 1, pins: [pin, otherPin], extra: true },
+      { schemaVersion: 1, pins: [pin] }, { schemaVersion: 1, pins: [otherPin, pin] },
+      { schemaVersion: 1, pins: [pin, pin, otherPin] }, { schemaVersion: 1, pins: [pin, { ...otherPin, byteLength: -1 }] },
+    ]) {
+      fetchMock.mockResolvedValue(response({ ok: true, result }));
+      await expect(store.pinManifest([otherRef, ref, ref])).rejects.toMatchObject({ code: "validation" });
+    }
+    const valid = { schemaVersion: 1, pins: [pin, otherPin] };
+    fetchMock.mockResolvedValue(response({ ok: true, result: valid }));
+    await expect(store.pinManifest([otherRef, ref, ref])).resolves.toEqual(valid);
+    fetchMock.mockResolvedValue(response({ ok: true, result: pin }));
+    await expect(store.resolveVersion(ref)).resolves.toEqual(pin);
+  });
+  it("preserves uncertain-commit errors as non-retryable", async () => {
+    fetchMock.mockResolvedValue(response({ ok: false, error: { code: "commit-uncertain", message: "Inspect exact token" } }, 409));
+    await expect(createFileProviderMediaProvider({ fetch: fetchMock })!.store.trash("hero", { expectedRevision: 1 })).rejects.toMatchObject({ code: "commit-uncertain", retryable: false });
+  });
+  it("rejects missing or foreign requested identities before transport", async () => {
+    const store = createFileProviderMediaProvider({ fetch: fetchMock })!.store;
+    await expect(store.resolveVersion(undefined as never)).rejects.toMatchObject({ code: "validation" });
+    await expect(store.resolveVersion({ ...ref, providerId: "foreign" })).rejects.toMatchObject({ code: "validation" });
+    await expect(store.pinManifest(undefined as never)).rejects.toMatchObject({ code: "validation" });
+    await expect(store.pinManifest([{ ...ref, providerId: "foreign" }])).rejects.toMatchObject({ code: "validation" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
   it("uses the shared capability and bounded header metadata for raw uploads", async () => {
     const record = createMediaRecord({ fileName: "hero image.png", mediaType: "image/png", byteLength: 8, checksum: "a".repeat(64) }, { id: "media-1", timestamp: "2026-01-01T00:00:00.000Z" });
     fetchMock.mockResolvedValue(response({ ok: true, result: record }));
