@@ -2,27 +2,32 @@ import type { JSX } from "preact";
 import { useWorkspace } from "../../app/workspace-context";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../app/chrome-context";
-import { formatIntent, notifyRouteSelection, parseIntent } from "../../app/route-intents";
+import { encodeContentValuePath, formatIntent, notifyRouteSelection, parseIntent } from "../../app/route-intents";
 import { EditorBody, EditorChrome, RecordTitle, readEditorCollapsed, writeEditorCollapsed } from "../../components/editor-chrome";
 import { CheckCircleIcon, CheckIcon, CopyIcon, DuplicateIcon, EllipsisIcon, EyeIcon, FileIcon, SettingsIcon, TrashIcon, WarningIcon } from "../../components/icons";
 import { useLibraryConfirm } from "../../components/library-page";
 import { ConfirmDialog, Menu, MenuItem, MenuSeparator, useMenu } from "../../components/overlay";
-import { Banner, Button, Chip, EmptyState, Pane, PaneBody, PaneHeader, SegmentedControl, StatusChip } from "../../components/ui";
-import type { ContentProvider } from "../../content";
+import { Banner, Button, Chip, EmptyState, Pane, PaneBody, PaneHeader, PaneTabs, SegmentedControl, StatusChip } from "../../components/ui";
+import type { ContentProvider, ContentSnapshot } from "../../content";
 import type { ComposerComponentProvider } from "../composer/component-provider";
 import { ContentAddModelDialog } from "./add-model-dialog";
 import { ContentEntryAuthor, ContentSchemaAuthor } from "./content-author";
 import { ContentNavigator } from "./content-library";
+import { ContentModelDirectory } from "./content-directory";
+import { ContentEntriesWorkspace, ContentRawView, ContentRelationshipsView, ContentUsedByView } from "./content-workspace";
 import { ContentPreviewPane } from "./content-preview-pane";
 import { createContentAuthoringController, type ContentAuthoringController, type ContentAuthoringState, type ContentSaveStatus, type ContentWorkMode } from "./controller";
 import { contentEntryLabel, contentEntryTitleField } from "./presentation";
 import type { ContentPreviewSource } from "./preview-source";
+import type { ContentMediaPickerRenderer } from "./structured-field-editor";
 
 export interface ContentRouteContentProps {
   provider: ContentProvider;
   controller?: ContentAuthoringController;
   componentProvider?: ComposerComponentProvider;
   createPreviewSource?: () => ContentPreviewSource;
+  renderMediaPicker?: ContentMediaPickerRenderer;
+  loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]>;
 }
 
 /** Names the persisted rail geometry: one Content editor, not one per record. */
@@ -32,6 +37,7 @@ const CONTENT_ROUTE = "/content";
 const MODE_OPTIONS = [
   { value: "entries" as const, label: "Entry", icon: FileIcon },
   { value: "model-fields" as const, label: "Schema", icon: SettingsIcon },
+  { value: "relationships" as const, label: "Relationships", icon: CopyIcon },
 ];
 
 /** The save queue's vocabulary, translated into the chrome's four states. */
@@ -45,8 +51,8 @@ function statusOf(status: ContentSaveStatus, detail: string, onRetry: () => void
   }
 }
 
-function contentHref(providerId: string, modelId: string, entryId?: string, viewId?: string | null): string {
-  return formatIntent({ route: "content", providerId, modelId, ...(entryId ? { entryId } : {}), ...(viewId ? { viewId } : {}) });
+function contentHref(providerId: string, modelId: string, entryId?: string, viewId?: string | null, selection?: { fieldId: string; valuePath?: readonly (string | number)[] } | null): string {
+  return formatIntent({ route: "content", providerId, modelId, ...(entryId ? { entryId } : {}), ...(viewId ? { viewId } : {}), ...(selection ? selection : {}) });
 }
 
 /**
@@ -58,15 +64,17 @@ function contentHref(providerId: string, modelId: string, entryId?: string, view
  * published through `useEditorStatus` rather than drawn here, because autosave
  * remains authoritative and the app chrome owns where its state is shown.
  */
-export function ContentApp({ provider, controller: supplied, componentProvider, createPreviewSource }: ContentRouteContentProps): JSX.Element {
+export function ContentApp({ provider, controller: supplied, componentProvider, createPreviewSource, renderMediaPicker, loadActivatedBaseline }: ContentRouteContentProps): JSX.Element {
   const integration = useWorkspace()?.integration;
-  const controller = useMemo(() => supplied ?? createContentAuthoringController(provider), [provider, supplied]);
+  const controller = useMemo(() => supplied ?? createContentAuthoringController(provider, { providers: integration?.contentProviders, mediaProvider: integration?.mediaProvider, loadActivatedBaseline }), [integration, loadActivatedBaseline, provider, supplied]);
   const [state, setState] = useState<ContentAuthoringState>(controller.state);
   const [actionError, setError] = useState<string | null>(null);
   const [intentError, setIntentError] = useState<string | null>(null);
   const error = [actionError, intentError].filter(Boolean).join(" ") || null;
   const [notice, setNotice] = useState<string | null>(null);
   const [addModelOpen, setAddModelOpen] = useState(false);
+  const [entryTab, setEntryTab] = useState<"fields" | "raw" | "used-by">("fields");
+  const [deepSelection, setDeepSelection] = useState<{ fieldId: string; valuePath?: readonly (string | number)[] } | null>(null);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(() => readEditorCollapsed(CONTENT_EDITOR_KEY).insp);
   const confirm = useLibraryConfirm();
   const overflowRef = useRef<HTMLButtonElement | null>(null);
@@ -100,7 +108,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   const acceptVisibleSelection = () => {
     if (!controller.state.model) return;
     if (!intentAccepted) controller.selectView(null);
-    setIntentError(null); setError(null); setIntentAccepted(true);
+    setDeepSelection(null); setIntentError(null); setError(null); setIntentAccepted(true);
   };
   useEffect(() => {
     if (appliedIntent.current || state.phase !== "ready") return;
@@ -114,6 +122,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
       await controller.openModel(intent.modelId);
       controller.selectView(intent.viewId ?? null);
       if (intent.entryId !== undefined) await controller.openEntry(intent.entryId);
+      if (intent.fieldId !== undefined) { controller.selectView(null); setEntryTab("fields"); setDeepSelection({ fieldId: intent.fieldId, ...(intent.valuePath ? { valuePath: intent.valuePath } : {}) }); }
       setIntentAccepted(true);
     })().catch((cause: unknown) => setIntentError(cause instanceof Error ? cause.message : "The Content link could not be opened."));
   }, [controller, state.phase]);
@@ -124,18 +133,32 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   useEffect(() => {
     if (!intentAccepted || state.phase !== "ready") return;
     if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") return;
-    window.history.replaceState(null, "", state.model ? contentHref(provider.descriptor.id, state.model.id, state.entry?.id, state.viewId) : CONTENT_ROUTE);
+    window.history.replaceState(null, "", state.model ? contentHref(provider.descriptor.id, state.model.id, state.entry?.id, state.viewId, state.entry ? deepSelection : null) : CONTENT_ROUTE);
     notifyRouteSelection();
-  }, [intentAccepted, state.phase, state.model?.id, state.entry?.id, state.viewId]);
+  }, [deepSelection, intentAccepted, state.phase, state.model?.id, state.entry?.id, state.viewId]);
+
+  useEffect(() => {
+    if (!deepSelection || !state.entry || entryTab !== "fields") return;
+    const path = deepSelection.valuePath ? encodeContentValuePath(deepSelection.valuePath) : "/";
+    const root = document.querySelector<HTMLElement>(`[data-content-field-id="${deepSelection.fieldId}"]`) ?? document.getElementById(`content-entry-${deepSelection.fieldId}`);
+    const target = deepSelection.valuePath ? root?.querySelector<HTMLElement>(`[data-content-value-path="${path}"]`) : root;
+    if (!target) { setIntentError(`The requested field or structured value no longer exists. Open Fields and choose a current value.`); return; }
+    setIntentError(null);
+    target.scrollIntoView?.({ block: "center" });
+    (target.matches("input,select,textarea,button") || target.hasAttribute("tabindex") ? target : target.querySelector<HTMLElement>("input,select,textarea,button"))?.focus();
+  }, [deepSelection, entryTab, state.entry?.id, state.model?.updatedAt]);
 
   const fields = state.model?.document.fields ?? [];
   const entryName = state.entry ? contentEntryLabel(state.entry, fields) : "";
   const titleField = contentEntryTitleField(fields);
   const schemaMode = state.workMode === "model-fields";
+  const relationshipsMode = state.workMode === "relationships";
   // Completeness is a claim about the open Entry, so it belongs beside the
   // record's own chips in the pane header rather than being re-drawn as a panel
   // at the top of the form the author is filling in.
   const missing = state.entry ? controller.completeness().length : 0;
+  const activeEntryTab = entryTab === "fields" && state.viewId ? `view:${state.viewId}` : entryTab;
+  const entryTabs = [{ id: "fields", label: "Fields" }, { id: "raw", label: "Raw" }, { id: "used-by", label: "Used by", count: state.incoming.length }, ...(state.model?.document.presentation?.views.map((view) => ({ id: `view:${view.id}`, label: view.label })) ?? [])];
 
   useBreadcrumb([
     { label: "Content", href: CONTENT_ROUTE },
@@ -242,7 +265,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
           size="sm"
           value={state.workMode}
           options={MODE_OPTIONS}
-          onChange={(mode) => run(async () => { if (mode === "model-fields") await controller.inspectSchema(); else controller.browseEntries(); acceptVisibleSelection(); })}
+          onChange={(mode) => run(async () => { if (mode === "model-fields") await controller.inspectSchema(); else if (mode === "relationships") await controller.inspectRelationships(); else controller.browseEntries(); setDeepSelection(null); acceptVisibleSelection(); })}
         />
       }
       right={
@@ -286,6 +309,9 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             <MenuItem icon={CopyIcon} disabled={state.entry === null} onSelect={() => { if (state.entry) copyEntryId(state.entry.id); }}>
               Copy entry ID
             </MenuItem>
+            <MenuItem icon={WarningIcon} disabled={state.entry?.lifecycle !== "published"} onSelect={() => run(() => controller.requestUnpublish())}>
+              Request unpublish
+            </MenuItem>
             <MenuSeparator />
             <MenuItem
               icon={TrashIcon}
@@ -322,8 +348,9 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
         main={
           <Pane variant="main" label="Editor">
             <PaneHeader
-              title={schemaMode ? "Schema" : "Entry"}
-              actions={state.entry ? (
+              title={!state.model ? "All models" : schemaMode ? "Schema" : relationshipsMode ? "Relationships" : state.entry ? "Entry" : "Entries"}
+              actions={state.entry ? (<>
+                <Chip tone={state.publicationState === "draft" ? "plain" : state.publicationState === "published-pending" || state.publicationState === "published-baseline-unavailable" ? "warn" : "accent"}>{state.publicationState === "published-pending" ? "Published · pending changes" : state.publicationState === "published-baseline-unavailable" ? "Published · baseline unavailable" : state.publicationState === "published" ? "Published" : "Draft"}</Chip>
                 <StatusChip
                   class="sg-content-completeness"
                   state="custom"
@@ -334,7 +361,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
                   // already carries the record's own chips beside it.
                   detail={missing === 0 ? undefined : `${missing} missing`}
                 />
-              ) : null}
+              </>) : null}
             >
               {state.model ? <Chip tone="plain">{state.model.document.name} · {state.model.document.kind}</Chip> : null}
             </PaneHeader>
@@ -342,14 +369,19 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
               {error || state.saveStatus === "error" ? (
                 <Banner
                   tone="err"
-                  action={state.saveStatus === "error" ? <Button size="sm" onClick={() => controller.retrySave()}>Retry save</Button> : undefined}
+                  action={state.conflictRecovery ? (
+                    state.conflictRecovery.authoritativeReady ? <>
+                      <Button size="sm" onClick={() => run(() => controller.discardConflictDraft())}>Use latest</Button>
+                      <Button size="sm" disabled={!state.conflictRecovery.canReapply} onClick={() => run(() => controller.reconcileConflictDraft())}>Reapply my draft</Button>
+                    </> : <Button size="sm" onClick={() => run(() => controller.reloadConflictAuthoritative())}>Retry latest</Button>
+                  ) : state.saveStatus === "error" ? <Button size="sm" onClick={() => controller.retrySave()}>Retry save</Button> : undefined}
                 >
-                  {error ?? state.message}
+                  {error ?? state.conflictRecovery?.message ?? state.message}
                 </Banner>
               ) : null}
               {notice ? <Banner tone="info">{notice}</Banner> : null}
               {!state.model ? (
-                <EmptyState title="No model selected" description="Choose a model in the Content navigator, or add one." inline />
+                <><p class="sg-content-hint">No model selected</p><ContentModelDirectory state={state} controller={controller} run={run} onAddModel={() => setAddModelOpen(true)} /></>
               ) : schemaMode ? (
                 <ContentSchemaAuthor
                   state={state}
@@ -363,10 +395,12 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
                     onConfirm: () => run(() => controller.removeField(field.id)),
                   })}
                 />
+              ) : relationshipsMode ? (
+                <ContentRelationshipsView state={state} />
               ) : state.entry ? (
-                <ContentEntryAuthor state={state} controller={controller} run={run} />
+                <div class="sg-content-entry-workspace"><PaneTabs label="Entry workspace" class="sg-content-entry-tabs" tabs={entryTabs} activeId={activeEntryTab} onSelect={(id) => { setDeepSelection(null); if (id.startsWith("view:")) { controller.selectView(id.slice(5)); setEntryTab("fields"); } else { controller.selectView(null); setEntryTab(id as "fields" | "raw" | "used-by"); } }} />{entryTab === "raw" ? <ContentRawView model={state.model} entry={state.entry} /> : entryTab === "used-by" ? <ContentUsedByView state={state} controller={controller} /> : <ContentEntryAuthor state={state} controller={controller} run={run} renderMediaPicker={renderMediaPicker} />}</div>
               ) : (
-                <EmptyState title="Choose an Entry" description="Select an Entry in the navigator, or add one with its model's Add entry row." inline />
+                <ContentEntriesWorkspace state={state} controller={controller} run={run} />
               )}
             </PaneBody>
           </Pane>

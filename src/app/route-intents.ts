@@ -4,7 +4,7 @@ type ProviderTarget = { readonly providerId: string };
 export type RouteIntent =
   | { readonly route: "composer"; readonly action: "new" }
   | (ProviderTarget & { readonly route: "composer"; readonly compositionId: RecordId })
-  | (ProviderTarget & { readonly route: "content"; readonly modelId: RecordId; readonly entryId?: RecordId; readonly viewId?: string })
+  | (ProviderTarget & { readonly route: "content"; readonly modelId: RecordId; readonly entryId?: RecordId; readonly viewId?: string; readonly fieldId?: RecordId; readonly valuePath?: readonly (RecordId | number)[] })
   | (ProviderTarget & { readonly route: "mapping"; readonly mappingId: RecordId })
   | (ProviderTarget & { readonly route: "sitemapper"; readonly sitemapId: RecordId; readonly pageId?: RecordId })
   | (ProviderTarget & { readonly route: "media"; readonly assetId: RecordId })
@@ -13,8 +13,38 @@ export type RouteIntentRoute = RouteIntent["route"];
 export type RouteIntentParseOutcome = { readonly status: "none" } | { readonly status: "matched"; readonly intent: RouteIntent } | { readonly status: "invalid"; readonly message: string };
 export interface RouteIntentLocation { readonly pathname: string; readonly search: string; readonly hash?: string }
 const PATHS: Record<string, RouteIntentRoute> = { "/composer": "composer", "/content": "content", "/mapping": "mapping", "/sitemapper": "sitemapper", "/media": "media", "/review": "review" };
-const PARAMS: Record<RouteIntentRoute, readonly string[]> = { composer: ["provider", "composition", "new"], content: ["provider", "model", "entry", "view"], mapping: ["provider", "mapping"], sitemapper: ["provider", "sitemap", "page"], media: ["provider", "asset"], review: [] };
+const PARAMS: Record<RouteIntentRoute, readonly string[]> = { composer: ["provider", "composition", "new"], content: ["provider", "model", "entry", "view", "field", "path"], mapping: ["provider", "mapping"], sitemapper: ["provider", "sitemap", "page"], media: ["provider", "asset"], review: [] };
 export const isIntentProviderId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(value);
+
+/** Typed RFC6901 pointer segments: `f:` is a stable nested field id, `i:` a list index. */
+export function encodeContentValuePath(path: readonly (RecordId | number)[]): string {
+  if (path.length === 0 || path.length > 32) throw new TypeError("Content value path must contain 1-32 segments.");
+  return `/${path.map((segment) => {
+    if (typeof segment === "number") {
+      if (!Number.isSafeInteger(segment) || segment < 0) throw new TypeError("Content value path index is malformed.");
+      return `i:${segment}`;
+    }
+    if (!isSafeRecordId(segment)) throw new TypeError("Content value path field id is malformed.");
+    return `f:${segment.replace(/~/g, "~0").replace(/\//g, "~1")}`;
+  }).join("/")}`;
+}
+
+export function decodeContentValuePath(pointer: string): readonly (RecordId | number)[] {
+  if (!pointer.startsWith("/") || pointer === "/") throw new TypeError("Content value path must be a non-empty RFC6901 pointer.");
+  const encoded = pointer.slice(1).split("/");
+  if (encoded.length > 32) throw new TypeError("Content value path is too deep.");
+  return encoded.map((segment) => {
+    if (/^i:(?:0|[1-9]\d*)$/.test(segment)) {
+      const index = Number(segment.slice(2));
+      if (!Number.isSafeInteger(index)) throw new TypeError("Content value path index is malformed.");
+      return index;
+    }
+    if (!segment.startsWith("f:") || /~(?![01])/u.test(segment)) throw new TypeError("Content value path segment is malformed.");
+    const fieldId = segment.slice(2).replace(/~1/g, "/").replace(/~0/g, "~");
+    if (!isSafeRecordId(fieldId)) throw new TypeError("Content value path field id is malformed.");
+    return fieldId;
+  });
+}
 
 /** Editors publish their own accepted selection without asking the host to remount them. */
 export function notifyRouteSelection(action: "push" | "replace" = "replace"): void { window.dispatchEvent(new CustomEvent("workspace-route-selection", { detail: action })); }
@@ -52,8 +82,13 @@ export function parseIntent(input?: RouteIntentLocation | URL | string): RouteIn
         intent = { route, providerId, sitemapId: read("sitemap")!, ...(pageId === undefined ? {} : { pageId }) }; break;
       }
       case "content": {
-        const entryId = read("entry", true), viewId = read("view", true);
-        intent = { route, providerId, modelId: read("model")!, ...(entryId === undefined ? {} : { entryId }), ...(viewId === undefined ? {} : { viewId }) }; break;
+        const entryId = read("entry", true), viewId = read("view", true), fieldId = read("field", true);
+        const pointer = params.get("path");
+        if (params.getAll("path").length > 1 || (params.has("path") && !pointer)) throw new Error("This link must include one path pointer.");
+        if (fieldId !== undefined && entryId === undefined) throw new Error("A Content field target requires an Entry.");
+        if (pointer !== null && fieldId === undefined) throw new Error("A Content value path requires a field target.");
+        const valuePath = pointer === null ? undefined : decodeContentValuePath(pointer);
+        intent = { route, providerId, modelId: read("model")!, ...(entryId === undefined ? {} : { entryId }), ...(viewId === undefined ? {} : { viewId }), ...(fieldId === undefined ? {} : { fieldId }), ...(valuePath === undefined ? {} : { valuePath }) }; break;
       }
     }
     return { status: "matched", intent };
@@ -69,7 +104,14 @@ export function formatIntent(intent: RouteIntent): string {
     case "mapping": params.set("mapping", intent.mappingId); break;
     case "media": params.set("asset", intent.assetId); break;
     case "sitemapper": params.set("sitemap", intent.sitemapId); if (intent.pageId !== undefined) params.set("page", intent.pageId); break;
-    case "content": params.set("model", intent.modelId); if (intent.entryId !== undefined) params.set("entry", intent.entryId); if (intent.viewId !== undefined) params.set("view", intent.viewId); break;
+    case "content": {
+      params.set("model", intent.modelId);
+      if (intent.entryId !== undefined) params.set("entry", intent.entryId);
+      if (intent.viewId !== undefined) params.set("view", intent.viewId);
+      if (intent.fieldId !== undefined) params.set("field", intent.fieldId);
+      if (intent.valuePath !== undefined) params.set("path", encodeContentValuePath(intent.valuePath));
+      break;
+    }
   }
   const href = `/${intent.route}${params.size ? `?${params}` : ""}`;
   const result = parseIntent(href);
