@@ -209,6 +209,8 @@ export class CompositionPersistenceError extends Error {
  * `CompositionPersistenceError`.
  */
 export interface CompositionStore {
+  snapshot?(): Promise<import("../../shared/persistence-generation").PersistedSnapshot<CompositionRecord>>;
+  mutationToken?(): Promise<number | string>;
   readonly provider: CompositionProviderDescriptor;
   list(): Promise<readonly CompositionSummary[]>;
   get(id: string): Promise<CompositionLoadOutcome>;

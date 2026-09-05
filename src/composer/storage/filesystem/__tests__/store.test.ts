@@ -67,6 +67,20 @@ afterEach(async () => {
 });
 
 describe("filesystem composition store safety", () => {
+  it("fingerprints persisted canonical content, including external same-inode edits", async () => {
+    const store = await createStore(); const value = record();
+    await store.put(value);
+    const first = await store.snapshot(); const inode = (await lstat(jsonPath(value.id))).ino;
+    const edited = { ...value, document: { ...value.document, name: "External edit" } };
+    await writeFile(jsonPath(value.id), JSON.stringify(edited));
+    expect((await lstat(jsonPath(value.id))).ino).toBe(inode);
+    const second = await store.snapshot();
+    expect(second.mutationToken).not.toBe(first.mutationToken);
+    expect(second.records).toEqual([edited]);
+    expect(await (await createStore()).mutationToken()).toBe(second.mutationToken);
+    await writeFile(jsonPath(value.id), "{}");
+    await expect(store.snapshot()).rejects.toMatchObject({ code: "validation" });
+  });
   it.each(["../escape", "encoded%2fslash", "with/slash", ".hidden", "CAPS"])(
     "rejects traversal-like or encoded id %s before touching files",
     async (id) => {

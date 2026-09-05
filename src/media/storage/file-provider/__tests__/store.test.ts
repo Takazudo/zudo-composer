@@ -10,6 +10,7 @@ vi.mock("virtual:composer-file-provider-config", () => ({ fileProviderConfig: DE
 import { createFileProviderMediaProvider } from "../store";
 import { createMediaRecord } from "../../../library";
 import { mediaVersionUrl } from "../../../model";
+import { subscribePersistenceChanges } from "../../../../shared/persistence-generation";
 
 const response = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), {
   status, headers: { "content-type": "application/json" },
@@ -18,6 +19,23 @@ let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 beforeEach(() => { fetchMock = vi.fn<typeof fetch>(); });
 
 describe("browser media file provider", () => {
+  it("notifies successful delete only after its response, never on a failed delete", async () => {
+    const changed = vi.fn(); const stop = subscribePersistenceChanges(changed);
+    const store = createFileProviderMediaProvider({ fetch: fetchMock })!.store;
+    let finish!: (value: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => { finish = resolve; }));
+    try {
+      const pending = store.delete("hero", { expectedRevision: 1 });
+      expect(changed).not.toHaveBeenCalled();
+      finish(response({ ok: true, result: true }));
+      await expect(pending).resolves.toBe(true);
+      expect(changed).toHaveBeenCalledExactlyOnceWith("media");
+      changed.mockClear();
+      fetchMock.mockResolvedValueOnce(response({ ok: false, error: { code: "conflict", message: "stale revision" } }, 409));
+      await expect(store.delete("hero", { expectedRevision: 1 })).rejects.toThrow("stale revision");
+      expect(changed).not.toHaveBeenCalled();
+    } finally { stop(); }
+  });
   const ref = { providerId: "media-files", assetId: "hero", versionId: "a".repeat(64) };
   const pin = { ...ref, checksum: ref.versionId, byteLength: 8, mediaType: "image/png", url: mediaVersionUrl(ref.versionId, "image/png") };
   it.each([

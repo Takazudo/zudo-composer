@@ -14,14 +14,22 @@ import { isSitemapCollectionStore, SitemapPersistenceError, type SitemapInitiali
 import type { MappingAssignmentCatalog } from "../sitemapper/routes";
 import { createIndexedDbSitemapProvider } from "../sitemapper/storage/indexeddb/provider";
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
-import { siteProjectRevisionDatabaseName, startSiteProjectRevisionRetention, type RevisionLockManager } from "./site-project-revision-retention";
+import { createWorkspaceStorage, projectFromWorkspace, workspaceScopedFactory, workspaceDatabaseName, withWorkspaceInitializationLock, WORKSPACE_DATABASE_NAME, type WorkspaceRecord } from "./workspace-storage";
+import { createWorkspaceSaveRegistry, type WorkspaceSaveRegistry } from "./workspace-sessions";
+import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture, type WorkspaceCaptureOutcome, type WorkspaceSnapshotSource } from "./workspace-snapshot";
+import { subscribePersistenceChanges } from "../shared/persistence-generation";
 
 export class ProviderIntegrationError extends Error {
   readonly name = "ProviderIntegrationError";
   constructor(readonly phase: "source" | "composition" | "content" | "mapping" | "sitemap" | "snapshot", message: string, readonly retryable = true, options?: { cause?: unknown }) { super(message, options); }
 }
+export class WorkspaceResetRequiredError extends ProviderIntegrationError {
+  readonly code = "reset-required";
+  constructor() { super("source", "Reset requires workspace.reset(): create a new workspace and switch only after initialization succeeds. The original workspace is preserved.", false); }
+}
 export type ProviderIntegrationOutcome = { status: "ready" } | { status: "error"; error: ProviderIntegrationError };
 export type SiteProjectSnapshotOutcome = { status: "ready"; project: SiteProject } | { status: "error"; error: ProviderIntegrationError };
+export type WorkspaceProjectCaptureOutcome = Exclude<WorkspaceCaptureOutcome, { status: "ready" }> | { status: "ready"; capture: WorkspaceCapture; project: SiteProject };
 
 function providerFromStore(store: CompositionStore): CompositionProvider {
   const initialize = async (): Promise<CompositionInitializationOutcome> => { try { return { status: "ready", summaries: await store.list() }; } catch (cause) { return { status: "error", error: cause instanceof CompositionPersistenceError ? cause : new CompositionPersistenceError("initialize", "unknown", "Composition initialization failed.", true, { cause }) }; } };
@@ -84,6 +92,11 @@ interface ContentSnapshotStore { readAll(): Promise<{ models: SiteProject["provi
 interface MappingSnapshotStore { readAll(): Promise<readonly MappingRecord[]> }
 
 export interface ProductionProviderIntegration {
+  workspace: WorkspaceLifecycle;
+  sessions: WorkspaceSaveRegistry;
+  subscribeChanges(listener: () => void): () => void;
+  captureWorkspace(): Promise<WorkspaceProjectCaptureOutcome>;
+  isCaptureCurrent(capture: WorkspaceCapture): Promise<boolean>;
   componentProvider: typeof activeComponentProvider;
   compositionProviders: readonly CompositionProvider[]; compositionCatalog: CompositionCatalog; mappingCompositionCatalog: MappingCompositionCatalog;
   contentProviders: readonly ContentProvider[]; contentProvider: ContentProvider; contentCatalog: ContentCatalog;
@@ -94,7 +107,17 @@ export interface ProductionProviderIntegration {
   initialization: { initialize(): Promise<ProviderIntegrationOutcome>; retry(): Promise<ProviderIntegrationOutcome>; startFresh(): Promise<ProviderIntegrationOutcome> };
   getCurrentSiteProject(): Promise<SiteProjectSnapshotOutcome>;
 }
-interface ProductionProviderIntegrationCommonOptions { compositionIdbFactory?: IDBFactory | null; contentIdbFactory?: IDBFactory | null; mappingIdbFactory?: IDBFactory | null; sitemapIdbFactory?: IDBFactory | null; fileCompositionProvider?: CompositionProvider | null }
+export interface WorkspaceLifecycle {
+  readonly id: string | undefined;
+  metadata(): Promise<WorkspaceRecord>;
+  updateMetadata(expectedToken: number, patch: { name?: string; activeSitemap?: SiteProject["activeSitemap"] }): Promise<WorkspaceRecord>;
+  reconcileBaseline(capture: WorkspaceCapture, revision: string): Promise<"applied" | "changed">;
+  open(id: string): Promise<ProductionProviderIntegration>;
+  create(project: SiteProject, baselineRevision: string): Promise<ProductionProviderIntegration>;
+  loadExample(project: SiteProject, baselineRevision: string): Promise<ProductionProviderIntegration>;
+  reset(): Promise<ProductionProviderIntegration>;
+}
+interface ProductionProviderIntegrationCommonOptions { workspaceId?: string; saveRegistry?: WorkspaceSaveRegistry; mediaProvider?: MediaFileProvider | null; compositionIdbFactory?: IDBFactory | null; contentIdbFactory?: IDBFactory | null; mappingIdbFactory?: IDBFactory | null; sitemapIdbFactory?: IDBFactory | null; fileCompositionProvider?: CompositionProvider | null }
 export type ProductionProviderIntegrationOptions = ProductionProviderIntegrationCommonOptions & (
   | { project?: undefined; sourceRevision?: undefined }
   | { project: null; sourceRevision?: null | undefined }
@@ -102,21 +125,6 @@ export type ProductionProviderIntegrationOptions = ProductionProviderIntegration
 );
 
 const SOURCE_REVISION = /^[a-f0-9]{64}$/;
-
-function revisionScopedIdbFactory(factory: IDBFactory | null | undefined, revision: string | undefined): IDBFactory | null | undefined {
-  if (!revision) return factory;
-  const target = factory === undefined ? globalThis.indexedDB ?? null : factory;
-  if (!target) return null;
-  const scope = (name: string): string => siteProjectRevisionDatabaseName(name, revision);
-  return new Proxy(target, {
-    get(value, property) {
-      if (property === "open") return (name: string, version?: number) => version === undefined ? value.open(scope(name)) : value.open(scope(name), version);
-      if (property === "deleteDatabase") return (name: string) => value.deleteDatabase(scope(name));
-      const member = Reflect.get(value, property, value) as unknown;
-      return typeof member === "function" ? member.bind(value) : member;
-    },
-  });
-}
 
 /** Compatibility fixture retained for focused renderer tests; production seeding uses SiteProject records. */
 export function createProductionSampleDocument(): CompositionDocument {
@@ -158,7 +166,7 @@ export function createInitializedCompositionCatalog(providers: readonly Composit
 }
 
 export function createProductionProviderIntegration(options: ProductionProviderIntegrationOptions = {}): ProductionProviderIntegration {
-  const mediaProvider = createFileProviderMediaProvider();
+  const mediaProvider = options.mediaProvider === undefined ? createFileProviderMediaProvider() : options.mediaProvider ?? undefined;
   const usesInjectedSource = options.project === undefined;
   const activated = activate(usesInjectedSource ? injectedSiteProject : options.project);
   let project = activated.project;
@@ -173,24 +181,19 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     project = undefined;
     activated.error = new ProviderIntegrationError("source", "The active SiteProject source is missing its canonical revision.", false);
   }
-  const usesDefaultIdb = options.compositionIdbFactory === undefined
-    && options.contentIdbFactory === undefined
-    && options.mappingIdbFactory === undefined
-    && options.sitemapIdbFactory === undefined;
-  const browserLocks = typeof navigator === "undefined" ? undefined : navigator.locks as unknown as RevisionLockManager | undefined;
-  const retention = sourceRevision && usesDefaultIdb && globalThis.indexedDB && browserLocks
-    ? startSiteProjectRevisionRetention({ factory: globalThis.indexedDB, locks: browserLocks, revision: sourceRevision })
-    : undefined;
-  const compositionSeed = project?.providers.compositions.find(({ id }) => id === "indexeddb")?.records ?? [];
-  const contentSeed = project?.providers.content.find(({ id }) => id === "content-indexeddb");
-  const mappingSeed = project?.providers.mappings.find(({ id }) => id === "mapping-indexeddb")?.records ?? [];
-  const sitemapSeed = project?.providers.sitemaps.find(({ id }) => id === "sitemap-indexeddb")?.records ?? [];
+  const initialProject = project;
+  const initialRevision = sourceRevision;
+  const storage = createWorkspaceStorage(options.compositionIdbFactory);
+  const sessions = options.saveRegistry ?? createWorkspaceSaveRegistry();
+  let workspaceRecord: WorkspaceRecord | undefined;
+  let workspaceId = options.workspaceId;
+  let mappingSeed: readonly MappingRecord[] = [];
+  let sitemapSeed: readonly SitemapRecord[] = [];
   const idb = (value: IDBFactory | null | undefined): { idbFactory?: IDBFactory | null } => {
-    const scoped = revisionScopedIdbFactory(value, sourceRevision);
-    return scoped === undefined ? {} : { idbFactory: scoped };
+    return { idbFactory: workspaceScopedFactory(value, () => { if (!workspaceId) throw new Error("Open a workspace before accessing its providers."); return workspaceId; }) };
   };
 
-  const baseComposition = createIndexedDbCompositionProvider({ seed: compositionSeed, ...idb(options.compositionIdbFactory) });
+  const baseComposition = createIndexedDbCompositionProvider({ seed: [], ...idb(options.compositionIdbFactory) });
   const fileStore = options.fileCompositionProvider === undefined
     ? createFileProviderCompositionStore({ catalog: activeComponentProvider.catalog })
     : null;
@@ -202,9 +205,9 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     const provider = compositionCandidates.get(browserProviderIdFor("compositions", declared.id));
     if (provider) baseCompositions.push(provider);
   }
-  const baseContent = createIndexedDbContentProvider({ seed: { models: contentSeed?.models ?? [], entries: contentSeed?.entries ?? [] }, ...idb(options.contentIdbFactory) });
-  const baseMapping = createIndexedDbMappingProvider({ seed: { mappings: mappingSeed }, ...idb(options.mappingIdbFactory) });
-  const baseSitemap = createIndexedDbSitemapProvider({ seed: sitemapSeed, ...idb(options.sitemapIdbFactory) });
+  const baseContent = createIndexedDbContentProvider(idb(options.contentIdbFactory));
+  const baseMapping = createIndexedDbMappingProvider(idb(options.mappingIdbFactory));
+  const baseSitemap = createIndexedDbSitemapProvider(idb(options.sitemapIdbFactory));
 
   const byDomain = {
     compositions: new Map(baseCompositions.map((provider) => [provider.descriptor.id, provider])),
@@ -279,36 +282,74 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     }
   };
 
-  const snapshotNow = async (): Promise<SiteProject> => {
+  const snapshotNow = async (capture?: WorkspaceCapture): Promise<SiteProject> => {
     if (!project) throw activated.error!;
-    const next = structuredClone(project);
+    const authored = capture?.values.workspace as WorkspaceRecord | undefined ?? await storage.open(workspaceId);
+    if (!authored) throw new ProviderIntegrationError("snapshot", "Workspace metadata is unavailable.");
+    const next = projectFromWorkspace(authored);
     for (const declared of next.providers.compositions) {
       const provider = byDomain.compositions.get(browserProviderIdFor("compositions", declared.id) as "indexeddb" | "files");
       if (!provider) throw new ProviderIntegrationError("snapshot", `Composition provider "${declared.id}" is unavailable.`);
+      if (capture) { declared.records = [...capture.values[`compositions:${declared.id}`] as typeof declared.records]; continue; }
       if (isCompositionCollectionStore(provider.store)) declared.records = [...await provider.store.readAll()];
       else { const summaries = await provider.store.list(); declared.records = await Promise.all(summaries.map(async ({ id }) => { const loaded = await provider.store.get(id); if (loaded.status !== "loaded") throw new ProviderIntegrationError("snapshot", `Composition "${id}" could not be loaded coherently.`); return loaded.record; })); }
     }
-    for (const declared of next.providers.content) { const provider = byDomain.content.get(browserProviderIdFor("content", declared.id) as "content-indexeddb"); if (!provider || !("readAll" in provider.store)) throw new ProviderIntegrationError("snapshot", `Content provider "${declared.id}" lacks atomic snapshot support.`); const records = await (provider.store as unknown as ContentSnapshotStore).readAll(); declared.models = [...records.models]; declared.entries = [...records.entries]; }
-    for (const declared of next.providers.mappings) { const provider = byDomain.mappings.get(browserProviderIdFor("mappings", declared.id) as "mapping-indexeddb"); if (!provider || !("readAll" in provider.store)) throw new ProviderIntegrationError("snapshot", `Mapping provider "${declared.id}" lacks atomic snapshot support.`); declared.records = [...await (provider.store as unknown as MappingSnapshotStore).readAll()]; }
-    for (const declared of next.providers.sitemaps) { const provider = byDomain.sitemaps.get(browserProviderIdFor("sitemaps", declared.id) as "sitemap-indexeddb"); if (!provider || !isSitemapCollectionStore(provider.store)) throw new ProviderIntegrationError("snapshot", `Sitemap provider "${declared.id}" lacks atomic snapshot support.`); declared.records = [...await provider.store.readAll()]; }
+    for (const declared of next.providers.content) { const provider = byDomain.content.get(browserProviderIdFor("content", declared.id) as "content-indexeddb"); if (!provider || !("readAll" in provider.store)) throw new ProviderIntegrationError("snapshot", `Content provider "${declared.id}" lacks atomic snapshot support.`); const records = capture ? capture.values[`content:${declared.id}`] as Awaited<ReturnType<ContentSnapshotStore["readAll"]>> : await (provider.store as unknown as ContentSnapshotStore).readAll(); declared.models = [...records.models]; declared.entries = [...records.entries]; }
+    for (const declared of next.providers.mappings) { const provider = byDomain.mappings.get(browserProviderIdFor("mappings", declared.id) as "mapping-indexeddb"); if (!provider || !("readAll" in provider.store)) throw new ProviderIntegrationError("snapshot", `Mapping provider "${declared.id}" lacks atomic snapshot support.`); declared.records = [...(capture ? capture.values[`mappings:${declared.id}`] as readonly MappingRecord[] : await (provider.store as unknown as MappingSnapshotStore).readAll())]; }
+    for (const declared of next.providers.sitemaps) { const provider = byDomain.sitemaps.get(browserProviderIdFor("sitemaps", declared.id) as "sitemap-indexeddb"); if (!provider || !isSitemapCollectionStore(provider.store)) throw new ProviderIntegrationError("snapshot", `Sitemap provider "${declared.id}" lacks atomic snapshot support.`); declared.records = [...(capture ? capture.values[`sitemaps:${declared.id}`] as readonly SitemapRecord[] : await provider.store.readAll())]; }
     const result = validateSiteProject(next, activeSiteProjectValidationContext);
     if (!result.ok) throw new ProviderIntegrationError("snapshot", `Provider snapshot is not coherent: ${result.diagnostics.map((item) => `${item.path}: ${item.message}`).join("; ")}`);
     return canonicalizeSiteProject(result.project);
   };
 
-  let freshPending = false; let active: { kind: string; promise: Promise<ProviderIntegrationOutcome> } | undefined; let tail: Promise<unknown> = Promise.resolve();
+  let initialized = false; let active: { kind: string; promise: Promise<ProviderIntegrationOutcome> } | undefined; let tail: Promise<unknown> = Promise.resolve();
   const perform = async (kind: "initialize" | "retry" | "startFresh"): Promise<ProviderIntegrationOutcome> => {
     try {
-      if (retention && !await retention.protect()) {
-        throw new ProviderIntegrationError("source", "The active SiteProject revision could not acquire its browser storage lock.", true);
+      if (kind === "startFresh") throw new WorkspaceResetRequiredError();
+      if (initialized && kind === "initialize") return { status: "ready" };
+      let record = await storage.open(workspaceId);
+      if (!record) {
+        if (options.workspaceId) throw new ProviderIntegrationError("source", "The requested workspace does not exist. Choose one explicitly.", false);
+        if (!initialProject || !initialRevision) throw activated.error!;
+        record = await storage.create(initialProject, initialRevision, "initial");
       }
-      verifyRegistry(); const action = kind === "startFresh" || freshPending ? "startFresh" : kind; if (action === "startFresh") freshPending = true;
-      for (const provider of baseCompositions) assertReady("composition", await provider.initialization[action]());
-      assertReady("content", await baseContent.initialization[action]()); await verifyMappingRefs();
-      assertReady("mapping", await baseMapping.initialization[action]());
-      await verifyMappingRefs(await (baseMapping.store as unknown as MappingSnapshotStore).readAll());
-      await verifySitemapRefs(action);
-      assertReady("sitemap", await baseSitemap.initialization[action]()); await snapshotNow(); freshPending = false; retention?.afterReady(); return { status: "ready" };
+      workspaceId = record.id;
+      return await withWorkspaceInitializationLock(options.compositionIdbFactory, workspaceId, async () => {
+        workspaceRecord = (await storage.open(workspaceId))!;
+        project = projectFromWorkspace(workspaceRecord);
+        baseCompositions.splice(0, baseCompositions.length, ...project.providers.compositions.flatMap(({ id }) => { const provider = compositionCandidates.get(browserProviderIdFor("compositions", id)); return provider ? [provider] : []; }));
+        byDomain.compositions = new Map(baseCompositions.map((provider) => [provider.descriptor.id, provider]));
+        compositionProviders.splice(0, compositionProviders.length, ...baseCompositions.map(wrapComposition));
+        verifyRegistry();
+        if (workspaceRecord.status === "ready") {
+          const databases = [
+            [options.compositionIdbFactory, "zudo-composer", "composition"],
+            [options.contentIdbFactory, "zudo-composer-content", "content"],
+            [options.mappingIdbFactory, "zudo-composer-mapping", "mapping"],
+            [options.sitemapIdbFactory, "zudo-composer-sitemapper", "sitemap"],
+          ] as const;
+          for (const [factory, name, phase] of databases) {
+            const target = factory === undefined ? globalThis.indexedDB : factory;
+            if (target?.databases && !(await target.databases()).some((database) => database.name === workspaceDatabaseName(name, workspaceId!))) throw new ProviderIntegrationError(phase, `Workspace ${phase} database is missing. Reset creates a new workspace; existing data is preserved.`, false);
+          }
+        }
+        const seed = workspaceRecord.status === "seeding" ? workspaceRecord.seed : undefined;
+        if (workspaceRecord.status === "seeding" && !seed) throw new ProviderIntegrationError("source", "Incomplete workspace seed metadata requires explicit reset.", false);
+        mappingSeed = seed?.providers.mappings.find(({ id }) => id === "mapping-indexeddb")?.records ?? [];
+        sitemapSeed = seed?.providers.sitemaps.find(({ id }) => id === "sitemap-indexeddb")?.records ?? [];
+        for (const provider of baseCompositions) assertReady("composition", await provider.initialization[kind]());
+        if (seed && isCompositionCollectionStore(baseComposition.store)) await baseComposition.store.seed(seed.providers.compositions.find(({ id }) => id === "indexeddb")?.records ?? []);
+        assertReady("content", await baseContent.initialization[kind]());
+        const contentSeed = seed?.providers.content.find(({ id }) => id === "content-indexeddb");
+        if (contentSeed) await baseContent.store.seed({ models: contentSeed.models, entries: contentSeed.entries });
+        if (seed) await verifyMappingRefs();
+        assertReady("mapping", await baseMapping.initialization[kind]());
+        if (seed) await baseMapping.store.seed({ mappings: mappingSeed });
+        assertReady("sitemap", await baseSitemap.initialization[kind]());
+        if (seed) { await verifySitemapRefs("startFresh"); if (isSitemapCollectionStore(baseSitemap.store)) await baseSitemap.store.seed(sitemapSeed); await snapshotNow(); workspaceRecord = await storage.complete(workspaceId!); }
+        initialized = true;
+        return { status: "ready" as const };
+      });
     } catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Provider integration failed.") }; }
   };
   const schedule = (kind: "initialize" | "retry" | "startFresh"): Promise<ProviderIntegrationOutcome> => {
@@ -336,7 +377,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     getModel: async (id: string) => { await ensureReady(); return provider.store.getModel(id); },
     scanEntries: async (id: string) => { await ensureReady(); return provider.store.scanEntries(id); },
   } }));
-  const guardedCompositionProviders = compositionProviders.map((provider) => ({ descriptor: provider.descriptor, store: {
+  const guardedCompositionProviders = () => compositionProviders.map((provider) => ({ descriptor: provider.descriptor, store: {
     list: async () => { await ensureReady(); return provider.store.list(); },
     get: async (id: string) => { await ensureReady(); return provider.store.get(id); },
   } }));
@@ -345,10 +386,10 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     get: async (id: string) => { await ensureReady(); return provider.store.get(id); },
   } }));
   const contentCatalog = createContentCatalog(guardedContentProviders);
-  const rawMappingCompositionCatalog = createMappingCompositionCatalog(guardedCompositionProviders);
+  const rawMappingCompositionCatalog = () => createMappingCompositionCatalog(guardedCompositionProviders());
   const mappingCompositionCatalog: MappingCompositionCatalog = {
-    list: async () => { try { await ensureReady(); return rawMappingCompositionCatalog.list(); } catch (error) { return { status: "listed", entries: [], failures: [{ providerId: "site-project", providerLabel: "Active SiteProject", reason: error instanceof Error ? error.message : "SiteProject initialization failed." }] }; } },
-    resolve: async (ref) => { try { await ensureReady(); return rawMappingCompositionCatalog.resolve(ref); } catch (error) { return { status: "provider-error", reason: error instanceof Error ? error.message : "SiteProject initialization failed." }; } },
+    list: async () => { try { await ensureReady(); return rawMappingCompositionCatalog().list(); } catch (error) { return { status: "listed", entries: [], failures: [{ providerId: "site-project", providerLabel: "Active SiteProject", reason: error instanceof Error ? error.message : "SiteProject initialization failed." }] }; } },
+    resolve: async (ref) => { try { await ensureReady(); return rawMappingCompositionCatalog().resolve(ref); } catch (error) { return { status: "provider-error", reason: error instanceof Error ? error.message : "SiteProject initialization failed." }; } },
   };
   const mappingContentEntries: MappingContentEntryCatalog = {
     async scan(ref) { if (ref.providerId !== contentProvider.descriptor.id) return { status: "provider-error", reason: `Content provider "${ref.providerId}" is unavailable.` }; const initialized = await lifecycle.initialize(); if (initialized.status !== "ready") return { status: "provider-error", reason: initialized.error.message }; try { return { status: "resolved", snapshot: await contentProvider.store.scanEntries(ref.recordId) }; } catch (error) { return { status: "provider-error", reason: error instanceof Error ? error.message : "Content snapshot failed." }; } },
@@ -358,14 +399,91 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   const sitemapperMappingCatalog = createMappingAssignmentCatalog(guardedMappingProviders, guardedContentProviders, async (mapping) => { const definition = await resolveMappingDefinition(mapping, { content: contentCatalog, compositions: mappingCompositionCatalog }, activeComponentProvider.catalog); return definition.status === "ready" ? { status: "ready" } : { status: "blocked", diagnostics: definition.diagnostics.map(({ code, message }) => ({ code, message })) }; });
   const preview = () => createContentPreviewSource({ mappings: mappingCatalog, catalogs: { content: contentCatalog, compositions: mappingCompositionCatalog }, manifest: activeComponentProvider.catalog, initializeContent: async () => { const result = await lifecycle.initialize(); return result.status === "ready" ? { status: "ready" } : { status: "error", reason: result.error.message }; }, initializeMappings: async () => { const result = await lifecycle.initialize(); return result.status === "ready" ? { status: "ready" } : { status: "error", reason: result.error.message }; } });
 
-  const initializedCompositionCatalog = createCompositionCatalog(guardedCompositionProviders);
+  const initializedCompositionCatalog = () => createCompositionCatalog(guardedCompositionProviders());
   const compositionCatalog: CompositionCatalog = {
-    listCompositions: async () => { try { await ensureReady(); return initializedCompositionCatalog.listCompositions(); } catch (error) { return { entries: [], failures: [{ providerId: "site-project", providerLabel: "Active SiteProject", reason: error instanceof Error ? error.message : "SiteProject initialization failed." }] }; } },
-    resolveComposition: async (ref) => { try { await ensureReady(); return initializedCompositionCatalog.resolveComposition(ref); } catch { return { status: "provider-unavailable" }; } },
+    listCompositions: async () => { try { await ensureReady(); return initializedCompositionCatalog().listCompositions(); } catch (error) { return { entries: [], failures: [{ providerId: "site-project", providerLabel: "Active SiteProject", reason: error instanceof Error ? error.message : "SiteProject initialization failed." }] }; } },
+    resolveComposition: async (ref) => { try { await ensureReady(); return initializedCompositionCatalog().resolveComposition(ref); } catch { return { status: "provider-unavailable" }; } },
   };
 
-  return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, mediaProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle,
-    // IndexedDB cannot transact across four databases. Each provider read is atomic; the serialized lifecycle gate and final aggregate validation reject cross-database partial mixes.
-    getCurrentSiteProject: async (): Promise<SiteProjectSnapshotOutcome> => { const ready = await lifecycle.initialize(); if (ready.status !== "ready") return ready; const result = tail.then(async () => ({ status: "ready" as const, project: await snapshotNow() })).catch((cause: unknown) => ({ status: "error" as const, error: cause instanceof ProviderIntegrationError ? cause : new ProviderIntegrationError("snapshot", cause instanceof Error ? cause.message : "Snapshot failed.", true, { cause }) })); tail = result; return result; },
+  const sources = (includeMedia: boolean): WorkspaceSnapshotSource[] => {
+    if (!project || !workspaceId) throw new ProviderIntegrationError("snapshot", "Open a workspace before capture.");
+    const result: WorkspaceSnapshotSource[] = [{ id: "workspace", token: async () => (await storage.open(workspaceId))!.mutationToken, read: async () => { const value = (await storage.open(workspaceId))!; return { mutationToken: value.mutationToken, value }; } }];
+    for (const domain of ["compositions", "mappings", "sitemaps"] as const) for (const declared of project.providers[domain]) {
+      const store = byDomain[domain].get(browserProviderIdFor(domain, declared.id as never) as never)?.store;
+      const id = `${domain}:${declared.id}`;
+      if (!store?.snapshot || !store.mutationToken) throw new ProviderIntegrationError("snapshot", `${id} lacks durable snapshot/precondition capability.`, false);
+      result.push({ id, token: () => store.mutationToken!(), read: async () => { const value = await store.snapshot!(); return { mutationToken: value.mutationToken, value: value.records }; } });
+    }
+    for (const declared of project.providers.content) {
+      const store = byDomain.content.get(browserProviderIdFor("content", declared.id) as "content-indexeddb")!.store;
+      result.push({ id: `content:${declared.id}`, token: async () => (await store.readAll()).mutationToken, read: async () => { const value = await store.readAll(); return { mutationToken: value.mutationToken, value }; } });
+    }
+    if (includeMedia) {
+      if (!mediaProvider) throw new ProviderIntegrationError("snapshot", "Media is unavailable; a release capture cannot claim a complete media snapshot.", false);
+      result.push({ id: `media:${mediaProvider.descriptor.id}`, token: () => mediaProvider.store.mutationToken(), read: async () => { const value = await mediaProvider.store.snapshot(); return { mutationToken: value.mutationToken, value }; } });
+    }
+    return result;
+  };
+  const capture = async (includeMedia: boolean): Promise<WorkspaceCaptureOutcome> => {
+    const ready = await lifecycle.initialize();
+    if (ready.status === "error") return { status: "unavailable", source: ready.error.phase, error: ready.error };
+    try { return await captureWorkspaceSnapshot(workspaceId!, sessions, sources(includeMedia)); }
+    catch (cause) { return { status: "unavailable", source: "capabilities", error: integrationError("snapshot", cause, "Workspace capture capability is unavailable.") }; }
+  };
+  const isCaptureCurrent = async (value: WorkspaceCapture) => {
+    await ensureReady();
+    return checkWorkspaceCapture(value, workspaceId!, sessions, sources(Object.keys(value.tokens).some((key) => key.startsWith("media:"))));
+  };
+  const openIntegration = async (id: string): Promise<ProductionProviderIntegration> => {
+    const next = createProductionProviderIntegration({ ...options, workspaceId: id, saveRegistry: sessions });
+    const ready = await next.initialization.initialize();
+    if (ready.status === "error") throw ready.error;
+    let selected: WorkspaceRecord | undefined;
+    try { selected = await storage.open(); } catch { /* Explicit open repairs only the selection, never the original data. */ }
+    if (selected?.id !== id) await storage.complete(id);
+    return next;
+  };
+  const create = async (value: SiteProject, baselineRevision: string): Promise<ProductionProviderIntegration> => {
+    const validated = activate(value);
+    if (!validated.project) throw validated.error!;
+    if (!SOURCE_REVISION.test(baselineRevision)) throw new ProviderIntegrationError("source", "A canonical baseline revision is required.", false);
+    const record = await storage.create(validated.project, baselineRevision);
+    return openIntegration(record.id);
+  };
+  const workspace: WorkspaceLifecycle = {
+    get id() { return workspaceId; },
+    async metadata() { await ensureReady(); return (await storage.open(workspaceId))!; },
+    async updateMetadata(expectedToken, patch) {
+      await ensureReady();
+      if (patch.activeSitemap) {
+        if (patch.activeSitemap.providerId !== "sitemap-indexeddb" || (await baseSitemap.store.get(patch.activeSitemap.recordId)).status !== "loaded") throw new ProviderIntegrationError("sitemap", "Select an existing provider-qualified Sitemap.", false);
+      }
+      return storage.update(workspaceId!, expectedToken, patch);
+    },
+    async reconcileBaseline(value, revision) {
+      if (!await isCaptureCurrent(value)) return "changed";
+      try { await storage.update(workspaceId!, value.tokens.workspace as number, { baselineRevision: revision }); return "applied"; }
+      catch (cause) { if (!await isCaptureCurrent(value)) return "changed"; throw cause; }
+    },
+    open: openIntegration, create, loadExample: create,
+    async reset() {
+      if (!initialProject || !initialRevision) throw new ProviderIntegrationError("source", "Reset requires a valid example/source project. Use workspace.loadExample(project, revision).", false);
+      return create(initialProject, initialRevision);
+    },
+  };
+  return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, mediaProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle, workspace, sessions,
+    subscribeChanges(listener: () => void) { const stopStorage = subscribePersistenceChanges((database) => { if (database === WORKSPACE_DATABASE_NAME || database === "media" || database === "compositions:files" || database.endsWith(`-workspace-v1-${workspaceId}`)) listener(); }); const stopSessions = sessions.subscribe(listener); return () => { stopStorage(); stopSessions(); }; },
+    captureWorkspace: async (): Promise<WorkspaceProjectCaptureOutcome> => {
+      const outcome = await capture(true);
+      if (outcome.status !== "ready") return outcome;
+      try { return { ...outcome, project: await snapshotNow(outcome.capture) }; }
+      catch (cause) { return { status: "unavailable", source: "project-validation", error: integrationError("snapshot", cause, "Project validation failed.") }; }
+    }, isCaptureCurrent,
+    getCurrentSiteProject: async (): Promise<SiteProjectSnapshotOutcome> => {
+      const value = await capture(false);
+      if (value.status !== "ready") return { status: "error", error: new ProviderIntegrationError("snapshot", value.status === "unavailable" ? `${value.source}: ${value.error.message}` : value.status === "save-failed" ? value.failures.map((failure) => `${failure.feature}/${failure.providerId}/${failure.recordId ?? "operation"}: ${failure.error.message}`).join("; ") : `Workspace changed during capture: ${value.sources.join(", ")}.`) };
+      try { return { status: "ready", project: await snapshotNow(value.capture) }; }
+      catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Snapshot validation failed.") }; }
+    },
   });
 }

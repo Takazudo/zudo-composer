@@ -1,3 +1,4 @@
+import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import {
   CONTENT_PROVIDERS,
   compareContentModelsNewestFirst,
@@ -432,7 +433,9 @@ export class IndexedDbContentStore implements ContentStore {
       }
       // Snapshot-returning mutations include the durable generation assigned above.
       const finalResult = mode === "readwrite" && (operation === "transact" || operation === "reconcile-publication") ? await this.snapshot(transaction, operation) as T : result;
-      await done; return finalResult;
+      await done;
+      if (mode === "readwrite") notifyPersistenceChange(connection.db.name);
+      return finalResult;
     }
     catch (error) {
       if (mode === "readwrite") { try { transaction.abort(); } catch { /* already terminal */ } }

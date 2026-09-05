@@ -1,3 +1,4 @@
+import { advanceMutationToken, readMutationToken, notifyPersistenceChange, PersistenceGenerationError } from "../../../shared/persistence-generation";
 import {
   COMPOSITION_PROVIDERS,
   CompositionPersistenceError,
@@ -179,6 +180,7 @@ class IndexedDbProviderRuntime {
           const compositions = request.result.createObjectStore(COMPOSITIONS_STORE_NAME, { keyPath: "id" });
           compositions.createIndex(UPDATED_AT_INDEX_NAME, "updatedAt", { unique: false });
           const meta = request.result.createObjectStore(META_STORE_NAME, { keyPath: "key" });
+          meta.put({ key: "mutation", token: 0 });
           meta.put({
             key: COMPOSER_META_KEYS.schema,
             databaseVersion: COMPOSER_DATABASE_VERSION,
@@ -245,6 +247,28 @@ class IndexedDbCompositionStore implements CompositionStore {
   readonly provider = COMPOSITION_PROVIDERS.indexeddb;
 
   constructor(private readonly runtime: IndexedDbProviderRuntime) {}
+
+  async mutationToken(): Promise<number> {
+    const connection = await this.runtime.open("list");
+    const transaction = connection.db.transaction(META_STORE_NAME, "readonly");
+    const done = transactionComplete(transaction);
+    const token = await readMutationToken(transaction);
+    await done;
+    return token;
+  }
+
+  async snapshot(): Promise<{ mutationToken: number; records: readonly CompositionRecord[] }> {
+    return this.run("list", "readonly", async (store) => {
+      const token = await readMutationToken(store.transaction);
+      const raw = await requestResult(store.getAll()) as unknown[];
+      const records = raw.map((value) => {
+        const loaded = loadCompositionRecord(value);
+        if (loaded.status !== "loaded") throw persistenceError("list", "validation", "Invalid Composition snapshot.", false);
+        return loaded.record;
+      });
+      return { mutationToken: token, records };
+    });
+  }
 
   async hasInitializationMeta(): Promise<boolean> {
     const connection = await this.runtime.open("initialize");
@@ -597,17 +621,22 @@ class IndexedDbCompositionStore implements CompositionStore {
     }
     let transaction: IDBTransaction;
     try {
-      transaction = connection.db.transaction(COMPOSITIONS_STORE_NAME, mode);
+      transaction = connection.db.transaction([COMPOSITIONS_STORE_NAME, META_STORE_NAME], mode);
     } catch (error) {
       throw mapOperationalError(operation, mode, error);
     }
     const done = transactionComplete(transaction);
     try {
+      await readMutationToken(transaction);
       const value = await action(transaction.objectStore(COMPOSITIONS_STORE_NAME));
+      if (mode === "readwrite") await advanceMutationToken(transaction);
       await done;
+      if (mode === "readwrite") notifyPersistenceChange(connection.db.name);
       return value;
     } catch (error) {
+      try { transaction.abort(); } catch { /* Already completed. */ }
       void done.catch(() => undefined);
+      if (error instanceof PersistenceGenerationError) throw persistenceError(operation, error.code, error.message, false);
       throw mapOperationalError(operation, mode, error);
     }
   }

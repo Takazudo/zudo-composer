@@ -10,6 +10,7 @@ import { activeComponentProvider } from "../../features/composer/active-pack";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import { createProductionProviderIntegration } from "../provider-integration";
 import { createWorkspaceSummary } from "../workspace-summary";
+import { workspaceDatabaseName, WORKSPACE_DATABASE_NAME } from "../workspace-storage";
 
 const sample = () => loadSampleSiteProject(activeSiteProjectValidationContext);
 const revision = (project: ReturnType<typeof sample>) => createHash("sha256").update(serializeSiteProject(project), "utf8").digest("hex");
@@ -36,6 +37,8 @@ function fileProvider(records: readonly CompositionRecord[]): CompositionProvide
     descriptor: COMPOSITION_PROVIDERS.files,
     store: {
       provider: COMPOSITION_PROVIDERS.files,
+      snapshot: async () => ({ mutationToken: JSON.stringify([...byId.values()]), records: structuredClone([...byId.values()]) }),
+      mutationToken: async () => JSON.stringify([...byId.values()]),
       list: async () => [...byId.values()].map(summarizeComposition),
       get: async (id) => { const record = byId.get(id); return record ? { status: "loaded" as const, record: structuredClone(record) } : { status: "not-found" as const, id }; },
       put: async (record) => { byId.set(record.id, structuredClone(record)); return { canonical: { status: "saved" as const }, derived: { status: "current" as const, records: [] } }; },
@@ -77,7 +80,7 @@ describe("SiteProject provider integration", () => {
     expect(sample().providers.compositions[0]!.records.find(({ id }) => id === "services-page")!.document.name).toBe("Services page");
   });
 
-  it("isolates browser records by exact activated revision while preserving edits within one revision", async () => {
+  it("preserves newer authoring records and metadata across changed activated source and reload", async () => {
     const factories = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
     const firstProject = sample();
     const firstRevision = revision(firstProject);
@@ -129,18 +132,9 @@ describe("SiteProject provider integration", () => {
       sitemapIdbFactory: factories.sitemap,
     });
     const secondSnapshot = await second.getCurrentSiteProject();
-    expect(secondSnapshot).toMatchObject({
-      status: "ready",
-      project: {
-        name: "Second revision source",
-        providers: {
-          compositions: [{ records: expect.arrayContaining([expect.objectContaining({ document: expect.objectContaining({ name: "Second revision services" }) })]) }],
-          content: [{ entries: expect.arrayContaining([expect.objectContaining({ values: expect.objectContaining({ "about-heading-field": "Second revision about" }) })]) }],
-          mappings: [{ records: expect.arrayContaining([expect.objectContaining({ document: expect.objectContaining({ name: "Second revision mapping" }) })]) }],
-          sitemaps: [{ records: [expect.objectContaining({ document: expect.objectContaining({ root: [expect.objectContaining({ title: "Second revision home" })] }) })] }],
-        },
-      },
-    });
+    expect(secondSnapshot).toEqual(firstSnapshot);
+    expect(second.workspace.id).toBe(first.workspace.id);
+    expect((await second.workspace.metadata()).baselineRevision).toBe(firstRevision);
   });
 
   it("rejects a non-canonical source revision before provider initialization", async () => {
@@ -166,7 +160,7 @@ describe("SiteProject provider integration", () => {
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("missing its canonical revision") } });
   });
 
-  it("fails closed before opening provider databases when revision locking fails", async () => {
+  it("fails closed before opening provider databases when workspace seed locking fails", async () => {
     const factory = new FDBFactory(); const opened: string[] = [];
     const trackedFactory = new Proxy(factory, {
       get(target, property) {
@@ -185,8 +179,8 @@ describe("SiteProject provider integration", () => {
     try {
       const project = sample();
       const current = createProductionProviderIntegration({ project, sourceRevision: revision(project) });
-      expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: true, message: expect.stringContaining("storage lock") } });
-      expect(opened).toEqual([]);
+      expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { retryable: true, message: expect.stringContaining("locking unavailable") } });
+      expect(new Set(opened)).toEqual(new Set([WORKSPACE_DATABASE_NAME]));
     } finally {
       vi.unstubAllGlobals();
       if (hadOwnLocks) Object.defineProperty(navigator, "locks", { configurable: true, value: priorLocks });
@@ -259,11 +253,13 @@ describe("SiteProject provider integration", () => {
     expect(await current.getCurrentSiteProject()).toMatchObject({ status: "ready" });
   });
 
-  it("serializes destructive startFresh and recreates the complete graph", async () => {
+  it("rejects in-place startFresh and creates a separately selected complete workspace on reset", async () => {
     const current = integration(); await current.initialization.initialize();
     const [fresh, concurrent] = await Promise.all([current.initialization.startFresh(), current.initialization.initialize()]);
-    expect(fresh).toEqual({ status: "ready" }); expect(concurrent).toEqual({ status: "ready" });
-    const snapshot = await current.getCurrentSiteProject();
+    expect(fresh).toMatchObject({ status: "error", error: { code: "reset-required" } }); expect(concurrent).toEqual({ status: "ready" });
+    const next = await current.workspace.reset();
+    expect(next.workspace.id).not.toBe(current.workspace.id);
+    const snapshot = await next.getCurrentSiteProject();
     expect(snapshot).toMatchObject({ status: "ready", project: { providers: { compositions: [{ records: expect.arrayContaining([expect.objectContaining({ id: "site-frame" })]) }], sitemaps: [{ records: [expect.objectContaining({ id: "sample-studio-sitemap" })] }] } } });
   });
 
@@ -295,7 +291,7 @@ describe("SiteProject provider integration", () => {
     expect(await prior.compositionProviders[0]!.store.delete("services-page")).toBe(true);
 
     const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: compositionFactory, contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
-    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "sitemap", message: expect.stringContaining("indexeddb:services-page") } });
+    expect(await current.getCurrentSiteProject()).toMatchObject({ status: "error" });
     expect(await current.sitemapProvider.store.list()).toEqual([]);
   });
 
@@ -312,7 +308,7 @@ describe("SiteProject provider integration", () => {
     about.source.ref.recordId = "missing-mapping";
     await prior.sitemapProvider.store.put(live);
     const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
-    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "sitemap", message: expect.stringContaining("mapping-indexeddb:missing-mapping") } });
+    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "snapshot", message: expect.stringContaining("missing-mapping") } });
   });
 
   it("exposes and snapshots exactly the declared Composition provider set", async () => {
@@ -338,7 +334,7 @@ describe("SiteProject provider integration", () => {
   it("preserves non-retryable Content version failures through initialize and retry wrappers", async () => {
     const project = sample();
     const projectRevision = revision(project);
-    const contentFactory = new FDBFactory(); const newer = await request(contentFactory.open(`${CONTENT_DATABASE_NAME}--site-project--${projectRevision}`, CONTENT_DATABASE_VERSION + 1)); newer.close();
+    const contentFactory = new FDBFactory(); const newer = await request(contentFactory.open(workspaceDatabaseName(CONTENT_DATABASE_NAME, "initial"), CONTENT_DATABASE_VERSION + 1)); newer.close();
     const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: new FDBFactory(), contentIdbFactory: contentFactory, mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
     expect(await current.contentProvider.initialization.initialize()).toMatchObject({ status: "error", error: { retryable: false, message: expect.stringContaining("newer") } });
     expect(await current.contentProvider.initialization.retry()).toMatchObject({ status: "error", error: { retryable: false, message: expect.stringContaining("newer") } });

@@ -144,6 +144,7 @@ export type WorkspaceInitializationOutcome = { status: "ready" } | { status: "er
  * integration free to grow.
  */
 export interface WorkspaceSummaryIntegration {
+  subscribeChanges?(listener: () => void): () => void;
   readonly initialization: { initialize(): Promise<WorkspaceInitializationOutcome>; retry(): Promise<WorkspaceInitializationOutcome> };
   readonly componentProvider: { readonly catalog: ComponentCatalog };
   readonly compositionProviders: readonly {
@@ -159,6 +160,7 @@ export interface WorkspaceSummaryIntegration {
 }
 
 export interface WorkspaceSummary {
+  dispose?(): void;
   counts(): Promise<WorkspaceCounts>;
   recent(limit?: number): Promise<WorkspaceRecent>;
   attention(): Promise<WorkspaceAttention>;
@@ -469,7 +471,9 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     return { compositions, mappings, sitemaps, content, media };
   })());
 
+  const stopChanges = integration.subscribeChanges?.(() => { pending = undefined; });
   return {
+    dispose() { stopChanges?.(); pending = undefined; },
     async counts() {
       const data = await read();
       return {
