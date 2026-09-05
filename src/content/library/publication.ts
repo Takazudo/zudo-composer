@@ -36,9 +36,10 @@ export function selectContentPublicationCandidate(working: readonly ContentSnaps
     const current = after.get(key), old = before.get(key);
     if (selection.action === "publish") {
       if (!current) throw new TypeError("Cannot publish a missing working entry.");
+      if (old && (current.entry.lifecycle !== "published" || contentEntryDigest(current.entry) === contentEntryDigest(old.entry))) throw new TypeError("Publish requires a new entry or changed published intent.");
       candidate.set(key, { ref: current.ref, entry: { ...structuredClone(current.entry), lifecycle: "published" } });
     } else {
-      if (!old || (selection.action === "delete" && current) || (selection.action === "unpublish" && !current)) throw new TypeError("Publication removal does not match working/baseline state.");
+      if (!old || (selection.action === "delete" && current) || (selection.action === "unpublish" && current?.entry.lifecycle !== "draft")) throw new TypeError("Publication removal does not match working/baseline state.");
       candidate.delete(key);
     }
   }
