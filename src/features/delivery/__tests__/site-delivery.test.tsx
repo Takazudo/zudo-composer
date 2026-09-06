@@ -6,7 +6,8 @@ import { createProductionProviderIntegration, ProviderIntegrationError, type Pro
 import { activeComponentProvider } from "../../composer/active-pack";
 import { loadSampleSiteProject } from "../../../site-project/sample";
 import { serializeSiteProject } from "../../../site-project/model/canonical";
-import { SiteDelivery } from "../site-delivery";
+import { SiteDelivery, loadDeliverySnapshot } from "../site-delivery";
+import { providerFixture, PNG } from "../../media/__tests__/versioned-fixture";
 
 afterEach(cleanup);
 const sample = () => loadSampleSiteProject({ componentPack: activeComponentProvider.manifest });
@@ -16,6 +17,40 @@ function fixture(project = sample()): ProductionProviderIntegration {
 }
 
 describe("SiteDelivery", () => {
+  it("captures exact managed Media for visitor output and blocks missing provider or corrupt bytes", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const asset = await filesystem.upload({ fileName: "download.png", declaredMediaType: "image/png", bytes: PNG });
+    const project = sample();
+    project.providers.compositions[0]!.records.find(({ id }) => id === "home-page")!.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-media/asset-${asset.id}`, children: "Download" }, slots: {} });
+    const idb = new IDBFactory();
+    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, compositionIdbFactory: idb, contentIdbFactory: idb, mappingIdbFactory: idb, sitemapIdbFactory: idb });
+    const providers = { ...base, captureWorkspace: vi.fn(() => base.captureWorkspace()), getCurrentSiteProject: vi.fn(() => { throw new Error("Must use aggregate project"); }) };
+    const result = await loadDeliverySnapshot(providers);
+    expect(result.status).toBe("ready");
+    expect(result).toMatchObject({ consistency: "captured" });
+    expect(providers.captureWorkspace).toHaveBeenCalledTimes(1);
+    expect(providers.getCurrentSiteProject).not.toHaveBeenCalled();
+    if (result.status === "ready") expect(result.build.routes.find(({ pathname }) => pathname === "/")!.composition.document.root.find(({ id }) => id === "download")!.props.href).toBe(asset.document.versions[0]!.url);
+    expect((await loadDeliverySnapshot(fixture(project))).status).toBe("compiler-error");
+    vi.spyOn(provider.store, "resolveVersion").mockRejectedValue(new Error("Corrupt bytes"));
+    expect((await loadDeliverySnapshot(providers)).status).toBe("compiler-error");
+  });
+  it.each(["media", "project"])("rejects a changed %s aggregate token rather than recapturing latest", async (domain) => {
+    const { provider, filesystem } = await providerFixture();
+    const project = sample(), idb = new IDBFactory();
+    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, compositionIdbFactory: idb, contentIdbFactory: idb, mappingIdbFactory: idb, sitemapIdbFactory: idb });
+    const capture = vi.fn(() => base.captureWorkspace());
+    let checks = 0;
+    const providers = { ...base, captureWorkspace: capture, isCaptureCurrent: async (value: Parameters<typeof base.isCaptureCurrent>[0]) => {
+      if (++checks === 2) {
+        if (domain === "media") await filesystem.upload({ fileName: "changed.png", declaredMediaType: "image/png", bytes: PNG });
+        else await base.workspace.updateMetadata((await base.workspace.metadata()).mutationToken, { name: "Changed project" });
+      }
+      return base.isCaptureCurrent(value);
+    } };
+    expect((await loadDeliverySnapshot(providers)).status).toBe("compiler-error");
+    expect(capture).toHaveBeenCalledTimes(1); expect(checks).toBe(2);
+  });
   it.each([
     ["/site", "Clear ideas, carefully shaped"],
     ["/site/services", "Ways to work together"],

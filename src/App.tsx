@@ -7,6 +7,11 @@ import { parseIntent, formatIntent } from "./app/route-intents";
 import { Button } from "./components/ui";
 import { workspaceDatabaseName, type WorkspaceRecord } from "./app/workspace-storage";
 import { CONTENT_DATABASE_NAME } from "./content";
+import { COMPOSER_DATABASE_NAME } from "./composer/storage/indexeddb/types";
+import { MAPPING_DATABASE_NAME } from "./mapping/storage/indexeddb/types";
+import { SITEMAPPER_DATABASE_NAME } from "./sitemapper/storage/indexeddb/types";
+import { WORKSPACE_DATABASE_NAME } from "./app/workspace-storage";
+import { createProjectMediaUsageInspection } from "./site-project/media/usage";
 import { subscribePersistenceChanges } from "./shared/persistence-generation";
 import { Shell } from "./app/shell";
 import { createWorkspaceSummary } from "./app/workspace-summary";
@@ -166,7 +171,18 @@ export function App({ themeController, integration }: AppProps = {}) {
     () => providers.sessions.flush(),
     (listener) => subscribePersistenceChanges((database) => {
       const workspaceId = providers.workspace.id;
-      if (workspaceId && database === workspaceDatabaseName(CONTENT_DATABASE_NAME, workspaceId)) listener();
+      if (database === WORKSPACE_DATABASE_NAME || database === "compositions:files" || (workspaceId && [CONTENT_DATABASE_NAME, COMPOSER_DATABASE_NAME, MAPPING_DATABASE_NAME, SITEMAPPER_DATABASE_NAME].some((name) => database === workspaceDatabaseName(name, workspaceId)))) listener();
+    }),
+    createProjectMediaUsageInspection({
+      readProject: async () => { const result = await providers.getCurrentSiteProject({ flushSessions: false }); if (result.status !== "ready") throw new Error(result.error.message); return result.project; },
+      catalog: providers.componentProvider.catalog,
+      mediaStore: providers.mediaProvider?.store,
+      href: (location) => {
+        const path = location.selectionPath ?? location.valuePath;
+        return location.domain === "content" && location.modelId
+          ? formatIntent({ route: "content", providerId: location.providerId, modelId: location.modelId, entryId: location.recordId, ...(location.fieldId ? { fieldId: location.fieldId } : {}), ...(path.length ? { valuePath: path } : {}) })
+          : formatIntent({ route: "composer", providerId: location.providerId, compositionId: location.sourceRecordId ?? location.recordId });
+      },
     }),
   ), [providers]);
   const mappingAttachmentService = useMemo(() => providers.mappingAttachmentService, [providers]);

@@ -2,7 +2,10 @@ import type { ComponentCatalog, CompositionDocument, CompositionNode } from "../
 import type { CompositionRecordRef } from "../composer/library";
 import { evaluateCollectionQuery, type MappingRecordRef } from "../mapping";
 import type { MappingAttachmentCallbacks, MappingAttachmentDiagnostic, MappingAttachmentItem, MappingAttachmentPreview, MappingAttachmentSnapshot, MappingAttachmentTarget } from "../features/mapping/attachments";
-import { compileSiteProject, type SiteProjectCompilation } from "../site-project/compiler";
+import { type SiteProjectCompilation } from "../site-project/compiler";
+import { compileWithCapturedMedia } from "../site-project/media/compile";
+import type { VersionedMediaStore } from "../media/library";
+import { serializeSiteProject } from "../site-project/model/canonical";
 import { browserProviderIdFor, validateSiteProject, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project";
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
 import type { WorkspaceRecord } from "./workspace-storage";
@@ -14,6 +17,7 @@ interface MappingAttachmentServiceOptions {
     updateMetadata(expectedToken: number, patch: { collectionAttachments?: readonly SiteProjectCollectionAttachment[] }): Promise<WorkspaceRecord>;
   };
   componentCatalog: ComponentCatalog;
+  mediaStore?: VersionedMediaStore;
   subscribe(listener: () => void): () => void;
 }
 
@@ -110,7 +114,7 @@ function compilerDiagnostics(compilation: SiteProjectCompilation, attachmentId: 
   if (compilation.status === "ready") return [];
   const attachmentPath = `$.collectionAttachments[?(@.id==${JSON.stringify(attachmentId)})]`;
   return compilation.diagnostics
-    .filter((diagnostic) => diagnostic.path === "$.collectionAttachments" || diagnostic.path.startsWith(attachmentPath))
+    .filter((diagnostic) => diagnostic.path === "$.mediaLock" || diagnostic.path === "$.collectionAttachments" || diagnostic.path.startsWith(attachmentPath))
     .map((diagnostic) => ({ code: diagnostic.code, severity: "blocking" as const, message: diagnostic.message, path: diagnostic.path }));
 }
 
@@ -177,8 +181,11 @@ export function createMappingAttachmentService(options: MappingAttachmentService
     return { target, mappingName: mapping.document.name, effectiveEntries: query.entries, staticFallback: projectComposition(project, attachment.composition)?.document ?? (() => { throw new Error("Attachment owner Composition was not found."); })(), diagnostics: queryDiagnostics(query.diagnostics) };
   }
 
-  async function compile(project: SiteProject): Promise<SiteProjectCompilation> {
-    return compileSiteProject(project, { componentCatalog: options.componentCatalog });
+  async function compile(project: SiteProject, baseline?: ProjectContext): Promise<SiteProjectCompilation> {
+    const revision = baseline ? serializeSiteProject(baseline.project) : undefined;
+    return compileWithCapturedMedia(project, { catalog: options.componentCatalog, mediaStore: options.mediaStore,
+      ...(baseline ? { checkBaseline: async () => { const current = await coherent(false); return current.metadata.mutationToken === baseline.metadata.mutationToken && serializeSiteProject(current.project) === revision; } } : {}),
+    });
   }
 
   async function list(): Promise<MappingAttachmentSnapshot> {
@@ -216,7 +223,7 @@ export function createMappingAttachmentService(options: MappingAttachmentService
       candidate.collectionAttachments.push(attachment);
       const validation = validateSiteProject(candidate, activeSiteProjectValidationContext);
       if (!validation.ok) throw new Error(validation.diagnostics.map((diagnostic) => diagnostic.message).join("; "));
-      const compilation = await compile(validation.project);
+      const compilation = await compile(validation.project, context);
       const attachmentDiagnostics = compilerDiagnostics(compilation, id);
       if (attachmentDiagnostics.some((diagnostic) => diagnostic.severity === "blocking")) throw new Error(attachmentDiagnostics.map((diagnostic) => diagnostic.message).join("; "));
       await options.workspace.updateMetadata(context.metadata.mutationToken, { collectionAttachments: candidate.collectionAttachments });

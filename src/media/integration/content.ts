@@ -1,11 +1,15 @@
 import { readContentGraph, type ContentProvider, type ContentMediaUse, type ContentFieldDefinition, type ContentValueSchema } from "../../content";
 import type { JsonValue } from "@zudo-composer/component-contract";
 import type { MediaAssetRef } from "../model";
+import type { ProjectMediaUsageInspection } from "../../site-project/media/usage";
+import type { MediaImpactLocation } from "../../site-project/media/types";
 
 export type MediaUse = ContentMediaUse;
 export interface MediaContentLocation { providerId: string; modelId: string; entryId: string; fieldId: string; valuePath: readonly (string | number)[] }
 export interface MediaUsageLocation extends MediaContentLocation { modelName: string; entryTitle: string; fieldLabel: string; use: MediaUse }
 export interface MediaUsageScan {
+  projectRevision?: string;
+  additionalLocations?: readonly { location: MediaImpactLocation; href?: string }[];
   status: "complete" | "incomplete" | "unavailable";
   locations: readonly MediaUsageLocation[];
   tokens: Readonly<Record<string, number>>;
@@ -24,7 +28,7 @@ export interface MediaContentServices {
 }
 
 /** Domain-only adapter. Enumerates whole provider snapshots, never UI pages. */
-export function createMediaContentServices(providers: readonly ContentProvider[], flush: () => Promise<unknown>, subscribeChanges: (listener: () => void) => () => void = () => () => undefined): MediaContentServices {
+export function createMediaContentServices(providers: readonly ContentProvider[], flush: () => Promise<unknown>, subscribeChanges: (listener: () => void) => () => void = () => () => undefined, impact?: ProjectMediaUsageInspection): MediaContentServices {
   const stores = providers.map(({ store }) => store);
   const listeners = new Set<() => void>();
   let stopChanges: (() => void) | undefined;
@@ -64,9 +68,13 @@ export function createMediaContentServices(providers: readonly ContentProvider[]
             valuePath: location.path.slice(1), modelName: model.document.name, entryTitle: entry.id,
             fieldLabel: model.document.fields.find(({ id }) => id === location.fieldId)?.label ?? location.fieldId, use };
         });
-        return { status: graph.index.complete ? "complete" : "incomplete", locations,
+        const inspected = await impact?.read();
+        const additionalLocations = inspected?.index.references.filter(({ ref, location }) => ref.providerId === asset.providerId && ref.assetId === asset.assetId && location.selectionPath === undefined).map(({ location }) => ({ location, href: impact?.href?.(location) })) ?? [];
+        const complete = graph.index.complete && inspected?.index.complete === true;
+        return { status: complete ? "complete" : "incomplete", locations, additionalLocations,
+          ...(inspected ? { projectRevision: inspected.revision } : {}),
           tokens: Object.fromEntries(graph.snapshots.map((snapshot) => [snapshot.providerId, snapshot.mutationToken])),
-          message: graph.index.complete ? "Complete structured Content scan. Raw URL or Markdown references may also exist; this does not prove the asset is unused." : "The authoritative Content graph is incomplete; trash is blocked." };
+          message: complete ? "Complete managed Media impact scan across Content, Composition properties, Markdown destinations and route materializations. External/advisory references are not proof of non-use." : `The authoritative Media impact scan is incomplete; trash is blocked. ${impact ? inspected?.index.advisory.slice(0, 3).map(({ reason }) => reason).join(" ") ?? "Project inspection failed." : "Full-project inspection is unavailable."}` };
       } catch (error) { return { status: "unavailable", locations: [], tokens: {}, message: error instanceof Error ? error.message : "Content scan unavailable." }; }
       })();
       scans.set(key, pending);
@@ -74,6 +82,7 @@ export function createMediaContentServices(providers: readonly ContentProvider[]
       return pending;
     },
     async isCurrent(scan) {
+      if (impact && (!scan.projectRevision || !await impact.isCurrent(scan.projectRevision))) return false;
       if (scan.status !== "complete" || Object.keys(scan.tokens).length !== stores.length) return false;
       try { return (await Promise.all(stores.map(async (store) => { const snapshot = await store.readAll(); return snapshot.providerId === store.provider.id && snapshot.mutationToken === scan.tokens[store.provider.id]; }))).every(Boolean); }
       catch { return false; }

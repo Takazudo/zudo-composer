@@ -1,7 +1,10 @@
 import { Component, type ComponentChildren, type JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { ProductionProviderIntegration } from "../../app/provider-integration";
-import { compileSiteProject, type SiteBuildPlan, type SiteCompiledRoute } from "../../site-project/compiler";
+import { type SiteBuildPlan, type SiteCompiledRoute } from "../../site-project/compiler";
+import { compileWithCapturedMedia } from "../../site-project/media/compile";
+import { validateMediaSnapshot } from "../../media/model";
+import type { WorkspaceCapture } from "../../app/workspace-snapshot";
 import { validateSiteProject, type SiteProject } from "../../site-project";
 import type { SitemapDocument } from "../../sitemapper/model/types";
 import { breadcrumbs, footerNavigation, primaryNavigation } from "./chrome";
@@ -13,7 +16,7 @@ type DeliveryState =
   | { status: "provider-error"; message: string; retryable: boolean }
   | { status: "validation-error"; message: string }
   | { status: "compiler-error"; message: string }
-  | { status: "ready"; project: SiteProject; build: SiteBuildPlan; sitemap: SitemapDocument };
+  | { status: "ready"; consistency: "captured" | "detached"; project: SiteProject; build: SiteBuildPlan; sitemap: SitemapDocument };
 
 function activeSitemap(project: SiteProject): SitemapDocument | undefined {
   return project.providers.sitemaps
@@ -23,14 +26,29 @@ function activeSitemap(project: SiteProject): SitemapDocument | undefined {
 
 export async function loadDeliverySnapshot(providers: ProductionProviderIntegration): Promise<DeliveryState> {
   try {
-    const snapshot = await providers.getCurrentSiteProject();
-    if (snapshot.status === "error") return { status: "provider-error", message: snapshot.error.message, retryable: snapshot.error.retryable };
-    const validated = validateSiteProject(snapshot.project, { componentPack: providers.componentProvider.manifest });
+    let project: SiteProject;
+    let capture: WorkspaceCapture | undefined;
+    if (providers.mediaProvider) {
+      const snapshot = await providers.captureWorkspace();
+      if (snapshot.status !== "ready") return { status: "provider-error", message: snapshot.status === "unavailable" ? snapshot.error.message : `Workspace capture ${snapshot.status}; retry after completing pending edits.`, retryable: true };
+      project = snapshot.project; capture = snapshot.capture;
+    } else {
+      // Static/committed assets need no authoring provider. This is explicitly
+      // detached output, not proof of cross-domain release currentness.
+      const snapshot = await providers.getCurrentSiteProject();
+      if (snapshot.status === "error") return { status: "provider-error", message: snapshot.error.message, retryable: snapshot.error.retryable };
+      project = snapshot.project;
+    }
+    const validated = validateSiteProject(project, { componentPack: providers.componentProvider.manifest });
     if (!validated.ok) return { status: "validation-error", message: validated.diagnostics.map(({ message }) => message).join(" ") };
-    const compilation = await compileSiteProject(validated.project, { componentCatalog: providers.componentProvider.catalog, policy: "release" });
+    const mediaSnapshot = capture?.values[`media:${providers.mediaProvider?.descriptor.id}`];
+    if (capture && !validateMediaSnapshot(mediaSnapshot)) return { status: "compiler-error", message: "Aggregate capture has no valid Media snapshot." };
+    const compilation = await compileWithCapturedMedia(validated.project, { catalog: providers.componentProvider.catalog, mediaStore: providers.mediaProvider?.store,
+      ...(capture ? { snapshot: mediaSnapshot as import("../../media/model").MediaSnapshot, isCaptureCurrent: () => providers.isCaptureCurrent(capture!) } : {}),
+    });
     if (compilation.status === "blocked") return { status: "compiler-error", message: compilation.diagnostics.map(({ message }) => message).join(" ") };
     const sitemap = activeSitemap(validated.project);
-    return sitemap ? { status: "ready", project: validated.project, build: compilation.build, sitemap } : { status: "validation-error", message: "The active Sitemap is unavailable." };
+    return sitemap ? { status: "ready", consistency: compilation.consistency, project: validated.project, build: compilation.build, sitemap } : { status: "validation-error", message: "The active Sitemap is unavailable." };
   } catch (error) {
     return { status: "provider-error", message: error instanceof Error ? error.message : "The delivery snapshot failed.", retryable: true };
   }

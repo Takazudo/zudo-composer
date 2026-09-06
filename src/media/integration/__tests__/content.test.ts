@@ -2,6 +2,7 @@ import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { describe, expect, it, vi } from "vitest";
 import { createContentModelRecord, createContentEntryRecord, createIndexedDbContentProvider } from "../../../content";
 import { createMediaContentServices, type MediaUse } from "../content";
+const completeImpact = { read: async () => ({ revision: "captured-project", index: { complete: true, references: [], advisory: [] } }), isCurrent: async () => true };
 
 async function content() {
   const model = createContentModelRecord({ name: "Resources", kind: "collection", fields: [
@@ -15,10 +16,18 @@ async function content() {
   return provider;
 }
 describe("injected complete Media / Content integration", () => {
+  it("fails closed without full-project inspection and exposes non-Content impacts", async () => {
+    const provider = await content(), asset = { providerId: "media-files", assetId: "hero" };
+    const absent = createMediaContentServices([provider], async () => undefined);
+    expect((await absent.scan(asset)).status).toBe("incomplete");
+    const impact = { ...completeImpact, read: async () => ({ revision: "project", index: { complete: true, references: [{ ref: asset, location: { domain: "compositions" as const, providerId: "indexeddb", recordId: "page", nodeId: "image", property: "src", valuePath: ["src"] } }], advisory: [] } }) };
+    const service = createMediaContentServices([provider], async () => undefined, undefined, impact);
+    expect(await service.scan(asset)).toMatchObject({ status: "complete", additionalLocations: [{ location: { domain: "compositions", recordId: "page", nodeId: "image" } }] });
+  });
   it("coalesces inspector and dialog scans for an asset/event while execution can force a fresh check", async () => {
     const provider = await content(); const read = vi.spyOn(provider.store, "readAll");
     let emit!: () => void; const flush = vi.fn(async () => undefined);
-    const service = createMediaContentServices([provider], flush, (listener) => { emit = listener; return () => undefined; });
+    const service = createMediaContentServices([provider], flush, (listener) => { emit = listener; return () => undefined; }, completeImpact);
     const stopInspector = service.subscribeChanges(() => undefined), stopDialog = service.subscribeChanges(() => undefined);
     const asset = { providerId: "media-files", assetId: "hero" };
     try {
@@ -49,7 +58,7 @@ describe("injected complete Media / Content integration", () => {
     stopAgain(); expect(detach).toHaveBeenCalledTimes(2); expect(read).not.toHaveBeenCalled();
   });
   it("persists image/link/card text through Content CAS without storing Media notes", async () => {
-    const provider = await content(); const service = createMediaContentServices([provider], async () => ({ status: "ready" }));
+    const provider = await content(); const service = createMediaContentServices([provider], async () => ({ status: "ready" }), undefined, completeImpact);
     const asset = { providerId: "media-files", assetId: "hero" };
     const values: MediaUse[] = [{ kind: "image", asset, alt: "Contextual image", decorative: false, caption: "A caption" }, { kind: "link", asset, label: "Download guide" }, { kind: "card", asset, title: "Resource card", description: "Per-use card description" }];
     for (const value of values) {

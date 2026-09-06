@@ -6,6 +6,7 @@ import type { SitemapEntryRef } from "../../sitemapper/model";
 import type { SitemapPublicationPolicy, SitemapRouteAncestor, ResolvedSitemapNavigation } from "../../sitemapper/routes";
 
 export interface CompileSiteProjectOptions {
+  mediaLock?: import("../../media/references").MediaReferenceLock;
   policy?: SitemapPublicationPolicy;
   /** Manifest-only catalog used by Mapping, reuse, and JSX generation. */
   componentCatalog: ComponentCatalog;
@@ -49,6 +50,7 @@ export interface SiteCompiledRouteComposition {
 }
 
 export interface SiteCompiledRoute {
+  materializationSources?: readonly { renderedNodeId: string; providerId: string; recordId: string; nodeId: string; attachmentId: string; entries: readonly { providerId: string; modelId: string; recordId: string }[] }[];
   pathname: string;
   /** Plain per-route title resolved during compilation; delivery never infers it from rendered content. */
   displayTitle: string;

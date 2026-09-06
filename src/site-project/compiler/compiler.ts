@@ -14,6 +14,8 @@ import type { SitemapNode } from "../../sitemapper/model/types";
 import { authoredPath, expandSitemapRoutes } from "../../sitemapper/routes/expand";
 import type { DerivedSitemapRoute, SitemapRouteDiagnostic } from "../../sitemapper/routes/types";
 import { resolveSitemapNavigation, sameSitemapEntry } from "../../sitemapper/routes/navigation";
+import { resolveSiteProjectMedia, resolveCompositionMedia } from "../media/impact";
+import { validateMediaReferenceLock, resolvePinnedMedia, isImmutableMediaUrl } from "../../media/references";
 import { compareUnicodeCodePoints } from "../model/canonical";
 import { createInMemorySiteProjectAdapters } from "../model/memory";
 import type { SiteProject, SiteProjectRecordRef } from "../model/types";
@@ -237,6 +239,13 @@ export async function compileSiteProject(
   project: SiteProject,
   options: CompileSiteProjectOptions,
 ): Promise<SiteProjectCompilation> {
+  if (options.mediaLock && !validateMediaReferenceLock(options.mediaLock)) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-lock-invalid", message: "The exact-version Media lock is invalid.", path: "$.mediaLock" }] };
+  const media = resolveSiteProjectMedia(project, options.componentCatalog, { lock: options.mediaLock });
+  const mediaMissing = media.index.references.filter(({ ref }) => !options.mediaLock || !resolvePinnedMedia(ref, options.mediaLock));
+  if ((options.policy ?? "release") === "release" && !media.index.complete) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-impact-incomplete", message: "Managed Media inspection is incomplete. " + media.index.advisory.map(({ reason }) => reason).join(" "), path: "$.mediaLock" }] };
+  if ((options.policy ?? "release") === "release" && media.index.advisory.some(({ value }) => value && isImmutableMediaUrl(value))) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-lock-required", message: "An immutable Media URL has no verified lock association.", path: "$.mediaLock" }] };
+  if ((options.policy ?? "release") === "release" && mediaMissing.length) return { status: "blocked", routes: [], diagnostics: mediaMissing.map(({ location }) => ({ severity: "blocking", code: "media-lock-required", message: "Required managed Media must be captured in an exact-version lock before release compilation.", path: JSON.stringify(location) })) };
+  project = media.project;
   const adapters = createInMemorySiteProjectAdapters(project);
   const snapshot = adapters.project;
   const active = snapshot.activeSitemap;
@@ -294,6 +303,7 @@ export async function compileSiteProject(
     return promise;
   };
 
+  const materializationSources = new Map<string, NonNullable<SiteCompiledRoute["materializationSources"]>[number][]>();
   const materializeCollectionAttachments = async (
     ownerRef: SiteProjectRecordRef,
     sourceDocument: CompositionDocument,
@@ -350,6 +360,12 @@ export async function compileSiteProject(
         const repeatedIdSet = new Set(repeatedIds);
         if (repeatedIdSet.size !== repeatedIds.length || repeatedIds.some((id) => occupiedNodeIds.has(id))) { diagnostics.push({ severity: "blocking", code: "attachment-node-id-conflict", message: `Stable repeated node identity for Entry "${entry.id}" conflicts with an authored or generated node.`, path: attachmentPath, ...routeContext, entry: { providerId: mapping.document.contentModel.providerId, recordId: entry.id } }); return undefined; }
         for (const id of repeatedIds) occupiedNodeIds.add(id);
+        const sources = materializationSources.get(routeContext.pathname) ?? [];
+        for (const originalNodeId of nodeIds(nested.root)) {
+          const prior = sources.find((source) => source.renderedNodeId === originalNodeId);
+          sources.push({ renderedNodeId: repeatedNodeId(attachment.id, entry.id, originalNodeId), providerId: prior?.providerId ?? mapping.document.composition.providerId, recordId: prior?.recordId ?? mapping.document.composition.recordId, nodeId: prior?.nodeId ?? originalNodeId, attachmentId: prior?.attachmentId ?? attachment.id, entries: [{ providerId: mapping.document.contentModel.providerId, modelId: entry.modelId, recordId: entry.id }, ...(prior?.entries ?? [])] });
+        }
+        materializationSources.set(routeContext.pathname, sources);
         const repeated = cloneRepeatedNodes(nested.root, attachment.id, entry.id);
         if (slot.accepts && repeated.some((node) => !slot.accepts!.includes(node.componentId))) { diagnostics.push({ severity: "blocking", code: "attachment-slot-incompatible", message: `Mapped roots for Entry "${entry.id}" are not accepted by the target slot.`, path: attachmentPath, ...routeContext }); return undefined; }
         roots.push(...repeated);
@@ -492,6 +508,10 @@ export async function compileSiteProject(
     if (!localRecord || !localDocument) continue;
     localDocument = await materializeCollectionAttachments(localRef!, localDocument, { pathname: expanded.pathname, nodeId: node.id });
     if (!localDocument) continue;
+    const resolvedMedia = resolveCompositionMedia(localDocument, options.componentCatalog, { lock: options.mediaLock });
+    const unresolvedMedia = resolvedMedia.index.references.filter(({ ref }) => !options.mediaLock || !resolvePinnedMedia(ref, options.mediaLock));
+    if ((options.policy ?? "release") === "release" && (!resolvedMedia.index.complete || unresolvedMedia.length || resolvedMedia.index.advisory.some(({ value }) => value && isImmutableMediaUrl(value)))) { diagnostics.push({ severity: "blocking", code: "media-lock-required", message: "Materialized Media is incomplete or absent from the exact-version lock.", path: indexed.path, pathname: expanded.pathname, nodeId: node.id }); continue; }
+    localDocument = resolvedMedia.document;
     const providerId = localRef!.providerId;
     const cycle = bindingCycle(providerId, localRef!.recordId, { ...localRecord, document: localDocument }, (ref) => adapters.compositions.catalog.resolve(ref));
     if (cycle) {
@@ -562,6 +582,7 @@ export async function compileSiteProject(
     }
     const modules = batch.records.filter((plan) => plan.status === "generated").map(asModule).sort(compareModules);
     routes.push({
+      ...(materializationSources.has(expanded.pathname) ? { materializationSources: materializationSources.get(expanded.pathname)! } : {}),
       pathname: expanded.pathname,
       displayTitle,
       ancestors: expanded.ancestors,
