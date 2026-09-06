@@ -10,47 +10,48 @@ export interface DeliveryRuntimeProps {
   composition: SiteCompiledRouteComposition;
   pack: TrustedComponentPack;
   onComponentError?: (detail: DeliveryComponentError) => void;
+  basePath?: "/site" | "/website-preview";
 }
 
 type Schema = { type?: string; schema?: Schema; fields?: readonly { key: string; schema: Schema }[]; items?: Schema | readonly Schema[] };
 
 function schemaValue(schema: Schema): Schema { return schema.schema ?? schema; }
 
-function rewriteSchemaValue(value: JsonValue, schema: Schema, key?: string): JsonValue | undefined {
+function rewriteSchemaValue(value: JsonValue, schema: Schema, key?: string, basePath: "/site" | "/website-preview" = "/site"): JsonValue | undefined {
   schema = schemaValue(schema);
-  if (key === "href" && schema.type === "string" && typeof value === "string") return safeDeliveryHref(value);
+  if (key === "href" && schema.type === "string" && typeof value === "string") return safeDeliveryHref(value, basePath);
   if (schema.type === "object" && value !== null && !Array.isArray(value) && typeof value === "object") {
     const source = value as JsonObject;
     const result: Record<string, JsonValue> = {};
     for (const field of schema.fields ?? []) if (Object.hasOwn(source, field.key)) {
-      const next = rewriteSchemaValue(source[field.key]!, field.schema, field.key);
+      const next = rewriteSchemaValue(source[field.key]!, field.schema, field.key, basePath);
       if (next !== undefined) result[field.key] = next;
     }
     return result;
   }
   if (schema.type === "array" && Array.isArray(value) && schema.items && !Array.isArray(schema.items)) {
-    return value.flatMap((item) => { const next = rewriteSchemaValue(item, schemaValue(schema.items as Schema)); return next === undefined ? [] : [next]; });
+    return value.flatMap((item) => { const next = rewriteSchemaValue(item, schemaValue(schema.items as Schema), undefined, basePath); return next === undefined ? [] : [next]; });
   }
   if (schema.type === "tuple" && Array.isArray(value) && Array.isArray(schema.items)) {
     const items = schema.items;
-    return value.flatMap((item, index) => { const next = rewriteSchemaValue(item, items[index] as Schema); return next === undefined ? [] : [next]; });
+    return value.flatMap((item, index) => { const next = rewriteSchemaValue(item, items[index] as Schema, undefined, basePath); return next === undefined ? [] : [next]; });
   }
   return value;
 }
 
-export function projectTrustedProps(node: CompositionNode, definition: ComponentManifest): Record<string, unknown> | null {
+export function projectTrustedProps(node: CompositionNode, definition: ComponentManifest, basePath: "/site" | "/website-preview" = "/site"): Record<string, unknown> | null {
   if (!validateNodeProps(node, definition).ok) return null;
   const props: Record<string, unknown> = { ...definition.defaults };
   const fields = new Map(definition.fields.map((field) => [field.prop, field]));
   const statics = new Set((definition.staticProps ?? []).map(({ prop }) => prop));
   for (const field of definition.fields) if (Object.hasOwn(props, field.prop)) {
-    const next = rewriteSchemaValue(props[field.prop] as JsonValue, field.schema as Schema, field.prop);
+    const next = rewriteSchemaValue(props[field.prop] as JsonValue, field.schema as Schema, field.prop, basePath);
     if (next === undefined) delete props[field.prop]; else props[field.prop] = next;
   }
   for (const [key, value] of Object.entries(node.props)) {
     const field = fields.get(key);
     if (field) {
-      const next = rewriteSchemaValue(value, field.schema as Schema, key);
+      const next = rewriteSchemaValue(value, field.schema as Schema, key, basePath);
       if (next === undefined) delete props[key]; else props[key] = next;
     } else if (statics.has(key) && Object.hasOwn(definition.defaults, key)) props[key] = definition.defaults[key];
   }
@@ -73,6 +74,7 @@ interface RuntimeNodeProps {
   pack: TrustedComponentPack;
   outlet?: { parentId: string; slotId: string; children: readonly CompositionNode[]; localOwner: string };
   report?: (detail: DeliveryComponentError) => void;
+  basePath: "/site" | "/website-preview";
 }
 
 function RuntimeInvocation({ runtime, props }: { runtime: ReturnType<typeof resolveComponentNode> extends infer T ? T : never; props: Record<string, unknown> }): ComponentChildren {
@@ -80,10 +82,10 @@ function RuntimeInvocation({ runtime, props }: { runtime: ReturnType<typeof reso
   return runtime.runtime.adapters?.render ? runtime.runtime.adapters.render(props) as ComponentChildren : h(runtime.runtime.component as never, props);
 }
 
-function RuntimeNode({ node, owner, pack, outlet, report }: RuntimeNodeProps): JSX.Element {
+function RuntimeNode({ node, owner, pack, outlet, report, basePath }: RuntimeNodeProps): JSX.Element {
   const resolved = resolveComponentNode(node, pack);
   if (resolved.status !== "resolved") return <BlockedNode message="An unavailable page component was blocked." />;
-  const props = projectTrustedProps(node, resolved.definition);
+  const props = projectTrustedProps(node, resolved.definition, basePath);
   if (!props) return <BlockedNode message="An invalid page component was blocked." />;
   const slots = new Map(resolved.definition.slots.map((slot) => [slot.id, slot]));
   if (Object.keys(node.slots).some((slotId) => !slots.has(slotId))) return <BlockedNode message="An invalid page component was blocked." />;
@@ -96,7 +98,7 @@ function RuntimeNode({ node, owner, pack, outlet, report }: RuntimeNodeProps): J
     const source = projected ? outlet.children : node.slots[slot.id] ?? [];
     if ((slot.cardinality === "single" && source.length > 1) || (slot.accepts && source.some((child) => !slot.accepts!.includes(child.componentId)))) return <BlockedNode message="An invalid page component was blocked." />;
     const childOwner = projected ? outlet.localOwner : owner;
-    const children = source.map((child) => <RuntimeNode key={`${childOwner}:${child.id}`} node={child} owner={childOwner} pack={pack} outlet={projected ? undefined : outlet} report={report} />);
+    const children = source.map((child) => <RuntimeNode key={`${childOwner}:${child.id}`} node={child} owner={childOwner} pack={pack} outlet={projected ? undefined : outlet} report={report} basePath={basePath} />);
     props[slot.prop] = slot.cardinality === "single" ? children[0] : children;
   }
   return <NodeErrorBoundary detail={{ nodeId: node.id, componentId: node.componentId }} report={report}><RuntimeInvocation runtime={resolved} props={props} /></NodeErrorBoundary>;
@@ -125,9 +127,9 @@ function verifiedLinkedView(composition: SiteCompiledRouteComposition, pack: Tru
   return { document: linked.document, outlet: { ...linked.outlet.target, children: composition.document.root, localOwner: `${composition.local.providerId}:${composition.routeRecordId}` } };
 }
 
-export function DeliveryRuntime({ composition, pack, onComponentError }: DeliveryRuntimeProps): JSX.Element {
+export function DeliveryRuntime({ composition, pack, onComponentError, basePath = "/site" }: DeliveryRuntimeProps): JSX.Element {
   const view = verifiedLinkedView(composition, pack);
   if (!view) return <BlockedNode message="This page template could not be verified." />;
   const owner = composition.linkedSource ? `${composition.linkedSource.ref.providerId}:${composition.linkedSource.ref.recordId}` : `${composition.local.providerId}:${composition.routeRecordId}`;
-  return <>{view.document.root.map((node) => <RuntimeNode key={`${owner}:${node.id}`} node={node} owner={owner} pack={pack} outlet={view.outlet} report={onComponentError} />)}</>;
+  return <>{view.document.root.map((node) => <RuntimeNode key={`${owner}:${node.id}`} node={node} owner={owner} pack={pack} outlet={view.outlet} report={onComponentError} basePath={basePath} />)}</>;
 }

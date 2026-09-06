@@ -23,7 +23,7 @@ it("renders real static inspection and explanatory disabled release actions", as
   await vi.waitFor(() => expect(screen.getByRole("button", { name: "Export working JSON" })).toBeEnabled());
   expect(screen.getByRole("button", { name: "Run release checks" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Activate locally" })).toBeDisabled();
-  expect(screen.getByRole("link", { name: "Working draft preview" })).toHaveAttribute("href", "/website-preview");
-  expect(screen.getByRole("link", { name: "Activated website" })).toHaveAttribute("href", "/site");
+  expect(screen.getByRole("link", { name: "Live working preview" })).toHaveAttribute("href", "/website-preview");
+  expect(screen.getByRole("link", { name: "Activated local website (not deployed)" })).toHaveAttribute("href", "/site");
   expect(request).not.toHaveBeenCalled(); controller.dispose();
 });

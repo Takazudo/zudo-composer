@@ -44,14 +44,15 @@ assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must us
 assert.ok(browserDistConfig.includes("wrangler dev --local"), "production browser config must use local Wrangler");
 assert.ok(browserDistConfig.includes('CLOUDFLARE_API_TOKEN: ""'), "production browser config must be unauthenticated");
 
-assert.ok(vite.includes("bundledProject"), "Vite config must inject an explicit bundled SiteProject");
-assert.ok(vite.includes("bundledRevision"), "Vite config must inject the bundled project's canonical revision");
-assert.ok(vite.includes("sample-site-project.json"), "Vite config must point at the checked-in sample");
+assert.ok(vite.includes("bundled-release.json"), "Vite config must inject an explicit completed bundled release artifact");
+assert.ok(vite.includes("bundledSource"), "Vite config must pass the immutable bundled delivery source");
 assert.ok(vite.includes("publicDir: 'media-store/public'"), "Vite dev server must expose the Media public asset root");
 assert.ok(vite.includes("exclude: ['@zudo-sg/ui', '@takazudo/zfb-md-wasm']"), "Vite dev optimizer must leave provider and WASM resource packages in the normal asset graph");
-assert.match(plugin, /if \(command === "build"\) return serializedModule\(options\.bundledProject, options\.bundledRevision\)/);
+assert.match(plugin, /command === "build" \? options\.bundledSource : await delivery\(\)/);
+assert.match(plugin, /readActivatedSiteRelease/);
+assert.match(plugin, /readActivatedSiteMedia/);
+assert.match(plugin, /release:changed/);
 assert.match(plugin, /export const siteProjectRevision/);
-assert.match(plugin, /readActivatedSiteProject/);
 assert.match(plugin, /process\.env\.ZUDO_SITE_PROJECT_ROOT/);
 assert.match(store, /SITE_PROJECT_LOCAL_ROOT_ENV = "ZUDO_SITE_PROJECT_ROOT"/);
 assert.match(store, /options\.testRoot \?\? configuredLocalRoot\(\)/);
@@ -78,6 +79,8 @@ const forbiddenProductionMarkers = [
   "ZUDO_SITE_PROJECT_ROOT",
   "virtual:site-project-source",
   "readActivatedSiteProject",
+  "readActivatedSiteRelease",
+  "readActivatedSiteMedia",
   "SiteProjectApiService",
   "SiteProjectStoreAdapter",
   "createLocalSiteProjectStore",

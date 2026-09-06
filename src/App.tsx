@@ -2,10 +2,10 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Dashboard } from "./app/dashboard";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "./app/provider-integration";
-import { WorkspaceContext, useWorkspace } from "./app/workspace-context";
+import { WorkspaceContext } from "./app/workspace-context";
 import { parseIntent, formatIntent } from "./app/route-intents";
 import { Button } from "./components/ui";
-import { workspaceDatabaseName, type WorkspaceRecord } from "./app/workspace-storage";
+import { workspaceDatabaseName } from "./app/workspace-storage";
 import { CONTENT_DATABASE_NAME } from "./content";
 import { COMPOSER_DATABASE_NAME } from "./composer/storage/indexeddb/types";
 import { MAPPING_DATABASE_NAME } from "./mapping/storage/indexeddb/types";
@@ -23,7 +23,8 @@ import { SitemapperRouteContent } from "./features/sitemapper";
 import { ReleaseRoute, createReleaseController, createReleaseTransport } from "./features/release";
 import { createApplicationOperationGate } from "./app/operation-gate";
 import { SiteDelivery } from "./features/delivery/site-delivery";
-import { isSitePath } from "./features/delivery/routing";
+import { activatedDeliverySource } from "./features/delivery/activated-source";
+import { isSitePath, isWorkingPreviewPath } from "./features/delivery/routing";
 import { bootstrapTheme, createThemeController, type ThemeController } from "./theme/theme";
 
 function NotFound() { return <main class="route-placeholder"><h1>Not found</h1><p>This standalone route does not exist.</p><a href="/">Return home</a></main>; }
@@ -51,6 +52,8 @@ export function App({ themeController, integration }: AppProps = {}) {
   useEffect(() => () => ownedThemeController?.dispose(), [ownedThemeController]);
 
   const [providers, setProviders] = useState(() => integration ?? createProductionProviderIntegration());
+  const activatedSource = useMemo(() => activatedDeliverySource(providers.componentProvider), [providers.componentProvider]);
+  const workingPreviewSource = useMemo(() => ({ kind: "working-preview" as const, providers }), [providers]);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search + window.location.hash);
   const [routeEpoch, setRouteEpoch] = useState(0);
   const locationRef = useRef(location);
@@ -77,7 +80,7 @@ export function App({ themeController, integration }: AppProps = {}) {
       if (url.origin !== window.location.origin) throw new Error("This is not a workspace destination.");
       await flush();
       if (ticket !== navigationTicket.current) return false;
-      if (isSitePath(url.pathname) || url.pathname === "/composer/preview") { window.location.assign(url.href); return true; }
+      if (isSitePath(url.pathname) || isWorkingPreviewPath(url.pathname) || url.pathname === "/composer/preview") { window.location.assign(url.href); return true; }
       const next = url.pathname + url.search + url.hash;
       if (next !== locationRef.current) setRouteEpoch((value) => value + 1);
       if (replace || next !== locationRef.current) {
@@ -155,7 +158,7 @@ export function App({ themeController, integration }: AppProps = {}) {
       locationRef.current = next; setLocation(next);
     };
     const click = (event: MouseEvent) => {
-      if (isSitePath(new URL(locationRef.current, window.location.origin).pathname)) return;
+      if (isSitePath(new URL(locationRef.current, window.location.origin).pathname) || isWorkingPreviewPath(new URL(locationRef.current, window.location.origin).pathname)) return;
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !(event.target instanceof Element)) return;
       const anchor = event.target.closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.getAttribute("aria-disabled") === "true") return;
@@ -203,7 +206,8 @@ export function App({ themeController, integration }: AppProps = {}) {
   useEffect(() => () => workspaceSummary.dispose?.(), [workspaceSummary]);
   const path = new URL(location, window.location.origin).pathname;
   useEffect(() => { if (path === "/sitemapper") void providers.compositionCatalog.listCompositions().catch(() => undefined); }, [path, providers]);
-  if (isSitePath(path)) return <SiteDelivery providers={providers} pathname={path} />;
+  if (isSitePath(path)) return <SiteDelivery source={activatedSource} pathname={path} />;
+  if (isWorkingPreviewPath(path)) return <SiteDelivery source={workingPreviewSource} pathname={path} />;
   let content: ComponentChildren;
   const intent = parseIntent(location);
   const target = intent.status === "matched" ? intent.intent : null;
@@ -223,31 +227,6 @@ export function App({ themeController, integration }: AppProps = {}) {
     if (item.domain === "compositions") return formatIntent({ route: "composer", providerId: item.providerId, compositionId: item.recordId });
     return item.domain === "media" ? "/media" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
   }} />;
-  else if (path === "/website-preview") content = <WebsitePreview />;
   else content = <NotFound />;
   return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}><div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
-}
-
-function WebsitePreview() {
-  const workspace = useWorkspace()!;
-  const [metadata, setMetadata] = useState<WorkspaceRecord | null>(null);
-  const [sitemaps, setSitemaps] = useState<readonly { id: string; document: { name: string } }[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const pending = useRef<Promise<void>>(Promise.resolve());
-  const session = useRef<ReturnType<typeof workspace.integration.sessions.register> | null>(null);
-  useEffect(() => {
-    const registered = workspace.integration.sessions.register({ feature: "Project metadata", providerId: "workspace", workspaceId: workspace.integration.workspace.id }, { flush: () => pending.current });
-    session.current = registered;
-    return () => { registered.detach(); session.current = null; };
-  }, [workspace.integration]);
-  useEffect(() => { let live = true; void Promise.all([workspace.integration.workspace.metadata(), workspace.integration.sitemapProvider.store.list()]).then(([value, records]) => { if (live) { setMetadata(value); setSitemaps(records.map((record) => ({ id: record.id, document: { name: record.name } }))); } }).catch((cause: unknown) => { if (live) setError(cause instanceof Error ? cause.message : "Preview metadata unavailable."); }); return () => { live = false; }; }, [workspace.integration]);
-  return <main class="route-placeholder"><h1>Website preview</h1><p>The current visitor route renders the live workspace draft. It is not an approved or activated release preview.</p>{error && <p role="alert">{error}</p>}<label>Active Sitemap<select disabled={!metadata || saving} value={metadata?.metadata.activeSitemap.recordId ?? ""} onChange={(event) => {
-    if (!metadata) return;
-    const recordId = event.currentTarget.value;
-    setSaving(true); setError(null);
-    session.current?.changed();
-    pending.current = workspace.integration.workspace.updateMetadata(metadata.mutationToken, { activeSitemap: { providerId: metadata.metadata.activeSitemap.providerId, recordId } }).then(setMetadata);
-    void pending.current.catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Sitemap selection failed.")).finally(() => setSaving(false));
-  }}><option value="" disabled>Select a Sitemap</option>{sitemaps.map((sitemap) => <option value={sitemap.id} key={sitemap.id}>{sitemap.document.name}</option>)}</select></label><p><a href="/site">Open live draft website</a></p><p>Activated release preview is unavailable until the release delivery service is connected.</p></main>;
 }

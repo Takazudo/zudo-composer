@@ -1,6 +1,7 @@
 # SiteProject release operator and API guide
 
-SiteProject is the canonical four-domain JSON graph: provider-qualified
+SiteProject is the canonical four-domain JSON graph: provider-qualified,
+provider-scoped
 Compositions, Content models/entries, Mappings, and Sitemaps. Media remains global
 and separate. Release inputs include an exact Media lock without adding a fifth
 project provider domain.
@@ -248,6 +249,13 @@ Focused API/store/CLI tests cover selection, digests/CAS, interrupted writes,
 immutable Media copies, completion corruption, symlinks and concurrent writers.
 The integration owner runs `site-project:boundary`, full CI/artifact gates and
 the guarded `test:browser:site-project` / `test:browser:site-project:dist` lanes.
-The latter consumes an existing artifact and must not rebuild it. Browser/Vite
-transport and activated artifact delivery are separate follow-up ownership;
-no hosted API, authentication, Cloudflare persistence or deployment is added here.
+The latter consumes an existing artifact and must not rebuild it. Vite development
+delivery resolves `/site` only from the currently activated, completed local
+release. It verifies the active project/revision/build triple and serves only that
+build's copied checksum-addressed Media bytes; missing or corrupt release state is
+unavailable and never falls back to a working draft. In contrast,
+`/website-preview` flushes and compiles the current live authoring snapshot. A
+production assets-only build embeds one explicit completed sample artifact, so it
+does not need a hosted authoring or release API. Local activation is not deployment;
+Cloudflare persistence, authentication, hosted APIs and deployment remain future
+work and are not a claim of this repository.

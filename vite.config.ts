@@ -1,21 +1,12 @@
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 import tailwindcss from '@tailwindcss/vite';
 import composerFileProviderPlugin from './plugins/composer-file-provider-plugin.mjs';
 import siteProjectSourcePlugin from './plugins/site-project-source-plugin.mjs';
 import releaseApiPlugin from './plugins/release-api-plugin';
+import bundledRelease from './src/features/delivery/bundled-release.json';
 
-type BundledSiteProject = Parameters<typeof siteProjectSourcePlugin>[0]['bundledProject'];
-const productionSiteProjectSource = readFileSync(
-  new URL('./src/site-project/sample/sample-site-project.json', import.meta.url),
-  'utf8',
-);
-const productionSiteProject = JSON.parse(productionSiteProjectSource) as unknown as BundledSiteProject;
-const productionSiteProjectRevision = createHash('sha256')
-  .update(productionSiteProjectSource, 'utf8')
-  .digest('hex');
+const bundledSource = bundledRelease as never;
 
 export default defineConfig({
   publicDir: 'media-store/public',
@@ -27,8 +18,7 @@ export default defineConfig({
   plugins: [
     releaseApiPlugin(),
     siteProjectSourcePlugin({
-      bundledProject: productionSiteProject,
-      bundledRevision: productionSiteProjectRevision,
+      bundledSource,
     }),
     composerFileProviderPlugin(),
     tailwindcss(),
