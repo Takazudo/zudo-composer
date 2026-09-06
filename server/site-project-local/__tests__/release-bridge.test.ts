@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import releaseApiPlugin, { RELEASE_LIMITS, trustedReleaseRequest } from "../../../plugins/release-api-plugin";
 import { fixture, stageFor, catalog, call, pack, toolchain, PNG, review } from "./release-fixture";
 import { createLocalSiteProjectApiService } from "../service";
+import { readActivatedSiteRelease } from "../dev-reader";
 import { readFile } from "node:fs/promises";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
 import { compileSiteProject } from "../../../src/site-project/compiler";
@@ -52,6 +53,21 @@ describe("local release capability bridge", () => {
     const applied = await call<{ buildId: string }>(service, "apply", { plan });
     await call(service, "build", { projectId: value.id, buildId: applied.buildId });
     expect(await readFile(join(context.testRoot, "builds", applied.buildId, `media-${plan.mediaLock!.pins[0]!.url.split("/").at(-1)}`))).toEqual(Buffer.from(PNG));
+  });
+  it("refuses an activated release whose toolchain is not the installed one", async () => {
+    const context = await fixture(), value = project();
+    const service = createLocalSiteProjectApiService({ pack, testRoot: context.testRoot, mediaStoreRoot: context.mediaRoot,
+      toolchain: { ...toolchain, componentPack: value.componentPack } });
+    const plan = await review(service, value);
+    const applied = await call<{ buildId: string }>(service, "apply", { plan });
+    const completed = await call<{ identity: { projectId: string; revision: string; buildId: string } }>(service, "build", { projectId: value.id, buildId: applied.buildId });
+    await call(service, "activate", { ...completed.identity, expectedActive: null });
+    const stamped = { ...toolchain, componentPack: value.componentPack };
+    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: stamped })).resolves.toMatchObject({ release: { identity: completed.identity } });
+    // A pack swap leaves the activated release unavailable rather than served
+    // against components it was never built with.
+    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: { ...stamped, installedPackDigest: "f".repeat(64) } }))
+      .rejects.toThrow("Activated release toolchain does not match the current installed runtime.");
   });
   it("passes the isolated Media root to the release service without exposing a client path", async () => {
     const mediaStoreRoot = "/tmp/release-bridge-isolated/media";

@@ -1,7 +1,7 @@
 // @ts-check
-// The child process behind `zudo-composer api`.
+// The child process behind `zudo-composer release`.
 //
-// It is the JSON-stdin SiteProject CLI, reached through Vite's module runner
+// It is the JSON-stdin SiteProject release CLI, reached through Vite's module runner
 // rather than `import()`: the runner's modules are TypeScript, and Node refuses
 // to strip types under `node_modules`, which is where an installed
 // zudo-composer lives.

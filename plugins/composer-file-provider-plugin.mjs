@@ -51,7 +51,14 @@ export const MEDIA_FILE_PROVIDER_FILE_NAME_HEADER = "x-zudo-composer-media-file-
 export const MEDIA_FILE_PROVIDER_RECORD_ID_HEADER = "x-zudo-composer-media-record-id";
 export const MEDIA_FILE_PROVIDER_METADATA_HEADER = "x-zudo-composer-media-metadata";
 export const MEDIA_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
-export const MEDIA_FILE_PROVIDER_ROOT = "media-store";
+// Mirrors `DEFAULT_SETTINGS.mediaDir` in `server/config/settings.ts`. A plugin
+// never reads the host config itself — every lane passes `mediaStoreRoot`
+// explicitly — so this is only the fallback for a direct caller.
+export const MEDIA_FILE_PROVIDER_ROOT = "cms/media";
+// A URL naming the conventional store directory is refused even when the store
+// was configured elsewhere: the catalog and the private version bytes are never
+// source files, so Vite must not reach them through `/@fs` or a source URL.
+const MEDIA_STORE_PATH = new RegExp(`(?:^|/)${MEDIA_FILE_PROVIDER_ROOT}(?:/|$)`);
 
 /** Explicit option, then the environment override, then the workspace default. */
 export function resolveCompositionsRoot(workspaceRoot, configured) {
@@ -166,7 +173,7 @@ export function createMediaFileMiddleware(options) {
     try {
       const decoded = typeof pathname === "string" ? posix.normalize(decodeURIComponent(pathname)) : "";
       const sourcePath = decoded.startsWith("/@fs/") ? decoded.slice(4) : resolve(options.workspaceRoot, `.${decoded}`);
-      if (/(?:^|\/)media-store(?:\/|$)/.test(decoded) || sourcePath === configuredRoot || sourcePath.startsWith(`${configuredRoot}/`)) {
+      if (MEDIA_STORE_PATH.test(decoded) || sourcePath === configuredRoot || sourcePath.startsWith(`${configuredRoot}/`)) {
         res.statusCode = 404; res.setHeader("cache-control", "no-store"); res.end(); return;
       }
     } catch { res.statusCode = 400; res.end(); return; }

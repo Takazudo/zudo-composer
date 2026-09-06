@@ -1,7 +1,7 @@
 # Global versioned Media
 
 Media is independent of the four SiteProject providers. The development provider
-persists one current schema (2) in `media-store/catalog.json`. That atomic file
+persists one current schema (2) in `<mediaDir>/catalog.json`. That atomic file
 contains records, logical folders, and a durable random `mutationToken`. There is
 no migration reader, production authoring API, permanent purge, or version GC.
 
@@ -11,9 +11,9 @@ no migration reader, production authoring API, permanent purge, or version GC.
 `summarizeMedia(record)` derives list metadata including both URLs and revision.
 Version IDs equal their SHA-256 checksum. Reusing identical bytes reuses the
 version, while still advancing metadata revision and the provider token.
-Managed bytes live in private `media-store/versions`, outside Vite's publicDir.
+Managed bytes live in private `<mediaDir>/versions`, outside Vite's publicDir.
 Development exact URLs require catalog membership and verified bytes; direct
-source and `/@fs` access to `media-store` is blocked. Uncommitted crash artifacts
+source and `/@fs` access to the media store is blocked. Uncommitted crash artifacts
 remain private and cannot enter Vite's public-directory copy. Production inputs
 remain the committed static public assets until release compilation explicitly
 selects a catalog-verified pin manifest and copies those exact private versions.

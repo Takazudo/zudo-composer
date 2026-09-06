@@ -167,7 +167,6 @@ export class FilesystemMediaStore implements VersionedMediaStore {
   readonly capabilities = MEDIA_VERSIONED_CAPABILITIES;
   private constructor(
     private readonly filesystem: SafeRootFilesystem<MediaPersistenceOperation, DurableExtraErrorCode>,
-    private readonly publicDirectory: GuardedDirectory,
     private readonly bytesDirectory: GuardedDirectory,
     private readonly idFactory: (hint?: string) => string,
     private readonly now: () => string,
@@ -202,11 +201,9 @@ export class FilesystemMediaStore implements VersionedMediaStore {
       return { path, realPath, stats };
     };
     try {
-      const publicDirectory = await prepareDirectory("public");
       const bytesDirectory = await prepareDirectory(BYTES_DIRECTORY);
       return new FilesystemMediaStore(
         filesystem,
-        publicDirectory,
         bytesDirectory,
         options.idFactory ?? createUuidIdFactory(),
         options.now ?? (() => new Date().toISOString()),
@@ -551,17 +548,16 @@ export class FilesystemMediaStore implements VersionedMediaStore {
     } catch { /* Orphan stages never enter the catalog or delivery. */ }
   }
   private async assertDirectories(operation: MediaPersistenceOperation): Promise<void> {
-    for (const directory of [this.publicDirectory, this.bytesDirectory]) {
-      try {
-        const stats = await this.filesystem.operations.lstat(directory.path);
-        const realPath = await this.filesystem.operations.realpath(directory.path);
-        if (stats.isSymbolicLink() || !stats.isDirectory() || !sameFile(stats, directory.stats) || realPath !== directory.realPath) {
-          throw operationError(operation, "blocked", `Media storage directory was replaced: ${directory.path}`);
-        }
-      } catch (cause) {
-        if (cause instanceof MediaPersistenceError) throw cause;
-        throw operationError(operation, "blocked", `Could not verify Media storage directory: ${directory.path}`, cause);
+    const directory = this.bytesDirectory;
+    try {
+      const stats = await this.filesystem.operations.lstat(directory.path);
+      const realPath = await this.filesystem.operations.realpath(directory.path);
+      if (stats.isSymbolicLink() || !stats.isDirectory() || !sameFile(stats, directory.stats) || realPath !== directory.realPath) {
+        throw operationError(operation, "blocked", `Media storage directory was replaced: ${directory.path}`);
       }
+    } catch (cause) {
+      if (cause instanceof MediaPersistenceError) throw cause;
+      throw operationError(operation, "blocked", `Could not verify Media storage directory: ${directory.path}`, cause);
     }
   }
 

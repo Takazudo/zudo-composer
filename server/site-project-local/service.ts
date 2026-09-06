@@ -10,6 +10,8 @@ import type { SiteProjectApiService, ReleaseToolchain, SiteProjectApiDependencie
 import { createFilesystemMediaStore } from "../../src/media/storage/filesystem";
 import type { VersionedMediaStore } from "../../src/media/library";
 import { createLocalSiteProjectStore, type LocalSiteProjectStoreOptions } from "./store";
+import { DEFAULT_SETTINGS } from "../config/settings";
+import { resolveWorkspaceRoot } from "../../plugins/roots.mjs";
 import { releaseJson } from "../../src/site-project/api/review";
 import { resolveLocalReleaseToolchain } from "./toolchain-config";
 export { resolveLocalReleaseToolchain } from "./toolchain-config";
@@ -23,7 +25,9 @@ export { resolveLocalReleaseToolchain } from "./toolchain-config";
 export interface LocalSiteProjectServiceOptions extends LocalSiteProjectStoreOptions { pack: TrustedComponentPack; packIdentity?: ResolvedComponentPack; workspaceRoot?: string; mediaStoreRoot?: string; mediaStore?: VersionedMediaStore; toolchain?: ReleaseToolchain; isWorkingCurrent?: SiteProjectApiDependencies["isWorkingCurrent"]; reconcilePublication?: SiteProjectApiDependencies["reconcilePublication"] }
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 export function createLocalSiteProjectApiService(options: LocalSiteProjectServiceOptions): SiteProjectApiService {
-  const mediaRoot = resolve(options.mediaStoreRoot ?? resolve(process.cwd(), "media-store"));
+  // The host's configured `mediaDir`. Every lane resolves it from the config
+  // and passes it; the default only covers a caller that supplies neither.
+  const mediaRoot = resolve(options.mediaStoreRoot ?? resolve(resolveWorkspaceRoot(options.workspaceRoot), DEFAULT_SETTINGS.mediaDir));
   const catalog = createComponentCatalog(options.pack.manifest);
   const store = createLocalSiteProjectStore({ ...options, componentPack: catalog.pack, readMedia: options.readMedia ?? (async (pin) => {
     for (const path of [mediaRoot, join(mediaRoot, "versions")]) { const info = await lstat(path); if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Unsafe pinned Media source directory."); }

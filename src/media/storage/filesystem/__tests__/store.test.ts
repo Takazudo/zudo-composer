@@ -272,10 +272,10 @@ describe("versioned global Media store", () => {
   it("refuses symlinked roots, parents, catalog and immutable byte paths", async () => {
     const parent = await sandbox(); await fs.mkdir(join(parent, "target")); await fs.symlink(join(parent, "target"), join(parent, "linked"));
     await expect(createFilesystemMediaStore(options(join(parent, "linked")))).rejects.toMatchObject({ code: "blocked" });
-    for (const target of ["catalog", "bytes", "public"]) {
+    for (const target of ["catalog", "bytes", "versions"]) {
       const root = await sandbox(); const store = await createFilesystemMediaStore(options(root)); const outside = join(root, "outside");
       await fs.writeFile(outside, "untouched");
-      if (target === "public") { await fs.rename(join(root, "public"), join(root, "original-public")); await fs.symlink(join(root, "original-public"), join(root, "public")); }
+      if (target === "versions") { await fs.rename(join(root, "versions"), join(root, "original-versions")); await fs.symlink(join(root, "original-versions"), join(root, "versions")); }
       else await fs.symlink(outside, target === "catalog" ? join(root, "catalog.json") : bytePath(root));
       await expect(upload(store)).rejects.toMatchObject({ code: "blocked" }); expect(await fs.readFile(outside, "utf8")).toBe("untouched");
     }

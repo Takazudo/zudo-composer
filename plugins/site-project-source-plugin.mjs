@@ -1,6 +1,6 @@
 // @ts-check
 import { resolve } from "node:path";
-import { appModuleId, resolveWorkspaceRoot } from "./roots.mjs";
+import { appModuleId, resolveSiteProjectLocalRoot, resolveWorkspaceRoot } from "./roots.mjs";
 import { COMPONENT_PACK_ID } from "./component-pack-plugin.mjs";
 
 export const SITE_PROJECT_SOURCE_ID = "virtual:site-project-source";
@@ -49,8 +49,9 @@ export function siteProjectSourcePlugin(options = {}) {
     name: "zudo-site-project-source", enforce: "pre",
     configureServer(viteServer) {
       server = viteServer;
-      const configuredRoot = process.env.ZUDO_SITE_PROJECT_ROOT?.trim();
-      const localRoot = configuredRoot ? resolve(configuredRoot) : resolve(workspaceRoot, ".zudo-site-project");
+      // The same resolver the store uses, so the watcher and the reader can
+      // never disagree about which release tree is being served.
+      const localRoot = resolveSiteProjectLocalRoot(workspaceRoot);
       const active = resolve(localRoot, "active.json");
       // Active selection is replaced atomically. Keep a stable directory watch
       // as well as the exact file watch so repeated rename/unlink/add cycles do

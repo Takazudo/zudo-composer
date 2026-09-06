@@ -3,8 +3,9 @@
 //
 // Two subcommands, and they are deliberately asymmetric. `dev` boots Vite in
 // this process — the server object is what has to be closed to release the
-// port, so there is nothing to gain from a child. `api` is the JSON-stdin
-// SiteProject CLI and stays a child process, supervised by `spawnSupervised`.
+// port, so there is nothing to gain from a child. `release` is the JSON-stdin
+// SiteProject release API and stays a child process, supervised by
+// `spawnSupervised`.
 
 import { constants as osConstants } from "node:os";
 import { resolve } from "node:path";
@@ -14,13 +15,14 @@ import { forwardedSignals, spawnSupervised } from "./supervise.mjs";
 /** How long a signal handler waits for `server.close()` before exiting anyway. */
 export const CLOSE_GRACE_MS = 2000;
 
-export const API_ENTRY_PATH = resolve(APP_ROOT, "server/cli/api-entry.mjs");
+export const RELEASE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/release-entry.mjs");
 
 export const USAGE = `Usage: zudo-composer <command> [options]
 
 Commands:
   dev     Start the authoring dev server, rooted at the current project.
-  api     Run the SiteProject JSON-stdin API (one request per stdin line).
+  release Run the SiteProject release API (one JSON request on stdin, one
+          canonical JSON response on stdout).
 
 dev options:
   --root <dir>     Host project root (default: the current directory).
@@ -31,12 +33,12 @@ dev options:
 
 /**
  * @param {string[]} argv
- * @returns {{command: "dev", options: Record<string, unknown>} | {command: "api", rest: string[]} | {command: "help"} | {error: string}}
+ * @returns {{command: "dev", options: Record<string, unknown>} | {command: "release", rest: string[]} | {command: "help"} | {error: string}}
  */
 export function parseArguments(argv) {
   const [command, ...rest] = argv;
   if (command === undefined || command === "--help" || command === "-h" || command === "help") return { command: "help" };
-  if (command === "api") return { command: "api", rest };
+  if (command === "release") return { command: "release", rest };
   if (command !== "dev") return { error: `Unknown command "${command}".` };
 
   /** @type {Record<string, unknown>} */
@@ -117,12 +119,12 @@ export async function runComposerCli(argv, deps = {}) {
     proc.stdout.write(USAGE);
     return;
   }
-  if (parsed.command === "api") {
+  if (parsed.command === "release") {
     spawnSupervised({
       command: proc.execPath,
-      args: [API_ENTRY_PATH, ...parsed.rest],
-      label: "the SiteProject API",
-      entryPath: API_ENTRY_PATH,
+      args: [RELEASE_ENTRY_PATH, ...parsed.rest],
+      label: "the SiteProject release API",
+      entryPath: RELEASE_ENTRY_PATH,
       ...(deps.spawn ? { spawn: deps.spawn } : {}),
       ...(deps.exists ? { exists: deps.exists } : {}),
       proc,

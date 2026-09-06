@@ -8,7 +8,7 @@ import { loadComposerConfig } from "../config";
 
 try {
   // Run under `tsx`, so the host config and the pack are both plain dynamic
-  // imports; the installed lane goes through `server/cli/api-entry.mjs`, whose
+  // imports; the installed lane goes through `server/cli/release-entry.mjs`, whose
   // Vite module runner does the same job where Node cannot strip types.
   const config = await loadComposerConfig();
   const { identity, pack } = await loadComponentPack(config.workspaceRoot, config.settings.pack, (entryPath) =>
@@ -18,7 +18,7 @@ try {
     pack,
     packIdentity: identity,
     workspaceRoot: config.workspaceRoot,
-    mediaStoreRoot: validateMediaStoreRoot(process.env.ZUDO_MEDIA_STORE_ROOT),
+    mediaStoreRoot: validateMediaStoreRoot(process.env.ZUDO_MEDIA_STORE_ROOT) ?? config.paths.media,
   }), {
     stdin: process.stdin,
     stdout: process.stdout,

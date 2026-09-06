@@ -12,11 +12,9 @@ import sitemapperDomainProvider from './plugins/sitemapper-domain-provider.mjs';
 import workspaceDomainProvider, { resolveWorkspaceRegistryRoot } from './plugins/workspace-domain-provider.mjs';
 import componentPackPlugin from './plugins/component-pack-plugin.mjs';
 import hostStylesPlugin from './plugins/host-styles-plugin.mjs';
-import { APP_ROOT, readRootEnvironment } from './plugins/roots.mjs';
+import { APP_ROOT, readRootEnvironment, resolvePublicDir } from './plugins/roots.mjs';
 import { CONFIG_FILE_NAME, composer } from './server/config/index.ts';
 import hostConfig from './zudo-composer.config.ts';
-
-const mediaStoreRoot = process.env.ZUDO_MEDIA_STORE_ROOT;
 
 // The repo root is its own host: this is the same resolution an installed
 // zudo-composer performs against a host project, with the config imported
@@ -42,8 +40,14 @@ const domainRoots = {
 };
 const workspaceRegistryRoot = resolveWorkspaceRegistryRoot(composerConfig.paths.data);
 
+// The content-addressed Media store, and the committed bytes the host's own
+// static pipeline serves. Both come from the resolved config; the browser lanes
+// keep their absolute-root override so they can write into a temporary tree.
+const mediaStoreRoot = readRootEnvironment(process.env.ZUDO_MEDIA_STORE_ROOT, 'Media store root')
+  ?? composerConfig.paths.media;
+
 export default defineConfig({
-  publicDir: 'media-store/public',
+  publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicMedia),
   // The configured pack and zfb-md-wasm import their glue/wasm files with
   // Vite's `?url` query. Keep both dependency packages in Vite's normal module
   // graph: Rolldown's dependency optimizer cannot resolve those resource
