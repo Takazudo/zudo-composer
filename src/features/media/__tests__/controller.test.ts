@@ -38,6 +38,24 @@ describe("versioned Media controller", () => {
     expect(update).toHaveBeenCalledTimes(2); expect(controller.hasDraft(record.id)).toBe(false);
     expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { note: "Newer" } } });
   });
+  it("deduplicates an explicit draft save racing the workspace save barrier", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const original = filesystem.updateMetadata.bind(filesystem);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const update = vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => { await gate; return original(...args); });
+    controller.draftMetadata(summarizeMedia(record), { note: "One committed draft" });
+    const saving = controller.saveDraft(record.id);
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    const flushing = controller.flush();
+    release();
+    await Promise.all([saving, flushing]);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(controller.hasDraft(record.id)).toBe(false);
+    expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { note: "One committed draft" } } });
+  });
   it("recovers uncertain outcomes only after deliberate authoritative inspection", async () => {
     const { provider, filesystem } = await providerFixture();
     const controller = createMediaLibraryController(provider); await controller.initialize();

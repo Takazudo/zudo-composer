@@ -36,6 +36,7 @@ export class MediaLibraryController {
   private request = 0;
   private pending: Promise<unknown> = Promise.resolve();
   private drafts = new Map<string, { record: MediaSummary; patch: MediaMetadataPatch }>();
+  private draftSaves = new Map<string, Promise<void>>();
   private flushing: Promise<void> | undefined;
   readonly store: MediaFileProviderStore | undefined;
   readonly contentServices: MediaContentServices | undefined;
@@ -93,7 +94,15 @@ export class MediaLibraryController {
     this.drafts.set(record.id, { record, patch: { ...this.drafts.get(record.id)?.patch, ...patch } });
     this.set({ generation: this.current.generation + 1 });
   }
-  async saveDraft(id: string) {
+  saveDraft(id: string): Promise<void> {
+    const active = this.draftSaves.get(id);
+    if (active) return active.then(() => this.drafts.has(id) ? this.saveDraft(id) : undefined);
+    const saving = this.persistDraft(id);
+    this.draftSaves.set(id, saving);
+    void saving.finally(() => { if (this.draftSaves.get(id) === saving) this.draftSaves.delete(id); }).catch(() => undefined);
+    return saving;
+  }
+  private async persistDraft(id: string) {
     const draft = this.drafts.get(id); if (!draft) return;
     const saved = await this.updateMetadata(draft.record, draft.patch);
     const newer = this.drafts.get(id);

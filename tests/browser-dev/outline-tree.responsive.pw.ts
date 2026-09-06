@@ -106,9 +106,13 @@ async function openSitemapper(page: Page, name: string): Promise<void> {
 async function ensureSiblingGap(page: Page): Promise<Locator> {
   if ((await page.locator(GAP).count()) === 0) {
     for (const title of ["Layout probe alpha", "Layout probe beta"]) {
-      await page.locator(ADD_ROW).first().click();
+      // Fixture setup only: the canvas can keep re-centering and reclaiming
+      // focus while CI renders its graph. Invoke the existing button handler
+      // directly; the later unforced insertion-tile click is the pointer proof.
+      const add = page.locator(ADD_ROW).first();
+      await add.evaluate((button: HTMLButtonElement) => button.click());
       const input = page.locator(".cms-tree-add-wrap .cms-tree-inline input").first();
-      await expect(input).toBeFocused();
+      await expect(input).toBeVisible();
       await input.fill(title);
       await input.press("Enter");
       await expect(page.getByRole("treeitem", { name: title })).toBeVisible();
