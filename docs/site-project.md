@@ -31,6 +31,13 @@ removes only an uncompleted stage from the visible stage catalog; it cannot
 discard active or completed release dependencies. No permanent release GC is
 implemented. Private abandoned files are not listed as committed stages.
 
+Activation returns a separate `activationGeneration` and reconciliation outcome.
+The generation is reserved durably in release metadata; `active.json` remains
+only the required triple. The cross-process writer lock covers pointer CAS and
+the injected reconciliation callback. Content records a monotonic fence in its
+own metadata transaction, including empty batches; late older callbacks cannot
+overwrite a newer reconciled lifecycle.
+
 `projectRevision` is SHA-256 of canonical four-domain SiteProject UTF-8 JSON,
 including its trailing newline. `buildId` is SHA-256 of canonical JSON containing
 `projectRevision`, sorted `mediaLock`, and `toolchain`. Thus unchanged project JSON
@@ -108,7 +115,7 @@ apply invalidate browser approval. After A is staged, editing B does not invalid
 building/activating pinned A. Workspace identity/storage remains separate from
 active release identity; see [workspace lifecycle](./workspace-design.md#workspace-lifetime-and-capture).
 
-Read-only operations are `describe`, `list`, `active`, `get`, `plan`, `completed`.
+Read-only operations are `describe`, `list`, `active`, `get`, `stage`, `plan`, `completed`.
 Mutations are `apply`, `build`, `activate`, `discard`. `get` addresses an exact
 retained project revision; `completed` addresses and integrity-checks an exact
 completed build; `active` returns the single identity and verified completed
@@ -170,7 +177,9 @@ the symbolic values below with the exact returned IDs/digests:
 ```
 
 For a replacement activation, `expectedActive` is the exact prior triple, not
-null. `get` requires `{projectId,revision}`. `discard` requires
+null. `get` requires `{projectId,revision}`. `stage` requires `{projectId,buildId}`
+and returns `{stage,stageGeneration}` from one authoritative catalog read, even
+for an unbuilt stage created by another tab or the CLI. `discard` requires
 `{projectId,buildId,expectedStageGeneration,expectedActive}`. Use `stageGeneration`
 from apply (including idempotent apply) or `list.stageGenerations[buildId]`.
 This is the exact visible stage incarnation, not merely a build hash or the
@@ -225,6 +234,14 @@ leave it unchanged; an uncertain activation is resolved by exact-state inspectio
 and idempotent retry. Phase-aware lock cleanup tracks owner removal, directory
 removal and root sync separately; retries cannot delete a later writer's lock.
 Precommit cleanup failures remain unavailable, not falsely committed.
+
+A browser reconciliation timeout reports `commit-uncertain` / reconciliation
+busy but quarantines the writer lock until that exact callback settles or its
+operator socket disconnects. Later UI/API/CLI activations cannot pass that lane.
+Disconnect aborts pending browser Content transactions; restart also disconnects
+the client. There is no force-unlock of a live reconciliation. Recovery hints are
+bounded, minimal unresolved approvals, pruned only after confirmed outcomes or
+an authoritative catalog proves retention or definitive stale-generation absence.
 Preserve the old root before any explicit clean reset.
 
 Focused API/store/CLI tests cover selection, digests/CAS, interrupted writes,

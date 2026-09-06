@@ -509,7 +509,8 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   };
   const subscribeChanges = (listener: () => void) => {
     const stopStorage = subscribePersistenceChanges((database) => { if (database === WORKSPACE_DATABASE_NAME || database === "media" || database === "compositions:files" || database.endsWith(`-workspace-v1-${workspaceId}`)) listener(); });
-    const stopSessions = sessions.subscribe(listener);
+    let sessionGeneration = sessions.generation;
+    const stopSessions = sessions.subscribe(() => { if (sessionGeneration !== sessions.generation) { sessionGeneration = sessions.generation; listener(); } });
     return () => { stopStorage(); stopSessions(); };
   };
   const mappingAttachmentService = createMappingAttachmentService({

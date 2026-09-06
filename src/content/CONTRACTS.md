@@ -143,10 +143,14 @@ await store.reconcilePublication([{
   expectedGeneration: approvedEntry.generation,
   expectedDigest: contentEntryDigest(approvedEntry),
   lifecycle: "published",
-}]);
+}], activationGeneration);
 ```
 
-Missing or changed entries are skipped, preserving edits made after review.
+`activationGeneration` is the release store's positive monotonic activation
+fence. The Content metadata transaction advances it even for empty batches;
+older or equal generations make no writes. This prevents a late callback for A
+from changing lifecycle after B has reconciled. Missing or changed entries are
+skipped, preserving edits made after review.
 Matching lifecycle metadata changes receive a new generation in the same
 transaction. Activation/release workflow, mutable workspace lifetime and
 immutable build/media identities remain the downstream owners' responsibilities.

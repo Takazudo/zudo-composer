@@ -15,6 +15,7 @@ import { MAPPING_DATABASE_NAME } from "../../mapping/storage/indexeddb/types";
 import { SITEMAPPER_DATABASE_NAME } from "../../sitemapper/storage/indexeddb/types";
 import { WORKSPACE_DATABASE_NAME } from "../workspace-storage";
 import { workspaceDatabaseName } from "../workspace-storage";
+import * as releaseFeature from "../../features/release";
 
 vi.mock("../provider-integration", () => ({ createProductionProviderIntegration: () => { throw new Error("Inject the test workspace."); } }));
 vi.mock("../dashboard", async () => {
@@ -48,6 +49,23 @@ function workspace(id = "one") {
 }
 afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, "", "/"); vi.clearAllMocks(); });
 describe("application workspace lifetime", () => {
+  it("holds the shared replacement gate throughout save, open and committed workspace swap", async () => {
+    const actual = releaseFeature.createReleaseController; let controller!: ReturnType<typeof actual>;
+    const spy = vi.spyOn(releaseFeature, "createReleaseController").mockImplementation((...args) => { controller = actual(...args); return controller; });
+    let finishSave!: () => void, finishOpen!: (value: unknown) => void;
+    const integration = { ...workspace(), captureWorkspace: vi.fn() };
+    integration.sessions.register({ feature: "Pending editor", providerId: "db" }, { flush: () => new Promise<void>((resolve) => { finishSave = resolve; }) });
+    integration.workspace.reset.mockImplementation(() => new Promise((resolve) => { finishOpen = resolve; }));
+    try {
+      render(<App integration={integration as unknown as ProductionProviderIntegration} />); await screen.findByRole("heading", { name: "Workspace one" });
+      fireEvent.click(screen.getByRole("button", { name: "Reset workspace" }));
+      expect(controller.getSnapshot().gateBlocked).toBe(true); await controller.review(); expect(integration.captureWorkspace).not.toHaveBeenCalled();
+      await act(async () => finishSave()); await waitFor(() => expect(integration.workspace.reset).toHaveBeenCalledTimes(1));
+      await controller.review(); expect(integration.captureWorkspace).not.toHaveBeenCalled(); expect(controller.getSnapshot().gateBlocked).toBe(true);
+      await act(async () => finishOpen(workspace("two"))); await screen.findByRole("heading", { name: "Workspace two" });
+      expect(controller.getSnapshot().gateBlocked).toBe(false);
+    } finally { spy.mockRestore(); }
+  });
   it("adapts Content field picking and exact Media usage locations without feature globals", async () => {
     const mediaProvider = { descriptor: { id: "media-files" } };
     const integration = { ...workspace(), mediaProvider };

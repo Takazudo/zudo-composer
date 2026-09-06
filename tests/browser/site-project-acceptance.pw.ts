@@ -131,7 +131,7 @@ test("crawls every emitted SiteProject route with refresh, Entry content, chrome
   }
 });
 
-test("an authoring Entry edit survives reload and is reflected by SiteDelivery", async ({ page }) => {
+test("review stages A while newer working B survives local activation and reload", async ({ page }) => {
   test.skip(BROWSER_LANE !== "dev", "the production lane intentionally serves immutable bundled data");
   const failures = watchRuntimeFailures(page);
   await page.goto("/content");
@@ -146,11 +146,32 @@ test("an authoring Entry edit survives reload and is reflected by SiteDelivery",
   // The route publishes its save state through `useEditorStatus`; the shell
   // draws it in the topbar.
   await expect(page.locator(".cms-topbar__status")).toContainText("Saved");
-  await page.goto("/site/about");
-  await expect(page.getByRole("heading", { name: "A browser-edited studio", exact: true })).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "A browser-edited studio", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Review & release", exact: true }).click();
+  await page.getByRole("checkbox", { name: /changed:.*about/ }).check();
+  await page.getByRole("button", { name: "Run release checks", exact: true }).click();
+  await page.getByRole("button", { name: "Approve reviewed candidate", exact: true }).click();
+  await page.getByRole("button", { name: "Apply / stage exact candidate", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Build staged candidate", exact: true })).toBeEnabled();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
+  await contentTree.getByRole("treeitem", { name: /^About content/ }).click();
+  await contentTree.getByRole("treeitem", { name: /^A browser-edited studio/ }).click();
+  await heading.fill("Newer working B"); await heading.blur();
+  await page.getByRole("link", { name: "Review & release", exact: true }).click();
+  await page.getByRole("button", { name: "Build staged candidate", exact: true }).click();
+  await page.getByRole("button", { name: "Activate locally", exact: true }).click();
+  await expect(page.getByText(/Activated locally\. Publication reconciliation/)).toBeVisible();
+  await page.goto("/content?provider=content-indexeddb&model=about-content&entry=about-entry");
+  await expect(heading).toHaveValue("Newer working B");
   expect(failures).toEqual([]);
+});
+
+test("static release inspection never offers write capability", async ({ page }) => {
+  test.skip(BROWSER_LANE !== "dist", "static capability assertion");
+  await page.goto("/review");
+  await expect(page.getByText(/Static read-only mode/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run release checks" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Activate locally" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Export working JSON" })).toBeEnabled();
 });
 
 test("missing SiteProject routes show an accessible not-found state", async ({ page }) => {

@@ -12,7 +12,7 @@ import { SITE_PROJECT_API_PROTOCOL_VERSION, type CompletedRelease, type ReleaseP
 const digest = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const keys = (value: Record<string, unknown>, expected: readonly string[]) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 const active = (value: unknown): value is SiteProjectActiveSelection | null => value === null || (isPlainObject(value) && keys(value, ["projectId", "revision", "buildId"]) && isSafeRecordId(value.projectId) && digest(value.revision) && digest(value.buildId));
-const shapes = { describe: [], list: [], active: [], get: ["projectId", "revision"], plan: ["project", "workingPrecondition", "selection", "expectedRevision", "expectedActive"], apply: ["plan"], build: ["projectId", "buildId"], completed: ["projectId", "buildId"], activate: ["projectId", "revision", "buildId", "expectedActive"], discard: ["projectId", "buildId", "expectedStageGeneration", "expectedActive"] };
+const shapes = { describe: [], list: [], active: [], get: ["projectId", "revision"], plan: ["project", "workingPrecondition", "selection", "expectedRevision", "expectedActive"], apply: ["plan"], stage: ["projectId", "buildId"], build: ["projectId", "buildId"], completed: ["projectId", "buildId"], activate: ["projectId", "revision", "buildId", "expectedActive"], discard: ["projectId", "buildId", "expectedStageGeneration", "expectedActive"] };
 const planKeys = ["schemaVersion", "workingProject", "workingPrecondition", "candidate", "selection", "expectedRevision", "expectedActive", "storeGeneration", "projectRevision", "buildId", "mediaLock", "toolchain", "changes", "checks", "affected", "publication", "planDigest"];
 const fail = (code: SiteProjectApiErrorCode, message: string, diagnostics?: readonly unknown[]): SiteProjectApiResponse => ({ ok: false, error: { code, message, ...(diagnostics ? { diagnostics: diagnostics as JsonValue[] } : {}) } });
 const ok = (result: unknown): SiteProjectApiResponse => ({ ok: true, result: result as JsonValue });
@@ -58,6 +58,7 @@ export function createSiteProjectApiService(dependencies: SiteProjectApiDependen
       case "list": { const result = await dependencies.projectStore.list(); return result.status === "ok" ? ok(result.value) : adapterFailure(result); }
       case "active": { const result = await dependencies.projectStore.list(); if (result.status !== "ok") return adapterFailure(result); if (!result.value.active) return ok({ active: null }); const completed = await dependencies.buildStore.getCompleted(result.value.active); return completed.status === "ok" ? ok({ active: result.value.active, completed: completed.value }) : adapterFailure(completed); }
       case "get": { const result = await dependencies.projectStore.get(request); return result.status === "ok" ? ok(result.value) : adapterFailure(result); }
+      case "stage": { const result = await dependencies.projectStore.getStage(request); return result.status === "ok" ? ok({ stage: result.value, stageGeneration: result.stageGeneration }) : adapterFailure(result); }
       case "completed": { const result = await dependencies.buildStore.getCompleted(request); return result.status === "ok" ? ok(result.value) : adapterFailure(result); }
       case "plan": { const result = await plan(request.project, request.workingPrecondition, request.selection, request.expectedRevision, request.expectedActive); return "ok" in result ? result : ok(result); }
       case "apply": {
@@ -93,11 +94,10 @@ export function createSiteProjectApiService(dependencies: SiteProjectApiDependen
         return result.status === "ok" ? ok(result.value) : adapterFailure(result);
       }
       case "activate": {
-        const result = await dependencies.projectStore.activate({ target: { projectId: request.projectId, revision: request.revision, buildId: request.buildId }, expectedActive: request.expectedActive });
+        const target = { projectId: request.projectId, revision: request.revision, buildId: request.buildId };
+        const result = await dependencies.projectStore.activate({ target, expectedActive: request.expectedActive, reconcile: dependencies.reconcilePublication ? (stage, generation) => dependencies.reconcilePublication!(target, stage.publication, generation) : undefined });
         if (result.status !== "ok") return adapterFailure(result);
-        let reconciliation: "applied" | "changed" | "unavailable" = "unavailable";
-        try { const stage = await dependencies.projectStore.getStage(request); const current = await dependencies.projectStore.list(); if (stage.status === "ok" && current.status === "ok" && sameRelease(current.value.active, result.value.active) && dependencies.reconcilePublication) reconciliation = await dependencies.reconcilePublication(result.value.active, stage.value.publication); } catch { /* Activation succeeded; reconciliation is independently retryable. */ }
-        return ok({ active: result.value.active, reconciliation });
+        return ok(result.value);
       }
       case "discard": { const result = await dependencies.projectStore.discard(request); return result.status === "ok" ? ok(result.value) : adapterFailure(result); }
     }

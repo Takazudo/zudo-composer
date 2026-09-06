@@ -31,7 +31,7 @@ export interface SiteProjectStoreAdapter {
   get(input: { projectId: string; revision: string }): Promise<SiteProjectAdapterReadResult<StoredSiteProject>>;
   getStage(input: { projectId: string; buildId: string; approvalDigest?: string }): Promise<{ status: "ok"; value: StagedRelease; stageGeneration: number } | { status: "not-found" } | { status: "unavailable"; message: string }>;
   apply(input: { project: SiteProject; stage: StagedRelease; expectedRevision: string | null; expectedActive: SiteProjectActiveSelection | null; expectedGeneration: number; verifyApproval?(): Promise<boolean> }): Promise<SiteProjectAdapterMutationResult<{ revision: string; buildId: string; stageGeneration: number; active: SiteProjectActiveSelection | null }>>;
-  activate(input: { target: SiteProjectActiveSelection; expectedActive: SiteProjectActiveSelection | null }): Promise<SiteProjectAdapterMutationResult<{ active: SiteProjectActiveSelection }>>;
+  activate(input: { target: SiteProjectActiveSelection; expectedActive: SiteProjectActiveSelection | null; reconcile?(stage: StagedRelease, activationGeneration: number): Promise<"applied" | "changed" | "unavailable"> }): Promise<SiteProjectAdapterMutationResult<{ active: SiteProjectActiveSelection; activationGeneration: number; reconciliation: "applied" | "changed" | "unavailable" }>>;
   discard(input: { projectId: string; buildId: string; expectedStageGeneration: number; expectedActive: SiteProjectActiveSelection | null }): Promise<SiteProjectAdapterMutationResult<{ active: SiteProjectActiveSelection | null }>>;
 }
 export interface SiteProjectBuildAdapter {
@@ -45,14 +45,14 @@ export interface SiteProjectApiDependencies {
   /** Browser workspace adapter verifies its coherent captured generation before staging. */
   isWorkingCurrent?(project: SiteProject, precondition: JsonValue): Promise<boolean>;
   /** Owning adapter matches working generation AND digest, never overwriting newer edits. */
-  reconcilePublication?(active: SiteProjectActiveSelection, changes: readonly ContentPublicationReconciliation[]): Promise<"applied" | "changed">;
+  reconcilePublication?(active: SiteProjectActiveSelection, changes: readonly ContentPublicationReconciliation[], activationGeneration: number): Promise<"applied" | "changed" | "unavailable">;
 }
 export type SiteProjectApiRequest =
   | { protocolVersion: 2; operation: "describe" | "list" | "active" }
   | { protocolVersion: 2; operation: "get"; projectId: string; revision: string }
   | { protocolVersion: 2; operation: "plan"; project: unknown; workingPrecondition: JsonValue; selection: ContentPublicationSelection[]; expectedRevision: string | null; expectedActive: SiteProjectActiveSelection | null }
   | { protocolVersion: 2; operation: "apply"; plan: ReleasePlan }
-  | { protocolVersion: 2; operation: "build" | "completed"; projectId: string; buildId: string }
+  | { protocolVersion: 2; operation: "stage" | "build" | "completed"; projectId: string; buildId: string }
   | { protocolVersion: 2; operation: "activate"; projectId: string; revision: string; buildId: string; expectedActive: SiteProjectActiveSelection | null }
   | { protocolVersion: 2; operation: "discard"; projectId: string; buildId: string; expectedStageGeneration: number; expectedActive: SiteProjectActiveSelection | null };
 export interface SiteProjectApiError { code: SiteProjectApiErrorCode; message: string; identity?: SiteProjectActiveSelection; diagnostics?: readonly JsonValue[] }

@@ -13,11 +13,11 @@ describe("post-activation lifecycle reconciliation", () => {
     const stage = stageFor(project()); stage.publication = [{ ref: { providerId: provider.descriptor.id, modelId: reviewed.modelId, recordId: reviewed.id }, expectedGeneration: reviewed.generation, expectedDigest: contentEntryDigest(reviewed), lifecycle: "published" }];
     const active = { projectId: stage.projectId, revision: stage.revision, buildId: stage.buildId };
     await provider.store.putEntry({ ...reviewed, values: { ...reviewed.values, title: "Newer draft" } });
-    expect(await reconcileActivatedPublication({ active, stage, stores: [provider.store], isActiveCurrent: async () => true })).toBe("changed");
+    expect(await reconcileActivatedPublication({ active, stage, stores: [provider.store], activationGeneration: 1, isActiveCurrent: async () => true })).toBe("changed");
     const current = (await provider.store.readAll()).entries[0]!; expect(current.lifecycle).toBe("draft"); expect(current.values.title).toBe("Newer draft");
     stage.publication[0] = { ...stage.publication[0]!, expectedGeneration: current.generation, expectedDigest: contentEntryDigest(current) };
-    expect(await reconcileActivatedPublication({ active, stage, stores: [provider.store], isActiveCurrent: async () => false })).toBe("changed");
-    expect(await reconcileActivatedPublication({ active, stage, stores: [provider.store], isActiveCurrent: async () => true })).toBe("applied");
+    expect(await reconcileActivatedPublication({ active, stage, stores: [provider.store], activationGeneration: 2, isActiveCurrent: async () => false })).toBe("changed");
+    expect(await reconcileActivatedPublication({ active, stage, stores: [provider.store], activationGeneration: 2, isActiveCurrent: async () => true })).toBe("applied");
     expect((await provider.store.readAll()).entries[0]).toMatchObject({ lifecycle: "published", values: { title: "Newer draft" } });
   });
 });

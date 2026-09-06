@@ -5,6 +5,7 @@ import preact from '@preact/preset-vite';
 import tailwindcss from '@tailwindcss/vite';
 import composerFileProviderPlugin from './plugins/composer-file-provider-plugin.mjs';
 import siteProjectSourcePlugin from './plugins/site-project-source-plugin.mjs';
+import releaseApiPlugin from './plugins/release-api-plugin';
 
 type BundledSiteProject = Parameters<typeof siteProjectSourcePlugin>[0]['bundledProject'];
 const productionSiteProjectSource = readFileSync(
@@ -24,6 +25,7 @@ export default defineConfig({
   // scanning the package, whereas the asset pipeline handles them on demand.
   optimizeDeps: { exclude: ['@zudo-sg/ui', '@takazudo/zfb-md-wasm'] },
   plugins: [
+    releaseApiPlugin(),
     siteProjectSourcePlugin({
       bundledProject: productionSiteProject,
       bundledRevision: productionSiteProjectRevision,

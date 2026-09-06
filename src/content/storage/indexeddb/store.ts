@@ -365,7 +365,8 @@ export class IndexedDbContentStore implements ContentStore {
     return this.run(operation, "readonly", [CONTENT_META_STORE_NAME, CONTENT_MODELS_STORE_NAME, CONTENT_ENTRIES_STORE_NAME], async (tx) => {
       const metaRecords = await requestResult(tx.objectStore(CONTENT_META_STORE_NAME).getAll()) as unknown[];
       const meta = metaRecords.find((item) => (item as { key?: unknown })?.key === CONTENT_META_KEYS.schema);
-      if (metaRecords.length !== 2 || !meta || typeof meta !== "object" || Object.keys(meta).sort().join(",") !== "databaseVersion,entryRecordSchemaVersion,key,modelRecordSchemaVersion" || (meta as { key?: unknown }).key !== CONTENT_META_KEYS.schema || (meta as { databaseVersion?: unknown }).databaseVersion !== CONTENT_DATABASE_VERSION || (meta as { modelRecordSchemaVersion?: unknown }).modelRecordSchemaVersion !== 1 || (meta as { entryRecordSchemaVersion?: unknown }).entryRecordSchemaVersion !== 1) {
+      const fence = metaRecords.find((item) => (item as { key?: unknown })?.key === CONTENT_META_KEYS.activation) as { generation?: unknown } | undefined;
+      if (metaRecords.length !== 3 || !fence || Object.keys(fence).sort().join(",") !== "generation,key" || !Number.isSafeInteger(fence.generation) || Number(fence.generation) < 0 || !meta || typeof meta !== "object" || Object.keys(meta).sort().join(",") !== "databaseVersion,entryRecordSchemaVersion,key,modelRecordSchemaVersion" || (meta as { key?: unknown }).key !== CONTENT_META_KEYS.schema || (meta as { databaseVersion?: unknown }).databaseVersion !== CONTENT_DATABASE_VERSION || (meta as { modelRecordSchemaVersion?: unknown }).modelRecordSchemaVersion !== 1 || (meta as { entryRecordSchemaVersion?: unknown }).entryRecordSchemaVersion !== 1) {
         throw contentPersistenceError(operation, "unsupported-version", "Content database schema metadata is missing or unsupported.", false);
       }
       await this.token(tx, operation);
@@ -392,8 +393,9 @@ export class IndexedDbContentStore implements ContentStore {
     });
   }
 
-  private async run<T>(operation: ContentPersistenceOperation, mode: IDBTransactionMode, stores: readonly string[], action: (transaction: IDBTransaction) => Promise<T>): Promise<T> {
+  private async run<T>(operation: ContentPersistenceOperation, mode: IDBTransactionMode, stores: readonly string[], action: (transaction: IDBTransaction) => Promise<T>, didChange: () => boolean = () => true, signal?: AbortSignal): Promise<T> {
     const connection = await this.runtime.open(operation);
+    signal?.throwIfAborted();
     if (connection.invalidated) throw contentPersistenceError(operation, "versionchange", "Content storage changed version in another context. Retry to reopen it.", true);
     let transaction: IDBTransaction;
     try { transaction = connection.db.transaction(mode === "readwrite" ? [CONTENT_META_STORE_NAME, CONTENT_MODELS_STORE_NAME, CONTENT_ENTRIES_STORE_NAME] : stores, mode); }
@@ -402,12 +404,15 @@ export class IndexedDbContentStore implements ContentStore {
       throw mapContentOperationalError(operation, mode, error);
     }
     const done = transactionComplete(transaction);
+    const abort = () => { try { transaction.abort(); } catch { /* Already terminal. */ } };
+    signal?.addEventListener("abort", abort, { once: true });
     try {
       const before = mode === "readwrite" && operation !== "clear" ? await this.snapshot(transaction, operation) : undefined;
       if (before) this.validateSnapshot(before, operation);
       const token = mode === "readwrite" ? await this.token(transaction, operation) : undefined;
       const result = await action(transaction);
-      if (mode === "readwrite") {
+      const mutated = mode === "readwrite" && didChange();
+      if (mutated) {
         if (token === undefined || token >= Number.MAX_SAFE_INTEGER) throw contentPersistenceError(operation, "write-failed", "Content mutation token is exhausted.", false);
         const next = await this.snapshot(transaction, operation);
         this.validateSnapshot(next, operation);
@@ -432,9 +437,9 @@ export class IndexedDbContentStore implements ContentStore {
         await requestResult(transaction.objectStore(CONTENT_META_STORE_NAME).put({ key: CONTENT_META_KEYS.mutation, token: token + 1 }));
       }
       // Snapshot-returning mutations include the durable generation assigned above.
-      const finalResult = mode === "readwrite" && (operation === "transact" || operation === "reconcile-publication") ? await this.snapshot(transaction, operation) as T : result;
+      const finalResult = mode === "readwrite" && (operation === "transact" || operation === "reconcile-publication") ? { ...await this.snapshot(transaction, operation), ...(operation === "reconcile-publication" ? { activationGeneration: (result as { activationGeneration: number }).activationGeneration } : {}) } as T : result;
       await done;
-      if (mode === "readwrite") notifyPersistenceChange(connection.db.name);
+      if (mutated) notifyPersistenceChange(connection.db.name);
       return finalResult;
     }
     catch (error) {
@@ -442,6 +447,7 @@ export class IndexedDbContentStore implements ContentStore {
       void done.catch(() => undefined);
       throw mapContentOperationalError(operation, mode, error);
     }
+    finally { signal?.removeEventListener("abort", abort); }
   }
 
   private async token(tx: IDBTransaction, operation: ContentPersistenceOperation): Promise<number> {
@@ -536,7 +542,9 @@ export class IndexedDbContentStore implements ContentStore {
   }
 
   /** A stale activation never overwrites newer authored values or lifecycle intent. */
-  async reconcilePublication(reconciliations: readonly ContentPublicationReconciliation[]): Promise<ContentSnapshot> {
+  async reconcilePublication(reconciliations: readonly ContentPublicationReconciliation[], activationGeneration: number, signal?: AbortSignal): Promise<ContentSnapshot & { activationGeneration: number }> {
+    if (!Number.isSafeInteger(activationGeneration) || activationGeneration < 1) throw contentPersistenceError("reconcile-publication", "validation", "A positive activation fence is required.", false);
+    let changed = false;
     const seen = new Set<string>();
     for (const item of reconciliations) {
       if (!item.ref || item.ref.providerId !== this.provider.id) throw contentPersistenceError("reconcile-publication", "unsupported-transaction", "Cannot reconcile another provider.", false);
@@ -545,6 +553,10 @@ export class IndexedDbContentStore implements ContentStore {
     }
     reconciliations = structuredClone(reconciliations);
     return this.run("reconcile-publication", "readwrite", [], async (tx) => {
+      const meta = tx.objectStore(CONTENT_META_STORE_NAME), fence = await requestResult(meta.get(CONTENT_META_KEYS.activation)) as { generation?: unknown } | undefined;
+      if (!fence || !Number.isSafeInteger(fence.generation) || Number(fence.generation) < 0) throw contentPersistenceError("reconcile-publication", "unsupported-version", "Activation fence metadata is invalid; explicit recovery is required.", false);
+      if (Number(fence.generation) >= activationGeneration) return { ...await this.snapshot(tx, "reconcile-publication"), activationGeneration: Number(fence.generation) };
+      changed = true; await requestResult(meta.put({ key: CONTENT_META_KEYS.activation, generation: activationGeneration }));
       const entries = tx.objectStore(CONTENT_ENTRIES_STORE_NAME);
       for (const item of reconciliations) {
         if (item.ref.providerId !== this.provider.id) throw contentPersistenceError("reconcile-publication", "unsupported-transaction", "Cannot reconcile another provider.", false);
@@ -553,8 +565,8 @@ export class IndexedDbContentStore implements ContentStore {
         const [entry] = loadedEntries([raw], "reconcile-publication");
         if (entry!.modelId === item.ref.modelId && entry!.generation === item.expectedGeneration && contentEntryDigest(entry!) === item.expectedDigest) await requestResult(entries.put({ ...entry, lifecycle: item.lifecycle }));
       }
-      return this.snapshot(tx, "reconcile-publication");
-    });
+      return { ...await this.snapshot(tx, "reconcile-publication"), activationGeneration };
+    }, () => changed, signal);
   }
 }
 

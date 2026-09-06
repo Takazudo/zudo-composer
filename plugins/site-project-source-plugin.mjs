@@ -29,7 +29,7 @@ export function siteProjectSourcePlugin(options) {
     if (!server) return;
     const module = server.moduleGraph.getModuleById(RESOLVED_SITE_PROJECT_SOURCE_ID);
     if (module) server.moduleGraph.invalidateModule(module);
-    server.ws.send({ type: "full-reload", path: "*" });
+    server.ws.send({ type: "custom", event: "release:changed", data: { source: "active-delivery" } });
   };
 
   return {

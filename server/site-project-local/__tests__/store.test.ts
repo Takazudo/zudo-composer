@@ -11,6 +11,20 @@ import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV } from "../sto
 const applyInput = (value = project()) => ({ project: value, stage: stageFor(value), expectedRevision: null, expectedActive: null, expectedGeneration: 0 });
 async function build(value = project()) { const compiled = await compileSiteProject(value, { componentCatalog: catalog }); if (compiled.status !== "ready") throw new Error("Fixture compile failed"); return compiled.build; }
 describe("immutable local release storage", () => {
+  it("serializes A reconciliation before any B activation and preserves committed active on callback failure", async () => {
+    const { store, testRoot } = await fixture(), a = applyInput(), b = applyInput({ ...project(), name: "B" });
+    await store.apply(a); await store.apply({ ...b, expectedRevision: a.stage.revision, expectedGeneration: 1 });
+    await store.complete({ stage: a.stage, build: await build(a.project) }); await store.complete({ stage: b.stage, build: await build(b.project) });
+    const target = (stage: typeof a.stage) => ({ projectId: stage.projectId, revision: stage.revision, buildId: stage.buildId });
+    const order: string[] = []; let started!: () => void, finish!: (value: "applied") => void;
+    const beginning = new Promise<void>((resolve) => { started = resolve; });
+    const first = store.activate({ target: target(a.stage), expectedActive: null, reconcile: async (_, generation) => { expect(generation).toBe(1); order.push("A-start"); started(); await new Promise<"applied">((resolve) => { finish = resolve; }); order.push("A-end"); return "applied"; } });
+    await beginning; const other = createLocalSiteProjectStore({ testRoot, componentPack: catalog.pack });
+    const second = other.activate({ target: target(b.stage), expectedActive: target(a.stage), reconcile: async (_, generation) => { expect(generation).toBe(2); order.push("B"); return "changed"; } });
+    await new Promise((resolve) => setTimeout(resolve, 25)); expect(order).toEqual(["A-start"]); finish("applied");
+    expect(await first).toMatchObject({ status: "ok", value: { reconciliation: "applied", activationGeneration: 1 } }); expect(await second).toMatchObject({ status: "ok", value: { reconciliation: "changed", activationGeneration: 2 } }); expect(order).toEqual(["A-start", "A-end", "B"]);
+    expect(await store.activate({ target: target(a.stage), expectedActive: target(b.stage), reconcile: async () => { throw new Error("Browser unavailable"); } })).toMatchObject({ status: "ok", value: { active: target(a.stage), activationGeneration: 3, reconciliation: "unavailable" } });
+  });
   it("requires the original active precondition and current CAS for discard receipt retries", async () => {
     const { store } = await fixture(); const a = applyInput(), b = applyInput({ ...project(), name: "Discard me" });
     await store.apply(a); await store.apply({ ...b, expectedRevision: a.stage.revision, expectedGeneration: 1 });
@@ -159,10 +173,10 @@ describe("immutable local release storage", () => {
   it("reports post-rename activation uncertainty and recovers by exact idempotent retry", async () => {
     const { store, testRoot } = await fixture(); const input = applyInput(); await store.apply(input); await store.complete({ stage: input.stage, build: await build() });
     const target = { projectId: input.stage.projectId, revision: input.stage.revision, buildId: input.stage.buildId };
-    const faulty = createLocalSiteProjectStore({ testRoot, componentPack: catalog.pack, fault(point) { if (point === "after-rename") throw new Error("Lost acknowledgement"); } });
+    let renames = 0; const faulty = createLocalSiteProjectStore({ testRoot, componentPack: catalog.pack, fault(point) { if (point === "after-rename" && ++renames === 2) throw new Error("Lost acknowledgement"); } });
     expect(await faulty.activate({ target, expectedActive: null })).toMatchObject({ status: "uncertain", message: expect.stringContaining("Inspect exact") });
     expect(await store.readActiveProject()).toMatchObject({ status: "ok", value: { buildId: target.buildId } });
-    expect(await store.activate({ target, expectedActive: null })).toEqual({ status: "ok", value: { active: target } });
+    expect(await store.activate({ target, expectedActive: null })).toEqual({ status: "ok", value: { active: target, activationGeneration: 1, reconciliation: "unavailable" } });
   });
   it("refuses symlinks, unknown schema files, and preserves their targets", async () => {
     const { testRoot, parent, store } = await fixture(); await store.list(); const outside = join(parent, "outside"); await mkdir(outside); await writeFile(join(outside, "keep"), "keep");
