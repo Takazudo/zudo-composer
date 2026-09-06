@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - fixtures/host
+  - fixtures/themeset-host
 
 allowBuilds:
   esbuild: true

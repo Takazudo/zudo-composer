@@ -10,14 +10,24 @@ import { isAbsolute, resolve, sep } from "node:path";
 export const APP_ROOT = resolve(fileURLToPath(import.meta.url), "../..");
 
 /**
- * Vite dev-server id for a file inside the package. A root-absolute specifier
- * (`/src/…`) resolves against the host project, so package-owned Node entries
- * must be addressed through Vite's `/@fs` prefix instead.
+ * Vite dev-server id for any absolute path outside the host root. A
+ * root-absolute specifier (`/src/…`) resolves against the host project, so
+ * package-owned modules — and an installed component pack, which lives
+ * wherever the host's package manager put it — must be addressed through
+ * Vite's `/@fs` prefix instead.
+ * @param {string} absolutePath
+ */
+export function fsModuleId(absolutePath) {
+  const absolute = resolve(absolutePath).split(sep).join("/");
+  return `/@fs${absolute.startsWith("/") ? "" : "/"}${absolute}`;
+}
+
+/**
+ * Vite dev-server id for a file inside the package.
  * @param {string} relativePath
  */
 export function appModuleId(relativePath) {
-  const absolute = resolve(APP_ROOT, relativePath).split(sep).join("/");
-  return `/@fs${absolute.startsWith("/") ? "" : "/"}${absolute}`;
+  return fsModuleId(resolve(APP_ROOT, relativePath));
 }
 
 /**

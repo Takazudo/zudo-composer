@@ -1,0 +1,4 @@
+/* The host's base stylesheet: the only importer of the component pack's CSS
+   and the host's Tailwind `@source` point. `zudo-composer` reaches it through
+   `virtual:zudo-composer-host-styles`, resolved from the `styles` setting. */
+@import "@zudo-sg/ui/styles/composer.css";

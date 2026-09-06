@@ -1,0 +1,7 @@
+/* The host is the sole importer of its pack's CSS, and declares where the
+   pack's class names live so Tailwind scans them. */
+@import "tailwindcss/preflight";
+@import "tailwindcss/utilities";
+@import "@zudo-composer/fixture-themeset/styles/themeset.css";
+
+@source "../node_modules/@zudo-composer/fixture-themeset/src";

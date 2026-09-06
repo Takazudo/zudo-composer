@@ -14,6 +14,9 @@ if (window.location.pathname === "/composer/preview") {
 } else {
   const themeController = createThemeController(initialTheme);
   import.meta.hot?.dispose(() => themeController.dispose());
+  // The host's base sheet first: it is the only importer of the component
+  // pack's CSS, so the pack's own cascade lands before this app's chrome.
+  await import("virtual:zudo-composer-host-styles");
   await import("./style.css");
   const { App } = await import("./App");
   render(<App themeController={themeController} />, root);

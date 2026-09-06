@@ -43,6 +43,88 @@
 }
 
 /*
+ * Tool-owned chrome tokens (Takazudo/zudo-composer#264).
+ *
+ * The component pack's CSS is the HOST's to import, not the tool's, so a
+ * themeset that ships none of these names must not be able to break the
+ * editor. Every custom property this app's own CSS consumes is therefore
+ * declared here with a tool-owned value. Defining a token is not copying a
+ * component: the values are the compact-UI ladder this chrome was drawn on.
+ *
+ * `@theme` rather than `:root` because Tailwind v4 also generates the
+ * utilities from these keys — `text-caption`, `gap-vsp-xs`, `rounded-md`,
+ * `text-fg` — which the chrome writes directly in markup.
+ *
+ * Deliberately NOT Tailwind's full default theme: it would define a base
+ * `--spacing`, which silently starts generating `p-4`/`min-w-48` and retires
+ * the premise `scripts/check-class-names.mjs` guards.
+ */
+@theme {
+  /* Two spacing axes: hsp = inline, vsp = block. No numeric scale. */
+  --spacing-0: 0;
+  --spacing-px: 1px;
+  --spacing-hsp-2xs: 0.125rem;
+  --spacing-hsp-xs: 0.375rem;
+  --spacing-hsp-sm: 0.5rem;
+  --spacing-hsp-md: 0.75rem;
+  --spacing-hsp-lg: 1rem;
+  --spacing-vsp-3xs: 0.25rem;
+  --spacing-vsp-2xs: 0.4375rem;
+  --spacing-vsp-10: 0.625rem;
+  --spacing-vsp-xs: 0.875rem;
+  --spacing-vsp-sm: 1.25rem;
+  --spacing-vsp-md: 1.5rem;
+  --spacing-vsp-lg: 1.75rem;
+
+  /* Abstract sizes, plus the three semantic aliases the chrome names. */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem;
+  --text-base--line-height: 1.75;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.5;
+  --text-micro: var(--text-xs);
+  --text-caption: var(--text-sm);
+  --text-small: var(--text-base);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.75;
+
+  --radius-DEFAULT: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-full: 9999px;
+  --shadow-overlay:
+    0 2px 4px oklch(.185 .005 65 / 0.08),
+    0 8px 16px oklch(.185 .005 65 / 0.08),
+    0 24px 48px oklch(.185 .005 65 / 0.10);
+
+  /* `sm:grid-cols-2` is the one responsive variant the chrome writes. */
+  --breakpoint-sm: 640px;
+
+  /*
+   * Color keys the chrome writes as utilities (`text-fg`, `bg-accent`,
+   * `border-border`, `text-danger`, `text-muted`, `bg-bg`). Tailwind needs a
+   * value here to emit the utility at all; the light/dark blocks below
+   * outrank it and carry the actual palette.
+   */
+  --color-bg: oklch(0.972 0.004 255);
+  --color-fg: oklch(0.235 0.018 255);
+  --color-muted: oklch(0.455 0.020 255);
+  --color-accent: oklch(0.515 0.170 255);
+  --color-border: oklch(0.845 0.012 255);
+  --color-danger: oklch(0.550 0.190 25);
+}
+
+/*
  * App theme override. Feature route chunks import the provider color sheet
  * again, so these attribute selectors intentionally outrank its later :root
  * declarations without importance flags or load-order assumptions.
@@ -96,6 +178,10 @@
   --sg-composer-panel-bg: var(--color-surface);
   --sg-composer-canvas-backdrop: oklch(0.910 0.008 255);
   --sg-composer-guide: oklch(0.610 0.018 255);
+  /* Prose roles the chrome reads by name; the pack no longer supplies them. */
+  --color-text: var(--color-fg);
+  --color-link: var(--color-accent);
+  --color-info: var(--color-accent);
 }
 
 :root[data-theme="dark"] {
@@ -136,6 +222,9 @@
   --sg-composer-panel-bg: var(--color-surface);
   --sg-composer-canvas-backdrop: oklch(0.125 0.012 255);
   --sg-composer-guide: oklch(0.550 0.020 255);
+  --color-text: var(--color-fg);
+  --color-link: var(--color-accent);
+  --color-info: var(--color-accent);
 }
 
 @theme {

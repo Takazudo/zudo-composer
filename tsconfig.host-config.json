@@ -18,6 +18,9 @@
     "server/config/**/*.ts",
     "server/config/**/*.d.mts",
     "plugins/roots.d.mts",
-    "fixtures/host/zudo-composer.config.ts"
+    "zudo-composer.config.ts",
+    "fixtures/host/zudo-composer.config.ts",
+    "fixtures/themeset-host/zudo-composer.config.ts",
+    "fixtures/self-host/zudo-composer.config.ts"
   ]
 }

@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 import { APP_ROOT } from "../../plugins/roots.mjs";
 import { APP_ENTRY_MODULE } from "../../plugins/composer-app-html.mjs";
 import { OPTIMIZE_DEPS_EXCLUDE, loadHostConfig, resolveComposerDevConfig, resolveFsAllow, resolvePublicDir } from "../dev-server.mjs";
+import { resolveComponentPack } from "../../plugins/component-pack.mjs";
 
 const FIXTURE_HOST = resolve(APP_ROOT, "fixtures/host");
 const BIN = resolve(APP_ROOT, "bin/zudo-composer.mjs");
@@ -94,17 +95,30 @@ describe("loadHostConfig", () => {
 });
 
 describe("resolveComposerDevConfig", () => {
+  // A real fixture host rather than the scratch directory above: the config now
+  // resolves the component pack, and a pack is a package the host installs.
   it("roots Vite at the host while the package keeps ownership of the html shell", async () => {
-    const { inlineConfig } = await resolveComposerDevConfig({ workspaceRoot: host });
-    expect(inlineConfig.root).toBe(host);
+    const { inlineConfig } = await resolveComposerDevConfig({ workspaceRoot: FIXTURE_HOST });
+    expect(inlineConfig.root).toBe(FIXTURE_HOST);
     expect(inlineConfig.configFile).toBe(false);
     // Vite's own html middlewares would look for a `<host>/index.html`.
     expect(inlineConfig.appType).toBe("custom");
-    expect(inlineConfig.publicDir).toBe(join(host, "public"));
-    expect(inlineConfig.optimizeDeps?.exclude).toEqual([...OPTIMIZE_DEPS_EXCLUDE]);
+    expect(inlineConfig.publicDir).toBe(join(FIXTURE_HOST, "public"));
+    const pack = resolveComponentPack(FIXTURE_HOST, "@zudo-sg/ui/composer-pack");
+    expect(inlineConfig.optimizeDeps?.exclude).toEqual([pack.packageName, ...OPTIMIZE_DEPS_EXCLUDE]);
     expect(inlineConfig.optimizeDeps?.entries).toEqual([resolve(APP_ROOT, APP_ENTRY_MODULE)]);
-    expect(inlineConfig.server?.fs?.allow).toEqual(resolveFsAllow(host));
-    expect(inlineConfig.plugins?.flat().map((plugin) => (plugin as { name?: string } | undefined)?.name)).toContain("zudo-composer-app-html");
+    // The pack's own directory is allowed too: it is outside the host root.
+    expect(inlineConfig.server?.fs?.allow).toEqual([...resolveFsAllow(FIXTURE_HOST), pack.packageRoot]);
+    const names = inlineConfig.plugins?.flat().map((plugin) => (plugin as { name?: string } | undefined)?.name);
+    expect(names).toContain("zudo-composer-app-html");
+    expect(names).toContain("zudo-component-pack");
+    expect(names).toContain("zudo-composer-host-styles");
+  });
+
+  it("refuses a host whose configured pack cannot be resolved", async () => {
+    await expect(resolveComposerDevConfig({ workspaceRoot: host })).rejects.toThrow(
+      /^Component pack "@acme\/themeset\/composer-pack" could not be resolved from /,
+    );
   });
 });
 

@@ -1,0 +1,15 @@
+{
+  "name": "@zudo-composer/fixture-themeset-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The themeset proof: the same host shape as fixtures/host, pointed at a different installed pack.",
+  "scripts": {
+    "dev": "zudo-composer dev"
+  },
+  "devDependencies": {
+    "@zudo-composer/component-contract": "workspace:*",
+    "@zudo-composer/fixture-themeset": "workspace:*",
+    "zudo-composer": "workspace:*"
+  }
+}

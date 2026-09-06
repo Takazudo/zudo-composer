@@ -1,0 +1,20 @@
+{
+  "name": "@zudo-composer/fixture-themeset",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A second, independently installed component pack. It exists to prove a themeset is swapped in by editing one config value.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./composer-pack": "./src/composer-pack.ts",
+    "./styles/themeset.css": "./styles/themeset.css"
+  },
+  "peerDependencies": {
+    "@zudo-composer/component-contract": "1.0.0",
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@zudo-composer/component-contract": "workspace:*",
+    "preact": "^10.29.8"
+  }
+}

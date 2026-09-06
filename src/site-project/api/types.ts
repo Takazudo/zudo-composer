@@ -9,7 +9,22 @@ import type { SiteProject } from "../model/types";
 export const SITE_PROJECT_API_PROTOCOL_VERSION = 2 as const;
 export type SiteProjectApiErrorCode = "malformed-request" | "unsupported-protocol" | "validation" | "compile-blocked" | "not-found" | "conflict" | "commit-uncertain" | "unavailable" | "internal";
 export interface SiteProjectActiveSelection { projectId: string; revision: string; buildId: string }
-export interface ReleaseToolchain { compiler: string; componentPack: { packId: string; packVersion: string; contractVersion: number }; providerCommit: string; providerTree: string; installedProviderDigest: string; contractDigest: string }
+/**
+ * Exactly which code compiled a release. A component pack is a package, not a
+ * Git checkout — a registry themeset and a host self-reference have no commit —
+ * so provenance is the specifier the host configured, the dependency spec it
+ * was installed by, and a digest of the resolved bytes.
+ */
+export interface ReleaseToolchain {
+  compiler: string;
+  componentPack: { packId: string; packVersion: string; contractVersion: number };
+  /** The config `pack` value, verbatim. */
+  packSpecifier: string;
+  /** The host's dependency spec for the pack's package, or `"self"`. */
+  packSource: string;
+  installedPackDigest: string;
+  contractDigest: string;
+}
 export interface ReleaseChange { domain: string; providerId: string; recordId: string; kind: "added" | "changed" | "removed" }
 export interface ReleaseCheck { severity: "blocking" | "info"; code: string; message: string; path: string }
 export interface ReleaseAffected { kind: "route" | "record" | "media"; identity: string; reason: string }

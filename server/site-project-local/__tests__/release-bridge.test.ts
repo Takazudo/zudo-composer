@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import releaseApiPlugin, { RELEASE_LIMITS, trustedReleaseRequest } from "../../../plugins/release-api-plugin";
-import { fixture, stageFor, catalog, call, toolchain, PNG, review } from "./release-fixture";
+import { fixture, stageFor, catalog, call, pack, toolchain, PNG, review } from "./release-fixture";
 import { createLocalSiteProjectApiService } from "../service";
 import { readFile } from "node:fs/promises";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
@@ -11,9 +11,6 @@ import { createSiteProjectApiService } from "../../../src/site-project/api/servi
 import type { SiteProjectApiDependencies, SiteProjectApiService } from "../../../src/site-project/api/types";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-
-// Keep this headless transport/storage regression independent of provider JSX rendering.
-vi.mock("@zudo-sg/ui/composer-pack", async () => ({ componentPack: { manifest: (await import("./release-fixture")).catalog.pack } }));
 
 function harness(concurrentChecks = false, makeService?: (callbacks: Pick<SiteProjectApiDependencies, "isWorkingCurrent" | "reconcilePublication">) => SiteProjectApiService, mediaStoreRoot?: string) {
   const plugin = releaseApiPlugin({ mediaStoreRoot });
@@ -46,7 +43,7 @@ describe("local release capability bridge", () => {
     const asset = await context.media!.upload({ fileName: "isolated.png", declaredMediaType: "image/png", bytes: PNG });
     const value = project();
     value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${asset.id}`;
-    const service = createLocalSiteProjectApiService({ testRoot: context.testRoot, mediaStoreRoot: context.mediaRoot,
+    const service = createLocalSiteProjectApiService({ pack, testRoot: context.testRoot, mediaStoreRoot: context.mediaRoot,
       toolchain: { ...toolchain, componentPack: value.componentPack } });
     const plan = await review(service, value, { selection: value.providers.content.flatMap((provider) => provider.entries.map((entry) => ({
       ref: { providerId: provider.id, modelId: entry.modelId, recordId: entry.id }, action: "publish",

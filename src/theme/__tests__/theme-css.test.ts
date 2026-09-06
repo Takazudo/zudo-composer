@@ -30,14 +30,14 @@ describe("application theme CSS contract", () => {
     }
     // Epic #156 gives every route one status vocabulary, so danger/success/
     // warning are app roles now — declared in both themes, hue-matched to the
-    // provider rungs they supersede. `info` stays the provider's: no chrome
-    // surface uses it, and the accent already carries that meaning.
+    // provider rungs they supersede. Since Takazudo/zudo-composer#264 the pack's CSS is the
+    // host's to import and may ship none of these names, so `info`/`link`/
+    // `text` are declared here too, as aliases onto roles the app already owns.
     for (const scheme of ["light", "dark"] as const) {
       const start = theme.indexOf(`:root[data-theme="${scheme}"] {`);
       const block = theme.slice(start, theme.indexOf("\n}", start));
-      for (const state of ["danger", "success", "warning"]) expect(block).toContain(`--color-${state}:`);
+      for (const state of ["danger", "success", "warning", "info", "link", "text"]) expect(block).toContain(`--color-${state}:`);
     }
-    expect(theme).not.toContain("--color-info:");
   });
 
   it("leaves the provider Tier-1 palette alone", () => {

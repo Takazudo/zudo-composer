@@ -1,0 +1,7 @@
+/* A themeset owns its own CSS, and the HOST imports it. The tool's stylesheets
+   never reach for a pack's, which is what lets this file replace the
+   provider's `composer.css` without touching a line of tool source. */
+.themeset-panel { display: grid; gap: 0.5rem; padding: 1rem; border: 1px solid currentcolor; }
+.themeset-panel--loud { border-width: 3px; }
+.themeset-panel__title { margin: 0; font-size: 1.25rem; }
+.themeset-note { margin: 0; }

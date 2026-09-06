@@ -51,13 +51,17 @@ checksum/signature/size-verify exact retained versions; they do not copy all Med
 files or fetch latest. Each build's `media-sha256-…` file maps to its pin's
 `/uploaded-media/sha256-…` URL for a later explicit artifact exporter.
 
-The local toolchain records the declared provider Git commit/tree separately from
-`installedProviderDigest`, a SHA-256 attestation of the actual resolved installed
-package's stable relative paths, permission modes and file bytes. Its traversal
-rejects internal symlinks/special files and detects entry/root changes. Altering
-installed runtime bytes changes the build identity, regardless of package URL.
-The toolchain also binds component-pack identity, contract handoff digest, and a fingerprint of production headless
-compiler/domain/contract source. An incomplete stage cannot be compiled using a
+The local toolchain records the component pack as a package, because that is
+what it is: `packSpecifier` is the configured `pack` value, `packSource` is the
+host's dependency spec for it (or `self` for a host self-reference), and
+`installedPackDigest` is a SHA-256 attestation of the actual resolved package's
+stable relative paths, permission modes and file bytes. A nested `node_modules`
+is skipped — it is never part of a package's published bytes — while the
+traversal otherwise rejects internal symlinks/special files and detects
+entry/root changes. Altering installed runtime bytes changes the build identity,
+regardless of package URL. The toolchain also binds component-pack identity, the
+contract package digest, and a fingerprint of production headless
+compiler/domain source. An incomplete stage cannot be compiled using a
 different toolchain. Already completed artifacts remain readable/activatable
 without recompiling them through newer tools.
 

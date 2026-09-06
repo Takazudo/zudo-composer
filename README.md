@@ -79,6 +79,52 @@ export default defineComposerConfig({
 { "scripts": { "dev": "zudo-composer dev" } }
 ```
 
+### Component packs and themesets
+
+A component pack is always addressed as a **package**, never as a path — the
+contract's `parseSource` admits only public bare-package imports and rejects any
+`src` path segment. Two shapes follow from that, and both are proven by fixtures
+in this repository:
+
+| Shape | `pack` | Every `source.module` | Fixture |
+| --- | --- | --- | --- |
+| Installed themeset | `"@acme/themeset/composer-pack"` | `"@acme/themeset"` | `fixtures/themeset-host` |
+| Host self-reference | `"my-site/components"` | `"my-site/components"` | `fixtures/self-host` |
+
+The self-reference needs nothing installed: the host's `package.json` declares
+its own `name` plus `"exports": { "./components": "./components/pack.ts" }`, and
+both Node and Vite resolve a package's reference to itself whenever `exports` is
+present. Its name must be a valid lowercase npm name, and no exported subpath
+segment may be `src`.
+
+Swapping a themeset is two edits and no tool change: the `pack` value above, and
+the `@import` in the host's `styles` entry. zudo-composer never falls back to a
+bundled pack — an unresolvable specifier is a startup error naming the specifier
+and the `package.json` it was resolved from.
+
+**Packaging rule for a themeset.** The pack is resolved with `createRequire`,
+so the `exports` targets for the pack entry and for every `source.module` must
+be a plain string or an object carrying a `default` key. An `exports` entry with
+only `import`/`types` conditions cannot be resolved.
+
+### Styles ownership
+
+zudo-composer's own CSS never imports a pack's. The host's `styles` file
+(`styles/base.css` by default) is the sole importer of the pack's stylesheet and
+the host's Tailwind `@source` declaration point:
+
+```css
+@import "@acme/themeset/styles/themeset.css";
+
+@source "../node_modules/@acme/themeset/src";
+```
+
+The tool reaches it through `virtual:zudo-composer-host-styles`, which resolves
+to the real file so its relative `@import`/`@source` bases stay the host's. A
+missing file is a loud config error. Every custom property the editor chrome
+consumes is declared in the tool's own `src/styles/app-tokens.css`, so a themeset
+that ships none of them still leaves a working editor.
+
 The package publishes five entry points. Everything else is internal:
 
 | Specifier | What it is |

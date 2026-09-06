@@ -129,7 +129,7 @@ describe("immutable local release storage", () => {
     const context = await fixture(), plan = await review(context.service, project());
     await release(context.service, plan);
     await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain })).resolves.toMatchObject({ release: { stage: { toolchain } } });
-    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: { ...toolchain, installedProviderDigest: "f".repeat(64) } })).rejects.toThrow(/current installed runtime/);
+    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: { ...toolchain, installedPackDigest: "f".repeat(64) } })).rejects.toThrow(/current installed runtime/);
   });
   it.each(["apply", "build", "activate", "discard"].flatMap((operation) => ["unlink", "rmdir", "sync"].map((step) => ({ operation, step }))))("reports committed $operation cleanup $step as uncertain and retries idempotently", async ({ operation, step }) => {
     const { store, testRoot } = await fixture(); const input = applyInput(), output = await build();

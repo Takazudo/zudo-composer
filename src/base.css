@@ -1,4 +1,11 @@
-@import "@zudo-sg/ui/styles/composer.css";
+/*
+ * The tool's own chrome sheet. It never imports component-pack CSS — that is
+ * the host's `styles` entry (`virtual:zudo-composer-host-styles`), which is
+ * also the pack's Tailwind `@source` point. Utilities only, with no default
+ * theme: `app-tokens.css` supplies every key this chrome uses, and a base
+ * `--spacing` deliberately does not exist (see `scripts/check-class-names.mjs`).
+ */
+@import "tailwindcss/utilities";
 @import "./styles/app-tokens.css";
 
 @source "./";
