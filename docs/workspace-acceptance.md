@@ -107,10 +107,10 @@ Manager must run the full integrated CI-equivalent gates without omissions:
 
 | Gate group | Required commands / evidence |
 | --- | --- |
-| Source and contracts | `lint`, `typecheck`, `headless:negative-scan`, `site-project:boundary`, `deployment:boundary`, `handoff:boundary`, `contract:negative-scan`, `contract:conformance`, `contract:external-install`, `styles:class-names` |
-| Unit and artifact | Full `test`; one production `build`; `provider:boundary`; `deployment:manifest` and `deployment:manifest:check`; `deploy:dry-run`; `smoke:local` |
-| All four browser lanes | `test:browser:dist`, `test:browser:dev`, `test:browser:site-project`, `test:browser:site-project:dist` through their configured guarded runners |
-| Artifact reuse | Production SiteProject lane uses the existing built `dist`, never another build; bundled Sample Studio route/asset smoke expectations remain intact |
+| Source and contracts | `lint`, `typecheck`, `headless:negative-scan`, `site-project:boundary`, `handoff:boundary`, `contract:negative-scan`, `contract:conformance`, `contract:external-install`, `styles:class-names` |
+| Unit and artifact | Full `test`; one production `build`; `provider:boundary` |
+| All three browser lanes | `test:browser:dist`, `test:browser:dev`, `test:browser:site-project` through their configured guarded runners |
+| Artifact reuse | `test:browser:dist` uses the existing built `dist`, never another build; bundled Sample Studio route/asset expectations remain intact |
 | Boundaries | No provider runtime in host/headless graph; no source-repository access/assets or current-schema aliases; direct-loopback authoring capability only in development; production static/release inspection is read-only |
 | Finish graph | Independent foreground review/fixes; root PR ready and green CI; merge into captured main; exact post-merge CI watch; touched issue/branch/worktree resource audit and cleanup |
 

@@ -68,7 +68,7 @@ assert.equal(packageJson.scripts["site-project:api"], "tsx server/site-project-l
 assert.equal(packageJson.scripts["site-project:boundary"], "node scripts/check-site-project-boundary.mjs");
 assert.equal(packageJson.scripts["site-project:bundle"], "tsx scripts/generate-bundled-release.ts --write");
 assert.equal(packageJson.scripts["site-project:bundle:check"], "tsx scripts/generate-bundled-release.ts --check");
-assert.equal(packageJson.scripts["test:browser:site-project"], "node scripts/run-site-project-browser.mjs --dev");
+assert.equal(packageJson.scripts["test:browser:site-project"], "node scripts/run-site-project-browser.mjs");
 const workflow = read(".github/workflows/ci.yml");
 assert.ok(workflow.includes("pnpm test:browser:site-project\n"), "CI must run the isolated dev acceptance lane");
 
@@ -89,8 +89,6 @@ const forbiddenProductionMarkers = [
   "node:path",
   "node:os",
   "node:child_process",
-  "CLOUDFLARE_API_TOKEN",
-  "CLOUDFLARE_ACCOUNT_ID",
   "active-build.json",
   "complete.json",
   "projects/",

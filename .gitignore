@@ -6,7 +6,6 @@ coverage/
 .vite/
 .artifacts/
 .zudo-site-project/
-.wrangler/
 *.local
 *.log
 .DS_Store

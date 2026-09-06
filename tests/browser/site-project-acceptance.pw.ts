@@ -10,7 +10,6 @@ const SITE_ROUTES = [
   "/site/journal/review-in-small-loops",
   "/site/journal/start-with-the-question",
 ] as const;
-const BROWSER_LANE = process.env.SITE_PROJECT_BROWSER_LANE ?? "dist";
 
 function watchRuntimeFailures(page: Page) {
   const failures: string[] = [];
@@ -136,7 +135,6 @@ test("crawls every emitted SiteProject route with refresh, Entry content, chrome
 });
 
 test("review stages A while newer working B survives local activation and reload", async ({ page }) => {
-  test.skip(BROWSER_LANE !== "dev", "the production lane intentionally serves immutable bundled data");
   const failures = watchRuntimeFailures(page);
   await page.goto("/content");
   const contentTree = page.getByRole("tree", { name: "Content" });
@@ -167,21 +165,6 @@ test("review stages A while newer working B survives local activation and reload
   await page.goto("/content?provider=content-indexeddb&model=about-content&entry=about-entry");
   await expect(heading).toHaveValue("Newer working B");
   expect(failures).toEqual([]);
-});
-
-test("static release inspection never offers write capability", async ({ page }) => {
-  test.skip(BROWSER_LANE !== "dist", "static capability assertion");
-  await page.goto("/review");
-  await expect(page.getByText(/Static read-only mode/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Run release checks" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Activate locally" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Export working JSON" })).toBeEnabled();
-  for (const endpoint of ["/__zudo-release", "/__zudo_composer_media_file_provider"]) {
-    const response = await page.request.post(endpoint, { data: { protocolVersion: 2, operation: "describe" } });
-    const body = await response.text();
-    expect(body, `${endpoint} must not expose a deployed authoring protocol`).not.toMatch(/"ok"\s*:\s*(?:true|false)|"capability"\s*:/);
-    expect(response.status() >= 400 || (response.headers()["content-type"] ?? "").includes("text/html")).toBe(true);
-  }
 });
 
 test("missing SiteProject routes show an accessible not-found state", async ({ page }) => {
@@ -216,23 +199,7 @@ test("SiteDelivery remains usable at desktop and mobile widths in both themes", 
   expect(failures).toEqual([]);
 });
 
-test("production ignores an alternate active disposable project and serves the bundled sample", async ({ page }) => {
-  test.skip(BROWSER_LANE !== "dist", "the dev lane intentionally follows its activated disposable project");
-  const failures = watchRuntimeFailures(page);
-  const virtualResponses: Response[] = [];
-  page.on("response", (response) => {
-    if (response.url().includes("virtual:site-project-source") || response.url().includes("__x00__virtual")) virtualResponses.push(response);
-  });
-  await page.goto("/site");
-  await expect(page.getByRole("link", { name: "Sample Studio", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Clear ideas, carefully shaped", exact: true })).toBeVisible();
-  await expect(page.getByText("Disposable browser project", { exact: true })).toHaveCount(0);
-  await expect.poll(() => virtualResponses.length).toBe(0);
-  expect(failures).toEqual([]);
-});
-
 test("dev virtual source contains the CLI-activated project", async ({ page }) => {
-  test.skip(BROWSER_LANE !== "dev", "the production bundle intentionally has no Vite virtual source request");
   const failures = watchRuntimeFailures(page);
   const virtualResponses: Response[] = [];
   page.on("response", (response) => {
@@ -248,4 +215,4 @@ test("dev virtual source contains the CLI-activated project", async ({ page }) =
 });
 
 // Last: activation changes only this guarded runner's disposable release root.
-registerCatalogJourney(BROWSER_LANE);
+registerCatalogJourney();

@@ -258,8 +258,7 @@ Preserve the old root before any explicit clean reset.
 Focused API/store/CLI tests cover selection, digests/CAS, interrupted writes,
 immutable Media copies, completion corruption, symlinks and concurrent writers.
 The integration owner runs `site-project:boundary`, full CI/artifact gates and
-the guarded `test:browser:site-project` / `test:browser:site-project:dist` lanes.
-The latter consumes an existing artifact and must not rebuild it. Vite development
+the guarded `test:browser:site-project` lane. Vite development
 delivery resolves `/site` only from the currently activated, completed local
 release. It verifies the active project/revision/build triple and serves only that
 build's copied checksum-addressed Media bytes; missing or corrupt release state is
@@ -267,5 +266,5 @@ unavailable and never falls back to a working draft. In contrast,
 `/website-preview` flushes and compiles the current live authoring snapshot. A
 production assets-only build embeds one explicit completed sample artifact, so it
 does not need a hosted authoring or release API. Local activation is not deployment;
-Cloudflare persistence, authentication, hosted APIs and deployment remain future
-work and are not a claim of this repository.
+hosted persistence, authentication, hosted APIs and deployment remain future work
+and are not a claim of this repository.
