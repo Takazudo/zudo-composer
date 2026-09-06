@@ -1,6 +1,13 @@
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { join, resolve } from "node:path";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
+import type { ReleasePlan, CompletedRelease } from "../../../src/site-project/api/types";
+import type { SiteProject } from "../../../src/site-project/model";
+
+const roots: string[] = [];
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 
 const fixture = resolve(process.cwd(), "server/site-project-local/__tests__/cli-fixture.ts");
 function run(input: string, code?: string): Promise<{ status: number | null; stdout: string; stderr: string }> {
@@ -25,6 +32,22 @@ function runThrowing(input: string): Promise<{ status: number | null; stdout: st
 }
 
 describe("SiteProject CLI framing", () => {
+  it("executes the real protocol-2 plan/stage/build/activate CLI without implicit activation", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "release-cli-")); roots.push(parent);
+    const project = JSON.parse(await readFile(resolve(process.cwd(), "src/site-project/sample/sample-site-project.json"), "utf8")) as SiteProject;
+    const invoke = (request: object) => new Promise<{ code: number | null; response: { ok: boolean; result: unknown } }>((done, fail) => {
+      const child = spawn(process.execPath, ["--import", "tsx", resolve(process.cwd(), "server/site-project-local/cli.ts")], { env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: join(parent, "release") }, stdio: ["pipe", "pipe", "pipe"] }); let stdout = "", stderr = "";
+      child.stdout.on("data", (chunk) => { stdout += String(chunk); }); child.stderr.on("data", (chunk) => { stderr += String(chunk); }); child.on("error", fail); child.on("close", (code) => { if (stderr) return fail(new Error(stderr)); done({ code, response: JSON.parse(stdout) }); }); child.stdin.end(JSON.stringify({ protocolVersion: 2, ...request }));
+    });
+    const planned = await invoke({ operation: "plan", project, workingPrecondition: null, selection: project.providers.content.flatMap((provider) => provider.entries.map((entry) => ({ ref: { providerId: provider.id, modelId: entry.modelId, recordId: entry.id }, action: "publish" }))), expectedRevision: null, expectedActive: null });
+    expect(planned.code).toBe(0); const plan = planned.response.result as ReleasePlan; expect(plan.checks.some(({ severity }) => severity === "blocking")).toBe(false);
+    expect((await invoke({ operation: "apply", plan })).code).toBe(0);
+    expect((await invoke({ operation: "active" })).response.result).toEqual({ active: null });
+    const built = await invoke({ operation: "build", projectId: project.id, buildId: plan.buildId }); expect(built.code).toBe(0); const completed = built.response.result as CompletedRelease;
+    expect((await invoke({ operation: "active" })).response.result).toEqual({ active: null });
+    expect((await invoke({ operation: "activate", ...completed.identity, expectedActive: null })).code).toBe(0);
+    expect((await invoke({ operation: "active" })).response.result).toMatchObject({ active: completed.identity });
+  }, 30_000);
   it.each(["", "not-json", "{}{}", "{\"a\":1} trailing"])("rejects blank, malformed, or concatenated input %#", async (input) => {
     const result = await run(input);
     expect(result.status).toBe(2);
@@ -36,7 +59,7 @@ describe("SiteProject CLI framing", () => {
 
   it.each([
     ["malformed-request", 2], ["unsupported-protocol", 2], ["validation", 2], ["compile-blocked", 2],
-    ["not-found", 2], ["conflict", 2], ["unavailable", 1], ["internal", 1],
+    ["not-found", 2], ["conflict", 2], ["commit-uncertain", 1], ["unavailable", 1], ["internal", 1],
   ])("maps %s to exit %i with one canonical response", async (code, expected) => {
     const result = await run('{"operation":"test"}\n', code);
     expect(result).toEqual({ status: expected, stderr: "", stdout: `{"error":{"code":"${code}","message":"${code}"},"ok":false}\n` });

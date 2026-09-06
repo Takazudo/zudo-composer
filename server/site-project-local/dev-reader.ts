@@ -4,6 +4,7 @@ import { createLocalSiteProjectStore, type LocalSiteProjectStoreOptions } from "
 export interface ActivatedSiteProjectData {
   project: SiteProject;
   revision: string;
+  buildId: string;
 }
 
 /** Read-only development seam. No path, mutation, or filesystem capability crosses it. */
