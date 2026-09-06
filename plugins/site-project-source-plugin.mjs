@@ -42,14 +42,11 @@ export function siteProjectSourcePlugin(options) {
     try { const loaded = await readRelease(); return loaded ? readySource(loaded, "activated-local") : { status: "no-active", message: "No completed local release is activated." }; }
     catch (error) { return { status: "error", message: error instanceof Error ? error.message : "Activated local release is unavailable." }; }
   };
-  const reload = async () => {
+  const publish = (deliverySource) => {
     if (!server) return;
     const module = server.moduleGraph.getModuleById(RESOLVED_SITE_PROJECT_SOURCE_ID);
-    if (module) {
-      server.moduleGraph.invalidateModule(module);
-      if (server.reloadModule) await server.reloadModule(module);
-    }
-    server.ws.send({ type: "custom", event: "release:changed", data: { source: "activated-release" } });
+    if (module) server.moduleGraph.invalidateModule(module);
+    server.ws.send({ type: "custom", event: "release:changed", data: { source: "activated-release", deliverySource } });
   };
   return {
     name: "zudo-site-project-source", enforce: "pre",
@@ -71,7 +68,12 @@ export function siteProjectSourcePlugin(options) {
         if (closed || refreshing) return; refreshing = true;
         try { while (!closed && applied < requested) {
           const generation = requested;
-          let next, failed = false; try { next = pathsFor(await readRelease()); } catch { failed = true; }
+          let loaded, next, source, failed = false;
+          try {
+            loaded = await readRelease();
+            next = pathsFor(loaded);
+            source = loaded ? readySource(loaded, "activated-local") : { status: "no-active", message: "No completed local release is activated." };
+          } catch { failed = true; }
           if (closed) break;
           if (generation !== requested) continue;
           if (failed) { notifyPending = true; scheduleRetry(); break; }
@@ -80,7 +82,7 @@ export function siteProjectSourcePlugin(options) {
           for (const path of watched) if (!next.has(path)) viteServer.watcher.unwatch(path);
           watched = next; applied = generation;
           if (notifyPending) {
-            try { await reload(); notifyPending = false; }
+            try { publish(source); notifyPending = false; }
             catch { notifyPending = true; requested++; scheduleRetry(); break; }
           }
         } } finally { refreshing = false; if (!closed && applied < requested && !retryTimer) globalThis.queueMicrotask(() => { void refresh(); }); }

@@ -25,6 +25,14 @@ export type DeliverySourceContract =
   | { kind: "activated"; componentProvider: typeof import("../composer/active-pack").activeComponentProvider; read(): ActivatedDeliverySource; subscribe?(listener: () => void): () => void }
   | { kind: "working-preview"; providers: import("../../app/provider-integration").ProductionProviderIntegration };
 
+export function parseActivatedDeliverySource(value: unknown): ActivatedDeliverySource | undefined {
+  if (!value || typeof value !== "object" || !("status" in value)) return undefined;
+  if ((value.status === "no-active" || value.status === "error") && "message" in value && typeof value.message === "string") return value as ActivatedDeliverySource;
+  if (value.status !== "ready" || !("artifact" in value)) return undefined;
+  try { return validateActivatedDeliveryArtifact(value.artifact as ActivatedDeliveryArtifact) === undefined ? value as ActivatedDeliverySource : undefined; }
+  catch { return undefined; }
+}
+
 const SHA = /^[a-f0-9]{64}$/;
 export function validateActivatedDeliveryArtifact(artifact: ActivatedDeliveryArtifact, installedPack?: { packId: string; packVersion: string; contractVersion: number }): string | undefined {
   const { identity, project, build } = artifact;
