@@ -94,6 +94,12 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@26.4.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12))
 
+  fixtures/host:
+    devDependencies:
+      zudo-composer:
+        specifier: workspace:*
+        version: link:../..
+
   packages/component-contract:
     devDependencies:
       typescript:

@@ -21,7 +21,7 @@ export interface LoadComposerConfigOptions extends ComposerRuntime {
 }
 
 const importConfigModule: ComposerConfigLoader = async (configPath) =>
-  (await import(pathToFileURL(configPath).href)) as Record<string, unknown>;
+  (await import(/* @vite-ignore */ pathToFileURL(configPath).href)) as Record<string, unknown>;
 
 export interface ComposerConfigModule {
   /** Absolute path the config was looked for at, whether or not it exists. */

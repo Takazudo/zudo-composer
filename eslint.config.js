@@ -18,7 +18,7 @@ export default tseslint.config(
     ],
   },
   {
-    files: ['scripts/**/*.mjs', 'plugins/**/*.mjs'],
+    files: ['bin/**/*.mjs', 'scripts/**/*.mjs', 'plugins/**/*.mjs', 'server/**/*.mjs'],
     languageOptions: {
       globals: {
         URL: 'readonly',
