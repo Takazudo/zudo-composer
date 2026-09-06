@@ -112,9 +112,10 @@ export function Shell({ children, path, themeController, themeSnapshot, summary 
   const temporaryRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  const restoreFocusRef = useRef(false);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const close = (restore = true) => { setTemporary(false); if (restore) (triggerRef.current?.isConnected ? triggerRef.current : toggleRef.current)?.focus(); };
-  const open = () => { triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setTemporary(true); };
+  const close = (restore = true) => { restoreFocusRef.current = restore; setTemporary(false); };
+  const open = () => { restoreFocusRef.current = false; triggerRef.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null; setTemporary(true); };
 
   useEffect(() => integration?.subscribeChanges(() => setGeneration((value) => value + 1)), [integration]);
   useEffect(() => summary?.subscribe?.(() => setGeneration((value) => value + 1)), [summary]);
@@ -138,6 +139,14 @@ export function Shell({ children, path, themeController, themeSnapshot, summary 
     document.body.style.overflow = "hidden";
     return () => { frame?.removeAttribute("inert"); document.body.style.overflow = overflow; };
   }, [temporary, mobile]);
+  useLayoutEffect(() => {
+    if (temporary || !restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    // Dialog's child layout effect has closed the native modal, and the
+    // preceding cleanup removed frame inertness. Earlier focus calls are
+    // ignored by the browser while the opener is still inert.
+    (triggerRef.current?.isConnected ? triggerRef.current : toggleRef.current)?.focus();
+  }, [temporary]);
   useEffect(() => {
     if (!temporary || mobile) return;
     closeRef.current?.focus();
