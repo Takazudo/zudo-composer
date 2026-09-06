@@ -52,7 +52,10 @@ assert.ok(snapshotKey, "missing exact provider snapshot");
 const snapshot = indentedBlock(snapshotSection, snapshotKey, 2);
 assert.ok(importer.includes(`specifier: ${providerSpec}`), "importer spec must retain exact provider Git SHA");
 assert.ok(importer.includes(`version: ${tarball}(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)`), "importer resolution drifted");
-assert.ok(packageBlock.includes(`resolution: {gitHosted: true, tarball: ${tarball}}`), "provider codeload package resolution drifted");
+// pnpm records an `integrity:` field between `gitHosted:` and `tarball:` when it
+// re-resolves a Git dependency, so assert the two load-bearing parts separately.
+assert.match(packageBlock, /resolution: \{gitHosted: true,/, "provider must resolve as a git-hosted tarball");
+assert.ok(packageBlock.includes(`tarball: ${tarball}}`), "provider codeload package resolution drifted");
 assert.ok(packageBlock.includes("version: 0.1.0"), "provider lock metadata version drifted");
 assert.ok(snapshot.includes("'@zudo-composer/component-contract': link:packages/component-contract"), "provider must use the intentional local contract peer");
 assert.equal(count(snapshot, "link:packages/component-contract"), 1, "only the intentional component-contract peer may link locally");
