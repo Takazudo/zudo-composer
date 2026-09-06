@@ -25,6 +25,14 @@ async function changeDraft(page: Page, title: string) {
     return { mutationToken: snapshot.mutationToken, record: loaded.record };
   }, title);
 }
+async function currentDeliveryIdentity(page: Page) {
+  return page.evaluate(async () => {
+    const sourcePath = "/src/features/delivery/activated-source.ts", packPath = "/src/features/composer/active-pack.ts";
+    const [{ activatedDeliverySource }, { activeComponentProvider }] = await Promise.all([import(sourcePath), import(packPath)]);
+    const source = activatedDeliverySource(activeComponentProvider).read();
+    return source.status === "ready" ? source.artifact.identity : { status: source.status };
+  });
+}
 const responseFor = (page: Page, operation: string) => page.waitForResponse((response) => {
   try { return response.request().postDataJSON()?.request?.operation === operation; } catch { return false; }
 });
@@ -183,12 +191,7 @@ export function registerCatalogJourney(lane: string) {
       const active = (await (await activating).json()).result.active;
       expect(active).toEqual({ projectId: "catalog-editorial-example", revision: staged.revision, buildId: staged.buildId });
       await expect(page.getByText(/Activated locally\. Publication reconciliation/)).toBeVisible();
-      await expect.poll(() => page.evaluate(async () => {
-        const sourcePath = "/src/features/delivery/activated-source.ts", packPath = "/src/features/composer/active-pack.ts";
-        const [{ activatedDeliverySource }, { activeComponentProvider }] = await Promise.all([import(sourcePath), import(packPath)]);
-        const source = activatedDeliverySource(activeComponentProvider).read();
-        return source.status === "ready" ? source.artifact.identity : { status: source.status };
-      }), { timeout: COLD_SITE_DELIVERY_TIMEOUT_MS }).toEqual(active);
+      await expect.poll(() => currentDeliveryIdentity(page), { timeout: COLD_SITE_DELIVERY_TIMEOUT_MS }).toEqual(active);
       await page.goto("/site");
       // Activation invalidates the dev SiteDelivery module graph. Give its
       // first render the same cold-route budget as the unbundled authoring UI.
@@ -206,10 +209,16 @@ export function registerCatalogJourney(lane: string) {
       await page.getByRole("checkbox", { name: /news-supply-notes/ }).check();
       await page.getByRole("button", { name: "Run release checks", exact: true }).click();
       await page.getByRole("button", { name: "Approve reviewed candidate", exact: true }).click();
+      const reapplying = responseFor(page, "apply");
       await page.getByRole("button", { name: "Apply / stage exact candidate", exact: true }).click();
+      const restaged = (await (await reapplying).json()).result;
       await page.getByRole("button", { name: "Build staged candidate", exact: true }).click();
+      const reactivating = responseFor(page, "activate");
       await page.getByRole("button", { name: "Activate locally", exact: true }).click();
+      const reactivated = (await (await reactivating).json()).result.active;
+      expect(reactivated).toEqual({ projectId: "catalog-editorial-example", revision: restaged.revision, buildId: restaged.buildId });
       await expect(page.getByText(/Activated locally\. Publication reconciliation/)).toBeVisible();
+      await expect.poll(() => currentDeliveryIdentity(page), { timeout: COLD_SITE_DELIVERY_TIMEOUT_MS }).toEqual(reactivated);
       await page.goto("/site/journal/stories/supply-notes-for-the-next-season");
       await expect(page.getByRole("heading", { name: "Newer private working B", exact: true })).toBeVisible({ timeout: COLD_SITE_DELIVERY_TIMEOUT_MS });
       await page.reload(); await expect(page.getByRole("heading", { name: "Newer private working B", exact: true })).toBeVisible({ timeout: COLD_SITE_DELIVERY_TIMEOUT_MS });
