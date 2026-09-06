@@ -17,12 +17,16 @@ export function ReleaseRoute({ controller, href }: { controller: ReleaseControll
     <p role="status">{state.message} Current step: {state.phase}.</p>
     {state.error && <p role="alert">{state.error}</p>}
     {state.changed && <p role="status">Working or release state changed. An unstaged approval is invalid; an exact staged build remains separate from newer drafts.</p>}
-    {!controller.available && <p>Static read-only mode. Inspect or export the working project; review, staging and activation require the local development server.</p>}
+    {!controller.available && <p>Static read-only mode. Inspect or export the working project; review, staging and activation require a direct loopback connection to the local development server.</p>}
     <p>Activated local build: <Identity value={state.active?.buildId ?? "None inspected"} /></p>
     <p>Exact staged build: <Identity value={state.staged?.buildId ?? "None"} /></p>
     <nav aria-label="Release destinations"><a href="/website-preview">Working draft preview</a> · <a href="/site">Activated website</a></nav>
     <Button disabled={state.busy} onClick={() => void controller.inspect()}>Inspect current state</Button>
     <Button disabled={!state.working || state.busy} onClick={exportWorking}>Export working JSON</Button>
+    <PaneSection title="Retained server stages">
+      <p>These records come from the local release catalog, including stages created in another tab or through the CLI. Selecting one never replaces working drafts.</p>
+      <ul>{state.retainedStages.map((stage) => <li key={`${stage.projectId}:${stage.buildId}:${stage.stageGeneration}`}><Identity value={`${stage.projectId} / ${stage.buildId}`} /> · incarnation {stage.stageGeneration} <Button disabled={writeDisabled} onClick={() => void controller.selectStage(stage)}>Inspect stage {stage.buildId.slice(0, 8)}</Button></li>)}</ul>
+    </PaneSection>
     <PaneSection title="Select Content changes">
       <p>Selection changes only the candidate. Unselected published entries retain their activated values; unselected new drafts stay private. Unpublish intent is set in the Content editor.</p>
       {state.choices.map((choice) => { const selected = state.selection.some(({ ref }) => ref.providerId === choice.ref.providerId && ref.modelId === choice.ref.modelId && ref.recordId === choice.ref.recordId); return <div key={JSON.stringify(choice.ref)}><Checkbox disabled={writeDisabled || !!state.staged} checked={selected} onCheckedChange={(checked) => controller.select(choice, checked)} label={`${choice.kind}: ${choice.ref.providerId} / ${choice.ref.modelId} / ${choice.ref.recordId}`} /></div>; })}
@@ -39,7 +43,8 @@ export function ReleaseRoute({ controller, href }: { controller: ReleaseControll
     <Button disabled={writeDisabled || state.phase !== "approved"} onClick={() => void controller.apply()}>Apply / stage exact candidate</Button>
     <Button disabled={writeDisabled || state.phase !== "staged"} onClick={() => void controller.build()}>Build staged candidate</Button>
     <Button disabled={writeDisabled || state.phase !== "built"} onClick={() => void controller.activate()}>Activate locally</Button>
+    <Button disabled={writeDisabled || state.phase !== "activated"} onClick={() => void controller.reconcile()}>Retry publication reconciliation</Button>
     <Button disabled={writeDisabled || state.phase !== "staged"} onClick={() => void controller.discard()}>Discard unbuilt stage</Button>
-    <Button disabled={state.busy || state.phase !== "activated"} onClick={() => controller.newReview()}>Review remaining working changes</Button>
+    <Button disabled={state.busy || state.phase === "uncertain"} onClick={() => controller.newReview()}>Review remaining working changes</Button>
   </PaneBody></Pane>;
 }

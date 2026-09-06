@@ -52,7 +52,7 @@ export type SiteProjectApiRequest =
   | { protocolVersion: 2; operation: "get"; projectId: string; revision: string }
   | { protocolVersion: 2; operation: "plan"; project: unknown; workingPrecondition: JsonValue; selection: ContentPublicationSelection[]; expectedRevision: string | null; expectedActive: SiteProjectActiveSelection | null }
   | { protocolVersion: 2; operation: "apply"; plan: ReleasePlan }
-  | { protocolVersion: 2; operation: "build" | "completed"; projectId: string; buildId: string }
+  | { protocolVersion: 2; operation: "stage" | "build" | "completed"; projectId: string; buildId: string }
   | { protocolVersion: 2; operation: "activate"; projectId: string; revision: string; buildId: string; expectedActive: SiteProjectActiveSelection | null }
   | { protocolVersion: 2; operation: "discard"; projectId: string; buildId: string; expectedStageGeneration: number; expectedActive: SiteProjectActiveSelection | null };
 export interface SiteProjectApiError { code: SiteProjectApiErrorCode; message: string; identity?: SiteProjectActiveSelection; diagnostics?: readonly JsonValue[] }

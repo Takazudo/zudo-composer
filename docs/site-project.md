@@ -108,7 +108,7 @@ apply invalidate browser approval. After A is staged, editing B does not invalid
 building/activating pinned A. Workspace identity/storage remains separate from
 active release identity; see [workspace lifecycle](./workspace-design.md#workspace-lifetime-and-capture).
 
-Read-only operations are `describe`, `list`, `active`, `get`, `plan`, `completed`.
+Read-only operations are `describe`, `list`, `active`, `get`, `stage`, `plan`, `completed`.
 Mutations are `apply`, `build`, `activate`, `discard`. `get` addresses an exact
 retained project revision; `completed` addresses and integrity-checks an exact
 completed build; `active` returns the single identity and verified completed
@@ -170,7 +170,9 @@ the symbolic values below with the exact returned IDs/digests:
 ```
 
 For a replacement activation, `expectedActive` is the exact prior triple, not
-null. `get` requires `{projectId,revision}`. `discard` requires
+null. `get` requires `{projectId,revision}`. `stage` requires `{projectId,buildId}`
+and returns `{stage,stageGeneration}` from one authoritative catalog read, even
+for an unbuilt stage created by another tab or the CLI. `discard` requires
 `{projectId,buildId,expectedStageGeneration,expectedActive}`. Use `stageGeneration`
 from apply (including idempotent apply) or `list.stageGenerations[buildId]`.
 This is the exact visible stage incarnation, not merely a build hash or the

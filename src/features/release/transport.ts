@@ -9,7 +9,7 @@ export interface ReleaseTransport {
 }
 export function createReleaseTransport(): ReleaseTransport {
   const hot = import.meta.hot;
-  const available = !!(import.meta.env.DEV && config && hot);
+  const available = !!(import.meta.env.DEV && config && hot && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname));
   const clientId = crypto.randomUUID();
   const listeners = new Set<() => void>();
   const requests = new Map<string, { operation: string; guard?: (payload: unknown) => Promise<unknown>; seen: Set<string> }>();
@@ -37,7 +37,7 @@ export function createReleaseTransport(): ReleaseTransport {
       const requestId = crypto.randomUUID(); requests.set(requestId, { operation: request.operation, guard, seen: new Set() });
       try {
         bind();
-        const response = await fetch(config!.endpoint, { method: "POST", credentials: "same-origin", redirect: "error", headers: { "Content-Type": "application/json", "X-Zudo-Release-Capability": config!.capability }, body: JSON.stringify({ requestId, clientId, request }) });
+        const response = await fetch(config!.endpoint, { method: "POST", credentials: "same-origin", redirect: "error", headers: { "Content-Type": "application/json", "X-Zudo-Release-Capability": config!.capability, "X-Zudo-Release-Client": clientId, "X-Zudo-Release-Request": requestId }, body: JSON.stringify({ requestId, clientId, request }) });
         const result = await response.json();
         if (!response.ok || typeof result?.ok !== "boolean" || (result.ok ? !("result" in result) : typeof result.error?.code !== "string")) throw new Error("Invalid release response.");
         return result as SiteProjectApiResponse;

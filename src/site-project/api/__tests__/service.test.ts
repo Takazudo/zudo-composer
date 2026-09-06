@@ -23,6 +23,9 @@ describe("protocol-2 staged release API", () => {
     const tampered = structuredClone(plan); tampered.candidate.name = "Not approved";
     expect(await service.handle({ protocolVersion: 2, operation: "apply", plan: tampered })).toMatchObject({ ok: false, error: { code: "conflict" } });
     await call(service, "apply", { plan }); expect(await call(service, "active")).toEqual({ active: null });
+    expect(await call(service, "stage", { projectId: plan.candidate.id, buildId: plan.buildId })).toMatchObject({ stage: { projectId: plan.candidate.id, buildId: plan.buildId, revision: plan.projectRevision }, stageGeneration: 1 });
+    expect(await service.handle({ protocolVersion: 2, operation: "stage", projectId: plan.candidate.id, buildId: "f".repeat(64) })).toMatchObject({ ok: false, error: { code: "not-found" } });
+    expect(await service.handle({ protocolVersion: 2, operation: "stage", projectId: plan.candidate.id, buildId: plan.buildId, extra: true })).toMatchObject({ ok: false, error: { code: "malformed-request" } });
     expect(await service.handle({ protocolVersion: 2, operation: "activate", projectId: plan.candidate.id, revision: plan.projectRevision, buildId: plan.buildId, expectedActive: null })).toMatchObject({ ok: false, error: { code: "not-found" } });
     await call(service, "build", { projectId: plan.candidate.id, buildId: plan.buildId }); expect(await call(service, "active")).toEqual({ active: null });
     const active = await release(service, plan); expect(await store.readActiveProject()).toMatchObject({ status: "ok", value: { revision: active.revision, buildId: active.buildId } });

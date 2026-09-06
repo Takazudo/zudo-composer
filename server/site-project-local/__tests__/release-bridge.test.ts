@@ -1,9 +1,9 @@
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
-import releaseApiPlugin from "../../../plugins/release-api-plugin";
+import releaseApiPlugin, { RELEASE_LIMITS, trustedReleaseRequest } from "../../../plugins/release-api-plugin";
 
-function harness() {
+function harness(concurrentChecks = false) {
   const plugin = releaseApiPlugin();
   (plugin.configResolved as (value: unknown) => void)({ command: "serve" });
   const source = (plugin.load as (id: string) => string)("\0virtual:release-config");
@@ -11,19 +11,43 @@ function harness() {
   const events = new Map<string, (data: unknown, client: unknown) => void>();
   let middleware!: (req: unknown, res: unknown, next: () => void) => Promise<void>;
   const client = { socket: Object.assign(new EventEmitter(), { readyState: 1 }), send: vi.fn() };
-  const service = vi.fn((options: { isWorkingCurrent(project: unknown, token: unknown): Promise<boolean> }) => ({ handle: async () => ({ ok: await options.isWorkingCurrent({ id: "A" }, { workspaceId: "one" }) }) }));
+  const service = vi.fn((options: { isWorkingCurrent(project: unknown, token: unknown): Promise<boolean> }) => ({ handle: async () => concurrentChecks ? { checks: await Promise.all([options.isWorkingCurrent({ id: "A" }, { workspaceId: "one" }), options.isWorkingCurrent({ id: "B" }, { workspaceId: "one" })]) } : { ok: await options.isWorkingCurrent({ id: "A" }, { workspaceId: "one" }) } }));
   (plugin.configureServer as (value: unknown) => void)({ config: { server: {} }, ws: { on: (key: string, listener: (data: unknown, client: unknown) => void) => events.set(key, listener), send: vi.fn() }, middlewares: { use: (value: typeof middleware) => { middleware = value; } }, ssrLoadModule: async () => ({ createLocalSiteProjectApiService: service }) });
   const clientId = "a".repeat(36), requestId = "b".repeat(36);
+  const socket = { remoteAddress: "127.0.0.1", localPort: 5173 };
+  events.get("connection")!(client.socket, { socket, headers: { origin: "http://localhost:5173", host: "localhost:5173" } });
   events.get("release:bind")!({ clientId, capability: config.capability }, client);
   client.send.mockClear();
-  const request = async (origin = "http://localhost:5173", capability = config.capability) => {
-    const req = Object.assign(Readable.from([Buffer.from(JSON.stringify({ clientId, requestId, request: { protocolVersion: 2, operation: "apply" } }))]), { url: "/__zudo-release", method: "POST", headers: { origin, host: "localhost:5173", "x-zudo-release-capability": capability, "content-type": "application/json" } });
+  const request = async (origin = "http://localhost:5173", capability = config.capability, options: { peer?: string; host?: string; headers?: Record<string, string | undefined>; stream?: Readable; id?: string } = {}) => {
+    const id = options.id ?? clientId;
+    const req = Object.assign(options.stream ?? Readable.from([Buffer.from(JSON.stringify({ clientId: id, requestId, request: { protocolVersion: 2, operation: "apply" } }))]), { socket: { ...socket, remoteAddress: options.peer ?? socket.remoteAddress }, url: "/__zudo-release", method: "POST", headers: { origin, host: options.host ?? "localhost:5173", "x-zudo-release-capability": capability, "content-type": "application/json", "x-zudo-release-client": id, "x-zudo-release-request": requestId, ...options.headers } });
     const res = Object.assign(new EventEmitter(), { destroyed: false, statusCode: 200, setHeader: vi.fn(), end: vi.fn() });
-    const done = middleware(req, res, vi.fn()); return { res, done };
+    const done = middleware(req, res, vi.fn()); return { req, res, done };
   };
-  return { plugin, request, client, events, requestId, service };
+  const bind = (id: string, peer = "127.0.0.1", host = "localhost:5173", headers = {}) => { const other = { socket: Object.assign(new EventEmitter(), { readyState: 1 }), send: vi.fn() }; events.get("connection")!(other.socket, { socket: { ...socket, remoteAddress: peer }, headers: { origin: `http://${host}`, host, ...headers } }); events.get("release:bind")!({ clientId: id, capability: config.capability }, other); return other; };
+  return { plugin, request, client, events, requestId, service, bind };
 }
 describe("local release capability bridge", () => {
+  it.each(["127.0.0.1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::1", "0:0:0:0:0:0:0:1"])("accepts canonical loopback operator peer %s", (peer) => { expect(trustedReleaseRequest({ socket: { remoteAddress: peer, localPort: 5173 }, headers: { host: "[::1]:5173", origin: "http://[::1]:5173" } } as never, false)).toBe(true); });
+  it.each([
+    { peer: "192.0.2.20" }, { peer: "::ffff:192.0.2.20" }, { host: "attacker.example:5173" }, { host: "localhost:6666" }, { headers: { "x-forwarded-host": "localhost:5173" } }, { headers: { forwarded: "for=127.0.0.1" } },
+  ])("denies remote/operator spoofing before body collection %j", async (options) => { const h = harness(); const stream = new Readable({ read: vi.fn() }); const read = vi.spyOn(stream, Symbol.asyncIterator); const { res, done } = await h.request(options.host ? `http://${options.host}` : undefined, undefined, { ...options, stream }); await done; expect(res.statusCode).toBe(403); expect(read).not.toHaveBeenCalled(); expect(h.service).not.toHaveBeenCalled(); stream.destroy(); });
+  it("does not bind or self-challenge a remote client that knows the served capability", async () => { const h = harness(); const remote = h.bind("c".repeat(36), "192.0.2.4"); expect(remote.send).not.toHaveBeenCalled(); const { res, done } = await h.request(undefined, undefined, { peer: "192.0.2.4", id: "c".repeat(36) }); await done; expect(res.statusCode).toBe(403); expect(h.service).not.toHaveBeenCalled(); });
+  it("rejects WS binding with forwarded authority or a non-operator origin", () => { const h = harness(); expect(h.bind("c".repeat(36), "127.0.0.1", "localhost:5173", { "x-forwarded-host": "localhost:5173" }).send).not.toHaveBeenCalled(); expect(h.bind("d".repeat(36), "127.0.0.1", "attacker.example:5173").send).not.toHaveBeenCalled(); });
+  it("rejects excess bodies globally and per client, then recovers capacity on close", async () => {
+    const h = harness(); const held = [];
+    for (let i = 0; i < RELEASE_LIMITS.requests; i++) { const id = String(i).repeat(36); h.bind(id); held.push(await h.request(undefined, undefined, { id, stream: new Readable({ read() {} }) })); }
+    const id = "f".repeat(36); h.bind(id); const rejected = await h.request(undefined, undefined, { id }); await rejected.done; expect(rejected.res.statusCode).toBe(429);
+    const same = await h.request(undefined, undefined, { id: "0".repeat(36) }); await same.done; expect(same.res.statusCode).toBe(429);
+    for (const item of held) item.res.emit("close"); await Promise.all(held.map(({ done }) => done));
+    const accepted = await h.request(); await vi.waitFor(() => expect(h.client.send).toHaveBeenCalled()); h.client.socket.emit("close"); await accepted.done; expect(accepted.res.statusCode).toBe(200);
+  });
+  it("times out stalled body collection and frees the client slot", async () => {
+    vi.useFakeTimers(); try { const h = harness(); const held = await h.request(undefined, undefined, { stream: new Readable({ read() {} }) }); await vi.advanceTimersByTimeAsync(RELEASE_LIMITS.bodyMs); await held.done; expect(held.req.destroyed).toBe(true); const retry = await h.request(); await vi.waitFor(() => expect(h.client.send).toHaveBeenCalled()); h.client.socket.emit("close"); await retry.done; expect(retry.res.statusCode).toBe(200); } finally { vi.useRealTimers(); }
+  });
+  it("allows only one active request and one outstanding challenge per client", async () => { const h = harness(true), first = await h.request(); await vi.waitFor(() => expect(h.client.send).toHaveBeenCalledTimes(1)); const second = await h.request(); await second.done; expect(second.res.statusCode).toBe(429); const challenge = h.client.send.mock.calls[0]![1]; h.events.get("release:answer")!({ ...challenge, result: true }, h.client); await first.done; expect(JSON.parse(first.res.end.mock.calls[0]![0])).toEqual({ checks: [true, false] }); });
+  it("rejects a declared oversized body before invoking its iterator", async () => { const h = harness(), stream = new Readable({ read() {} }), iterator = vi.spyOn(stream, Symbol.asyncIterator); const result = await h.request(undefined, undefined, { stream, headers: { "content-length": String(RELEASE_LIMITS.bodyBytes + 1) } }); await result.done; expect(result.res.statusCode).toBe(413); expect(iterator).not.toHaveBeenCalled(); stream.destroy(); });
+  it("bounds registered operator channels and frees registration on unbind", () => { const h = harness(); for (let i = 0; i < RELEASE_LIMITS.clients - 1; i++) expect(h.bind(String(i).padStart(36, "0")).send).toHaveBeenCalledTimes(1); const id = "f".repeat(36); expect(h.bind(id).send).not.toHaveBeenCalled(); h.events.get("release:unbind")!({ clientId: "a".repeat(36) }, h.client); expect(h.bind(id).send).toHaveBeenCalledTimes(1); });
   it("emits no capability or endpoint in production", () => { const { plugin } = harness(); (plugin.configResolved as (value: unknown) => void)({ command: "build" }); expect((plugin.load as (id: string) => string)("\0virtual:release-config")).toBe("export default null;"); });
   it.each([["https://evil.example", undefined], ["http://localhost:5173", "wrong"]])("rejects wrong origin/capability before service access", async (origin, capability) => { const h = harness(); const { res, done } = await h.request(origin, capability); await done; expect(res.statusCode).toBe(403); expect(h.service).not.toHaveBeenCalled(); });
   it("requires a single-use challenge from the exact request and connection", async () => {
