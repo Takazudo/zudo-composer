@@ -6,6 +6,11 @@ Compositions, Content models/entries, Mappings, and Sitemaps. Media remains glob
 and separate. Release inputs include an exact Media lock without adding a fifth
 project provider domain.
 
+The optional [catalog & editorial example walkthrough](./catalog-editorial-example.md)
+starts from the authoring dashboard's explicit **Create catalog & editorial
+example** action. It creates a separate workspace, preserves the current one,
+and leaves the bundled deployment and active release unchanged.
+
 The current local release API is **protocol 2**. There are no protocol-1 readers,
 migrations, compatibility adapters, or second active-build pointer. An old local
 layout is refused and preserved for explicit operator inspection/reset.

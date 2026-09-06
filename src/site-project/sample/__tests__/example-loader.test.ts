@@ -1,0 +1,98 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { IDBFactory } from "fake-indexeddb";
+import { afterEach, expect, it, vi } from "vitest";
+import { createFilesystemMediaStore } from "../../../media/storage/filesystem";
+import type { MediaFileProvider, MediaFileProviderStore } from "../../../media";
+import { createProductionProviderIntegration } from "../../../app/provider-integration";
+import { createWorkspaceStorage } from "../../../app/workspace-storage";
+import { activeSiteProjectValidationContext } from "../../../app/site-project-manifest";
+import { activeComponentProvider } from "../../../features/composer/active-pack";
+import { compileSiteProject } from "../../compiler";
+import { captureSiteProjectMediaLock } from "../../media/capture";
+import { createReleasePlan } from "../../api/review";
+import type { SiteProjectApiDependencies } from "../../api/types";
+import { loadSampleSiteProject } from "../index";
+import { CATALOG_EDITORIAL_IDS as IDS, loadCatalogEditorialSiteProject } from "../catalog-editorial";
+import { createCatalogEditorialExample, EXAMPLE_PDF_URL } from "../example-loader";
+const roots: string[] = [];
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
+const context = activeSiteProjectValidationContext;
+async function setup() {
+  const root = await mkdtemp(join(tmpdir(), "catalog-example-")); roots.push(root);
+  const store = await createFilesystemMediaStore({ mediaStoreRoot: root });
+  const bytes = new Uint8Array(await readFile("media-store/public/uploaded-media/deployment-sample.pdf"));
+  const upload = vi.fn(async (file: File) => {
+    const buffer = await new Promise<ArrayBuffer>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as ArrayBuffer); reader.onerror = () => reject(reader.error); reader.readAsArrayBuffer(file); });
+    return store.upload({ fileName: file.name, declaredMediaType: file.type, bytes: new Uint8Array(buffer) });
+  });
+  const browserStore = new Proxy(store, { get(target, property) { if (property === "upload") return upload; const value = Reflect.get(target, property); return typeof value === "function" ? value.bind(target) : value; } }) as unknown as MediaFileProviderStore;
+  const media = { descriptor: store.provider, store: browserStore } as MediaFileProvider;
+  const fetch = vi.fn(async () => ({ ok: true, arrayBuffer: async () => bytes.buffer })) as unknown as typeof globalThis.fetch;
+  return { store, media, fetch, upload };
+}
+it("does nothing on cancel or unavailable capability, including no Media reads or project switch", async () => {
+  const loadExample = vi.fn(); const fetch = vi.fn();
+  expect(await createCatalogEditorialExample({ confirmed: false, context, media: null, loadExample, fetch })).toBeUndefined();
+  await expect(createCatalogEditorialExample({ confirmed: true, context, media: null, loadExample, fetch })).rejects.toThrow("requires the local development");
+  expect(loadExample).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+});
+it("validates before upload, rejects corrupted fixture bytes and never calls the workspace writer", async () => {
+  const fixture = await setup(), loadExample = vi.fn();
+  const wrongContext = { componentPack: { ...context.componentPack, packVersion: "999" } };
+  await expect(createCatalogEditorialExample({ ...fixture, confirmed: true, context: wrongContext, loadExample })).rejects.toThrow("invalid");
+  expect(fixture.upload).not.toHaveBeenCalled();
+  const fetch = vi.fn(async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([1]).buffer })) as unknown as typeof globalThis.fetch;
+  await expect(createCatalogEditorialExample({ ...fixture, fetch, confirmed: true, context, loadExample })).rejects.toThrow("integrity");
+  expect(fixture.upload).not.toHaveBeenCalled(); expect(loadExample).not.toHaveBeenCalled();
+});
+it("preserves the current workspace after later creation failure and retries by reusing verified global Media", async () => {
+  const fixture = await setup(); const factory = new IDBFactory();
+  const original = createProductionProviderIntegration({ project: loadSampleSiteProject(context), sourceRevision: "a".repeat(64), compositionIdbFactory: factory, contentIdbFactory: factory, mappingIdbFactory: factory, sitemapIdbFactory: factory, mediaProvider: null });
+  expect(await original.initialization.initialize()).toMatchObject({ status: "ready" });
+  const originalId = original.workspace.id!;
+  const storage = createWorkspaceStorage(factory);
+  const openDatabase = factory.open.bind(factory);
+  const failure = vi.spyOn(factory, "open").mockImplementation((name, version) => {
+    if (name.includes("-workspace-v1-") && !name.endsWith(originalId)) throw new Error("workspace write unavailable");
+    return openDatabase(name, version);
+  });
+  await expect(createCatalogEditorialExample({ ...fixture, confirmed: true, context, loadExample: (project, revision) => original.workspace.loadExample(project, revision) })).rejects.toThrow();
+  failure.mockRestore();
+  expect((await storage.open())!.id).toBe(originalId);
+  expect((await fixture.store.snapshot()).records).toHaveLength(1);
+  const loaded = await createCatalogEditorialExample({ ...fixture, confirmed: true, context, loadExample: (project, revision) => original.workspace.loadExample(project, revision) });
+  expect(loaded!.workspace.id).not.toBe(originalId);
+  expect((await storage.open())!.id).toBe(loaded!.workspace.id);
+  expect((await storage.open(originalId))!.metadata.name).toBe("Sample Studio");
+  expect(fixture.upload).toHaveBeenCalledTimes(1);
+  expect(fixture.fetch).toHaveBeenCalledWith(EXAMPLE_PDF_URL, { credentials: "same-origin", redirect: "error" });
+  const captured = await loaded!.getCurrentSiteProject();
+  expect(captured.status).toBe("ready"); if (captured.status !== "ready") return;
+  const media = await captureSiteProjectMediaLock(captured.project, activeComponentProvider.catalog, fixture.store);
+  expect(media.status).toBe("ready"); if (media.status !== "ready") return;
+  expect(media.lock!.pins).toHaveLength(1);
+  const release = await compileSiteProject(captured.project, { componentCatalog: activeComponentProvider.catalog, policy: "release", mediaLock: media.lock });
+  expect(release.status).toBe("ready"); if (release.status !== "ready") return;
+  expect(release.build.routes.some((route) => route.pathname.includes("supply-notes"))).toBe(false);
+  const reopened = await loaded!.workspace.open(originalId);
+  expect((await reopened.getCurrentSiteProject()).status).toBe("ready");
+});
+it("reviews a selected draft over its baseline with exact Media dependencies and reports missing unselected dependencies", async () => {
+  const fixture = await setup();
+  const project = (await createCatalogEditorialExample({ ...fixture, confirmed: true, context, loadExample: async (project) => project }))!;
+  const baseline = structuredClone(project);
+  baseline.providers.content[0]!.entries = baseline.providers.content[0]!.entries.filter((record) => record.lifecycle === "published");
+  const selection = [{ ref: { providerId: "content-indexeddb", modelId: IDS.models.news, recordId: IDS.entries.news[3] }, action: "publish" as const }];
+  const deps: SiteProjectApiDependencies = { get projectStore(): never { throw new Error("Review must not write a stage"); }, get buildStore(): never { throw new Error("Review must not build"); }, componentCatalog: activeComponentProvider.catalog, mediaStore: fixture.store, hash: async (text: string) => createHash("sha256").update(text).digest("hex"), toolchain: { compiler: "test", componentPack: project.componentPack, providerCommit: "a".repeat(40), providerTree: "b".repeat(40), installedProviderDigest: "c".repeat(64), contractDigest: "d".repeat(64) } };
+  const input = { project, baseline, selection, workingPrecondition: null, expectedRevision: null, expectedActive: null, storeGeneration: 0 };
+  const plan = await createReleasePlan(input, deps);
+  expect(plan.checks.filter((check) => check.severity === "blocking")).toEqual([]);
+  expect(plan.publication).toHaveLength(1); expect(plan.mediaLock!.pins).toHaveLength(1);
+  expect(plan.affected.some((item) => item.identity.includes("supply-notes-for-the-next-season"))).toBe(true);
+  const missing = await createReleasePlan({ ...input, baseline: null }, deps);
+  expect(missing.checks.some((check) => check.severity === "blocking" && check.code.startsWith("content-"))).toBe(true);
+  expect(loadCatalogEditorialSiteProject(context).providers.content[0]!.entries.find((entry) => entry.id === IDS.entries.news[3])!.lifecycle).toBe("draft");
+});
