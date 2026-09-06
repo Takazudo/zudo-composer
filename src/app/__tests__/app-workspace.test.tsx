@@ -16,6 +16,7 @@ import { SITEMAPPER_DATABASE_NAME } from "../../sitemapper/storage/indexeddb/typ
 import { WORKSPACE_DATABASE_NAME } from "../workspace-storage";
 import { workspaceDatabaseName } from "../workspace-storage";
 import * as releaseFeature from "../../features/release";
+import * as exampleLoader from "../../site-project/sample/example-loader";
 
 vi.mock("../provider-integration", () => ({ createProductionProviderIntegration: () => { throw new Error("Inject the test workspace."); } }));
 vi.mock("../dashboard", async () => {
@@ -49,6 +50,23 @@ function workspace(id = "one") {
 }
 afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, "", "/"); vi.clearAllMocks(); });
 describe("application workspace lifetime", () => {
+  it("warns on closing throughout confirmed example import and stops warning after the committed swap", async () => {
+    let finish!: (value: exampleLoader.ExampleCreationResult<ProductionProviderIntegration>) => void;
+    const create = vi.spyOn(exampleLoader, "createCatalogEditorialExample").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const integration = { ...workspace(), mediaProvider: { descriptor: { id: "media-files" } } };
+    const warns = () => { const event = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; };
+    try {
+      render(<App integration={integration as unknown as ProductionProviderIntegration} />);
+      await screen.findByRole("heading", { name: "Workspace one" }); expect(warns()).toBe(false);
+      fireEvent.click(screen.getByRole("button", { name: "Create catalog & editorial example" }));
+      expect(create).not.toHaveBeenCalled(); expect(warns()).toBe(false);
+      fireEvent.click(screen.getByRole("button", { name: "Confirm create separate project" }));
+      await waitFor(() => expect(create).toHaveBeenCalledTimes(1)); expect(warns()).toBe(true);
+      await act(async () => finish({ value: workspace("example") as unknown as ProductionProviderIntegration, mediaStatus: "current" }));
+      await screen.findByRole("heading", { name: "Workspace example" });
+      expect(warns()).toBe(false); expect(screen.getByRole("button", { name: "Return to previous workspace" })).toBeInTheDocument();
+    } finally { create.mockRestore(); }
+  });
   it("holds the shared replacement gate throughout save, open and committed workspace swap", async () => {
     const actual = releaseFeature.createReleaseController; let controller!: ReturnType<typeof actual>;
     const spy = vi.spyOn(releaseFeature, "createReleaseController").mockImplementation((...args) => { controller = actual(...args); return controller; });

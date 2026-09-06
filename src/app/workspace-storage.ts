@@ -1,6 +1,7 @@
-import { isSiteProjectProviderId, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project";
+import { isSiteProjectProviderId, serializeSiteProject, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project";
 import { isSafeRecordId } from "../shared";
 import { notifyPersistenceChange, requestValue } from "../shared/persistence-generation";
+import { CATALOG_EDITORIAL_ATTEMPT_ID } from "../site-project/sample/catalog-editorial";
 
 export const WORKSPACE_DATABASE_NAME = "zudo-composer-workspaces-v1";
 export type WorkspaceProjectMetadata = Omit<SiteProject, "providers"> & { providers: { [K in keyof SiteProject["providers"]]: readonly { id: SiteProject["providers"][K][number]["id"] }[] } };
@@ -13,6 +14,10 @@ export interface WorkspaceRecord {
   baselineRevision: string;
   /** Fixed at creation; never replaced by a later injected active source. */
   seed?: SiteProject;
+  /** No provider may reseed while an earlier failed attempt is being removed. */
+  seedCleanupPending?: true;
+  /** A resumed creation cannot bypass its external before-complete guard. */
+  requiresBeforeComplete?: true;
 }
 export function workspaceDatabaseName(database: string, workspaceId: string): string {
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(workspaceId)) throw new Error("Invalid workspace identity.");
@@ -89,10 +94,18 @@ export function createWorkspaceStorage(factory: IDBFactory | null | undefined) {
     finally { db.close(); }
   }
   function validate(value: unknown): WorkspaceRecord {
+    if (value && typeof value === "object" && "requiresBeforeComplete" in value && ((value as WorkspaceRecord).requiresBeforeComplete !== true || (value as WorkspaceRecord).status !== "seeding")) throw new Error("Workspace creation guard metadata is invalid.");
+    if (value && typeof value === "object" && "seedCleanupPending" in value && ((value as WorkspaceRecord).seedCleanupPending !== true || (value as WorkspaceRecord).status !== "seeding")) throw new Error("Workspace seed cleanup metadata is invalid.");
     if (!value || typeof value !== "object" || (value as WorkspaceRecord).schemaVersion !== 1 || !Number.isSafeInteger((value as WorkspaceRecord).mutationToken) || (value as WorkspaceRecord).mutationToken < 0 || !["seeding", "ready"].includes((value as WorkspaceRecord).status) || !(value as WorkspaceRecord).metadata || !validateCollectionAttachments((value as WorkspaceRecord).metadata.collectionAttachments) || typeof (value as WorkspaceRecord).baselineRevision !== "string") throw new Error("Workspace metadata is invalid; explicit recovery is required.");
     return value as WorkspaceRecord;
   }
   return {
+    async findSeeding(project: SiteProject, revision: string): Promise<WorkspaceRecord | undefined> {
+      return transaction("readonly", async (records) => {
+        const values: unknown[] = await requestValue(records.getAll());
+        return values.filter((value) => value && typeof value === "object" && (value as WorkspaceRecord).status === "seeding" && (value as WorkspaceRecord).baselineRevision === revision).map(validate).find((record) => record.seed && serializeSiteProject(record.seed) === serializeSiteProject(project));
+      });
+    },
     async open(id?: string): Promise<WorkspaceRecord | undefined> {
       return transaction("readonly", async (records, selection) => {
         const selected: unknown = id ?? await requestValue(selection.get("active"));
@@ -103,22 +116,50 @@ export function createWorkspaceStorage(factory: IDBFactory | null | undefined) {
         return validate(record);
       });
     },
-    async create(project: SiteProject, baselineRevision: string, id: string = crypto.randomUUID()): Promise<WorkspaceRecord> {
+    async create(project: SiteProject, baselineRevision: string, id: string = crypto.randomUUID(), requiresBeforeComplete = false): Promise<WorkspaceRecord> {
       workspaceDatabaseName("validate", id);
-      return transaction("readwrite", async (records) => {
+      return transaction("readwrite", async (records, selection) => {
         const existing: unknown = await requestValue(records.get(id));
-        if (existing !== undefined) return validate(existing);
-        const record: WorkspaceRecord = { schemaVersion: 1, id, mutationToken: 0, status: "seeding", metadata: metadata(project), baselineRevision, seed: structuredClone(project) };
+        if (existing !== undefined) {
+          const record = validate(existing);
+          // Return this exact guarded cleanup attempt only to finish deletion.
+          // Its old source must never be seeded as the newly requested project.
+          if (id === CATALOG_EDITORIAL_ATTEMPT_ID && record.seedCleanupPending) {
+            if (record.status === "seeding" && record.requiresBeforeComplete && requiresBeforeComplete && await requestValue(selection.get("active")) !== id) return record;
+            throw new Error("Example cleanup requires an unselected guarded seeding attempt.");
+          }
+          if (record.status !== "seeding" || Boolean(record.requiresBeforeComplete) !== requiresBeforeComplete || record.baselineRevision !== baselineRevision || !record.seed || serializeSiteProject(record.seed) !== serializeSiteProject(project)) throw new Error(`Workspace attempt ${id} already exists with a different or completed identity; open it explicitly.`);
+          return record;
+        }
+        const record: WorkspaceRecord = { schemaVersion: 1, id, mutationToken: 0, status: "seeding", metadata: metadata(project), baselineRevision, seed: structuredClone(project), ...(requiresBeforeComplete ? { requiresBeforeComplete: true } : {}) };
         records.add(record);
         return record;
       });
     },
-    async complete(id: string): Promise<WorkspaceRecord> {
+    /** Caller holds the workspace initialization lock throughout DB cleanup. */
+    async markSeedCleanup(id: string, revision: string): Promise<void> {
+      await transaction("readwrite", async (records, selection) => {
+        const record = validate(await requestValue(records.get(id)));
+        if (record.status !== "seeding" || record.baselineRevision !== revision || await requestValue(selection.get("active")) === id) throw new Error("Only an unselected matching seeding attempt may be discarded.");
+        record.seedCleanupPending = true; records.put(record);
+      });
+    },
+    /** Remove the exact attempt only after every provider DB deletion succeeded. */
+    async discardSeeding(id: string, revision: string): Promise<void> {
+      await transaction("readwrite", async (records, selection) => {
+        const record = validate(await requestValue(records.get(id)));
+        if (record.status !== "seeding" || !record.seedCleanupPending || record.baselineRevision !== revision || await requestValue(selection.get("active")) === id) throw new Error("Only a cleaned, unselected matching seeding attempt may be discarded.");
+        records.delete(id);
+      });
+    },
+    async complete(id: string, creationValidated = false): Promise<WorkspaceRecord> {
       return transaction("readwrite", async (records, selection) => {
         const record = validate(await requestValue(records.get(id)));
+        if (record.seedCleanupPending) throw new Error("Workspace seed cleanup must finish before completion.");
+        if (record.requiresBeforeComplete && !creationValidated) throw new Error("Workspace creation must repeat its before-complete validation before selection.");
         if (record.status !== "ready") {
           if (record.mutationToken === Number.MAX_SAFE_INTEGER) throw new Error("Workspace mutation generation is exhausted.");
-          record.status = "ready"; delete record.seed; record.mutationToken++; records.put(record);
+          record.status = "ready"; delete record.seed; delete record.requiresBeforeComplete; record.mutationToken++; records.put(record);
         }
         selection.put(id, "active");
         return record;
