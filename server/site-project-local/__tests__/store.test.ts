@@ -6,10 +6,18 @@ import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
 import { compileSiteProject } from "../../../src/site-project/compiler";
 import { serializeSiteProject } from "../../../src/site-project/model/canonical";
 import { releaseJson } from "../../../src/site-project/api/review";
-import { fixture, stageFor, sha, catalog, review, call, PNG } from "./release-fixture";
+import { fixture, stageFor, sha, catalog, review, call, PNG, toolchain } from "./release-fixture";
 import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV } from "../store";
+import type { CompletedRelease, SiteProjectActiveSelection } from "../../../src/site-project/api/types";
+import { readActivatedSiteRelease } from "../dev-reader";
 const applyInput = (value = project()) => ({ project: value, stage: stageFor(value), expectedRevision: null, expectedActive: null, expectedGeneration: 0 });
 async function build(value = project()) { const compiled = await compileSiteProject(value, { componentCatalog: catalog }); if (compiled.status !== "ready") throw new Error("Fixture compile failed"); return compiled.build; }
+async function release(service: Parameters<typeof call>[0], plan: Awaited<ReturnType<typeof review>>, expectedActive: SiteProjectActiveSelection | null = null) {
+  await call(service, "apply", { plan });
+  const completed = await call<CompletedRelease>(service, "build", { projectId: plan.candidate.id, buildId: plan.buildId });
+  await call(service, "activate", { ...completed.identity, expectedActive });
+  return completed;
+}
 describe("immutable local release storage", () => {
   it("serializes A reconciliation before any B activation and preserves committed active on callback failure", async () => {
     const { store, testRoot } = await fixture(), a = applyInput(), b = applyInput({ ...project(), name: "B" });
@@ -87,6 +95,41 @@ describe("immutable local release storage", () => {
     expect(await retry.complete({ stage: staged.value, build: compiled.build })).toMatchObject({ status: "ok" }); expect(reads).toBe(0);
     await writeFile(join(context.testRoot, "builds", plan.buildId, `media-${asset.document.versions[0]!.url.split("/").at(-1)}`), "corrupt");
     expect(await retry.getCompleted({ projectId: value.id, buildId: plan.buildId })).toMatchObject({ status: "unavailable" });
+  });
+  it("reads only verified active release bytes and switches the exact pinned Media namespace atomically", async () => {
+    const context = await fixture({ media: true });
+    expect(await context.store.readActiveRelease()).toEqual({ status: "ok", value: null });
+    const firstAsset = await context.media!.upload({ fileName: "first.png", declaredMediaType: "image/png", bytes: PNG });
+    const firstProject = project(); firstProject.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${firstAsset.id}`;
+    const firstPlan = await review(context.service, firstProject), first = await release(context.service, firstPlan);
+    const firstPin = first.stage.mediaLock!.pins[0]!;
+    expect(await context.store.readActiveRelease()).toMatchObject({ status: "ok", value: { project: { id: first.identity.projectId }, release: { identity: first.identity, completionDigest: first.completionDigest } } });
+    expect(await context.store.readActiveMedia(firstPin.url)).toMatchObject({ status: "ok", value: { bytes: PNG, mediaType: "image/png", identity: first.identity } });
+    expect(await context.store.readActiveMedia(`/uploaded-media/../${firstPin.url.split("/").at(-1)}`)).toEqual({ status: "not-found" });
+    expect(await context.store.readActiveMedia(`/uploaded-media/sha256-${"f".repeat(64)}.png`)).toEqual({ status: "not-found" });
+
+    const liveVersion = join(context.mediaRoot, "versions", firstAsset.document.versions[0]!.url.split("/").at(-1)!);
+    await writeFile(liveVersion, new Uint8Array([...PNG, 9]));
+    expect(await context.store.readActiveMedia(firstPin.url)).toMatchObject({ status: "ok", value: { bytes: PNG } });
+
+    const copied = join(context.testRoot, "builds", first.identity.buildId, `media-${firstPin.url.split("/").at(-1)}`);
+    await writeFile(copied, "digest mismatch");
+    expect(await context.store.readActiveMedia(firstPin.url)).toMatchObject({ status: "unavailable", message: expect.stringContaining("integrity") });
+    await writeFile(copied, PNG);
+
+    const secondAsset = await context.media!.upload({ fileName: "second.png", declaredMediaType: "image/png", bytes: new Uint8Array([...PNG, 7]) });
+    const secondProject = structuredClone(firstProject); secondProject.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${secondAsset.id}`;
+    const secondPlan = await review(context.service, secondProject, { expectedRevision: first.identity.revision, expectedActive: first.identity });
+    const second = await release(context.service, secondPlan, first.identity), secondPin = second.stage.mediaLock!.pins[0]!;
+    expect(secondPin.url).not.toBe(firstPin.url);
+    expect(await context.store.readActiveMedia(firstPin.url)).toEqual({ status: "not-found" });
+    expect(await context.store.readActiveMedia(secondPin.url)).toMatchObject({ status: "ok", value: { bytes: new Uint8Array([...PNG, 7]), identity: second.identity } });
+  });
+  it("fails the development delivery seam closed when installed bytes differ from an active stage attestation", async () => {
+    const context = await fixture(), plan = await review(context.service, project());
+    await release(context.service, plan);
+    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain })).resolves.toMatchObject({ release: { stage: { toolchain } } });
+    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: { ...toolchain, installedProviderDigest: "f".repeat(64) } })).rejects.toThrow(/current installed runtime/);
   });
   it.each(["apply", "build", "activate", "discard"].flatMap((operation) => ["unlink", "rmdir", "sync"].map((step) => ({ operation, step }))))("reports committed $operation cleanup $step as uncertain and retries idempotently", async ({ operation, step }) => {
     const { store, testRoot } = await fixture(); const input = applyInput(), output = await build();

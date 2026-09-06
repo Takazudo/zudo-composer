@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, open, readFile, readdir, realpath } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { installedPackageDigest } from "./installed-identity";
+import { lstat, open, realpath } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
 import { componentPack } from "@zudo-sg/ui/composer-pack";
 import { createComponentCatalog } from "../../src/composer/model/types";
 import { createSiteProjectApiService } from "../../src/site-project/api/service";
@@ -12,19 +10,11 @@ import { createFilesystemMediaStore } from "../../src/media/storage/filesystem";
 import type { VersionedMediaStore } from "../../src/media/library";
 import { createLocalSiteProjectStore, type LocalSiteProjectStoreOptions } from "./store";
 import { releaseJson } from "../../src/site-project/api/review";
+import { resolveLocalReleaseToolchain } from "./toolchain-config.mjs";
+export { resolveLocalReleaseToolchain } from "./toolchain-config.mjs";
 
 export interface LocalSiteProjectServiceOptions extends LocalSiteProjectStoreOptions { mediaStoreRoot?: string; mediaStore?: VersionedMediaStore; toolchain?: ReleaseToolchain; isWorkingCurrent?: SiteProjectApiDependencies["isWorkingCurrent"]; reconcilePublication?: SiteProjectApiDependencies["reconcilePublication"] }
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
-async function compilerIdentity(): Promise<string> {
-  const root = resolve(import.meta.dirname, "../../src"), files: [string, string][] = [];
-  const visit = async (relativePath: string): Promise<void> => { for (const entry of await readdir(join(root, relativePath), { withFileTypes: true })) {
-    if (entry.name === "__tests__") continue; if (entry.isSymbolicLink()) throw new Error("Compiler identity cannot follow symlinks.");
-    const path = `${relativePath}/${entry.name}`; if (entry.isDirectory()) await visit(path); else if (entry.name.endsWith(".ts")) files.push([path, await readFile(join(root, path), "utf8")]);
-  } };
-  for (const domain of ["site-project", "composer", "content", "mapping", "sitemapper", "media", "shared", "../packages/component-contract/src"]) await visit(domain);
-  files.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
-  return `site-project-release/2:${sha(releaseJson(files))}`;
-}
 export function createLocalSiteProjectApiService(options: LocalSiteProjectServiceOptions = {}): SiteProjectApiService {
   const mediaRoot = resolve(options.mediaStoreRoot ?? resolve(import.meta.dirname, "../../media-store"));
   const catalog = createComponentCatalog(componentPack.manifest);
@@ -36,12 +26,7 @@ export function createLocalSiteProjectApiService(options: LocalSiteProjectServic
     return (async function* () { try { for await (const chunk of handle.createReadStream({ autoClose: false })) yield new Uint8Array(chunk); } finally { await handle.close(); } })();
   }) });
   const create = async () => {
-    const packageJson = JSON.parse(await readFile(resolve(import.meta.dirname, "../../package.json"), "utf8"));
-    const providerCommit = String(packageJson.dependencies["@zudo-sg/ui"]).split("#").at(-1)!;
-    const contractText = await readFile(resolve(import.meta.dirname, "../../contract-handoff.json"), "utf8");
-    if (!options.toolchain && providerCommit !== "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf") throw new Error("Pinned provider tree identity needs explicit verification.");
-    const installedRoot = await realpath(dirname(dirname(fileURLToPath(import.meta.resolve("@zudo-sg/ui/composer-pack")))));
-    const toolchain: ReleaseToolchain = options.toolchain ?? { compiler: await compilerIdentity(), componentPack: { packId: catalog.pack.packId, packVersion: catalog.pack.packVersion, contractVersion: catalog.pack.contractVersion }, providerCommit, providerTree: "1c3cbfd3a25d1425f447cdadd5ba538916394309", installedProviderDigest: await installedPackageDigest(installedRoot), contractDigest: sha(contractText) };
+    const toolchain = await resolveLocalReleaseToolchain(options);
     let mediaStore = options.mediaStore;
     if (!mediaStore) { try { await lstat(join(mediaRoot, "catalog.json")); mediaStore = await createFilesystemMediaStore({ mediaStoreRoot: mediaRoot }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } }
     return createSiteProjectApiService({ componentCatalog: catalog, projectStore: store, buildStore: store, hash: async (text) => sha(text), toolchain, mediaStore, isWorkingCurrent: options.isWorkingCurrent, reconcilePublication: options.reconcilePublication });

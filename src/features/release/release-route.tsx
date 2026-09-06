@@ -21,7 +21,7 @@ export function ReleaseRoute({ controller, href }: { controller: ReleaseControll
     {!controller.available && <p>Static read-only mode. Inspect or export the working project; review, staging and activation require a direct loopback connection to the local development server.</p>}
     <p>Activated local build: <Identity value={state.active?.buildId ?? "None inspected"} /></p>
     <p>Exact staged build: <Identity value={state.staged?.buildId ?? "None"} /></p>
-    <nav aria-label="Release destinations"><a href="/website-preview">Working draft preview</a> · <a href="/site">Activated website</a></nav>
+    <nav aria-label="Release destinations"><a href="/website-preview">Live working preview</a> · <a href="/site">Activated local website (not deployed)</a></nav>
     {state.gateBlocked && !state.busy && <p role="status">Workspace replacement is in progress. Release operations are unavailable until it finishes.</p>}
     <Button disabled={blocked} onClick={() => void controller.inspect()}>Inspect current state</Button>
     <Button disabled={!state.working || blocked} onClick={exportWorking}>Export working JSON</Button>

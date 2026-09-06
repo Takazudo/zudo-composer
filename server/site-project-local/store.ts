@@ -280,6 +280,31 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       return { status: "ok" as const, value: { ...stored, buildId: active.buildId } };
     }); } catch (error) { return unavailable(error); }
   }
+  async readActiveRelease(): Promise<SiteProjectAdapterReadResult<{ project: SiteProject; release: CompletedRelease } | null>> {
+    try { return await this.lock(async () => {
+      const active = await this.active(); if (!active) return { status: "ok" as const, value: null };
+      const release = await this.completed(active.projectId, active.buildId);
+      if (!release || !sameRelease(active, release.identity)) throw new Error("Active completed build is missing or inconsistent.");
+      const stored = await this.stored(active.projectId, active.revision);
+      if (!stored || stored.revision !== release.stage.revision || stored.project.id !== release.build.projectId) throw new Error("Active immutable project/build identity is inconsistent.");
+      return { status: "ok" as const, value: { project: stored.project, release } };
+    }); } catch (error) { return unavailable(error); }
+  }
+  async readActiveMedia(pathname: string): Promise<SiteProjectAdapterReadResult<{ bytes: Uint8Array; mediaType: MediaVersionPin["mediaType"]; identity: SiteProjectActiveSelection }>> {
+    try { return await this.lock(async () => {
+      if (!/^\/uploaded-media\/sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf)$/.test(pathname)) return { status: "not-found" as const };
+      const active = await this.active(); if (!active) return { status: "not-found" as const };
+      const release = await this.completed(active.projectId, active.buildId);
+      if (!release || !sameRelease(active, release.identity)) throw new Error("Active completed build is missing or inconsistent.");
+      const pins = release.stage.mediaLock?.pins.filter((candidate) => candidate.url === pathname) ?? [];
+      if (pins.length !== 1) return { status: "not-found" as const };
+      const pin = pins[0]!, name = `media-${basename(pin.url)}`;
+      if (release.files[name] !== pin.checksum) throw new Error("Active pinned Media manifest is inconsistent.");
+      const bytes = await this.read(join(this.root, "builds", active.buildId, name));
+      if (bytes.byteLength !== pin.byteLength || hash(bytes) !== pin.checksum || sniffMedia(bytes.subarray(0, 16))?.mediaType !== pin.mediaType) throw new Error("Active pinned Media bytes failed integrity verification.");
+      return { status: "ok" as const, value: { bytes: new Uint8Array(bytes), mediaType: pin.mediaType, identity: { ...active } } };
+    }); } catch (error) { return unavailable(error); }
+  }
   async apply(input: Parameters<SiteProjectStoreAdapter["apply"]>[0]): ReturnType<SiteProjectStoreAdapter["apply"]> {
     try { return await this.lock(async () => {
       if (!validStage(input.stage) || input.project.schemaVersion !== 2 || input.stage.projectId !== input.project.id || (this.options.componentPack && !validateSiteProject(input.project, { componentPack: this.options.componentPack }).ok) || hash(serializeSiteProject(input.project)) !== input.stage.revision) throw new Error("Invalid immutable staged inputs.");

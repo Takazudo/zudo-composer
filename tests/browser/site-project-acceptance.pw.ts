@@ -179,7 +179,7 @@ test("missing SiteProject routes show an accessible not-found state", async ({ p
   const response = await page.goto("/site/does-not-exist");
   expect(response?.status()).toBe(200);
   await expect(page.getByRole("heading", { name: "Page not found", exact: true })).toBeVisible();
-  await expect(page.getByText("This page is not present in the current Sitemap.", { exact: true })).toBeVisible();
+  await expect(page.getByText("This page is not present in the selected delivery snapshot.", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
   expect(failures).toEqual([]);
 });
