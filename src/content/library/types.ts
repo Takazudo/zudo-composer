@@ -9,7 +9,10 @@ import type {
 
 export const CONTENT_PROVIDERS = {
   indexeddb: { id: "content-indexeddb", label: "Browser storage" },
+  filesystem: { id: "content-filesystem", label: "Project files" },
 } as const;
+
+export type ContentProviderDescriptor = (typeof CONTENT_PROVIDERS)[keyof typeof CONTENT_PROVIDERS];
 
 export interface ContentModelSummary {
   id: RecordId;
@@ -29,17 +32,36 @@ export interface ContentEntrySnapshot {
   diagnostics: readonly ContentCompletenessDiagnostic[];
 }
 
-export type ContentPersistenceOperation =
-  | "read-all" | "transact" | "reconcile-publication"
-  | "initialize" | "list-models" | "get-model" | "put-model" | "delete-model"
-  | "count-entries" | "get-entry" | "page-entries" | "scan-entries"
-  | "put-entry" | "delete-entry" | "remove-field" | "seed" | "clear";
-export type ContentPersistenceErrorCode =
-  | "conflict" | "reference-in-use" | "dependency-in-use" | "unsupported-transaction"
-  | "unavailable" | "blocked" | "versionchange" | "unsupported-version"
-  | "validation" | "not-found" | "immutable-kind" | "field-in-use"
-  | "field-removal-required" | "single-cardinality" | "read-failed"
-  | "write-failed" | "transaction-failed" | "invalid-cursor" | "unknown";
+// Runtime tables, not bare unions: a provider that rebuilds an error from a
+// wire payload has to decide whether a received operation/code is one of ours,
+// and a union alone cannot answer that at runtime.
+export const CONTENT_PERSISTENCE_OPERATIONS = [
+  "read-all", "transact", "reconcile-publication",
+  "initialize", "list-models", "get-model", "put-model", "delete-model",
+  "count-entries", "get-entry", "page-entries", "scan-entries",
+  "put-entry", "delete-entry", "remove-field", "seed", "clear",
+] as const;
+export type ContentPersistenceOperation = (typeof CONTENT_PERSISTENCE_OPERATIONS)[number];
+
+export const CONTENT_PERSISTENCE_ERROR_CODES = [
+  "conflict", "reference-in-use", "dependency-in-use", "unsupported-transaction",
+  "unavailable", "blocked", "versionchange", "unsupported-version",
+  "validation", "not-found", "immutable-kind", "field-in-use",
+  "field-removal-required", "single-cardinality", "read-failed",
+  "write-failed", "transaction-failed", "invalid-cursor",
+  // The mutation reached disk but its durability could not be proven. Never a
+  // plain failure, and never safe to retry blindly.
+  "commit-uncertain", "unknown",
+] as const;
+export type ContentPersistenceErrorCode = (typeof CONTENT_PERSISTENCE_ERROR_CODES)[number];
+
+export function isContentPersistenceOperation(value: unknown): value is ContentPersistenceOperation {
+  return (CONTENT_PERSISTENCE_OPERATIONS as readonly unknown[]).includes(value);
+}
+
+export function isContentPersistenceErrorCode(value: unknown): value is ContentPersistenceErrorCode {
+  return (CONTENT_PERSISTENCE_ERROR_CODES as readonly unknown[]).includes(value);
+}
 
 export class ContentPersistenceError extends Error {
   readonly name = "ContentPersistenceError";
@@ -50,6 +72,13 @@ export class ContentPersistenceError extends Error {
     readonly retryable: boolean,
     options?: { cause?: unknown },
   ) { super(message, options); }
+
+  /**
+   * Structured context the shared file-provider transport forwards verbatim.
+   * `retryable` is not derivable from the code alone, so it has to cross the
+   * wire rather than be re-guessed browser-side.
+   */
+  get details(): { retryable: boolean } { return { retryable: this.retryable }; }
 }
 
 export interface ContentSeed {
@@ -112,7 +141,7 @@ export type ContentInitializationOutcome =
   | { status: "error"; error: ContentPersistenceError };
 
 export interface ContentProvider {
-  readonly descriptor: typeof CONTENT_PROVIDERS.indexeddb;
+  readonly descriptor: ContentProviderDescriptor;
   readonly store: ContentStore;
   readonly initialization: {
     initialize(): Promise<ContentInitializationOutcome>;

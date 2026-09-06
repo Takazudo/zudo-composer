@@ -6,6 +6,10 @@ import {
   summarizeContentModel,
   buildContentGraphIndex,
   contentEntryDigest,
+  assertContentEntryMatchesModel,
+  contentEntrySemanticIssue,
+  decodeContentEntryCursor,
+  encodeContentEntryCursor,
 } from "../../library";
 import type {
   ContentEntryPage,
@@ -18,10 +22,10 @@ import type {
   ContentSnapshot,
   ContentMutation,
   ContentPublicationReconciliation,
+  ContentEntryCursor,
 } from "../../library";
 import {
   isCanonicalContentTimestamp,
-  isValueValidForField,
   loadContentEntryRecord,
   loadContentModelRecord,
   validateContentEntryRecord,
@@ -50,34 +54,14 @@ import {
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
-const CURSOR_PREFIX = "content-entry-v1:";
 
-interface CursorTuple { createdAt: string; id: string }
 export interface ContentInitializationFailure { id: string; status: "invalid" | "future-schema"; version?: number }
 export interface ContentInitializationScan { models: readonly ContentModelSummary[]; failures: readonly ContentInitializationFailure[] }
-
-function encodeCursor(entry: ContentEntryRecord): string {
-  return `${CURSOR_PREFIX}${encodeURIComponent(entry.createdAt)}:${encodeURIComponent(entry.id)}`;
-}
-
-function decodeCursor(value: string | undefined): CursorTuple | undefined {
-  if (value === undefined) return undefined;
-  if (!value.startsWith(CURSOR_PREFIX)) throw contentPersistenceError("page-entries", "invalid-cursor", "Entry cursor is invalid.", false);
-  const parts = value.slice(CURSOR_PREFIX.length).split(":");
-  if (parts.length !== 2) throw contentPersistenceError("page-entries", "invalid-cursor", "Entry cursor is invalid.", false);
-  try {
-    const [createdAt, id] = parts.map(decodeURIComponent);
-    if (!createdAt || !isSafeRecordId(id) || new Date(createdAt).toISOString() !== createdAt) throw new Error("invalid");
-    return { createdAt, id };
-  } catch (error) {
-    throw contentPersistenceError("page-entries", "invalid-cursor", "Entry cursor is invalid.", false, error);
-  }
-}
 
 function cursorRecords(
   request: IDBRequest<IDBCursorWithValue | null>,
   modelId: string,
-  cursor?: CursorTuple,
+  cursor?: ContentEntryCursor,
   limit?: number,
 ): Promise<unknown[]> {
   return new Promise((resolve, reject) => {
@@ -112,22 +96,6 @@ function loadedEntries(rawRecords: readonly unknown[], operation: ContentPersist
   });
 }
 
-function validateEntryAgainstModel(entry: ContentEntryRecord, model: ContentModelRecord, operation: ContentPersistenceOperation): void {
-  const issue = entrySemanticIssue(entry, model);
-  if (issue) throw contentPersistenceError(operation, "validation", issue, false);
-}
-
-function entrySemanticIssue(entry: ContentEntryRecord, model: ContentModelRecord): string | undefined {
-  if (entry.modelId !== model.id) return `Entry refers to missing model "${entry.modelId}".`;
-  const fields = new Map(model.document.fields.map((field) => [field.id, field]));
-  for (const [fieldId, value] of Object.entries(entry.values)) {
-    const field = fields.get(fieldId);
-    if (!field) return `Entry value refers to unknown field "${fieldId}".`;
-    if (!isValueValidForField(field, value)) return `Entry value for field "${field.key}" does not match ${field.kind}.`;
-  }
-  return undefined;
-}
-
 export class IndexedDbContentStore implements ContentStore {
   readonly provider = CONTENT_PROVIDERS.indexeddb;
   readonly transactionScope = "provider" as const;
@@ -156,7 +124,7 @@ export class IndexedDbContentStore implements ContentStore {
       if (existingRaw !== undefined) {
         const existing = loadedModel(existingRaw, "put-model");
         const storedEntries = loadedEntries(await requestResult(entries.getAll(record.id)), "put-model");
-        for (const entry of storedEntries) validateEntryAgainstModel(entry, existing, "put-model");
+        for (const entry of storedEntries) assertContentEntryMatchesModel(entry, existing, "put-model");
         if (existing.createdAt !== record.createdAt) throw contentPersistenceError("put-model", "validation", "Content model createdAt is immutable after persistence.", false);
         if (existing.document.kind !== record.document.kind) throw contentPersistenceError("put-model", "immutable-kind", "Content model kind is immutable after persistence.", false);
         const nextFields = new Map(record.document.fields.map((field) => [field.id, field]));
@@ -180,7 +148,7 @@ export class IndexedDbContentStore implements ContentStore {
       const model = loadedModel(raw, "delete-model");
       const entries = tx.objectStore(CONTENT_ENTRIES_STORE_NAME).index(CONTENT_ENTRY_MODEL_INDEX);
       const entryRecords = loadedEntries(await requestResult(entries.getAll(id)), "delete-model");
-      for (const entry of entryRecords) validateEntryAgainstModel(entry, model, "delete-model");
+      for (const entry of entryRecords) assertContentEntryMatchesModel(entry, model, "delete-model");
       for (const entry of entryRecords) await requestResult(tx.objectStore(CONTENT_ENTRIES_STORE_NAME).delete(entry.id));
       await requestResult(models.delete(id));
       return true;
@@ -202,7 +170,7 @@ export class IndexedDbContentStore implements ContentStore {
       if (loaded.status !== "loaded") return loaded;
       const modelRaw = await requestResult(tx.objectStore(CONTENT_MODELS_STORE_NAME).get(loaded.record.modelId));
       const model = loadContentModelRecord(modelRaw);
-      const semanticIssue = model.status === "loaded" ? entrySemanticIssue(loaded.record, model.record) : `Entry refers to unreadable or missing model "${loaded.record.modelId}".`;
+      const semanticIssue = model.status === "loaded" ? contentEntrySemanticIssue(loaded.record, model.record) : `Entry refers to unreadable or missing model "${loaded.record.modelId}".`;
       return semanticIssue ? { status: "invalid", issue: { code: "invalid-value", message: semanticIssue }, raw } : loaded;
     });
   }
@@ -210,17 +178,17 @@ export class IndexedDbContentStore implements ContentStore {
   async pageEntries(modelId: string, options: ContentPageOptions = {}): Promise<ContentEntryPage> {
     const limit = options.limit ?? DEFAULT_PAGE_SIZE;
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_SIZE) throw contentPersistenceError("page-entries", "validation", `Page limit must be an integer from 1 to ${MAX_PAGE_SIZE}.`, false);
-    const cursor = decodeCursor(options.cursor);
+    const cursor = decodeContentEntryCursor(options.cursor);
     const range = this.runtime.keyRangeFactory?.bound([modelId], cursor ? [modelId, cursor.createdAt, cursor.id] : [modelId, "\uffff", "\uffff"], false, cursor !== undefined);
     const { raw, model } = await this.run("page-entries", "readonly", [CONTENT_MODELS_STORE_NAME, CONTENT_ENTRIES_STORE_NAME], async (tx) => ({
       model: loadedModel(await requestResult(tx.objectStore(CONTENT_MODELS_STORE_NAME).get(modelId)), "page-entries"),
       raw: await cursorRecords(tx.objectStore(CONTENT_ENTRIES_STORE_NAME).index(CONTENT_ENTRY_MODEL_CREATED_AT_INDEX).openCursor(range, "prev"), modelId, cursor, limit + 1),
     }));
     const entries = loadedEntries(raw, "page-entries");
-    for (const entry of entries) validateEntryAgainstModel(entry, model, "page-entries");
+    for (const entry of entries) assertContentEntryMatchesModel(entry, model, "page-entries");
     const hasMore = entries.length > limit;
     const page = entries.slice(0, limit);
-    return { entries: page, ...(hasMore ? { nextCursor: encodeCursor(page[page.length - 1]!) } : {}) };
+    return { entries: page, ...(hasMore ? { nextCursor: encodeContentEntryCursor(page[page.length - 1]!) } : {}) };
   }
 
   async scanEntries(modelId: string): Promise<ContentEntrySnapshot> {
@@ -229,7 +197,7 @@ export class IndexedDbContentStore implements ContentStore {
       const range = this.runtime.keyRangeFactory?.bound([modelId], [modelId, "\uffff", "\uffff"]);
       const raw = await cursorRecords(tx.objectStore(CONTENT_ENTRIES_STORE_NAME).index(CONTENT_ENTRY_MODEL_CREATED_AT_INDEX).openCursor(range, "prev"), modelId);
       const entries = loadedEntries(raw, "scan-entries");
-      for (const entry of entries) validateEntryAgainstModel(entry, model, "scan-entries");
+      for (const entry of entries) assertContentEntryMatchesModel(entry, model, "scan-entries");
       return { model, count: entries.length, entries, diagnostics: entries.flatMap((entry) => diagnoseContentEntryCompleteness(model, entry)) };
     });
   }
@@ -241,7 +209,7 @@ export class IndexedDbContentStore implements ContentStore {
     await this.run("put-entry", "readwrite", [CONTENT_MODELS_STORE_NAME, CONTENT_ENTRIES_STORE_NAME], async (tx) => {
       const entries = tx.objectStore(CONTENT_ENTRIES_STORE_NAME);
       const model = loadedModel(await requestResult(tx.objectStore(CONTENT_MODELS_STORE_NAME).get(record.modelId)), "put-entry");
-      validateEntryAgainstModel(record, model, "put-entry");
+      assertContentEntryMatchesModel(record, model, "put-entry");
       if (model.document.kind === "single") {
         const existing = await requestResult(entries.get(record.id));
         const count = await requestResult(entries.index(CONTENT_ENTRY_MODEL_INDEX).count(record.modelId));
@@ -271,7 +239,7 @@ export class IndexedDbContentStore implements ContentStore {
       const loaded = loadContentEntryRecord(raw);
       if (loaded.status !== "loaded") throw contentPersistenceError("delete-entry", "validation", "The stored Entry is invalid and was preserved.", false);
       const model = loadedModel(await requestResult(tx.objectStore(CONTENT_MODELS_STORE_NAME).get(loaded.record.modelId)), "delete-entry");
-      validateEntryAgainstModel(loaded.record, model, "delete-entry");
+      assertContentEntryMatchesModel(loaded.record, model, "delete-entry");
       await requestResult(store.delete(id)); return true;
     });
   }
@@ -283,7 +251,7 @@ export class IndexedDbContentStore implements ContentStore {
       if (!model.document.fields.some((field) => field.id === fieldId)) throw contentPersistenceError("remove-field", "not-found", "Content field was not found.", false);
       const rawEntries = await requestResult(tx.objectStore(CONTENT_ENTRIES_STORE_NAME).index(CONTENT_ENTRY_MODEL_INDEX).getAll(modelId));
       const entries = loadedEntries(rawEntries, "remove-field");
-      for (const entry of entries) validateEntryAgainstModel(entry, model, "remove-field");
+      for (const entry of entries) assertContentEntryMatchesModel(entry, model, "remove-field");
       const now = this.runtime.now();
       if (!isCanonicalContentTimestamp(now)) throw contentPersistenceError("remove-field", "validation", "The provider clock must return a canonical ISO timestamp.", false);
       const updatedAt = now < model.updatedAt ? model.updatedAt : now;
@@ -315,7 +283,7 @@ export class IndexedDbContentStore implements ContentStore {
       entryIds.add(entry.id);
       const model = models.get(entry.modelId);
       if (!model) throw contentPersistenceError("seed", "validation", `Seed Entry references missing model "${entry.modelId}".`, false);
-      validateEntryAgainstModel(validation.value, model, "seed");
+      assertContentEntryMatchesModel(validation.value, model, "seed");
       if (model.document.kind === "single") {
         const count = (singleCounts.get(model.id) ?? 0) + 1; singleCounts.set(model.id, count);
         if (count > 1) throw contentPersistenceError("seed", "single-cardinality", "A Single seed permits at most one Entry.", false);
@@ -337,7 +305,7 @@ export class IndexedDbContentStore implements ContentStore {
           continue;
         }
         const actualModel = loadedModel(await requestResult(modelStore.get(entry.modelId)), "seed");
-        validateEntryAgainstModel(entry, actualModel, "seed");
+        assertContentEntryMatchesModel(entry, actualModel, "seed");
         if (actualModel.document.kind === "single" && await requestResult(entryStore.index(CONTENT_ENTRY_MODEL_INDEX).count(entry.modelId)) > 0) throw contentPersistenceError("seed", "single-cardinality", "A Single model permits at most one Entry.", false);
         await requestResult(entryStore.add(entry));
       }
@@ -382,7 +350,7 @@ export class IndexedDbContentStore implements ContentStore {
         const loaded = loadContentEntryRecord(entryRaw[index]);
         if (loaded.status === "loaded") {
           const model = modelRecords.get(loaded.record.modelId);
-          if (!model || entrySemanticIssue(loaded.record, model)) failures.push({ id: loaded.record.id, status: "invalid" });
+          if (!model || contentEntrySemanticIssue(loaded.record, model)) failures.push({ id: loaded.record.id, status: "invalid" });
         } else if (loaded.status !== "not-found") failures.push({ id: rawId(entryRaw[index], `entry-unknown-${index + 1}`), status: loaded.status, ...(loaded.status === "future-schema" ? { version: loaded.foundSchemaVersion } : {}) });
       }
       if (!failures.length) {
