@@ -81,6 +81,17 @@ describe("siteProjectSourcePlugin", () => {
     expect(readDevRelease).toHaveBeenCalledTimes(4);
   });
 
+  it("does no queued refresh work after the development server closes", async () => {
+    const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() }), httpServer = new EventEmitter();
+    const readDevRelease = vi.fn(), send = vi.fn();
+    const plugin = siteProjectSourcePlugin({ bundledSource: bundledSource as never, currentToolchain: toolchain, readDevRelease });
+    (plugin.configResolved as (config: unknown) => void)({ command: "serve" });
+    (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, httpServer, moduleGraph: { getModuleById: vi.fn() }, ws: { send } });
+    watcher.add.mockClear(); httpServer.emit("close");
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+    expect(readDevRelease).not.toHaveBeenCalled(); expect(watcher.add).not.toHaveBeenCalled(); expect(watcher.unwatch).not.toHaveBeenCalled(); expect(send).not.toHaveBeenCalled();
+  });
+
   it("coalesces refresh races without losing dirty events or publishing stale watched identities", async () => {
     type Loaded = { project: { id: string }; release: { identity: { projectId: string; revision: string; buildId: string }; files: Record<string, string>; stage: { mediaLock: null; toolchain: typeof toolchain } } };
     const deferred: { resolve(value: Loaded): void; promise: Promise<Loaded> }[] = [];

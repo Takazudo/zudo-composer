@@ -65,8 +65,8 @@ export function siteProjectSourcePlugin(options) {
         return new Set([active, resolve(localRoot, "projects", projectId, `${revision}.json`), resolve(buildRoot, "stage.json"), resolve(buildRoot, "build.json"), resolve(buildRoot, "complete.json"), ...Object.keys(loaded.release.files).map((name) => resolve(buildRoot, name))]);
       };
       const refresh = async () => {
-        if (refreshing) return; refreshing = true;
-        try { while (applied < requested) {
+        if (closed || refreshing) return; refreshing = true;
+        try { while (!closed && applied < requested) {
           const generation = requested;
           let next, failed = false; try { next = pathsFor(await readRelease()); } catch { failed = true; }
           if (closed) break;
