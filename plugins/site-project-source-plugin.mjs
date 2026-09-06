@@ -57,7 +57,7 @@ export function siteProjectSourcePlugin(options) {
       const localRoot = configuredRoot ? resolve(configuredRoot) : resolve(viteServer.config.root, ".zudo-site-project");
       const active = resolve(localRoot, "active.json");
       viteServer.watcher.add(active);
-      let watched = new Set([active]), requested = 0, applied = 0, refreshing = false, notifyPending = false;
+      let watched = new Set([active]), requested = 0, applied = 0, refreshing = false, notifyPending = false, retryTimer, retryDelay = 25, closed = false;
       const pathsFor = (loaded) => {
         if (!loaded) return new Set([active]);
         const { projectId, revision, buildId } = loaded.release.identity;
@@ -68,19 +68,24 @@ export function siteProjectSourcePlugin(options) {
         if (refreshing) return; refreshing = true;
         try { while (applied < requested) {
           const generation = requested;
-          let next; try { next = pathsFor(await readRelease()); } catch { next = new Set([active]); }
+          let next, failed = false; try { next = pathsFor(await readRelease()); } catch { failed = true; }
+          if (closed) break;
           if (generation !== requested) continue;
+          if (failed) { notifyPending = true; scheduleRetry(); break; }
+          if (retryTimer) { globalThis.clearTimeout(retryTimer); retryTimer = undefined; } retryDelay = 25;
           for (const path of next) if (!watched.has(path)) viteServer.watcher.add(path);
           for (const path of watched) if (!next.has(path)) viteServer.watcher.unwatch(path);
           watched = next; applied = generation;
           if (notifyPending) { notifyPending = false; reload(); }
-        } } finally { refreshing = false; if (applied < requested) globalThis.queueMicrotask(() => { void refresh(); }); }
+        } } finally { refreshing = false; if (!closed && applied < requested && !retryTimer) globalThis.queueMicrotask(() => { void refresh(); }); }
       };
-      const requestRefresh = (notify) => { requested++; notifyPending ||= notify; globalThis.queueMicrotask(() => { void refresh(); }); };
+      const scheduleRetry = () => { if (retryTimer || closed) return; const delay = retryDelay; retryDelay = Math.min(250, retryDelay * 2); retryTimer = globalThis.setTimeout(() => { retryTimer = undefined; if (!closed) void refresh(); }, delay); };
+      const requestRefresh = (notify) => { if (closed) return; requested++; notifyPending ||= notify; globalThis.queueMicrotask(() => { void refresh(); }); };
       const changed = (path) => {
         if (watched.has(path)) requestRefresh(true);
       };
       viteServer.watcher.on("add", changed); viteServer.watcher.on("change", changed); viteServer.watcher.on("unlink", changed);
+      viteServer.httpServer?.once("close", () => { closed = true; if (retryTimer) globalThis.clearTimeout(retryTimer); retryTimer = undefined; });
       requestRefresh(false);
       viteServer.middlewares?.use(async (req, res, next) => {
         let pathname; try { pathname = new URL(req.url ?? "", "http://localhost").pathname; } catch { return next(); }

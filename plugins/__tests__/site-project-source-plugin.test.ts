@@ -47,13 +47,38 @@ describe("siteProjectSourcePlugin", () => {
     const source = await plugin.load?.call({} as never, RESOLVED_SITE_PROJECT_SOURCE_ID, {} as never);
     expect(source).toContain('"id":"demo"');
     expect(source).toContain(`siteProjectRevision = "${identity.revision}"`);
-    readDevRelease.mockRejectedValueOnce(new Error("corrupt module"));
     watcher.emit("change", `/repo/.zudo-site-project/builds/${identity.buildId}/module-0000.mjs`);
     await vi.waitFor(() => expect(send).toHaveBeenCalledWith({ type: "custom", event: "release:changed", data: { source: "activated-release" } }));
-    expect(watcher.unwatch).toHaveBeenCalledWith(`/repo/.zudo-site-project/builds/${identity.buildId}/module-0000.mjs`);
     expect(send.mock.calls.some(([message]) => message.type === "full-reload")).toBe(false);
     expect(invalidateModule).toHaveBeenCalledTimes(1);
     expect(reloadModule).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains verified watches across bounded transient retries and converges after recovery", async () => {
+    const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
+    const send = vi.fn(), oldIdentity = { projectId: "old", revision: "1".repeat(64), buildId: "1".repeat(64) }, nextIdentity = { projectId: "next", revision: "2".repeat(64), buildId: "2".repeat(64) };
+    const loaded = (identity: typeof oldIdentity) => ({ project: { id: identity.projectId }, release: { identity, files: { "build.json": identity.buildId, "module-0000.mjs": identity.buildId }, stage: { mediaLock: null, toolchain } } });
+    const readDevRelease = vi.fn().mockResolvedValue(loaded(oldIdentity));
+    const plugin = siteProjectSourcePlugin({ bundledSource: bundledSource as never, currentToolchain: toolchain, readDevRelease });
+    (plugin.configResolved as (config: unknown) => void)({ command: "serve" });
+    (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send } });
+    const oldModule = `/repo/.zudo-site-project/builds/${oldIdentity.buildId}/module-0000.mjs`, active = "/repo/.zudo-site-project/active.json";
+    await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith(oldModule));
+    let rejectFirst!: (error: Error) => void, rejectSecond!: (error: Error) => void;
+    readDevRelease.mockImplementationOnce(() => new Promise((_, reject) => { rejectFirst = reject; })).mockImplementationOnce(() => new Promise((_, reject) => { rejectSecond = reject; })).mockResolvedValue(loaded(nextIdentity));
+    watcher.emit("change", oldModule);
+    await vi.waitFor(() => expect(rejectFirst).toBeTypeOf("function"));
+    watcher.emit("change", active); rejectFirst(new Error("activation settling"));
+    await vi.waitFor(() => expect(readDevRelease).toHaveBeenCalledTimes(3));
+    expect(watcher.unwatch).not.toHaveBeenCalled(); expect(send).not.toHaveBeenCalled();
+    rejectSecond(new Error("writer lock busy"));
+    await vi.waitFor(() => expect(readDevRelease).toHaveBeenCalledTimes(4), { timeout: 1000 });
+    const nextModule = `/repo/.zudo-site-project/builds/${nextIdentity.buildId}/module-0000.mjs`;
+    await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith(nextModule));
+    expect(watcher.unwatch.mock.invocationCallOrder[0]).toBeGreaterThan(watcher.add.mock.invocationCallOrder.at(-1)!);
+    expect(watcher.unwatch).toHaveBeenCalledWith(oldModule);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(readDevRelease).toHaveBeenCalledTimes(4);
   });
 
   it("coalesces refresh races without losing dirty events or publishing stale watched identities", async () => {
