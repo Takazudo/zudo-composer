@@ -10,12 +10,12 @@
 import { constants } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { resolve, posix, isAbsolute, dirname, basename } from "node:path";
+import { resolve, posix, dirname, basename } from "node:path";
+import { appModuleId, readRootEnvironment, resolveWorkspaceRoot, validateRootOverride } from "./roots.mjs";
 
 /** @param {string | undefined} root */
 export function validateMediaStoreRoot(root) {
-  if (root !== undefined && (!isAbsolute(root) || resolve(root) !== root)) throw new Error("Media store root must be an absolute resolved path.");
-  return root;
+  return validateRootOverride(root, "Media store root");
 }
 
 /** @typedef {import("../src/composer/library/types.ts").CompositionRecord} CompositionRecord */
@@ -27,6 +27,7 @@ export const COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER = "x-zudo-composer-capabil
 /** UTF-8 bytes. Large enough for a substantial document plus generated JSX. */
 export const COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES = 2 * 1024 * 1024;
 export const COMPOSER_FILE_PROVIDER_ROOT = "compositions";
+export const COMPOSITIONS_ROOT_ENV = "ZUDO_COMPOSITIONS_ROOT";
 export const MEDIA_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_media_file_provider";
 export const MEDIA_FILE_PROVIDER_OPERATION_HEADER = "x-zudo-composer-media-operation";
 export const MEDIA_FILE_PROVIDER_FILE_NAME_HEADER = "x-zudo-composer-media-file-name";
@@ -34,6 +35,14 @@ export const MEDIA_FILE_PROVIDER_RECORD_ID_HEADER = "x-zudo-composer-media-recor
 export const MEDIA_FILE_PROVIDER_METADATA_HEADER = "x-zudo-composer-media-metadata";
 export const MEDIA_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 export const MEDIA_FILE_PROVIDER_ROOT = "media-store";
+
+/** Explicit option, then the environment override, then the workspace default. */
+export function resolveCompositionsRoot(workspaceRoot, configured) {
+  return validateRootOverride(configured, "Compositions root")
+    ?? readRootEnvironment(process.env[COMPOSITIONS_ROOT_ENV], "Compositions root")
+    ?? resolve(workspaceRoot, COMPOSER_FILE_PROVIDER_ROOT);
+}
+
 const MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/octet-stream"]);
 const MEDIA_FILE_PROVIDER_BYTES_DIRECTORY = "versions";
 const MEDIA_FILE_PROVIDER_BYTE_PATTERN = /^\/uploaded-media\/(sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/;
@@ -223,10 +232,10 @@ function sendMediaFileError(res) {
 /**
  * Serve an uploaded media byte file directly from the development store.
  *
- * @param {{projectRoot: string, mediaStoreRoot?: string, createStore?: () => Promise<any>, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open, realpath?: typeof fsPromises.realpath}}} options
+ * @param {{workspaceRoot: string, mediaStoreRoot?: string, createStore?: () => Promise<any>, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open, realpath?: typeof fsPromises.realpath}}} options
  */
 export function createMediaFileMiddleware(options) {
-  const configuredRoot = validateMediaStoreRoot(options.mediaStoreRoot) ?? resolve(options.projectRoot, MEDIA_FILE_PROVIDER_ROOT);
+  const configuredRoot = validateMediaStoreRoot(options.mediaStoreRoot) ?? resolve(options.workspaceRoot, MEDIA_FILE_PROVIDER_ROOT);
   const lstatFile = options.operations?.lstat ?? fsPromises.lstat;
   const openFile = options.operations?.open ?? fsPromises.open;
   const realpathFile = options.operations?.realpath ?? fsPromises.realpath;
@@ -238,7 +247,7 @@ export function createMediaFileMiddleware(options) {
     // ordinary source-file URLs, even when they are outside publicDir.
     try {
       const decoded = typeof pathname === "string" ? posix.normalize(decodeURIComponent(pathname)) : "";
-      const sourcePath = decoded.startsWith("/@fs/") ? decoded.slice(4) : resolve(options.projectRoot, `.${decoded}`);
+      const sourcePath = decoded.startsWith("/@fs/") ? decoded.slice(4) : resolve(options.workspaceRoot, `.${decoded}`);
       if (/(?:^|\/)media-store(?:\/|$)/.test(decoded) || sourcePath === configuredRoot || sourcePath.startsWith(`${configuredRoot}/`)) {
         res.statusCode = 404; res.setHeader("cache-control", "no-store"); res.end(); return;
       }
@@ -807,18 +816,20 @@ function sendConnectResponse(res, response) {
 }
 
 /** Vite plugin. Each dev server closure receives an independent capability.
- * @param {{mediaStoreRoot?: string}} options
+ * @param {{mediaStoreRoot?: string, compositionsRoot?: string, workspaceRoot?: string}} options
  */
 export default function composerFileProviderPlugin(options = {}) {
   const explicitMediaRoot = validateMediaStoreRoot(options.mediaStoreRoot);
+  // Authored data lives in the host project, package entries live in the
+  // package; `config.root` is neither once the tool runs from node_modules.
+  const workspaceRoot = resolveWorkspaceRoot(options.workspaceRoot);
+  const compositionsRoot = resolveCompositionsRoot(workspaceRoot, options.compositionsRoot);
   let command = "build";
   let capability;
-  let projectRoot;
   return {
     name: "composer-file-provider",
     configResolved(config) {
       command = config.command;
-      projectRoot = config.root;
       capability = command === "serve" ? randomBytes(32).toString("base64url") : undefined;
     },
     resolveId(id) {
@@ -844,21 +855,21 @@ export default function composerFileProviderPlugin(options = {}) {
     },
     async configureServer(server) {
       const activeCapability = capability;
-      if (activeCapability === undefined || projectRoot === undefined) return;
+      if (activeCapability === undefined) return;
       const {
         createFilesystemCompositionStore,
         validateCompositionRecord,
-      } = await server.ssrLoadModule("/src/composer/storage/file-provider/dev-server-entry.ts");
+      } = await server.ssrLoadModule(appModuleId("src/composer/storage/file-provider/dev-server-entry.ts"));
       const handler = createComposerFileProviderMiddleware({
         capability: activeCapability,
         validateRecord: validateCompositionRecord,
         createStore: ({ provideJsx }) => createFilesystemCompositionStore({
-          compositionsRoot: resolve(projectRoot, COMPOSER_FILE_PROVIDER_ROOT),
+          compositionsRoot,
           provideJsx,
         }),
       });
-      const { createFilesystemMediaStore } = await server.ssrLoadModule("/src/media/storage/file-provider/dev-server-entry.ts");
-      const mediaStoreRoot = explicitMediaRoot ?? resolve(projectRoot, MEDIA_FILE_PROVIDER_ROOT);
+      const { createFilesystemMediaStore } = await server.ssrLoadModule(appModuleId("src/media/storage/file-provider/dev-server-entry.ts"));
+      const mediaStoreRoot = explicitMediaRoot ?? resolve(workspaceRoot, MEDIA_FILE_PROVIDER_ROOT);
       const mediaHandler = createMediaUploadMiddleware({
         capability: activeCapability,
         createStore: () => createFilesystemMediaStore({ mediaStoreRoot }),
@@ -912,7 +923,7 @@ export default function composerFileProviderPlugin(options = {}) {
         sendConnectResponse(res, await handler({ ...requestHead, body }));
       });
       // Vite's public-dir middleware serves only files in its startup-scanned publicFiles Set (updated by chokidar), so a file uploaded during the session otherwise gets the SPA shell until the watcher catches up (#180).
-      server.middlewares.use(createMediaFileMiddleware({ projectRoot, mediaStoreRoot, createStore: () => createFilesystemMediaStore({ mediaStoreRoot }) }));
+      server.middlewares.use(createMediaFileMiddleware({ workspaceRoot, mediaStoreRoot, createStore: () => createFilesystemMediaStore({ mediaStoreRoot }) }));
     },
   };
 }

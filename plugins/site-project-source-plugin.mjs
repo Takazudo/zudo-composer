@@ -1,5 +1,6 @@
 // @ts-check
 import { resolve } from "node:path";
+import { appModuleId, resolveWorkspaceRoot } from "./roots.mjs";
 
 export const SITE_PROJECT_SOURCE_ID = "virtual:site-project-source";
 export const RESOLVED_SITE_PROJECT_SOURCE_ID = `\0${SITE_PROJECT_SOURCE_ID}`;
@@ -23,11 +24,13 @@ function readySource(loaded) {
 /**
  * Read-only release source. It resolves only the single verified active release
  * pointer, in every command.
- * @param {{readDevRelease?: () => Promise<any>, readDevMedia?: (pathname: string) => Promise<any>}} [options]
+ * @param {{readDevRelease?: () => Promise<any>, readDevMedia?: (pathname: string) => Promise<any>, workspaceRoot?: string}} [options]
  */
 export function siteProjectSourcePlugin(options = {}) {
   /** @type {any} */ let server;
-  const readRelease = async () => options.readDevRelease ? options.readDevRelease() : server.ssrLoadModule("/server/site-project-local/dev-reader.ts").then((module) => module.readActivatedSiteRelease());
+  const workspaceRoot = resolveWorkspaceRoot(options.workspaceRoot);
+  const devReaderId = appModuleId("server/site-project-local/dev-reader.ts");
+  const readRelease = async () => options.readDevRelease ? options.readDevRelease() : server.ssrLoadModule(devReaderId).then((module) => module.readActivatedSiteRelease());
   const delivery = async () => {
     try { const loaded = await readRelease(); return loaded ? readySource(loaded) : { status: "no-active", message: "No completed local release is activated." }; }
     catch (error) { return { status: "error", message: error instanceof Error ? error.message : "Activated local release is unavailable." }; }
@@ -43,7 +46,7 @@ export function siteProjectSourcePlugin(options = {}) {
     configureServer(viteServer) {
       server = viteServer;
       const configuredRoot = process.env.ZUDO_SITE_PROJECT_ROOT?.trim();
-      const localRoot = configuredRoot ? resolve(configuredRoot) : resolve(viteServer.config.root, ".zudo-site-project");
+      const localRoot = configuredRoot ? resolve(configuredRoot) : resolve(workspaceRoot, ".zudo-site-project");
       const active = resolve(localRoot, "active.json");
       // Active selection is replaced atomically. Keep a stable directory watch
       // as well as the exact file watch so repeated rename/unlink/add cycles do
@@ -92,7 +95,7 @@ export function siteProjectSourcePlugin(options = {}) {
         let pathname; try { pathname = new URL(req.url ?? "", "http://localhost").pathname; } catch { return next(); }
         if (!PINNED_MEDIA.test(pathname)) return next();
         try {
-          const value = options.readDevMedia ? await options.readDevMedia(pathname) : await viteServer.ssrLoadModule("/server/site-project-local/dev-reader.ts").then((module) => module.readActivatedSiteMedia(pathname));
+          const value = options.readDevMedia ? await options.readDevMedia(pathname) : await viteServer.ssrLoadModule(devReaderId).then((module) => module.readActivatedSiteMedia(pathname));
           if (!value) return next();
           res.statusCode = 200; res.setHeader("Content-Type", value.mediaType); res.setHeader("Content-Length", String(value.bytes.byteLength)); res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); res.setHeader("ETag", `"sha256-${pathname.slice("/uploaded-media/sha256-".length).split(".")[0]}"`); return res.end(Buffer.from(value.bytes));
         } catch { res.statusCode = 503; res.setHeader("Cache-Control", "no-store"); return res.end("Activated Media unavailable."); }

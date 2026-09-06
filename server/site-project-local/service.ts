@@ -16,7 +16,7 @@ export { resolveLocalReleaseToolchain } from "./toolchain-config.mjs";
 export interface LocalSiteProjectServiceOptions extends LocalSiteProjectStoreOptions { mediaStoreRoot?: string; mediaStore?: VersionedMediaStore; toolchain?: ReleaseToolchain; isWorkingCurrent?: SiteProjectApiDependencies["isWorkingCurrent"]; reconcilePublication?: SiteProjectApiDependencies["reconcilePublication"] }
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 export function createLocalSiteProjectApiService(options: LocalSiteProjectServiceOptions = {}): SiteProjectApiService {
-  const mediaRoot = resolve(options.mediaStoreRoot ?? resolve(import.meta.dirname, "../../media-store"));
+  const mediaRoot = resolve(options.mediaStoreRoot ?? resolve(process.cwd(), "media-store"));
   const catalog = createComponentCatalog(componentPack.manifest);
   const store = createLocalSiteProjectStore({ ...options, componentPack: catalog.pack, readMedia: options.readMedia ?? (async (pin) => {
     for (const path of [mediaRoot, join(mediaRoot, "versions")]) { const info = await lstat(path); if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Unsafe pinned Media source directory."); }

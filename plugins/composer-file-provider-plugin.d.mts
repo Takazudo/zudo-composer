@@ -10,6 +10,7 @@ export const COMPOSER_FILE_PROVIDER_ENDPOINT: string;
 export const COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER: string;
 export const COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES: number;
 export const COMPOSER_FILE_PROVIDER_ROOT: string;
+export const COMPOSITIONS_ROOT_ENV: string;
 export const MEDIA_FILE_PROVIDER_ENDPOINT: string;
 export const MEDIA_FILE_PROVIDER_OPERATION_HEADER: string;
 export const MEDIA_FILE_PROVIDER_FILE_NAME_HEADER: string;
@@ -25,7 +26,7 @@ export function createMediaUploadMiddleware(options: {
 }): (request: IncomingMessage, response: ServerResponse) => Promise<void>;
 
 export function createMediaFileMiddleware(options: {
-  projectRoot: string;
+  workspaceRoot: string;
   mediaStoreRoot?: string;
   createStore?(): Promise<FilesystemMediaStore>;
   operations?: { lstat?: typeof fs.lstat; open?: typeof fs.open; realpath?: typeof fs.realpath };
@@ -60,4 +61,5 @@ export function createComposerFileProviderMiddleware(options: {
 }): (request: DevRequest) => Promise<DevResponse>;
 
 export function validateMediaStoreRoot(root: string | undefined): string | undefined;
-export default function composerFileProviderPlugin(options?: { mediaStoreRoot?: string }): Plugin;
+export function resolveCompositionsRoot(workspaceRoot: string, configured?: string): string;
+export default function composerFileProviderPlugin(options?: { mediaStoreRoot?: string; compositionsRoot?: string; workspaceRoot?: string }): Plugin;

@@ -35,9 +35,9 @@ describe("siteProjectSourcePlugin", () => {
     const identity = { projectId: "demo", revision: "a".repeat(64), buildId: "c".repeat(64) };
     const files = { "build.json": "1".repeat(64), "stage.json": "2".repeat(64), "module-0000.mjs": "3".repeat(64), [`media-sha256-${"4".repeat(64)}.png`]: "4".repeat(64) };
     const readDevRelease = vi.fn().mockResolvedValue({ project: { id: "demo" }, release: { identity, build: { projectId: "demo" }, completionDigest: "d".repeat(64), files, stage: { mediaLock: null, toolchain } } });
-    const plugin = siteProjectSourcePlugin({ readDevRelease });
+    const plugin = siteProjectSourcePlugin({ readDevRelease, workspaceRoot: "/repo" });
     (plugin.configureServer as (server: unknown) => void)({
-      config: { root: "/repo" }, watcher,
+      watcher,
       moduleGraph: { getModuleById: vi.fn(() => ({ id: RESOLVED_SITE_PROJECT_SOURCE_ID })), invalidateModule }, reloadModule,
       ws: { send }, ssrLoadModule: vi.fn(),
     });
@@ -59,8 +59,8 @@ describe("siteProjectSourcePlugin", () => {
     const send = vi.fn();
     const identity = { projectId: "ordered", revision: "6".repeat(64), buildId: "7".repeat(64) };
     const readDevRelease = vi.fn().mockResolvedValue({ project: { id: identity.projectId }, release: { identity, build: {}, completionDigest: "8".repeat(64), files: { "build.json": "9".repeat(64) }, stage: { mediaLock: null, toolchain } } });
-    const plugin = siteProjectSourcePlugin({ readDevRelease });
-    (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, moduleGraph: { getModuleById: vi.fn(() => ({ id: RESOLVED_SITE_PROJECT_SOURCE_ID, file: null })), invalidateModule: vi.fn() }, ws: { send } });
+    const plugin = siteProjectSourcePlugin({ readDevRelease, workspaceRoot: "/repo" });
+    (plugin.configureServer as (server: unknown) => void)({ watcher, moduleGraph: { getModuleById: vi.fn(() => ({ id: RESOLVED_SITE_PROJECT_SOURCE_ID, file: null })), invalidateModule: vi.fn() }, ws: { send } });
     await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith("/repo/.zudo-site-project/active.json"));
     watcher.emit("change", "/repo/.zudo-site-project/active.json");
     await vi.waitFor(() => expect(send).toHaveBeenCalledWith({ type: "custom", event: "release:changed", data: { source: "activated-release", deliverySource: expect.objectContaining({ status: "ready", artifact: expect.objectContaining({ project: { id: "ordered" }, identity }) }) } }));
@@ -72,8 +72,8 @@ describe("siteProjectSourcePlugin", () => {
     const send = vi.fn();
     const identity = { projectId: "retry", revision: "a".repeat(64), buildId: "b".repeat(64) };
     const readDevRelease = vi.fn().mockResolvedValue({ project: { id: identity.projectId }, release: { identity, build: {}, completionDigest: "c".repeat(64), files: { "build.json": "d".repeat(64) }, stage: { mediaLock: null, toolchain } } });
-    const plugin = siteProjectSourcePlugin({ readDevRelease });
-    (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, moduleGraph: { getModuleById: vi.fn(() => ({ id: RESOLVED_SITE_PROJECT_SOURCE_ID, file: null })), invalidateModule }, ws: { send } });
+    const plugin = siteProjectSourcePlugin({ readDevRelease, workspaceRoot: "/repo" });
+    (plugin.configureServer as (server: unknown) => void)({ watcher, moduleGraph: { getModuleById: vi.fn(() => ({ id: RESOLVED_SITE_PROJECT_SOURCE_ID, file: null })), invalidateModule }, ws: { send } });
     await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith("/repo/.zudo-site-project/active.json"));
     watcher.emit("change", "/repo/.zudo-site-project/active.json");
     await vi.waitFor(() => expect(invalidateModule).toHaveBeenCalledTimes(2));
@@ -85,8 +85,8 @@ describe("siteProjectSourcePlugin", () => {
     const send = vi.fn(), oldIdentity = { projectId: "old", revision: "1".repeat(64), buildId: "1".repeat(64) }, nextIdentity = { projectId: "next", revision: "2".repeat(64), buildId: "2".repeat(64) };
     const loaded = (identity: typeof oldIdentity) => ({ project: { id: identity.projectId }, release: { identity, files: { "build.json": identity.buildId, "module-0000.mjs": identity.buildId }, stage: { mediaLock: null, toolchain } } });
     const readDevRelease = vi.fn().mockResolvedValue(loaded(oldIdentity));
-    const plugin = siteProjectSourcePlugin({ readDevRelease });
-    (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send } });
+    const plugin = siteProjectSourcePlugin({ readDevRelease, workspaceRoot: "/repo" });
+    (plugin.configureServer as (server: unknown) => void)({ watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send } });
     const oldModule = `/repo/.zudo-site-project/builds/${oldIdentity.buildId}/module-0000.mjs`, active = "/repo/.zudo-site-project/active.json";
     await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith(oldModule));
     let rejectFirst!: (error: Error) => void, rejectSecond!: (error: Error) => void;
@@ -110,8 +110,8 @@ describe("siteProjectSourcePlugin", () => {
   it("does no queued refresh work after the development server closes", async () => {
     const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() }), httpServer = new EventEmitter();
     const readDevRelease = vi.fn(), send = vi.fn();
-    const plugin = siteProjectSourcePlugin({ readDevRelease });
-    (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, httpServer, moduleGraph: { getModuleById: vi.fn() }, ws: { send } });
+    const plugin = siteProjectSourcePlugin({ readDevRelease, workspaceRoot: "/repo" });
+    (plugin.configureServer as (server: unknown) => void)({ watcher, httpServer, moduleGraph: { getModuleById: vi.fn() }, ws: { send } });
     watcher.add.mockClear(); httpServer.emit("close");
     await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
     expect(readDevRelease).not.toHaveBeenCalled(); expect(watcher.add).not.toHaveBeenCalled(); expect(watcher.unwatch).not.toHaveBeenCalled(); expect(send).not.toHaveBeenCalled();
@@ -124,8 +124,8 @@ describe("siteProjectSourcePlugin", () => {
     const readDevRelease = vi.fn(() => next());
     const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
     const send = vi.fn(), active = "/repo/.zudo-site-project/active.json";
-    const plugin = siteProjectSourcePlugin({ readDevRelease });
-    (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send } });
+    const plugin = siteProjectSourcePlugin({ readDevRelease, workspaceRoot: "/repo" });
+    (plugin.configureServer as (server: unknown) => void)({ watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send } });
     await vi.waitFor(() => expect(deferred).toHaveLength(1));
     watcher.emit("change", active);
     const loaded = (name: string, digit: string): Loaded => ({ project: { id: name }, release: { identity: { projectId: name, revision: digit.repeat(64), buildId: digit.repeat(64) }, files: { "build.json": digit.repeat(64), "module-0000.mjs": digit.repeat(64) }, stage: { mediaLock: null, toolchain } } });
@@ -148,10 +148,10 @@ describe("siteProjectSourcePlugin", () => {
   it("gives active pins precedence, delegates unpinned authoring bytes, and fails release-read errors closed", async () => {
     let mode: "one" | "two" | "missing" | "error" = "one";
     const readDevMedia = vi.fn(async () => mode === "missing" ? null : mode === "error" ? Promise.reject(new Error("digest")) : ({ bytes: Uint8Array.from([mode === "one" ? 1 : 2]), mediaType: "image/png", identity: {} }));
-    const plugin = siteProjectSourcePlugin({ readDevRelease: async () => null, readDevMedia });
+    const plugin = siteProjectSourcePlugin({ readDevRelease: async () => null, readDevMedia, workspaceRoot: "/repo" });
     let middleware!: (req: { url: string }, res: Record<string, unknown>, next: () => void) => Promise<void>;
     const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
-    (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send: vi.fn() }, middlewares: { use: (value: typeof middleware) => { middleware = value; } } });
+    (plugin.configureServer as (server: unknown) => void)({ watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send: vi.fn() }, middlewares: { use: (value: typeof middleware) => { middleware = value; } } });
     const pathname = `/uploaded-media/sha256-${"a".repeat(64)}.png`;
     const call = async (live = true) => { const end = vi.fn(), setHeader = vi.fn(), res = { statusCode: 0, end, setHeader }; const next = vi.fn(() => { res.statusCode = live ? 200 : 404; end(live ? Uint8Array.from([9]) : "Media not found."); }); await middleware({ url: pathname }, res, next); return { res, next, end, setHeader }; };
     const active = await call(); expect(Array.from(active.end.mock.calls[0]![0])).toEqual([1]); expect(active.next).not.toHaveBeenCalled();
