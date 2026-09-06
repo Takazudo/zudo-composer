@@ -13,7 +13,7 @@ import { MEDIA_MAX_BYTE_LENGTH, MEDIA_SCHEMA_VERSION, isValidMediaFileName, isMe
 } from "../../model";
 import { isSafeRecordId, isPlainObject } from "../../../shared";
 import { createUuidIdFactory } from "../../../shared/id-factory";
-import { SafeRootFilesystem, streamingAtomicReplace, type StreamingAtomicWriteResult } from "../../../shared/node-fs";
+import { SafeRootFilesystem, commitDocument, type DurableExtraErrorCode, streamingAtomicReplace, syncDirectory, withMutationLock, type StreamingAtomicWriteResult } from "../../../shared/node-fs";
 import type { FilesystemMediaStoreOptions, MediaUploadInput, SniffedMedia, MediaReplaceInput } from "./types";
 
 const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
@@ -166,7 +166,7 @@ export class FilesystemMediaStore implements VersionedMediaStore {
   readonly provider = { id: "media-files", label: "Project files" } as const;
   readonly capabilities = MEDIA_VERSIONED_CAPABILITIES;
   private constructor(
-    private readonly filesystem: SafeRootFilesystem<MediaPersistenceOperation>,
+    private readonly filesystem: SafeRootFilesystem<MediaPersistenceOperation, DurableExtraErrorCode>,
     private readonly publicDirectory: GuardedDirectory,
     private readonly bytesDirectory: GuardedDirectory,
     private readonly idFactory: (hint?: string) => string,
@@ -175,7 +175,7 @@ export class FilesystemMediaStore implements VersionedMediaStore {
   ) {}
 
   static async create(options: FilesystemMediaStoreOptions): Promise<FilesystemMediaStore> {
-    const filesystem = await SafeRootFilesystem.create({
+    const filesystem = await SafeRootFilesystem.create<MediaPersistenceOperation, DurableExtraErrorCode>({
       root: options.mediaStoreRoot,
       operations: options.operations,
       randomToken: options.randomToken,
@@ -469,26 +469,23 @@ export class FilesystemMediaStore implements VersionedMediaStore {
   }
   /** Kernel O_EXCL serializes cooperating writers across processes. Never steal
    * an existing lock: after a crash verify no writer is running before manual
-   * .mutation.lock removal. Reads remain available during lock recovery. */
+   * .mutation.lock removal. Reads remain available during lock recovery.
+   *
+   * The whole catalog is one document, so a mutation touching several records
+   * commits with the single rename inside commitDocument or not at all. */
   private mutate<T>(operation: MediaPersistenceOperation, expectedToken: string | undefined, edit: (snapshot: MediaSnapshot) => Promise<T>, signal?: AbortSignal): Promise<T> {
     if (expectedToken !== undefined && !isValidMediaChecksum(expectedToken)) return Promise.reject(operationError(operation, "validation", "Expected Media snapshot token must be a valid token."));
-    return this.filesystem.run(operation, async () => {
-      await this.assertDirectories(operation);
-      const lockPath = this.filesystem.ownedPath(".mutation.lock");
-      let lock;
-      try { lock = await this.filesystem.operations.open(lockPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | NO_FOLLOW, 0o600); }
-      catch (cause) {
-        if (errorCode(cause) === "EEXIST") throw operationError(operation, "conflict", "Another Media writer holds .mutation.lock. Retry after it finishes; after a crash verify no writer is running before manual lock recovery.");
-        rethrow(operation, "write-failed", "Could not acquire Media mutation lock.", cause);
-      }
-      let lockStats: Stats | undefined;
-      let uncertain = false;
-      try {
-        lockStats = await lock.stat();
-        await lock.writeFile(JSON.stringify({ pid: process.pid, createdAt: this.now() }));
-        await lock.sync();
-        await this.syncDirectory(operation, this.filesystem.realRoot);
-        await this.syncDirectory(operation, this.bytesDirectory.path);
+    const verify = (phase: MediaPersistenceOperation) => this.assertDirectories(phase);
+    return this.filesystem.run(operation, () => withMutationLock(
+      this.filesystem,
+      operation,
+      {
+        now: this.now,
+        preflightDirectories: [this.filesystem.realRoot, this.bytesDirectory.path],
+        verify,
+        onFailure: (cause) => rethrow(operation, "write-failed", "Could not commit Media mutation.", cause),
+      },
+      async () => {
         const snapshot = await this.readCatalog();
         signal?.throwIfAborted();
         if (expectedToken !== undefined && expectedToken !== snapshot.mutationToken) throw operationError(operation, "conflict", "Media snapshot changed; reload before retrying.");
@@ -496,58 +493,17 @@ export class FilesystemMediaStore implements VersionedMediaStore {
         snapshot.mutationToken = randomBytes(32).toString("hex");
         this.assertCatalog(snapshot);
         await this.assertDirectories(operation);
-        await this.commitCatalog(operation, snapshot, signal);
+        await commitDocument(this.filesystem, operation, this.catalogPath(), JSON.stringify(snapshot, null, 2) + "\n", {
+          signal,
+          verify,
+          uncertainMessage: "Catalog rename completed but directory durability is uncertain. Inspect the exact catalog/token and retained lock before recovery; do not retry blindly.",
+        });
         return structuredClone(result);
-      } catch (cause) {
-        uncertain = cause instanceof MediaPersistenceError && cause.code === "commit-uncertain";
-        rethrow(operation, "write-failed", "Could not commit Media mutation.", cause);
-      }
-      finally {
-        await lock.close().catch(() => undefined);
-        // Cleanup failure must not report a committed mutation as failed.
-        try {
-          await this.filesystem.assertRoot(operation);
-          const current = await this.filesystem.operations.lstat(lockPath);
-          if (!uncertain && lockStats && current.isFile() && !current.isSymbolicLink() && sameFile(current, lockStats)) await this.filesystem.operations.unlink(lockPath);
-        } catch { /* Retained lock fails closed on next mutation. */ }
-      }
-    });
+      },
+    ));
   }
-  /** Post-rename durability failures are explicitly uncertain, never reported
-   * as ordinary failed/unchanged mutations. The retained lock blocks retries. */
-  private async commitCatalog(operation: MediaPersistenceOperation, snapshot: MediaSnapshot, signal?: AbortSignal): Promise<void> {
-    const path = this.catalogPath();
-    const temporary = await this.filesystem.openTemporaryFile(operation, path);
-    let committed = false;
-    try {
-      await temporary.handle.writeFile(JSON.stringify(snapshot, null, 2) + "\n");
-      await temporary.handle.sync();
-      await temporary.handle.close();
-      await this.filesystem.assertRoot(operation);
-      await this.assertDirectories(operation);
-      await this.filesystem.assertReplaceablePath(operation, path);
-      signal?.throwIfAborted();
-      await this.filesystem.operations.rename(temporary.path, path);
-      committed = true;
-      try { await this.syncDirectory(operation, this.filesystem.realRoot); }
-      catch (cause) { throw operationError(operation, "commit-uncertain", "Catalog rename completed but directory durability is uncertain. Inspect the exact catalog/token and retained lock before recovery; do not retry blindly.", cause); }
-    } finally {
-      await temporary.handle.close().catch(() => undefined);
-      if (!committed) await this.filesystem.operations.unlink(temporary.path).catch(() => undefined);
-    }
-  }
-  private async syncDirectory(operation: MediaPersistenceOperation, path: string): Promise<void> {
-    let handle;
-    try {
-      await this.filesystem.assertRoot(operation);
-      await this.assertDirectories(operation);
-      handle = await this.filesystem.operations.open(path, constants.O_RDONLY | NO_FOLLOW | (constants.O_DIRECTORY ?? 0));
-      const opened = await handle.stat();
-      const current = await this.filesystem.operations.lstat(path);
-      if (!opened.isDirectory() || current.isSymbolicLink() || !sameFile(opened, current)) throw operationError(operation, "blocked", "Media directory changed before durability sync.");
-      await handle.sync();
-    } catch (cause) { rethrow(operation, "write-failed", "Media directory fsync is required but failed or is unsupported.", cause); }
-    finally { await handle?.close().catch(() => undefined); }
+  private syncDirectory(operation: MediaPersistenceOperation, path: string): Promise<void> {
+    return syncDirectory(this.filesystem, operation, path, (phase) => this.assertDirectories(phase));
   }
   private async stageBytes(input: MediaReplaceInput, expected?: StreamingAtomicWriteResult, expectedType?: string): Promise<StagedMedia> {
     await this.assertDirectories("put");

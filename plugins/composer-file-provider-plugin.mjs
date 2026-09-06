@@ -9,9 +9,23 @@
 
 import { constants } from "node:fs";
 import * as fsPromises from "node:fs/promises";
-import { randomBytes, timingSafeEqual } from "node:crypto";
 import { resolve, posix, dirname, basename } from "node:path";
 import { appModuleId, readRootEnvironment, resolveWorkspaceRoot, validateRootOverride } from "./roots.mjs";
+import {
+  FILE_PROVIDER_CAPABILITY_HEADER,
+  FILE_PROVIDER_MAX_BODY_BYTES,
+  bodyBytes,
+  connectRequestHead,
+  createDevCapability,
+  errorResponse,
+  hasExactKeys,
+  isDeadResponse,
+  isPlainObject,
+  json,
+  readBody,
+  sendConnectResponse,
+  validateRequestHead,
+} from "./file-provider-http.mjs";
 
 /** @param {string | undefined} root */
 export function validateMediaStoreRoot(root) {
@@ -23,9 +37,9 @@ export function validateMediaStoreRoot(root) {
 /** @typedef {{status: number, headers: Record<string, string>, body: string, bodyEncoding: "utf8"}} DevResponse */
 
 export const COMPOSER_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_file_provider";
-export const COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER = "x-zudo-composer-capability";
+export const COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER = FILE_PROVIDER_CAPABILITY_HEADER;
 /** UTF-8 bytes. Large enough for a substantial document plus generated JSX. */
-export const COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES = 2 * 1024 * 1024;
+export const COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES = FILE_PROVIDER_MAX_BODY_BYTES;
 export const COMPOSER_FILE_PROVIDER_ROOT = "compositions";
 export const COMPOSITIONS_ROOT_ENV = "ZUDO_COMPOSITIONS_ROOT";
 export const MEDIA_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_media_file_provider";
@@ -58,58 +72,6 @@ const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
 // encodeURIComponent represents astral Unicode as four percent-encoded bytes.
 const MEDIA_ENCODED_FILE_NAME_MAX_LENGTH = 4096;
 
-const JSON_HEADERS = Object.freeze({
-  "cache-control": "no-store",
-  "content-type": "application/json; charset=utf-8",
-  "x-content-type-options": "nosniff",
-});
-
-/**
- * @param {number} status
- * @param {unknown} payload
- * @param {Record<string, string>} [headers]
- * @returns {DevResponse}
- */
-function json(status, payload, headers = {}) {
-  return {
-    status,
-    headers: { ...JSON_HEADERS, ...headers },
-    body: JSON.stringify(payload),
-    bodyEncoding: "utf8",
-  };
-}
-
-/**
- * @param {number} status
- * @param {string} code
- * @param {string} message
- * @param {string | undefined} [operation]
- * @param {Record<string, string>} [headers]
- */
-function errorResponse(status, code, message, operation, headers) {
-  return json(status, {
-    ok: false,
-    error: { code, message, ...(operation === undefined ? {} : { operation }) },
-  }, headers);
-}
-
-/** @param {unknown} value @returns {value is Record<string, unknown>} */
-function isPlainObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * @param {unknown} value
- * @param {string[]} required
- * @param {string[]} [optional]
- */
-function hasExactKeys(value, required, optional = []) {
-  if (!isPlainObject(value)) return false;
-  const keys = Object.keys(value).sort();
-  const allowed = new Set([...required, ...optional]);
-  return required.every((key) => key in value) && keys.every((key) => allowed.has(key));
-}
-
 /** @param {unknown} value @returns {value is string} */
 function isSafeId(value) {
   return typeof value === "string" && /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(value);
@@ -133,53 +95,6 @@ function parseOutputsById(value) {
     return undefined;
   }
   return result;
-}
-
-/** @param {string | undefined} body */
-function bodyBytes(body) {
-  return Buffer.byteLength(body ?? "", "utf8");
-}
-
-/** @param {DevRequest} req */
-function isSameOriginDevRequest(req) {
-  if (req.headers["sec-fetch-site"] !== "same-origin") return false;
-  const host = req.headers.host;
-  const origin = req.headers.origin;
-  if (!host || !origin || /[\s,]/.test(host)) return false;
-  try {
-    const expected = new URL(`${req.protocol ?? "http"}://${host}`).origin;
-    return new URL(origin).origin === expected && origin === expected;
-  } catch {
-    return false;
-  }
-}
-
-function validateRequestHead(
-  req,
-  endpoint,
-  capability,
-  acceptedMediaTypes = new Set(["application/json"]),
-  unsupportedMediaTypeMessage = "Content-Type must be application/json.",
-) {
-  if (req.url !== endpoint) return errorResponse(404, "not-found", "File-provider route not found.");
-  if (req.method !== "POST") {
-    return errorResponse(405, "method-not-allowed", "Only POST is allowed.", undefined, { allow: "POST" });
-  }
-  if (!isSameOriginDevRequest(req)) {
-    return errorResponse(403, "origin-rejected", "A same-origin development request is required.");
-  }
-  if (!hasCapability(req, capability)) {
-    return errorResponse(401, "invalid-capability", "The development file capability is missing or invalid.");
-  }
-  const mediaType = req.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
-  if (mediaType === undefined || !acceptedMediaTypes.has(mediaType)) {
-    return errorResponse(415, "unsupported-media-type", unsupportedMediaTypeMessage);
-  }
-  return undefined;
-}
-
-function isDeadResponse(req, res) {
-  return req.aborted === true || req.socket?.destroyed === true || res.destroyed === true || res.writableEnded === true;
 }
 
 function mediaOperationError(value, operation) {
@@ -503,15 +418,6 @@ export function createMediaUploadMiddleware(options) {
   };
 }
 
-/** @param {DevRequest} req @param {string} expected */
-function hasCapability(req, expected) {
-  const supplied = req.headers[COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER];
-  if (typeof supplied !== "string") return false;
-  const a = Buffer.from(supplied);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 class OutputRequiredError extends Error {
   /** @param {unknown} request */
   constructor(request) {
@@ -760,61 +666,6 @@ export function createComposerFileProviderMiddleware(options) {
 const VIRTUAL_CONFIG_ID = "virtual:composer-file-provider-config";
 const RESOLVED_VIRTUAL_CONFIG_ID = `\0${VIRTUAL_CONFIG_ID}`;
 
-/** Read a Connect request without ever buffering more than the public limit. */
-function readBody(req, maxBodyBytes) {
-  return new Promise((resolveBody, rejectBody) => {
-    const chunks = [];
-    let size = 0;
-    let settled = false;
-    let ended = false;
-    const cleanup = () => {
-      req.off("data", onData);
-      req.off("end", onEnd);
-      req.off("error", onError);
-      req.off("aborted", onAborted);
-      req.off("close", onClose);
-    };
-    const rejectOnce = (error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      rejectBody(error);
-    };
-    const onData = (chunk) => {
-      size += chunk.length;
-      if (size > maxBodyBytes) {
-        rejectOnce(Object.assign(new Error("body-too-large"), { code: "BODY_TOO_LARGE" }));
-        req.resume();
-        return;
-      }
-      chunks.push(chunk);
-    };
-    const onEnd = () => {
-      if (settled) return;
-      ended = true;
-      settled = true;
-      cleanup();
-      resolveBody(Buffer.concat(chunks).toString("utf8"));
-    };
-    const onError = (error) => rejectOnce(error);
-    const onAborted = () => rejectOnce(Object.assign(new Error("request-aborted"), { code: "REQUEST_ABORTED" }));
-    const onClose = () => {
-      if (!ended) rejectOnce(Object.assign(new Error("request-closed"), { code: "REQUEST_ABORTED" }));
-    };
-    req.on("data", onData);
-    req.on("end", onEnd);
-    req.on("error", onError);
-    req.on("aborted", onAborted);
-    req.on("close", onClose);
-  });
-}
-
-function sendConnectResponse(res, response) {
-  res.statusCode = response.status;
-  for (const [name, value] of Object.entries(response.headers)) res.setHeader(name, value);
-  res.end(response.body);
-}
-
 /** Vite plugin. Each dev server closure receives an independent capability.
  * @param {{mediaStoreRoot?: string, compositionsRoot?: string, workspaceRoot?: string}} options
  */
@@ -830,7 +681,7 @@ export default function composerFileProviderPlugin(options = {}) {
     name: "composer-file-provider",
     configResolved(config) {
       command = config.command;
-      capability = command === "serve" ? randomBytes(32).toString("base64url") : undefined;
+      capability = command === "serve" ? createDevCapability() : undefined;
     },
     resolveId(id) {
       return id === VIRTUAL_CONFIG_ID ? RESOLVED_VIRTUAL_CONFIG_ID : undefined;
@@ -880,15 +731,8 @@ export default function composerFileProviderPlugin(options = {}) {
       });
       server.middlewares.use(async (req, res, next) => {
         if (req.url !== COMPOSER_FILE_PROVIDER_ENDPOINT) return next();
-        const headers = Object.fromEntries(
-          Object.entries(req.headers).map(([name, value]) => [name, Array.isArray(value) ? undefined : value]),
-        );
-        const requestHead = {
-          url: req.url,
-          method: req.method,
-          headers,
-          protocol: req.socket?.encrypted === true ? "https" : "http",
-        };
+        const requestHead = connectRequestHead(req);
+        const headers = requestHead.headers;
         const headError = validateRequestHead(requestHead, COMPOSER_FILE_PROVIDER_ENDPOINT, activeCapability);
         if (headError !== undefined) {
           sendConnectResponse(res, headError);
