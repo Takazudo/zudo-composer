@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from 'node:child_process';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -153,6 +153,23 @@ for (const required of [
 ]) {
   assert(rootPackedPaths.has(required), `packed archive omits the runtime file ${required}`);
 }
+
+// `compilerIdentity()` hashes every non-test source under the contract's `src`,
+// so the archive must carry exactly that set. The allowlist names those files
+// one by one — a directory entry would drag the colocated test in, because the
+// nested `package.json` makes the parent's negations stop applying inside it —
+// and naming files is only safe while something notices a new one.
+const contractSources = (await readdir(path.join(packageRoot, 'src')))
+  .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+  .sort();
+const packedContractSources = [...rootPackedPaths]
+  .filter((entry) => entry.startsWith('packages/component-contract/src/'))
+  .map((entry) => entry.slice('packages/component-contract/src/'.length))
+  .sort();
+assert(
+  JSON.stringify(packedContractSources) === JSON.stringify(contractSources),
+  `packed contract sources drifted from disk: add the missing file to the root \`files\` allowlist (packed ${JSON.stringify(packedContractSources)}, on disk ${JSON.stringify(contractSources)})`,
+);
 
 for (const packed of rootPackedPaths) {
   assert(!/(?:^|\/)__tests__\//u.test(packed), `packed archive exposes a test directory: ${packed}`);

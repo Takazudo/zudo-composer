@@ -35,11 +35,14 @@
     "plugins",
     "server",
     "src",
-    "packages/component-contract/src",
+    "packages/component-contract/src/fixtures.ts",
+    "packages/component-contract/src/index.ts",
+    "packages/component-contract/src/runtime.ts",
+    "packages/component-contract/src/types.ts",
+    "packages/component-contract/src/validation.ts",
     "!**/__tests__",
     "!**/type-tests",
     "!**/*.test.*",
-    "!packages/component-contract/src/*.test.ts",
     "!src/test"
   ],
   "engines": {
