@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, readFile, readdir, realpath } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { installedPackageDigest } from "./installed-identity";
 import { componentPack } from "@zudo-sg/ui/composer-pack";
 import { createComponentCatalog } from "../../src/composer/model/types";
 import { createSiteProjectApiService } from "../../src/site-project/api/service";
@@ -38,7 +40,8 @@ export function createLocalSiteProjectApiService(options: LocalSiteProjectServic
     const providerCommit = String(packageJson.dependencies["@zudo-sg/ui"]).split("#").at(-1)!;
     const contractText = await readFile(resolve(import.meta.dirname, "../../contract-handoff.json"), "utf8");
     if (!options.toolchain && providerCommit !== "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf") throw new Error("Pinned provider tree identity needs explicit verification.");
-    const toolchain: ReleaseToolchain = options.toolchain ?? { compiler: await compilerIdentity(), componentPack: { packId: catalog.pack.packId, packVersion: catalog.pack.packVersion, contractVersion: catalog.pack.contractVersion }, providerCommit, providerTree: "1c3cbfd3a25d1425f447cdadd5ba538916394309", contractDigest: sha(contractText) };
+    const installedRoot = await realpath(dirname(dirname(fileURLToPath(import.meta.resolve("@zudo-sg/ui/composer-pack")))));
+    const toolchain: ReleaseToolchain = options.toolchain ?? { compiler: await compilerIdentity(), componentPack: { packId: catalog.pack.packId, packVersion: catalog.pack.packVersion, contractVersion: catalog.pack.contractVersion }, providerCommit, providerTree: "1c3cbfd3a25d1425f447cdadd5ba538916394309", installedProviderDigest: await installedPackageDigest(installedRoot), contractDigest: sha(contractText) };
     let mediaStore = options.mediaStore;
     if (!mediaStore) { try { await lstat(join(mediaRoot, "catalog.json")); mediaStore = await createFilesystemMediaStore({ mediaStoreRoot: mediaRoot }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } }
     return createSiteProjectApiService({ componentCatalog: catalog, projectStore: store, buildStore: store, hash: async (text) => sha(text), toolchain, mediaStore });

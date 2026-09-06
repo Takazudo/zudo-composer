@@ -5,11 +5,48 @@ import { describe, expect, it } from "vitest";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
 import { compileSiteProject } from "../../../src/site-project/compiler";
 import { serializeSiteProject } from "../../../src/site-project/model/canonical";
-import { fixture, stageFor, sha, catalog } from "./release-fixture";
+import { fixture, stageFor, sha, catalog, review, call, PNG } from "./release-fixture";
 import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV } from "../store";
 const applyInput = (value = project()) => ({ project: value, stage: stageFor(value), expectedRevision: null, expectedActive: null, expectedGeneration: 0 });
 async function build(value = project()) { const compiled = await compileSiteProject(value, { componentCatalog: catalog }); if (compiled.status !== "ready") throw new Error("Fixture compile failed"); return compiled.build; }
 describe("immutable local release storage", () => {
+  it("restores the immediately preceding project head, not the greatest hash", async () => {
+    const { store } = await fixture();
+    const candidates = Array.from({ length: 8 }, (_, index) => applyInput({ ...project(), name: `Candidate ${index}` })).sort((a, b) => a.stage.buildId < b.stage.buildId ? -1 : 1);
+    const a = candidates[7]!, b = candidates[0]!, c = candidates[4]!;
+    await store.apply(a); await store.apply({ ...b, expectedRevision: a.stage.revision, expectedGeneration: 1 }); await store.apply({ ...c, expectedRevision: b.stage.revision, expectedGeneration: 2 });
+    expect(await store.discard({ projectId: c.stage.projectId, buildId: c.stage.buildId, expectedActive: null })).toMatchObject({ status: "ok" });
+    expect(await store.list()).toMatchObject({ status: "ok", value: { projects: [expect.objectContaining({ head: b.stage.revision })] } });
+  });
+  it("resumes a durable pinned Media copy without consulting unavailable source bytes", async () => {
+    const context = await fixture({ media: true }); const asset = await context.media!.upload({ fileName: "image.png", declaredMediaType: "image/png", bytes: PNG });
+    const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${asset.id}`;
+    const plan = await review(context.service, value); await call(context.service, "apply", { plan });
+    const staged = await context.store.getStage({ projectId: value.id, buildId: plan.buildId }); if (staged.status !== "ok") throw new Error("Stage missing");
+    const compiled = await compileSiteProject(plan.candidate, { componentCatalog: catalog, mediaLock: plan.mediaLock! }); if (compiled.status !== "ready") throw new Error("Compile blocked");
+    let once = true;
+    const faulty = createLocalSiteProjectStore({ testRoot: context.testRoot, componentPack: catalog.pack, readMedia: async () => (async function* () { yield PNG; })(), fault(point) { if (once && point === "after-rename") { once = false; throw new Error("Copy acknowledged late"); } } });
+    expect(await faulty.complete({ stage: staged.value, build: compiled.build })).toMatchObject({ status: "unavailable" });
+    let reads = 0; const retry = createLocalSiteProjectStore({ testRoot: context.testRoot, componentPack: catalog.pack, readMedia: async () => { reads++; throw new Error("Source offline"); } });
+    expect(await retry.complete({ stage: staged.value, build: compiled.build })).toMatchObject({ status: "ok" }); expect(reads).toBe(0);
+    await writeFile(join(context.testRoot, "builds", plan.buildId, `media-${asset.document.versions[0]!.url.split("/").at(-1)}`), "corrupt");
+    expect(await retry.getCompleted({ projectId: value.id, buildId: plan.buildId })).toMatchObject({ status: "unavailable" });
+  });
+  it.each(["apply", "build", "activate", "discard"].flatMap((operation) => ["unlink", "rmdir", "sync"].map((step) => ({ operation, step }))))("reports committed $operation cleanup $step as uncertain and retries idempotently", async ({ operation, step }) => {
+    const { store, testRoot } = await fixture(); const input = applyInput(), output = await build();
+    const identity = { projectId: input.stage.projectId, revision: input.stage.revision, buildId: input.stage.buildId };
+    if (operation !== "apply") await store.apply(input);
+    if (operation === "activate") await store.complete({ stage: input.stage, build: output });
+    let once = true; const faulty = createLocalSiteProjectStore({ testRoot, componentPack: catalog.pack, fault(point) { if (once && point === `lock-cleanup-${step}`) { once = false; throw new Error("Cleanup failed"); } } });
+    const run = (target: typeof store) => operation === "apply" ? target.apply(input) : operation === "build" ? target.complete({ stage: input.stage, build: output }) : operation === "activate" ? target.activate({ target: identity, expectedActive: null }) : target.discard({ projectId: identity.projectId, buildId: identity.buildId, expectedActive: null });
+    expect(await run(faulty)).toMatchObject({ status: "uncertain", identity, message: expect.stringContaining(identity.buildId) });
+    expect(await run(store)).toMatchObject({ status: "ok" });
+  });
+  it("keeps precommit cleanup failure distinct from a committed mutation", async () => {
+    const { testRoot } = await fixture(); let once = true;
+    const faulty = createLocalSiteProjectStore({ testRoot, componentPack: catalog.pack, fault(point) { if (point === "after-write") throw new Error("Write failed before commit"); if (once && point === "lock-cleanup-unlink") { once = false; throw new Error("Cleanup also failed"); } } });
+    expect(await faulty.apply(applyInput())).toMatchObject({ status: "unavailable" });
+  });
   it("hides abandoned files and can restage equivalent inputs with a new idempotent approval receipt", async () => {
     const { store } = await fixture(); const first = applyInput();
     expect(await store.apply({ ...first, verifyApproval: async () => false })).toEqual({ status: "conflict" });

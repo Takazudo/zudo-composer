@@ -16,7 +16,7 @@ export const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 export const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 export const catalog = createComponentCatalog({ ...componentCatalog.pack, components: componentCatalog.pack.components.map((component) => component.id !== "leaf" ? component : { ...component, fields: [...component.fields, { prop: "href", label: "Link", schema: { type: "string" }, editor: { kind: "text" } }] }) });
-export const toolchain = { compiler: "fixture/2", componentPack: { packId: catalog.pack.packId, packVersion: catalog.pack.packVersion, contractVersion: catalog.pack.contractVersion }, providerCommit: "a".repeat(40), providerTree: "b".repeat(40), contractDigest: "c".repeat(64) };
+export const toolchain = { compiler: "fixture/2", componentPack: { packId: catalog.pack.packId, packVersion: catalog.pack.packVersion, contractVersion: catalog.pack.contractVersion }, providerCommit: "a".repeat(40), providerTree: "b".repeat(40), installedProviderDigest: "e".repeat(64), contractDigest: "c".repeat(64) };
 export const PNG = Uint8Array.from([137,80,78,71,13,10,26,10,1,2,3,4]);
 export async function fixture(options: LocalSiteProjectStoreOptions & { media?: boolean } = {}) {
   const parent = await mkdtemp(join(tmpdir(), "release-v2-")); roots.push(parent);

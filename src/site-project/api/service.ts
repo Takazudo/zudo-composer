@@ -28,7 +28,9 @@ function parse(value: unknown): SiteProjectApiRequest | SiteProjectApiResponse {
   }
   return value as unknown as SiteProjectApiRequest;
 }
-const adapterFailure = (result: { status: string; message?: string }) => fail(result.status === "conflict" ? "conflict" : result.status === "not-found" ? "not-found" : result.status === "uncertain" ? "commit-uncertain" : "unavailable", result.message ?? `Release storage ${result.status}.`);
+const adapterFailure = (result: { status: string; message?: string; identity?: SiteProjectActiveSelection }): SiteProjectApiResponse => result.status === "uncertain"
+  ? { ok: false, error: { code: "commit-uncertain", message: result.message ?? "Commit acknowledgment is uncertain.", ...(result.identity ? { identity: result.identity } : {}) } }
+  : fail(result.status === "conflict" ? "conflict" : result.status === "not-found" ? "not-found" : "unavailable", result.message ?? `Release storage ${result.status}.`);
 export function createSiteProjectApiService(dependencies: SiteProjectApiDependencies): SiteProjectApiService {
   if (!validateReleaseToolchain(dependencies.toolchain) || releaseJson(dependencies.toolchain.componentPack) !== releaseJson({ packId: dependencies.componentCatalog.pack.packId, packVersion: dependencies.componentCatalog.pack.packVersion, contractVersion: dependencies.componentCatalog.pack.contractVersion })) throw new TypeError("Release toolchain must match the exact installed component catalog.");
   const compiler = dependencies.compiler ?? compileSiteProject;

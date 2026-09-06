@@ -43,8 +43,12 @@ checksum/signature/size-verify exact retained versions; they do not copy all Med
 files or fetch latest. Each build's `media-sha256-…` file maps to its pin's
 `/uploaded-media/sha256-…` URL for a later explicit artifact exporter.
 
-The local toolchain binds the installed provider Git commit/tree, component-pack
-identity, contract handoff digest, and a fingerprint of production headless
+The local toolchain records the declared provider Git commit/tree separately from
+`installedProviderDigest`, a SHA-256 attestation of the actual resolved installed
+package's stable relative paths, permission modes and file bytes. Its traversal
+rejects internal symlinks/special files and detects entry/root changes. Altering
+installed runtime bytes changes the build identity, regardless of package URL.
+The toolchain also binds component-pack identity, contract handoff digest, and a fingerprint of production headless
 compiler/domain/contract source. An incomplete stage cannot be compiled using a
 different toolchain. Already completed artifacts remain readable/activatable
 without recompiling them through newer tools.
@@ -180,7 +184,7 @@ The default private root is `.zudo-site-project`; `ZUDO_SITE_PROJECT_ROOT` suppl
 an explicit disposable root for isolated tests. Layout:
 
 ```text
-heads.json                       current stage catalog/generation/approval receipts
+heads.json                       stage order, heads, generation, approval/discard receipts
 active.json                      sole active project/revision/buildId triple
 projects/PROJECT/REVISION.json    immutable canonical project
 stages/BUILD_ID.json              immutable lock/toolchain/publication inputs
@@ -192,15 +196,26 @@ Exclusive process locks, regular-file/no-symlink checks, pinned root checks,
 file fsync and parent-directory fsync protect mutations. Unknown layouts and
 unsafe paths fail closed. A live writer lock is never stolen. A provably dead
 writer can be recovered; an ownerless/invalid lock requires explicit inspection.
-Durable partial stage/build files can be retried with the same inputs; completed
+Stage application order is persisted explicitly, not inferred from build hashes:
+discarding the current C in A→B→C restores B. Discard receipts make retry of a
+committed discard idempotent. Durable partial stage/build files can be retried
+with the same inputs. A valid already-copied Media destination is verified by
+path, size, signature/MIME and digest before any source reader is consulted, so
+retry can complete while that source is unavailable. Corrupt destinations block.
+Completed
 outputs cannot be repaired by silently overwriting conflicting bytes.
 
-`commit-uncertain` (CLI exit 1) after an atomic pointer/catalog rename means the operation may have committed but its
+`commit-uncertain` (CLI exit 1) after an atomic pointer/catalog rename or lock
+cleanup failure after a logical stage/build/activation/discard commit identifies
+the exact project/revision/build identity. The operation may have committed but its
 acknowledgment was lost. Inspect `list`, `active`, and `completed`, then retry the
 same approved identity; do not construct a new blind mutation. Failed staging or
 building cannot change active. Activation failures before pointer replacement
 leave it unchanged; an uncertain activation is resolved by exact-state inspection
-and idempotent retry. Preserve the old root before any explicit clean reset.
+and idempotent retry. Phase-aware lock cleanup tracks owner removal, directory
+removal and root sync separately; retries cannot delete a later writer's lock.
+Precommit cleanup failures remain unavailable, not falsely committed.
+Preserve the old root before any explicit clean reset.
 
 Focused API/store/CLI tests cover selection, digests/CAS, interrupted writes,
 immutable Media copies, completion corruption, symlinks and concurrent writers.

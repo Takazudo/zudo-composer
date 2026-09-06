@@ -22,12 +22,14 @@ const configuredLocalRoot = () => process.env[SITE_PROJECT_LOCAL_ROOT_ENV]?.trim
 const SHA = /^[a-f0-9]{64}$/;
 const hash = (text: string | Uint8Array) => createHash("sha256").update(text).digest("hex");
 const unavailable = (error: unknown) => ({ status: "unavailable" as const, message: error instanceof Error ? error.message : "Release storage unavailable." });
-class ReleaseCommitUncertainError extends Error {}
-const mutationFailure = (error: unknown) => error instanceof ReleaseCommitUncertainError ? { status: "uncertain" as const, message: error.message } : unavailable(error);
+class ReleaseCommitUncertainError extends Error { constructor(message: string, readonly identity: SiteProjectActiveSelection, options: ErrorOptions) { super(message, options); } }
+const mutationFailure = (error: unknown) => error instanceof ReleaseCommitUncertainError ? { status: "uncertain" as const, message: error.message, identity: error.identity } : unavailable(error);
 const inside = (root: string, path: string) => { const part = relative(root, path); return part === "" || (part !== ".." && !part.startsWith(`..${sep}`) && !isAbsolute(part)); };
 const exists = async (path: string) => { try { await lstat(path); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; } };
 async function syncDirectory(path: string) { const handle = await open(path, "r"); try { await handle.sync(); } finally { await handle.close(); } }
-interface Heads { schemaVersion: 2; generation: number; projects: Record<string, { revision: string; buildId: string }>; stages: string[]; approvals: Record<string, string> }
+interface Heads { schemaVersion: 2; generation: number; projects: Record<string, { revision: string; buildId: string }>; stageOrder: string[]; approvals: Record<string, string>; discarded: Record<string, SiteProjectActiveSelection> }
+interface CommitState { identity?: SiteProjectActiveSelection }
+interface CleanupTicket { path: string; owner: string; inode: number; phase: "owner" | "directory" | "sync" }
 export interface LocalSiteProjectStoreOptions {
   testRoot?: string; lockTimeoutMs?: number; fault?(point: string): void | Promise<void>;
   componentPack?: ComponentPackManifest;
@@ -46,6 +48,9 @@ function validStage(value: unknown): value is StagedRelease {
 export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProjectBuildAdapter {
   readonly root: string;
   private pinnedRoot?: string;
+  private commitState?: CommitState;
+  private pendingCleanup?: CleanupTicket;
+  private cleanupRetry?: Promise<void>;
   constructor(private readonly options: LocalSiteProjectStoreOptions = {}) { this.root = resolve(options.testRoot ?? configuredLocalRoot()); }
   private hit(point: string) { return this.options.fault?.(point); }
   private async directory(path: string) {
@@ -75,7 +80,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     try { const info = await handle.stat(); const current = await lstat(path); if (!info.isFile() || info.ino !== current.ino || info.dev !== current.dev) throw new Error("Release file changed during read."); return await handle.readFile(); } finally { await handle.close(); }
   }
   private async json(path: string): Promise<unknown> { const text = (await this.read(path)).toString("utf8"); const value = JSON.parse(text); if (releaseJson(value) !== text) throw new Error("Noncanonical release data."); return value; }
-  private async write(path: string, bytes: string | Uint8Array, immutable = false) {
+  private async write(path: string, bytes: string | Uint8Array, immutable = false, commit?: SiteProjectActiveSelection) {
     await this.file(path);
     if (immutable && await exists(path)) { if (!(await this.read(path)).equals(Buffer.from(bytes))) throw new Error("Immutable release output conflicts."); return; }
     const temp = join(dirname(path), `.release-tmp-${process.pid}-${randomBytes(12).toString("hex")}`);
@@ -83,10 +88,12 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     try { await handle.writeFile(bytes); await this.hit("after-write"); await handle.sync(); await this.hit("after-file-sync"); } finally { await handle.close(); }
     await this.hit("after-close"); await this.file(path); await this.hit("before-rename");
     await rename(temp, path);
+    if (commit && this.commitState) this.commitState.identity = { ...commit };
     try { await this.hit("after-rename"); await syncDirectory(dirname(path)); await this.hit("after-directory-sync"); }
-    catch (error) { if (!immutable) throw new ReleaseCommitUncertainError("Release commit acknowledgment is uncertain. Inspect exact stage/active state before retrying the same identity.", { cause: error }); throw error; }
+    catch (error) { if (commit) throw new ReleaseCommitUncertainError(`Release commit acknowledgment is uncertain. Inspect exact identity ${releaseJson(commit).trim()} before retrying.`, commit, { cause: error }); throw error; }
   }
   private async lock<T>(action: () => Promise<T>): Promise<T> {
+    await this.retryCleanup();
     await this.ensureRoot(); const path = join(this.root, ".transaction-lock"); const deadline = Date.now() + (this.options.lockTimeoutMs ?? 10_000);
     const nonce = randomBytes(12).toString("hex"), owner = releaseJson({ pid: process.pid, nonce });
     while (true) {
@@ -98,10 +105,33 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
         await new Promise((resolveWait) => setTimeout(resolveWait, 10));
       }
     }
+    const state: CommitState = {}; this.commitState = state;
+    const cleanup: CleanupTicket = { path, owner, inode: (await lstat(path)).ino, phase: "owner" };
     try {
       await this.verifyLayout();
       return await action();
-    } finally { await this.releaseLock(path, owner); }
+    } finally { await this.finishOperation(cleanup, state); }
+  }
+  private async finishOperation(ticket: CleanupTicket, state: CommitState) {
+    try { await this.releaseLock(ticket); }
+    catch (error) {
+      this.pendingCleanup = ticket;
+      // Phase-aware retry never removes a later writer's lock. A persistent
+      // failure keeps the ticket for this instance's next recovery attempt.
+      try { await this.retryCleanup(); } catch { /* Original outcome remains explicit. */ }
+      if (state.identity) throw new ReleaseCommitUncertainError(`Release committed but lock cleanup failed. Inspect exact identity ${releaseJson(state.identity).trim()} before retrying.`, state.identity, { cause: error });
+      throw error;
+    }
+  }
+  private async retryCleanup() {
+    if (!this.pendingCleanup) return;
+    if (!this.cleanupRetry) {
+      const ticket = this.pendingCleanup;
+      const retry = this.releaseLock(ticket).then(() => { if (this.pendingCleanup === ticket) this.pendingCleanup = undefined; });
+      this.cleanupRetry = retry;
+      void retry.finally(() => { if (this.cleanupRetry === retry) this.cleanupRetry = undefined; }).catch(() => undefined);
+    }
+    await this.cleanupRetry;
   }
   private async recoverDeadWriter(path: string): Promise<boolean> {
     const recovery = join(this.root, ".recovery-lock");
@@ -129,7 +159,17 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     const info = await lstat(path); if (!info.isDirectory() || info.isSymbolicLink() || info.ino !== inode || await realpath(this.root) !== this.pinnedRoot) throw new Error("Recovery lock ownership changed.");
     await rmdir(path); await syncDirectory(this.root);
   }
-  private async releaseLock(path: string, owner: string) { if (await readFile(join(path, "owner.json"), "utf8") !== owner) throw new Error("Release lock ownership changed."); await unlink(join(path, "owner.json")); await rmdir(path); await syncDirectory(this.root); }
+  private async releaseLock(ticket: CleanupTicket) {
+    const { path, owner, inode } = ticket;
+    if (ticket.phase !== "sync") { const info = await lstat(path); if (!info.isDirectory() || info.isSymbolicLink() || info.ino !== inode || await realpath(this.root) !== this.pinnedRoot) throw new Error("Release lock ownership changed."); }
+    if (ticket.phase === "owner") {
+      const ownerPath = join(path, "owner.json"), info = await lstat(ownerPath);
+      if (!info.isFile() || info.isSymbolicLink() || await readFile(ownerPath, "utf8") !== owner) throw new Error("Release lock ownership changed.");
+      await this.hit("lock-cleanup-unlink"); await unlink(ownerPath); ticket.phase = "directory";
+    }
+    if (ticket.phase === "directory") { await this.hit("lock-cleanup-rmdir"); await rmdir(path); ticket.phase = "sync"; }
+    await this.hit("lock-cleanup-sync"); await syncDirectory(this.root);
+  }
   private async verifyLayout() {
     const temporary = (name: string) => /^\.release-tmp-\d+-[a-f0-9]{24}$/.test(name);
     for (const entry of await readdir(this.root, { withFileTypes: true })) {
@@ -143,16 +183,16 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     }
   }
   private async heads(): Promise<Heads> {
-    const path = join(this.root, "heads.json"); if (!await exists(path)) return { schemaVersion: 2, generation: 0, projects: {}, stages: [], approvals: {} };
+    const path = join(this.root, "heads.json"); if (!await exists(path)) return { schemaVersion: 2, generation: 0, projects: {}, stageOrder: [], approvals: {}, discarded: {} };
     const value = await this.json(path) as Heads;
-    if (!value || Object.keys(value).sort().join(",") !== "approvals,generation,projects,schemaVersion,stages" || value.schemaVersion !== 2 || !Number.isSafeInteger(value.generation) || value.generation < 0 || !value.projects || typeof value.projects !== "object" || Array.isArray(value.projects) || !value.approvals || typeof value.approvals !== "object" || Array.isArray(value.approvals) || !Array.isArray(value.stages) || new Set(value.stages).size !== value.stages.length || value.stages.some((id) => !SHA.test(id)) || Object.entries(value.approvals).some(([digest, id]) => !SHA.test(digest) || !value.stages.includes(id))) throw new Error("Invalid release heads schema.");
+    if (!value || Object.keys(value).sort().join(",") !== "approvals,discarded,generation,projects,schemaVersion,stageOrder" || value.schemaVersion !== 2 || !Number.isSafeInteger(value.generation) || value.generation < 0 || !value.discarded || typeof value.discarded !== "object" || Array.isArray(value.discarded) || Object.entries(value.discarded).some(([id, target]) => !validActive(target) || id !== target.buildId) || !value.projects || typeof value.projects !== "object" || Array.isArray(value.projects) || !value.approvals || typeof value.approvals !== "object" || Array.isArray(value.approvals) || !Array.isArray(value.stageOrder) || new Set(value.stageOrder).size !== value.stageOrder.length || value.stageOrder.some((id) => !SHA.test(id)) || Object.entries(value.approvals).some(([digest, id]) => !SHA.test(digest) || !value.stageOrder.includes(id))) throw new Error("Invalid release heads schema.");
     for (const [projectId, head] of Object.entries(value.projects)) if (!validActive({ projectId, ...head })) throw new Error("Invalid project head.");
     return value;
   }
   private async active(): Promise<SiteProjectActiveSelection | null> { const path = join(this.root, "active.json"); if (!await exists(path)) return null; const value = await this.json(path); if (!validActive(value)) throw new Error("Invalid active release pointer."); return value; }
   private async stage(projectId: string, buildId: string): Promise<StagedRelease | undefined> {
     if (!isSafeRecordId(projectId) || !SHA.test(buildId)) throw new Error("Unsafe stage identity.");
-    if (!(await this.heads()).stages.includes(buildId)) return undefined;
+    if (!(await this.heads()).stageOrder.includes(buildId)) return undefined;
     const value = await this.json(join(this.root, "stages", `${buildId}.json`));
     if (!validStage(value) || value.buildId !== buildId || !await this.stored(value.projectId, value.revision)) throw new Error("Corrupt staged release."); return value.projectId === projectId ? value : undefined;
   }
@@ -177,11 +217,12 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     const build = await this.json(join(directory, "build.json")) as SiteBuildPlan;
     if (build.projectId !== projectId) throw new Error("Completed build project differs.");
     for (const pin of stage.mediaLock?.pins ?? []) if (complete.files[`media-${basename(pin.url)}`] !== pin.checksum) throw new Error("Completed build omits pinned Media bytes.");
+    await syncDirectory(directory);
     return { ...complete, build, stage };
   }
   private async visibleStages(): Promise<StagedRelease[]> {
     const values: StagedRelease[] = [];
-    for (const id of (await this.heads()).stages) { const value = await this.json(join(this.root, "stages", `${id}.json`)); if (!validStage(value) || value.buildId !== id || !await this.stored(value.projectId, value.revision)) throw new Error("Retained staged inputs are corrupt or missing."); values.push(value); }
+    for (const id of (await this.heads()).stageOrder) { const value = await this.json(join(this.root, "stages", `${id}.json`)); if (!validStage(value) || value.buildId !== id || !await this.stored(value.projectId, value.revision)) throw new Error("Retained staged inputs are corrupt or missing."); values.push(value); }
     return values;
   }
   async list(): ReturnType<SiteProjectStoreAdapter["list"]> {
@@ -233,16 +274,31 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       }
       await this.write(stagePath, releaseJson(retainedStage), true); await this.hit("stage-files-durable");
       if (input.verifyApproval && !await input.verifyApproval()) return { status: "conflict" as const };
-      heads.projects[input.project.id] = { revision: input.stage.revision, buildId: input.stage.buildId }; if (!heads.stages.includes(input.stage.buildId)) heads.stages.push(input.stage.buildId); heads.stages.sort(); heads.approvals[input.stage.planDigest] = input.stage.buildId; heads.generation++;
-      await this.write(join(this.root, "heads.json"), releaseJson(heads));
+      heads.projects[input.project.id] = { revision: input.stage.revision, buildId: input.stage.buildId }; heads.stageOrder = heads.stageOrder.filter((id) => id !== input.stage.buildId); heads.stageOrder.push(input.stage.buildId); heads.approvals[input.stage.planDigest] = input.stage.buildId; delete heads.discarded[input.stage.buildId]; heads.generation++;
+      await this.write(join(this.root, "heads.json"), releaseJson(heads), false, { projectId: input.stage.projectId, revision: input.stage.revision, buildId: input.stage.buildId });
       return { status: "ok" as const, value: { revision: input.stage.revision, buildId: input.stage.buildId, active } };
     }); } catch (error) { return mutationFailure(error); }
   }
   async activate(input: Parameters<SiteProjectStoreAdapter["activate"]>[0]): ReturnType<SiteProjectStoreAdapter["activate"]> {
-    try { return await this.lock(async () => { if (!validActive(input.target)) throw new Error("Invalid activation identity."); const completed = await this.completed(input.target.projectId, input.target.buildId); if (!completed || !sameRelease(completed.identity, input.target)) return { status: "not-found" as const }; const current = await this.active(); if (sameRelease(current, input.target)) return { status: "ok" as const, value: { active: input.target } }; if (!sameRelease(current, input.expectedActive)) return { status: "conflict" as const }; await this.hit("before-active-write"); await this.write(join(this.root, "active.json"), releaseJson(input.target)); return { status: "ok" as const, value: { active: input.target } }; }); } catch (error) { return mutationFailure(error); }
+    try { return await this.lock(async () => { if (!validActive(input.target)) throw new Error("Invalid activation identity."); const completed = await this.completed(input.target.projectId, input.target.buildId); if (!completed || !sameRelease(completed.identity, input.target)) return { status: "not-found" as const }; const current = await this.active(); if (sameRelease(current, input.target)) return { status: "ok" as const, value: { active: input.target } }; if (!sameRelease(current, input.expectedActive)) return { status: "conflict" as const }; await this.hit("before-active-write"); await this.write(join(this.root, "active.json"), releaseJson(input.target), false, input.target); return { status: "ok" as const, value: { active: input.target } }; }); } catch (error) { return mutationFailure(error); }
   }
   async discard(input: Parameters<SiteProjectStoreAdapter["discard"]>[0]): ReturnType<SiteProjectStoreAdapter["discard"]> {
-    try { return await this.lock(async () => { const stage = await this.stage(input.projectId, input.buildId); if (!stage) return { status: "not-found" as const }; const active = await this.active(); if (!sameRelease(active, input.expectedActive) || active?.buildId === input.buildId || await exists(join(this.root, "builds", input.buildId, "complete.json"))) return { status: "conflict" as const }; const heads = await this.heads(); heads.stages = heads.stages.filter((id) => id !== input.buildId); heads.approvals = Object.fromEntries(Object.entries(heads.approvals).filter(([, id]) => id !== input.buildId)); if (heads.projects[input.projectId]?.buildId === input.buildId) { const remaining = []; for (const id of heads.stages) { const item = await this.stage(input.projectId, id); if (item) remaining.push(item); } const next = remaining.at(-1); if (next) heads.projects[input.projectId] = { revision: next.revision, buildId: next.buildId }; else delete heads.projects[input.projectId]; } heads.generation++; await this.write(join(this.root, "heads.json"), releaseJson(heads)); return { status: "ok" as const, value: { active } }; }); } catch (error) { return mutationFailure(error); }
+    try { return await this.lock(async () => {
+      const heads = await this.heads(), active = await this.active();
+      if (heads.discarded[input.buildId]?.projectId === input.projectId) return { status: "ok" as const, value: { active } };
+      const stage = await this.stage(input.projectId, input.buildId); if (!stage) return { status: "not-found" as const };
+      if (!sameRelease(active, input.expectedActive) || active?.buildId === input.buildId || await exists(join(this.root, "builds", input.buildId, "complete.json"))) return { status: "conflict" as const };
+      heads.stageOrder = heads.stageOrder.filter((id) => id !== input.buildId);
+      heads.approvals = Object.fromEntries(Object.entries(heads.approvals).filter(([, id]) => id !== input.buildId));
+      if (heads.projects[input.projectId]?.buildId === input.buildId) {
+        const remaining = []; for (const id of heads.stageOrder) { const item = await this.stage(input.projectId, id); if (item) remaining.push(item); }
+        const next = remaining.at(-1); if (next) heads.projects[input.projectId] = { revision: next.revision, buildId: next.buildId }; else delete heads.projects[input.projectId];
+      }
+      const identity = { projectId: stage.projectId, revision: stage.revision, buildId: stage.buildId };
+      heads.discarded[input.buildId] = identity; heads.generation++;
+      await this.write(join(this.root, "heads.json"), releaseJson(heads), false, identity);
+      return { status: "ok" as const, value: { active } };
+    }); } catch (error) { return mutationFailure(error); }
   }
   async complete(input: { stage: StagedRelease; build: SiteBuildPlan }): ReturnType<SiteProjectBuildAdapter["complete"]> {
     try { return await this.lock(async () => {
@@ -255,6 +311,14 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       const fileDigests = new Map([...outputs].map(([name, bytes]) => [name, hash(bytes)]));
       for (const pin of stage.mediaLock?.pins ?? []) {
         const name = `media-${basename(pin.url)}`; if (fileDigests.has(name)) continue;
+        const destination = join(directory, name);
+        if (await exists(destination)) {
+          await this.file(destination);
+          const info = await lstat(destination); if (info.size !== pin.byteLength || info.size > 25 * 1024 * 1024) throw new Error("Existing pinned Media size differs.");
+          const bytes = await this.read(destination);
+          if (hash(bytes) !== pin.checksum || sniffMedia(bytes.subarray(0, 16))?.mediaType !== pin.mediaType) throw new Error("Existing pinned Media integrity differs.");
+          await syncDirectory(directory); fileDigests.set(name, pin.checksum); continue;
+        }
         if (!this.options.readMedia) throw new Error("Exact Media byte reader unavailable.");
         const parts: Uint8Array[] = []; let length = 0; const checksum = createHash("sha256");
         for await (const chunk of await this.options.readMedia(pin)) { length += chunk.byteLength; if (length > pin.byteLength || length > 25 * 1024 * 1024) throw new Error("Pinned Media byte size exceeded."); checksum.update(chunk); parts.push(chunk); }
@@ -267,7 +331,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       await this.hit("build-files-durable");
       const identity = { projectId: stage.projectId, revision: stage.revision, buildId: stage.buildId }, files = Object.fromEntries(fileDigests);
       const marker = { schemaVersion: 2, identity, files, completionDigest: hash(releaseJson({ identity, files })) };
-      await this.write(join(directory, "complete.json"), releaseJson(marker), true); await syncDirectory(directory);
+      await this.write(join(directory, "complete.json"), releaseJson(marker), true, identity); await syncDirectory(directory);
       return { status: "ok" as const, value: (await this.completed(stage.projectId, stage.buildId))! };
     }); } catch (error) { return mutationFailure(error); }
   }
