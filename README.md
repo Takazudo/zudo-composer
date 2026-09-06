@@ -50,6 +50,56 @@ uses the bundled sample; local project state is disposable and ignored.
 Hosted persistence, a hosted API, and authentication are future adapter work;
 nothing in this repository claims them.
 
+## Installing into a host project
+
+`zudo-composer` is installed by the project it authors. There is no registry
+release; hosts resolve it from an exact Git commit, alongside the component
+contract, which the package declares as a **peer dependency** so the host's own
+`defineComponent` sidecars type against a single instance:
+
+```sh
+pnpm add -D \
+  "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
+  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#9b774b827e9f6fec14379995ac2c691ccc3b7e5b"
+```
+
+The host then declares `zudo-composer.config.ts` at its own root and runs the
+bin. `pack` is the only setting without a default:
+
+```ts
+import { defineComposerConfig } from "zudo-composer/config";
+
+export default defineComposerConfig({
+  pack: "@zudo-sg/ui/composer-pack",
+});
+```
+
+```jsonc
+// package.json
+{ "scripts": { "dev": "zudo-composer dev" } }
+```
+
+The package publishes five entry points. Everything else is internal:
+
+| Specifier | What it is |
+| --- | --- |
+| `zudo-composer` | `startComposerDevServer` / `resolveComposerDevConfig` |
+| `zudo-composer/config` | `defineComposerConfig` and the config types |
+| `zudo-composer/vite` | the composer Vite plugins, for a host-authored config |
+| `zudo-composer/styles` | the canonical Composer stylesheet |
+| `zudo-composer/package.json` | the manifest |
+
+Vite and its Preact/Tailwind plugins are runtime `dependencies` rather than
+`devDependencies`: they are dev-only for *this* repository but are loaded by the
+installed launcher, so a host must receive them. The published archive ships the
+TypeScript sources under `src/`, `server/`, and `plugins/` — not a built
+`dist/` — because the launcher evaluates them through Vite, and it retains
+`contract-handoff.json` and `packages/component-contract/src`, which the
+SiteProject toolchain reads to compute release identity.
+
+`fixtures/host/` is the in-repo dogfood host: the smallest project that installs
+the package and runs its bin.
+
 ## Development and validation
 
 Use Node.js 22.13.0+ or 24.0.0+ and pnpm 11.5.2 through Corepack:
@@ -131,9 +181,10 @@ consumers use the package-only commit recorded by
 - exact external Git spec:
   `git+https://github.com/Takazudo/zudo-composer.git#9b774b827e9f6fec14379995ac2c691ccc3b7e5b`
 
-The monorepo itself intentionally resolves this contract with `workspace:*`.
-That local workspace relationship must not be confused with, or used in place
-of, the immutable external UI-provider Git dependency.
+The monorepo itself intentionally resolves this contract with `workspace:*`, as
+a dev dependency; the published manifest declares it as a peer dependency so a
+host installs exactly one instance. Neither relationship may be confused with,
+or used in place of, the immutable external UI-provider Git dependency.
 
 ## No deployment target
 

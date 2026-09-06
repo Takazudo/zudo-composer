@@ -30,7 +30,13 @@ assert.deepEqual(SITE_ROUTES, [
 ]);
 assert.deepEqual(SPA_ROUTES, [...AUTHORING_ROUTES, ...SITE_ROUTES]);
 assert.equal(packageJson.dependencies["@zudo-sg/ui"], providerSpec);
-assert.equal(packageJson.dependencies["@zudo-composer/component-contract"], "workspace:*");
+// The contract is a peer of the published package and a workspace dev
+// dependency of this repository. Both halves are load-bearing: the peer keeps a
+// host on one contract instance, the dev spec keeps `workspace:*` out of what
+// ships.
+assert.equal(packageJson.peerDependencies["@zudo-composer/component-contract"], "1.0.0");
+assert.equal(packageJson.devDependencies["@zudo-composer/component-contract"], "workspace:*");
+assert.equal(packageJson.dependencies["@zudo-composer/component-contract"], undefined);
 assert.equal(contractHandoff.rootGitSpec, contractSpec);
 assert.equal(packageJson.scripts["handoff:boundary"], "node scripts/check-standalone-handoff.mjs");
 assert.ok(packageJson.scripts.check.includes("pnpm handoff:boundary"));

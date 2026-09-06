@@ -26,15 +26,24 @@ importers:
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
-      '@zudo-composer/component-contract':
-        specifier: workspace:*
-        version: link:packages/component-contract
+      '@preact/preset-vite':
+        specifier: ^2.10.6
+        version: 2.10.6(@babel/core@7.29.7)(preact@10.29.8)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12))
+      '@tailwindcss/vite':
+        specifier: ^4.3.3
+        version: 4.3.3(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12))
       '@zudo-sg/ui':
         specifier: git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf
         version: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)
       preact:
         specifier: ^10.29.8
         version: 10.29.8(preact-render-to-string@6.7.0)
+      tailwindcss:
+        specifier: ^4.3.3
+        version: 4.3.3
+      vite:
+        specifier: ^8.2.2
+        version: 8.2.2(@types/node@26.4.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)
       zod:
         specifier: ^4.0.0
         version: 4.4.3
@@ -45,12 +54,6 @@ importers:
       '@playwright/test':
         specifier: ^1.62.1
         version: 1.62.1
-      '@preact/preset-vite':
-        specifier: ^2.10.6
-        version: 2.10.6(@babel/core@7.29.7)(preact@10.29.8)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12))
-      '@tailwindcss/vite':
-        specifier: ^4.3.3
-        version: 4.3.3(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12))
       '@testing-library/dom':
         specifier: ^10.4.1
         version: 10.4.1
@@ -63,6 +66,9 @@ importers:
       '@types/node':
         specifier: ^26.4.0
         version: 26.4.0
+      '@zudo-composer/component-contract':
+        specifier: workspace:*
+        version: link:packages/component-contract
       eslint:
         specifier: ^10.9.1
         version: 10.9.1(jiti@2.7.0)
@@ -75,9 +81,6 @@ importers:
       preact-render-to-string:
         specifier: ^6.6.6
         version: 6.7.0(preact@10.29.8)
-      tailwindcss:
-        specifier: ^4.3.3
-        version: 4.3.3
       tsx:
         specifier: ^4.20.5
         version: 4.23.12
@@ -87,15 +90,15 @@ importers:
       typescript-eslint:
         specifier: ^8.68.0
         version: 8.68.0(eslint@10.9.1(jiti@2.7.0))(typescript@6.0.3)
-      vite:
-        specifier: ^8.2.2
-        version: 8.2.2(@types/node@26.4.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@26.4.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12))
 
   fixtures/host:
     devDependencies:
+      '@zudo-composer/component-contract':
+        specifier: workspace:*
+        version: link:../../packages/component-contract
       zudo-composer:
         specifier: workspace:*
         version: link:../..
