@@ -1,6 +1,7 @@
 import { isSiteProjectProviderId, serializeSiteProject, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project";
 import { isSafeRecordId } from "../shared";
 import { notifyPersistenceChange, requestValue } from "../shared/persistence-generation";
+import { CATALOG_EDITORIAL_ATTEMPT_ID } from "../site-project/sample/catalog-editorial";
 
 export const WORKSPACE_DATABASE_NAME = "zudo-composer-workspaces-v1";
 export type WorkspaceProjectMetadata = Omit<SiteProject, "providers"> & { providers: { [K in keyof SiteProject["providers"]]: readonly { id: SiteProject["providers"][K][number]["id"] }[] } };
@@ -117,10 +118,16 @@ export function createWorkspaceStorage(factory: IDBFactory | null | undefined) {
     },
     async create(project: SiteProject, baselineRevision: string, id: string = crypto.randomUUID(), requiresBeforeComplete = false): Promise<WorkspaceRecord> {
       workspaceDatabaseName("validate", id);
-      return transaction("readwrite", async (records) => {
+      return transaction("readwrite", async (records, selection) => {
         const existing: unknown = await requestValue(records.get(id));
         if (existing !== undefined) {
           const record = validate(existing);
+          // Return this exact guarded cleanup attempt only to finish deletion.
+          // Its old source must never be seeded as the newly requested project.
+          if (id === CATALOG_EDITORIAL_ATTEMPT_ID && record.seedCleanupPending) {
+            if (record.status === "seeding" && record.requiresBeforeComplete && requiresBeforeComplete && await requestValue(selection.get("active")) !== id) return record;
+            throw new Error("Example cleanup requires an unselected guarded seeding attempt.");
+          }
           if (record.status !== "seeding" || Boolean(record.requiresBeforeComplete) !== requiresBeforeComplete || record.baselineRevision !== baselineRevision || !record.seed || serializeSiteProject(record.seed) !== serializeSiteProject(project)) throw new Error(`Workspace attempt ${id} already exists with a different or completed identity; open it explicitly.`);
           return record;
         }

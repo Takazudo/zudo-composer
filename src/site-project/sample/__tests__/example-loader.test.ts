@@ -17,7 +17,7 @@ import { captureSiteProjectMediaLock } from "../../media/capture";
 import { createReleasePlan } from "../../api/review";
 import type { SiteProjectApiDependencies } from "../../api/types";
 import { loadSampleSiteProject } from "../index";
-import { CATALOG_EDITORIAL_IDS as IDS, loadCatalogEditorialSiteProject } from "../catalog-editorial";
+import { CATALOG_EDITORIAL_ATTEMPT_ID, CATALOG_EDITORIAL_IDS as IDS, loadCatalogEditorialSiteProject } from "../catalog-editorial";
 import { createCatalogEditorialExample, EXAMPLE_PDF_URL } from "../example-loader";
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
@@ -58,7 +58,7 @@ it.each(["replace", "trash"] as const)("rejects Media %s after seed validation a
   expect((await records()).map((record) => record.id)).toEqual([original.workspace.id]);
   expect((await factory.databases()).some(({ name }) => name?.endsWith(attemptId))).toBe(false);
 });
-it("retains one blocked cleanup identity, waits out queued deletion and reseeds partial databases idempotently", async () => {
+it.each(["unchanged", "trash", "replace"] as const)("retains one blocked cleanup identity and reseeds CURRENT data after Media is %s", async (mutation) => {
   const fixture = await setup(), { original, storage, factory, records } = await workspaceSetup();
   const deletes = vi.spyOn(factory, "deleteDatabase");
   let held!: IDBDatabase, attemptId = "";
@@ -74,6 +74,11 @@ it("retains one blocked cleanup identity, waits out queued deletion and reseeds 
     await expect(first()).rejects.toThrow("cleanup is incomplete");
     expect(await records()).toHaveLength(2);
     expect(await storage.open(attemptId)).toMatchObject({ status: "seeding", seedCleanupPending: true });
+    expect(attemptId).toBe(CATALOG_EDITORIAL_ATTEMPT_ID);
+    const oldRevision = (await storage.open(attemptId))!.baselineRevision;
+    const oldMedia = (await fixture.store.snapshot()).records[0]!;
+    if (mutation === "trash") await fixture.store.trash(oldMedia.id, { expectedRevision: oldMedia.revision });
+    if (mutation === "replace") await fixture.store.replace(oldMedia.id, { bytes: new TextEncoder().encode("%PDF-1.4\nreplacement") }, { expectedRevision: oldMedia.revision });
     await expect(original.workspace.open(attemptId)).rejects.toThrow("original validated loader");
     const retry = () => createCatalogEditorialExample({ ...fixture, confirmed: true, context, loadExample: (project, revision, commit) => {
       expect(commit.attemptId).toBe(attemptId);
@@ -81,6 +86,7 @@ it("retains one blocked cleanup identity, waits out queued deletion and reseeds 
     } });
     await expect(retry()).rejects.toThrow("cleanup is incomplete");
     expect(await records()).toHaveLength(2); expect((await storage.open())!.id).toBe(original.workspace.id);
+    expect((await storage.open(attemptId))!.baselineRevision).toBe(oldRevision);
     expect(deletes.mock.calls.filter(([name]) => name === workspaceDatabaseName(COMPOSER_DATABASE_NAME, attemptId))).toHaveLength(1);
     held.close();
     const result = await retry();
@@ -88,12 +94,34 @@ it("retains one blocked cleanup identity, waits out queued deletion and reseeds 
     expect(await records()).toHaveLength(2);
     expect(await storage.open(attemptId)).toMatchObject({ status: "ready" });
     expect((await factory.databases()).filter(({ name }) => name?.endsWith(attemptId))).toHaveLength(4);
-    expect(fixture.upload).toHaveBeenCalledTimes(1);
-    expect(await result!.value.getCurrentSiteProject()).toMatchObject({ status: "ready" });
+    expect(fixture.upload).toHaveBeenCalledTimes(mutation === "unchanged" ? 1 : 2);
+    const captured = await result!.value.getCurrentSiteProject();
+    expect(captured).toMatchObject({ status: "ready" });
+    if (mutation !== "unchanged" && captured.status === "ready") {
+      expect((await storage.open(attemptId))!.baselineRevision).not.toBe(oldRevision);
+      const resource = captured.project.providers.content[0]!.entries.find(({ id }) => id === IDS.entries.products[0])!.values[IDS.fields.productResource] as { asset: { assetId: string } };
+      expect(resource.asset.assetId).not.toBe(oldMedia.id);
+      expect((await fixture.store.snapshot()).records.find(({ id }) => id === resource.asset.assetId)?.document.state).toBe("active");
+    }
+    expect((await storage.open(attemptId))!.seed).toBeUndefined();
     expect(await result!.value.initialization.retry()).toMatchObject({ status: "ready" });
     await expect(storage.markSeedCleanup(attemptId, (await storage.open(attemptId))!.baselineRevision)).rejects.toThrow("Only an unselected");
     await expect(storage.discardSeeding(attemptId, (await storage.open(attemptId))!.baselineRevision)).rejects.toThrow("Only a cleaned");
   } finally { held?.close(); deletes.mockRestore(); }
+});
+it("rejects mismatched non-cleanup or ready example identities without rebinding them", async () => {
+  const { original, storage } = await workspaceSetup();
+  const project = loadCatalogEditorialSiteProject(context);
+  await storage.create(project, "b".repeat(64), CATALOG_EDITORIAL_ATTEMPT_ID, true);
+  const changed = { ...project, name: "A different requested project" };
+  await expect(original.workspace.loadExample(changed, "c".repeat(64), { attemptId: CATALOG_EDITORIAL_ATTEMPT_ID, beforeComplete: async () => {} })).rejects.toThrow("different or completed identity");
+  const loaded = await original.workspace.loadExample(project, "b".repeat(64), { attemptId: CATALOG_EDITORIAL_ATTEMPT_ID, beforeComplete: async () => {} });
+  await expect(original.workspace.loadExample(changed, "c".repeat(64), { attemptId: CATALOG_EDITORIAL_ATTEMPT_ID, beforeComplete: async () => {} })).rejects.toThrow("different or completed identity");
+  expect((await storage.open())!.id).toBe(loaded.workspace.id);
+  expect((await storage.open(CATALOG_EDITORIAL_ATTEMPT_ID))!.metadata.name).toBe(project.name);
+  await storage.create(project, "b".repeat(64), "generic-attempt", true);
+  await storage.markSeedCleanup("generic-attempt", "b".repeat(64));
+  await expect(storage.create(changed, "c".repeat(64), "generic-attempt", true)).rejects.toThrow("different or completed identity");
 });
 it("cannot bypass a persisted creation guard by ordinarily opening or completing a crash-interrupted seed", async () => {
   const { original, storage } = await workspaceSetup();

@@ -45,12 +45,15 @@ workspace listing is not added by this example. The existing workspace selection
 service can reopen a known ID. This example introduces no delete, overwrite or purge action.
 There is no automatic loading on startup or navigation.
 
-Creation uses `example-<bound-project-revision>` as its retry identity. Failed
+Creation uses `example-catalog-editorial-v1` as its stable retry identity,
+independent of mutable Media assets and project revision. Failed
 seeding marks cleanup pending before deleting only that unselected attempt's
 four scoped IndexedDB databases. Once all deletions complete, its seeding
 metadata is removed. A blocked or uncertain deletion keeps that exact seed
 identity and source; retries finish the queued deletions before idempotently
-reseeding. They cannot mint another workspace for the same revision or let a
+reseeding from the CURRENT requested, validated project/revision and Media guard.
+An old cleanup-pending seed is returned solely to finish deletion, never to
+reseed stale Media references. They cannot mint another example workspace or let a
 late delete remove freshly reseeded data. Close blocking connections and retry
 the same example. A ready workspace is never deleted, cleared or overwritten;
 attempting to create an already completed identity reports its ID for explicit

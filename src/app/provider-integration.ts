@@ -21,6 +21,7 @@ import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture,
 import { subscribePersistenceChanges } from "../shared/persistence-generation";
 import { createMappingAttachmentService } from "./mapping-attachment-service";
 import { deleteWorkspaceSeedDatabases } from "./workspace-seeding";
+import { CATALOG_EDITORIAL_ATTEMPT_ID } from "../site-project/sample/catalog-editorial";
 
 export class ProviderIntegrationError extends Error {
   readonly name = "ProviderIntegrationError";
@@ -122,7 +123,7 @@ export interface WorkspaceLifecycle {
   reset(): Promise<ProductionProviderIntegration>;
 }
 export interface WorkspaceCreateOptions { attemptId?: string; beforeComplete?(): Promise<void> }
-interface ProductionProviderIntegrationCommonOptions { workspaceId?: string; creation?: WorkspaceCreateOptions; saveRegistry?: WorkspaceSaveRegistry; mediaProvider?: MediaFileProvider | null; compositionIdbFactory?: IDBFactory | null; contentIdbFactory?: IDBFactory | null; mappingIdbFactory?: IDBFactory | null; sitemapIdbFactory?: IDBFactory | null; fileCompositionProvider?: CompositionProvider | null }
+interface ProductionProviderIntegrationCommonOptions { workspaceId?: string; creation?: WorkspaceCreateOptions; creationProject?: SiteProject; creationRevision?: string; saveRegistry?: WorkspaceSaveRegistry; mediaProvider?: MediaFileProvider | null; compositionIdbFactory?: IDBFactory | null; contentIdbFactory?: IDBFactory | null; mappingIdbFactory?: IDBFactory | null; sitemapIdbFactory?: IDBFactory | null; fileCompositionProvider?: CompositionProvider | null }
 export type ProductionProviderIntegrationOptions = ProductionProviderIntegrationCommonOptions & (
   | { project?: undefined; sourceRevision?: undefined }
   | { project: null; sourceRevision?: null | undefined }
@@ -331,9 +332,12 @@ export function createProductionProviderIntegration(options: ProductionProviderI
         if (workspaceRecord.seedCleanupPending) {
           const { seed, baselineRevision, id, requiresBeforeComplete } = workspaceRecord;
           if (!seed || workspaceRecord.status !== "seeding" || !options.creation) throw new Error("An incomplete creation requires its original explicit attempt to resume cleanup.");
+          const rebind = id === CATALOG_EDITORIAL_ATTEMPT_ID;
+          if (rebind && (!options.creationProject || !options.creationRevision || !options.creation.beforeComplete)) throw new Error("Example cleanup retry requires the current validated project and guard.");
+          await storage.markSeedCleanup(id, baselineRevision);
           await deleteWorkspaceSeedDatabases(id, options);
           await storage.discardSeeding(id, baselineRevision);
-          workspaceRecord = await storage.create(seed, baselineRevision, id, requiresBeforeComplete);
+          workspaceRecord = await storage.create(rebind ? options.creationProject! : seed, rebind ? options.creationRevision! : baselineRevision, id, rebind ? true : requiresBeforeComplete);
         }
         project = projectFromWorkspace(workspaceRecord);
         baseCompositions.splice(0, baseCompositions.length, ...project.providers.compositions.flatMap(({ id }) => { const provider = compositionCandidates.get(browserProviderIdFor("compositions", id)); return provider ? [provider] : []; }));
@@ -465,8 +469,8 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     await ensureReady();
     return checkWorkspaceCapture(value, workspaceId!, sessions, sources(Object.keys(value.tokens).some((key) => key.startsWith("media:"))));
   };
-  const openIntegration = async (id: string, creation?: WorkspaceCreateOptions): Promise<ProductionProviderIntegration> => {
-    const next = createProductionProviderIntegration({ ...options, creation, workspaceId: id, saveRegistry: sessions });
+  const openIntegration = async (id: string, creation?: WorkspaceCreateOptions, creationProject?: SiteProject, creationRevision?: string): Promise<ProductionProviderIntegration> => {
+    const next = createProductionProviderIntegration({ ...options, creation, creationProject, creationRevision, workspaceId: id, saveRegistry: sessions });
     const ready = await next.initialization.initialize();
     if (ready.status === "error") throw ready.error;
     let selected: WorkspaceRecord | undefined;
@@ -480,7 +484,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     if (!SOURCE_REVISION.test(baselineRevision)) throw new ProviderIntegrationError("source", "A canonical baseline revision is required.", false);
     const attemptId = creation.attemptId ?? (await storage.findSeeding(validated.project, baselineRevision))?.id;
     const record = await storage.create(validated.project, baselineRevision, attemptId, Boolean(creation.beforeComplete));
-    return openIntegration(record.id, creation);
+    return openIntegration(record.id, creation, validated.project, baselineRevision);
   };
   const workspace: WorkspaceLifecycle = {
     get id() { return workspaceId; },

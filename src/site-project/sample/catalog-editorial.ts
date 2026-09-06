@@ -26,6 +26,7 @@ import bundledProject from "./sample-site-project.json";
  * provider-qualified; there is no model-specific adapter behind this data.
  */
 export const CATALOG_EDITORIAL_TIMESTAMP = "2026-09-01T00:00:00.000Z";
+export const CATALOG_EDITORIAL_ATTEMPT_ID = "example-catalog-editorial-v1";
 export const CATALOG_EDITORIAL_CONTENT_PROVIDER = "content-indexeddb" as const;
 export const CATALOG_EDITORIAL_COMPOSITION_PROVIDER = "indexeddb" as const;
 export const CATALOG_EDITORIAL_MAPPING_PROVIDER = "mapping-indexeddb" as const;

@@ -1,7 +1,7 @@
 import type { MediaFileProvider } from "../../media";
 import { currentMediaVersion } from "../../media";
 import { serializeSiteProject, type SiteProject, type SiteProjectValidationContext } from "../model";
-import { loadCatalogEditorialSiteProject } from "./catalog-editorial";
+import { CATALOG_EDITORIAL_ATTEMPT_ID, loadCatalogEditorialSiteProject } from "./catalog-editorial";
 
 export const EXAMPLE_PDF_URL = "/uploaded-media/deployment-sample.pdf";
 export const EXAMPLE_PDF_CHECKSUM = "e268488c410059adbef72560b28e0e20c992c2d597d40501047f5a59ed1ea2f2";
@@ -56,7 +56,7 @@ export async function createCatalogEditorialExample<T>(options: {
   };
   const project = loadCatalogEditorialSiteProject(options.context, ref);
   const revision = await digest(new TextEncoder().encode(serializeSiteProject(project)));
-  const value = await options.loadExample(project, revision, { attemptId: `example-${revision}`, beforeComplete });
+  const value = await options.loadExample(project, revision, { attemptId: CATALOG_EDITORIAL_ATTEMPT_ID, beforeComplete });
   try { await beforeComplete(); return { value, mediaStatus: "current" }; }
   catch { return { value, mediaStatus: "changed", message: "Example workspace was created. The checked Media state changed or became unavailable after the selection check; inspect Media before preview or release. Authoring references are not permanently pinned." }; }
 }
