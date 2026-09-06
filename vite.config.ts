@@ -8,6 +8,7 @@ import bundledRelease from './artifacts/site-release/bundled-release.json';
 import { resolveLocalReleaseToolchain } from './server/site-project-local/toolchain-config.mjs';
 
 const bundledSource = bundledRelease as never;
+const mediaStoreRoot = process.env.ZUDO_MEDIA_STORE_ROOT;
 
 export default defineConfig(async () => ({
   publicDir: 'media-store/public',
@@ -17,12 +18,12 @@ export default defineConfig(async () => ({
   // scanning the package, whereas the asset pipeline handles them on demand.
   optimizeDeps: { exclude: ['@zudo-sg/ui', '@takazudo/zfb-md-wasm'] },
   plugins: [
-    releaseApiPlugin(),
+    releaseApiPlugin({ mediaStoreRoot }),
     siteProjectSourcePlugin({
       bundledSource,
       currentToolchain: await resolveLocalReleaseToolchain(),
     }),
-    composerFileProviderPlugin(),
+    composerFileProviderPlugin({ mediaStoreRoot }),
     tailwindcss(),
     preact(),
   ],

@@ -127,11 +127,14 @@ test("every control the coarse stylesheet promises 44px to gets it", async ({ pa
   const failures = watchRuntimeFailures(page);
 
   await gotoRoute(page, "/");
+  await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Navigation", exact: true })).toBeVisible();
   const dashboard = await auditTouchTargets(page);
   expect(dashboard.undersized, "dashboard touch targets").toEqual([]);
   // The rail alone contributes seven links, so a probe that found almost
   // nothing means the selectors have drifted, not that the screen is clean.
   expect(dashboard.counted).toBeGreaterThan(7);
+  await page.keyboard.press("Escape");
 
   await gotoRoute(page, "/sitemapper");
   expect((await auditTouchTargets(page)).undersized, "sitemap library touch targets").toEqual([]);
@@ -147,8 +150,7 @@ test("every control the coarse stylesheet promises 44px to gets it", async ({ pa
   await createSitemap(page, TARGET_FIXTURE);
   expect((await auditTouchTargets(page)).undersized, "record editor touch targets").toEqual([]);
 
-  // The one `Menu` this lane can reach: the library's row menu needs a listing,
-  // and a listing is exactly what the dev lane cannot produce.
+  // Exercise the real record action menu after explicit workspace fixture setup.
   await page.getByRole("button", { name: "More sitemap actions" }).click();
   await expect(page.getByRole("menu", { name: "Sitemap actions" })).toBeVisible();
   expect((await auditTouchTargets(page)).undersized, "sitemap menu touch targets").toEqual([]);

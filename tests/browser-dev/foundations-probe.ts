@@ -9,44 +9,16 @@
  * `foundations.pw.ts` and `foundations.coarse.pw.ts` are one deliverable split
  * across two lanes by filename suffix, so what they both need lives here.
  *
- * **The dev lane activates no SiteProject, so no library here can list.**
- * `pnpm dev` leaves `provider-integration` without an active project, its
- * `verifyRegistry()` throws, and every library — compositions, content,
- * mapping, sitemaps alike — initializes into "No development SiteProject is
- * activated". Creating and editing a record still works, because those go
- * through `provider.store` directly rather than through
- * `initialization.initialize()`; a *listing* is the one thing this lane cannot
- * produce. That is why `createSitemap` below stays in the record editor it
- * navigates to and never comes back to the library for the record it made.
- *
- * The proofs that genuinely need a populated library therefore live on the
- * dist lane, in `tests/browser/library-chrome.pw.ts`.
- *
- * The alternative is worth writing down for whoever needs it next, because the
- * recipe already exists and is proven: `pnpm test:browser:site-project --dev`
- * drives exactly this shape against a Vite dev server. Its runner
- * (`scripts/run-site-project-browser.mjs`) mkdtemps a disposable root, applies
- * the sample project and activates it through `server/site-project-local/cli.ts`,
- * passes the root down as `ZUDO_SITE_PROJECT_ROOT`, and removes it afterwards;
- * `playwright.site-project.config.ts` then forwards it into `webServer.env`.
- * Giving this lane the same treatment would unblock every library-dependent
- * dev-lane proof at once — including the one gap left below.
- *
- * Its cost is that a config cannot mkdtemp and still be a plain config, so the
- * dev lane would need a runner in front of it, which changes the shape of
- * `pnpm test:browser:dev` — a named completion gate. That is a decision about
- * what this lane means, not a side effect of one spec, so it is left to be
- * taken deliberately.
- *
- * The one proof that needed both — `.cms-table th/td { height: 44px }` from the
- * coarse block in `ui.css` — took the cheaper route instead: the **dist** lane
- * grew a coarse project of its own, and `tests/browser/library-table.coarse.pw.ts`
- * checks it against the bundled sample's library. Nothing else here is blocked
- * on activating a project for this lane.
+ * The dev server may have no activated release. `ensureDevWorkspace` explicitly
+ * initializes the test-owned IndexedDB source through the current validated
+ * workspace service; it never bypasses unavailable initialization to fake a
+ * listing. This does not activate a release. Activation remains in the guarded
+ * SiteProject lane with its disposable local release root.
  */
 
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
+import { ensureDevWorkspace } from "./workspace-bootstrap";
 
 export const ROUTES = ["/", "/sitemapper", "/composer"] as const;
 
@@ -112,6 +84,7 @@ export async function expectNoHorizontalOverflow(page: Page, label: string): Pro
 
 /** Open a route and wait until it has painted and stopped working. */
 export async function gotoRoute(page: Page, route: FoundationRoute): Promise<void> {
+  await ensureDevWorkspace(page);
   await page.goto(route);
   await expect(ROUTE_READY[route](page)).toBeVisible({ timeout: READY_TIMEOUT_MS });
   // Nothing is measured on a route that still says it is busy — a route stuck
@@ -137,7 +110,6 @@ export async function createSitemap(page: Page, name: string): Promise<void> {
   const dialog = page.getByRole("dialog", { name: "Create sitemap" });
   await dialog.getByRole("textbox", { name: "Sitemap name" }).fill(name);
   await dialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(name);
 }
-

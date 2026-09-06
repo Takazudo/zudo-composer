@@ -10,7 +10,13 @@
 import { constants } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { resolve, posix } from "node:path";
+import { resolve, posix, isAbsolute, dirname, basename } from "node:path";
+
+/** @param {string | undefined} root */
+export function validateMediaStoreRoot(root) {
+  if (root !== undefined && (!isAbsolute(root) || resolve(root) !== root)) throw new Error("Media store root must be an absolute resolved path.");
+  return root;
+}
 
 /** @typedef {import("../src/composer/library/types.ts").CompositionRecord} CompositionRecord */
 /** @typedef {{url?: string, method?: string, protocol?: "http" | "https", headers: Record<string, string | undefined>, body?: string}} DevRequest */
@@ -217,9 +223,10 @@ function sendMediaFileError(res) {
 /**
  * Serve an uploaded media byte file directly from the development store.
  *
- * @param {{projectRoot: string, createStore?: () => Promise<any>, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open, realpath?: typeof fsPromises.realpath}}} options
+ * @param {{projectRoot: string, mediaStoreRoot?: string, createStore?: () => Promise<any>, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open, realpath?: typeof fsPromises.realpath}}} options
  */
 export function createMediaFileMiddleware(options) {
+  const configuredRoot = validateMediaStoreRoot(options.mediaStoreRoot) ?? resolve(options.projectRoot, MEDIA_FILE_PROVIDER_ROOT);
   const lstatFile = options.operations?.lstat ?? fsPromises.lstat;
   const openFile = options.operations?.open ?? fsPromises.open;
   const realpathFile = options.operations?.realpath ?? fsPromises.realpath;
@@ -231,7 +238,8 @@ export function createMediaFileMiddleware(options) {
     // ordinary source-file URLs, even when they are outside publicDir.
     try {
       const decoded = typeof pathname === "string" ? posix.normalize(decodeURIComponent(pathname)) : "";
-      if (/(?:^|\/)media-store(?:\/|$)/.test(decoded)) {
+      const sourcePath = decoded.startsWith("/@fs/") ? decoded.slice(4) : resolve(options.projectRoot, `.${decoded}`);
+      if (/(?:^|\/)media-store(?:\/|$)/.test(decoded) || sourcePath === configuredRoot || sourcePath.startsWith(`${configuredRoot}/`)) {
         res.statusCode = 404; res.setHeader("cache-control", "no-store"); res.end(); return;
       }
     } catch { res.statusCode = 400; res.end(); return; }
@@ -266,21 +274,20 @@ export function createMediaFileMiddleware(options) {
       if (!record || !version) { res.statusCode = 404; res.setHeader("cache-control", "no-store"); res.end(); return; }
       await store.resolveVersion({ providerId: store.provider.id, assetId: record.id, versionId: version.id });
     } catch { sendMediaFileError(res); return; }
-    // Resolve the configured project once (e.g. macOS /var -> /private/var),
-    // then reject links inside its owned media-store subtree.
-    let projectRoot;
-    try { projectRoot = await realpathFile(options.projectRoot); }
+    // Resolve the trusted parent (e.g. macOS /var -> /private/var),
+    // then reject links at the owned Media root and within its subtree.
+    let mediaRoot;
+    try { mediaRoot = resolve(await realpathFile(dirname(configuredRoot)), basename(configuredRoot)); }
     catch (cause) {
       if (isMissingMediaFileError(cause)) return next();
       sendMediaFileError(res); return;
     }
-    const filePath = resolve(projectRoot, MEDIA_FILE_PROVIDER_ROOT, MEDIA_FILE_PROVIDER_BYTES_DIRECTORY, fileName);
+    const filePath = resolve(mediaRoot, MEDIA_FILE_PROVIDER_BYTES_DIRECTORY, fileName);
 
     // O_NOFOLLOW only protects the final component; reject symlinked parents too.
     const parents = [];
     try {
-      for (const relative of [MEDIA_FILE_PROVIDER_ROOT, `${MEDIA_FILE_PROVIDER_ROOT}/${MEDIA_FILE_PROVIDER_BYTES_DIRECTORY}`]) {
-        const path = resolve(projectRoot, relative);
+      for (const path of [mediaRoot, resolve(mediaRoot, MEDIA_FILE_PROVIDER_BYTES_DIRECTORY)]) {
         const directory = await lstatFile(path);
         if (directory.isSymbolicLink() || !directory.isDirectory() || await realpathFile(path) !== path) return next();
         parents.push({ path, stats: directory });
@@ -799,8 +806,11 @@ function sendConnectResponse(res, response) {
   res.end(response.body);
 }
 
-/** Vite plugin. Each dev server closure receives an independent capability. */
-export default function composerFileProviderPlugin() {
+/** Vite plugin. Each dev server closure receives an independent capability.
+ * @param {{mediaStoreRoot?: string}} options
+ */
+export default function composerFileProviderPlugin(options = {}) {
+  const explicitMediaRoot = validateMediaStoreRoot(options.mediaStoreRoot);
   let command = "build";
   let capability;
   let projectRoot;
@@ -848,9 +858,10 @@ export default function composerFileProviderPlugin() {
         }),
       });
       const { createFilesystemMediaStore } = await server.ssrLoadModule("/src/media/storage/file-provider/dev-server-entry.ts");
+      const mediaStoreRoot = explicitMediaRoot ?? resolve(projectRoot, MEDIA_FILE_PROVIDER_ROOT);
       const mediaHandler = createMediaUploadMiddleware({
         capability: activeCapability,
-        createStore: () => createFilesystemMediaStore({ mediaStoreRoot: resolve(projectRoot, MEDIA_FILE_PROVIDER_ROOT) }),
+        createStore: () => createFilesystemMediaStore({ mediaStoreRoot }),
       });
       server.middlewares.use(async (req, res, next) => {
         if (req.url !== MEDIA_FILE_PROVIDER_ENDPOINT) return next();
@@ -901,7 +912,7 @@ export default function composerFileProviderPlugin() {
         sendConnectResponse(res, await handler({ ...requestHead, body }));
       });
       // Vite's public-dir middleware serves only files in its startup-scanned publicFiles Set (updated by chokidar), so a file uploaded during the session otherwise gets the SPA shell until the watcher catches up (#180).
-      server.middlewares.use(createMediaFileMiddleware({ projectRoot, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: resolve(projectRoot, MEDIA_FILE_PROVIDER_ROOT) }) }));
+      server.middlewares.use(createMediaFileMiddleware({ projectRoot, mediaStoreRoot, createStore: () => createFilesystemMediaStore({ mediaStoreRoot }) }));
     },
   };
 }

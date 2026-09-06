@@ -344,13 +344,10 @@ export function SitemapperIntegration({
   }, [controller.flushNavigationDrafts]);
 
   const saveStatus = controller.state.saveStatus;
-  // A Mapping route family owns its own routes and takes no authored children,
-  // so the toolbar's Add page adds beside it rather than going dead.
-  const addTargetId = selectedNode !== null && selectedNode.source.kind === "mapping"
-    ? index.byId.get(selectedNode.id)?.parentId ?? null
-    : selectedId ?? document.root[0]?.id ?? null;
-  // The one case with nowhere to go: the single root page is itself a Mapping.
-  const canAddPage = addTargetId !== null || document.root.length === 0;
+  // The selected authored page owns the new child even when it is a Mapping
+  // family. Missing parents and the single-root rule remain structural limits.
+  const addTargetId = selectedId ?? document.root[0]?.id ?? null;
+  const canAddPage = addTargetId === null ? document.root.length === 0 : index.byId.has(addTargetId);
   const notice = recordError || controller.lastError || metadataError
     ? <Banner tone="err" action={deleteBlocked ? <a class="cms-btn cms-btn--ghost cms-btn--xs" href={SITEMAPPER_ROUTE}>Choose another Sitemap</a> : undefined}>{recordError ?? controller.lastError ?? metadataError}</Banner>
     : controller.canUndoRemove
@@ -400,7 +397,7 @@ export function SitemapperIntegration({
           <a class="cms-btn cms-btn--ghost cms-btn--sm" href="/site" target="_blank" rel="noreferrer">Visitor preview</a>
           <Button
             disabled={!canAddPage}
-            title={canAddPage ? undefined : "The root page is a Mapping route family, which takes no authored children."}
+            title={canAddPage ? undefined : "Choose an existing parent page; a Sitemap can have only one root."}
             onClick={() => {
               if (addTargetId === null) dispatch({ type: "addRoot", title: "Home" });
               else addChild(addTargetId);

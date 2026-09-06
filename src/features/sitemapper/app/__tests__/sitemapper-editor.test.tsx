@@ -100,6 +100,20 @@ function toolbar(): HTMLElement {
 }
 
 describe("Sitemapper editor chrome", () => {
+  it.each(["home", "about"])("toolbar inserts inside selected Mapping %s, not beside it", async (selectedId) => {
+    const value = record();
+    const mapped = selectedId === "home" ? value.document.root[0]! : value.document.root[0]!.children[0]!;
+    mapped.source = { kind: "mapping", ref: { providerId: "mapping-indexeddb", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug" } };
+    const oldLength = mapped.children.length, store = fakeStore();
+    render(<ChromeContext.Provider value={createChromeStore()}><SitemapperIntegration providerId="sitemap-indexeddb" record={value} store={store} catalog={catalog} initialPageId={selectedId} idFactory={createSequentialIdFactory("nested")} /></ChromeContext.Provider>);
+    const add = within(toolbar()).getByRole("button", { name: "Add page" }); expect(add).toBeEnabled(); fireEvent.click(add);
+    await waitFor(() => expect(store.put).toHaveBeenCalled());
+    const saved = store.put.mock.lastCall![0].document;
+    const parent = selectedId === "home" ? saved.root[0]! : saved.root[0]!.children[0]!;
+    expect(parent.children).toHaveLength(oldLength + 1);
+    expect(saved.root).toHaveLength(1);
+    if (selectedId === "about") expect(saved.root[0]!.children).toHaveLength(2);
+  });
   it.each(["entry-field", "selected-entry"] as const)("expands draft %s authoring routes with explicit preview policy", async (kind) => {
     const model = createContentModelRecord({ name: "Drafts", kind: "collection", fields: [{ id: "slug", key: "slug", label: "Slug", kind: "slug", required: true }] }, { id: "drafts" });
     const draft = createContentEntryRecord(model.id, { slug: "draft-path" }, { id: "draft" });

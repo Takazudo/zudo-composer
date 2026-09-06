@@ -15,12 +15,13 @@
  * asks for. Renaming the file silently drops the coarse half.
  *
  * The Sitemapper route adopted `OutlineTree` in issue #165, which is what made
- * this spec live. The skip below is kept as the guard it always was: a route
- * that stops rendering a tree says so instead of failing on a null selector.
+ * this spec live. A missing tree now fails: every current host must retain the
+ * approved shared outline; absence cannot silently skip its acceptance proof.
  */
 
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
+import { ensureDevWorkspace } from "./workspace-bootstrap";
 
 const TREE = ".cms-tree";
 /** Every element that draws a row. Their boxes are the layout contract. */
@@ -79,6 +80,7 @@ async function opacityOf(locator: Locator): Promise<number> {
 }
 
 async function openSitemapper(page: Page, name: string): Promise<void> {
+  await ensureDevWorkspace(page);
   await page.goto("/sitemapper");
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "New sitemap" }).click();
@@ -87,7 +89,7 @@ async function openSitemapper(page: Page, name: string): Promise<void> {
   await dialog.getByRole("button", { name: "Create sitemap" }).click();
   // Creating navigates to the record's own URL, so the editor is reached the
   // same way a deep link reaches it.
-  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(name);
 }
 
@@ -112,6 +114,31 @@ async function ensureSiblingGap(page: Page): Promise<Locator> {
   return gap;
 }
 
+test("outline insertion preserves IME input, Escape focus and the exact first sibling index", async ({ page }, info) => {
+  await openSitemapper(page, `Exact insertion ${info.project.name}`);
+  const pane = page.getByRole("radiogroup", { name: "Pane" });
+  if (await pane.isVisible()) await pane.getByRole("radio").first().click();
+  const gap = await ensureSiblingGap(page), trigger = gap.locator(".cms-tree-insert__btn");
+  await trigger.focus(); await trigger.press("Enter");
+  const input = page.locator(".cms-tree-inline input"); await expect(input).toBeFocused();
+  await input.fill("未確定"); await input.dispatchEvent("compositionstart", { data: "未確定" });
+  await input.press("Enter"); await input.press("Escape"); await expect(input).toHaveValue("未確定");
+  await input.dispatchEvent("compositionend", { data: "未確定" }); await input.press("Escape");
+  await expect(input).toHaveCount(0); await expect(trigger).toBeFocused();
+  await trigger.press("Enter"); await input.fill("Exact first sibling"); await input.press("Enter");
+  await expect(page.getByRole("treeitem", { name: /^Exact first sibling/ })).toBeVisible();
+  await expect(page.locator(".cms-topbar__status")).toContainText("Saved");
+  const titles = await page.evaluate(async () => {
+    const path = "/src/app/provider-integration.ts";
+    const { createProductionProviderIntegration } = await import(path);
+    const integration = createProductionProviderIntegration(); await integration.initialization.initialize();
+    const record = await integration.sitemapProvider.store.get(new URLSearchParams(location.search).get("sitemap"));
+    if (record.status !== "loaded") throw new Error("Inserted Sitemap was not persisted.");
+    return record.record.document.root[0].children.map((node: { title: string }) => node.title);
+  });
+  expect(titles).toEqual(["Exact first sibling", "Layout probe alpha", "Layout probe beta"]);
+});
+
 test("no outline row moves when a gap is hovered or its inline editor is open", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const coarseLane = testInfo.project.name === "coarse";
@@ -119,10 +146,7 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
   await openSitemapper(page, `Outline layout probe ${testInfo.project.name}`);
 
   const tree = page.locator(TREE).first();
-  test.skip(
-    (await page.locator(TREE).count()) === 0,
-    "The Sitemapper route has not adopted OutlineTree yet (issue #165).",
-  );
+  await expect(tree, "The approved Sitemap outline must be present; absence is a regression.").toBeAttached();
   // Below 64rem `EditorChrome` shows one pane at a time behind a "Pane" switch,
   // and the navigator is not the default — so the tree is in the DOM but hidden
   // on the coarse lane. Select the first pane (the navigator) by position rather

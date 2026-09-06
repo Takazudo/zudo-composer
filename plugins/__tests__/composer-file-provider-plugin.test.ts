@@ -480,9 +480,9 @@ describe("media upload request boundary and core integration", () => {
 describe("dev/build registration boundary", () => {
   type RegisteredMiddleware = (request: unknown, response: unknown, next: () => unknown) => unknown;
 
-  function setupSource(command: "serve" | "build") {
-    const instance = plugin();
-    instance.configResolved({ command, root: sandbox });
+  function setupSource(command: "serve" | "build", mediaStoreRoot?: string, projectRoot = sandbox) {
+    const instance = plugin({ mediaStoreRoot });
+    instance.configResolved({ command, root: projectRoot });
     const resolved = instance.resolveId("virtual:composer-file-provider-config");
     expect(resolved).toBe("\0virtual:composer-file-provider-config");
     const source = instance.load(resolved);
@@ -508,8 +508,8 @@ describe("dev/build registration boundary", () => {
     await dispatch();
   }
 
-  async function setupServeServer() {
-    const { instance, source } = setupSource("serve");
+  async function setupServeServer(mediaStoreRoot?: string, projectRoot = sandbox) {
+    const { instance, source } = setupSource("serve", mediaStoreRoot, projectRoot);
     const middlewares: RegisteredMiddleware[] = [];
     const ssrLoadModule = vi.fn().mockResolvedValue({
       createFilesystemCompositionStore,
@@ -566,6 +566,36 @@ describe("dev/build registration boundary", () => {
   }
 
   describe("uploaded-media direct serving", () => {
+    it("uploads, redirects and serves only from an explicit isolated root without exposing it", async () => {
+      const mediaStoreRoot = join(sandbox, "isolated-media");
+      const projectRoot = join(sandbox, "project"); await mkdir(projectRoot);
+      const { middlewares, source } = await setupServeServer(mediaStoreRoot, projectRoot);
+      expect(source).not.toContain(mediaStoreRoot);
+      const config = JSON.parse(source.match(/= (.*);/)![1]!);
+      const bytes = Buffer.from("%PDF-1.7\nisolated upload");
+      const request = Object.assign(Readable.from([bytes]), { method: "POST", url: MEDIA_FILE_PROVIDER_ENDPOINT, headers: {
+        host: "localhost:4321", origin: "http://localhost:4321", "sec-fetch-site": "same-origin", "content-type": "application/pdf",
+        [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: config.capability,
+        [MEDIA_FILE_PROVIDER_OPERATION_HEADER]: "upload", [MEDIA_FILE_PROVIDER_FILE_NAME_HEADER]: "isolated.pdf",
+      } });
+      const uploaded = mediaResponse(); await invokeRegistered(middlewares, request, uploaded);
+      expect(uploaded.statusCode).toBe(200); await responseBytes(uploaded);
+      const store = await createFilesystemMediaStore({ mediaStoreRoot });
+      const record = (await store.snapshot()).records[0]!;
+      const url = record.document.versions[0]!.url;
+      const response = mediaResponse(); await invokeRegistered(middlewares, mediaRequest("GET", url), response);
+      expect(await responseBytes(response)).toEqual(bytes);
+      const redirect = mediaResponse(); await invokeRegistered(middlewares, mediaRequest("GET", `/uploaded-media/asset-${record.id}`), redirect);
+      expect(redirect.headers.location).toBe(url);
+      const raw = mediaResponse(); await invokeRegistered(middlewares, mediaRequest("GET", `/@fs/${mediaStoreRoot}/catalog.json`), raw);
+      expect(raw.statusCode).toBe(404);
+      await expect(readFile(join(projectRoot, "media-store", "catalog.json"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(setupSource("build", mediaStoreRoot).source).toBe("export const fileProviderConfig = undefined;\n");
+    });
+    it.each(["relative/media", "/tmp/../media", "/tmp/media/"])("rejects unresolved roots %s", (mediaStoreRoot) => {
+      expect(() => plugin({ mediaStoreRoot })).toThrow("absolute resolved");
+      expect(() => createMediaFileMiddleware({ projectRoot: sandbox, mediaStoreRoot })).toThrow("absolute resolved");
+    });
     it("does not expose or ship failed publication and crash artifacts", async () => {
       const root = join(sandbox, "media-store");
       const store = await createFilesystemMediaStore({ mediaStoreRoot: root, operations: {

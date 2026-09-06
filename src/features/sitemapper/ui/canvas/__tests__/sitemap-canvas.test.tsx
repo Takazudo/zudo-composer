@@ -50,6 +50,14 @@ function props(document = doc(), sources: ReadonlyMap<string, PageSourceLabel> =
 }
 
 describe("SitemapCanvas", () => {
+  it("offers Add child page for a Mapping-sourced canvas node", async () => {
+    const value = doc(); value.root[0]!.source = { kind: "mapping", ref: { providerId: "mapping-indexeddb", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug" } };
+    const callbacks = props(value); render(<SitemapCanvas {...callbacks} />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Home" }));
+    const add = await screen.findByRole("menuitem", { name: "Add child page" });
+    expect(add).not.toHaveAttribute("aria-disabled", "true"); fireEvent.click(add);
+    expect(callbacks.onAddChild).toHaveBeenCalledWith("Home");
+  });
   it("follows the page media seam while measuring geometry from the canvas", async () => {
     const listeners = new Set<EventListenerOrEventListenerObject>();
     const media = {

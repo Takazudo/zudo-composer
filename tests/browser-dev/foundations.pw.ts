@@ -75,7 +75,11 @@ test("every CMS route loads clean and never scrolls sideways", async ({ page }) 
       const label = `${route} at ${size.width}x${size.height}`;
       failures.length = 0;
       await gotoRoute(page, route);
-      await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+      if (size.width <= 760) {
+        await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
+        await expect(page.getByRole("dialog", { name: "Navigation", exact: true }).getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+        await page.keyboard.press("Escape");
+      } else await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
       await expectNoHorizontalOverflow(page, label);
       expect(failures, label).toEqual([]);
     }

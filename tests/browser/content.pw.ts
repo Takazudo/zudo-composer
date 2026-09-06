@@ -301,7 +301,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await sampleRow.getByRole("link", { name: "Sample Studio sitemap", exact: true }).click();
   // Opening a Sitemap is a real navigation to the record's own URL, and the
   // editor chrome names the record it loaded.
-  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Sample Studio sitemap");
   // Scoped to the toolbar: the outline's terminal add rows are called "Add page"
   // too, and it is the toolbar action this line means to find. `EditorChrome`
@@ -564,7 +564,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Mapping journey");
   await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
 
   // Issue #165 moved the Sitemapper onto `OutlineTree` and `EditorChrome`: the
   // outline is a real `tree` of `treeitem` rows, and the inspector is a pane
@@ -610,7 +610,8 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(mappingField.getByText("Entry slug is missing or empty.", { exact: true }).first()).toBeVisible();
   await expect(mappingField.getByText("Entry slug contains a forbidden route delimiter.", { exact: true })).toBeVisible();
   await expect(mappingField.getByText(/Route \/news\/latest\/%E6%9D%B1%E4%BA%AC collides/).first()).toBeVisible();
-  // A Mapping route family owns its own routes and takes no authored children.
+  // Derived routes do not become persisted outline nodes. This fixture has
+  // one authored node; nested authored families are covered by the catalog journey.
   await expect(pages.getByRole("treeitem")).toHaveCount(1);
 
   // An absolute base derives nothing at all, and the expansion says why rather
@@ -699,12 +700,16 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   }
   expect(themeColors[0]).not.toBe(themeColors[1]);
 
-  await page.setViewportSize({ width: 375, height: 812 });
-  // Below 64rem the rail leaves the side and becomes the bottom tab strip.
+  await page.setViewportSize({ width: 390, height: 844 });
+  // At 760px and below navigation is a modal drawer, never a bottom tab alias.
   await expect(page.locator(".cms-topbar")).toHaveCSS("height", "48px");
-  await expect(page.locator(".cms-rail")).toHaveCSS("height", "56px");
-  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "Navigation", exact: true });
+  const navigation = drawer.getByRole("navigation", { name: "Main navigation" });
   for (const product of PRODUCT_LINKS) await expect(navigation.getByRole("link", { name: product, exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(page.getByRole("button", { name: "Expand navigation", exact: true })).toBeFocused();
   // `EditorChrome` replaced the route's own tablist with the shared pane
   // switch. Scoped to the group: the toolbar also carries a Preview button.
   const contentPaneSwitch = page.getByRole("radiogroup", { name: "Pane" });
@@ -719,10 +724,12 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
 
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+  await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
   for (const product of PRODUCT_LINKS) {
     const box = await navigation.getByRole("link", { name: product, exact: true }).boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(44);
   }
+  await page.keyboard.press("Escape");
   const targets = await page.locator(".sg-content-app button:visible").evaluateAll((nodes) => nodes.map((node) => {
     const { width, height } = node.getBoundingClientRect();
     return { name: node.getAttribute("aria-label") ?? node.textContent?.trim() ?? "button", width, height };
@@ -806,7 +813,7 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   const responsiveDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await responsiveDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Responsive panels");
   await responsiveDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
   // `EditorChrome` replaced the Sitemapper's own tablist with the shared pane
   // switch, and the editor renames the three panes. Scoped to the group rather
   // than matched page-wide: the toolbar's View control also offers a "Canvas",
