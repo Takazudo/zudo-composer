@@ -27,9 +27,15 @@ describe("immutable UI provider dependency", () => {
   it("pins the advertised Git spec and one workspace component contract", () => {
     const pkg = JSON.parse(readFileSync(resolve("package.json"), "utf8")) as {
       dependencies: Record<string, string>;
+      devDependencies: Record<string, string>;
+      peerDependencies: Record<string, string>;
     };
     expect(pkg.dependencies["@zudo-sg/ui"]).toBe(SPEC);
-    expect(pkg.dependencies["@zudo-composer/component-contract"]).toBe("workspace:*");
+    // The contract is consumed from the workspace here but published as a peer, so it
+    // must never appear in `dependencies` — a `workspace:*` spec there would ship.
+    expect(pkg.dependencies["@zudo-composer/component-contract"]).toBeUndefined();
+    expect(pkg.devDependencies["@zudo-composer/component-contract"]).toBe("workspace:*");
+    expect(pkg.peerDependencies["@zudo-composer/component-contract"]).toBe("1.0.0");
     expect(pkg.dependencies["@zudo-sg/ui"]).not.toMatch(/(?:^|:)(?:file|link|path):|\.\.|packages\/ui/);
   });
 
