@@ -92,7 +92,7 @@ export function siteProjectSourcePlugin(options) {
         if (!PINNED_MEDIA.test(pathname)) return next();
         try {
           const value = options.readDevMedia ? await options.readDevMedia(pathname) : await viteServer.ssrLoadModule("/server/site-project-local/dev-reader.ts").then((module) => module.readActivatedSiteMedia(pathname));
-          if (!value) { res.statusCode = 404; res.setHeader("Cache-Control", "no-store"); return res.end("Pinned activated Media not found."); }
+          if (!value) return next();
           res.statusCode = 200; res.setHeader("Content-Type", value.mediaType); res.setHeader("Content-Length", String(value.bytes.byteLength)); res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); res.setHeader("ETag", `"sha256-${pathname.slice("/uploaded-media/sha256-".length).split(".")[0]}"`); return res.end(Buffer.from(value.bytes));
         } catch { res.statusCode = 503; res.setHeader("Cache-Control", "no-store"); return res.end("Activated Media unavailable."); }
       });

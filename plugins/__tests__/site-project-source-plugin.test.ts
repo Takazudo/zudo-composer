@@ -121,7 +121,7 @@ describe("siteProjectSourcePlugin", () => {
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
   });
 
-  it("serves only exact activated pinned media and never falls through on missing or corrupt bytes", async () => {
+  it("gives active pins precedence, delegates unpinned authoring bytes, and fails release-read errors closed", async () => {
     let mode: "one" | "two" | "missing" | "error" = "one";
     const readDevMedia = vi.fn(async () => mode === "missing" ? null : mode === "error" ? Promise.reject(new Error("digest")) : ({ bytes: Uint8Array.from([mode === "one" ? 1 : 2]), mediaType: "image/png", identity: {} }));
     const plugin = siteProjectSourcePlugin({ bundledSource: bundledSource as never, currentToolchain: toolchain, readDevRelease: async () => null, readDevMedia });
@@ -130,10 +130,11 @@ describe("siteProjectSourcePlugin", () => {
     (plugin.configResolved as (config: unknown) => void)({ command: "serve" });
     (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send: vi.fn() }, middlewares: { use: (value: typeof middleware) => { middleware = value; } } });
     const pathname = `/uploaded-media/sha256-${"a".repeat(64)}.png`;
-    const call = async () => { const next = vi.fn(), end = vi.fn(), setHeader = vi.fn(), res = { statusCode: 0, end, setHeader }; await middleware({ url: pathname }, res, next); return { res, next, end, setHeader }; };
-    expect(Array.from((await call()).end.mock.calls[0]![0])).toEqual([1]);
-    mode = "two"; expect(Array.from((await call()).end.mock.calls[0]![0])).toEqual([2]);
-    mode = "missing"; const missing = await call(); expect(missing.res.statusCode).toBe(404); expect(missing.next).not.toHaveBeenCalled();
+    const call = async (live = true) => { const end = vi.fn(), setHeader = vi.fn(), res = { statusCode: 0, end, setHeader }; const next = vi.fn(() => { res.statusCode = live ? 200 : 404; end(live ? Uint8Array.from([9]) : "Media not found."); }); await middleware({ url: pathname }, res, next); return { res, next, end, setHeader }; };
+    const active = await call(); expect(Array.from(active.end.mock.calls[0]![0])).toEqual([1]); expect(active.next).not.toHaveBeenCalled();
+    mode = "two"; const switched = await call(); expect(Array.from(switched.end.mock.calls[0]![0])).toEqual([2]); expect(switched.next).not.toHaveBeenCalled();
+    mode = "missing"; const live = await call(); expect(live.res.statusCode).toBe(200); expect(Array.from(live.end.mock.calls[0]![0])).toEqual([9]); expect(live.next).toHaveBeenCalledTimes(1);
+    const absent = await call(false); expect(absent.res.statusCode).toBe(404); expect(absent.next).toHaveBeenCalledTimes(1);
     mode = "error"; const error = await call(); expect(error.res.statusCode).toBe(503); expect(error.next).not.toHaveBeenCalled();
   });
 });

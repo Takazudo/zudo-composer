@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { ensureDevWorkspace } from "./workspace-bootstrap";
+import { requireDevBrowserRoots } from "./isolated-roots";
+
+const { mediaRoot } = requireDevBrowserRoots(process.env);
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 const REPLACEMENT = Buffer.concat([PNG, Buffer.from("synthetic-version-2")]);
@@ -34,7 +37,7 @@ test("versioned Media persists bytes, folders, identity and per-use Content text
     const tile = page.locator(".sg-media-tile").filter({ hasText: fileName });
     await expect(tile).toHaveCount(1);
     await expect.poll(() => tile.locator("img").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
-    expect(await readFile(resolve("media-store/versions", oldUrl.split("/").at(-1)!))).toEqual(PNG);
+    expect(await readFile(join(mediaRoot, "versions", oldUrl.split("/").at(-1)!))).toEqual(PNG);
     await page.getByRole("button", { name: `Inspect ${fileName}` }).click();
     const inspector = page.getByRole("complementary", { name: "Asset details" });
     await inspector.getByLabel("Asset name", { exact: true }).fill(`renamed-${suffix}.png`);
