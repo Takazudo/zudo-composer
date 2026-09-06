@@ -393,7 +393,10 @@
   color: var(--color-muted);
   box-shadow: 0 0 0 3px var(--color-bg);
   opacity: 0;
-  pointer-events: none;
+  /* Keep the semantic tile above the hover-expansion sibling hit-testable.
+   * Visibility is a reveal rule, not an actionability prerequisite: otherwise
+   * pointer entry can hit only the decorative sibling instead of the button. */
+  pointer-events: auto;
   cursor: pointer;
   z-index: var(--tree-z-tile);
 }

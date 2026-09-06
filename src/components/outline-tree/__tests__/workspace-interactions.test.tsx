@@ -138,14 +138,22 @@ describe("workspace tree transactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Insert before A" }));
     const input = screen.getByRole("textbox");
     fireEvent.input(input, { target: { value: "日本語" } });
-    fireEvent.compositionStart(input);
+    fireEvent(input, new CompositionEvent("compositionstart", { bubbles: true }));
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Escape", keyCode: 229 });
     fireEvent.keyDown(input, { key: "Enter" });
     fireEvent.keyDown(input, { key: "Escape" });
     expect(input).toHaveFocus();
     expect(add).not.toHaveBeenCalled();
-    fireEvent.compositionEnd(input);
+    fireEvent(input, new CompositionEvent("compositionend", { bubbles: true }));
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Escape", keyCode: 229 });
+    expect(add).not.toHaveBeenCalled();
+    const remove = vi.spyOn(input, "removeEventListener");
     fireEvent.keyDown(input, { key: "Enter" });
     expect(add).toHaveBeenCalledWith({ parentId: null, index: 0, title: "日本語" });
+    expect(remove).toHaveBeenCalledWith("compositionstart", expect.any(Function));
+    expect(remove).toHaveBeenCalledWith("compositionend", expect.any(Function));
   });
 
   it("renames with F2, preserves descendants and consumes Escape before outer surfaces", () => {

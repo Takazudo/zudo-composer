@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { PlusIcon } from "../icons";
 import { Button, Input, cx, isComposingKey } from "../ui";
 import { useOutlineTree } from "./outline-context";
@@ -29,8 +29,20 @@ function OutlineInlineEditor({ target, depth, label, variant }: InlineEditorProp
   const composing = useRef(false);
   const title = value.trim();
 
-  useEffect(() => {
-    wrapperRef.current?.querySelector("input")?.focus();
+  useLayoutEffect(() => {
+    const input = wrapperRef.current?.querySelector("input");
+    if (!input) return;
+    // Native lowercase event names are portable even where the DOM exposes
+    // no oncompositionstart property for Preact's JSX event-name inference.
+    const start = () => { composing.current = true; };
+    const end = () => { composing.current = false; };
+    input.addEventListener("compositionstart", start);
+    input.addEventListener("compositionend", end);
+    input.focus();
+    return () => {
+      input.removeEventListener("compositionstart", start);
+      input.removeEventListener("compositionend", end);
+    };
   }, []);
 
   function commit() {
@@ -50,8 +62,6 @@ function OutlineInlineEditor({ target, depth, label, variant }: InlineEditorProp
         placeholder={label}
         aria-label={label}
         onInput={(event) => setValue(event.currentTarget.value)}
-        onCompositionStart={() => { composing.current = true; }}
-        onCompositionEnd={() => { composing.current = false; }}
         onKeyDown={(event) => {
           event.stopPropagation();
           if (composing.current || isComposingKey(event)) return;

@@ -19,13 +19,22 @@ export function InlineRename({ value, label, onCommit, onCancel }: InlineRenameP
   const input = useRef<HTMLInputElement>(null);
   const composing = useRef(false);
   useLayoutEffect(() => {
-    input.current?.focus();
-    input.current?.select();
+    const element = input.current;
+    if (!element) return;
+    // Use native names, independent of Preact's DOM-property case inference.
+    const start = () => { composing.current = true; };
+    const end = () => { composing.current = false; };
+    element.addEventListener("compositionstart", start);
+    element.addEventListener("compositionend", end);
+    element.focus();
+    element.select();
+    return () => {
+      element.removeEventListener("compositionstart", start);
+      element.removeEventListener("compositionend", end);
+    };
   }, []);
   return <Input elementRef={input} size="sm" value={draft} aria-label={label}
     onInput={(event) => setDraft(event.currentTarget.value)}
-    onCompositionStart={() => { composing.current = true; }}
-    onCompositionEnd={() => { composing.current = false; }}
     onKeyDown={(event) => {
       event.stopPropagation();
       if (composing.current || isComposingKey(event)) return;
