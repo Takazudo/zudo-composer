@@ -6,11 +6,6 @@ Compositions, Content models/entries, Mappings, and Sitemaps. Media remains glob
 and separate. Release inputs include an exact Media lock without adding a fifth
 project provider domain.
 
-The optional [catalog & editorial example walkthrough](./catalog-editorial-example.md)
-starts from the authoring dashboard's explicit **Create catalog & editorial
-example** action. It creates a separate workspace, preserves the current one,
-and leaves the bundled deployment and active release unchanged.
-
 The current local release API is **protocol 2**. There are no protocol-1 readers,
 migrations, compatibility adapters, or second active-build pointer. An old local
 layout is refused and preserved for explicit operator inspection/reset.
@@ -151,7 +146,7 @@ head revision and active triple from `list` for subsequent reviews.
 ```sh
 node --input-type=module <<'NODE' | corepack pnpm site-project:api > release-plan.json
 import { readFileSync } from 'node:fs';
-const project = JSON.parse(readFileSync('src/site-project/sample/sample-site-project.json', 'utf8'));
+const project = JSON.parse(readFileSync('src/test/site-project-fixture.json', 'utf8'));
 const selection = project.providers.content.flatMap(p => p.entries.map(e => ({
   ref: { providerId: p.id, modelId: e.modelId, recordId: e.id }, action: 'publish'
 })));

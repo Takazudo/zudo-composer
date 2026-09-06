@@ -6,7 +6,7 @@ import type { SiteBuildPlan } from "../../site-project/compiler";
 import type { SiteProject } from "../../site-project/model";
 
 export interface ActivatedDeliveryArtifact {
-  kind: "activated-local" | "bundled-static";
+  kind: "activated-local";
   identity: SiteProjectActiveSelection;
   project: SiteProject;
   build: SiteBuildPlan;

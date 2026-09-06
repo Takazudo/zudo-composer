@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { activeComponentProvider } from "../../features/composer/active-pack";
-import { loadSampleSiteProject } from "../../site-project/sample";
+import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { createMappingAttachmentService } from "../mapping-attachment-service";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import type { WorkspaceRecord } from "../workspace-storage";

@@ -5,7 +5,7 @@ import { COMPOSITION_PROVIDERS, summarizeComposition, type CompositionProvider, 
 import { CONTENT_DATABASE_NAME, CONTENT_DATABASE_VERSION } from "../../content/storage/indexeddb/types";
 import { compileSiteProject } from "../../site-project/compiler";
 import { serializeSiteProject } from "../../site-project/model/canonical";
-import { loadSampleSiteProject } from "../../site-project/sample";
+import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { activeComponentProvider } from "../../features/composer/active-pack";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import { createProductionProviderIntegration } from "../provider-integration";

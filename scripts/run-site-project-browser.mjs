@@ -43,7 +43,7 @@ try {
   const mediaRoot = join(temporaryRoot, "media");
   await Promise.all([mkdir(releaseRoot), mkdir(mediaRoot)]);
   const environment = { ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot };
-  const project = JSON.parse(await readFile(join(root, "src/site-project/sample/sample-site-project.json"), "utf8"));
+  const project = JSON.parse(await readFile(join(root, "src/test/site-project-fixture.json"), "utf8"));
   const plan = await runCli({
     protocolVersion: 2,
     operation: "plan",

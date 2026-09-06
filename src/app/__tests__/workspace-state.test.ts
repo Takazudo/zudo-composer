@@ -6,7 +6,7 @@ import { createWorkspaceStorage, workspaceDatabaseName } from "../workspace-stor
 import { createProductionProviderIntegration } from "../provider-integration";
 import { createWorkspaceSummary } from "../workspace-summary";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
-import { loadSampleSiteProject } from "../../site-project/sample";
+import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { createSaveQueue } from "../../shared/persistence/save-queue";
 import type { MediaFileProvider } from "../../media";
 import { createIndexedDbCompositionProvider } from "../../composer/storage/indexeddb";

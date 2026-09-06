@@ -9,7 +9,7 @@ export async function ensureDevWorkspace(page: Page): Promise<void> {
   await page.goto("/");
   await page.evaluate(async () => {
     const integrationPath = "/src/app/provider-integration.ts";
-    const samplePath = "/src/site-project/sample/index.ts";
+    const samplePath = "/src/test/site-project-fixture.ts";
     const manifestPath = "/src/app/site-project-manifest.ts";
     const modelPath = "/src/site-project/model/index.ts";
     const { createProductionProviderIntegration } = await import(integrationPath);
