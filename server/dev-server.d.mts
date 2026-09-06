@@ -3,9 +3,6 @@ import type { ResolvedComposerConfig } from "./config";
 
 export const OPTIMIZE_DEPS_EXCLUDE: readonly string[];
 
-export type ComposerModuleEvaluator = (modulePath: string) => Promise<Record<string, unknown>>;
-
-export function createModuleEvaluator(root: string): ComposerModuleEvaluator;
 export function loadHostConfig(workspaceRoot: string, env?: Record<string, string | undefined>): Promise<ResolvedComposerConfig>;
 export function resolveFsAllow(workspaceRoot: string): string[];
 export function resolvePublicDir(workspaceRoot: string, publicMedia: string): string;
@@ -19,7 +16,7 @@ export interface ComposerDevServerOptions {
 }
 
 export function resolveComposerDevConfig(
-  options?: ComposerDevServerOptions & { config?: ResolvedComposerConfig },
+  options?: ComposerDevServerOptions,
 ): Promise<{ composerConfig: ResolvedComposerConfig; inlineConfig: InlineConfig }>;
 
 export function startComposerDevServer(

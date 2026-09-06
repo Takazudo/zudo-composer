@@ -10,14 +10,14 @@
 
 import { realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-import { createServer, runnerImport } from "vite";
+import { createServer } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import preact from "@preact/preset-vite";
 import composerFileProviderPlugin from "../plugins/composer-file-provider-plugin.mjs";
 import { siteProjectSourcePlugin } from "../plugins/site-project-source-plugin.mjs";
-import composerAppHtmlPlugin from "../plugins/composer-app-html.mjs";
+import composerAppHtmlPlugin, { APP_ENTRY_MODULE } from "../plugins/composer-app-html.mjs";
 import { APP_ROOT, resolveWorkspaceRoot } from "../plugins/roots.mjs";
+import { createModuleEvaluator } from "./module-evaluator.mjs";
 
 /**
  * Packages Vite's dependency optimizer must not scan. `@zudo-sg/ui` and
@@ -26,31 +26,6 @@ import { APP_ROOT, resolveWorkspaceRoot } from "../plugins/roots.mjs";
  * handles them on demand once they stay in the normal module graph.
  */
 export const OPTIMIZE_DEPS_EXCLUDE = Object.freeze(["@zudo-sg/ui", "@takazudo/zfb-md-wasm"]);
-
-/**
- * Evaluate a TypeScript module through Vite itself.
- *
- * `zudo-composer.config.ts` and the package's own `.ts` server modules cannot
- * be `import()`ed: Node refuses to strip types for anything under
- * `node_modules`, which is exactly where an installed zudo-composer lives. This
- * is the evaluator `loadComposerConfig({ load })` exists to receive. It is
- * `runnerImport` rather than a dev server's `ssrLoadModule` because no server
- * exists yet at config time — and a throwaway one would be a second Vite boot.
- * @param {string} root
- * @returns {(modulePath: string) => Promise<Record<string, unknown>>}
- */
-export function createModuleEvaluator(root) {
-  return async (modulePath) => {
-    const { module } = await runnerImport(pathToFileURL(modulePath).href, {
-      configFile: false,
-      root,
-      // No plugin pipeline runs here, so the JSX runtime the package's `.tsx`
-      // files expect has to be stated: the default would emit React imports.
-      oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
-    });
-    return /** @type {Record<string, unknown>} */ (module);
-  };
-}
 
 /**
  * Resolve the host's `zudo-composer.config.ts`.
@@ -111,11 +86,11 @@ export function resolvePublicDir(workspaceRoot, publicMedia) {
 
 /**
  * The complete inline Vite config for a host-rooted dev server.
- * @param {{workspaceRoot?: string, env?: Record<string, string | undefined>, config?: any}} [options]
+ * @param {{workspaceRoot?: string, env?: Record<string, string | undefined>}} [options]
  */
 export async function resolveComposerDevConfig(options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(options.workspaceRoot);
-  const composerConfig = options.config ?? (await loadHostConfig(workspaceRoot, options.env));
+  const composerConfig = await loadHostConfig(workspaceRoot, options.env);
   const { paths } = composerConfig;
   const { default: releaseApiPlugin } = /** @type {{default: (options: unknown) => any}} */ (
     await createModuleEvaluator(APP_ROOT)(resolve(APP_ROOT, "plugins/release-api-plugin.ts"))
@@ -137,9 +112,13 @@ export async function resolveComposerDevConfig(options = {}) {
         // Scanning starts from html under `root`, and there is none. Point the
         // scanner at the package's entry so the first request does not stall
         // on a full-reload discovery round.
-        entries: [resolve(APP_ROOT, "src/main.tsx")],
+        entries: [resolve(APP_ROOT, APP_ENTRY_MODULE)],
       },
       server: { fs: { allow: resolveFsAllow(workspaceRoot) } },
+      // Every CMS root comes from the resolved config, passed explicitly, so
+      // the plugins' own `ZUDO_COMPOSITIONS_ROOT` / `ZUDO_MEDIA_STORE_ROOT`
+      // fallbacks do not apply in this lane. The SiteProject release root is
+      // not a config setting and keeps its own `ZUDO_SITE_PROJECT_ROOT`.
       plugins: [
         releaseApiPlugin({ mediaStoreRoot: paths.media }),
         siteProjectSourcePlugin({ workspaceRoot }),
