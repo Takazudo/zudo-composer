@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 
+const COLD_SITE_DELIVERY_TIMEOUT_MS = 60_000;
+
 async function currentProject(page: Page) {
   return page.evaluate(async () => {
     const path = "/src/app/provider-integration.ts";
@@ -179,7 +181,9 @@ export function registerCatalogJourney(lane: string) {
       await page.getByRole("button", { name: "Activate locally", exact: true }).click();
       await expect(page.getByText(/Activated locally\. Publication reconciliation/)).toBeVisible();
       await page.goto("/site");
-      await expect(page.getByRole("heading", { name: "Useful objects for a clearer day" })).toBeVisible();
+      // Activation invalidates the dev SiteDelivery module graph. Give its
+      // first render the same cold-route budget as the unbundled authoring UI.
+      await expect(page.getByRole("heading", { name: "Useful objects for a clearer day" })).toBeVisible({ timeout: COLD_SITE_DELIVERY_TIMEOUT_MS });
       await expect(page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link")).toHaveText(["Home", "Catalog", "Journal", "Support"]);
       await expect(page.getByRole("link", { name: "External shop", exact: true })).toHaveAttribute("href", "https://shop.example.test/catalog");
       await expect(page.getByText("Material notes for a shared shelf", { exact: true })).toBeVisible();
@@ -198,8 +202,8 @@ export function registerCatalogJourney(lane: string) {
       await page.getByRole("button", { name: "Activate locally", exact: true }).click();
       await expect(page.getByText(/Activated locally\. Publication reconciliation/)).toBeVisible();
       await page.goto("/site/journal/stories/supply-notes-for-the-next-season");
-      await expect(page.getByRole("heading", { name: "Newer private working B", exact: true })).toBeVisible();
-      await page.reload(); await expect(page.getByRole("heading", { name: "Newer private working B", exact: true })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Newer private working B", exact: true })).toBeVisible({ timeout: COLD_SITE_DELIVERY_TIMEOUT_MS });
+      await page.reload(); await expect(page.getByRole("heading", { name: "Newer private working B", exact: true })).toBeVisible({ timeout: COLD_SITE_DELIVERY_TIMEOUT_MS });
     });
   });
 }
