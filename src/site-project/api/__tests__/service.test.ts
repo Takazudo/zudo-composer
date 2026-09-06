@@ -54,7 +54,7 @@ describe("protocol-2 staged release API", () => {
     current = false; expect(await service.handle({ protocolVersion: 2, operation: "apply", plan })).toMatchObject({ ok: false, error: { code: "conflict" } });
     current = true; await call(service, "apply", { plan }); current = false;
     const active = await release(service, plan);
-    expect(reconcile).toHaveBeenCalledWith(active, [expect.objectContaining({ expectedGeneration: 7, lifecycle: "published" })]);
+    expect(reconcile).toHaveBeenCalledWith(active, [expect.objectContaining({ expectedGeneration: 7, lifecycle: "published" })], 1);
   });
   it("pins exact bytes and gives the same project/new Media a different immutable build", async () => {
     const { service, media, testRoot } = await fixture({ media: true });

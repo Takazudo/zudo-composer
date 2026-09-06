@@ -27,7 +27,7 @@ const mutationFailure = (error: unknown) => error instanceof ReleaseCommitUncert
 const inside = (root: string, path: string) => { const part = relative(root, path); return part === "" || (part !== ".." && !part.startsWith(`..${sep}`) && !isAbsolute(part)); };
 const exists = async (path: string) => { try { await lstat(path); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; } };
 async function syncDirectory(path: string) { const handle = await open(path, "r"); try { await handle.sync(); } finally { await handle.close(); } }
-interface Heads { schemaVersion: 2; generation: number; projects: Record<string, { revision: string; buildId: string }>; stageOrder: string[]; stageGenerations: Record<string, number>; approvals: Record<string, string>; discarded: Record<string, { identity: SiteProjectActiveSelection; stageGeneration: number; expectedActive: SiteProjectActiveSelection | null }> }
+interface Heads { schemaVersion: 2; generation: number; activationGeneration: number; projects: Record<string, { revision: string; buildId: string }>; stageOrder: string[]; stageGenerations: Record<string, number>; approvals: Record<string, string>; discarded: Record<string, { identity: SiteProjectActiveSelection; stageGeneration: number; expectedActive: SiteProjectActiveSelection | null }> }
 interface CommitState { identity?: SiteProjectActiveSelection }
 interface CleanupTicket { path: string; owner: string; inode: number; phase: "owner" | "directory" | "sync" }
 export interface LocalSiteProjectStoreOptions {
@@ -183,10 +183,10 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     }
   }
   private async heads(): Promise<Heads> {
-    const path = join(this.root, "heads.json"); if (!await exists(path)) { if (await exists(join(this.root, "active.json"))) throw new Error("Active pointer has no retained heads catalog."); return { schemaVersion: 2, generation: 0, projects: {}, stageOrder: [], stageGenerations: {}, approvals: {}, discarded: {} }; }
+    const path = join(this.root, "heads.json"); if (!await exists(path)) { if (await exists(join(this.root, "active.json"))) throw new Error("Active pointer has no retained heads catalog."); return { schemaVersion: 2, generation: 0, activationGeneration: 0, projects: {}, stageOrder: [], stageGenerations: {}, approvals: {}, discarded: {} }; }
     const value = await this.json(path) as Heads;
     const object = (item: unknown) => !!item && typeof item === "object" && !Array.isArray(item);
-    if (!value || Object.keys(value).sort().join(",") !== "approvals,discarded,generation,projects,schemaVersion,stageGenerations,stageOrder" || value.schemaVersion !== 2 || !Number.isSafeInteger(value.generation) || value.generation < 0 || ![value.projects, value.stageGenerations, value.approvals, value.discarded].every(object) || !Array.isArray(value.stageOrder) || new Set(value.stageOrder).size !== value.stageOrder.length || value.stageOrder.some((id) => !SHA.test(id))) throw new Error("Invalid release heads schema.");
+    if (!value || Object.keys(value).sort().join(",") !== "activationGeneration,approvals,discarded,generation,projects,schemaVersion,stageGenerations,stageOrder" || value.schemaVersion !== 2 || !Number.isSafeInteger(value.generation) || value.generation < 0 || !Number.isSafeInteger(value.activationGeneration) || value.activationGeneration < 0 || ![value.projects, value.stageGenerations, value.approvals, value.discarded].every(object) || !Array.isArray(value.stageOrder) || new Set(value.stageOrder).size !== value.stageOrder.length || value.stageOrder.some((id) => !SHA.test(id))) throw new Error("Invalid release heads schema.");
     if (Object.keys(value.stageGenerations).sort().join() !== [...value.stageOrder].sort().join()) throw new Error("Visible stage generations differ from stage order.");
     const lastHeads = new Map<string, { revision: string; buildId: string }>(), stages = new Map<string, StagedRelease>(), generations = new Set<number>();
     let priorGeneration = 0;
@@ -209,7 +209,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       generations.add(receipt.stageGeneration);
     }
     const active = await this.active();
-    if (active && (!stages.has(active.buildId) || !sameRelease(active, { projectId: stages.get(active.buildId)!.projectId, revision: stages.get(active.buildId)!.revision, buildId: active.buildId }) || !await exists(join(this.root, "builds", active.buildId, "complete.json")))) throw new Error("Active identity is not a retained completed stage.");
+    if (active && (value.activationGeneration < 1 || !stages.has(active.buildId) || !sameRelease(active, { projectId: stages.get(active.buildId)!.projectId, revision: stages.get(active.buildId)!.revision, buildId: active.buildId }) || !await exists(join(this.root, "builds", active.buildId, "complete.json")))) throw new Error("Active identity is not a retained completed stage.");
     for (const [projectId, head] of Object.entries(value.projects)) if (!validActive({ projectId, ...head })) throw new Error("Invalid project head.");
     return value;
   }
@@ -305,7 +305,24 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     }); } catch (error) { return mutationFailure(error); }
   }
   async activate(input: Parameters<SiteProjectStoreAdapter["activate"]>[0]): ReturnType<SiteProjectStoreAdapter["activate"]> {
-    try { return await this.lock(async () => { if (!validActive(input.target)) throw new Error("Invalid activation identity."); const completed = await this.completed(input.target.projectId, input.target.buildId); if (!completed || !sameRelease(completed.identity, input.target)) return { status: "not-found" as const }; const current = await this.active(); if (sameRelease(current, input.target)) return { status: "ok" as const, value: { active: input.target } }; if (!sameRelease(current, input.expectedActive)) return { status: "conflict" as const }; await this.hit("before-active-write"); await this.write(join(this.root, "active.json"), releaseJson(input.target), false, input.target); return { status: "ok" as const, value: { active: input.target } }; }); } catch (error) { return mutationFailure(error); }
+    try { return await this.lock(async () => {
+      if (!validActive(input.target)) throw new Error("Invalid activation identity.");
+      const completed = await this.completed(input.target.projectId, input.target.buildId);
+      if (!completed || !sameRelease(completed.identity, input.target)) return { status: "not-found" as const };
+      const current = await this.active(), heads = await this.heads();
+      if (!sameRelease(current, input.target)) {
+        if (!sameRelease(current, input.expectedActive)) return { status: "conflict" as const };
+        if (heads.activationGeneration >= Number.MAX_SAFE_INTEGER) throw new Error("Activation generation exhausted.");
+        heads.activationGeneration++;
+        // Reserve the durable fence before publishing its pointer. Crash gaps are safe.
+        await this.write(join(this.root, "heads.json"), releaseJson(heads), false);
+        await this.hit("before-active-write"); await this.write(join(this.root, "active.json"), releaseJson(input.target), false, input.target);
+      }
+      let reconciliation: "applied" | "changed" | "unavailable" = "unavailable";
+      if (input.reconcile && this.commitState) this.commitState.identity = { ...input.target };
+      try { if (input.reconcile) reconciliation = await input.reconcile(completed.stage, heads.activationGeneration); } catch { /* The pointer is committed; reconciliation failure cannot roll it back. */ }
+      return { status: "ok" as const, value: { active: input.target, activationGeneration: heads.activationGeneration, reconciliation } };
+    }); } catch (error) { return mutationFailure(error); }
   }
   async discard(input: Parameters<SiteProjectStoreAdapter["discard"]>[0]): ReturnType<SiteProjectStoreAdapter["discard"]> {
     try { return await this.lock(async () => {

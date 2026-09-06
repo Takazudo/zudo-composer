@@ -94,11 +94,10 @@ export function createSiteProjectApiService(dependencies: SiteProjectApiDependen
         return result.status === "ok" ? ok(result.value) : adapterFailure(result);
       }
       case "activate": {
-        const result = await dependencies.projectStore.activate({ target: { projectId: request.projectId, revision: request.revision, buildId: request.buildId }, expectedActive: request.expectedActive });
+        const target = { projectId: request.projectId, revision: request.revision, buildId: request.buildId };
+        const result = await dependencies.projectStore.activate({ target, expectedActive: request.expectedActive, reconcile: dependencies.reconcilePublication ? (stage, generation) => dependencies.reconcilePublication!(target, stage.publication, generation) : undefined });
         if (result.status !== "ok") return adapterFailure(result);
-        let reconciliation: "applied" | "changed" | "unavailable" = "unavailable";
-        try { const stage = await dependencies.projectStore.getStage(request); const current = await dependencies.projectStore.list(); if (stage.status === "ok" && current.status === "ok" && sameRelease(current.value.active, result.value.active) && dependencies.reconcilePublication) reconciliation = await dependencies.reconcilePublication(result.value.active, stage.value.publication); } catch { /* Activation succeeded; reconciliation is independently retryable. */ }
-        return ok({ active: result.value.active, reconciliation });
+        return ok(result.value);
       }
       case "discard": { const result = await dependencies.projectStore.discard(request); return result.status === "ok" ? ok(result.value) : adapterFailure(result); }
     }

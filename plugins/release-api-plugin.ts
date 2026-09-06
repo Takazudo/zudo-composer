@@ -36,12 +36,14 @@ export default function releaseApiPlugin(): Plugin {
       let service: Promise<{ handle(request: unknown): Promise<unknown> }> | undefined;
       const api = () => service ??= server.ssrLoadModule("/server/site-project-local/service.ts").then((module) => module.createLocalSiteProjectApiService({
         isWorkingCurrent: async (project: unknown, precondition: unknown) => (await contexts.getStore()?.ask({ kind: "current", project, precondition })) === true,
+        reconcilePublication: async (active: unknown, changes: unknown, activationGeneration: number) => { const result = await contexts.getStore()?.ask({ kind: "reconcile", active, changes, activationGeneration }); return result === "applied" || result === "changed" ? result : "unavailable"; },
       }));
       const clients = new Map<string, { client: WebSocketClient; close(): void }>();
       const active = new Map<string, { abort(): void }>();
-      const pending = new Map<string, { client: WebSocketClient; clientId: string; requestId: string; finish(value: unknown): void }>();
+      const pending = new Map<string, { client: WebSocketClient; clientId: string; requestId: string; reconciliation: boolean; finish(value: unknown): void }>();
       const challenges = new Set<string>();
       const remove = (id: string) => { const entry = clients.get(id); if (!entry) return; clients.delete(id); entry.client.socket.off("close", entry.close); active.get(id)?.abort(); };
+      server.httpServer?.once("close", () => { for (const id of clients.keys()) remove(id); });
       server.ws.on("release:bind", (data, client) => {
         if (!trustedSockets.has(client.socket) || data?.capability !== capability || !/^[a-f0-9-]{36}$/.test(data.clientId)) return;
         const prior = clients.get(data.clientId); if (prior && prior.client !== client) return;
@@ -52,7 +54,8 @@ export default function releaseApiPlugin(): Plugin {
       server.ws.on("release:answer", (data, client) => { const item = pending.get(data?.challenge); if (!trustedSockets.has(client.socket) || !item || item.client !== client || item.requestId !== data.requestId) return; item.finish(data.result); });
       server.middlewares.use(async (req, res, next) => {
         if (req.url !== "/__zudo-release") return next();
-        const respond = (status: number, value: unknown) => { if (res.destroyed) return; res.statusCode = status; res.setHeader("Content-Type", "application/json"); res.setHeader("Cache-Control", "no-store"); res.end(JSON.stringify(value)); };
+        let responded = false, quarantined = false;
+        const respond = (status: number, value: unknown) => { if (responded || res.destroyed) return; responded = true; res.statusCode = status; res.setHeader("Content-Type", "application/json"); res.setHeader("Cache-Control", "no-store"); res.end(JSON.stringify(value)); };
         // Reject before reading or allocating the body, including when --host serves remote clients.
         if (!trustedReleaseRequest(req, !!server.config.server.https) || req.method !== "POST" || req.headers["x-zudo-release-capability"] !== capability || req.headers["content-type"] !== "application/json") return respond(403, { error: "Direct loopback operator channel required." });
         const clientId = req.headers["x-zudo-release-client"], requestId = req.headers["x-zudo-release-request"];
@@ -62,9 +65,10 @@ export default function releaseApiPlugin(): Plugin {
         const length = req.headers["content-length"];
         if (length !== undefined && (!/^[0-9]+$/.test(String(length)) || Number(length) > RELEASE_LIMITS.bodyBytes)) return respond(413, { error: "Release request body too large." });
         let closed = false, reading = true;
-        const abort = () => { closed = true; if (reading) req.destroy(); for (const item of pending.values()) if (item.clientId === clientId) item.finish(false); };
-        active.set(clientId, { abort }); res.once("close", abort);
-        const timer = setTimeout(abort, RELEASE_LIMITS.bodyMs);
+        const abort = (force = false) => { if (!force && (quarantined || [...pending.values()].some((item) => item.clientId === clientId && item.reconciliation))) { quarantined = true; return; } closed = true; if (reading) req.destroy(); for (const item of pending.values()) if (item.clientId === clientId) item.finish(false); };
+        const responseClosed = () => abort();
+        active.set(clientId, { abort: () => abort(true) }); res.once("close", responseClosed);
+        const timer = setTimeout(() => abort(true), RELEASE_LIMITS.bodyMs);
         try {
           const chunks: Buffer[] = []; let bytes = 0;
           for await (const chunk of req) { bytes += chunk.length; if (bytes > RELEASE_LIMITS.bodyBytes) throw new Error("Request too large."); chunks.push(Buffer.from(chunk)); }
@@ -76,8 +80,15 @@ export default function releaseApiPlugin(): Plugin {
             return new Promise((resolve) => {
               const challenge = nonce();
               const finish = (value: unknown) => { if (!pending.delete(challenge)) return; challenges.delete(clientId); clearTimeout(expiry); resolve(value); };
-              const expiry = setTimeout(() => finish(false), RELEASE_LIMITS.challengeMs);
-              challenges.add(clientId); pending.set(challenge, { client, clientId, requestId, finish });
+              const expiry = setTimeout(() => {
+                if ((payload as { kind?: string })?.kind !== "reconcile") return finish(false);
+                // Do not unlock beneath a live browser transaction. The bounded
+                // response reports uncertainty; exact late settlement/disconnect
+                // finishes the callback and releases the cross-process lock.
+                quarantined = true;
+                respond(200, { ok: false, error: { code: "commit-uncertain", identity: (payload as { active: unknown }).active, message: "Activation committed; reconciliation uncertain/busy. The activation lane is quarantined until this client settles or disconnects." } });
+              }, RELEASE_LIMITS.challengeMs);
+              challenges.add(clientId); pending.set(challenge, { client, clientId, requestId, reconciliation: (payload as { kind?: string })?.kind === "reconcile", finish });
               if (closed || res.destroyed || client.socket.readyState !== 1) return finish(false);
               client.send("release:challenge", { challenge, requestId, operation: body.request?.operation, payload });
             });
@@ -86,7 +97,7 @@ export default function releaseApiPlugin(): Plugin {
           if (["apply", "activate", "discard"].includes(body.request?.operation)) server.ws.send("release:changed", {});
           respond(200, result);
         } catch { respond(503, { ok: false, error: { code: "unavailable", message: "Local release channel unavailable; inspect exact state before retrying a mutation." } }); }
-        finally { clearTimeout(timer); res.off("close", abort); abort(); active.delete(clientId); }
+        finally { clearTimeout(timer); res.off("close", responseClosed); abort(true); active.delete(clientId); }
       });
     },
   };

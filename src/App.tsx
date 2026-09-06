@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Dashboard } from "./app/dashboard";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "./app/provider-integration";
 import { WorkspaceContext, useWorkspace } from "./app/workspace-context";
@@ -21,6 +21,7 @@ import { MappingRouteContent } from "./features/mapping";
 import { MediaFieldPicker, MediaRouteContent, createMediaContentServices } from "./features/media";
 import { SitemapperRouteContent } from "./features/sitemapper";
 import { ReleaseRoute, createReleaseController, createReleaseTransport } from "./features/release";
+import { createApplicationOperationGate } from "./app/operation-gate";
 import { SiteDelivery } from "./features/delivery/site-delivery";
 import { isSitePath } from "./features/delivery/routing";
 import { bootstrapTheme, createThemeController, type ThemeController } from "./theme/theme";
@@ -34,6 +35,8 @@ export interface AppProps {
 }
 
 export function App({ themeController, integration }: AppProps = {}) {
+  const operationGate = useMemo(createApplicationOperationGate, []);
+  const swapCommitted = useRef<(() => void) | null>(null);
   const ownedThemeController = useMemo(
     () => (themeController ? null : createThemeController(bootstrapTheme())),
     [themeController],
@@ -88,12 +91,13 @@ export function App({ themeController, integration }: AppProps = {}) {
     finally { if (ticket === navigationTicket.current) setBusy(false); }
   };
   const replaceWorkspace = async (action: () => Promise<ProductionProviderIntegration>): Promise<boolean> => {
-    if (replacing.current || traversal.current || busy || release.getSnapshot().busy) return false;
+    if (replacing.current || traversal.current || busy) return false;
+    const releaseGate = operationGate.claim("replacement"); if (!releaseGate) return false;
     replacing.current = true;
     setBusy(true); setError(null);
-    try { await flush(); const replacement = await action(); setProviders(replacement); setReady(true); return true; }
+    try { await flush(); const replacement = await action(); if (operationGate.disposed) return false; if (replacement === providers) { setReady(true); return true; } await new Promise<void>((resolve) => { swapCommitted.current = resolve; setProviders(replacement); setReady(true); }); return true; }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Workspace could not be opened. The existing workspace remains selected."); return false; }
-    finally { replacing.current = false; setBusy(false); }
+    finally { replacing.current = false; setBusy(false); releaseGate(); }
   };
   const retry = async () => {
     setBusy(true); setError(null);
@@ -167,7 +171,9 @@ export function App({ themeController, integration }: AppProps = {}) {
   // One read model for the whole chrome; the rail's counts come from it, and
   // the Dashboard route reuses this instance rather than initializing a second.
   const workspaceSummary = useMemo(() => createWorkspaceSummary(providers), [providers]);
-  const release = useMemo(() => createReleaseController(providers, createReleaseTransport()), [providers]);
+  const release = useMemo(() => createReleaseController(providers, createReleaseTransport(), operationGate), [providers, operationGate]);
+  useLayoutEffect(() => { swapCommitted.current?.(); swapCommitted.current = null; }, [providers]);
+  useEffect(() => () => { operationGate.dispose(); swapCommitted.current?.(); swapCommitted.current = null; }, [operationGate]);
   useEffect(() => () => release.dispose(), [release]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => { if (providers.sessions.hasPending || release.getSnapshot().busy) { event.preventDefault(); event.returnValue = ""; } };

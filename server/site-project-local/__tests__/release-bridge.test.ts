@@ -2,8 +2,15 @@ import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import releaseApiPlugin, { RELEASE_LIMITS, trustedReleaseRequest } from "../../../plugins/release-api-plugin";
+import { fixture, stageFor, catalog } from "./release-fixture";
+import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
+import { compileSiteProject } from "../../../src/site-project/compiler";
+import { createSiteProjectApiService } from "../../../src/site-project/api/service";
+import type { SiteProjectApiDependencies, SiteProjectApiService } from "../../../src/site-project/api/types";
+import { spawn } from "node:child_process";
+import { join } from "node:path";
 
-function harness(concurrentChecks = false) {
+function harness(concurrentChecks = false, makeService?: (callbacks: Pick<SiteProjectApiDependencies, "isWorkingCurrent" | "reconcilePublication">) => SiteProjectApiService) {
   const plugin = releaseApiPlugin();
   (plugin.configResolved as (value: unknown) => void)({ command: "serve" });
   const source = (plugin.load as (id: string) => string)("\0virtual:release-config");
@@ -11,23 +18,42 @@ function harness(concurrentChecks = false) {
   const events = new Map<string, (data: unknown, client: unknown) => void>();
   let middleware!: (req: unknown, res: unknown, next: () => void) => Promise<void>;
   const client = { socket: Object.assign(new EventEmitter(), { readyState: 1 }), send: vi.fn() };
-  const service = vi.fn((options: { isWorkingCurrent(project: unknown, token: unknown): Promise<boolean> }) => ({ handle: async () => concurrentChecks ? { checks: await Promise.all([options.isWorkingCurrent({ id: "A" }, { workspaceId: "one" }), options.isWorkingCurrent({ id: "B" }, { workspaceId: "one" })]) } : { ok: await options.isWorkingCurrent({ id: "A" }, { workspaceId: "one" }) } }));
-  (plugin.configureServer as (value: unknown) => void)({ config: { server: {} }, ws: { on: (key: string, listener: (data: unknown, client: unknown) => void) => events.set(key, listener), send: vi.fn() }, middlewares: { use: (value: typeof middleware) => { middleware = value; } }, ssrLoadModule: async () => ({ createLocalSiteProjectApiService: service }) });
+  const service = vi.fn((options: { isWorkingCurrent(project: unknown, token: unknown): Promise<boolean> }) => makeService ? makeService(options) : ({ handle: async () => concurrentChecks ? { checks: await Promise.all([options.isWorkingCurrent({ id: "A" }, { workspaceId: "one" }), options.isWorkingCurrent({ id: "B" }, { workspaceId: "one" })]) } : { ok: await options.isWorkingCurrent({ id: "A" }, { workspaceId: "one" }) } }));
+  const httpServer = new EventEmitter();
+  (plugin.configureServer as (value: unknown) => void)({ httpServer, config: { server: {} }, ws: { on: (key: string, listener: (data: unknown, client: unknown) => void) => events.set(key, listener), send: vi.fn() }, middlewares: { use: (value: typeof middleware) => { middleware = value; } }, ssrLoadModule: async () => ({ createLocalSiteProjectApiService: service }) });
   const clientId = "a".repeat(36), requestId = "b".repeat(36);
   const socket = { remoteAddress: "127.0.0.1", localPort: 5173 };
   events.get("connection")!(client.socket, { socket, headers: { origin: "http://localhost:5173", host: "localhost:5173" } });
   events.get("release:bind")!({ clientId, capability: config.capability }, client);
   client.send.mockClear();
-  const request = async (origin = "http://localhost:5173", capability = config.capability, options: { peer?: string; host?: string; headers?: Record<string, string | undefined>; stream?: Readable; id?: string } = {}) => {
+  const request = async (origin = "http://localhost:5173", capability = config.capability, options: { peer?: string; host?: string; headers?: Record<string, string | undefined>; stream?: Readable; id?: string; apiRequest?: unknown } = {}) => {
     const id = options.id ?? clientId;
-    const req = Object.assign(options.stream ?? Readable.from([Buffer.from(JSON.stringify({ clientId: id, requestId, request: { protocolVersion: 2, operation: "apply" } }))]), { socket: { ...socket, remoteAddress: options.peer ?? socket.remoteAddress }, url: "/__zudo-release", method: "POST", headers: { origin, host: options.host ?? "localhost:5173", "x-zudo-release-capability": capability, "content-type": "application/json", "x-zudo-release-client": id, "x-zudo-release-request": requestId, ...options.headers } });
+    const req = Object.assign(options.stream ?? Readable.from([Buffer.from(JSON.stringify({ clientId: id, requestId, request: options.apiRequest ?? { protocolVersion: 2, operation: "apply" } }))]), { socket: { ...socket, remoteAddress: options.peer ?? socket.remoteAddress }, url: "/__zudo-release", method: "POST", headers: { origin, host: options.host ?? "localhost:5173", "x-zudo-release-capability": capability, "content-type": "application/json", "x-zudo-release-client": id, "x-zudo-release-request": requestId, ...options.headers } });
     const res = Object.assign(new EventEmitter(), { destroyed: false, statusCode: 200, setHeader: vi.fn(), end: vi.fn() });
     const done = middleware(req, res, vi.fn()); return { req, res, done };
   };
   const bind = (id: string, peer = "127.0.0.1", host = "localhost:5173", headers = {}) => { const other = { socket: Object.assign(new EventEmitter(), { readyState: 1 }), send: vi.fn() }; events.get("connection")!(other.socket, { socket: { ...socket, remoteAddress: peer }, headers: { origin: `http://${host}`, host, ...headers } }); events.get("release:bind")!({ clientId: id, capability: config.capability }, other); return other; };
-  return { plugin, request, client, events, requestId, service, bind };
+  return { plugin, request, client, events, requestId, service, bind, httpServer };
 }
 describe("local release capability bridge", () => {
+  it.each(["late-settle", "disconnect", "dispose"])("quarantines timed-out A against a separate activation process until %s", async (finish) => {
+    const context = await fixture(), a = project(), b = { ...project(), name: "B" }, sa = stageFor(a), sb = stageFor(b);
+    for (const [index, value] of [a, b].entries()) { const stage = index === 0 ? sa : sb; await context.store.apply({ project: value, stage, expectedRevision: index === 0 ? null : sa.revision, expectedActive: null, expectedGeneration: index }); const build = await compileSiteProject(value, { componentCatalog: catalog }); if (build.status !== "ready") throw new Error("Fixture blocked"); await context.store.complete({ stage, build: build.build }); }
+    const target = (stage: typeof sa) => ({ projectId: stage.projectId, revision: stage.revision, buildId: stage.buildId });
+    const activateB = () => new Promise<{ status: string; value?: { activationGeneration: number } }>((resolve, reject) => { const child = spawn(process.execPath, ["--import", "tsx", join(process.cwd(), "server/site-project-local/__tests__/activation-worker.ts"), context.testRoot, JSON.stringify(target(sb)), JSON.stringify(target(sa))], { stdio: ["ignore", "pipe", "pipe"] }); let out = "", error = ""; child.stdout.on("data", (part) => { out += part; }); child.stderr.on("data", (part) => { error += part; }); child.on("error", reject); child.on("close", (code) => code === 0 ? resolve(JSON.parse(out)) : reject(new Error(error))); });
+    const h = harness(false, (callbacks) => createSiteProjectApiService({ ...context.dependencies, ...callbacks }));
+    vi.useFakeTimers();
+    try {
+      const request = await h.request(undefined, undefined, { apiRequest: { protocolVersion: 2, operation: "activate", ...target(sa), expectedActive: null } });
+      await vi.waitFor(() => expect(h.client.send).toHaveBeenCalled()); const challenge = h.client.send.mock.calls[0]![1]; expect(challenge.payload.activationGeneration).toBe(1);
+      await vi.advanceTimersByTimeAsync(RELEASE_LIMITS.challengeMs); expect(JSON.parse(request.res.end.mock.calls[0]![0])).toMatchObject({ ok: false, error: { code: "commit-uncertain", message: expect.stringContaining("quarantined") } });
+      request.res.emit("close"); expect((await activateB()).status).toBe("unavailable");
+      if (finish === "late-settle") h.events.get("release:answer")!({ ...challenge, result: "applied" }, h.client);
+      else if (finish === "disconnect") h.client.socket.emit("close"); else h.httpServer.emit("close");
+      await request.done; expect(request.res.end).toHaveBeenCalledTimes(1);
+      expect(await activateB()).toMatchObject({ status: "ok", value: { activationGeneration: 2 } });
+    } finally { vi.useRealTimers(); h.client.socket.emit("close"); }
+  });
   it.each(["127.0.0.1", "::ffff:127.0.0.1", "::ffff:7f00:1", "::1", "0:0:0:0:0:0:0:1"])("accepts canonical loopback operator peer %s", (peer) => { expect(trustedReleaseRequest({ socket: { remoteAddress: peer, localPort: 5173 }, headers: { host: "[::1]:5173", origin: "http://[::1]:5173" } } as never, false)).toBe(true); });
   it.each([
     { peer: "192.0.2.20" }, { peer: "::ffff:192.0.2.20" }, { host: "attacker.example:5173" }, { host: "localhost:6666" }, { headers: { "x-forwarded-host": "localhost:5173" } }, { headers: { forwarded: "for=127.0.0.1" } },

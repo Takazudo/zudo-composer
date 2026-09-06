@@ -10,7 +10,8 @@ export function ReleaseRoute({ controller, href }: { controller: ReleaseControll
   const [state, setState] = useState(controller.getSnapshot);
   useEffect(() => { setState(controller.getSnapshot()); return controller.subscribe(() => setState(controller.getSnapshot())); }, [controller]);
   useEffect(() => { if (!controller.getSnapshot().working) void controller.inspect(); }, [controller]);
-  const writeDisabled = state.busy || !controller.available;
+  const blocked = state.busy || state.gateBlocked;
+  const writeDisabled = blocked || !controller.available;
   const exportWorking = () => { const source = controller.exportProject(); if (!source) return; const url = URL.createObjectURL(new Blob([source], { type: "application/json" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "working-site-project.json"; anchor.click(); URL.revokeObjectURL(url); };
   return <Pane label="Review and release"><PaneHeader title="Review & release" as="h1" /><PaneBody>
     <p>Local release only — activation is not hosted deployment.</p>
@@ -21,10 +22,12 @@ export function ReleaseRoute({ controller, href }: { controller: ReleaseControll
     <p>Activated local build: <Identity value={state.active?.buildId ?? "None inspected"} /></p>
     <p>Exact staged build: <Identity value={state.staged?.buildId ?? "None"} /></p>
     <nav aria-label="Release destinations"><a href="/website-preview">Working draft preview</a> · <a href="/site">Activated website</a></nav>
-    <Button disabled={state.busy} onClick={() => void controller.inspect()}>Inspect current state</Button>
-    <Button disabled={!state.working || state.busy} onClick={exportWorking}>Export working JSON</Button>
+    {state.gateBlocked && !state.busy && <p role="status">Workspace replacement is in progress. Release operations are unavailable until it finishes.</p>}
+    <Button disabled={blocked} onClick={() => void controller.inspect()}>Inspect current state</Button>
+    <Button disabled={!state.working || blocked} onClick={exportWorking}>Export working JSON</Button>
     <PaneSection title="Retained server stages">
       <p>These records come from the local release catalog, including stages created in another tab or through the CLI. Selecting one never replaces working drafts.</p>
+      <p>Unresolved local recovery hints: {state.journalPendingCount ?? "unavailable"}. Catalog inspection safely resolves these hints.</p>
       <ul>{state.retainedStages.map((stage) => <li key={`${stage.projectId}:${stage.buildId}:${stage.stageGeneration}`}><Identity value={`${stage.projectId} / ${stage.buildId}`} /> · incarnation {stage.stageGeneration} <Button disabled={writeDisabled} onClick={() => void controller.selectStage(stage)}>Inspect stage {stage.buildId.slice(0, 8)}</Button></li>)}</ul>
     </PaneSection>
     <PaneSection title="Select Content changes">
@@ -45,6 +48,6 @@ export function ReleaseRoute({ controller, href }: { controller: ReleaseControll
     <Button disabled={writeDisabled || state.phase !== "built"} onClick={() => void controller.activate()}>Activate locally</Button>
     <Button disabled={writeDisabled || state.phase !== "activated"} onClick={() => void controller.reconcile()}>Retry publication reconciliation</Button>
     <Button disabled={writeDisabled || state.phase !== "staged"} onClick={() => void controller.discard()}>Discard unbuilt stage</Button>
-    <Button disabled={state.busy || state.phase === "uncertain"} onClick={() => controller.newReview()}>Review remaining working changes</Button>
+    <Button disabled={blocked || state.phase === "uncertain"} onClick={() => controller.newReview()}>Review remaining working changes</Button>
   </PaneBody></Pane>;
 }

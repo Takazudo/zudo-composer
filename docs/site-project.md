@@ -31,6 +31,13 @@ removes only an uncompleted stage from the visible stage catalog; it cannot
 discard active or completed release dependencies. No permanent release GC is
 implemented. Private abandoned files are not listed as committed stages.
 
+Activation returns a separate `activationGeneration` and reconciliation outcome.
+The generation is reserved durably in release metadata; `active.json` remains
+only the required triple. The cross-process writer lock covers pointer CAS and
+the injected reconciliation callback. Content records a monotonic fence in its
+own metadata transaction, including empty batches; late older callbacks cannot
+overwrite a newer reconciled lifecycle.
+
 `projectRevision` is SHA-256 of canonical four-domain SiteProject UTF-8 JSON,
 including its trailing newline. `buildId` is SHA-256 of canonical JSON containing
 `projectRevision`, sorted `mediaLock`, and `toolchain`. Thus unchanged project JSON
@@ -227,6 +234,14 @@ leave it unchanged; an uncertain activation is resolved by exact-state inspectio
 and idempotent retry. Phase-aware lock cleanup tracks owner removal, directory
 removal and root sync separately; retries cannot delete a later writer's lock.
 Precommit cleanup failures remain unavailable, not falsely committed.
+
+A browser reconciliation timeout reports `commit-uncertain` / reconciliation
+busy but quarantines the writer lock until that exact callback settles or its
+operator socket disconnects. Later UI/API/CLI activations cannot pass that lane.
+Disconnect aborts pending browser Content transactions; restart also disconnects
+the client. There is no force-unlock of a live reconciliation. Recovery hints are
+bounded, minimal unresolved approvals, pruned only after confirmed outcomes or
+an authoritative catalog proves retention or definitive stale-generation absence.
 Preserve the old root before any explicit clean reset.
 
 Focused API/store/CLI tests cover selection, digests/CAS, interrupted writes,

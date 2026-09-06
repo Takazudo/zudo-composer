@@ -62,7 +62,7 @@ export interface ContentStore {
   readonly transactionScope: "provider" | "unsupported";
   readAll(): Promise<ContentSnapshot>;
   transact(mutation: ContentMutation): Promise<ContentSnapshot>;
-  reconcilePublication(reconciliations: readonly ContentPublicationReconciliation[]): Promise<ContentSnapshot>;
+  reconcilePublication(reconciliations: readonly ContentPublicationReconciliation[], activationGeneration: number, signal?: AbortSignal): Promise<ContentSnapshot & { activationGeneration: number }>;
   listModels(): Promise<readonly ContentModelSummary[]>;
   getModel(id: string): Promise<ContentLoadOutcome<ContentModelRecord>>;
   putModel(record: ContentModelRecord): Promise<void>;

@@ -18,6 +18,20 @@ async function setup() {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Rich Content transactions and durable snapshots", () => {
+  it("aborts a disconnected reconciliation transaction without installing its fence", async () => {
+    const { store } = await setup(), before = await store.readAll(), cancellation = new AbortController();
+    const original = IDBObjectStore.prototype.put; const put = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function(this: IDBObjectStore, value, key) { const request = original.call(this, value, key); if (value?.key === "activation") cancellation.abort(); return request; });
+    await expect(store.reconcilePublication([], 5, cancellation.signal)).rejects.toBeDefined(); put.mockRestore();
+    expect(await store.readAll()).toEqual(before); expect((await store.reconcilePublication([], 5)).activationGeneration).toBe(5);
+  });
+  it("fences late activation A after empty B and makes equal/older generations write-free", async () => {
+    const { store } = await setup(); await store.putEntry(entry("a")); const before = await store.readAll(), reviewed = before.entries[0]!;
+    const a = [{ ref: ref("a"), expectedGeneration: reviewed.generation, expectedDigest: contentEntryDigest(reviewed), lifecycle: "published" as const }];
+    const b = await store.reconcilePublication([], 2); expect(b.activationGeneration).toBe(2); expect(b.mutationToken).toBe(before.mutationToken + 1);
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
+    const late = await store.reconcilePublication(a, 1), equal = await store.reconcilePublication(a, 2);
+    expect(late.entries[0]!.lifecycle).toBe("draft"); expect(equal.entries[0]!.lifecycle).toBe("draft"); expect(late.mutationToken).toBe(b.mutationToken); expect(equal.mutationToken).toBe(b.mutationToken); expect(put).not.toHaveBeenCalled();
+  });
   it("round trips nested object/list/choice/media values and rejects schema edits invalidating existing data", async () => {
     const { store } = await setup();
     const rich: ContentFieldDefinition = { id: "details", key: "details", label: "Details", required: true, kind: "object", fields: [
@@ -99,12 +113,12 @@ describe("Rich Content transactions and durable snapshots", () => {
     await store.putEntry(draft); const reviewed = (await store.readAll()).entries[0]!;
     const reconciliation = { ref: ref("a"), expectedGeneration: reviewed.generation, expectedDigest: contentEntryDigest(reviewed), lifecycle: "published" as const };
     await store.putEntry({ ...reviewed, values: { title: "Later B" } });
-    await store.reconcilePublication([reconciliation]);
+    await store.reconcilePublication([reconciliation], 1);
     let latest = (await store.readAll()).entries[0]!;
     expect(latest).toMatchObject({ lifecycle: "draft", values: { title: "Later B" } });
-    await store.reconcilePublication([{ ...reconciliation, expectedGeneration: latest.generation, expectedDigest: "wrong" }]);
+    await store.reconcilePublication([{ ...reconciliation, expectedGeneration: latest.generation, expectedDigest: "wrong" }], 2);
     expect((await store.readAll()).entries[0]!.lifecycle).toBe("draft");
-    await store.reconcilePublication([{ ...reconciliation, expectedGeneration: latest.generation, expectedDigest: contentEntryDigest(latest) }]);
+    await store.reconcilePublication([{ ...reconciliation, expectedGeneration: latest.generation, expectedDigest: contentEntryDigest(latest) }], 3);
     latest = (await store.readAll()).entries[0]!; expect(latest.lifecycle).toBe("published");
     await store.putEntry({ ...draft, values: { title: "Pending published edit" } });
     expect((await store.readAll()).entries[0]!).toMatchObject({ lifecycle: "published", values: { title: "Pending published edit" } });
@@ -135,7 +149,7 @@ describe("Rich Content transactions and durable snapshots", () => {
     await expect(store.reconcilePublication([
       { ref: ref("a"), expectedGeneration: after.entries[0]!.generation, expectedDigest: contentEntryDigest(after.entries[0]!), lifecycle: "published" },
       { ref: { ...ref("b"), providerId: "foreign" }, expectedGeneration: 0, expectedDigest: "", lifecycle: "published" },
-    ])).rejects.toMatchObject({ code: "unsupported-transaction" });
+    ], 1)).rejects.toMatchObject({ code: "unsupported-transaction" });
     expect(put).not.toHaveBeenCalled();
   });
 
