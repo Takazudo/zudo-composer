@@ -263,6 +263,8 @@
 
 .cms-check__box {
   position: relative;
+  /* The native input owns hit testing; this sibling only paints its state. */
+  pointer-events: none;
   flex: 0 0 auto;
   width: 15px;
   height: 15px;

@@ -82,7 +82,11 @@ test("collection query settings and ordered pins survive a Mapping reload", asyn
 
   await page.getByRole("button", { name: "Choose" }).click();
   const pins = page.getByRole("dialog", { name: "Choose ordered pins" });
-  await pins.getByRole("checkbox").first().check();
+  const firstPin = pins.getByRole("checkbox").first();
+  // This is deliberately an ordinary pointer-backed check, not a forced DOM
+  // mutation: the decorative box must never intercept the native input.
+  await firstPin.check();
+  await expect(firstPin).toBeChecked();
   await pins.getByRole("button", { name: "Save pins" }).click();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
