@@ -16,9 +16,9 @@ test("versioned Media persists bytes, folders, identity and per-use Content text
   const fileName = `media-${suffix}.png`; const modelId = `media-test-${suffix}`;
   let assetId: string | undefined;
   await ensureDevWorkspace(page);
-  await page.goto("/media");
-  await expect(page.getByRole("heading", { name: "Media", exact: true })).toBeVisible();
-  // Seed only this test's synthetic Content destination through real domain operations.
+  // Seed only this test's synthetic Content destination through real domain
+  // operations before Media mounts, so the picker never depends on the timing
+  // of a cross-context IndexedDB notification to discover it.
   await page.evaluate(async ({ modelId }) => {
     const integrationPath = "/src/app/provider-integration.ts", contentPath = "/src/content/index.ts";
     const { createProductionProviderIntegration } = await import(integrationPath);
@@ -27,6 +27,8 @@ test("versioned Media persists bytes, folders, identity and per-use Content text
     await integration.contentProvider.store.putModel(createContentModelRecord({ name: modelId, kind: "collection", fields: [{ id: "picture", key: "picture", label: "Picture", required: false, kind: "media-use", use: "image" }] }, { id: modelId }));
     await integration.contentProvider.store.putEntry(createContentEntryRecord(modelId, {}, { id: modelId + "-entry" }));
   }, { modelId });
+  await page.goto("/media");
+  await expect(page.getByRole("heading", { name: "Media", exact: true })).toBeVisible();
   try {
     const responsePromise = page.waitForResponse((response) => response.request().headers()["x-zudo-composer-media-operation"] === "upload");
     await page.locator('.sg-media-upload input[type="file"]').setInputFiles({ name: fileName, mimeType: "image/png", buffer: PNG });

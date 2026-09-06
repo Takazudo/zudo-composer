@@ -205,23 +205,16 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
     else expect(await opacityOf(tile)).toBe(0);
 
     // Exercise the expanded hover strip away from the semantic tile at center.
-    // Move the pointer directly after the explicit scroll above: Locator.hover()
-    // performs its own actionability scroll and can move EditorChrome's inner
-    // scroller, which is viewport movement rather than an outline layout shift.
-    const hoverBox = await hit.boundingBox();
-    expect(hoverBox).not.toBeNull();
-    await page.mouse.move(hoverBox!.x + 4, hoverBox!.y + hoverBox!.height / 2);
+    // No forced action: Playwright must resolve the real hit target. Its
+    // actionability scroll is intentionally filtered by tree-relative geometry.
+    await hit.hover({ position: { x: 4, y: 4 } });
     expect(await opacityOf(tile)).toBeGreaterThan(0);
     expect(await readGeometry(page)).toEqual(baseline);
   });
 
   await test.step("the open inline editor floats on the boundary and moves nothing", async () => {
-    const ownsHit = await tile.evaluate((element) => {
-      const box = element.getBoundingClientRect();
-      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-      return hit === element || (hit !== null && element.contains(hit));
-    });
-    expect(ownsHit, "The insertion button, not decorative expansion, owns its center").toBe(true);
+    // This remains an ordinary, unforced click: Playwright's actionability
+    // check is the browser-level proof that decoration does not intercept it.
     await tile.click();
     const editor = gap.locator(".cms-tree-inline");
     await expect(editor).toBeVisible();
