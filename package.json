@@ -39,6 +39,7 @@
     "!**/__tests__",
     "!**/type-tests",
     "!**/*.test.*",
+    "!packages/component-contract/src/*.test.ts",
     "!src/test"
   ],
   "engines": {
