@@ -85,6 +85,9 @@ describe("outline-tree.css", () => {
     // Ringed with the page background so the tile reads as a break in the line.
     expect(tile).toContain("box-shadow: 0 0 0 3px var(--color-bg)");
     expect(tile).toContain("opacity: 0");
+    expect(tile).toContain("pointer-events: auto");
+    expect(tile).not.toContain("pointer-events: none");
+    expect(tile).toContain("z-index: var(--tree-z-tile)");
 
     expect(block(".cms-tree-insert > .cms-tree-inline")).toContain("position: absolute");
   });

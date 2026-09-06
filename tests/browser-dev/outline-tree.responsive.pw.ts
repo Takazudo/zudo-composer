@@ -122,7 +122,12 @@ test("outline insertion preserves IME input, Escape focus and the exact first si
   await trigger.focus(); await trigger.press("Enter");
   const input = page.locator(".cms-tree-inline input"); await expect(input).toBeFocused();
   await input.fill("未確定"); await input.dispatchEvent("compositionstart", { data: "未確定" });
-  await input.press("Enter"); await input.press("Escape"); await expect(input).toHaveValue("未確定");
+  await input.dispatchEvent("keydown", { key: "Enter", code: "Enter", isComposing: true });
+  await input.dispatchEvent("keydown", { key: "Escape", code: "Escape", keyCode: 229 });
+  // Independently prove compositionstart/end tracking, not only key flags.
+  await input.dispatchEvent("keydown", { key: "Enter", code: "Enter", isComposing: false });
+  await input.dispatchEvent("keydown", { key: "Escape", code: "Escape", isComposing: false });
+  await expect(input).toHaveValue("未確定"); await expect(input).toBeFocused();
   await input.dispatchEvent("compositionend", { data: "未確定" }); await input.press("Escape");
   await expect(input).toHaveCount(0); await expect(trigger).toBeFocused();
   await trigger.press("Enter"); await input.fill("Exact first sibling"); await input.press("Enter");
@@ -194,21 +199,20 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
     if (coarseLane) expect(await opacityOf(tile)).toBeGreaterThan(0);
     else expect(await opacityOf(tile)).toBe(0);
 
-    // force: true is required and is not a workaround for a defect. The reveal is
-    // keyed on the container (`.cms-tree-insert:hover`), so the hover paints the
-    // `+` tile over the boundary and gives it `pointer-events: auto` — the tile
-    // then occupies the hit zone's centre point. Playwright's actionability check
-    // sees a different hit target and retries until the test times out, even
-    // though the hover has already succeeded and the container stays hovered
-    // (which is exactly why the affordance remains visible when the pointer
-    // travels onto the tile to click it). The mouse still moves, so `:hover`
-    // applies and the opacity assertion below is meaningful.
-    await hit.hover({ force: true });
+    // Exercise the expanded hover strip away from the semantic tile at center.
+    // No forced action: the strip and button must each own their intended area.
+    await hit.hover({ position: { x: 1, y: 1 } });
     expect(await opacityOf(tile)).toBeGreaterThan(0);
     expect(await readGeometry(page)).toEqual(baseline);
   });
 
   await test.step("the open inline editor floats on the boundary and moves nothing", async () => {
+    const ownsHit = await tile.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return hit === element || (hit !== null && element.contains(hit));
+    });
+    expect(ownsHit, "The insertion button, not decorative expansion, owns its center").toBe(true);
     await tile.click();
     const editor = gap.locator(".cms-tree-inline");
     await expect(editor).toBeVisible();
