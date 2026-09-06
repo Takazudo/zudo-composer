@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isIP } from "node:net";
+import { validateMediaStoreRoot } from "./composer-file-provider-plugin.mjs";
 import type { IncomingMessage } from "node:http";
 import type { Plugin, WebSocketClient } from "vite";
 
@@ -21,7 +22,8 @@ export function trustedReleaseRequest(req: Pick<IncomingMessage, "headers" | "so
   try { const url = new URL(`${https ? "https" : "http"}://${host}`); return url.host === host && origin === url.origin && Number(url.port || (https ? 443 : 80)) === req.socket.localPort; } catch { return false; }
 }
 /** Serve-only loopback operator capability; no secret is emitted in build mode. */
-export default function releaseApiPlugin(): Plugin {
+export default function releaseApiPlugin(options: { mediaStoreRoot?: string } = {}): Plugin {
+  const mediaStoreRoot = validateMediaStoreRoot(options.mediaStoreRoot);
   let serving = false;
   const capability = nonce();
   return {
@@ -35,6 +37,7 @@ export default function releaseApiPlugin(): Plugin {
       const contexts = new AsyncLocalStorage<{ ask(payload: unknown): Promise<unknown> }>();
       let service: Promise<{ handle(request: unknown): Promise<unknown> }> | undefined;
       const api = () => service ??= server.ssrLoadModule("/server/site-project-local/service.ts").then((module) => module.createLocalSiteProjectApiService({
+        mediaStoreRoot,
         isWorkingCurrent: async (project: unknown, precondition: unknown) => (await contexts.getStore()?.ask({ kind: "current", project, precondition })) === true,
         reconcilePublication: async (active: unknown, changes: unknown, activationGeneration: number) => { const result = await contexts.getStore()?.ask({ kind: "reconcile", active, changes, activationGeneration }); return result === "applied" || result === "changed" ? result : "unavailable"; },
       }));

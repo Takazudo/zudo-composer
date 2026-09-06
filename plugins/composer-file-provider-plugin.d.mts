@@ -26,6 +26,7 @@ export function createMediaUploadMiddleware(options: {
 
 export function createMediaFileMiddleware(options: {
   projectRoot: string;
+  mediaStoreRoot?: string;
   createStore?(): Promise<FilesystemMediaStore>;
   operations?: { lstat?: typeof fs.lstat; open?: typeof fs.open; realpath?: typeof fs.realpath };
 }): (request: IncomingMessage, response: ServerResponse, next: () => void) => Promise<void>;
@@ -58,4 +59,5 @@ export function createComposerFileProviderMiddleware(options: {
   >>;
 }): (request: DevRequest) => Promise<DevResponse>;
 
-export default function composerFileProviderPlugin(): Plugin;
+export function validateMediaStoreRoot(root: string | undefined): string | undefined;
+export default function composerFileProviderPlugin(options?: { mediaStoreRoot?: string }): Plugin;

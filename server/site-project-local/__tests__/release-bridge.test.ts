@@ -2,7 +2,9 @@ import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import releaseApiPlugin, { RELEASE_LIMITS, trustedReleaseRequest } from "../../../plugins/release-api-plugin";
-import { fixture, stageFor, catalog } from "./release-fixture";
+import { fixture, stageFor, catalog, call, toolchain, PNG, review } from "./release-fixture";
+import { createLocalSiteProjectApiService } from "../service";
+import { readFile } from "node:fs/promises";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
 import { compileSiteProject } from "../../../src/site-project/compiler";
 import { createSiteProjectApiService } from "../../../src/site-project/api/service";
@@ -10,8 +12,11 @@ import type { SiteProjectApiDependencies, SiteProjectApiService } from "../../..
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 
-function harness(concurrentChecks = false, makeService?: (callbacks: Pick<SiteProjectApiDependencies, "isWorkingCurrent" | "reconcilePublication">) => SiteProjectApiService) {
-  const plugin = releaseApiPlugin();
+// Keep this headless transport/storage regression independent of provider JSX rendering.
+vi.mock("@zudo-sg/ui/composer-pack", async () => ({ componentPack: { manifest: (await import("./release-fixture")).catalog.pack } }));
+
+function harness(concurrentChecks = false, makeService?: (callbacks: Pick<SiteProjectApiDependencies, "isWorkingCurrent" | "reconcilePublication">) => SiteProjectApiService, mediaStoreRoot?: string) {
+  const plugin = releaseApiPlugin({ mediaStoreRoot });
   (plugin.configResolved as (value: unknown) => void)({ command: "serve" });
   const source = (plugin.load as (id: string) => string)("\0virtual:release-config");
   const config = JSON.parse(source.slice("export default ".length, -1));
@@ -36,6 +41,31 @@ function harness(concurrentChecks = false, makeService?: (callbacks: Pick<SitePr
   return { plugin, request, client, events, requestId, service, bind, httpServer };
 }
 describe("local release capability bridge", () => {
+  it("production review and pinned build read bytes from the explicit isolated Media root", async () => {
+    const context = await fixture({ media: true });
+    const asset = await context.media!.upload({ fileName: "isolated.png", declaredMediaType: "image/png", bytes: PNG });
+    const value = project();
+    value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${asset.id}`;
+    const service = createLocalSiteProjectApiService({ testRoot: context.testRoot, mediaStoreRoot: context.mediaRoot,
+      toolchain: { ...toolchain, componentPack: value.componentPack } });
+    const plan = await review(service, value, { selection: value.providers.content.flatMap((provider) => provider.entries.map((entry) => ({
+      ref: { providerId: provider.id, modelId: entry.modelId, recordId: entry.id }, action: "publish",
+    }))) });
+    expect(plan.mediaLock!.pins[0]!.checksum).toBe(asset.document.versions[0]!.checksum);
+    const applied = await call<{ buildId: string }>(service, "apply", { plan });
+    await call(service, "build", { projectId: value.id, buildId: applied.buildId });
+    expect(await readFile(join(context.testRoot, "builds", applied.buildId, `media-${plan.mediaLock!.pins[0]!.url.split("/").at(-1)}`))).toEqual(Buffer.from(PNG));
+  });
+  it("passes the isolated Media root to the release service without exposing a client path", async () => {
+    const mediaStoreRoot = "/tmp/release-bridge-isolated/media";
+    const h = harness(false, undefined, mediaStoreRoot);
+    const { done } = await h.request();
+    await vi.waitFor(() => expect(h.client.send).toHaveBeenCalled());
+    expect(h.service.mock.calls[0]![0]).toMatchObject({ mediaStoreRoot });
+    expect((h.plugin.load as (id: string) => string)("\0virtual:release-config")).not.toContain(mediaStoreRoot);
+    h.client.socket.emit("close"); await done;
+    expect(() => releaseApiPlugin({ mediaStoreRoot: "relative" })).toThrow("absolute resolved");
+  });
   it.each(["late-settle", "disconnect", "dispose"])("quarantines timed-out A against a separate activation process until %s", async (finish) => {
     const context = await fixture(), a = project(), b = { ...project(), name: "B" }, sa = stageFor(a), sb = stageFor(b);
     for (const [index, value] of [a, b].entries()) { const stage = index === 0 ? sa : sb; await context.store.apply({ project: value, stage, expectedRevision: index === 0 ? null : sa.revision, expectedActive: null, expectedGeneration: index }); const build = await compileSiteProject(value, { componentCatalog: catalog }); if (build.status !== "ready") throw new Error("Fixture blocked"); await context.store.complete({ stage, build: build.build }); }

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { runSiteProjectCli } from "./cli-runner";
 import { createLocalSiteProjectApiService } from "./service";
+import { validateMediaStoreRoot } from "../../plugins/composer-file-provider-plugin.mjs";
 
 try {
-  process.exitCode = await runSiteProjectCli(createLocalSiteProjectApiService(), {
+  process.exitCode = await runSiteProjectCli(createLocalSiteProjectApiService({ mediaStoreRoot: validateMediaStoreRoot(process.env.ZUDO_MEDIA_STORE_ROOT) }), {
     stdin: process.stdin,
     stdout: process.stdout,
     stderr: process.stderr,

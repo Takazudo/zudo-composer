@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -44,8 +44,12 @@ async function runCli(request, environment) {
 // a symlinked ancestor (e.g. macOS `os.tmpdir()` -> `/private/var/folders/...`).
 const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-site-project-browser-")));
 try {
+  const releaseRoot = join(temporaryRoot, "release");
+  const mediaRoot = join(temporaryRoot, "media");
+  await Promise.all([mkdir(releaseRoot), mkdir(mediaRoot)]);
   const environment = {
-    ZUDO_SITE_PROJECT_ROOT: temporaryRoot,
+    ZUDO_SITE_PROJECT_ROOT: releaseRoot,
+    ZUDO_MEDIA_STORE_ROOT: mediaRoot,
     SITE_PROJECT_BROWSER_LANE: mode,
   };
   const sample = JSON.parse(await readFile(join(root, "src/site-project/sample/sample-site-project.json"), "utf8"));

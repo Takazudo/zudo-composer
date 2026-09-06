@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { requireIsolatedRoots } from "./tests/browser/isolated-roots";
+
+const { releaseRoot, mediaRoot } = requireIsolatedRoots(process.env);
 
 export default defineConfig({
   testDir: "./tests/browser",
@@ -22,6 +25,8 @@ export default defineConfig({
     timeout: 30_000,
     env: {
       ...process.env,
+      ZUDO_SITE_PROJECT_ROOT: releaseRoot,
+      ZUDO_MEDIA_STORE_ROOT: mediaRoot,
       CLOUDFLARE_API_TOKEN: "",
       CLOUDFLARE_ACCOUNT_ID: "",
     },

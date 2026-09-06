@@ -35,6 +35,7 @@ export function registerCatalogJourney(lane: string) {
   test("catalog example: persistent graph, >25 references, query pins, Media versions and local immutable release", async ({ page, context }, info) => {
     test.skip(lane !== "dev", "This authoring/activation journey belongs only to the isolated local release lane.");
     expect(process.env.ZUDO_SITE_PROJECT_ROOT, "Guarded runner must supply a disposable release root").toBeTruthy();
+    expect(process.env.ZUDO_MEDIA_STORE_ROOT, "Guarded runner must supply a disposable Media root").toBeTruthy();
     test.setTimeout(240_000);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");

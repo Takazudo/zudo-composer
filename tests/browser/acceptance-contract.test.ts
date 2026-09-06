@@ -1,4 +1,7 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, mkdirSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { requireIsolatedRoots } from "./isolated-roots";
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
 
@@ -13,6 +16,37 @@ const sources = [
 
 /** Source contract only: never reports a browser run or visual acceptance. */
 describe("final browser acceptance source contract", () => {
+  it("rejects missing, default, unresolved and unrelated roots before browser server startup", () => {
+    const parent = realpathSync(mkdtempSync(join(tmpdir(), "zudo-composer-site-project-browser-")));
+    try {
+      const releaseRoot = join(parent, "release"), mediaRoot = join(parent, "media");
+      mkdirSync(releaseRoot); mkdirSync(mediaRoot);
+      const env = { ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot };
+      expect(requireIsolatedRoots(env)).toEqual({ releaseRoot, mediaRoot });
+      for (const invalid of [{}, { ZUDO_SITE_PROJECT_ROOT: releaseRoot }, { ...env, ZUDO_MEDIA_STORE_ROOT: "media-store" },
+        { ...env, ZUDO_MEDIA_STORE_ROOT: join(process.cwd(), "media-store") }, { ...env, ZUDO_MEDIA_STORE_ROOT: `${mediaRoot}/` },
+        { ...env, ZUDO_MEDIA_STORE_ROOT: releaseRoot }]) expect(() => requireIsolatedRoots(invalid)).toThrow();
+      for (const config of ["playwright.site-project.config.ts", "playwright.site-project-dist.config.ts"]) {
+        expect(read(config)).toContain("requireIsolatedRoots(process.env)");
+        expect(read(config)).toContain("ZUDO_MEDIA_STORE_ROOT: mediaRoot");
+        expect(read(config)).toContain("reuseExistingServer: false");
+      }
+    } finally { rmSync(parent, { recursive: true, force: true }); }
+  });
+  it("isolates release and Media beneath one cleaned temporary parent for child processes only", () => {
+    const runner = read("scripts/run-site-project-browser.mjs");
+    expect(runner).toContain('join(temporaryRoot, "release")');
+    expect(runner).toContain('join(temporaryRoot, "media")');
+    expect(runner).toContain("ZUDO_SITE_PROJECT_ROOT: releaseRoot");
+    expect(runner).toContain("ZUDO_MEDIA_STORE_ROOT: mediaRoot");
+    expect(runner).toMatch(/finally\s*\{\s*await rm\(temporaryRoot, \{ recursive: true, force: true \}\)/);
+    expect(runner).not.toMatch(/process\.env\.\w+\s*=/);
+    expect(read("server/site-project-local/cli.ts")).toContain("validateMediaStoreRoot(process.env.ZUDO_MEDIA_STORE_ROOT)");
+    const vite = read("vite.config.ts");
+    expect(vite).toContain("process.env.ZUDO_MEDIA_STORE_ROOT");
+    expect(vite).toContain("releaseApiPlugin({ mediaStoreRoot })");
+    expect(vite).toContain("composerFileProviderPlugin({ mediaStoreRoot })");
+  });
   it.each(sources)("%s parses without syntax errors or focused/conditional-adoption escapes", (file) => {
     const source = read(file);
     const compiled = ts.transpileModule(source, { fileName: file, reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
