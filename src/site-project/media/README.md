@@ -15,9 +15,16 @@ lock explicitly to `compileSiteProject`; required managed references without pin
 block compilation. The compiler never fetches a mutable Media head itself.
 
 Live visitor delivery and Mapping attachment previews use
-`compileWithCapturedMedia`: capture once from the injected store, verify exact
-bytes/metadata and coherent project revision around compilation, then pass the
-captured lock. Failure blocks without recapturing latest or retrying implicitly.
+`compileWithCapturedMedia`. Visitor delivery with Media uses the production
+aggregate `captureWorkspace` project and Media snapshot, constructs the lock from
+that snapshot, and invokes `isCaptureCurrent` around compilation. There is no
+second project or Media snapshot capture to select newer versions. Media-absent
+static visitor output is explicitly `consistency: "detached"`, not release-current.
+Mapping previews are also detached preflight. Attachment creation compares its
+persisted baseline separately from the unpersisted candidate under the workspace
+lock, checks exact Media integrity/token, then performs the metadata CAS update.
+It never compares candidate serialization to the persisted baseline. Failure
+blocks without recapturing latest or retrying implicitly.
 Identityless URLs always use that injected provider identity; impact inspection
 without the identity is incomplete. Malformed or unsupported managed-looking
 values block release and preview, even when no valid reference was collected.

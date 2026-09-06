@@ -5,8 +5,28 @@ import { createMappingAttachmentService } from "../mapping-attachment-service";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import type { WorkspaceRecord } from "../workspace-storage";
 import { providerFixture, PNG } from "../../features/media/__tests__/versioned-fixture";
+import { createProductionProviderIntegration } from "../provider-integration";
+import { IDBFactory } from "fake-indexeddb";
+import { createHash } from "node:crypto";
+import { serializeSiteProject } from "../../site-project/model/canonical";
 
 describe("mapping attachment aggregate service", () => {
+  it("attaches an unpersisted candidate with the real production Media store and metadata CAS", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const asset = await filesystem.upload({ fileName: "link.png", declaredMediaType: "image/png", bytes: PNG });
+    const project = loadSampleSiteProject(activeSiteProjectValidationContext);
+    const source = project.providers.compositions[0]!.records.find(({ id }) => id === "journal-entry-page")!;
+    delete source.document.binding;
+    source.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-media/asset-${asset.id}`, children: "Download" }, slots: {} });
+    const idb = new IDBFactory();
+    const integration = createProductionProviderIntegration({ project, sourceRevision: createHash("sha256").update(serializeSiteProject(project)).digest("hex"), mediaProvider: provider, compositionIdbFactory: idb, contentIdbFactory: idb, mappingIdbFactory: idb, sitemapIdbFactory: idb });
+    expect((await integration.initialization.initialize()).status).toBe("ready");
+    const before = await integration.workspace.metadata();
+    await integration.mappingAttachmentService.attach({ composition: { providerId: "indexeddb", recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } });
+    const after = await integration.workspace.metadata();
+    expect(after.mutationToken).toBeGreaterThan(before.mutationToken);
+    expect(after.metadata.collectionAttachments).toHaveLength(1);
+  });
   it("pins managed Media in attachment previews and reports missing provider as blocking", async () => {
     const { provider, filesystem } = await providerFixture();
     const asset = await filesystem.upload({ fileName: "link.png", declaredMediaType: "image/png", bytes: PNG });

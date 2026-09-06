@@ -15,9 +15,9 @@ export async function inspectSiteProjectMedia(project: SiteProject, catalog: Com
   }
   return index;
 }
-export async function captureSiteProjectMediaLock(project: SiteProject, catalog: ComponentCatalog, store: VersionedMediaStore | undefined) {
+export async function captureSiteProjectMediaLock(project: SiteProject, catalog: ComponentCatalog, store: VersionedMediaStore | undefined, suppliedSnapshot?: MediaSnapshot) {
   try {
-  const snapshot = await store?.snapshot();
+  const snapshot = suppliedSnapshot ?? await store?.snapshot();
   const index = await inspectSiteProjectMedia(project, catalog, snapshot, store?.provider.id);
   if (!index.complete) return { status: "blocked" as const, index, diagnostics: [{ code: "unrecognized" as const, message: "Media impact inspection is incomplete; exact release capture is blocked." }] };
   if (!index.references.length && !store) return { status: "ready" as const, index, lock: undefined };

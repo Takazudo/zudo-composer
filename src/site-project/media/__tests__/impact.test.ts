@@ -24,16 +24,21 @@ describe("provider-qualified media impact", () => {
     const pin = { ...lock.pins[0]!, providerId: "custom-media" };
     const resolveVersion = vi.fn(async (ref) => { expect(ref.providerId).toBe("custom-media"); const { metadataRevision, headVersionId, ...exact } = pin; expect(metadataRevision).toBe(1); expect(headVersionId).toBe(checksum); return exact; });
     const store = { provider: { id: "custom-media" }, snapshot: async () => structuredClone(snapshot), mutationToken: async () => snapshot.mutationToken, resolveVersion } as unknown as VersionedMediaStore;
-    const result = await compileWithCapturedMedia(value, { catalog, mediaStore: store, readProject: async () => value });
+    const result = await compileWithCapturedMedia(value, { catalog, mediaStore: store });
     expect(result.status).toBe("ready");
+    expect(result.consistency).toBe("detached");
+    const guardedStore = { ...store, snapshot: vi.fn(async () => { throw new Error("Must not recapture snapshot"); }) };
+    const isCaptureCurrent = vi.fn(async () => true);
+    expect(await compileWithCapturedMedia(value, { catalog, mediaStore: guardedStore, snapshot, isCaptureCurrent })).toMatchObject({ status: "ready", consistency: "captured" });
+    expect(guardedStore.snapshot).not.toHaveBeenCalled(); expect(isCaptureCurrent).toHaveBeenCalledTimes(2);
     if (result.status === "ready") expect(result.build.routes[0]!.composition.document.root[0]!.props.href).toBe(pin.url);
     const inspection = await createProjectMediaUsageInspection({ readProject: async () => value, catalog, mediaStore: store }).read();
     expect(inspection.index.complete).toBe(true);
     expect(inspection.index.references.every(({ ref }) => ref.providerId === "custom-media")).toBe(true);
-    expect((await compileWithCapturedMedia(value, { catalog, mediaStore: store, readProject: async () => ({ ...value, name: "Changed" }) })).status).toBe("blocked");
-    expect((await compileWithCapturedMedia(value, { catalog, mediaStore: store, readProject: async () => { snapshot.mutationToken = "c".repeat(64); return value; } })).status).toBe("blocked");
+    expect((await compileWithCapturedMedia(value, { catalog, mediaStore: store, checkBaseline: async () => false })).status).toBe("blocked");
+    expect((await compileWithCapturedMedia(value, { catalog, mediaStore: store, checkBaseline: async () => { snapshot.mutationToken = "c".repeat(64); return true; } })).status).toBe("blocked");
     resolveVersion.mockRejectedValue(new Error("Corrupt bytes"));
-    expect((await compileWithCapturedMedia(value, { catalog, mediaStore: store, readProject: async () => value })).status).toBe("blocked");
+    expect((await compileWithCapturedMedia(value, { catalog, mediaStore: store })).status).toBe("blocked");
   });
   it.each(["/uploaded-media/asset-bad?query", "raw /uploaded-media/asset-asset"])("blocks unsupported managed text before release: %s", async (href) => {
     const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = href;
