@@ -7,13 +7,13 @@ import { installedPackageDigest } from "./installed-identity";
 import { componentPack } from "@zudo-sg/ui/composer-pack";
 import { createComponentCatalog } from "../../src/composer/model/types";
 import { createSiteProjectApiService } from "../../src/site-project/api/service";
-import type { SiteProjectApiService, ReleaseToolchain } from "../../src/site-project/api/types";
+import type { SiteProjectApiService, ReleaseToolchain, SiteProjectApiDependencies } from "../../src/site-project/api/types";
 import { createFilesystemMediaStore } from "../../src/media/storage/filesystem";
 import type { VersionedMediaStore } from "../../src/media/library";
 import { createLocalSiteProjectStore, type LocalSiteProjectStoreOptions } from "./store";
 import { releaseJson } from "../../src/site-project/api/review";
 
-export interface LocalSiteProjectServiceOptions extends LocalSiteProjectStoreOptions { mediaStoreRoot?: string; mediaStore?: VersionedMediaStore; toolchain?: ReleaseToolchain }
+export interface LocalSiteProjectServiceOptions extends LocalSiteProjectStoreOptions { mediaStoreRoot?: string; mediaStore?: VersionedMediaStore; toolchain?: ReleaseToolchain; isWorkingCurrent?: SiteProjectApiDependencies["isWorkingCurrent"]; reconcilePublication?: SiteProjectApiDependencies["reconcilePublication"] }
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 async function compilerIdentity(): Promise<string> {
   const root = resolve(import.meta.dirname, "../../src"), files: [string, string][] = [];
@@ -44,7 +44,7 @@ export function createLocalSiteProjectApiService(options: LocalSiteProjectServic
     const toolchain: ReleaseToolchain = options.toolchain ?? { compiler: await compilerIdentity(), componentPack: { packId: catalog.pack.packId, packVersion: catalog.pack.packVersion, contractVersion: catalog.pack.contractVersion }, providerCommit, providerTree: "1c3cbfd3a25d1425f447cdadd5ba538916394309", installedProviderDigest: await installedPackageDigest(installedRoot), contractDigest: sha(contractText) };
     let mediaStore = options.mediaStore;
     if (!mediaStore) { try { await lstat(join(mediaRoot, "catalog.json")); mediaStore = await createFilesystemMediaStore({ mediaStoreRoot: mediaRoot }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } }
-    return createSiteProjectApiService({ componentCatalog: catalog, projectStore: store, buildStore: store, hash: async (text) => sha(text), toolchain, mediaStore });
+    return createSiteProjectApiService({ componentCatalog: catalog, projectStore: store, buildStore: store, hash: async (text) => sha(text), toolchain, mediaStore, isWorkingCurrent: options.isWorkingCurrent, reconcilePublication: options.reconcilePublication });
   };
   const handle: SiteProjectApiService["handle"] = async (request) => { try { return await (await create()).handle(request); } catch { return { ok: false, error: { code: "unavailable", message: "Release toolchain or Media capability is unavailable." } }; } };
   return { handle, serialize: async (request) => releaseJson(await handle(request)) };

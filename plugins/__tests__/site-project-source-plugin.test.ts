@@ -20,7 +20,7 @@ describe("siteProjectSourcePlugin", () => {
     expect(readDevProject).not.toHaveBeenCalled();
   });
 
-  it("loads activated data in dev and invalidates with one deterministic full reload on active add/change/unlink", async () => {
+  it("invalidates activated delivery with a scoped event without reloading working editors", async () => {
     const watcher = new EventEmitter() as EventEmitter & { add: ReturnType<typeof vi.fn>; unwatch: ReturnType<typeof vi.fn> };
     watcher.add = vi.fn(); watcher.unwatch = vi.fn();
     const invalidateModule = vi.fn(); const send = vi.fn();
@@ -37,7 +37,8 @@ describe("siteProjectSourcePlugin", () => {
     expect(source).toContain('"id":"demo"');
     expect(source).toContain(`siteProjectRevision = "${"a".repeat(64)}"`);
     watcher.emit("unlink", "/repo/.zudo-site-project/active.json");
-    await vi.waitFor(() => expect(send).toHaveBeenCalledWith({ type: "full-reload", path: "*" }));
+    await vi.waitFor(() => expect(send).toHaveBeenCalledWith({ type: "custom", event: "release:changed", data: { source: "active-delivery" } }));
+    expect(send.mock.calls.some(([message]) => message.type === "full-reload")).toBe(false);
     expect(invalidateModule).toHaveBeenCalledTimes(1);
   });
 });

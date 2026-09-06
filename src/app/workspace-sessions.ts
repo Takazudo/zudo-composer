@@ -10,33 +10,36 @@ export type WorkspaceFlushOutcome = { status: "ready"; generation: number } | { 
 export function createWorkspaceSaveRegistry() {
   let generation = 0;
   const listeners = new Set<() => void>();
-  const sessions = new Map<symbol, { identity: WorkspaceSessionIdentity; handle: WorkspaceSaveHandle; detached: boolean; error?: Error }>();
+  const sessions = new Map<symbol, { identity: WorkspaceSessionIdentity; handle: WorkspaceSaveHandle; detached: boolean; revision: number; saved: number; pending?: Promise<WorkspaceSaveFailure | undefined>; error?: Error }>();
   const emit = () => { for (const listener of listeners) { try { listener(); } catch { /* Observers cannot interrupt saving. */ } } };
   const changed = () => { generation++; emit(); };
   const settle = async (key: symbol): Promise<WorkspaceSaveFailure | undefined> => {
     const session = sessions.get(key);
     if (!session) return;
-    try {
-      await session.handle.flush();
-      delete session.error;
-      if (session.detached) sessions.delete(key);
-    } catch (cause) {
-      session.error = cause instanceof Error ? cause : new Error("Save failed.", { cause });
-      return { ...session.identity, error: session.error };
-    }
+    if (session.pending) return session.pending;
+    session.pending = (async () => {
+      try {
+        do { const revision = session.revision; await session.handle.flush(); session.saved = revision; } while (session.saved !== session.revision);
+        delete session.error;
+        if (session.detached) sessions.delete(key);
+      } catch (cause) { session.error = cause instanceof Error ? cause : new Error("Save failed.", { cause }); return { ...session.identity, error: session.error }; }
+      finally { session.pending = undefined; emit(); }
+    })();
+    return session.pending;
   };
   return {
     get generation() { return generation; },
+    get hasPending() { return [...sessions.values()].some((session) => session.saved !== session.revision || !!session.pending || !!session.error); },
     get failures(): readonly WorkspaceSaveFailure[] { return [...sessions.values()].flatMap((session) => session.error ? [{ ...session.identity, error: session.error }] : []); },
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     register(identity: WorkspaceSessionIdentity, handle: WorkspaceSaveHandle) {
       const key = Symbol(identity.feature);
-      sessions.set(key, { identity: { ...identity }, handle, detached: false });
-      changed();
+      sessions.set(key, { identity: { ...identity }, handle, detached: false, revision: 0, saved: 0 });
+      emit();
       return {
         /** Call when an editor accepts a draft, before its debounce/write begins. */
-        changed,
-        retry() { handle.retry?.(); changed(); },
+        changed() { const session = sessions.get(key); if (!session) return; session.revision++; changed(); },
+        retry() { handle.retry?.(); changed(); void settle(key); },
         detach() {
           const session = sessions.get(key);
           if (!session || session.detached) return;

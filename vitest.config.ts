@@ -27,6 +27,7 @@ export default defineConfig({
         plugins: [preact()],
         resolve: {
           alias: {
+            'virtual:release-config': fileURLToPath(new URL('./src/test/release-config.ts', import.meta.url)),
             'virtual:composer-file-provider-config': fileURLToPath(
               new URL('./src/test/composer-file-provider-config.ts', import.meta.url),
             ),

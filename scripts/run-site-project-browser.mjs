@@ -52,20 +52,25 @@ try {
   const project = mode === "dist"
     ? { ...globalThis.structuredClone(sample), id: "browser-disposable-project", name: "Disposable browser project" }
     : sample;
-  const applyResult = await runCli({
-    protocolVersion: 1,
-    operation: "apply",
+  const plan = await runCli({
+    protocolVersion: 2,
+    operation: "plan",
     project,
+    workingPrecondition: null,
+    selection: project.providers.content.flatMap((provider) => provider.entries.map((entry) => ({ ref: { providerId: provider.id, modelId: entry.modelId, recordId: entry.id }, action: "publish" }))),
     expectedRevision: null,
     expectedActive: null,
   }, environment);
+  const applyResult = await runCli({ protocolVersion: 2, operation: "apply", plan }, environment);
   const revision = applyResult.revision;
   if (typeof revision !== "string" || !/^[a-f0-9]{64}$/u.test(revision)) throw new Error("CLI apply did not return a revision digest.");
+  await runCli({ protocolVersion: 2, operation: "build", projectId: project.id, buildId: applyResult.buildId }, environment);
   await runCli({
-    protocolVersion: 1,
+    protocolVersion: 2,
     operation: "activate",
     projectId: project.id,
     revision,
+    buildId: applyResult.buildId,
     expectedActive: null,
   }, environment);
 

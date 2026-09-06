@@ -20,6 +20,7 @@ import { ContentRouteContent } from "./features/content";
 import { MappingRouteContent } from "./features/mapping";
 import { MediaFieldPicker, MediaRouteContent, createMediaContentServices } from "./features/media";
 import { SitemapperRouteContent } from "./features/sitemapper";
+import { ReleaseRoute, createReleaseController, createReleaseTransport } from "./features/release";
 import { SiteDelivery } from "./features/delivery/site-delivery";
 import { isSitePath } from "./features/delivery/routing";
 import { bootstrapTheme, createThemeController, type ThemeController } from "./theme/theme";
@@ -87,7 +88,7 @@ export function App({ themeController, integration }: AppProps = {}) {
     finally { if (ticket === navigationTicket.current) setBusy(false); }
   };
   const replaceWorkspace = async (action: () => Promise<ProductionProviderIntegration>): Promise<boolean> => {
-    if (replacing.current || traversal.current || busy) return false;
+    if (replacing.current || traversal.current || busy || release.getSnapshot().busy) return false;
     replacing.current = true;
     setBusy(true); setError(null);
     try { await flush(); const replacement = await action(); setProviders(replacement); setReady(true); return true; }
@@ -166,6 +167,13 @@ export function App({ themeController, integration }: AppProps = {}) {
   // One read model for the whole chrome; the rail's counts come from it, and
   // the Dashboard route reuses this instance rather than initializing a second.
   const workspaceSummary = useMemo(() => createWorkspaceSummary(providers), [providers]);
+  const release = useMemo(() => createReleaseController(providers, createReleaseTransport()), [providers]);
+  useEffect(() => () => release.dispose(), [release]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (providers.sessions.hasPending || release.getSnapshot().busy) { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [providers, release]);
   const mediaContentServices = useMemo(() => createMediaContentServices(
     providers.contentProviders,
     () => providers.sessions.flush(),
@@ -202,7 +210,13 @@ export function App({ themeController, integration }: AppProps = {}) {
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
   else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} contentServices={mediaContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;
   else if (path === "/") content = <Dashboard summary={workspaceSummary} />;
-  else if (path === "/review") content = <main class="route-placeholder"><h1>Review & release</h1><p>Release checks and activation are not available in this workspace yet.</p><p>Preview does not approve or publish changes.</p></main>;
+  else if (path === "/review") content = <ReleaseRoute controller={release} href={(item) => {
+    if (!("domain" in item)) return item.path.includes("media") ? "/media" : item.path.includes("sitemap") ? "/sitemapper" : item.path.includes("mapping") ? "/mapping" : item.path.includes("content") ? "/content" : null;
+    if (item.domain === "content-entry") { const entry = release.getSnapshot().working?.providers.content.find(({ id }) => id === item.providerId)?.entries.find(({ id }) => id === item.recordId); return entry ? formatIntent({ route: "content", providerId: item.providerId, modelId: entry.modelId, entryId: entry.id }) : "/content"; }
+    if (item.domain === "content-model") return formatIntent({ route: "content", providerId: item.providerId, modelId: item.recordId });
+    if (item.domain === "compositions") return formatIntent({ route: "composer", providerId: item.providerId, compositionId: item.recordId });
+    return item.domain === "media" ? "/media" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
+  }} />;
   else if (path === "/website-preview") content = <WebsitePreview />;
   else content = <NotFound />;
   return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}><div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
