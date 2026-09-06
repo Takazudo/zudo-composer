@@ -1,33 +1,34 @@
 import type { ReleasePlan, StagedRelease } from "../../site-project/api/types";
 const root = "zudo-release-journal-v2:";
 const prefix = (workspaceId: string) => `${root}${encodeURIComponent(workspaceId)}:`;
-export interface ReleaseReceipt { key: string; projectId: string; buildId: string; approvalDigest: string; expectedStoreGeneration: number }
+export interface ReleaseReceipt { key: string; attemptId: string; projectId: string; buildId: string; approvalDigest: string; expectedStoreGeneration: number }
+const attemptIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const notify = (workspaceId: string) => window.dispatchEvent(new CustomEvent("release:journal", { detail: workspaceId }));
 function receiptCount(workspaceId: string) { let count = 0; for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i)?.startsWith(prefix(workspaceId))) count++; return count; }
 /** Only unresolved approvals need local hints. Server catalog stages need none. */
 export function recordReleaseApproval(workspaceId: string, plan: ReleasePlan, stage: StagedRelease): ReleaseReceipt {
-  const key = `${prefix(workspaceId)}${stage.projectId}:${stage.buildId}:${plan.planDigest}`;
-  const receipt = { key, projectId: stage.projectId, buildId: stage.buildId, approvalDigest: plan.planDigest, expectedStoreGeneration: plan.storeGeneration };
+  const attemptId = crypto.randomUUID();
+  const key = `${prefix(workspaceId)}${stage.projectId}:${stage.buildId}:${plan.planDigest}:${attemptId}`;
+  const receipt = { key, attemptId, projectId: stage.projectId, buildId: stage.buildId, approvalDigest: plan.planDigest, expectedStoreGeneration: plan.storeGeneration };
   const value = JSON.stringify(receipt), prior = localStorage.getItem(key);
-  if (prior !== null && prior !== value) throw new Error("Recovery receipt differs from its immutable identity.");
-  if (prior === null) { if (receiptCount(workspaceId) >= 128) throw new Error("Unresolved release receipt limit reached. Inspect this workspace's server catalog before another apply."); localStorage.setItem(key, value); }
+  if (prior !== null) throw new Error("Recovery attempt identity already exists; no receipt was changed.");
+  if (receiptCount(workspaceId) >= 128) throw new Error("Unresolved release receipt limit reached. Inspect this workspace's server catalog before another apply.");
+  localStorage.setItem(key, value);
   if (localStorage.getItem(key) !== value) throw new Error("Recovery journal did not persist.");
   if (receiptCount(workspaceId) > 128) {
     // Another tab can write between the precheck and setItem. Roll back only
     // this call's new, unchanged receipt; transport has not started yet.
-    if (prior === null) {
-      if (localStorage.getItem(key) !== value) throw new Error("Receipt changed during capacity rollback; no other receipt was removed.");
-      localStorage.removeItem(key);
-      if (localStorage.getItem(key) !== null) throw new Error("Receipt capacity rollback could not be verified; transport is blocked.");
-      notify(workspaceId);
-    }
+    if (localStorage.getItem(key) !== value) throw new Error("Receipt changed during capacity rollback; no other receipt was removed.");
+    localStorage.removeItem(key);
+    if (localStorage.getItem(key) !== null) throw new Error("Receipt capacity rollback could not be verified; transport is blocked.");
+    notify(workspaceId);
     throw new Error("Unresolved release receipt limit reached after concurrent write. No request was sent.");
   }
   notify(workspaceId); return receipt;
 }
 export function releaseReceipts(workspaceId: string): ReleaseReceipt[] {
   const receipts: ReleaseReceipt[] = [];
-  for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); if (!key?.startsWith(prefix(workspaceId))) continue; const receipt = JSON.parse(localStorage.getItem(key)!); if (receipt.key !== key || typeof receipt.projectId !== "string" || !/^[a-f0-9]{64}$/.test(receipt.buildId) || !/^[a-f0-9]{64}$/.test(receipt.approvalDigest) || !Number.isSafeInteger(receipt.expectedStoreGeneration) || receipt.expectedStoreGeneration < 0) throw new Error("Invalid release recovery receipt."); receipts.push(receipt); }
+  for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); if (!key?.startsWith(prefix(workspaceId))) continue; const receipt = JSON.parse(localStorage.getItem(key)!); if (receipt.key !== key || typeof receipt.attemptId !== "string" || !attemptIdPattern.test(receipt.attemptId) || key !== `${prefix(workspaceId)}${receipt.projectId}:${receipt.buildId}:${receipt.approvalDigest}:${receipt.attemptId}` || typeof receipt.projectId !== "string" || !/^[a-f0-9]{64}$/.test(receipt.buildId) || !/^[a-f0-9]{64}$/.test(receipt.approvalDigest) || !Number.isSafeInteger(receipt.expectedStoreGeneration) || receipt.expectedStoreGeneration < 0) throw new Error("Invalid release recovery receipt."); receipts.push(receipt); }
   return receipts;
 }
 export function resolveReleaseReceipt(workspaceId: string, receipt: ReleaseReceipt) { if (localStorage.getItem(receipt.key) === JSON.stringify(receipt)) { localStorage.removeItem(receipt.key); notify(workspaceId); } }
