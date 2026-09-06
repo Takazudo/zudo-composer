@@ -19,6 +19,8 @@
     "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
     "contract:external-install": "node scripts/verify-contract-install.mjs",
     "site-project:boundary": "node scripts/check-site-project-boundary.mjs",
+    "site-project:bundle": "tsx scripts/generate-bundled-release.ts --write",
+    "site-project:bundle:check": "tsx scripts/generate-bundled-release.ts --check",
     "provider:boundary": "node scripts/check-provider-boundary.mjs",
     "deployment:boundary": "node scripts/check-deployment-boundary.mjs",
     "handoff:boundary": "node scripts/check-standalone-handoff.mjs",

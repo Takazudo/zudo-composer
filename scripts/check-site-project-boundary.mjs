@@ -20,6 +20,7 @@ const browser = read("tests/browser/site-project-acceptance.pw.ts");
 const browserRunner = read("scripts/run-site-project-browser.mjs");
 const browserConfig = read("playwright.site-project.config.ts");
 const browserDistConfig = read("playwright.site-project-dist.config.ts");
+const bundleProducer = read("scripts/generate-bundled-release.ts");
 
 assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/media"]);
 assert.deepEqual(SITE_ROUTES, [
@@ -43,6 +44,9 @@ assert.ok(browserRunner.includes('operation: "activate"'), "browser runner must 
 assert.ok(browserRunner.includes('"dist", "index.html"'), "production browser runner must consume an existing build");
 assert.ok(browserRunner.includes('"playwright.site-project-dist.config.ts"'), "production browser runner must use the Wrangler config");
 assert.ok(browserRunner.includes("env: { ...process.env, ...environment }"), "browser runner must preserve the parent process environment");
+assert.ok(bundleProducer.includes('operation: "plan"') && bundleProducer.includes('operation: "apply"') && bundleProducer.includes('operation: "build"'), "bundled release producer must use protocol-2 review/apply/build");
+assert.ok(bundleProducer.includes("mkdtemp") && bundleProducer.includes("mediaStoreRoot"), "bundled release producer must isolate release and Media state");
+assert.ok(bundleProducer.includes('mode === "--check"'), "bundled release producer must support deterministic drift checks");
 assert.doesNotMatch(browserRunner, /\b(?:pnpm|npm)\s+(?:run\s+)?build\b/, "browser lanes must not rebuild the production artifact");
 assert.ok(browserConfig.includes("reuseExistingServer: false"), "isolated dev browser config must own its server");
 assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must use one deterministic worker");
@@ -73,6 +77,8 @@ assert.ok(read(".gitignore").includes(".zudo-site-project/"), "disposable local 
 
 assert.equal(packageJson.scripts["site-project:api"], "tsx server/site-project-local/cli.ts");
 assert.equal(packageJson.scripts["site-project:boundary"], "node scripts/check-site-project-boundary.mjs");
+assert.equal(packageJson.scripts["site-project:bundle"], "tsx scripts/generate-bundled-release.ts --write");
+assert.equal(packageJson.scripts["site-project:bundle:check"], "tsx scripts/generate-bundled-release.ts --check");
 assert.equal(packageJson.scripts["test:browser:site-project"], "node scripts/run-site-project-browser.mjs --dev");
 assert.equal(packageJson.scripts["test:browser:site-project:dist"], "node scripts/run-site-project-browser.mjs --dist");
 const workflow = read(".github/workflows/ci.yml");
