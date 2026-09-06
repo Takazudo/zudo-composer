@@ -15,15 +15,23 @@ export interface SafeRootFilesystemOperations {
   open(path: string, flags: number, mode?: number): Promise<FileHandle>;
   rename(oldPath: string, newPath: string): Promise<void>;
   unlink(path: string): Promise<void>;
+  rmdir(path: string): Promise<void>;
 }
 
 export type SafeRootErrorCode = "blocked" | "read-failed" | "write-failed";
 
-export interface SafeRootErrorPolicy<Operation extends string> {
+/**
+ * Codes a store needs on top of root confinement once it takes a cross-process
+ * lock and proves durability. A domain whose error type cannot represent them
+ * cannot use the mutation-lock helpers, and the type system says so.
+ */
+export type DurableExtraErrorCode = "conflict" | "commit-uncertain";
+
+export interface SafeRootErrorPolicy<Operation extends string, ExtraCode extends string = never> {
   isError(value: unknown): boolean;
   create(
     operation: Operation,
-    code: SafeRootErrorCode,
+    code: SafeRootErrorCode | ExtraCode,
     message: string,
     cause?: unknown,
   ): Error;
@@ -35,11 +43,11 @@ export interface SafeRootErrorPolicy<Operation extends string> {
   ): never;
 }
 
-export interface SafeRootFilesystemOptions<Operation extends string> {
+export interface SafeRootFilesystemOptions<Operation extends string, ExtraCode extends string = never> {
   root: string;
   operations?: Partial<SafeRootFilesystemOperations>;
   randomToken?: () => string;
-  errors: SafeRootErrorPolicy<Operation>;
+  errors: SafeRootErrorPolicy<Operation, ExtraCode>;
   /** For example, "Composer compositions root". */
   rootLabel: string;
   /** For example, "Composer". */
@@ -67,16 +75,17 @@ const defaultOperations: SafeRootFilesystemOperations = {
   open: (path, flags, mode) => nodeFs.open(path, flags, mode),
   rename: (oldPath, newPath) => nodeFs.rename(oldPath, newPath),
   unlink: (path) => nodeFs.unlink(path),
+  rmdir: (path) => nodeFs.rmdir(path),
 };
 
 const rootQueues = new Map<string, Promise<void>>();
 
-function errorCode(value: unknown): string | undefined {
+export function errorCode(value: unknown): string | undefined {
   if (typeof value !== "object" || value === null || !("code" in value)) return undefined;
   return typeof value.code === "string" ? value.code : undefined;
 }
 
-function sameFile(a: Stats, b: Stats): boolean {
+export function sameFile(a: Stats, b: Stats): boolean {
   return a.dev === b.dev && a.ino === b.ino;
 }
 
@@ -94,22 +103,22 @@ async function serialized<T>(realRoot: string, task: () => Promise<T>): Promise<
   return run;
 }
 
-export class SafeRootFilesystem<Operation extends string> {
+export class SafeRootFilesystem<Operation extends string, ExtraCode extends string = never> {
   private constructor(
     private readonly rootPath: string,
     readonly realRoot: string,
     private readonly rootStats: Stats,
     readonly operations: SafeRootFilesystemOperations,
     private readonly randomToken: () => string,
-    private readonly errors: SafeRootErrorPolicy<Operation>,
+    readonly errors: SafeRootErrorPolicy<Operation, ExtraCode>,
     private readonly rootLabel: string,
-    private readonly ownerLabel: string,
-    private readonly recordLabel: string,
+    readonly ownerLabel: string,
+    readonly recordLabel: string,
   ) {}
 
-  static async create<Operation extends string>(
-    options: SafeRootFilesystemOptions<Operation>,
-  ): Promise<SafeRootFilesystem<Operation>> {
+  static async create<Operation extends string, ExtraCode extends string = never>(
+    options: SafeRootFilesystemOptions<Operation, ExtraCode>,
+  ): Promise<SafeRootFilesystem<Operation, ExtraCode>> {
     const rootPath = resolve(options.root);
     const operations = { ...defaultOperations, ...options.operations };
     try {
