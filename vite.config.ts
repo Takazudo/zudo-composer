@@ -6,6 +6,8 @@ import siteProjectSourcePlugin from './plugins/site-project-source-plugin.mjs';
 import releaseApiPlugin from './plugins/release-api-plugin';
 import domainFileProviderPlugin from './plugins/domain-file-provider-plugin.mjs';
 import contentDomainProvider from './plugins/content-domain-provider.mjs';
+import mappingDomainProvider from './plugins/mapping-domain-provider.mjs';
+import sitemapperDomainProvider from './plugins/sitemapper-domain-provider.mjs';
 
 const mediaStoreRoot = process.env.ZUDO_MEDIA_STORE_ROOT;
 
@@ -20,7 +22,7 @@ export default defineConfig({
     releaseApiPlugin({ mediaStoreRoot }),
     siteProjectSourcePlugin(),
     composerFileProviderPlugin({ mediaStoreRoot }),
-    domainFileProviderPlugin({ descriptors: [contentDomainProvider()] }),
+    domainFileProviderPlugin({ descriptors: [contentDomainProvider(), mappingDomainProvider(), sitemapperDomainProvider()] }),
     tailwindcss(),
     preact(),
   ],

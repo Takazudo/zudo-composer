@@ -14,8 +14,17 @@ export type {
   SitemapInitializationOutcome,
   SitemapProviderInitializer,
   SitemapProvider,
+  SitemapProviderDescriptor,
 } from "./types";
-export { SitemapPersistenceError, SITEMAP_PROVIDERS, isSitemapCollectionStore } from "./types";
+export {
+  SitemapPersistenceError,
+  SITEMAP_PROVIDERS,
+  SITEMAP_PERSISTENCE_OPERATIONS,
+  SITEMAP_PERSISTENCE_ERROR_CODES,
+  isSitemapCollectionStore,
+  isSitemapPersistenceOperation,
+  isSitemapPersistenceErrorCode,
+} from "./types";
 export {
   countSitemapPages,
   countUnassignedSitemapPages,
