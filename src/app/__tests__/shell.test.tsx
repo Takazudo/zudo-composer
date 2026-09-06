@@ -8,6 +8,7 @@ import { RAIL_STORAGE_KEY } from "../rail";
 import { Shell } from "../shell";
 import type { WorkspaceCounts, WorkspaceSummary } from "../workspace-summary";
 import { createThemeController, THEME_STORAGE_KEY, type ThemeController } from "../../theme/theme";
+import { readFileSync } from "node:fs";
 
 afterEach(() => {
   cleanup();
@@ -16,6 +17,14 @@ afterEach(() => {
   window.localStorage.removeItem(RAIL_STORAGE_KEY);
   window.localStorage.removeItem(THEME_STORAGE_KEY);
   vi.unstubAllGlobals();
+});
+
+it("gives percentage-height editors a definite route slot without clipping long pages", () => {
+  const shellStyles = readFileSync("src/app/shell.css", "utf8");
+  const route = shellStyles.match(/\.cms-route-content\s*\{([^}]+)\}/)?.[1];
+  expect(route).toMatch(/(?:^|;)\s*height:\s*100%\s*;/);
+  expect(route).not.toMatch(/overflow\s*:\s*(hidden|clip)/);
+  expect(shellStyles).toMatch(/\.cms-shell-main\s*\{[^}]*overflow:\s*auto/);
 });
 
 function readyCounts(): WorkspaceCounts {
@@ -138,6 +147,25 @@ describe("Shell chrome", () => {
     expect(document.body.style.overflow).toBe("");
     expect(localStorage.getItem(RAIL_STORAGE_KEY)).toBe("collapsed");
     expect(screen.getByRole("textbox")).toBe(input);
+  });
+  it.each(["Escape", "Close navigation"])("restores mobile focus after inert cleanup on %s", (dismissal) => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    // jsdom does not implement inert: model the browser refusing focus into it.
+    const focus = HTMLElement.prototype.focus;
+    const focusSpy = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (this: HTMLElement, options) {
+      if (!this.closest("[inert]")) focus.call(this, options);
+    });
+    try {
+      const { container } = render(<ShellHarness />);
+      const trigger = screen.getByRole("button", { name: "Expand navigation" });
+      trigger.focus(); fireEvent.click(trigger);
+      const close = within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("button", { name: "Close navigation" });
+      expect(container.querySelector(".cms-frame")).toHaveAttribute("inert");
+      if (dismissal === "Escape") fireEvent.keyDown(close, { key: "Escape" }); else fireEvent.click(close);
+      expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
+      expect(container.querySelector(".cms-frame")).not.toHaveAttribute("inert");
+      expect(trigger).toHaveFocus();
+    } finally { focusSpy.mockRestore(); }
   });
   it("renders the rail, the topbar, and the route content", () => {
     const { container } = render(<ShellHarness path="/composer" />);

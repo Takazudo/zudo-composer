@@ -23,7 +23,8 @@ for (const width of WORKSPACE_WIDTHS) for (const theme of ["light", "dark"] as c
     const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
     for (const [path, heading] of modules) {
       await page.goto(path);
-      await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
+      if (path === "/content") await expect(page.getByRole("region", { name: "Editor", exact: true })).toBeVisible();
+      else await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
       await page.getByRole("button", { name: /^Theme:/ }).click();
       await page.getByRole("menuitemradio", { name: theme === "light" ? "Light" : "Dark", exact: true }).click();
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -70,7 +71,11 @@ test("coarse navigation controls are real touch targets", async ({ page }, info)
   const trigger = page.getByRole("button", { name: "Expand navigation", exact: true });
   if (coarse) await trigger.tap(); else await trigger.click();
   const drawer = page.getByRole("dialog", { name: "Navigation", exact: true });
+  // The modal translates during entry. Wait for stable geometry before
+  // measuring: fractional transformed edges can subtract to 43.99998px.
+  await expect(drawer).toHaveCSS("transform", "none");
   for (const link of await drawer.getByRole("navigation", { name: "Main navigation" }).getByRole("link").all()) {
+    if (coarse) await expect(link).toHaveCSS("min-height", "44px");
     const box = await link.boundingBox(); expect(box).not.toBeNull(); if (coarse) expect(box!.height).toBeGreaterThanOrEqual(44);
   }
   await page.keyboard.press("Escape"); await expect(trigger).toBeFocused(); await noOverflow(page);
