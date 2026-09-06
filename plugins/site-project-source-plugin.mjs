@@ -5,6 +5,13 @@ export const SITE_PROJECT_SOURCE_ID = "virtual:site-project-source";
 export const RESOLVED_SITE_PROJECT_SOURCE_ID = `\0${SITE_PROJECT_SOURCE_ID}`;
 const PINNED_MEDIA = /^\/uploaded-media\/sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf)$/;
 
+/** @param {any} value */
+const canonical = (value) => Array.isArray(value) ? `[${value.map(canonical).join(",")}]` : value && typeof value === "object" ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}` : JSON.stringify(value);
+/** @param {any} source @param {any} currentToolchain */
+export function assertBundledToolchain(source, currentToolchain) {
+  if (!source || source.status !== "ready" || !source.artifact?.toolchain || canonical(source.artifact.toolchain) !== canonical(currentToolchain)) throw new TypeError("Bundled release toolchain does not match the current installed runtime.");
+}
+
 /** @param {unknown} source */
 function serializedModule(source) {
   const ready = source && typeof source === "object" && "status" in source && source.status === "ready" && "artifact" in source;
@@ -17,21 +24,19 @@ function serializedModule(source) {
 /** @param {any} loaded @param {"activated-local"|"bundled-static"} kind */
 function readySource(loaded, kind) {
   const release = loaded.release;
-  return { status: "ready", artifact: { kind, identity: release.identity, project: loaded.project, build: release.build, completionDigest: release.completionDigest, files: release.files, mediaPins: release.stage.mediaLock?.pins ?? [] } };
+  return { status: "ready", artifact: { kind, identity: release.identity, project: loaded.project, build: release.build, completionDigest: release.completionDigest, files: release.files, mediaPins: release.stage.mediaLock?.pins ?? [], toolchain: release.stage.toolchain } };
 }
 
 /**
  * Read-only release source. Production receives an explicit precompiled bundle;
  * development resolves only the single verified active release pointer.
- * @param {{bundledSource: unknown, readDevRelease?: () => Promise<any>, readDevMedia?: (pathname: string) => Promise<any>}} options
+ * @param {{bundledSource: unknown, currentToolchain: unknown, readDevRelease?: () => Promise<any>, readDevMedia?: (pathname: string) => Promise<any>}} options
  */
 export function siteProjectSourcePlugin(options) {
   if (!options || !("bundledSource" in options) || !options.bundledSource) throw new TypeError("siteProjectSourcePlugin requires an explicit bundled delivery source.");
+  assertBundledToolchain(options.bundledSource, options.currentToolchain);
   let command = "build";
   /** @type {any} */ let server;
-  /** @type {string|undefined} */ let currentCanonical;
-  /** @type {string|undefined} */ let currentBuild;
-  let reloadPending = false;
   const readRelease = async () => options.readDevRelease ? options.readDevRelease() : server.ssrLoadModule("/server/site-project-local/dev-reader.ts").then((module) => module.readActivatedSiteRelease());
   const delivery = async () => {
     try { const loaded = await readRelease(); return loaded ? readySource(loaded, "activated-local") : { status: "no-active", message: "No completed local release is activated." }; }
@@ -52,23 +57,31 @@ export function siteProjectSourcePlugin(options) {
       const localRoot = configuredRoot ? resolve(configuredRoot) : resolve(viteServer.config.root, ".zudo-site-project");
       const active = resolve(localRoot, "active.json");
       viteServer.watcher.add(active);
-      const watchCurrent = async () => {
-        try {
-          const loaded = await readRelease();
-          const nextCanonical = loaded ? resolve(localRoot, "projects", loaded.release.identity.projectId, `${loaded.release.identity.revision}.json`) : undefined;
-          const nextBuild = loaded ? resolve(localRoot, "builds", loaded.release.identity.buildId, "complete.json") : undefined;
-          for (const prior of [currentCanonical, currentBuild]) if (prior && prior !== nextCanonical && prior !== nextBuild) viteServer.watcher.unwatch(prior);
-          currentCanonical = nextCanonical; currentBuild = nextBuild;
-          for (const next of [nextCanonical, nextBuild]) if (next) viteServer.watcher.add(next);
-        } catch { currentCanonical = undefined; currentBuild = undefined; }
+      let watched = new Set([active]), requested = 0, applied = 0, refreshing = false, notifyPending = false;
+      const pathsFor = (loaded) => {
+        if (!loaded) return new Set([active]);
+        const { projectId, revision, buildId } = loaded.release.identity;
+        const buildRoot = resolve(localRoot, "builds", buildId);
+        return new Set([active, resolve(localRoot, "projects", projectId, `${revision}.json`), resolve(buildRoot, "stage.json"), resolve(buildRoot, "build.json"), resolve(buildRoot, "complete.json"), ...Object.keys(loaded.release.files).map((name) => resolve(buildRoot, name))]);
       };
-      void watchCurrent();
+      const refresh = async () => {
+        if (refreshing) return; refreshing = true;
+        try { while (applied < requested) {
+          const generation = requested;
+          let next; try { next = pathsFor(await readRelease()); } catch { next = new Set([active]); }
+          if (generation !== requested) continue;
+          for (const path of next) if (!watched.has(path)) viteServer.watcher.add(path);
+          for (const path of watched) if (!next.has(path)) viteServer.watcher.unwatch(path);
+          watched = next; applied = generation;
+          if (notifyPending) { notifyPending = false; reload(); }
+        } } finally { refreshing = false; if (applied < requested) globalThis.queueMicrotask(() => { void refresh(); }); }
+      };
+      const requestRefresh = (notify) => { requested++; notifyPending ||= notify; globalThis.queueMicrotask(() => { void refresh(); }); };
       const changed = (path) => {
-        if (![active, currentCanonical, currentBuild].includes(path) || reloadPending) return;
-        reloadPending = true;
-        globalThis.queueMicrotask(() => { void watchCurrent().finally(() => { reloadPending = false; reload(); }); });
+        if (watched.has(path)) requestRefresh(true);
       };
       viteServer.watcher.on("add", changed); viteServer.watcher.on("change", changed); viteServer.watcher.on("unlink", changed);
+      requestRefresh(false);
       viteServer.middlewares?.use(async (req, res, next) => {
         let pathname; try { pathname = new URL(req.url ?? "", "http://localhost").pathname; } catch { return next(); }
         if (!PINNED_MEDIA.test(pathname)) return next();

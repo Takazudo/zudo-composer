@@ -4,11 +4,12 @@ import tailwindcss from '@tailwindcss/vite';
 import composerFileProviderPlugin from './plugins/composer-file-provider-plugin.mjs';
 import siteProjectSourcePlugin from './plugins/site-project-source-plugin.mjs';
 import releaseApiPlugin from './plugins/release-api-plugin';
-import bundledRelease from './src/features/delivery/bundled-release.json';
+import bundledRelease from './artifacts/site-release/bundled-release.json';
+import { resolveLocalReleaseToolchain } from './server/site-project-local/toolchain-config.mjs';
 
 const bundledSource = bundledRelease as never;
 
-export default defineConfig({
+export default defineConfig(async () => ({
   publicDir: 'media-store/public',
   // zfb-md-wasm's browser entry imports its glue/wasm files with Vite's
   // `?url` query. Keep both dependency packages in Vite's normal module graph:
@@ -19,9 +20,10 @@ export default defineConfig({
     releaseApiPlugin(),
     siteProjectSourcePlugin({
       bundledSource,
+      currentToolchain: await resolveLocalReleaseToolchain(),
     }),
     composerFileProviderPlugin(),
     tailwindcss(),
     preact(),
   ],
-});
+}));

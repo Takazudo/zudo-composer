@@ -61,7 +61,7 @@ export async function loadDeliverySnapshot(source: DeliverySourceContract): Prom
   const selected = source.read();
   if (selected.status === "no-active") return { status: "provider-error", message: selected.message, retryable: true };
   if (selected.status === "error") return { status: "provider-error", message: selected.message, retryable: true };
-  const integrity = validateActivatedDeliveryArtifact(selected.artifact);
+  const integrity = validateActivatedDeliveryArtifact(selected.artifact, source.componentProvider.manifest);
   if (integrity) return { status: "compiler-error", message: integrity };
   const validated = validateSiteProject(structuredClone(selected.artifact.project), { componentPack: source.componentProvider.manifest });
   if (!validated.ok) return { status: "validation-error", message: validated.diagnostics.map(({ message }) => message).join(" ") };

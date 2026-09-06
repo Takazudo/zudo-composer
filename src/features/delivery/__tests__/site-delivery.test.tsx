@@ -7,7 +7,7 @@ import { activeComponentProvider } from "../../composer/active-pack";
 import { loadSampleSiteProject } from "../../../site-project/sample";
 import { serializeSiteProject } from "../../../site-project/model/canonical";
 import { SiteDelivery, loadWorkingPreviewSnapshot } from "../site-delivery";
-import bundledRelease from "../bundled-release.json";
+import bundledRelease from "../../../../artifacts/site-release/bundled-release.json";
 import type { ActivatedDeliverySource, DeliverySourceContract } from "../source";
 import { validateActivatedDeliveryArtifact } from "../source";
 import { providerFixture, PNG } from "../../media/__tests__/versioned-fixture";
@@ -123,6 +123,10 @@ describe("SiteDelivery", () => {
     render(<SiteDelivery source={activated({ status: "ready", artifact: blocked })} pathname="/site" />);
     expect(await screen.findByRole("heading", { name: "Site build blocked" })).toBeInTheDocument();
     await waitFor(() => expect(document.title).toBe("Site build blocked — Site delivery"));
+    cleanup();
+    const staleRuntime = structuredClone((bundled as Extract<ActivatedDeliverySource, { status: "ready" }>).artifact); staleRuntime.toolchain.componentPack.packVersion = "stale";
+    render(<SiteDelivery source={activated({ status: "ready", artifact: staleRuntime })} pathname="/site" />);
+    expect(await screen.findByText(/does not match the installed component pack/)).toBeInTheDocument();
   });
 
   it("retries a retryable provider failure and renders the recovered route", async () => {

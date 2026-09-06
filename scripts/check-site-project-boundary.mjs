@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./deployment-artifact-lib.mjs";
+import { resolveLocalReleaseToolchain } from "../server/site-project-local/toolchain-config.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
 const readJson = (path) => JSON.parse(read(path));
+const canonical = (value) => Array.isArray(value) ? `[${value.map(canonical).join(",")}]` : value && typeof value === "object" ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}` : JSON.stringify(value);
+const digest = (value) => createHash("sha256").update(`${canonical(value)}\n`).digest("hex");
 const packageJson = readJson("package.json");
 const wrangler = readJson("wrangler.jsonc");
 const vite = read("vite.config.ts");
+const bundledRelease = readJson("artifacts/site-release/bundled-release.json");
 const plugin = read("plugins/site-project-source-plugin.mjs");
 const store = read("server/site-project-local/store.ts");
 const browser = read("tests/browser/site-project-acceptance.pw.ts");
@@ -46,6 +51,14 @@ assert.ok(browserDistConfig.includes('CLOUDFLARE_API_TOKEN: ""'), "production br
 
 assert.ok(vite.includes("bundled-release.json"), "Vite config must inject an explicit completed bundled release artifact");
 assert.ok(vite.includes("bundledSource"), "Vite config must pass the immutable bundled delivery source");
+assert.ok(vite.includes("resolveLocalReleaseToolchain"), "Vite config must resolve the current installed release toolchain");
+assert.ok(vite.includes("currentToolchain"), "Vite config must reject a stale bundled runtime attestation");
+assert.equal(bundledRelease.status, "ready");
+assert.ok(bundledRelease.artifact?.toolchain?.installedProviderDigest, "Bundled release must retain its installed runtime attestation");
+assert.deepEqual(bundledRelease.artifact.toolchain, await resolveLocalReleaseToolchain(), "Bundled release must attest the exact current installed runtime");
+assert.equal(bundledRelease.artifact.completionDigest, digest({ identity: bundledRelease.artifact.identity, files: bundledRelease.artifact.files }), "Bundled completion digest must bind its identity and files");
+assert.equal(bundledRelease.artifact.files["build.json"], digest(bundledRelease.artifact.build), "Bundled build digest must bind the embedded compiled plan");
+assert.ok(!existsSync(join(root, "src/features/delivery/bundled-release.json")), "Bundled release data must stay outside the application source boundary");
 assert.ok(vite.includes("publicDir: 'media-store/public'"), "Vite dev server must expose the Media public asset root");
 assert.ok(vite.includes("exclude: ['@zudo-sg/ui', '@takazudo/zfb-md-wasm']"), "Vite dev optimizer must leave provider and WASM resource packages in the normal asset graph");
 assert.match(plugin, /command === "build" \? options\.bundledSource : await delivery\(\)/);

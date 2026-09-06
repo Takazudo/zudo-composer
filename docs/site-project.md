@@ -205,6 +205,11 @@ builds/BUILD_ID/                  immutable build.json, stage.json, modules, Med
 builds/BUILD_ID/complete.json     terminal file manifest/completion digest
 ```
 
+The local visitor currently renders the verified compiled composition snapshot in
+`build.json`; it does not execute the emitted module files. Those module bytes are
+still completion-manifest dependencies, so mutations make the active artifact
+unavailable and trigger a scoped delivery recheck.
+
 Exclusive process locks, regular-file/no-symlink checks, pinned root checks,
 file fsync and parent-directory fsync protect mutations. Unknown layouts and
 unsafe paths fail closed. A live writer lock is never stolen. A provably dead

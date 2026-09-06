@@ -6,9 +6,10 @@ import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
 import { compileSiteProject } from "../../../src/site-project/compiler";
 import { serializeSiteProject } from "../../../src/site-project/model/canonical";
 import { releaseJson } from "../../../src/site-project/api/review";
-import { fixture, stageFor, sha, catalog, review, call, PNG } from "./release-fixture";
+import { fixture, stageFor, sha, catalog, review, call, PNG, toolchain } from "./release-fixture";
 import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV } from "../store";
 import type { CompletedRelease, SiteProjectActiveSelection } from "../../../src/site-project/api/types";
+import { readActivatedSiteRelease } from "../dev-reader";
 const applyInput = (value = project()) => ({ project: value, stage: stageFor(value), expectedRevision: null, expectedActive: null, expectedGeneration: 0 });
 async function build(value = project()) { const compiled = await compileSiteProject(value, { componentCatalog: catalog }); if (compiled.status !== "ready") throw new Error("Fixture compile failed"); return compiled.build; }
 async function release(service: Parameters<typeof call>[0], plan: Awaited<ReturnType<typeof review>>, expectedActive: SiteProjectActiveSelection | null = null) {
@@ -123,6 +124,12 @@ describe("immutable local release storage", () => {
     expect(secondPin.url).not.toBe(firstPin.url);
     expect(await context.store.readActiveMedia(firstPin.url)).toEqual({ status: "not-found" });
     expect(await context.store.readActiveMedia(secondPin.url)).toMatchObject({ status: "ok", value: { bytes: new Uint8Array([...PNG, 7]), identity: second.identity } });
+  });
+  it("fails the development delivery seam closed when installed bytes differ from an active stage attestation", async () => {
+    const context = await fixture(), plan = await review(context.service, project());
+    await release(context.service, plan);
+    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain })).resolves.toMatchObject({ release: { stage: { toolchain } } });
+    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: { ...toolchain, installedProviderDigest: "f".repeat(64) } })).rejects.toThrow(/current installed runtime/);
   });
   it.each(["apply", "build", "activate", "discard"].flatMap((operation) => ["unlink", "rmdir", "sync"].map((step) => ({ operation, step }))))("reports committed $operation cleanup $step as uncertain and retries idempotently", async ({ operation, step }) => {
     const { store, testRoot } = await fixture(); const input = applyInput(), output = await build();
