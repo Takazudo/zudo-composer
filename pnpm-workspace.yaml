@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - fixtures/host
 
 allowBuilds:
   esbuild: true

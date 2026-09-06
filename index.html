@@ -8,6 +8,10 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- Root-absolute, so it resolves only while Vite is rooted at this
+         package. `zudo-composer dev` roots Vite at the host project instead and
+         rewrites this exact attribute to a `/@fs` id; see
+         plugins/composer-app-html.mjs. -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
