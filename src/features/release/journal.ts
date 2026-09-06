@@ -3,14 +3,26 @@ const root = "zudo-release-journal-v2:";
 const prefix = (workspaceId: string) => `${root}${encodeURIComponent(workspaceId)}:`;
 export interface ReleaseReceipt { key: string; projectId: string; buildId: string; approvalDigest: string; expectedStoreGeneration: number }
 const notify = (workspaceId: string) => window.dispatchEvent(new CustomEvent("release:journal", { detail: workspaceId }));
+function receiptCount(workspaceId: string) { let count = 0; for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i)?.startsWith(prefix(workspaceId))) count++; return count; }
 /** Only unresolved approvals need local hints. Server catalog stages need none. */
 export function recordReleaseApproval(workspaceId: string, plan: ReleasePlan, stage: StagedRelease): ReleaseReceipt {
   const key = `${prefix(workspaceId)}${stage.projectId}:${stage.buildId}:${plan.planDigest}`;
   const receipt = { key, projectId: stage.projectId, buildId: stage.buildId, approvalDigest: plan.planDigest, expectedStoreGeneration: plan.storeGeneration };
   const value = JSON.stringify(receipt), prior = localStorage.getItem(key);
   if (prior !== null && prior !== value) throw new Error("Recovery receipt differs from its immutable identity.");
-  if (prior === null) { let count = 0; for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i)?.startsWith(root)) count++; if (count >= 128) throw new Error("Unresolved release receipt limit reached. Inspect the server catalog before another apply."); localStorage.setItem(key, value); }
+  if (prior === null) { if (receiptCount(workspaceId) >= 128) throw new Error("Unresolved release receipt limit reached. Inspect this workspace's server catalog before another apply."); localStorage.setItem(key, value); }
   if (localStorage.getItem(key) !== value) throw new Error("Recovery journal did not persist.");
+  if (receiptCount(workspaceId) > 128) {
+    // Another tab can write between the precheck and setItem. Roll back only
+    // this call's new, unchanged receipt; transport has not started yet.
+    if (prior === null) {
+      if (localStorage.getItem(key) !== value) throw new Error("Receipt changed during capacity rollback; no other receipt was removed.");
+      localStorage.removeItem(key);
+      if (localStorage.getItem(key) !== null) throw new Error("Receipt capacity rollback could not be verified; transport is blocked.");
+      notify(workspaceId);
+    }
+    throw new Error("Unresolved release receipt limit reached after concurrent write. No request was sent.");
+  }
   notify(workspaceId); return receipt;
 }
 export function releaseReceipts(workspaceId: string): ReleaseReceipt[] {
