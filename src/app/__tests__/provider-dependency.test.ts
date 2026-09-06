@@ -45,7 +45,11 @@ describe("immutable UI provider dependency", () => {
 
     expect(importer).toContain(`specifier: ${SPEC}`);
     expect(importer).toContain(`version: ${TARBALL}(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)`);
-    expect(packageBlock).toContain(`resolution: {gitHosted: true, tarball: ${TARBALL}}`);
+    // pnpm records an `integrity:` field between `gitHosted:` and `tarball:` when it
+    // re-resolves a Git dependency, so assert the two load-bearing parts separately
+    // rather than matching one contiguous string.
+    expect(packageBlock).toMatch(/resolution: \{gitHosted: true,/);
+    expect(packageBlock).toContain(`tarball: ${TARBALL}}`);
     expect(packageBlock).toContain("version: 0.1.0");
     expect(snapshot).toContain("'@zudo-composer/component-contract': link:packages/component-contract");
     for (const block of [importer, packageBlock, snapshot]) {
