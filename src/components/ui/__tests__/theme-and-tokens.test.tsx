@@ -191,6 +191,7 @@ describe("ui.css", () => {
   });
 
   it("draws checkbox states from tokens and remains visible in forced colours", () => {
+    expect(uiCss).toMatch(/\.cms-check__box\s*\{[^}]*pointer-events: none;/s);
     expect(uiCss).toContain(".cms-check__input:checked + .cms-check__box");
     expect(uiCss).toContain(".cms-check__input:indeterminate + .cms-check__box");
     expect(uiCss).toContain(".cms-check__input:focus-visible + .cms-check__box");
