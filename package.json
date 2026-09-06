@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
     "test": "vitest run",
-    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm site-project:boundary && pnpm deployment:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm test && pnpm build && pnpm provider:boundary && pnpm deploy:dry-run",
+    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm test && pnpm build && pnpm provider:boundary",
     "headless:negative-scan": "node scripts/check-headless-boundary.mjs",
     "contract:conformance": "node scripts/check-package-conformance.mjs",
     "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
@@ -22,21 +22,13 @@
     "site-project:bundle": "tsx scripts/generate-bundled-release.ts --write",
     "site-project:bundle:check": "tsx scripts/generate-bundled-release.ts --check",
     "provider:boundary": "node scripts/check-provider-boundary.mjs",
-    "deployment:boundary": "node scripts/check-deployment-boundary.mjs",
     "handoff:boundary": "node scripts/check-standalone-handoff.mjs",
     "styles:class-names": "node scripts/check-class-names.mjs",
-    "deployment:manifest": "node scripts/deployment-artifact.mjs write",
-    "deployment:manifest:check": "node scripts/deployment-artifact.mjs check",
-    "deploy:dry-run": "wrangler deploy --dry-run",
-    "deploy": "wrangler deploy",
-    "smoke:local": "node scripts/smoke-deployment.mjs --local",
-    "smoke:live": "node scripts/smoke-deployment.mjs --base-url https://zudo-composer.zudolab.dev",
     "site-project:api": "tsx server/site-project-local/cli.ts",
     "site-project:check": "vitest run server/site-project-local plugins/__tests__/site-project-source-plugin.test.ts",
     "test:browser": "pnpm build && pnpm test:browser:dist",
     "test:browser:dist": "playwright test",
-    "test:browser:site-project": "node scripts/run-site-project-browser.mjs --dev",
-    "test:browser:site-project:dist": "node scripts/run-site-project-browser.mjs --dist",
+    "test:browser:site-project": "node scripts/run-site-project-browser.mjs",
     "test:browser:dev": "node scripts/run-dev-browser.mjs"
   },
   "dependencies": {
@@ -69,7 +61,6 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.68.0",
     "vite": "^8.2.2",
-    "vitest": "^4.1.11",
-    "wrangler": "4.127.1"
+    "vitest": "^4.1.11"
   }
 }

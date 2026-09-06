@@ -28,11 +28,10 @@ describe("final browser acceptance source contract", () => {
       for (const invalid of [{}, { ZUDO_SITE_PROJECT_ROOT: releaseRoot }, { ...env, ZUDO_MEDIA_STORE_ROOT: "media-store" },
         { ...env, ZUDO_MEDIA_STORE_ROOT: join(process.cwd(), "media-store") }, { ...env, ZUDO_MEDIA_STORE_ROOT: `${mediaRoot}/` },
         { ...env, ZUDO_MEDIA_STORE_ROOT: releaseRoot }]) expect(() => requireIsolatedRoots(invalid)).toThrow();
-      for (const config of ["playwright.site-project.config.ts", "playwright.site-project-dist.config.ts"]) {
-        expect(read(config)).toContain("requireIsolatedRoots(process.env)");
-        expect(read(config)).toContain("ZUDO_MEDIA_STORE_ROOT: mediaRoot");
-        expect(read(config)).toContain("reuseExistingServer: false");
-      }
+      const config = read("playwright.site-project.config.ts");
+      expect(config).toContain("requireIsolatedRoots(process.env)");
+      expect(config).toContain("ZUDO_MEDIA_STORE_ROOT: mediaRoot");
+      expect(config).toContain("reuseExistingServer: false");
     } finally { rmSync(parent, { recursive: true, force: true }); }
   });
   it("isolates release and Media beneath one cleaned temporary parent for child processes only", () => {
@@ -84,11 +83,10 @@ describe("final browser acceptance source contract", () => {
     const config = read("playwright.config.ts");
     expect(config).toContain('"**/*.responsive.pw.ts"'); expect(config).toContain("hasTouch: true");
   });
-  it("registers the destructive local activation journey last and only in the isolated dev lane", () => {
+  it("registers the destructive local activation journey last in the isolated dev lane", () => {
     const spec = read("tests/browser/site-project-acceptance.pw.ts");
-    expect(spec.trimEnd().endsWith("registerCatalogJourney(BROWSER_LANE);")).toBe(true);
+    expect(spec.trimEnd().endsWith("registerCatalogJourney();")).toBe(true);
     const journey = read(sources[1]!);
-    expect(journey).toContain('test.skip(lane !== "dev"');
     expect(journey).toContain("process.env.ZUDO_SITE_PROJECT_ROOT");
     for (const requirement of ["i < 31", "Confirm create separate project", "expectedMutationToken", "stageGeneration", "mediaLock.pins", "Activate locally", "Newer private working B"]) expect(journey).toContain(requirement);
     expect(journey).not.toMatch(/protocolVersion:\s*1\b/);

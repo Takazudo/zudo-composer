@@ -28,8 +28,8 @@ The SiteProject operator/API guide is [`docs/site-project.md`](./docs/site-proje
 It is the source for provider-scoped graph, whole-project apply, active
 identity/CAS revisions, immutable builds, diagnostics, JSON-stdin examples,
 disposable local state, and guarded browser acceptance commands.
-Cloudflare persistence, hosted API, and authentication are future adapter work;
-the assets-only Worker makes no such claim.
+Hosted persistence, a hosted API, and authentication are future adapter work;
+nothing in this repository claims them.
 
 ## Clean-break authority
 
@@ -40,7 +40,7 @@ redirects, aliases, legacy fallbacks, compatibility shims, or compatibility
 fixtures.
 
 This authority applies only to this project's current state. It does not permit
-destructive changes to unrelated repositories, user files, Cloudflare Workers,
+destructive changes to unrelated repositories, user files, hosting resources,
 domains, credentials, or other infrastructure.
 
 ## Provider and contract handoffs
@@ -58,7 +58,7 @@ Keep these domains distinct:
   `@zudo-composer/component-contract@1.0.0`
 
 Provider updates require a permanent full Git SHA, verified tree, regenerated
-lockfile, clean frozen install, and full unit/artifact/browser/deployment gates.
+lockfile, clean frozen install, and full unit/artifact/browser gates.
 Never resolve the provider through a branch/tag, sibling checkout,
 `workspace:`, `file:`, `link:`, `path:`, copied source, or pnpm Git subdirectory
 selector.
@@ -76,35 +76,24 @@ relationship for the external UI-provider dependency.
 - Contract handoff: `corepack pnpm contract:conformance`, `corepack pnpm
   contract:negative-scan`, and `corepack pnpm contract:external-install --
   --exact`.
-- Built artifact: `corepack pnpm deployment:manifest`, `corepack pnpm
-  deployment:manifest:check`, `corepack pnpm smoke:local`, and `corepack pnpm
-  test:browser:dist`, `corepack pnpm test:browser:dev`, `corepack pnpm
-  test:browser:site-project`, and `corepack pnpm
-  test:browser:site-project:dist` after the one production build. The
-  SiteProject production lane must reuse `dist` and never rebuild.
+- Built artifact: `corepack pnpm test:browser:dist`, `corepack pnpm
+  test:browser:dev`, and `corepack pnpm test:browser:site-project` after the one
+  production build. No browser lane may rebuild `dist`.
 
-Do not weaken frozen install, negative dependency scans, exact provider pin,
-12-component runtime/CSS/WASM proof, Wrangler dry-run, or all-route/all-asset
-smoke to make a gate pass.
+Do not weaken frozen install, negative dependency scans, exact provider pin, or
+the 12-component runtime/CSS/WASM proof to make a gate pass.
 
-## Deployment and credentials
+## No deployment target
 
-The only deployment target is Worker `zudo-composer` at Custom Domain
-`zudo-composer.zudolab.dev`; `workers.dev` and preview URLs remain
-disabled. Never reuse a zudo-sg Worker, domain, account assumption, OAuth file,
-token, or GitHub secret.
+This project is a locally run tool. It has no deployment target, no hosting
+provider, no deployed hostname, and no deployment credentials. Hosting is
+deliberately deferred to a future adapter: do not add a deploy script, a hosting
+config file, a credential check, or a live smoke lane. If hosting is ever added,
+it arrives as a new adapter with its own gates.
 
-Unauthenticated proof uses `corepack pnpm deploy:dry-run` and `corepack pnpm
-smoke:local`. Local deployment requires `wrangler login`, `wrangler whoami`,
-manifest recheck, `pnpm deploy`, and `pnpm smoke:live`. CI deployment requires
-both `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; partial credentials are
-an error and absent credentials produce a credential-only handoff without
-skipping noncredential validation.
-
-Do not claim a permanent target `main` SHA, final CI URL, deployment success, or
-live smoke before the Phase 3 root merges and post-merge evidence exists. The
-integration owner records that canonical evidence on both Phase 3 and Phase 4
-epics.
+Do not claim a permanent target `main` SHA or a final CI URL before the Phase 3
+root merges and post-merge evidence exists. The integration owner records that
+canonical evidence on both Phase 3 and Phase 4 epics.
 
 ## Provenance
 
