@@ -152,13 +152,14 @@ describe('App', () => {
     expect(screen.queryByText(/being connected/i)).not.toBeInTheDocument();
   });
 
-  it('dispatches Site outside the authoring Shell while preserving author navigation isolation', async () => {
+  it('dispatches Site outside the authoring Shell and never falls back to a draft without an active release', async () => {
     window.history.replaceState(null, '', '/site');
     const { container } = renderApp();
-    expect(await screen.findByRole('heading', { name: 'Clear ideas, carefully shaped' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Site unavailable' })).toBeInTheDocument();
+    expect(screen.getByText(/No activated local release/)).toBeInTheDocument();
     expect(container.querySelector('.app-shell')).not.toBeInTheDocument();
     expect(container.querySelector('.cms-rail')).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument();
   });
 });
