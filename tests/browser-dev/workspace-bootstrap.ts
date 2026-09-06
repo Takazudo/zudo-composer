@@ -1,0 +1,28 @@
+import type { Page } from "@playwright/test";
+const prepared = new WeakSet<Page>();
+/** Test-owned IndexedDB only. Dev without an activated release is unavailable;
+ * initialize an explicit validated source through the real workspace service.
+ * This is fixture setup, not a production fallback or a storage mock.
+ */
+export async function ensureDevWorkspace(page: Page): Promise<void> {
+  if (prepared.has(page)) return;
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const integrationPath = "/src/app/provider-integration.ts";
+    const samplePath = "/src/site-project/sample/index.ts";
+    const manifestPath = "/src/app/site-project-manifest.ts";
+    const modelPath = "/src/site-project/model/index.ts";
+    const { createProductionProviderIntegration } = await import(integrationPath);
+    const { loadSampleSiteProject } = await import(samplePath);
+    const { activeSiteProjectValidationContext } = await import(manifestPath);
+    const { serializeSiteProject } = await import(modelPath);
+    const project = loadSampleSiteProject(activeSiteProjectValidationContext);
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(serializeSiteProject(project)));
+    const sourceRevision = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+    const integration = createProductionProviderIntegration({ project, sourceRevision });
+    const outcome = await integration.initialization.initialize();
+    if (outcome.status !== "ready") throw new Error(`Explicit browser fixture initialization failed: ${outcome.error?.message ?? outcome.status}`);
+  });
+  await page.reload();
+  prepared.add(page);
+}

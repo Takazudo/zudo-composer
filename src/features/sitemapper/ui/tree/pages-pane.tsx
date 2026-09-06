@@ -65,12 +65,12 @@ export function PagesPane({
 
   // The schema keeps exactly one root page, so the root list offers an insert
   // only while it is empty — that insert IS the "create the Home page" action.
-  // Below the root, a Mapping route family owns its own routes and takes no
-  // authored children.
+  // All existing parents may contain authored children, including nested
+  // Mapping route families. Commands remain authoritative for stale targets.
   function canInsert(target: OutlineInsertTarget): boolean {
     if (target.parentId === null) return document.root.length === 0;
     const parent = index.byId.get(target.parentId)?.node;
-    return parent !== undefined && parent.source.kind !== "mapping";
+    return parent !== undefined;
   }
 
   return (
@@ -104,7 +104,7 @@ export function PagesPane({
                 isRoot={node.id === rootId}
                 canMoveUp={location.parentId !== null && location.index > 0}
                 canMoveDown={location.parentId !== null && location.index < siblings.length - 1}
-                canAddChild={location.node.source.kind !== "mapping"}
+                canAddChild={true}
                 onAddChild={onAddChild}
                 onRename={onRename}
                 onMove={onMove}

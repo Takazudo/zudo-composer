@@ -62,12 +62,18 @@ describe("Sitemapper pages pane", () => {
     expect(screen.getByRole("treeitem", { name: /About/ })).toBeInTheDocument();
   });
 
-  it("refuses authored children under a Mapping route family", () => {
+  it("offers exact-index authored children under a Mapping route family", () => {
     const mapped = page("home", "Home");
     mapped.source = { kind: "mapping", ref: { providerId: "m", recordId: "articles" }, route: { kind: "single" } };
-    render(<PagesPane {...paneProps(documentOf([mapped]))} />);
-    expect(addRows()).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Add child page to Home" })).toBeDisabled();
+    const props = paneProps(documentOf([mapped]));
+    render(<PagesPane {...props} />);
+    expect(addRows()).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Add child page to Home" }));
+    expect(props.onAddChild).toHaveBeenCalledWith("home");
+    fireEvent.click(screen.getByRole("button", { name: "Add page", exact: true }));
+    const input = screen.getByRole("textbox", { name: "Add page" });
+    fireEvent.input(input, { target: { value: "Nested page" } }); fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onAdd).toHaveBeenCalledWith({ parentId: "home", index: 0, title: "Nested page" });
   });
 
   it("puts move, duplicate and delete behind one row menu, with the root protected", () => {

@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Response } from "@playwright/test";
+import { registerCatalogJourney } from "./catalog-editorial-journey";
 
 const SITE_ROUTES = [
   "/site",
@@ -172,6 +173,12 @@ test("static release inspection never offers write capability", async ({ page })
   await expect(page.getByRole("button", { name: "Run release checks" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Activate locally" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Export working JSON" })).toBeEnabled();
+  for (const endpoint of ["/__zudo-release", "/__zudo_composer_media_file_provider"]) {
+    const response = await page.request.post(endpoint, { data: { protocolVersion: 2, operation: "describe" } });
+    const body = await response.text();
+    expect(body, `${endpoint} must not expose a deployed authoring protocol`).not.toMatch(/"ok"\s*:\s*(?:true|false)|"capability"\s*:/);
+    expect(response.status() >= 400 || (response.headers()["content-type"] ?? "").includes("text/html")).toBe(true);
+  }
 });
 
 test("missing SiteProject routes show an accessible not-found state", async ({ page }) => {
@@ -236,3 +243,6 @@ test("dev virtual source contains the CLI-activated project", async ({ page }) =
   expect(source).toContain('"Sample Studio"');
   expect(failures).toEqual([]);
 });
+
+// Last: activation changes only this guarded runner's disposable release root.
+registerCatalogJourney(BROWSER_LANE);

@@ -1,5 +1,8 @@
 # Shared workspace design
 
+See [the final acceptance matrix](./workspace-acceptance.md) for current browser
+sources, worker evidence limits and manager-owned integrated completion gates.
+
 The production workspace extends `src/components/ui`, `overlay` and
 `outline-tree`. Feature UIs consume these components; do not copy prototype
 renderers, add a parallel tree, or import `preact/compat`. The installed component
@@ -91,12 +94,10 @@ node; use `cancel()` for dismissal. If a chooser's target disappears, the tree
 leaves chooser focus and draft intact, and its cancellation still restores a
 connected tree focus target. A superseded chooser cannot complete a newer one.
 
-Existing one-argument chooser callbacks remain callable but do not participate
-in completion/cancellation or resolve stale positions. Composer's external
-chooser must adopt the session when its workspace integration is updated
-(issue #234); all new chooser consumers must use it. Sitemap's existing inline
-handler already uses the complete inline path; its later chooser integrations
-must use the same transaction API (issue #239).
+Current external chooser consumers must use the insertion session for anchored
+completion/cancellation and stale-target checks. The final browser sources
+exercise exact first-sibling insertion, IME and cancellation focus on desktop
+and coarse-pointer projects; absence of the approved outline is a failure.
 
 ## Rename and nested menus
 
@@ -153,8 +154,8 @@ same protocol to Composition, Mapping, and Sitemap stores.
 The current authoring transaction boundary is one Content provider. Complete
 provider-qualified graph reads are supported, but a relation write requiring
 multiple provider transactions fails before the first write. Rich Content
-kinds remain explicitly incompatible with scalar Mapping transforms until the
-structured Mapping contract consumes them. Provisional Content and Media
+kinds require explicit supported Mapping projections (object field, Media text/
+asset, reference identity/list or route link), never silent stringification. Content and Media
 schemas fail through their typed recovery paths; there are no compatibility
 readers or migrations.
 
@@ -171,12 +172,18 @@ Missing selected workspaces, provider databases or malformed metadata require
 explicit recovery, never silent reconstruction from activated source.
 
 `workspace.open(id)` returns an initialized integration for that existing
-workspace. `create(project, baselineRevision)` and `loadExample(...)` allocate a
-new ID; `reset()` creates a new workspace from the source supplied to this
+workspace. `create(project, baselineRevision, options?)` and `loadExample(...)`
+create or resume an explicit seeding attempt; `reset()` creates a new workspace from the source supplied to this
 integration. They return the replacement integration only after provider
 initialization and atomic registry selection succeed. The shell swaps integration
-then; an old integration continues to address its old drafts. A failed creation
-may leave an unselected namespace, which this workflow never deletes. The old
+then; an old integration continues to address its old drafts. Failed provisional
+seeds are cleaned up under the workspace initialization lock. Blocked/uncertain
+deletion retains one cleanup-pending attempt and retries finish deletion before
+reseeding; ready or selected workspaces are never deleted. The optional catalog
+example has one stable attempt ID and rebinds the current validated project only
+after cleanup. Its persisted before-complete guard cannot be bypassed by an
+ordinary open after a crash. See [the example walkthrough](./catalog-editorial-example.md).
+The
 `initialization.startFresh()` entry point fails with `code: "reset-required"`
 without writes; recovery UI uses `workspace.reset()` and handles its returned
 integration. An unavailable source can still open the selected existing workspace;

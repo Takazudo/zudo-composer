@@ -80,7 +80,7 @@ export function SitemapNode({
         <EllipsisIcon size="xs" />
       </button>
       <Menu controller={menu} label={`${node.title} actions`}>
-        <MenuItem icon={PlusIcon} disabled={node.source.kind === "mapping"} onSelect={() => onAddChild(node.id)}>Add child page</MenuItem>
+        <MenuItem icon={PlusIcon} onSelect={() => onAddChild(node.id)}>Add child page</MenuItem>
         <MenuItem icon={DuplicateIcon} disabled={isRoot} onSelect={() => onDuplicate(node.id)}>Duplicate</MenuItem>
         <MenuSeparator />
         <MenuItem icon={TrashIcon} tone="danger" disabled={isRoot} onSelect={() => onDelete(node.id)}>Delete…</MenuItem>

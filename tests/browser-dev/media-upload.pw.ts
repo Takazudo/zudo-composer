@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
+import { ensureDevWorkspace } from "./workspace-bootstrap";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 const REPLACEMENT = Buffer.concat([PNG, Buffer.from("synthetic-version-2")]);
@@ -11,6 +12,7 @@ test("versioned Media persists bytes, folders, identity and per-use Content text
   const suffix = `${process.pid}-${Date.now()}`;
   const fileName = `media-${suffix}.png`; const modelId = `media-test-${suffix}`;
   let assetId: string | undefined;
+  await ensureDevWorkspace(page);
   await page.goto("/media");
   await expect(page.getByRole("heading", { name: "Media", exact: true })).toBeVisible();
   // Seed only this test's synthetic Content destination through real domain operations.
