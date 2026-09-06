@@ -2,22 +2,29 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { componentPack } from "@zudo-sg/ui/composer-pack";
 import { createComponentCatalog } from "../../src/composer/model/types";
 import { createSiteProjectApiService } from "../../src/site-project/api/service";
+import type { TrustedComponentPack } from "@zudo-composer/component-contract";
+import type { ResolvedComponentPack } from "../../plugins/component-pack.d.mts";
 import type { SiteProjectApiService, ReleaseToolchain, SiteProjectApiDependencies } from "../../src/site-project/api/types";
 import { createFilesystemMediaStore } from "../../src/media/storage/filesystem";
 import type { VersionedMediaStore } from "../../src/media/library";
 import { createLocalSiteProjectStore, type LocalSiteProjectStoreOptions } from "./store";
 import { releaseJson } from "../../src/site-project/api/review";
-import { resolveLocalReleaseToolchain } from "./toolchain-config.mjs";
-export { resolveLocalReleaseToolchain } from "./toolchain-config.mjs";
+import { resolveLocalReleaseToolchain } from "./toolchain-config";
+export { resolveLocalReleaseToolchain } from "./toolchain-config";
 
-export interface LocalSiteProjectServiceOptions extends LocalSiteProjectStoreOptions { mediaStoreRoot?: string; mediaStore?: VersionedMediaStore; toolchain?: ReleaseToolchain; isWorkingCurrent?: SiteProjectApiDependencies["isWorkingCurrent"]; reconcilePublication?: SiteProjectApiDependencies["reconcilePublication"] }
+/**
+ * `pack` is required and has no default: server-side validation must run
+ * against the pack the host configured, or it would accept components the
+ * browser cannot render. `packIdentity` is what the release is stamped with,
+ * so it is required unless the caller supplies a `toolchain` outright.
+ */
+export interface LocalSiteProjectServiceOptions extends LocalSiteProjectStoreOptions { pack: TrustedComponentPack; packIdentity?: ResolvedComponentPack; workspaceRoot?: string; mediaStoreRoot?: string; mediaStore?: VersionedMediaStore; toolchain?: ReleaseToolchain; isWorkingCurrent?: SiteProjectApiDependencies["isWorkingCurrent"]; reconcilePublication?: SiteProjectApiDependencies["reconcilePublication"] }
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
-export function createLocalSiteProjectApiService(options: LocalSiteProjectServiceOptions = {}): SiteProjectApiService {
+export function createLocalSiteProjectApiService(options: LocalSiteProjectServiceOptions): SiteProjectApiService {
   const mediaRoot = resolve(options.mediaStoreRoot ?? resolve(process.cwd(), "media-store"));
-  const catalog = createComponentCatalog(componentPack.manifest);
+  const catalog = createComponentCatalog(options.pack.manifest);
   const store = createLocalSiteProjectStore({ ...options, componentPack: catalog.pack, readMedia: options.readMedia ?? (async (pin) => {
     for (const path of [mediaRoot, join(mediaRoot, "versions")]) { const info = await lstat(path); if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Unsafe pinned Media source directory."); }
     const root = await realpath(mediaRoot), versions = await realpath(join(mediaRoot, "versions")); if (versions !== join(root, "versions")) throw new Error("Pinned source escaped Media root.");

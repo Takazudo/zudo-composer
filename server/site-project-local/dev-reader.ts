@@ -3,10 +3,12 @@ import type { CompletedRelease, SiteProjectActiveSelection } from "../../src/sit
 import type { MediaType } from "../../src/media/model";
 import { createLocalSiteProjectStore } from "./store";
 import { releaseJson } from "../../src/site-project/api/review";
-import { resolveLocalReleaseToolchain } from "./toolchain-config.mjs";
+import { resolveLocalReleaseToolchain, type LocalReleaseToolchainOptions } from "./toolchain-config";
 import type { LocalSiteProjectStoreOptions } from "./store";
 
-type DeliveryReaderOptions = LocalSiteProjectStoreOptions & { toolchain?: CompletedRelease["stage"]["toolchain"] };
+/** The reader compares the activated release's toolchain against the current
+ * one, so it needs the same pack identity the service stamps releases with. */
+type DeliveryReaderOptions = LocalSiteProjectStoreOptions & LocalReleaseToolchainOptions;
 
 /** Read-only development seam. No path, mutation, or filesystem capability crosses it. */
 export interface ActivatedSiteReleaseData { project: SiteProject; release: CompletedRelease }

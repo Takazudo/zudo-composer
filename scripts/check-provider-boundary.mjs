@@ -249,7 +249,19 @@ for (const [size, value] of Object.entries({ xs: ".75rem", sm: "1rem", md: "1.25
   assert.ok(combinedCss.includes(`.w-icon-${size}{width:var(--spacing-icon-${size})}`), `built CSS is missing w-icon-${size}`);
   assert.ok(combinedCss.includes(`.h-icon-${size}{height:var(--spacing-icon-${size})}`), `built CSS is missing h-icon-${size}`);
 }
-assert.equal(css.reduce((total, source) => total + count(source, ".hi-kw{"), 0), 2, "canonical provider CSS must occur once in each host/preview graph");
-assert.equal(css.filter((source) => source.includes(".hi-kw{")).length, 2, "host and preview must each own one canonical CSS asset");
+// The pack's CSS has exactly ONE importer now — the host's `styles` entry,
+// reached through `virtual:zudo-composer-host-styles` — so it is emitted once
+// and shared by both entries rather than copied into each. Both still receive
+// it — `main.tsx` imports it before `./style.css`, `preview-entry.ts` before its
+// own sheet — and Vite hoists the link for that shared chunk into the entry.
+const canonicalCss = cssFiles.filter((path) => readFileSync(path, "utf8").includes(".hi-kw{"));
+assert.equal(canonicalCss.length, 1, "canonical pack CSS must be emitted exactly once");
+assert.equal(count(readFileSync(canonicalCss[0], "utf8"), ".hi-kw{"), 1, "canonical pack CSS must not be duplicated inside its own asset");
+const entryJs = jsFiles.filter((path) => basename(path).startsWith("index-"));
+assert.equal(entryJs.length, 1, "exactly one application entry chunk must be emitted");
+assert.ok(
+  readFileSync(entryJs[0], "utf8").includes(basename(canonicalCss[0])),
+  "the shared application entry must reference the canonical pack CSS, so host and preview both receive it",
+);
 
 console.log(`Provider boundary passed: ${componentIds.length} components from pack ${packVersion}, ${assetFiles.length} assets, ${wasm.length} WASM, ${glue.length} glue.`);

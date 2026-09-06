@@ -32,7 +32,7 @@ async function activatedArtifact(project = sample()): Promise<ActivatedDeliveryA
     kind: "activated-local",
     identity: { projectId: project.id, revision: revision(project), buildId: sha(`build:${project.id}`) },
     project, build: compilation.build, completionDigest: sha(`complete:${project.id}`), files, mediaPins: [],
-    toolchain: { compiler: "compiler/2", componentPack: { packId, packVersion, contractVersion }, providerCommit: "a".repeat(40), providerTree: "b".repeat(40), installedProviderDigest: "c".repeat(64), contractDigest: "d".repeat(64) },
+    toolchain: { compiler: "compiler/2", componentPack: { packId, packVersion, contractVersion }, packSpecifier: "@fixture/pack/composer-pack", packSource: "workspace:*", installedPackDigest: "c".repeat(64), contractDigest: "d".repeat(64) },
   };
 }
 let artifact: ActivatedDeliveryArtifact;

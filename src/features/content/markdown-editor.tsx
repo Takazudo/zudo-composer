@@ -4,7 +4,6 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { Annotation, Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { ProseMd } from "@zudo-sg/ui";
 import type { JSX } from "preact";
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import {
@@ -21,6 +20,7 @@ import { Button, SegmentedControl } from "../../components/ui";
 import type { ResolvedTheme } from "../../theme/theme";
 import { useResolvedTheme } from "../../theme/use-resolved-theme";
 import { applyMarkdownFormat, type MarkdownFormat } from "./markdown-formatting";
+import { MarkdownPreview } from "./markdown-preview";
 
 const externalValue = Annotation.define<boolean>();
 
@@ -261,7 +261,7 @@ export function MarkdownEditor({
           </div>
           <div class="sg-content-markdown-editor__preview" hidden={mode === "edit"} aria-label={`${label} formatted preview`}>
             <div class="sg-content-markdown-editor__preview-label">Formatted text</div>
-            <ProseMd markdown={value} />
+            <MarkdownPreview markdown={value} />
           </div>
         </div>
       </div>

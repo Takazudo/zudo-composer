@@ -1,0 +1,15 @@
+/*
+ * The dogfood host's base stylesheet.
+ *
+ * This repository is a host project as well as the tool: `pnpm dev`, the unit
+ * suite and the artifact gates all run against the root `zudo-composer.config.ts`,
+ * so the 12-component runtime/CSS/WASM proof keeps exercising the same seam a
+ * real host uses.
+ *
+ * A host's `styles` entry owns two things and the tool owns neither:
+ *   1. it is the SOLE importer of the component pack's CSS;
+ *   2. it declares, with `@source`, where the pack's class names live so
+ *      Tailwind scans them.
+ * The provider's own sheet already does (2) with an `@source` of its own.
+ */
+@import "@zudo-sg/ui/styles/composer.css";

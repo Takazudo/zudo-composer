@@ -16,29 +16,23 @@ import preact from "@preact/preset-vite";
 import composerFileProviderPlugin from "../plugins/composer-file-provider-plugin.mjs";
 import { siteProjectSourcePlugin } from "../plugins/site-project-source-plugin.mjs";
 import composerAppHtmlPlugin, { APP_ENTRY_MODULE } from "../plugins/composer-app-html.mjs";
+import componentPackPlugin from "../plugins/component-pack-plugin.mjs";
+import hostStylesPlugin from "../plugins/host-styles-plugin.mjs";
 import { APP_ROOT, resolveWorkspaceRoot } from "../plugins/roots.mjs";
 import { createModuleEvaluator } from "./module-evaluator.mjs";
+import { loadHostConfig } from "./host-context.mjs";
+
+export { loadHostConfig };
 
 /**
- * Packages Vite's dependency optimizer must not scan. `@zudo-sg/ui` and
+ * Packages Vite's dependency optimizer must not scan beyond the configured
+ * component pack, which `componentPackPlugin` adds itself. A pack and
  * `@takazudo/zfb-md-wasm` import their glue/wasm resources with Vite's `?url`
  * query, which the optimizer cannot resolve while scanning; the asset pipeline
- * handles them on demand once they stay in the normal module graph.
+ * handles them on demand once they stay in the normal module graph. The name is
+ * harmless when the package is not installed.
  */
-export const OPTIMIZE_DEPS_EXCLUDE = Object.freeze(["@zudo-sg/ui", "@takazudo/zfb-md-wasm"]);
-
-/**
- * Resolve the host's `zudo-composer.config.ts`.
- * @param {string} workspaceRoot
- * @param {Record<string, string | undefined>} [env]
- */
-export async function loadHostConfig(workspaceRoot, env) {
-  const evaluateApp = createModuleEvaluator(APP_ROOT);
-  const { loadComposerConfig } = /** @type {{loadComposerConfig: (options: unknown) => Promise<any>}} */ (
-    await evaluateApp(resolve(APP_ROOT, "server/config/index.ts"))
-  );
-  return loadComposerConfig({ workspaceRoot, env, load: createModuleEvaluator(workspaceRoot) });
-}
+export const OPTIMIZE_DEPS_EXCLUDE = Object.freeze(["@takazudo/zfb-md-wasm"]);
 
 /** @param {string} path */
 function realpathOrSelf(path) {
@@ -91,10 +85,13 @@ export function resolvePublicDir(workspaceRoot, publicMedia) {
 export async function resolveComposerDevConfig(options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(options.workspaceRoot);
   const composerConfig = await loadHostConfig(workspaceRoot, options.env);
-  const { paths } = composerConfig;
+  const { paths, settings } = composerConfig;
   const { default: releaseApiPlugin } = /** @type {{default: (options: unknown) => any}} */ (
     await createModuleEvaluator(APP_ROOT)(resolve(APP_ROOT, "plugins/release-api-plugin.ts"))
   );
+  // Resolving the pack is the first thing that can fail, and it fails loudly:
+  // a host whose pack cannot be resolved has no pack, and never the bundled one.
+  const componentPack = componentPackPlugin({ workspaceRoot, pack: settings.pack });
   return {
     composerConfig,
     inlineConfig: {
@@ -108,20 +105,22 @@ export async function resolveComposerDevConfig(options = {}) {
       // plugin serves it instead.
       appType: /** @type {const} */ ("custom"),
       optimizeDeps: {
-        exclude: [...OPTIMIZE_DEPS_EXCLUDE],
+        exclude: [componentPack.identity.packageName, ...OPTIMIZE_DEPS_EXCLUDE],
         // Scanning starts from html under `root`, and there is none. Point the
         // scanner at the package's entry so the first request does not stall
         // on a full-reload discovery round.
         entries: [resolve(APP_ROOT, APP_ENTRY_MODULE)],
       },
-      server: { fs: { allow: resolveFsAllow(workspaceRoot) } },
+      server: { fs: { allow: [...resolveFsAllow(workspaceRoot), componentPack.identity.packageRoot] } },
       // Every CMS root comes from the resolved config, passed explicitly, so
       // the plugins' own `ZUDO_COMPOSITIONS_ROOT` / `ZUDO_MEDIA_STORE_ROOT`
       // fallbacks do not apply in this lane. The SiteProject release root is
       // not a config setting and keeps its own `ZUDO_SITE_PROJECT_ROOT`.
       plugins: [
-        releaseApiPlugin({ mediaStoreRoot: paths.media }),
-        siteProjectSourcePlugin({ workspaceRoot }),
+        componentPack,
+        hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath: composerConfig.configPath }),
+        releaseApiPlugin({ mediaStoreRoot: paths.media, workspaceRoot, packIdentity: componentPack.identity }),
+        siteProjectSourcePlugin({ workspaceRoot, packIdentity: componentPack.identity }),
         composerFileProviderPlugin({ workspaceRoot, compositionsRoot: paths.compositions, mediaStoreRoot: paths.media }),
         composerAppHtmlPlugin(),
         tailwindcss(),

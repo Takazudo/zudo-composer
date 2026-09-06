@@ -1,6 +1,7 @@
 // @ts-check
 import { resolve } from "node:path";
 import { appModuleId, resolveWorkspaceRoot } from "./roots.mjs";
+import { COMPONENT_PACK_ID } from "./component-pack-plugin.mjs";
 
 export const SITE_PROJECT_SOURCE_ID = "virtual:site-project-source";
 export const RESOLVED_SITE_PROJECT_SOURCE_ID = `\0${SITE_PROJECT_SOURCE_ID}`;
@@ -24,13 +25,16 @@ function readySource(loaded) {
 /**
  * Read-only release source. It resolves only the single verified active release
  * pointer, in every command.
- * @param {{readDevRelease?: () => Promise<any>, readDevMedia?: (pathname: string) => Promise<any>, workspaceRoot?: string}} [options]
+ * @param {{readDevRelease?: () => Promise<any>, readDevMedia?: (pathname: string) => Promise<any>, workspaceRoot?: string, packIdentity?: import("./component-pack.d.mts").ResolvedComponentPack}} [options]
  */
 export function siteProjectSourcePlugin(options = {}) {
   /** @type {any} */ let server;
   const workspaceRoot = resolveWorkspaceRoot(options.workspaceRoot);
   const devReaderId = appModuleId("server/site-project-local/dev-reader.ts");
-  const readRelease = async () => options.readDevRelease ? options.readDevRelease() : server.ssrLoadModule(devReaderId).then((module) => module.readActivatedSiteRelease());
+  // The reader re-derives the current toolchain to compare it against the
+  // activated release's, so it needs the same pack the service stamped with.
+  const readerOptions = async () => ({ workspaceRoot, packIdentity: options.packIdentity, pack: (await server.ssrLoadModule(COMPONENT_PACK_ID)).componentPack });
+  const readRelease = async () => options.readDevRelease ? options.readDevRelease() : server.ssrLoadModule(devReaderId).then(async (module) => module.readActivatedSiteRelease(await readerOptions()));
   const delivery = async () => {
     try { const loaded = await readRelease(); return loaded ? readySource(loaded) : { status: "no-active", message: "No completed local release is activated." }; }
     catch (error) { return { status: "error", message: error instanceof Error ? error.message : "Activated local release is unavailable." }; }
@@ -95,7 +99,7 @@ export function siteProjectSourcePlugin(options = {}) {
         let pathname; try { pathname = new URL(req.url ?? "", "http://localhost").pathname; } catch { return next(); }
         if (!PINNED_MEDIA.test(pathname)) return next();
         try {
-          const value = options.readDevMedia ? await options.readDevMedia(pathname) : await viteServer.ssrLoadModule(devReaderId).then((module) => module.readActivatedSiteMedia(pathname));
+          const value = options.readDevMedia ? await options.readDevMedia(pathname) : await viteServer.ssrLoadModule(devReaderId).then(async (module) => module.readActivatedSiteMedia(pathname, await readerOptions()));
           if (!value) return next();
           res.statusCode = 200; res.setHeader("Content-Type", value.mediaType); res.setHeader("Content-Length", String(value.bytes.byteLength)); res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); res.setHeader("ETag", `"sha256-${pathname.slice("/uploaded-media/sha256-".length).split(".")[0]}"`); return res.end(Buffer.from(value.bytes));
         } catch { res.statusCode = 503; res.setHeader("Cache-Control", "no-store"); return res.end("Activated Media unavailable."); }

@@ -18,8 +18,10 @@ describe("Markdown editor styling contract", () => {
     ]) expect(css).toContain(variable);
   });
 
-  it("keeps Split usable on narrow layouts and imports the shared ProseMd styles", () => {
-    expect(css).toContain('@import "@zudo-sg/ui/src/content/prose-md/prose-md.css"');
+  it("keeps Split usable on narrow layouts and leaves pack CSS to the host", () => {
+    // The preview renders the pack's own ProseMd, whose stylesheet arrives with
+    // the pack — through the host's `styles` entry, never through tool CSS.
+    expect(css).not.toContain("@zudo-sg/ui");
     expect(css).toContain("@media (max-width: 42rem)");
     expect(css).toMatch(/\.sg-content-markdown-editor__workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/);
   });

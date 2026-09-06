@@ -96,6 +96,7 @@
     "@testing-library/preact": "^3.2.4",
     "@types/node": "^26.4.0",
     "@zudo-composer/component-contract": "workspace:*",
+    "@zudo-composer/fixture-themeset": "workspace:*",
     "eslint": "^10.9.1",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",

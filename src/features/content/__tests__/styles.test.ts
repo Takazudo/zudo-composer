@@ -7,9 +7,11 @@ const css = readFileSync(resolve(process.cwd(), "src/features/content/styles.css
 const rules = css.replace(/\/\*[\s\S]*?\*\//g, "");
 
 describe("Content styling contract", () => {
-  it("imports provider tokens and scopes selectors", () => {
-    expect(css).toContain('@import "@zudo-sg/ui/styles/tokens.css"');
-    expect(css).toContain('@import "@zudo-sg/ui/styles/colors.css"');
+  it("imports no pack CSS and scopes selectors", () => {
+    // Tool CSS never imports the component pack's; the tokens this route reads
+    // are declared in `src/styles/app-tokens.css`, so a themeset that ships
+    // none of them cannot break the editor.
+    expect(css).not.toContain("@import");
     const classNames = [...rules.slice(rules.indexOf(".sg-content")).matchAll(/\.([a-z][a-z0-9_-]*)/g)].map((match) => match[1]);
     expect(classNames.length).toBeGreaterThan(0);
     expect(classNames.every((name) => name.startsWith("sg-content"))).toBe(true);

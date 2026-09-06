@@ -38,7 +38,14 @@ assert.ok(browserConfig.includes("reuseExistingServer: false"), "isolated dev br
 assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must use one deterministic worker");
 
 assert.ok(vite.includes("publicDir: 'media-store/public'"), "Vite dev server must expose the Media public asset root");
-assert.ok(vite.includes("exclude: ['@zudo-sg/ui', '@takazudo/zfb-md-wasm']"), "Vite dev optimizer must leave provider and WASM resource packages in the normal asset graph");
+// The excluded pack name is DERIVED from the resolved config, never spelled
+// out: pinning the literal here would quietly re-hardcode the provider that
+// `pack` exists to make swappable.
+assert.ok(
+  vite.includes("exclude: [componentPack.identity.packageName, '@takazudo/zfb-md-wasm']"),
+  "Vite dev optimizer must leave the configured pack and the WASM resource package in the normal asset graph",
+);
+assert.ok(vite.includes("componentPackPlugin({ workspaceRoot: composerConfig.workspaceRoot, pack: composerConfig.settings.pack })"), "Vite must resolve its component pack through the host config");
 assert.match(plugin, /readActivatedSiteRelease/);
 assert.match(plugin, /readActivatedSiteMedia/);
 assert.match(plugin, /release:changed/);

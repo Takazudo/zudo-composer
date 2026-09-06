@@ -6,6 +6,11 @@ export default defineConfig({
   test: {
     projects: [
       {
+        // Node-lane specs may import a component pack, whose sidecars are
+        // `.tsx`. Without this the default JSX runtime would be React's — the
+        // same statement `server/module-evaluator.mjs` has to make for the
+        // installed lane.
+        oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
         test: {
           name: 'server',
           // Must stay as wide as the app project's `server/**` exclusion, or a server spec
@@ -27,6 +32,8 @@ export default defineConfig({
         plugins: [preact()],
         resolve: {
           alias: {
+            'virtual:zudo-composer-pack': fileURLToPath(new URL('./src/test/composer-pack.ts', import.meta.url)),
+            'virtual:zudo-composer-host-styles': fileURLToPath(new URL('./src/test/host-styles.css', import.meta.url)),
             'virtual:release-config': fileURLToPath(new URL('./src/test/release-config.ts', import.meta.url)),
             'virtual:composer-file-provider-config': fileURLToPath(
               new URL('./src/test/composer-file-provider-config.ts', import.meta.url),

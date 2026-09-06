@@ -1,4 +1,4 @@
-import { componentPack } from "@zudo-sg/ui/composer-pack";
+import { componentPack } from "virtual:zudo-composer-pack";
 import { createComposerComponentProvider } from "./component-provider";
 
 /** The sole production component-pack selection point. */

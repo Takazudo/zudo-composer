@@ -10,16 +10,23 @@ import { resolve } from "node:path";
 import { validateMediaStoreRoot } from "../../plugins/composer-file-provider-plugin.mjs";
 import { APP_ROOT } from "../../plugins/roots.mjs";
 import { createModuleEvaluator } from "../module-evaluator.mjs";
+import { loadHostContext } from "../host-context.mjs";
 
 const evaluate = createModuleEvaluator(APP_ROOT);
 
 try {
-  const [{ runSiteProjectCli }, { createLocalSiteProjectApiService }] = await Promise.all([
+  const [{ runSiteProjectCli }, { createLocalSiteProjectApiService }, { composerConfig, pack, packIdentity }] = await Promise.all([
     evaluate(resolve(APP_ROOT, "server/site-project-local/cli-runner.ts")),
     evaluate(resolve(APP_ROOT, "server/site-project-local/service.ts")),
+    loadHostContext(),
   ]);
   process.exitCode = await runSiteProjectCli(
-    createLocalSiteProjectApiService({ mediaStoreRoot: validateMediaStoreRoot(process.env.ZUDO_MEDIA_STORE_ROOT) }),
+    createLocalSiteProjectApiService({
+      pack,
+      packIdentity,
+      workspaceRoot: composerConfig.workspaceRoot,
+      mediaStoreRoot: validateMediaStoreRoot(process.env.ZUDO_MEDIA_STORE_ROOT) ?? composerConfig.paths.media,
+    }),
     { stdin: process.stdin, stdout: process.stdout, stderr: process.stderr },
   );
 } catch (error) {

@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import { RESOLVED_SITE_PROJECT_SOURCE_ID, SITE_PROJECT_SOURCE_ID, siteProjectSourcePlugin } from "../site-project-source-plugin.mjs";
 
-const toolchain = { compiler: "compiler/2", componentPack: { packId: "pack", packVersion: "1", contractVersion: 2 }, providerCommit: "a".repeat(40), providerTree: "b".repeat(40), installedProviderDigest: "c".repeat(64), contractDigest: "d".repeat(64) };
+const toolchain = { compiler: "compiler/2", componentPack: { packId: "pack", packVersion: "1", contractVersion: 2 }, packSpecifier: "@fixture/pack/composer-pack", packSource: "workspace:*", installedPackDigest: "c".repeat(64), contractDigest: "d".repeat(64) };
 
 describe("siteProjectSourcePlugin", () => {
   it("serializes the activated release without leaking any local reader marker", async () => {

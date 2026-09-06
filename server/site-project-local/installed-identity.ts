@@ -5,7 +5,12 @@ import { join, resolve } from "node:path";
 import { releaseJson } from "../../src/site-project/api/review";
 
 /** Attests the actual installed package, not its declared URL. Package-manager
- * indirection is resolved by the caller; no link inside this tree is followed. */
+ * indirection is resolved by the caller; no link inside this tree is followed.
+ *
+ * A nested `node_modules` is skipped rather than hashed. It is never part of a
+ * package's published bytes, and under pnpm/workspaces it is a tree of symlinks
+ * into the store — hashing it would make a checkout and an install of the same
+ * package attest differently, which is the opposite of the point. */
 export async function installedPackageDigest(directory: string): Promise<string> {
   const root = resolve(directory), pinned = await realpath(root);
   const entries: [string, string, number, string][] = [];
@@ -13,9 +18,9 @@ export async function installedPackageDigest(directory: string): Promise<string>
     const before = await lstat(path);
     if (before.isSymbolicLink() || await realpath(root) !== pinned || await realpath(path) !== join(pinned, relative)) throw new Error("Installed package tree contains a link or changed root.");
     if (before.isDirectory()) {
-      const names = (await readdir(path)).sort(); entries.push([relative, "directory", before.mode & 0o777, ""]);
+      const names = (await readdir(path)).sort().filter((name) => name !== "node_modules"); entries.push([relative, "directory", before.mode & 0o777, ""]);
       for (const name of names) await visit(join(path, name), relative ? `${relative}/${name}` : name);
-      if (JSON.stringify((await readdir(path)).sort()) !== JSON.stringify(names)) throw new Error("Installed package directory changed during hashing.");
+      if (JSON.stringify((await readdir(path)).sort().filter((name) => name !== "node_modules")) !== JSON.stringify(names)) throw new Error("Installed package directory changed during hashing.");
     } else if (before.isFile()) {
       const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {

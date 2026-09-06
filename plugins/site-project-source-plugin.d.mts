@@ -7,6 +7,7 @@ export interface SiteProjectSourcePluginOptions {
   readDevRelease?: () => Promise<{ project: SiteProject; release: CompletedRelease } | null>;
   readDevMedia?: (pathname: string) => Promise<{ bytes: Uint8Array; mediaType: MediaType; identity: CompletedRelease["identity"] } | null>;
   workspaceRoot?: string;
+  packIdentity?: import("./component-pack.d.mts").ResolvedComponentPack;
 }
 
 export declare const SITE_PROJECT_SOURCE_ID = "virtual:site-project-source";
