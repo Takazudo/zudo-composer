@@ -15,7 +15,8 @@ import { isSitemapCollectionStore, SitemapPersistenceError, type SitemapInitiali
 import type { MappingAssignmentCatalog } from "../sitemapper/routes";
 import { createIndexedDbSitemapProvider } from "../sitemapper/storage/indexeddb/provider";
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
-import { createWorkspaceStorage, projectFromWorkspace, workspaceScopedFactory, workspaceDatabaseName, withWorkspaceInitializationLock, WORKSPACE_DATABASE_NAME, type WorkspaceRecord } from "./workspace-storage";
+import { createWorkspaceStorage, workspaceScopedFactory, workspaceDatabaseName, withWorkspaceInitializationLock, WORKSPACE_DATABASE_NAME } from "./workspace-storage";
+import { projectFromWorkspace, type WorkspaceRecord } from "./workspace-record";
 import { createWorkspaceSaveRegistry, type WorkspaceSaveRegistry } from "./workspace-sessions";
 import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture, type WorkspaceCaptureOutcome, type WorkspaceSnapshotSource, type WorkspaceToken } from "./workspace-snapshot";
 import { subscribePersistenceChanges } from "../shared/persistence-generation";

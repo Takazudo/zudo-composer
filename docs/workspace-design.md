@@ -254,6 +254,37 @@ bypass persisted-token checks. Direct external filesystem changes are caught on
 the next capture/read; external processes do not promise browser wakeups.
 Sidebar/theme/pin preferences never enter metadata or capture tokens.
 
+## Workspace scoping on the filesystem
+
+The browser registry is the IndexedDB database `zudo-composer-workspaces-v1`,
+and scoping is a database-*name* prefix applied by an `IDBFactory` Proxy. The
+filesystem lane keeps the same protocol and moves only where the bytes live.
+
+The registry is one `TransactionalRecordStore` under the host's CMS root
+(`<dataDir>/workspaces`): `meta` carries the layout marker, `selection` carries
+the active pointer, and each workspace is one document holding the same
+`WorkspaceRecord` — same schema, same per-record `mutationToken` precondition,
+same refusals — shared with the browser registry through `workspace-record.ts`.
+Because the store commits the whole record set behind one pointer swap, a
+workspace record and the selection pointer can never disagree after a crash.
+
+Scoping is a *directory* prefix applied where the Proxy applied the name
+prefix: each of the four authoring domain roots gains one
+`workspace-v1-<id>/` subdirectory. Scoping per domain root rather than
+re-rooting the CMS tree is what keeps a host's independently configured
+`compositionsDir`/`contentDir`/`mappingsDir`/`sitemapsDir` meaningful. Media is
+not scoped, exactly as it is not scoped in IndexedDB. Workspace ids are
+filenames here, so they are held to the record-id rule — lower-case and
+case-stable — rather than IndexedDB's looser name rule.
+
+Web Locks cannot reach across two dev-server processes, so once-only seeding is
+serialized by the shared kernel `O_EXCL` mutation lock instead, one lock
+directory per workspace beneath the registry root. The lock is never stolen: a
+holder that dies leaves the file behind and every later seed of that workspace
+fails closed until a human verifies no writer is running. Capture is unchanged
+— token → read → token, three attempts — because `WorkspaceToken` already
+admits the filesystem's generation values.
+
 ## Generic workspace shell
 
 The shell owns Overview, Content, Media, Compositions, Mappings, Sitemaps,
