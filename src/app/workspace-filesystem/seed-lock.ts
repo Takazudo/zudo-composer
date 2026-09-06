@@ -16,7 +16,7 @@
 import { SafeRootFilesystem, withMutationLock } from "../../shared/node-fs";
 import type { DurableExtraErrorCode, SafeRootErrorPolicy, SafeRootFilesystemOperations } from "../../shared/node-fs";
 import { join } from "node:path";
-import { workspaceDirectoryName } from "./scope";
+import { workspaceDirectoryName } from "../../shared/workspace-scope";
 import { WorkspaceRegistryError, type WorkspaceRegistryErrorCode } from "./types";
 
 type Operation = "seed";

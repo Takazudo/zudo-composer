@@ -9,8 +9,8 @@ describe("strict workspace intents", () => {
       { route: "content", providerId: "editorial", modelId: "people" },
       { route: "content", providerId: "catalog", modelId: "people", entryId: "person", viewId: "contact" },
       { route: "content", providerId: "catalog", modelId: "people", entryId: "person", fieldId: "gallery", valuePath: [2, "caption"] },
-      { route: "mapping", providerId: "mapping-indexeddb", mappingId: "card" },
-      { route: "sitemapper", providerId: "sitemap-indexeddb", sitemapId: "site", pageId: "home" },
+      { route: "mapping", providerId: "mapping-filesystem", mappingId: "card" },
+      { route: "sitemapper", providerId: "sitemap-filesystem", sitemapId: "site", pageId: "home" },
       { route: "media", providerId: "media-files", assetId: "portrait" },
       { route: "review" },
     ];

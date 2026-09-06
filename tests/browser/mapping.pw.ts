@@ -3,7 +3,7 @@
 // Content-owned coverage lives in `content.pw.ts`.
 import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
 
-const JOURNAL_MAPPING = "/mapping?provider=mapping-indexeddb&mapping=journal-entry-mapping";
+const JOURNAL_MAPPING = "/mapping?provider=mapping-filesystem&mapping=journal-entry-mapping";
 
 function watchRuntimeFailures(page: Page) {
   const failures: string[] = [];

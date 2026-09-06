@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { applyContentInverseMutation, buildContentGraphIndex, contentEntryDigest, createContentEntryRecord, createContentModelRecord, getContentDeletionBlockers, getContentPublicationChanges, planContentInverseMutation, readContentGraph, selectContentPublicationCandidate } from "..";
 import type { ContentSnapshot, ContentStore } from "..";
 
-const timestamp = "2026-01-01T00:00:00.000Z", providerId = "content-indexeddb";
+const timestamp = "2026-01-01T00:00:00.000Z", providerId = "content-filesystem";
 const ref = (recordId: string, provider = providerId) => ({ providerId: provider, modelId: "items", recordId });
 const model = createContentModelRecord({ name: "Items", kind: "collection", fields: [{ id: "title", key: "title", label: "Title", required: true, kind: "text" }, { id: "refs", key: "refs", label: "Refs", required: false, kind: "reference-list", target: { providerId, recordId: "items" }, ordered: true }] }, { id: "items", timestamp });
 const entry = (id: string, title = id) => createContentEntryRecord("items", { title }, { id, timestamp });

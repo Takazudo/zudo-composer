@@ -1,129 +1,270 @@
-import { serializeSiteProject, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project/model";
-import { notifyPersistenceChange, requestValue } from "../shared/persistence-generation";
-import { validateCollectionAttachments, validateWorkspaceRecord, workspaceProjectMetadata, type WorkspaceRecord } from "./workspace-record";
+// The workspace registry, as the application sees it.
+//
+// Durable workspace metadata lives in the host project's files, under
+// `<dataDir>/workspaces`. The browser never touches those files: it reaches the
+// same registry the dev server runs over one capability-protected same-origin
+// endpoint, and every record that comes back is re-validated with the shared
+// workspace-record validators before it is believed.
+//
+// Two things this module owns that the Node registry deliberately does not:
+//
+//   * **Refresh hints.** `FilesystemWorkspaceRegistry` never calls
+//     `notifyPersistenceChange` — there are no browser listeners in a Node
+//     process, and a commit that fired one would be lying about who heard it.
+//     The hint belongs to the endpoint's browser half, which is here: every
+//     mutating call emits on the `workspace` channel, and
+//     `persistence-generation`'s BroadcastChannel carries it to the other tabs.
+//     Hints are hints; snapshot correctness still rests on persisted tokens.
+//   * **Tab serialization.** Seeding is a long browser-driven sequence across
+//     four providers. Web Locks release when their tab dies, which is what a
+//     lock held across an editing session must do; the dev server's own
+//     `O_EXCL` lock — which is never stolen — guards the short registry
+//     transitions instead, on the far side of each request.
 
-export const WORKSPACE_DATABASE_NAME = "zudo-composer-workspaces-v1";
+import { domainProviderConfig } from "virtual:composer-domain-providers";
+import { DomainFileProviderClient, readDomainFileProviderConfig } from "../shared/file-provider";
+import type { FileProviderConfig, FileProviderErrorAdapter, FileProviderWireError } from "../shared/file-provider";
+import { isSafeRecordId } from "../shared";
+import type { SiteProject, SiteProjectCollectionAttachment } from "../site-project/model";
+import { validateWorkspaceRecord, type WorkspaceRecord } from "./workspace-record";
+import {
+  WorkspaceRegistryError,
+  type WorkspaceRegistryErrorCode,
+  type WorkspaceRegistryOperation,
+} from "./workspace-filesystem/types";
 
-export function workspaceDatabaseName(database: string, workspaceId: string): string {
-  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(workspaceId)) throw new Error("Invalid workspace identity.");
-  return `${database}-workspace-v1-${workspaceId}`;
+/** The registry's file-provider domain, and its refresh-hint channel. */
+export const WORKSPACE_FILE_PROVIDER_DOMAIN = "workspace";
+
+export interface WorkspaceMetadataPatch {
+  name?: string;
+  activeSitemap?: SiteProject["activeSitemap"];
+  baselineRevision?: string;
+  collectionAttachments?: readonly SiteProjectCollectionAttachment[];
 }
-export function workspaceScopedFactory(factory: IDBFactory | null | undefined, identity: () => string): IDBFactory | null {
-  const target = factory === undefined ? globalThis.indexedDB : factory;
-  if (!target) return null;
-  return new Proxy(target, { get(value, property) {
-    if (property === "open") return (name: string, version?: number) => value.open(workspaceDatabaseName(name, identity()), version);
-    if (property === "deleteDatabase") return (name: string) => value.deleteDatabase(workspaceDatabaseName(name, identity()));
-    const member: unknown = Reflect.get(value, property, value);
-    return typeof member === "function" ? member.bind(value) : member;
-  } });
+
+/**
+ * The registry surface the application depends on.
+ *
+ * The dev server's `createWorkspaceRegistryService` implements it directly, so
+ * a spec can drive the real filesystem registry without a transport while the
+ * app drives the same methods over one.
+ */
+export interface WorkspaceStorage {
+  list(): Promise<readonly WorkspaceRecord[]>;
+  selection(): Promise<string | null>;
+  generation(): Promise<number>;
+  /** Without an id, the selected workspace; `null` when none is selected. */
+  open(id?: string): Promise<WorkspaceRecord | null>;
+  findSeeding(project: SiteProject, revision: string): Promise<WorkspaceRecord | null>;
+  create(project: SiteProject, baselineRevision: string, id?: string, requiresBeforeComplete?: boolean): Promise<WorkspaceRecord>;
+  markSeedCleanup(id: string, revision: string): Promise<void>;
+  discardSeeding(id: string, revision: string): Promise<void>;
+  complete(id: string, creationValidated?: boolean): Promise<WorkspaceRecord>;
+  update(id: string, expectedToken: number, patch: WorkspaceMetadataPatch): Promise<WorkspaceRecord>;
+  /** The counterpart of seed cleanup: remove every directory this workspace owns. */
+  deleteDirectories(id: string): Promise<void>;
+  /** Which of the four authoring directories are absent. */
+  missingDirectories(id: string): Promise<readonly string[]>;
 }
 
-export function createWorkspaceStorage(factory: IDBFactory | null | undefined) {
-  const target = factory === undefined ? globalThis.indexedDB : factory;
-  const open = async () => {
-    if (!target) throw new Error("Workspace IndexedDB is unavailable.");
-    const request = target.open(WORKSPACE_DATABASE_NAME, 1);
-    request.onupgradeneeded = () => { request.result.createObjectStore("workspaces", { keyPath: "id" }); request.result.createObjectStore("selection"); };
-    return requestValue(request);
-  };
-  async function transaction<T>(mode: IDBTransactionMode, action: (records: IDBObjectStore, selection: IDBObjectStore) => Promise<T>): Promise<T> {
-    const db = await open();
-    const tx = db.transaction(["workspaces", "selection"], mode);
-    const done = new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error ?? new Error("Workspace transaction aborted.")); tx.onerror = () => reject(tx.error); });
-    try { const result = await action(tx.objectStore("workspaces"), tx.objectStore("selection")); await done; if (mode === "readwrite") notifyPersistenceChange(WORKSPACE_DATABASE_NAME); return result; }
-    catch (error) { try { tx.abort(); } catch { /* Already settled. */ } void done.catch(() => undefined); throw error; }
-    finally { db.close(); }
+type WorkspaceWireOperation =
+  | "list"
+  | "selection"
+  | "generation"
+  | "open"
+  | "find-seeding"
+  | "create"
+  | "mark-seed-cleanup"
+  | "discard-seeding"
+  | "complete"
+  | "update"
+  | "delete-directories"
+  | "missing-directories";
+
+const OPERATIONS: readonly WorkspaceRegistryOperation[] = ["initialize", "read", "create", "complete", "update", "discard", "select"];
+const CODES: readonly WorkspaceRegistryErrorCode[] = ["blocked", "read-failed", "write-failed", "conflict", "commit-uncertain", "validation", "unsupported-version"];
+
+/**
+ * The registry classifies retryability from the code alone — the same rule its
+ * own error factory applies — so nothing has to travel as structured details.
+ */
+function retryableCode(code: WorkspaceRegistryErrorCode): boolean {
+  return code === "read-failed" || code === "write-failed" || code === "conflict";
+}
+
+function registryOperation(value: string, fallback: WorkspaceRegistryOperation): WorkspaceRegistryOperation {
+  return OPERATIONS.includes(value as WorkspaceRegistryOperation) ? value as WorkspaceRegistryOperation : fallback;
+}
+
+/** A wire operation named for the browser maps onto the registry's own vocabulary. */
+function registryOperationOf(operation: WorkspaceWireOperation): WorkspaceRegistryOperation {
+  switch (operation) {
+    case "create": return "create";
+    case "complete": return "complete";
+    case "update": return "update";
+    case "mark-seed-cleanup":
+    case "discard-seeding":
+    case "delete-directories": return "discard";
+    default: return "read";
   }
-  const validate = (value: unknown): WorkspaceRecord => validateWorkspaceRecord(value, (message) => { throw new Error(message); });
-  return {
-    async findSeeding(project: SiteProject, revision: string): Promise<WorkspaceRecord | undefined> {
-      return transaction("readonly", async (records) => {
-        const values: unknown[] = await requestValue(records.getAll());
-        return values.filter((value) => value && typeof value === "object" && (value as WorkspaceRecord).status === "seeding" && (value as WorkspaceRecord).baselineRevision === revision).map(validate).find((record) => record.seed && serializeSiteProject(record.seed) === serializeSiteProject(project));
-      });
-    },
-    async open(id?: string): Promise<WorkspaceRecord | undefined> {
-      return transaction("readonly", async (records, selection) => {
-        const selected: unknown = id ?? await requestValue(selection.get("active"));
-        if (selected === undefined) return undefined;
-        if (typeof selected !== "string") throw new Error("Workspace selection is invalid; choose a workspace explicitly.");
-        const record: unknown = await requestValue(records.get(selected));
-        if (record === undefined) throw new Error(`Selected workspace ${selected} is missing; choose a workspace explicitly.`);
-        return validate(record);
-      });
-    },
-    async create(project: SiteProject, baselineRevision: string, id: string = crypto.randomUUID(), requiresBeforeComplete = false): Promise<WorkspaceRecord> {
-      workspaceDatabaseName("validate", id);
-      return transaction("readwrite", async (records) => {
-        const existing: unknown = await requestValue(records.get(id));
-        if (existing !== undefined) {
-          const record = validate(existing);
-          if (record.status !== "seeding" || Boolean(record.requiresBeforeComplete) !== requiresBeforeComplete || record.baselineRevision !== baselineRevision || !record.seed || serializeSiteProject(record.seed) !== serializeSiteProject(project)) throw new Error(`Workspace attempt ${id} already exists with a different or completed identity; open it explicitly.`);
-          return record;
-        }
-        const record: WorkspaceRecord = { schemaVersion: 1, id, mutationToken: 0, status: "seeding", metadata: workspaceProjectMetadata(project), baselineRevision, seed: structuredClone(project), ...(requiresBeforeComplete ? { requiresBeforeComplete: true } : {}) };
-        records.add(record);
-        return record;
-      });
-    },
-    /** Caller holds the workspace initialization lock throughout DB cleanup. */
-    async markSeedCleanup(id: string, revision: string): Promise<void> {
-      await transaction("readwrite", async (records, selection) => {
-        const record = validate(await requestValue(records.get(id)));
-        if (record.status !== "seeding" || record.baselineRevision !== revision || await requestValue(selection.get("active")) === id) throw new Error("Only an unselected matching seeding attempt may be discarded.");
-        record.seedCleanupPending = true; records.put(record);
-      });
-    },
-    /** Remove the exact attempt only after every provider DB deletion succeeded. */
-    async discardSeeding(id: string, revision: string): Promise<void> {
-      await transaction("readwrite", async (records, selection) => {
-        const record = validate(await requestValue(records.get(id)));
-        if (record.status !== "seeding" || !record.seedCleanupPending || record.baselineRevision !== revision || await requestValue(selection.get("active")) === id) throw new Error("Only a cleaned, unselected matching seeding attempt may be discarded.");
-        records.delete(id);
-      });
-    },
-    async complete(id: string, creationValidated = false): Promise<WorkspaceRecord> {
-      return transaction("readwrite", async (records, selection) => {
-        const record = validate(await requestValue(records.get(id)));
-        if (record.seedCleanupPending) throw new Error("Workspace seed cleanup must finish before completion.");
-        if (record.requiresBeforeComplete && !creationValidated) throw new Error("Workspace creation must repeat its before-complete validation before selection.");
-        if (record.status !== "ready") {
-          if (record.mutationToken === Number.MAX_SAFE_INTEGER) throw new Error("Workspace mutation generation is exhausted.");
-          record.status = "ready"; delete record.seed; delete record.requiresBeforeComplete; record.mutationToken++; records.put(record);
-        }
-        selection.put(id, "active");
-        return record;
-      });
-    },
-    async update(id: string, expectedToken: number, patch: { name?: string; activeSitemap?: SiteProject["activeSitemap"]; baselineRevision?: string; collectionAttachments?: readonly SiteProjectCollectionAttachment[] }): Promise<WorkspaceRecord> {
-      return transaction("readwrite", async (records) => {
-        const record = validate(await requestValue(records.get(id)));
-        if (record.status !== "ready" || record.mutationToken !== expectedToken) throw new Error("Workspace metadata changed; reload before applying this update.");
-        if (record.mutationToken === Number.MAX_SAFE_INTEGER) throw new Error("Workspace mutation generation is exhausted.");
-        if (patch.name !== undefined) { if (!patch.name.trim()) throw new Error("Workspace name is required."); record.metadata.name = patch.name; }
-        if (patch.activeSitemap !== undefined) record.metadata.activeSitemap = structuredClone(patch.activeSitemap);
-        if (patch.collectionAttachments !== undefined) {
-          if (!validateCollectionAttachments(patch.collectionAttachments)) throw new Error("Collection attachment metadata is malformed.");
-          record.metadata.collectionAttachments = patch.collectionAttachments.map((attachment) => structuredClone(attachment));
-        }
-        if (patch.baselineRevision !== undefined) { if (!/^[a-f0-9]{64}$/.test(patch.baselineRevision)) throw new Error("Invalid baseline revision."); record.baselineRevision = patch.baselineRevision; }
-        record.mutationToken++;
-        records.put(record);
-        return record;
-      });
-    },
-  };
 }
 
-const localLocks = new WeakMap<IDBFactory, Map<string, Promise<unknown>>>();
-/** Browser Web Locks serialize once-only multi-provider seed; tests use an isolated factory. */
-export async function withWorkspaceInitializationLock<T>(factory: IDBFactory | null | undefined, id: string, action: () => Promise<T>): Promise<T> {
+export const workspaceFileProviderErrorAdapter: FileProviderErrorAdapter<WorkspaceWireOperation, WorkspaceRegistryError> = {
+  domain: WORKSPACE_FILE_PROVIDER_DOMAIN,
+  persistenceChannel: WORKSPACE_FILE_PROVIDER_DOMAIN,
+
+  isDomainError: (value): value is WorkspaceRegistryError => value instanceof WorkspaceRegistryError,
+
+  toWire: (error): FileProviderWireError => ({
+    domain: WORKSPACE_FILE_PROVIDER_DOMAIN,
+    operation: error.operation,
+    code: error.code,
+    message: error.message,
+  }),
+
+  fromWire: (error, fallbackOperation) => {
+    const code = CODES.includes(error.code as WorkspaceRegistryErrorCode) ? error.code as WorkspaceRegistryErrorCode : "blocked";
+    return new WorkspaceRegistryError(
+      registryOperation(error.operation, registryOperationOf(fallbackOperation)),
+      code,
+      error.message,
+      retryableCode(code),
+    );
+  },
+
+  transportError: (operation, message, cause) => new WorkspaceRegistryError(
+    registryOperationOf(operation),
+    "read-failed",
+    message,
+    true,
+    { cause },
+  ),
+};
+
+function decodeRecord(value: unknown): WorkspaceRecord {
+  return validateWorkspaceRecord(value, (message) => {
+    throw new WorkspaceRegistryError("read", "blocked", `The local workspace registry returned an invalid record: ${message}`, false);
+  });
+}
+
+function decodeOptionalRecord(value: unknown): WorkspaceRecord | null {
+  return value === null || value === undefined ? null : decodeRecord(value);
+}
+
+export interface CreateFileProviderWorkspaceStorageOptions {
+  config: FileProviderConfig;
+  fetchImpl?: typeof fetch;
+}
+
+class FileProviderWorkspaceStorage implements WorkspaceStorage {
+  private readonly client: DomainFileProviderClient<WorkspaceWireOperation, WorkspaceRegistryError>;
+
+  constructor(options: CreateFileProviderWorkspaceStorageOptions) {
+    this.client = new DomainFileProviderClient(
+      options.config,
+      workspaceFileProviderErrorAdapter,
+      options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+    );
+  }
+
+  async list(): Promise<readonly WorkspaceRecord[]> {
+    const records = await this.client.call<unknown>("list");
+    if (!Array.isArray(records)) throw this.malformed("read", "a malformed workspace list");
+    return records.map(decodeRecord);
+  }
+
+  async selection(): Promise<string | null> {
+    const value = await this.client.call<unknown>("selection");
+    if (value !== null && !isSafeRecordId(value)) throw this.malformed("read", "a malformed workspace selection");
+    return value as string | null;
+  }
+
+  async generation(): Promise<number> {
+    const value = await this.client.call<unknown>("generation");
+    if (!Number.isSafeInteger(value) || (value as number) < 0) throw this.malformed("read", "a malformed registry generation");
+    return value as number;
+  }
+
+  async open(id?: string): Promise<WorkspaceRecord | null> {
+    return decodeOptionalRecord(await this.client.call("open", id === undefined ? {} : { id }));
+  }
+
+  async findSeeding(project: SiteProject, revision: string): Promise<WorkspaceRecord | null> {
+    return decodeOptionalRecord(await this.client.call("find-seeding", { project, revision }));
+  }
+
+  async create(project: SiteProject, baselineRevision: string, id?: string, requiresBeforeComplete = false): Promise<WorkspaceRecord> {
+    return decodeRecord(await this.client.call(
+      "create",
+      { project, baselineRevision, ...(id === undefined ? {} : { id }), requiresBeforeComplete },
+      { mutates: true },
+    ));
+  }
+
+  async markSeedCleanup(id: string, revision: string): Promise<void> {
+    await this.client.call("mark-seed-cleanup", { id, revision }, { mutates: true });
+  }
+
+  async discardSeeding(id: string, revision: string): Promise<void> {
+    await this.client.call("discard-seeding", { id, revision }, { mutates: true });
+  }
+
+  async complete(id: string, creationValidated = false): Promise<WorkspaceRecord> {
+    return decodeRecord(await this.client.call("complete", { id, creationValidated }, { mutates: true }));
+  }
+
+  async update(id: string, expectedToken: number, patch: WorkspaceMetadataPatch): Promise<WorkspaceRecord> {
+    return decodeRecord(await this.client.call("update", { id, expectedToken, patch }, { mutates: true }));
+  }
+
+  async deleteDirectories(id: string): Promise<void> {
+    await this.client.call("delete-directories", { id }, { mutates: true });
+  }
+
+  async missingDirectories(id: string): Promise<readonly string[]> {
+    const value = await this.client.call<unknown>("missing-directories", { id });
+    if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+      throw this.malformed("read", "a malformed directory report");
+    }
+    return value as readonly string[];
+  }
+
+  private malformed(operation: WorkspaceRegistryOperation, detail: string): WorkspaceRegistryError {
+    return new WorkspaceRegistryError(operation, "blocked", `The local workspace registry returned ${detail}.`, false);
+  }
+}
+
+export function readWorkspaceFileProviderConfig(): FileProviderConfig | undefined {
+  return readDomainFileProviderConfig(domainProviderConfig, WORKSPACE_FILE_PROVIDER_DOMAIN);
+}
+
+/**
+ * The registry the development server injected, or `undefined` in a production
+ * build. A caller that gets `undefined` has no workspace registry at all and
+ * must say so rather than falling back to some other store.
+ */
+export function createFileProviderWorkspaceStorage(
+  options: Partial<CreateFileProviderWorkspaceStorageOptions> = {},
+): WorkspaceStorage | undefined {
+  const config = options.config ?? readWorkspaceFileProviderConfig();
+  if (!config) return undefined;
+  return new FileProviderWorkspaceStorage({ config, ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }) });
+}
+
+const localLocks = new Map<string, Promise<unknown>>();
+
+/**
+ * Serialize once-only multi-provider seeding within this browser.
+ *
+ * Web Locks cover the realistic contention — two tabs of the same dev server —
+ * and release with their tab. The in-process map is the fallback for a
+ * non-browser test environment; it serializes within one module instance, which
+ * is exactly what a single-process spec needs.
+ */
+export async function withWorkspaceInitializationLock<T>(id: string, action: () => Promise<T>): Promise<T> {
   if (typeof navigator !== "undefined" && navigator.locks) return navigator.locks.request(`zudo-workspace-seed-${id}`, action);
-  if (factory === undefined || factory === null) throw new Error("Workspace creation requires browser Web Locks to serialize seeding across tabs.");
-  let locks = localLocks.get(factory);
-  if (!locks) { locks = new Map(); localLocks.set(factory, locks); }
-  const pending = (locks.get(id) ?? Promise.resolve()).then(action, action);
-  locks.set(id, pending);
-  try { return await pending; } finally { if (locks.get(id) === pending) locks.delete(id); }
+  const pending = (localLocks.get(id) ?? Promise.resolve()).then(action, action);
+  localLocks.set(id, pending);
+  try { return await pending; } finally { if (localLocks.get(id) === pending) localLocks.delete(id); }
 }

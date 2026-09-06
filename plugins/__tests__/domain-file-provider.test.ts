@@ -3,6 +3,8 @@ import { createDomainFileProviderMiddleware, domainFileProviderEndpoint, seriali
 
 const CAPABILITY = "test-capability";
 const ENDPOINT = domainFileProviderEndpoint("content");
+/** Every authoring domain is workspace scoped; the header names the workspace. */
+const WORKSPACE = "test-workspace";
 
 class ContentPersistenceError extends Error {
   readonly name = "ContentPersistenceError";
@@ -30,6 +32,7 @@ function request(operation: string, body?: unknown, overrides: Record<string, un
       "content-type": "application/json",
       "x-zudo-composer-capability": CAPABILITY,
       "x-zudo-composer-operation": operation,
+      "x-zudo-composer-workspace": WORKSPACE,
     },
     body: body === undefined ? "" : JSON.stringify(body),
     ...overrides,
@@ -41,12 +44,15 @@ interface TestStore {
   put?(payload: unknown): unknown;
 }
 
+/** Which workspace each request resolved its store against. */
+const seen: (string | undefined)[] = [];
+
 function middleware(store: TestStore, extra: Record<string, unknown> = {}) {
   return createDomainFileProviderMiddleware<TestStore>({
     domain: "content",
     capability: CAPABILITY,
     isDomainError,
-    createStore: () => Promise.resolve(store),
+    createStore: (workspaceId) => { seen.push(workspaceId); return Promise.resolve(store); },
     operations: {
       snapshot: (target) => target.snapshot!(),
       put: (target, payload) => target.put!(payload),
@@ -75,6 +81,26 @@ describe("domain file provider endpoint", () => {
       expect((await handler(request("snapshot", undefined, overrides))).status).toBe(status);
     }
     expect((await handler(request("snapshot"))).status).toBe(200);
+  });
+
+  it("resolves the store against the named workspace and refuses a request without one", async () => {
+    const handler = middleware({ snapshot: () => ({ records: [] }) });
+    seen.length = 0;
+    expect((await handler(request("snapshot"))).status).toBe(200);
+    expect(seen).toEqual([WORKSPACE]);
+
+    const headers = { ...request("snapshot").headers };
+    delete (headers as Record<string, string>)["x-zudo-composer-workspace"];
+    expect((await handler(request("snapshot", undefined, { headers }))).status).toBe(400);
+    expect((await handler(request("snapshot", undefined, { headers: { ...request("snapshot").headers, "x-zudo-composer-workspace": "../escape" } }))).status).toBe(400);
+    // The refusal happened before any store was built.
+    expect(seen).toEqual([WORKSPACE]);
+
+    // An unscoped endpoint — the workspace registry itself — answers without one.
+    const unscoped = middleware({ snapshot: () => ({ records: [] }) }, { workspaceScoped: false });
+    seen.length = 0;
+    expect((await unscoped(request("snapshot", undefined, { headers }))).status).toBe(200);
+    expect(seen).toEqual([undefined]);
   });
 
   it("rejects an unknown operation, a malformed body and an oversized body", async () => {

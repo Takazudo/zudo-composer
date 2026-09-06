@@ -14,7 +14,7 @@ export const SITEMAP_FILE_PROVIDER_DOMAIN = "sitemapper";
  * `applyTransaction`.
  */
 export const SITEMAP_FILE_PROVIDER_OPERATIONS = [
-  "list", "read-all", "get", "put", "delete", "seed", "clear", "initialize", "start-fresh",
+  "list", "read-all", "snapshot", "get", "put", "delete", "seed", "clear", "initialize", "start-fresh",
 ] as const;
 
 export type SitemapWireOperation = (typeof SITEMAP_FILE_PROVIDER_OPERATIONS)[number];
@@ -28,7 +28,7 @@ export type SitemapWireOperation = (typeof SITEMAP_FILE_PROVIDER_OPERATIONS)[num
 export function sitemapPersistenceOperationOf(operation: SitemapWireOperation): SitemapPersistenceOperation {
   if (operation === "start-fresh") return "clear";
   if (operation === "seed") return "put";
-  if (operation === "read-all") return "list";
+  if (operation === "read-all" || operation === "snapshot") return "list";
   return operation;
 }
 
@@ -42,5 +42,7 @@ export interface SitemapFileProviderStore extends SitemapCollectionStore {
 }
 
 export interface SitemapFileProvider extends SitemapProvider {
+  /** Always present here, unlike the optional base field. */
+  readonly descriptor: SitemapProviderDescriptor;
   readonly store: SitemapFileProviderStore;
 }

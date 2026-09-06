@@ -27,7 +27,7 @@ import type { ContentSnapshot, ContentStore } from "../library";
 
 const timestamp = "2026-09-01T00:00:00.000Z";
 const nextTimestamp = "2026-09-02T00:00:00.000Z";
-const contentProviderId = "content-indexeddb";
+const contentProviderId = "content-filesystem";
 const mediaProviderId = "media-files";
 const contentModelRef = { providerId: contentProviderId, recordId: "article" };
 const targetEntryRef: ContentEntryRef = { providerId: contentProviderId, modelId: "article", recordId: "target" };

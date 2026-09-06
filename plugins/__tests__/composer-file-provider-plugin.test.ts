@@ -5,6 +5,7 @@ import { join, sep } from "node:path";
 import { PassThrough, Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFilesystemCompositionStore } from "../../src/composer/storage/filesystem";
+import { createWorkspaceScopedCompositionStore } from "../../src/composer/storage/file-provider/dev-server-entry";
 import { createFilesystemMediaStore } from "../../src/media/storage/filesystem";
 import { createMediaRecord } from "../../src/media/library";
 import {
@@ -14,9 +15,11 @@ import {
 } from "../../src/composer/library";
 import { createFixtureDocument } from "../../src/composer/__tests__/fixtures";
 import { APP_ROOT, appModuleId } from "../roots.mjs";
+import { workspaceScopedRoot } from "../../src/shared/workspace-scope";
 import plugin, {
   COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER,
   COMPOSER_FILE_PROVIDER_ENDPOINT,
+  COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER,
   COMPOSITIONS_ROOT_ENV,
   MEDIA_FILE_PROVIDER_ENDPOINT,
   MEDIA_FILE_PROVIDER_FILE_NAME_HEADER,
@@ -32,6 +35,8 @@ import plugin, {
 } from "../composer-file-provider-plugin.mjs";
 
 const CAPABILITY = "test-capability-value-that-is-not-guessable";
+/** Compositions are workspace scoped; the header names the workspace directory. */
+const WORKSPACE = "test-workspace";
 const T1 = "2026-01-02T03:04:05.000Z";
 
 let sandbox: string;
@@ -62,6 +67,7 @@ function request(
       "sec-fetch-site": "same-origin",
       "content-type": "application/json; charset=utf-8",
       [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: CAPABILITY,
+      [COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER]: WORKSPACE,
     },
     body: overrides.rawBody ?? JSON.stringify(body),
     protocol: overrides.protocol,
@@ -81,8 +87,8 @@ function makeHandler(options: { maxBodyBytes?: number } = {}) {
     capability: CAPABILITY,
     maxBodyBytes: options.maxBodyBytes,
     validateRecord: validateCompositionRecord,
-    createStore: ({ provideJsx }) => createFilesystemCompositionStore({
-      compositionsRoot: root,
+    createStore: ({ workspaceId, provideJsx }) => createFilesystemCompositionStore({
+      compositionsRoot: workspaceScopedRoot(join(sandbox, "compositions"), workspaceId),
       provideJsx,
     }),
   });
@@ -90,7 +96,8 @@ function makeHandler(options: { maxBodyBytes?: number } = {}) {
 
 beforeEach(async () => {
   sandbox = await mkdtemp(join(tmpdir(), "composer-file-provider-"));
-  root = join(sandbox, "compositions");
+  // The endpoint writes below the workspace directory, not the domain root.
+  root = workspaceScopedRoot(join(sandbox, "compositions"), WORKSPACE);
 });
 
 afterEach(async () => {
@@ -296,7 +303,7 @@ describe("file-provider core integration", () => {
   });
 
   it("never reports a failed derived repair as a successful read", async () => {
-    await mkdir(root);
+    await mkdir(root, { recursive: true });
     const initial = await createFilesystemCompositionStore({
       compositionsRoot: root,
       provideJsx: () => "initial",
@@ -515,7 +522,7 @@ describe("dev/build registration boundary", () => {
     const { instance, source } = setupSource("serve", mediaStoreRoot, workspaceRoot);
     const middlewares: RegisteredMiddleware[] = [];
     const ssrLoadModule = vi.fn().mockResolvedValue({
-      createFilesystemCompositionStore,
+      createWorkspaceScopedCompositionStore,
       createFilesystemMediaStore,
       validateCompositionRecord,
     });
@@ -904,12 +911,13 @@ describe("dev/build registration boundary", () => {
       headers: {
         host: "localhost:4321", origin: "http://localhost:4321", "sec-fetch-site": "same-origin", "content-type": "application/json",
         [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: config.capability,
+        [COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER]: WORKSPACE,
       },
     });
     const response = { statusCode: 0, setHeader: vi.fn(), end: vi.fn() };
     await invokeRegistered(middlewares, requestStream, response);
     expect(response.statusCode).toBe(200);
-    const stored = JSON.parse(await readFile(join(workspaceRoot, "compositions", "composition-alpha.composition.json"), "utf8"));
+    const stored = JSON.parse(await readFile(join(workspaceScopedRoot(join(workspaceRoot, "compositions"), WORKSPACE), "composition-alpha.composition.json"), "utf8"));
     expect(stored.id).toBe("alpha");
     // The package directory and the process working directory are both foreign
     // to the host workspace and must stay untouched.

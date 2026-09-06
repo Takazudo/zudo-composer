@@ -12,6 +12,16 @@
 export const FILE_PROVIDER_CAPABILITY_HEADER = "x-zudo-composer-capability";
 /** The operation travels in a header so the body is purely the payload. */
 export const FILE_PROVIDER_OPERATION_HEADER = "x-zudo-composer-operation";
+/**
+ * Which workspace the request addresses.
+ *
+ * A workspace scopes the four authoring domains to one directory below each
+ * domain root, and the roots are the dev server's to resolve — the browser
+ * never sees a path. So the browser names the workspace and the server does the
+ * joining, which is the same split the IndexedDB lane had when a Proxy rewrote
+ * a database name the browser also never spelled out.
+ */
+export const FILE_PROVIDER_WORKSPACE_HEADER = "x-zudo-composer-workspace";
 /** UTF-8 bytes. Large enough for a substantial document graph. */
 export const FILE_PROVIDER_MAX_BODY_BYTES = 2 * 1024 * 1024;
 
@@ -112,6 +122,8 @@ export interface FileProviderConfig {
   capability: string;
   capabilityHeader: string;
   operationHeader: string;
+  /** Absent on an endpoint no workspace scopes, such as the registry itself. */
+  workspaceHeader?: string;
   maxBodyBytes: number;
 }
 

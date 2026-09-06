@@ -14,14 +14,18 @@ export const MAPPING_FILE_PROVIDER_DOMAIN = "mapping";
  * `applyTransaction`.
  */
 export const MAPPING_FILE_PROVIDER_OPERATIONS = [
-  "list", "get", "put", "delete", "seed", "clear", "initialize", "start-fresh",
+  "list", "read-all", "snapshot", "get", "put", "delete", "seed", "clear", "initialize", "start-fresh",
 ] as const;
 
 export type MappingWireOperation = (typeof MAPPING_FILE_PROVIDER_OPERATIONS)[number];
 
 /** `start-fresh` is an initialization entry point, not a store operation. */
 export function mappingPersistenceOperationOf(operation: MappingWireOperation): MappingPersistenceOperation {
-  return operation === "start-fresh" ? "clear" : operation;
+  if (operation === "start-fresh") return "clear";
+  // Reading the whole record set is a `list` as far as Mapping's own error
+  // vocabulary is concerned; only the transport distinguishes them.
+  if (operation === "read-all" || operation === "snapshot") return "list";
+  return operation;
 }
 
 export type MappingFileProviderConfig = FileProviderConfig;

@@ -33,7 +33,7 @@ import {
   type WorkspaceRecord,
 } from "../workspace-record";
 import type { WorkspaceSnapshotSource } from "../workspace-snapshot";
-import { assertWorkspaceDirectoryId, isSafeWorkspaceId } from "./scope";
+import { assertWorkspaceDirectoryId, isSafeWorkspaceId } from "../../shared/workspace-scope";
 import {
   WORKSPACE_META_RECORD_ID,
   WORKSPACE_REGISTRY_LAYOUT,

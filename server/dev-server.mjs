@@ -14,6 +14,11 @@ import { createServer } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import preact from "@preact/preset-vite";
 import composerFileProviderPlugin from "../plugins/composer-file-provider-plugin.mjs";
+import domainFileProviderPlugin from "../plugins/domain-file-provider-plugin.mjs";
+import contentDomainProvider from "../plugins/content-domain-provider.mjs";
+import mappingDomainProvider from "../plugins/mapping-domain-provider.mjs";
+import sitemapperDomainProvider from "../plugins/sitemapper-domain-provider.mjs";
+import workspaceDomainProvider, { resolveWorkspaceRegistryRoot } from "../plugins/workspace-domain-provider.mjs";
 import { siteProjectSourcePlugin } from "../plugins/site-project-source-plugin.mjs";
 import composerAppHtmlPlugin, { APP_ENTRY_MODULE } from "../plugins/composer-app-html.mjs";
 import componentPackPlugin from "../plugins/component-pack-plugin.mjs";
@@ -122,6 +127,23 @@ export async function resolveComposerDevConfig(options = {}) {
         releaseApiPlugin({ mediaStoreRoot: paths.media, workspaceRoot, packIdentity: componentPack.identity }),
         siteProjectSourcePlugin({ workspaceRoot, packIdentity: componentPack.identity }),
         composerFileProviderPlugin({ workspaceRoot, compositionsRoot: paths.compositions, mediaStoreRoot: paths.media }),
+        domainFileProviderPlugin({
+          workspaceRoot,
+          descriptors: [
+            workspaceDomainProvider({
+              registryRoot: resolveWorkspaceRegistryRoot(paths.data),
+              domainRoots: {
+                compositions: paths.compositions,
+                content: paths.content,
+                mappings: paths.mappings,
+                sitemaps: paths.sitemaps,
+              },
+            }),
+            contentDomainProvider({ contentRoot: paths.content }),
+            mappingDomainProvider({ mappingsRoot: paths.mappings }),
+            sitemapperDomainProvider({ sitemapsRoot: paths.sitemaps }),
+          ],
+        }),
         composerAppHtmlPlugin(),
         tailwindcss(),
         preact(),

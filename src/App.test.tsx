@@ -1,23 +1,32 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/preact';
-import { IDBFactory as FDBFactory } from 'fake-indexeddb';
+import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from './test/workspace-providers';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { createProductionProviderIntegration } from './app/provider-integration';
 
-function renderApp() {
-  // Explicit factories use the test lock adapter; jsdom has no browser Web Locks.
-  const factory = new FDBFactory();
-  return render(<App integration={createProductionProviderIntegration({ compositionIdbFactory: factory, contentIdbFactory: factory, mappingIdbFactory: factory, sitemapIdbFactory: factory, mediaProvider: null })} />);
+const hosts: TemporaryWorkspaceProviders[] = [];
+
+/** One temporary host project per render, torn down with the test. */
+async function renderApp() {
+  const project = await createTemporaryWorkspaceProviders();
+  hosts.push(project);
+  const integration = createProductionProviderIntegration({ createProviders: project.createProviders, mediaProvider: null });
+  // Seeding writes real files, which is slower than the queries below wait for.
+  // The workspace being ready is a precondition of these assertions, not one of
+  // the things they are testing.
+  await integration.initialization.initialize();
+  return render(<App integration={integration} />);
 }
 
 /** The Dashboard heading follows the local clock, so match all three. */
 const GREETING = /^Good (morning|afternoon|evening)\.$/;
 
 describe('App', () => {
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
+    await Promise.all(hosts.splice(0).map((value) => value.dispose()));
     window.history.replaceState(null, '', '/');
     document.documentElement.removeAttribute('data-theme-preference');
     document.documentElement.removeAttribute('data-theme');
@@ -37,7 +46,7 @@ describe('App', () => {
     ['/media', 'heading', 'Media', 'Media'],
   ])('mounts the real product on direct refresh at %s', async (route, role, name, railLabel) => {
     window.history.replaceState(null, '', route);
-    renderApp();
+    await renderApp();
     expect(await screen.findByRole(role, { name })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
     expect(nav.querySelectorAll('a[data-route]')).toHaveLength(8);
@@ -47,7 +56,7 @@ describe('App', () => {
   });
 
   it('renders the workspace Overview on Home after initialization', async () => {
-    renderApp();
+    await renderApp();
 
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
     expect(nav.querySelectorAll('a[data-route]')).toHaveLength(8);
@@ -62,7 +71,7 @@ describe('App', () => {
     const request = vi.fn();
     vi.stubGlobal('fetch', request);
     window.history.replaceState(null, '', '/media');
-    renderApp();
+    await renderApp();
 
     expect(await screen.findByRole('heading', { name: 'Media' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /upload/i })).toBeDisabled();
@@ -70,8 +79,8 @@ describe('App', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('supports theme selection, keyboard movement, Escape, outside close, and focus return', () => {
-    renderApp();
+  it('supports theme selection, keyboard movement, Escape, outside close, and focus return', async () => {
+    await renderApp();
 
     const trigger = screen.getByRole('button', { name: 'Theme: System' });
     fireEvent.click(trigger);
@@ -99,7 +108,7 @@ describe('App', () => {
   });
 
   it('discloses truthful planned email notifications without collecting data or simulating delivery', async () => {
-    renderApp();
+    await renderApp();
     await screen.findByRole('heading', { name: GREETING });
 
     const trigger = screen.getByRole('button', { name: 'Notifications' });
@@ -137,7 +146,7 @@ describe('App', () => {
   });
 
   it('opens the standalone routes from the Overview quick actions', async () => {
-    renderApp();
+    await renderApp();
     await screen.findByRole('heading', { name: GREETING });
 
     // Built through `route-intents`, never a hand-rolled query string.
@@ -147,14 +156,14 @@ describe('App', () => {
 
   it('mounts the real Sitemapper with its host-injected Composer catalog', async () => {
     window.history.replaceState(null, '', '/sitemapper');
-    renderApp();
+    await renderApp();
     expect(await screen.findByRole('heading', { name: 'Sitemaps' })).toBeInTheDocument();
     expect(screen.queryByText(/being connected/i)).not.toBeInTheDocument();
   });
 
   it('dispatches Site outside the authoring Shell and never falls back to a draft without an active release', async () => {
     window.history.replaceState(null, '', '/site');
-    const { container } = renderApp();
+    const { container } = await renderApp();
     expect(await screen.findByRole('heading', { name: 'Site unavailable' })).toBeInTheDocument();
     expect(screen.getByText(/No activated local release/)).toBeInTheDocument();
     expect(container.querySelector('.app-shell')).not.toBeInTheDocument();

@@ -35,8 +35,8 @@ export const GRID = components.find((item) => item.id === "ui.auto-grid")!;
 export const HEADING_NODE = "heading-node";
 export const GRID_NODE = "grid-node";
 
-export const CONTENT_REF = { providerId: "content-indexeddb", recordId: "model-1" } as const;
-export const COMPOSITION_REF = { providerId: "indexeddb", recordId: "composition-1" } as const;
+export const CONTENT_REF = { providerId: "content-filesystem", recordId: "model-1" } as const;
+export const COMPOSITION_REF = { providerId: "files", recordId: "composition-1" } as const;
 
 export const model: ContentModelRecord = {
   id: "model-1",
@@ -144,9 +144,9 @@ export function harness(
 ): MappingHarness {
   const records = new Map(seed.map((record) => [record.id, structuredClone(record)]));
   const provider: MappingProvider = {
-    descriptor: MAPPING_PROVIDERS.indexeddb,
+    descriptor: MAPPING_PROVIDERS.filesystem,
     store: {
-      provider: MAPPING_PROVIDERS.indexeddb,
+      provider: MAPPING_PROVIDERS.filesystem,
       async list() {
         return [...records.values()].map((record) => ({
           id: record.id,

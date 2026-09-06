@@ -135,6 +135,8 @@ function decodeInitialization(value: unknown, operation: ContentPersistenceOpera
 export interface CreateFileProviderContentStoreOptions {
   config: ContentFileProviderConfig;
   fetchImpl?: typeof fetch;
+  /** The open workspace this provider's records are scoped to. */
+  workspace?: () => string;
 }
 
 export class FileProviderContentStore implements ContentFileProviderStore {
@@ -147,6 +149,7 @@ export class FileProviderContentStore implements ContentFileProviderStore {
       options.config,
       contentFileProviderErrorAdapter,
       options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+      options.workspace,
     );
   }
 

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { MUTATION_LOCK_FILENAME } from "../../../shared/node-fs";
 import { WORKSPACE_SEED_LOCK_DIRECTORY, withWorkspaceSeedLock } from "../seed-lock";
-import { workspaceDirectoryName } from "../scope";
+import { workspaceDirectoryName } from "../../../shared/workspace-scope";
 import { WorkspaceRegistryError } from "../types";
 
 const roots: string[] = [];

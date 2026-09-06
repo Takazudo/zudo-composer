@@ -16,9 +16,10 @@ import {
   FILE_PROVIDER_CAPABILITY_HEADER,
   FILE_PROVIDER_MAX_BODY_BYTES,
   FILE_PROVIDER_OPERATION_HEADER,
+  FILE_PROVIDER_WORKSPACE_HEADER,
   domainFileProviderEndpoint,
 } from "../../../../shared/file-provider";
-import { createFilesystemSitemapStore } from "../../filesystem";
+import { createWorkspaceScopedSitemapStore } from "../dev-server-entry";
 import { sitemapFileProviderErrorAdapter } from "../wire-error";
 import { FileProviderSitemapStore, createFileProviderSitemapProvider } from "../store";
 import { SITEMAP_FILE_PROVIDER_DOMAIN, SITEMAP_FILE_PROVIDER_OPERATIONS } from "../types";
@@ -49,8 +50,13 @@ const config = {
   capability: CAPABILITY,
   capabilityHeader: FILE_PROVIDER_CAPABILITY_HEADER,
   operationHeader: FILE_PROVIDER_OPERATION_HEADER,
+  workspaceHeader: FILE_PROVIDER_WORKSPACE_HEADER,
   maxBodyBytes: FILE_PROVIDER_MAX_BODY_BYTES,
 };
+
+/** The endpoint scopes every request to a workspace directory below the root. */
+const WORKSPACE = "wire-workspace";
+const workspace = () => WORKSPACE;
 
 const sandboxes: string[] = [];
 
@@ -66,7 +72,7 @@ async function connected(): Promise<{ store: FileProviderSitemapStore; requests:
     capability: CAPABILITY,
     isDomainError: (value: unknown) => value instanceof SitemapPersistenceError,
     operations: SITEMAPPER_PROVIDER_OPERATIONS,
-    createStore: () => createFilesystemSitemapStore({ sitemapsRoot: root }),
+    createStore: (workspaceId: string | undefined) => createWorkspaceScopedSitemapStore(root, workspaceId!),
     applyTransaction: (store: { applyTransaction(request: unknown): Promise<unknown> }, request: unknown) => store.applyTransaction(request),
   });
   const requests: string[] = [];
@@ -84,14 +90,14 @@ async function connected(): Promise<{ store: FileProviderSitemapStore; requests:
     });
     return new Response(response.body, { status: response.status, headers: response.headers });
   }) satisfies typeof fetch;
-  return { store: new FileProviderSitemapStore({ config, fetchImpl }), requests, fetchImpl };
+  return { store: new FileProviderSitemapStore({ config, fetchImpl, workspace }), requests, fetchImpl };
 }
 
 /** Sends the shared `transaction` wire operation directly: Sitemapper has no batch method on its store surface, so only the raw wire shape exercises it. */
 async function sendTransaction(fetchImpl: typeof fetch, payload: unknown): Promise<{ mutationToken: string; records: readonly { id: string }[] }> {
   const response = await fetchImpl(config.endpoint, {
     method: "POST",
-    headers: { "content-type": "application/json", [config.capabilityHeader]: config.capability, [config.operationHeader]: "transaction" },
+    headers: { "content-type": "application/json", [config.capabilityHeader]: config.capability, [config.operationHeader]: "transaction", [config.workspaceHeader!]: WORKSPACE },
     body: JSON.stringify(payload),
   });
   const body = await response.json() as { ok: boolean; result?: { mutationToken: string; records: readonly { id: string }[] }; error?: { code: string } };
@@ -111,6 +117,7 @@ describe("Sitemapper file provider over the dev endpoint", () => {
 
     const snapshot = await store.readAll();
     expect(snapshot.map((entry) => entry.id)).toEqual(["a"]);
+    expect(await store.snapshot()).toMatchObject({ records: [{ id: "a" }] });
 
     expect(await store.delete("missing")).toBe(false);
     expect(await store.delete("a")).toBe(true);
@@ -153,6 +160,7 @@ describe("Sitemapper file provider over the dev endpoint", () => {
 
   it("reports an unreachable dev server as an unavailable Sitemapper error", async () => {
     const store = new FileProviderSitemapStore({
+      workspace,
       config,
       fetchImpl: (() => Promise.reject(new TypeError("Failed to fetch"))) satisfies typeof fetch,
     });
@@ -160,7 +168,7 @@ describe("Sitemapper file provider over the dev endpoint", () => {
   });
 
   it("refuses a request body larger than the endpoint accepts before sending it", async () => {
-    const store = new FileProviderSitemapStore({ config: { ...config, maxBodyBytes: 64 }, fetchImpl: (() => { throw new Error("must not send"); }) satisfies typeof fetch });
+    const store = new FileProviderSitemapStore({ config: { ...config, maxBodyBytes: 64 }, workspace, fetchImpl: (() => { throw new Error("must not send"); }) satisfies typeof fetch });
     await expect(store.seed([record("a")])).rejects.toMatchObject({ operation: "put", code: "unavailable" });
   });
 
@@ -174,7 +182,7 @@ describe("Sitemapper file provider over the dev endpoint", () => {
 
   it("exposes the initialization surface as a Sitemap provider", async () => {
     const { fetchImpl } = await connected();
-    const provider = createFileProviderSitemapProvider({ config, fetchImpl });
+    const provider = createFileProviderSitemapProvider({ config, fetchImpl, workspace });
     expect(provider.descriptor).toBe(SITEMAP_PROVIDERS.filesystem);
     expect(provider.store.provider.id).toBe(providerId);
     expect(await provider.initialization.initialize()).toEqual({ status: "ready", summaries: [] });

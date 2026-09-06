@@ -9,9 +9,10 @@ import domainFileProviderPlugin from './plugins/domain-file-provider-plugin.mjs'
 import contentDomainProvider from './plugins/content-domain-provider.mjs';
 import mappingDomainProvider from './plugins/mapping-domain-provider.mjs';
 import sitemapperDomainProvider from './plugins/sitemapper-domain-provider.mjs';
+import workspaceDomainProvider, { resolveWorkspaceRegistryRoot } from './plugins/workspace-domain-provider.mjs';
 import componentPackPlugin from './plugins/component-pack-plugin.mjs';
 import hostStylesPlugin from './plugins/host-styles-plugin.mjs';
-import { APP_ROOT } from './plugins/roots.mjs';
+import { APP_ROOT, readRootEnvironment } from './plugins/roots.mjs';
 import { CONFIG_FILE_NAME, composer } from './server/config/index.ts';
 import hostConfig from './zudo-composer.config.ts';
 
@@ -22,6 +23,24 @@ const mediaStoreRoot = process.env.ZUDO_MEDIA_STORE_ROOT;
 // directly rather than evaluated, because Vite already compiles this file.
 const composerConfig = composer({ ...hostConfig, workspaceRoot: APP_ROOT, configPath: resolve(APP_ROOT, CONFIG_FILE_NAME) });
 const componentPack = componentPackPlugin({ workspaceRoot: composerConfig.workspaceRoot, pack: composerConfig.settings.pack });
+
+// The four authoring domain roots a workspace scopes, plus the registry that
+// names workspaces. Every root is resolved here and passed to its plugin
+// explicitly — no plugin reads the config file itself.
+//
+// The dev browser lane hands the compositions root in through the environment
+// so it writes into an isolated temporary tree. It has to win over the config
+// here, and it has to be the same value the workspace registry scopes and
+// removes directories under — one root, two consumers.
+const compositionsRoot = readRootEnvironment(process.env.ZUDO_COMPOSITIONS_ROOT, 'Compositions root')
+  ?? composerConfig.paths.compositions;
+const domainRoots = {
+  compositions: compositionsRoot,
+  content: composerConfig.paths.content,
+  mappings: composerConfig.paths.mappings,
+  sitemaps: composerConfig.paths.sitemaps,
+};
+const workspaceRegistryRoot = resolveWorkspaceRegistryRoot(composerConfig.paths.data);
 
 export default defineConfig({
   publicDir: 'media-store/public',
@@ -41,8 +60,20 @@ export default defineConfig({
     }),
     releaseApiPlugin({ mediaStoreRoot }),
     siteProjectSourcePlugin(),
-    composerFileProviderPlugin({ mediaStoreRoot }),
-    domainFileProviderPlugin({ descriptors: [contentDomainProvider(), mappingDomainProvider(), sitemapperDomainProvider()] }),
+    composerFileProviderPlugin({
+      mediaStoreRoot,
+      compositionsRoot,
+      workspaceRoot: composerConfig.workspaceRoot,
+    }),
+    domainFileProviderPlugin({
+      workspaceRoot: composerConfig.workspaceRoot,
+      descriptors: [
+        workspaceDomainProvider({ registryRoot: workspaceRegistryRoot, domainRoots }),
+        contentDomainProvider({ contentRoot: domainRoots.content }),
+        mappingDomainProvider({ mappingsRoot: domainRoots.mappings }),
+        sitemapperDomainProvider({ sitemapsRoot: domainRoots.sitemaps }),
+      ],
+    }),
     tailwindcss(),
     preact(),
   ],

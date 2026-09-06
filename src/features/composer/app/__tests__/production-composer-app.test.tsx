@@ -15,7 +15,6 @@ import {
   type CompositionRecord,
 } from "../../../../composer/browser";
 import { fixtureComponentProvider, createFixtureSampleDocument } from "../../test-support/fixture-pack";
-import { createProductionComposerProviders } from "../../../../app/provider-integration";
 import {
   readyMessage as protocolReadyMessage,
   requestHistoryMessage as protocolRequestHistoryMessage,
@@ -154,12 +153,6 @@ afterEach(() => {
 });
 
 describe("ProductionComposerApp", () => {
-  it("registers only IndexedDB when the dev file capability is absent", () => {
-    expect(createProductionComposerProviders().map(({ descriptor }) => descriptor.id)).toEqual([
-      "indexeddb",
-    ]);
-  });
-
   it("normalizes the document URL and keeps same record ids isolated by provider", async () => {
     const indexeddb = memoryProvider("indexeddb", [record("same", "Browser copy")]);
     const files = memoryProvider("files", [record("same", "File copy")]);

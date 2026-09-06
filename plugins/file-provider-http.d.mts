@@ -17,7 +17,10 @@ export interface DevResponse {
 
 export const FILE_PROVIDER_CAPABILITY_HEADER: string;
 export const FILE_PROVIDER_OPERATION_HEADER: string;
+export const FILE_PROVIDER_WORKSPACE_HEADER: string;
 export const FILE_PROVIDER_MAX_BODY_BYTES: number;
+
+export function isSafeWorkspaceHeader(value: unknown): value is string;
 
 export function createDevCapability(): string;
 export function domainFileProviderEndpoint(domain: string): string;

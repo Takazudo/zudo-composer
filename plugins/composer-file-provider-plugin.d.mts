@@ -53,6 +53,7 @@ export function createComposerFileProviderMiddleware(options: {
   maxBodyBytes?: number;
   validateRecord(value: unknown): CompositionRecordValidation;
   createStore(options: {
+    workspaceId: string;
     provideJsx(record: CompositionRecord, request: unknown): string | { status: "generated"; code: string } | { status: "blocked"; reason: string };
   }): Promise<Pick<
     FilesystemCompositionStore,

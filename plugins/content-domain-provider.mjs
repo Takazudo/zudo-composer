@@ -84,7 +84,7 @@ export default function contentDomainProvider(options = {}) {
     /** @param {any} module @param {string} root */
     bind: (module, root) => ({
       isDomainError: module.isContentPersistenceError,
-      createStore: () => module.createFilesystemContentStore({ contentRoot: root }),
+      createStore: (workspaceId) => module.createWorkspaceScopedContentStore(root, workspaceId),
       operations: OPERATIONS,
     }),
   };

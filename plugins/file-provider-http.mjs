@@ -14,7 +14,25 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 
 export const FILE_PROVIDER_CAPABILITY_HEADER = "x-zudo-composer-capability";
 export const FILE_PROVIDER_OPERATION_HEADER = "x-zudo-composer-operation";
+/**
+ * Which workspace the request addresses. The browser names it; only the server
+ * turns that name into a directory below a domain root. `src/shared/file-provider/protocol.ts`
+ * carries the same spelling for the browser half — plugin modules run in the
+ * Vite config graph and must never be pulled into the bundle.
+ */
+export const FILE_PROVIDER_WORKSPACE_HEADER = "x-zudo-composer-workspace";
 export const FILE_PROVIDER_MAX_BODY_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Workspace ids are directory names here, so they are held to the same
+ * record-id rule the browser applies. `src/shared/record-identity.ts` owns the
+ * pattern; this repeats it for the same reason the header does.
+ *
+ * @param {unknown} value @returns {value is string}
+ */
+export function isSafeWorkspaceHeader(value) {
+  return typeof value === "string" && /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(value);
+}
 
 /** One capability per dev server closure. Never persisted, never reused. */
 export function createDevCapability() {

@@ -1,27 +1,29 @@
 import injectedSiteProject, { siteProjectRevision as injectedSiteProjectRevision } from "virtual:site-project-source";
-import { COMPOSITION_SCHEMA_VERSION, CompositionPersistenceError, createFileProviderCompositionStore, createIndexedDbCompositionProvider, diagnoseDocument, isCompositionCollectionStore, type CompositionDocument, type CompositionInitializationOutcome, type CompositionProvider, type CompositionStore } from "../composer/browser";
+import { COMPOSITION_PROVIDERS, COMPOSITION_SCHEMA_VERSION, CompositionPersistenceError, createFileProviderCompositionStore, diagnoseDocument, isCompositionCollectionStore, type CompositionDocument, type CompositionInitializationOutcome, type CompositionProvider, type CompositionStore } from "../composer/browser";
 import { createContentCatalog, type ContentCatalog } from "../content/catalog";
-import { ContentPersistenceError, type ContentInitializationOutcome, type ContentProvider } from "../content/library";
-import { createIndexedDbContentProvider } from "../content/storage/indexeddb";
+import { CONTENT_PROVIDERS, ContentPersistenceError, type ContentInitializationOutcome, type ContentProvider } from "../content/library";
+import { createFileProviderContentProvider, readContentFileProviderConfig } from "../content/storage/file-provider";
 import { activeComponentProvider } from "../features/composer/active-pack";
 import { createContentPreviewSource, type ContentPreviewSource } from "../features/content/preview-source";
 import { createFileProviderMediaProvider, type MediaFileProvider } from "../media";
 import type { MappingContentEntryCatalog } from "../features/mapping";
 import type { MappingAttachmentCallbacks } from "../features/mapping/attachments";
-import { createCompositionCatalog as createMappingCompositionCatalog, createIndexedDbMappingProvider, createMappingCatalog, MappingPersistenceError, resolveMappingDefinition, type CompositionCatalog as MappingCompositionCatalog, type MappingCatalog, type MappingInitializationOutcome, type MappingProvider, type MappingRecord } from "../mapping";
+import { MAPPING_PROVIDERS, createCompositionCatalog as createMappingCompositionCatalog, createMappingCatalog, MappingPersistenceError, resolveMappingDefinition, type CompositionCatalog as MappingCompositionCatalog, type MappingCatalog, type MappingInitializationOutcome, type MappingProvider, type MappingRecord } from "../mapping";
+import { createFileProviderMappingProvider, readMappingFileProviderConfig } from "../mapping/storage/file-provider";
 import { browserProviderIdFor, canonicalizeSiteProject, validateSiteProject, type SiteProject, type SiteProjectDomain } from "../site-project";
 import { createCompositionCatalog, createMappingAssignmentCatalog, type CompositionCatalog } from "../sitemapper/catalog";
-import { isSitemapCollectionStore, SitemapPersistenceError, type SitemapInitializationOutcome, type SitemapProvider, type SitemapRecord } from "../sitemapper/library";
+import { isSitemapCollectionStore, SITEMAP_PROVIDERS, SitemapPersistenceError, type SitemapInitializationOutcome, type SitemapProvider, type SitemapProviderDescriptor, type SitemapRecord } from "../sitemapper/library";
 import type { MappingAssignmentCatalog } from "../sitemapper/routes";
-import { createIndexedDbSitemapProvider } from "../sitemapper/storage/indexeddb/provider";
+import { createFileProviderSitemapProvider, readSitemapFileProviderConfig } from "../sitemapper/storage/file-provider";
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
-import { createWorkspaceStorage, workspaceScopedFactory, workspaceDatabaseName, withWorkspaceInitializationLock, WORKSPACE_DATABASE_NAME } from "./workspace-storage";
+import { createFileProviderWorkspaceStorage, withWorkspaceInitializationLock, type WorkspaceStorage } from "./workspace-storage";
+import { isAuthoringPersistenceChannel, MEDIA_PERSISTENCE_CHANNEL } from "./persistence-channels";
 import { projectFromWorkspace, type WorkspaceRecord } from "./workspace-record";
 import { createWorkspaceSaveRegistry, type WorkspaceSaveRegistry } from "./workspace-sessions";
 import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture, type WorkspaceCaptureOutcome, type WorkspaceSnapshotSource, type WorkspaceToken } from "./workspace-snapshot";
 import { subscribePersistenceChanges } from "../shared/persistence-generation";
 import { createMappingAttachmentService } from "./mapping-attachment-service";
-import { deleteWorkspaceSeedDatabases } from "./workspace-seeding";
+import { discardWorkspaceSeed } from "./workspace-seeding";
 
 export class ProviderIntegrationError extends Error {
   readonly name = "ProviderIntegrationError";
@@ -122,7 +124,34 @@ export interface WorkspaceLifecycle {
   reset(): Promise<ProductionProviderIntegration>;
 }
 export interface WorkspaceCreateOptions { attemptId?: string; beforeComplete?(): Promise<void> }
-interface ProductionProviderIntegrationCommonOptions { workspaceId?: string; creation?: WorkspaceCreateOptions; saveRegistry?: WorkspaceSaveRegistry; mediaProvider?: MediaFileProvider | null; compositionIdbFactory?: IDBFactory | null; contentIdbFactory?: IDBFactory | null; mappingIdbFactory?: IDBFactory | null; sitemapIdbFactory?: IDBFactory | null; fileCompositionProvider?: CompositionProvider | null }
+/**
+ * The four authoring providers and the registry are supplied together or not at
+ * all. In the application they are built from the development server's injected
+ * transport configuration; a spec supplies them directly — typically the real
+ * Node stores over a temporary directory — so the wiring under test is the same
+ * shape either way and there is never a fallback provider.
+ */
+export interface WorkspaceProviderSet {
+  storage: WorkspaceStorage;
+  compositions: CompositionProvider;
+  content: ContentProvider;
+  mappings: MappingProvider;
+  /** The descriptor is what provider resolution matches on, so it is required here. */
+  sitemaps: SitemapProvider & { descriptor: SitemapProviderDescriptor };
+}
+
+interface ProductionProviderIntegrationCommonOptions {
+  workspaceId?: string;
+  creation?: WorkspaceCreateOptions;
+  saveRegistry?: WorkspaceSaveRegistry;
+  mediaProvider?: MediaFileProvider | null;
+  /**
+   * Replaces the whole filesystem transport, registry included. It is a factory
+   * rather than a value because each integration resolves its own open
+   * workspace, and opening a workspace builds a nested integration.
+   */
+  createProviders?: (workspace: () => string) => WorkspaceProviderSet;
+}
 export type ProductionProviderIntegrationOptions = ProductionProviderIntegrationCommonOptions & (
   | { project?: undefined; sourceRevision?: undefined }
   | { project: null; sourceRevision?: null | undefined }
@@ -141,32 +170,52 @@ export function createProductionSampleDocument(): CompositionDocument {
 }
 export const PRODUCTION_SEED_IDS = { composition: "product-overview", contentModel: "news-collection", titleField: "news-title", bodyField: "news-body", publishedField: "news-published", entries: ["news-entry-welcome", "news-entry-mapping"] as const, mapping: "news-product-overview", headingBinding: "news-heading-binding", proseBinding: "news-prose-binding" } as const;
 export const PRODUCTION_SEED_TIMESTAMP = "2026-08-29T00:00:00.000Z";
-export function createProductionComposerProviders(idbFactory?: IDBFactory | null): readonly CompositionProvider[] {
-  const project = activate(injectedSiteProject).project;
-  const providers: CompositionProvider[] = [];
-  if (project?.providers.compositions.some(({ id }) => id === "indexeddb")) providers.push(createIndexedDbCompositionProvider({ seed: project.providers.compositions.find(({ id }) => id === "indexeddb")?.records ?? [], ...(idbFactory === undefined ? {} : { idbFactory }) }));
-  const files = createFileProviderCompositionStore({ catalog: activeComponentProvider.catalog });
-  if (files && project?.providers.compositions.some(({ id }) => id === "files")) providers.push(providerFromStore(files));
-  return providers;
-}
-export function createInitializedCompositionCatalog(providers: readonly CompositionProvider[]): CompositionCatalog {
-  const catalog = createCompositionCatalog(providers); const ready = new Map<CompositionProvider, Promise<CompositionInitializationOutcome>>();
-  const initialize = async () => {
-    const results = await Promise.allSettled(providers.map((provider) => {
-    const prior = ready.get(provider); if (prior) return prior;
-    const pending = provider.initialization.initialize().then((outcome) => { if (outcome.status !== "ready") ready.delete(provider); return outcome; }, (error: unknown) => { ready.delete(provider); throw error; });
-    ready.set(provider, pending); return pending;
-    }));
-    return results.flatMap((result, index) => {
-      const provider = providers[index]!;
-      if (result.status === "rejected") return [{ providerId: provider.descriptor.id, providerLabel: provider.descriptor.label, reason: result.reason instanceof Error ? result.reason.message : "Composition initialization failed." }];
-      if (result.value.status === "ready") return [];
-      return [{ providerId: provider.descriptor.id, providerLabel: provider.descriptor.label, reason: result.value.status === "error" ? result.value.error.message : result.value.recovery.message }];
-    });
+/**
+ * Build the four authoring providers and the workspace registry from the
+ * development server's injected transport configuration.
+ *
+ * A production build injects none of it, so this returns `undefined` and the
+ * caller reports that the application has no durable storage — it never falls
+ * back to some other provider.
+ */
+/**
+ * The provider set a build with no development transport gets.
+ *
+ * Descriptors are the real ones, so provider resolution still reports the same
+ * identities; every operation rejects with one explanation instead of pretending
+ * some other store is available.
+ */
+function unavailableProviderSet(): WorkspaceProviderSet {
+  const refuse = (): never => {
+    throw new ProviderIntegrationError("source", "Durable authoring storage is unavailable. Authoring runs against the host project's files, which only the development server serves.", false);
   };
+  const store = <T>(): T => new Proxy({}, {
+    // A bare `then` would make the store look like a thenable to `await`.
+    get: (_target, property) => (property === "then" ? undefined : refuse),
+  }) as T;
+  const initialization = { initialize: refuse, retry: refuse, startFresh: refuse } as never;
   return {
-    listCompositions: async () => { const failures = await initialize(); return failures.length ? { entries: [], failures } : catalog.listCompositions(); },
-    resolveComposition: async (ref) => (await initialize()).length ? { status: "provider-unavailable" } : catalog.resolveComposition(ref),
+    storage: store<WorkspaceStorage>(),
+    compositions: { descriptor: COMPOSITION_PROVIDERS.files, store: store(), initialization },
+    content: { descriptor: CONTENT_PROVIDERS.filesystem, store: store(), initialization },
+    mappings: { descriptor: MAPPING_PROVIDERS.filesystem, store: store(), initialization },
+    sitemaps: { descriptor: SITEMAP_PROVIDERS.filesystem, store: store(), initialization },
+  };
+}
+
+export function createFileProviderWorkspaceProviders(workspace: () => string): WorkspaceProviderSet | undefined {
+  const storage = createFileProviderWorkspaceStorage();
+  const contentConfig = readContentFileProviderConfig();
+  const mappingConfig = readMappingFileProviderConfig();
+  const sitemapConfig = readSitemapFileProviderConfig();
+  const compositionStore = createFileProviderCompositionStore({ catalog: activeComponentProvider.catalog, workspace });
+  if (!storage || !contentConfig || !mappingConfig || !sitemapConfig || !compositionStore) return undefined;
+  return {
+    storage,
+    compositions: providerFromStore(compositionStore),
+    content: createFileProviderContentProvider({ config: contentConfig, workspace }),
+    mappings: createFileProviderMappingProvider({ config: mappingConfig, workspace }),
+    sitemaps: createFileProviderSitemapProvider({ config: sitemapConfig, workspace }),
   };
 }
 
@@ -188,31 +237,36 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   }
   const initialProject = project;
   const initialRevision = sourceRevision;
-  const storage = createWorkspaceStorage(options.compositionIdbFactory);
   const sessions = options.saveRegistry ?? createWorkspaceSaveRegistry();
   let workspaceRecord: WorkspaceRecord | undefined;
   let workspaceId = options.workspaceId;
   let mappingSeed: readonly MappingRecord[] = [];
   let sitemapSeed: readonly SitemapRecord[] = [];
-  const idb = (value: IDBFactory | null | undefined): { idbFactory?: IDBFactory | null } => {
-    return { idbFactory: workspaceScopedFactory(value, () => { if (!workspaceId) throw new Error("Open a workspace before accessing its providers."); return workspaceId; }) };
+  // Every provider request carries the open workspace, and the dev server turns
+  // that name into the directory below its own domain root. Resolving it per
+  // call rather than capturing it is what lets one set of providers outlive a
+  // workspace switch.
+  const openWorkspace = (): string => {
+    if (!workspaceId) throw new Error("Open a workspace before accessing its providers.");
+    return workspaceId;
   };
+  // A production build injects no transport at all. The integration is still
+  // constructed — the delivery routes share this component tree and must keep
+  // rendering — but every provider call reports the same refusal, which the
+  // initialization outcome carries to the authoring UI.
+  const providers = (options.createProviders ?? createFileProviderWorkspaceProviders)(openWorkspace) ?? unavailableProviderSet();
+  const storage = providers.storage;
 
-  const baseComposition = createIndexedDbCompositionProvider({ seed: [], ...idb(options.compositionIdbFactory) });
-  const fileStore = options.fileCompositionProvider === undefined
-    ? createFileProviderCompositionStore({ catalog: activeComponentProvider.catalog })
-    : null;
-  const fileProvider = options.fileCompositionProvider ?? (fileStore ? providerFromStore(fileStore) : undefined);
-  const compositionCandidates = new Map<string, CompositionProvider>([[baseComposition.descriptor.id, baseComposition]]);
-  if (fileProvider?.descriptor.id === "files") compositionCandidates.set(fileProvider.descriptor.id, fileProvider);
+  const compositionCandidates = new Map<string, CompositionProvider>([[providers.compositions.descriptor.id, providers.compositions]]);
   const baseCompositions: CompositionProvider[] = [];
   for (const declared of project?.providers.compositions ?? []) {
     const provider = compositionCandidates.get(browserProviderIdFor("compositions", declared.id));
     if (provider) baseCompositions.push(provider);
   }
-  const baseContent = createIndexedDbContentProvider(idb(options.contentIdbFactory));
-  const baseMapping = createIndexedDbMappingProvider(idb(options.mappingIdbFactory));
-  const baseSitemap = createIndexedDbSitemapProvider(idb(options.sitemapIdbFactory));
+  const baseComposition = providers.compositions;
+  const baseContent = providers.content;
+  const baseMapping = providers.mappings;
+  const baseSitemap = providers.sitemaps;
 
   const byDomain = {
     compositions: new Map(baseCompositions.map((provider) => [provider.descriptor.id, provider])),
@@ -299,9 +353,9 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       if (isCompositionCollectionStore(provider.store)) declared.records = [...await provider.store.readAll()];
       else { const summaries = await provider.store.list(); declared.records = await Promise.all(summaries.map(async ({ id }) => { const loaded = await provider.store.get(id); if (loaded.status !== "loaded") throw new ProviderIntegrationError("snapshot", `Composition "${id}" could not be loaded coherently.`); return loaded.record; })); }
     }
-    for (const declared of next.providers.content) { const provider = byDomain.content.get(browserProviderIdFor("content", declared.id) as "content-indexeddb"); if (!provider || !("readAll" in provider.store)) throw new ProviderIntegrationError("snapshot", `Content provider "${declared.id}" lacks atomic snapshot support.`); const records = capture ? capture.values[`content:${declared.id}`] as Awaited<ReturnType<ContentSnapshotStore["readAll"]>> : await (provider.store as unknown as ContentSnapshotStore).readAll(); declared.models = [...records.models]; declared.entries = [...records.entries]; }
-    for (const declared of next.providers.mappings) { const provider = byDomain.mappings.get(browserProviderIdFor("mappings", declared.id) as "mapping-indexeddb"); if (!provider || !("readAll" in provider.store)) throw new ProviderIntegrationError("snapshot", `Mapping provider "${declared.id}" lacks atomic snapshot support.`); declared.records = [...(capture ? capture.values[`mappings:${declared.id}`] as readonly MappingRecord[] : await (provider.store as unknown as MappingSnapshotStore).readAll())]; }
-    for (const declared of next.providers.sitemaps) { const provider = byDomain.sitemaps.get(browserProviderIdFor("sitemaps", declared.id) as "sitemap-indexeddb"); if (!provider || !isSitemapCollectionStore(provider.store)) throw new ProviderIntegrationError("snapshot", `Sitemap provider "${declared.id}" lacks atomic snapshot support.`); declared.records = [...(capture ? capture.values[`sitemaps:${declared.id}`] as readonly SitemapRecord[] : await provider.store.readAll())]; }
+    for (const declared of next.providers.content) { const provider = byDomain.content.get(browserProviderIdFor("content", declared.id) as "content-filesystem"); if (!provider || !("readAll" in provider.store)) throw new ProviderIntegrationError("snapshot", `Content provider "${declared.id}" lacks atomic snapshot support.`); const records = capture ? capture.values[`content:${declared.id}`] as Awaited<ReturnType<ContentSnapshotStore["readAll"]>> : await (provider.store as unknown as ContentSnapshotStore).readAll(); declared.models = [...records.models]; declared.entries = [...records.entries]; }
+    for (const declared of next.providers.mappings) { const provider = byDomain.mappings.get(browserProviderIdFor("mappings", declared.id) as "mapping-filesystem"); if (!provider || !("readAll" in provider.store)) throw new ProviderIntegrationError("snapshot", `Mapping provider "${declared.id}" lacks atomic snapshot support.`); declared.records = [...(capture ? capture.values[`mappings:${declared.id}`] as readonly MappingRecord[] : await (provider.store as unknown as MappingSnapshotStore).readAll())]; }
+    for (const declared of next.providers.sitemaps) { const provider = byDomain.sitemaps.get(browserProviderIdFor("sitemaps", declared.id) as "sitemap-filesystem"); if (!provider || !isSitemapCollectionStore(provider.store)) throw new ProviderIntegrationError("snapshot", `Sitemap provider "${declared.id}" lacks atomic snapshot support.`); declared.records = [...(capture ? capture.values[`sitemaps:${declared.id}`] as readonly SitemapRecord[] : await provider.store.readAll())]; }
     const result = validateSiteProject(next, activeSiteProjectValidationContext);
     if (!result.ok) {
       const onlyAttachmentDiagnostics = result.diagnostics.length > 0 && result.diagnostics.every((item) => item.path.startsWith("$.collectionAttachments"));
@@ -323,7 +377,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
         record = await storage.create(initialProject, initialRevision, "initial");
       }
       workspaceId = record.id;
-      return await withWorkspaceInitializationLock(options.compositionIdbFactory, workspaceId, async () => {
+      return await withWorkspaceInitializationLock(workspaceId, async () => {
         try {
         workspaceRecord = (await storage.open(workspaceId))!;
         if (options.creation && !initialized && workspaceRecord.status === "ready") throw new Error(`Workspace attempt ${workspaceId} is already complete; open it explicitly.`);
@@ -331,9 +385,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
         if (workspaceRecord.seedCleanupPending) {
           const { seed, baselineRevision, id, requiresBeforeComplete } = workspaceRecord;
           if (!seed || workspaceRecord.status !== "seeding" || !options.creation) throw new Error("An incomplete creation requires its original explicit attempt to resume cleanup.");
-          await storage.markSeedCleanup(id, baselineRevision);
-          await deleteWorkspaceSeedDatabases(id, options);
-          await storage.discardSeeding(id, baselineRevision);
+          await discardWorkspaceSeed(storage, id, baselineRevision);
           workspaceRecord = await storage.create(seed, baselineRevision, id, requiresBeforeComplete);
         }
         project = projectFromWorkspace(workspaceRecord);
@@ -342,25 +394,25 @@ export function createProductionProviderIntegration(options: ProductionProviderI
         compositionProviders.splice(0, compositionProviders.length, ...baseCompositions.map(wrapComposition));
         verifyRegistry();
         if (workspaceRecord.status === "ready") {
-          const databases = [
-            [options.compositionIdbFactory, "zudo-composer", "composition"],
-            [options.contentIdbFactory, "zudo-composer-content", "content"],
-            [options.mappingIdbFactory, "zudo-composer-mapping", "mapping"],
-            [options.sitemapIdbFactory, "zudo-composer-sitemapper", "sitemap"],
-          ] as const;
-          for (const [factory, name, phase] of databases) {
-            const target = factory === undefined ? globalThis.indexedDB : factory;
-            if (target?.databases && !(await target.databases()).some((database) => database.name === workspaceDatabaseName(name, workspaceId!))) throw new ProviderIntegrationError(phase, `Workspace ${phase} database is missing. Reset creates a new workspace; existing data is preserved.`, false);
+          // A ready workspace whose directory was removed outside the app has
+          // lost records the registry still claims. Refuse rather than
+          // re-creating it silently under the same identity.
+          const missing = await storage.missingDirectories(workspaceId!);
+          const phases = { compositions: "composition", content: "content", mappings: "mapping", sitemaps: "sitemap" } as const;
+          const [domain] = missing;
+          if (domain !== undefined) {
+            const phase = phases[domain as keyof typeof phases] ?? "source";
+            throw new ProviderIntegrationError(phase, `Workspace ${phase} files are missing. Reset creates a new workspace; existing data is preserved.`, false);
           }
         }
         const seed = workspaceRecord.status === "seeding" ? workspaceRecord.seed : undefined;
         if (workspaceRecord.status === "seeding" && !seed) throw new ProviderIntegrationError("source", "Incomplete workspace seed metadata requires explicit reset.", false);
-        mappingSeed = seed?.providers.mappings.find(({ id }) => id === "mapping-indexeddb")?.records ?? [];
-        sitemapSeed = seed?.providers.sitemaps.find(({ id }) => id === "sitemap-indexeddb")?.records ?? [];
+        mappingSeed = seed?.providers.mappings.find(({ id }) => id === "mapping-filesystem")?.records ?? [];
+        sitemapSeed = seed?.providers.sitemaps.find(({ id }) => id === "sitemap-filesystem")?.records ?? [];
         for (const provider of baseCompositions) assertReady("composition", await provider.initialization[kind]());
-        if (seed && isCompositionCollectionStore(baseComposition.store)) await baseComposition.store.seed(seed.providers.compositions.find(({ id }) => id === "indexeddb")?.records ?? []);
+        if (seed && isCompositionCollectionStore(baseComposition.store)) await baseComposition.store.seed(seed.providers.compositions.find(({ id }) => id === baseComposition.descriptor.id)?.records ?? []);
         assertReady("content", await baseContent.initialization[kind]());
-        const contentSeed = seed?.providers.content.find(({ id }) => id === "content-indexeddb");
+        const contentSeed = seed?.providers.content.find(({ id }) => id === "content-filesystem");
         if (contentSeed) await baseContent.store.seed({ models: contentSeed.models, entries: contentSeed.entries });
         if (seed) await verifyMappingRefs();
         assertReady("mapping", await baseMapping.initialization[kind]());
@@ -372,9 +424,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
         } catch (cause) {
           if (options.creation && workspaceRecord?.status === "seeding") {
             try {
-              await storage.markSeedCleanup(workspaceRecord.id, workspaceRecord.baselineRevision);
-              await deleteWorkspaceSeedDatabases(workspaceRecord.id, options);
-              await storage.discardSeeding(workspaceRecord.id, workspaceRecord.baselineRevision);
+              await discardWorkspaceSeed(storage, workspaceRecord.id, workspaceRecord.baselineRevision);
             } catch (cleanup) {
               throw new AggregateError([cause, cleanup], `Workspace creation failed; cleanup is incomplete for attempt ${workspaceRecord.id}. Retry that exact attempt. ${cleanup instanceof Error ? cleanup.message : "Cleanup unavailable."}`, { cause: cleanup });
             }
@@ -447,7 +497,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       result.push({ id, token: () => store.mutationToken!(), read: async () => { const value = await store.snapshot!(); return { mutationToken: value.mutationToken, value: value.records }; } });
     }
     for (const declared of project.providers.content) {
-      const store = byDomain.content.get(browserProviderIdFor("content", declared.id) as "content-indexeddb")!.store;
+      const store = byDomain.content.get(browserProviderIdFor("content", declared.id) as "content-filesystem")!.store;
       result.push({ id: `content:${declared.id}`, token: async () => (await store.readAll()).mutationToken, read: async () => { const value = await store.readAll(); return { mutationToken: value.mutationToken, value }; } });
     }
     if (includeMedia) {
@@ -470,7 +520,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     const next = createProductionProviderIntegration({ ...options, creation, workspaceId: id, saveRegistry: sessions });
     const ready = await next.initialization.initialize();
     if (ready.status === "error") throw ready.error;
-    let selected: WorkspaceRecord | undefined;
+    let selected: WorkspaceRecord | null = null;
     try { selected = await storage.open(); } catch { /* Explicit open repairs only the selection, never the original data. */ }
     if (selected?.id !== id) await storage.complete(id);
     return next;
@@ -489,7 +539,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     async updateMetadata(expectedToken, patch) {
       await ensureReady();
       if (patch.activeSitemap) {
-        if (patch.activeSitemap.providerId !== "sitemap-indexeddb" || (await baseSitemap.store.get(patch.activeSitemap.recordId)).status !== "loaded") throw new ProviderIntegrationError("sitemap", "Select an existing provider-qualified Sitemap.", false);
+        if (patch.activeSitemap.providerId !== "sitemap-filesystem" || (await baseSitemap.store.get(patch.activeSitemap.recordId)).status !== "loaded") throw new ProviderIntegrationError("sitemap", "Select an existing provider-qualified Sitemap.", false);
       }
       return storage.update(workspaceId!, expectedToken, patch);
     },
@@ -534,7 +584,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Snapshot validation failed.") }; }
   };
   const subscribeChanges = (listener: () => void) => {
-    const stopStorage = subscribePersistenceChanges((database) => { if (database === WORKSPACE_DATABASE_NAME || database === "media" || database === "compositions:files" || database.endsWith(`-workspace-v1-${workspaceId}`)) listener(); });
+    const stopStorage = subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel) || channel === MEDIA_PERSISTENCE_CHANNEL) listener(); });
     let sessionGeneration = sessions.generation;
     const stopSessions = sessions.subscribe(() => { if (sessionGeneration !== sessions.generation) { sessionGeneration = sessions.generation; listener(); } });
     return () => { stopStorage(); stopSessions(); };
@@ -544,7 +594,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     getCurrentSiteProject,
     workspace,
     componentCatalog: activeComponentProvider.catalog,
-    subscribe: (listener) => subscribePersistenceChanges((database) => { if (database === WORKSPACE_DATABASE_NAME || database.endsWith(`-workspace-v1-${workspaceId}`)) listener(); }),
+    subscribe: (listener) => subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel)) listener(); }),
   });
   return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, mediaProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, mappingAttachmentService, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle, workspace, sessions,
     subscribeChanges,

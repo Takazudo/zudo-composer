@@ -7,7 +7,8 @@ import type { JSX } from "preact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useBreadcrumb, type EditorStatus } from "../../../app/chrome-context";
 import { useWorkspace } from "../../../app/workspace-context";
-import { workspaceDatabaseName } from "../../../app/workspace-storage";
+import { CONTENT_FILE_PROVIDER_DOMAIN } from "../../../content/storage/file-provider";
+import { MAPPING_FILE_PROVIDER_DOMAIN } from "../../../mapping/storage/file-provider";
 import type { WorkspaceRecord } from "../../../app/workspace-record";
 import { notifyRouteSelection } from "../../../app/route-intents";
 import { EditorBody, EditorChrome, RecordTitle } from "../../../components/editor-chrome";
@@ -17,8 +18,6 @@ import { ConfirmDialog, Menu, MenuItem, MenuSeparator, useMenu } from "../../../
 import { Banner, Button, SegmentedControl } from "../../../components/ui";
 import { cloneJson, createUuidIdFactory, type IdFactory } from "../../../shared";
 import { subscribePersistenceChanges } from "../../../shared/persistence-generation";
-import { CONTENT_DATABASE_NAME } from "../../../content/storage/indexeddb/types";
-import { MAPPING_DATABASE_NAME } from "../../../mapping/storage/indexeddb/types";
 import type { CompositionCatalog } from "../../../sitemapper/catalog";
 import type { SitemapRecord, SitemapStore } from "../../../sitemapper/library";
 import type { SitemapNode } from "../../../sitemapper/model";
@@ -150,17 +149,10 @@ export function SitemapperIntegration({
 
   useEffect(() => {
     if (!workspaceIntegration?.workspace.id) return undefined;
-    const workspaceId = workspaceIntegration.workspace.id;
-    let contentDatabase: string;
-    let mappingDatabase: string;
-    try {
-      contentDatabase = workspaceDatabaseName(CONTENT_DATABASE_NAME, workspaceId);
-      mappingDatabase = workspaceDatabaseName(MAPPING_DATABASE_NAME, workspaceId);
-    } catch {
-      return undefined;
-    }
-    return subscribePersistenceChanges((database) => {
-      if (database === contentDatabase || database === mappingDatabase) {
+    // A filesystem provider's refresh hint names its domain, not a
+    // workspace-scoped database: the workspace travels as a request header.
+    return subscribePersistenceChanges((channel) => {
+      if (channel === CONTENT_FILE_PROVIDER_DOMAIN || channel === MAPPING_FILE_PROVIDER_DOMAIN) {
         routeExpansionEpochRef.current += 1;
         setRouteExpansionState(null);
         setCatalogEpoch((current) => current + 1);

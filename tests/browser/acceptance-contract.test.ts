@@ -45,7 +45,7 @@ describe("final browser acceptance source contract", () => {
     const vite = read("vite.config.ts");
     expect(vite).toContain("process.env.ZUDO_MEDIA_STORE_ROOT");
     expect(vite).toContain("releaseApiPlugin({ mediaStoreRoot })");
-    expect(vite).toContain("composerFileProviderPlugin({ mediaStoreRoot })");
+    expect(vite).toMatch(/composerFileProviderPlugin\(\{[\s\S]*?\bmediaStoreRoot,/);
   });
   it("makes the canonical dev browser lane own isolated roots and reject direct config launch", () => {
     const parent = realpathSync(mkdtempSync(join(tmpdir(), "zudo-composer-dev-browser-")));
@@ -70,6 +70,9 @@ describe("final browser acceptance source contract", () => {
       // The dev server must take the foreign composition root from that
       // environment, never from the Vite root or the package directory.
       expect(read("plugins/composer-file-provider-plugin.mjs")).toContain('COMPOSITIONS_ROOT_ENV = "ZUDO_COMPOSITIONS_ROOT"');
+      // The same root the workspace registry scopes and removes directories
+      // under, or the lane would isolate compositions and nothing else.
+      expect(read("vite.config.ts")).toContain("readRootEnvironment(process.env.ZUDO_COMPOSITIONS_ROOT, 'Compositions root')");
       expect(mediaTest).toContain("requireDevBrowserRoots(process.env)"); expect(mediaTest).toContain('join(mediaRoot, "versions"');
       expect(mediaTest).not.toContain('resolve("media-store/versions"');
     } finally { rmSync(parent, { recursive: true, force: true }); }

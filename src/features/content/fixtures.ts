@@ -7,10 +7,10 @@ export function createMemoryContentProvider(options: { initialization?: ContentI
   const entry = createContentEntryRecord(model.id, { title: "Hello" }, { id: "entry-1", timestamp: "2026-01-01T00:00:00.000Z" });
   let models = structuredClone(options.models ?? [model]); let entries = structuredClone(options.entries ?? [entry]);
   let mutationToken = 0;
-  const providerId = options.providerId ?? "content-indexeddb", providerLabel = options.providerLabel ?? "Browser storage";
+  const providerId = options.providerId ?? "content-filesystem", providerLabel = options.providerLabel ?? "Project files";
   const snapshot = () => ({ providerId, mutationToken, models: structuredClone(models), entries: structuredClone(entries) });
   const ready = (): ContentInitializationOutcome => options.initialization ?? { status: "ready", models: models.map((record) => ({ id: record.id, name: record.document.name, kind: record.document.kind, fieldCount: record.document.fields.length, createdAt: record.createdAt, updatedAt: record.updatedAt })) };
-  return { descriptor: { id: providerId as "content-indexeddb", label: providerLabel as "Browser storage" }, initialization: { initialize: async () => ready(), retry: async () => ready(), startFresh: async () => { models = []; entries = []; mutationToken++; return { status: "ready", models: [] }; } }, store: {
+  return { descriptor: { id: providerId as "content-filesystem", label: providerLabel as "Project files" }, initialization: { initialize: async () => ready(), retry: async () => ready(), startFresh: async () => { models = []; entries = []; mutationToken++; return { status: "ready", models: [] }; } }, store: {
     provider: { id: providerId, label: providerLabel }, listModels: async () => { const outcome = ready(); return outcome.status === "ready" ? outcome.models : []; },
     transactionScope: "provider",
     readAll: async () => snapshot(),

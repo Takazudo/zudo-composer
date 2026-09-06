@@ -15,7 +15,7 @@ import { activeSiteProjectValidationContext } from "../../site-project-manifest"
 import { loadSampleSiteProject } from "../../../test/site-project-fixture";
 import { createFilesystemWorkspaceRegistry, type FilesystemWorkspaceRegistry } from "../registry";
 import { WORKSPACE_META_RECORD_ID, WORKSPACE_SELECTION_RECORD_ID, WorkspaceRegistryError } from "../types";
-import { workspaceDirectoryName, workspaceDomainRoots, workspaceScopedRoot } from "../scope";
+import { workspaceDirectoryName, workspaceDomainRoots, workspaceScopedRoot } from "../../../shared/workspace-scope";
 import { deleteWorkspaceDirectories } from "../seed-cleanup";
 
 const revision = "a".repeat(64);

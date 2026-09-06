@@ -293,7 +293,7 @@ describe("Field key validation", () => {
 });
 
 describe("Content pane header", () => {
-  beforeEach(() => window.history.replaceState(null, "", "/content?provider=content-indexeddb&model=articles&entry=entry-1"));
+  beforeEach(() => window.history.replaceState(null, "", "/content?provider=content-filesystem&model=articles&entry=entry-1"));
 
   it("carries completeness beside the record's chips instead of a panel in the form", async () => {
     render(<ContentApp provider={createMemoryContentProvider()} />);

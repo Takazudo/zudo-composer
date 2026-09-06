@@ -21,9 +21,10 @@ import {
   FILE_PROVIDER_CAPABILITY_HEADER,
   FILE_PROVIDER_MAX_BODY_BYTES,
   FILE_PROVIDER_OPERATION_HEADER,
+  FILE_PROVIDER_WORKSPACE_HEADER,
   domainFileProviderEndpoint,
 } from "../../../../shared/file-provider";
-import { createFilesystemContentStore } from "../../filesystem";
+import { createWorkspaceScopedContentStore } from "../dev-server-entry";
 import { contentFileProviderErrorAdapter } from "../error-adapter";
 import { FileProviderContentStore, createFileProviderContentProvider } from "../store";
 import { CONTENT_FILE_PROVIDER_DOMAIN, CONTENT_FILE_PROVIDER_OPERATIONS } from "../types";
@@ -43,8 +44,13 @@ const config = {
   capability: CAPABILITY,
   capabilityHeader: FILE_PROVIDER_CAPABILITY_HEADER,
   operationHeader: FILE_PROVIDER_OPERATION_HEADER,
+  workspaceHeader: FILE_PROVIDER_WORKSPACE_HEADER,
   maxBodyBytes: FILE_PROVIDER_MAX_BODY_BYTES,
 };
+
+/** The endpoint scopes every request to a workspace directory below the root. */
+const WORKSPACE = "wire-workspace";
+const workspace = () => WORKSPACE;
 
 const sandboxes: string[] = [];
 
@@ -60,7 +66,7 @@ async function connected(): Promise<{ store: FileProviderContentStore; requests:
     capability: CAPABILITY,
     isDomainError: (value: unknown) => value instanceof ContentPersistenceError,
     operations: CONTENT_PROVIDER_OPERATIONS,
-    createStore: () => createFilesystemContentStore({ contentRoot: root }),
+    createStore: (workspaceId: string | undefined) => createWorkspaceScopedContentStore(root, workspaceId!),
   });
   const requests: string[] = [];
   const fetchImpl = (async (_input, init) => {
@@ -77,7 +83,7 @@ async function connected(): Promise<{ store: FileProviderContentStore; requests:
     });
     return new Response(response.body, { status: response.status, headers: response.headers });
   }) satisfies typeof fetch;
-  return { store: new FileProviderContentStore({ config, fetchImpl }), requests, fetchImpl };
+  return { store: new FileProviderContentStore({ config, fetchImpl, workspace }), requests, fetchImpl };
 }
 
 describe("Content file provider over the dev endpoint", () => {
@@ -156,6 +162,7 @@ describe("Content file provider over the dev endpoint", () => {
 
   it("reports an unreachable dev server as an unavailable Content error", async () => {
     const store = new FileProviderContentStore({
+      workspace,
       config,
       fetchImpl: (() => Promise.reject(new TypeError("Failed to fetch"))) satisfies typeof fetch,
     });
@@ -163,7 +170,7 @@ describe("Content file provider over the dev endpoint", () => {
   });
 
   it("refuses a request body larger than the endpoint accepts before sending it", async () => {
-    const store = new FileProviderContentStore({ config: { ...config, maxBodyBytes: 64 }, fetchImpl: (() => { throw new Error("must not send"); }) satisfies typeof fetch });
+    const store = new FileProviderContentStore({ config: { ...config, maxBodyBytes: 64 }, workspace, fetchImpl: (() => { throw new Error("must not send"); }) satisfies typeof fetch });
     await expect(store.seed({ models: [model()], entries: [] })).rejects.toMatchObject({ operation: "seed", code: "unavailable" });
   });
 
@@ -179,7 +186,7 @@ describe("Content file provider over the dev endpoint", () => {
 
   it("exposes the initialization surface as a Content provider", async () => {
     const { fetchImpl } = await connected();
-    const provider = createFileProviderContentProvider({ config, fetchImpl });
+    const provider = createFileProviderContentProvider({ config, fetchImpl, workspace });
     expect(provider.descriptor).toBe(CONTENT_PROVIDERS.filesystem);
     expect(provider.store.provider.id).toBe(providerId);
     expect(await provider.initialization.initialize()).toEqual({ status: "ready", models: [] });

@@ -22,13 +22,13 @@ function sourceFixture() {
   const listeners = new Set<(state: ContentPreviewState) => void>();
   const idle: ContentPreviewState = { phase: "idle", requestRevision: 0, entryRevision: 0, modelRef: null, candidates: [], selectedRef: null, evaluation: null, document: null, context: null, failures: [], message: "Idle" };
   const ready: ContentPreviewState = {
-    ...idle, phase: "ready", modelRef: { providerId: "content-indexeddb", recordId: model.id }, selectedRef: { providerId: "mapping-indexeddb", recordId: "map one" },
+    ...idle, phase: "ready", modelRef: { providerId: "content-filesystem", recordId: model.id }, selectedRef: { providerId: "mapping-filesystem", recordId: "map one" },
     candidates: [
-      { ref: { providerId: "mapping-indexeddb", recordId: "map one" }, providerLabel: "Browser mappings", summary: { id: "map one", name: "Article page", createdAt: stamp, updatedAt: stamp, bindingCount: 1 }, status: "ready", diagnostics: [] },
-      { ref: { providerId: "mapping-indexeddb", recordId: "broken" }, providerLabel: "Browser mappings", summary: { id: "broken", name: "Broken page", createdAt: stamp, updatedAt: stamp, bindingCount: 1 }, status: "broken", diagnostics: [{ scope: "definition", code: "source-field-missing", severity: "blocking", message: "Body is missing.", bindingId: "binding" }] },
+      { ref: { providerId: "mapping-filesystem", recordId: "map one" }, providerLabel: "Browser mappings", summary: { id: "map one", name: "Article page", createdAt: stamp, updatedAt: stamp, bindingCount: 1 }, status: "ready", diagnostics: [] },
+      { ref: { providerId: "mapping-filesystem", recordId: "broken" }, providerLabel: "Browser mappings", summary: { id: "broken", name: "Broken page", createdAt: stamp, updatedAt: stamp, bindingCount: 1 }, status: "broken", diagnostics: [{ scope: "definition", code: "source-field-missing", severity: "blocking", message: "Body is missing.", bindingId: "binding" }] },
     ],
     document: { schemaVersion: 2, id: "page", name: "Article page", root: [] },
-    context: { mapping: { ref: { providerId: "mapping-indexeddb", recordId: "map one" }, id: "map one", name: "Article page" }, composition: { providerId: "composer-indexeddb", recordId: "page", id: "page", name: "Article page" }, contentModel: { ref: { providerId: "content-indexeddb", recordId: model.id }, id: model.id, name: model.document.name }, entry: { providerId: "content-indexeddb", modelId: model.id, entryId: entry.id }, appliedBindingCount: 1, appliedBindings: [{ bindingId: "binding", sourceFieldId: "body", target: { nodeId: "prose", prop: "markdown" }, value: "## Unsaved draft" }], unchangedStaticCount: 2, diagnostics: [] },
+    context: { mapping: { ref: { providerId: "mapping-filesystem", recordId: "map one" }, id: "map one", name: "Article page" }, composition: { providerId: "composer-indexeddb", recordId: "page", id: "page", name: "Article page" }, contentModel: { ref: { providerId: "content-filesystem", recordId: model.id }, id: model.id, name: model.document.name }, entry: { providerId: "content-filesystem", modelId: model.id, entryId: entry.id }, appliedBindingCount: 1, appliedBindings: [{ bindingId: "binding", sourceFieldId: "body", target: { nodeId: "prose", prop: "markdown" }, value: "## Unsaved draft" }], unchangedStaticCount: 2, diagnostics: [] },
     message: "Preview is current.",
   };
   const source = {
@@ -43,10 +43,10 @@ function sourceFixture() {
 describe("ContentPreviewPane", () => {
   it("chooses a Mapping to render through, disabling the blocked ones, and enlarges the draft", async () => {
     const source = sourceFixture();
-    render(<ContentPreviewPane providerId="content-indexeddb" model={model} entry={entry} entryName="Unsaved draft" componentProvider={{} as never} createPreviewSource={() => source} />);
+    render(<ContentPreviewPane providerId="content-filesystem" model={model} entry={entry} entryName="Unsaved draft" componentProvider={{} as never} createPreviewSource={() => source} />);
 
     const render_through = await screen.findByRole("combobox", { name: "Render through" });
-    expect(render_through).toHaveAccessibleDescription(/content-indexeddb \/ draft/);
+    expect(render_through).toHaveAccessibleDescription(/content-filesystem \/ draft/);
     expect(screen.getByRole("option", { name: /Broken page — blocked/ })).toBeDisabled();
     await waitFor(() => expect(previewHost).toHaveBeenCalled());
     expect(screen.getByText("Rendered draft")).toHaveAttribute("data-enlargeable", "true");
@@ -55,11 +55,11 @@ describe("ContentPreviewPane", () => {
 
   it("names the applied bindings and the exact Mapping URL on the Mapping tab", async () => {
     const source = sourceFixture();
-    render(<ContentPreviewPane providerId="content-indexeddb" model={model} entry={entry} entryName="Unsaved draft" componentProvider={{} as never} createPreviewSource={() => source} />);
+    render(<ContentPreviewPane providerId="content-filesystem" model={model} entry={entry} entryName="Unsaved draft" componentProvider={{} as never} createPreviewSource={() => source} />);
 
     fireEvent.click(await screen.findByRole("tab", { name: /^Mapping/ }));
     const link = screen.getByRole("link", { name: "Open Mapping" });
-    expect(link).toHaveAttribute("href", "/mapping?provider=mapping-indexeddb&mapping=map%20one");
+    expect(link).toHaveAttribute("href", "/mapping?provider=mapping-filesystem&mapping=map%20one");
     expect(screen.getByText(/Composition: composer-indexeddb \/ Article page/)).toBeInTheDocument();
     expect(screen.getByText("Body → prose.markdown")).toBeInTheDocument();
     expect(screen.getByText(/2 bindings left the Composition/)).toBeInTheDocument();
@@ -67,10 +67,10 @@ describe("ContentPreviewPane", () => {
 
   it("lists every Mapping that references the model on the Usage tab", async () => {
     const source = sourceFixture();
-    render(<ContentPreviewPane providerId="content-indexeddb" model={model} entry={entry} entryName="Unsaved draft" componentProvider={{} as never} createPreviewSource={() => source} />);
+    render(<ContentPreviewPane providerId="content-filesystem" model={model} entry={entry} entryName="Unsaved draft" componentProvider={{} as never} createPreviewSource={() => source} />);
 
     fireEvent.click(await screen.findByRole("tab", { name: /^Usage/ }));
-    expect(screen.getByRole("link", { name: "Article page" })).toHaveAttribute("href", "/mapping?provider=mapping-indexeddb&mapping=map%20one");
+    expect(screen.getByRole("link", { name: "Article page" })).toHaveAttribute("href", "/mapping?provider=mapping-filesystem&mapping=map%20one");
     expect(screen.getByRole("link", { name: "Broken page" })).toBeInTheDocument();
     expect(screen.getByText("blocked")).toBeInTheDocument();
   });

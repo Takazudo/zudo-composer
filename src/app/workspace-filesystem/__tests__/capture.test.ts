@@ -17,7 +17,7 @@ import { createWorkspaceSaveRegistry } from "../../workspace-sessions";
 import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceSnapshotSource } from "../../workspace-snapshot";
 import { createTransactionalRecordStore, type TransactionalRecordStore } from "../../../shared/node-fs";
 import { createFilesystemWorkspaceRegistry, type FilesystemWorkspaceRegistry } from "../registry";
-import { workspaceDomainRoots } from "../scope";
+import { workspaceDomainRoots } from "../../../shared/workspace-scope";
 
 const revision = "a".repeat(64);
 const sample = () => loadSampleSiteProject(activeSiteProjectValidationContext);

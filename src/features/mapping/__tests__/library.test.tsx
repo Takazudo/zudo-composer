@@ -17,8 +17,8 @@ import {
   model,
 } from "./harness";
 
-const SECOND_MODEL = { providerId: "content-indexeddb", recordId: "model-2" } as const;
-const SECOND_COMPOSITION = { providerId: "indexeddb", recordId: "composition-2" } as const;
+const SECOND_MODEL = { providerId: "content-filesystem", recordId: "model-2" } as const;
+const SECOND_COMPOSITION = { providerId: "files", recordId: "composition-2" } as const;
 
 function renderApp(workspace: MappingHarness, navigate: (href: string) => void, search = "") {
   return render(
@@ -87,7 +87,7 @@ describe("Mapping library", () => {
 
     const row = within(container.querySelector<HTMLElement>(".cms-table tbody tr")!);
     expect(row.getByRole("link", { name: "Article Mapping" }))
-      .toHaveAttribute("href", "/mapping?provider=mapping-indexeddb&mapping=mapping-1");
+      .toHaveAttribute("href", "/mapping?provider=mapping-filesystem&mapping=mapping-1");
     expect(row.getByText("Articles")).toBeInTheDocument();
     expect(row.getByText("Article page")).toBeInTheDocument();
     await waitFor(() => expect(row.getByText("Ready")).toBeInTheDocument());
@@ -118,7 +118,7 @@ describe("Mapping library", () => {
     const dialog = await screen.findByRole("dialog", { name: "Create mapping" });
 
     // Pick the second entry of each list.
-    fireEvent.change(within(dialog).getByRole("combobox", { name: "Content model" }), { target: { value: "content-indexeddb/model-2" } });
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Content model" }), { target: { value: "content-filesystem/model-2" } });
     fireEvent.change(within(dialog).getByRole("combobox", { name: "Composition" }), { target: { value: "indexeddb/composition-2" } });
 
     // The catalogs reload in a different order while the dialog is still open.
@@ -135,7 +135,7 @@ describe("Mapping library", () => {
     const created = [...workspace.records.values()][0]!;
     expect(created.document.contentModel).toEqual({ ...SECOND_MODEL });
     expect(created.document.composition).toEqual({ ...SECOND_COMPOSITION });
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/mapping?provider=mapping-indexeddb&mapping=${created.id}`));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/mapping?provider=mapping-filesystem&mapping=${created.id}`));
   });
 
   it("names a new Mapping and refuses an empty one", async () => {
@@ -167,7 +167,7 @@ describe("Mapping library", () => {
     await waitFor(() => expect(workspace.records.size).toBe(2));
     const copy = [...workspace.records.values()].find((record) => record.id !== "mapping-1")!;
     expect(copy.document.name).toBe("Article Mapping copy");
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/mapping?provider=mapping-indexeddb&mapping=${copy.id}`));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/mapping?provider=mapping-filesystem&mapping=${copy.id}`));
   });
 
   it("asks the alertdialog before a bulk delete", async () => {
@@ -210,7 +210,7 @@ describe("Mapping library", () => {
   it("reports a deep link that could not be opened as a banner on the library", async () => {
     const workspace = harness([mappingRecord([])]);
     const navigate = vi.fn();
-    renderApp(workspace, navigate, "?provider=mapping-indexeddb&mapping=missing-record");
+    renderApp(workspace, navigate, "?provider=mapping-filesystem&mapping=missing-record");
 
     const banner = await screen.findByText(/was not found in provider/);
     expect(banner).toBeInTheDocument();
@@ -224,7 +224,7 @@ describe("Mapping library", () => {
 
   it("reports a malformed Mapping link without opening anything", async () => {
     const workspace = harness([mappingRecord([])]);
-    renderApp(workspace, vi.fn(), "?provider=mapping-indexeddb&mapping=..%2Fmapping-1");
+    renderApp(workspace, vi.fn(), "?provider=mapping-filesystem&mapping=..%2Fmapping-1");
 
     expect(await screen.findByText("The Mapping record id is malformed.")).toBeInTheDocument();
     expect(workspace.controller.state.mapping).toBeNull();
@@ -232,7 +232,7 @@ describe("Mapping library", () => {
 
   it("opens the editor for a valid deep link", async () => {
     const workspace = harness([mappingRecord([READY_BINDING])]);
-    renderApp(workspace, vi.fn(), "?provider=mapping-indexeddb&mapping=mapping-1");
+    renderApp(workspace, vi.fn(), "?provider=mapping-filesystem&mapping=mapping-1");
 
     expect(await screen.findByRole("textbox", { name: "Mapping name" })).toHaveValue("Article Mapping");
     expect(screen.queryByRole("heading", { name: "Mappings" })).toBeNull();

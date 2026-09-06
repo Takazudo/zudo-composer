@@ -15,6 +15,7 @@ import {
   FILE_PROVIDER_CAPABILITY_HEADER,
   FILE_PROVIDER_MAX_BODY_BYTES,
   FILE_PROVIDER_OPERATION_HEADER,
+  FILE_PROVIDER_WORKSPACE_HEADER,
   connectRequestHead,
   createDevCapability,
   domainFileProviderEndpoint,
@@ -33,10 +34,11 @@ const RESOLVED_DOMAIN_PROVIDERS_MODULE_ID = `\0${DOMAIN_PROVIDERS_MODULE_ID}`;
  * @typedef {{
  *   domain: string,
  *   entryModule: string,
+ *   workspaceScoped?: boolean,
  *   resolveRoot: (workspaceRoot: string) => string,
  *   bind: (module: any, root: string) => {
  *     isDomainError: (value: unknown) => boolean,
- *     createStore: () => Promise<any>,
+ *     createStore: (workspaceId: string | undefined) => Promise<any>,
  *     operations: Record<string, (store: any, payload: unknown) => unknown>,
  *     applyTransaction?: (store: any, request: any) => Promise<unknown>,
  *   },
@@ -78,6 +80,9 @@ export default function domainFileProviderPlugin(options) {
         capability,
         capabilityHeader: FILE_PROVIDER_CAPABILITY_HEADER,
         operationHeader: FILE_PROVIDER_OPERATION_HEADER,
+        // Omitted for an unscoped endpoint, which is how the browser client
+        // learns it must not name a workspace on that domain.
+        ...(descriptor.workspaceScoped === false ? {} : { workspaceHeader: FILE_PROVIDER_WORKSPACE_HEADER }),
         maxBodyBytes,
       }]));
       return `export const domainProviderConfig = ${JSON.stringify({ domains })};\n`;
@@ -98,6 +103,7 @@ export default function domainFileProviderPlugin(options) {
           isDomainError: bound.isDomainError,
           operations: bound.operations,
           createStore: bound.createStore,
+          ...(descriptor.workspaceScoped === false ? { workspaceScoped: false } : {}),
           ...(bound.applyTransaction === undefined ? {} : { applyTransaction: bound.applyTransaction }),
         });
         server.middlewares.use(async (req, res, next) => {

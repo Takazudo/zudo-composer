@@ -32,7 +32,8 @@ export interface DomainFileProviderMiddlewareOptions<Store> {
   isDomainError(value: unknown): boolean;
   operations: Record<string, (store: Store, payload: unknown) => Promise<unknown> | unknown>;
   applyTransaction?(store: Store, request: DomainTransactionRequest): Promise<unknown>;
-  createStore(): Promise<Store>;
+  workspaceScoped?: boolean;
+  createStore(workspaceId: string | undefined): Promise<Store>;
 }
 
 export function createDomainFileProviderMiddleware<Store>(

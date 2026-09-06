@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
-import { IDBFactory } from "fake-indexeddb";
+import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../../test/workspace-providers";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "../../../app/provider-integration";
 import { activeComponentProvider } from "../../composer/active-pack";
@@ -13,6 +13,13 @@ import { validateActivatedDeliveryArtifact } from "../source";
 import { providerFixture, PNG } from "../../media/__tests__/versioned-fixture";
 
 afterEach(cleanup);
+const hosts: TemporaryWorkspaceProviders[] = [];
+afterEach(async () => { await Promise.all(hosts.splice(0).map((value) => value.dispose())); });
+async function host(): Promise<TemporaryWorkspaceProviders> {
+  const value = await createTemporaryWorkspaceProviders();
+  hosts.push(value);
+  return value;
+}
 const sample = () => loadSampleSiteProject({ componentPack: activeComponentProvider.manifest });
 const revision = (project: ReturnType<typeof sample>) => createHash("sha256").update(serializeSiteProject(project), "utf8").digest("hex");
 function fixture(project = sample()): ProductionProviderIntegration {
@@ -55,8 +62,7 @@ describe("SiteDelivery", () => {
     const asset = await filesystem.upload({ fileName: "download.png", declaredMediaType: "image/png", bytes: PNG });
     const project = sample();
     project.providers.compositions[0]!.records.find(({ id }) => id === "home-page")!.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-media/asset-${asset.id}`, children: "Download" }, slots: {} });
-    const idb = new IDBFactory();
-    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, compositionIdbFactory: idb, contentIdbFactory: idb, mappingIdbFactory: idb, sitemapIdbFactory: idb });
+    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, createProviders: (await host()).createProviders });
     const providers = { ...base, captureWorkspace: vi.fn(() => base.captureWorkspace()), getCurrentSiteProject: vi.fn(() => { throw new Error("Must use aggregate project"); }) };
     const result = await loadWorkingPreviewSnapshot(providers);
     expect(result.status).toBe("ready");
@@ -70,8 +76,8 @@ describe("SiteDelivery", () => {
   });
   it.each(["media", "project"])("rejects a changed %s aggregate token rather than recapturing latest", async (domain) => {
     const { provider, filesystem } = await providerFixture();
-    const project = sample(), idb = new IDBFactory();
-    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, compositionIdbFactory: idb, contentIdbFactory: idb, mappingIdbFactory: idb, sitemapIdbFactory: idb });
+    const project = sample();
+    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, createProviders: (await host()).createProviders });
     const capture = vi.fn(() => base.captureWorkspace());
     let checks = 0;
     const providers = { ...base, captureWorkspace: capture, isCaptureCurrent: async (value: Parameters<typeof base.isCaptureCurrent>[0]) => {
@@ -163,9 +169,10 @@ describe("SiteDelivery", () => {
   });
 
   it("reads a new provider snapshot after remount and shows a persisted Content edit", async () => {
-    const idb = new IDBFactory();
     const project = sample();
-    const providers = createProductionProviderIntegration({ project, sourceRevision: revision(project), compositionIdbFactory: idb, contentIdbFactory: idb, mappingIdbFactory: idb, sitemapIdbFactory: idb });
+    const providers = createProductionProviderIntegration({ project, sourceRevision: revision(project), createProviders: (await host()).createProviders });
+    // Seeding writes real files; readiness is a precondition here, not the assertion.
+    await providers.initialization.initialize();
     render(<SiteDelivery source={working(providers)} pathname="/website-preview/about" />);
     expect(await screen.findByRole("heading", { name: "A studio built around useful clarity" })).toBeInTheDocument();
     expect(screen.getByText("Live working preview — not activated")).toBeInTheDocument();

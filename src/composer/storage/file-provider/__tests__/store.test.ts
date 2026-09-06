@@ -7,6 +7,7 @@ const { DEV_CONFIG } = vi.hoisted(() => ({
     endpoint: "/dev-only-endpoint",
     capability: "dev-secret",
     capabilityHeader: "x-test-capability",
+    workspaceHeader: "x-test-workspace",
     maxBodyBytes: 2_097_152,
   },
 }));
@@ -50,7 +51,7 @@ beforeEach(() => {
 describe("browser file-provider adapter", () => {
   it("notifies committed delete, dependency-checked delete and clear, but not failed or blocked operations", async () => {
     const changed = vi.fn(); const stop = subscribePersistenceChanges(changed);
-    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock })!;
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" })!;
     if (!isCompositionLifecycleStore(store)) throw new Error("Missing lifecycle capability");
     try {
       fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: true }));
@@ -73,7 +74,7 @@ describe("browser file-provider adapter", () => {
   it("reads validated persisted snapshots without derived-output planning", async () => {
     const result = { mutationToken: "a".repeat(64), records: [record()] };
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result }));
-    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock })!;
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" })!;
     expect(await store.snapshot!()).toEqual(result);
     expect(JSON.parse(String(fetchMock.mock.calls[0]![1]!.body))).toEqual({ operation: "snapshot" });
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: { ...result, records: [{}] } }));
@@ -90,7 +91,7 @@ describe("browser file-provider adapter", () => {
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: {
         canonical: { status: "saved" }, derived: { status: "repaired", records: [{ recordId: value.id, status: "repaired" }] },
       } }));
-    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock });
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" });
 
     await expect(store!.put(value)).resolves.toMatchObject({ canonical: { status: "saved" }, derived: { status: "repaired" } });
 
@@ -119,7 +120,7 @@ describe("browser file-provider adapter", () => {
         request: outputRequest([value]),
       }, 409))
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: [summary] }));
-    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock });
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" });
 
     await expect(store!.list()).resolves.toEqual([summary]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -132,7 +133,7 @@ describe("browser file-provider adapter", () => {
   it("reports blocked generated output separately from a successful canonical save", async () => {
     const value = record();
     value.document.root[0]!.componentId = "unknown.component";
-    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock });
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" });
 
     fetchMock
       .mockResolvedValueOnce(jsonResponse({
@@ -152,7 +153,7 @@ describe("browser file-provider adapter", () => {
 
   it("maps transport and sanitized server failures to the shared error contract", async () => {
     fetchMock.mockRejectedValueOnce(new TypeError("network down"));
-    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock });
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" });
     await expect(store!.clear()).rejects.toMatchObject({
       operation: "clear", code: "unavailable", retryable: true,
     });
@@ -168,7 +169,7 @@ describe("browser file-provider adapter", () => {
 
   it("rejects malformed JSON protocol errors through the shared error contract", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ ok: false }));
-    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock });
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" });
 
     await expect(store!.clear()).rejects.toMatchObject({
       name: "CompositionPersistenceError",
@@ -183,7 +184,7 @@ describe("browser file-provider adapter", () => {
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: { status: "loaded", record: value } }))
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: true }))
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: null }));
-    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock });
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" });
 
     await expect(store!.get("alpha")).resolves.toEqual({ status: "loaded", record: value });
     await expect(store!.delete("alpha")).resolves.toBe(true);
@@ -209,7 +210,7 @@ describe("browser file-provider adapter", () => {
       }, 409))
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: { status: "unpublished" } }))
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: null }));
-    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock });
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" });
     expect(isCompositionLifecycleStore(store!)).toBe(true);
     if (!store || !isCompositionLifecycleStore(store)) throw new Error("missing lifecycle capability");
 

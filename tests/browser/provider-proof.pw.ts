@@ -176,7 +176,7 @@ test("clean Sitemapper assigns and resolves the seeded About page catalog entry"
 
   // Creating navigates to the record's own URL: `/sitemapper` is the library
   // and `/sitemapper?sitemap=` is one Sitemap, so the editor is a real route.
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Provider proof");
   await expect(page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /Home/ })).toBeVisible();
 
