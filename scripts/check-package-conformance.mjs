@@ -136,7 +136,7 @@ for (const target of [...exportTargets, rootPackageJson.bin['zudo-composer']]) {
   assert(rootPackedPaths.has(target.replace(/^\.\//u, '')), `packed archive omits the declared entry point ${target}`);
 }
 
-// Sources the launcher loads, and the two files `compilerIdentity()` walks.
+// Sources the launcher loads, plus the inputs release identity is derived from.
 for (const required of [
   'index.html',
   'contract-handoff.json',

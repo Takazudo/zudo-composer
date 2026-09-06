@@ -6,11 +6,8 @@
 // then refuses to strip types, so a `.ts` entry here would fail. Being an
 // identity function, there is nothing else for it to do.
 
-/**
- * @template {object} T
- * @param {T} config
- * @returns {T}
- */
+// Typed by the `define.d.mts` sidecar, which is what both this repository and a
+// host resolve; there is no second declaration of the signature here.
 export function defineComposerConfig(config) {
   return config;
 }

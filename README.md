@@ -93,9 +93,20 @@ Vite and its Preact/Tailwind plugins are runtime `dependencies` rather than
 `devDependencies`: they are dev-only for *this* repository but are loaded by the
 installed launcher, so a host must receive them. The published archive ships the
 TypeScript sources under `src/`, `server/`, and `plugins/` — not a built
-`dist/` — because the launcher evaluates them through Vite, and it retains
-`contract-handoff.json` and `packages/component-contract/src`, which the
-SiteProject toolchain reads to compute release identity.
+`dist/` — because the launcher evaluates them through Vite. It also retains
+`contract-handoff.json` and the contract's own sources, which the SiteProject
+toolchain reads to compute release identity; those sources are named one file at
+a time in `files`, because the nested `package.json` under `packages/` stops the
+root allowlist's exclusions from applying to that subtree.
+
+pnpm 10 and later refuse to prepare a Git-hosted dependency that runs build
+scripts unless the host allows it, so the contract needs an entry in the host's
+`pnpm-workspace.yaml`:
+
+```yaml
+onlyBuiltDependencies:
+  - "@zudo-composer/component-contract"
+```
 
 `fixtures/host/` is the in-repo dogfood host: the smallest project that installs
 the package and runs its bin.
