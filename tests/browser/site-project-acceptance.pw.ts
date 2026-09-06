@@ -71,7 +71,10 @@ async function expectRouteContent(page: Page, route: string) {
 test("the activated graph appears in every authoring library", async ({ page }) => {
   const failures = watchRuntimeFailures(page);
   await page.goto("/composer");
-  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
+  // The first unbundled Composer route loads the full provider module graph.
+  // Match the established dev-route readiness contract without inflating the
+  // warm library assertions that follow.
+  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible({ timeout: 60_000 });
   for (const name of ["About page", "Home page", "Journal entry page", "Journal index page", "Services page", "Site frame"]) {
     await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   }
