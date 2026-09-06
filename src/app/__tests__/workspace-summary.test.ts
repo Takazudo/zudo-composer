@@ -41,7 +41,7 @@ function compositionRecord(id: string): CompositionRecord {
 
 function mappingEntry(id: string, updatedAt: string): MappingCatalogEntry {
   return {
-    ref: { providerId: "mapping-indexeddb", recordId: id },
+    ref: { providerId: "mapping-filesystem", recordId: id },
     providerLabel: "Browser storage",
     summary: { id, name: `Mapping ${id}`, createdAt: AT(1), updatedAt, bindingCount: 0 },
   };
@@ -56,7 +56,7 @@ function mappingRecord(id: string, compositionRecordId = "hero"): MappingRecord 
       schemaVersion: MAPPING_SCHEMA_VERSION,
       id,
       name: `Mapping ${id}`,
-      contentModel: { providerId: "content-indexeddb", recordId: "journal" },
+      contentModel: { providerId: "content-filesystem", recordId: "journal" },
       composition: { providerId: "indexeddb", recordId: compositionRecordId },
       mode: { kind: "single" },
       bindings: [],
@@ -162,7 +162,7 @@ function createFakeIntegration(options: FakeOptions = {}) {
     initialization: { initialize, retry },
     componentProvider: { catalog: emptyCatalog },
     compositionProviders: [{ descriptor: { id: "indexeddb", label: "Browser storage" }, store: { list: () => settle(compositions) } }],
-    contentProvider: { descriptor: { id: "content-indexeddb" }, store: { listModels: async () => (models instanceof Error ? Promise.reject(models) : models.map((model): ContentModelSummary => ({ id: model.id, name: model.document.name, kind: model.document.kind, fieldCount: model.document.fields.length, createdAt: model.createdAt, updatedAt: model.updatedAt }))), scanEntries } },
+    contentProvider: { descriptor: { id: "content-filesystem" }, store: { listModels: async () => (models instanceof Error ? Promise.reject(models) : models.map((model): ContentModelSummary => ({ id: model.id, name: model.document.name, kind: model.document.kind, fieldCount: model.document.fields.length, createdAt: model.createdAt, updatedAt: model.updatedAt }))), scanEntries } },
     contentCatalog: {
       listModels: async () => ({ status: "listed", entries: [], failures: [] }),
       resolveModel: async (ref) => {
@@ -181,7 +181,7 @@ function createFakeIntegration(options: FakeOptions = {}) {
       list: async () => ({ status: "listed", entries: [], failures: [] }),
       resolve: async (ref) => (knownCompositions.has(ref.recordId) ? { status: "resolved", record: compositionRecord(ref.recordId) } : { status: "not-found" }),
     },
-    sitemapProvider: { descriptor: { id: "sitemap-indexeddb" }, store: sitemapStore },
+    sitemapProvider: { descriptor: { id: "sitemap-filesystem" }, store: sitemapStore },
     mediaProvider: media === null ? undefined : { descriptor: { id: "media-files" }, store: { list: () => settle(media) } },
   };
   return { integration, initialize, retry, scanEntries };
@@ -276,12 +276,12 @@ describe("createWorkspaceSummary — recent", () => {
       "content-entry:first",
     ]);
     expect(records.map(({ href }) => href)).toEqual([
-      "/sitemapper?provider=sitemap-indexeddb&sitemap=studio",
+      "/sitemapper?provider=sitemap-filesystem&sitemap=studio",
       "/media?provider=media-files&asset=hero-image",
-      "/content?provider=content-indexeddb&model=journal",
-      "/mapping?provider=mapping-indexeddb&mapping=journal",
+      "/content?provider=content-filesystem&model=journal",
+      "/mapping?provider=mapping-filesystem&mapping=journal",
       "/composer",
-      "/content?provider=content-indexeddb&model=journal&entry=first",
+      "/content?provider=content-filesystem&model=journal&entry=first",
     ]);
     expect(records.find(({ kind }) => kind === "content-entry")?.label).toBe("First article");
   });
@@ -346,24 +346,24 @@ describe("createWorkspaceSummary — attention", () => {
     const attention = await createWorkspaceSummary(integration).attention();
 
     expect(value(attention.mappings)).toEqual([
-      { kind: "blocked-mapping", id: "about", label: "Mapping about", detail: "The referenced Composition was not found.", href: "/mapping?provider=mapping-indexeddb&mapping=about" },
-      { kind: "blocked-mapping", id: "ghost", label: "Mapping ghost", detail: "This Mapping record was not found.", href: "/mapping?provider=mapping-indexeddb&mapping=ghost" },
+      { kind: "blocked-mapping", id: "about", label: "Mapping about", detail: "The referenced Composition was not found.", href: "/mapping?provider=mapping-filesystem&mapping=about" },
+      { kind: "blocked-mapping", id: "ghost", label: "Mapping ghost", detail: "This Mapping record was not found.", href: "/mapping?provider=mapping-filesystem&mapping=ghost" },
     ]);
     expect(value(attention.sitemaps)).toEqual([{
       kind: "unassigned-page",
       id: "home",
       label: "Home",
       detail: '"Sitemap studio" has a page with no Composition or Mapping source.',
-      href: "/sitemapper?provider=sitemap-indexeddb&sitemap=studio&page=home",
-      intent: { route: "sitemapper", providerId: "sitemap-indexeddb", sitemapId: "studio", pageId: "home" },
+      href: "/sitemapper?provider=sitemap-filesystem&sitemap=studio&page=home",
+      intent: { route: "sitemapper", providerId: "sitemap-filesystem", sitemapId: "studio", pageId: "home" },
     }]);
     expect(value(attention.content)).toEqual([{
       kind: "incomplete-entry",
       id: "second",
       label: "second",
       detail: "Heading is required.",
-      href: "/content?provider=content-indexeddb&model=journal&entry=second",
-      intent: { route: "content", providerId: "content-indexeddb", modelId: "journal", entryId: "second" },
+      href: "/content?provider=content-filesystem&model=journal&entry=second",
+      intent: { route: "content", providerId: "content-filesystem", modelId: "journal", entryId: "second" },
     }]);
   });
 
@@ -372,7 +372,7 @@ describe("createWorkspaceSummary — attention", () => {
       sitemaps: [sitemapRecord("studio", AT(3), [sitemapNode("Page One", "Home", { kind: "unassigned" })])],
     });
     const attention = await createWorkspaceSummary(integration).attention();
-    expect(value(attention.sitemaps)[0]).toMatchObject({ href: "/sitemapper?provider=sitemap-indexeddb&sitemap=studio", intent: { route: "sitemapper", providerId: "sitemap-indexeddb", sitemapId: "studio" } });
+    expect(value(attention.sitemaps)[0]).toMatchObject({ href: "/sitemapper?provider=sitemap-filesystem&sitemap=studio", intent: { route: "sitemapper", providerId: "sitemap-filesystem", sitemapId: "studio" } });
   });
 });
 
@@ -413,7 +413,7 @@ describe("createWorkspaceSummary — resilience and lifecycle", () => {
     const { integration } = createFakeIntegration();
     const failing: WorkspaceSummaryIntegration = {
       ...integration,
-      mappingCatalog: { ...integration.mappingCatalog, list: async () => ({ status: "listed", entries: [], failures: [{ providerId: "mapping-indexeddb", providerLabel: "Browser storage", reason: "The database is blocked." }] }) },
+      mappingCatalog: { ...integration.mappingCatalog, list: async () => ({ status: "listed", entries: [], failures: [{ providerId: "mapping-filesystem", providerLabel: "Browser storage", reason: "The database is blocked." }] }) },
     };
     expect((await createWorkspaceSummary(failing).counts()).mappings).toEqual({ status: "unavailable", error: "Browser storage: The database is blocked." });
   });

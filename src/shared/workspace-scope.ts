@@ -1,5 +1,9 @@
 // Workspace scoping, on disk.
 //
+// This lives in `shared/` rather than beside the workspace registry because the
+// four authoring domains reach it from their own dev-server entries, and a
+// domain may not import the application layer.
+//
 // In the browser a workspace is a *name* prefix: an `IDBFactory` Proxy rewrites
 // every provider's database to `<database>-workspace-v1-<id>`, so the four
 // authoring domains land in four separate databases per workspace. There is
@@ -18,7 +22,7 @@
 // domains, and no workspace owns its bytes.
 
 import { join } from "node:path";
-import { isSafeRecordId } from "../../shared";
+import { isSafeRecordId } from "./record-identity";
 
 /** Shared by the database name and the directory name; the same generation of scoping. */
 export const WORKSPACE_DIRECTORY_PREFIX = "workspace-v1-";

@@ -14,6 +14,8 @@ import { appModuleId, readRootEnvironment, resolveWorkspaceRoot, validateRootOve
 import {
   FILE_PROVIDER_CAPABILITY_HEADER,
   FILE_PROVIDER_MAX_BODY_BYTES,
+  FILE_PROVIDER_WORKSPACE_HEADER,
+  isSafeWorkspaceHeader,
   bodyBytes,
   connectRequestHead,
   createDevCapability,
@@ -38,6 +40,7 @@ export function validateMediaStoreRoot(root) {
 
 export const COMPOSER_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_file_provider";
 export const COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER = FILE_PROVIDER_CAPABILITY_HEADER;
+export const COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER = FILE_PROVIDER_WORKSPACE_HEADER;
 /** UTF-8 bytes. Large enough for a substantial document plus generated JSX. */
 export const COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES = FILE_PROVIDER_MAX_BODY_BYTES;
 export const COMPOSER_FILE_PROVIDER_ROOT = "compositions";
@@ -565,7 +568,7 @@ function validateEnvelope(payload) {
  *   capability: string,
  *   maxBodyBytes?: number,
  *   validateRecord: (value: unknown) => {ok: true, record: CompositionRecord} | {ok: false, issue: {message: string}},
- *   createStore: (options: {provideJsx: (record: CompositionRecord, request: unknown) => string | {status: "generated", code: string} | {status: "blocked", reason: string}}) => Promise<{
+ *   createStore: (options: {workspaceId: string, provideJsx: (record: CompositionRecord, request: unknown) => string | {status: "generated", code: string} | {status: "blocked", reason: string}}) => Promise<{
  *     list(): Promise<unknown>, get(id: string): Promise<unknown>, snapshot(): Promise<unknown>,
  *     put(record: CompositionRecord, jsx?: string): Promise<unknown>,
  *     delete(id: string): Promise<boolean>, clear(): Promise<void>,
@@ -586,6 +589,13 @@ export function createComposerFileProviderMiddleware(options) {
     // even when the handler is embedded outside the Vite/Connect adapter.
     const headError = validateRequestHead(req, endpoint, options.capability);
     if (headError !== undefined) return headError;
+    // Compositions are one of the four workspace-scoped authoring domains, so
+    // an unnamed workspace is refused rather than written to the shared root
+    // every workspace directory sits beside.
+    const workspaceId = req.headers[FILE_PROVIDER_WORKSPACE_HEADER];
+    if (!isSafeWorkspaceHeader(workspaceId)) {
+      return errorResponse(400, "invalid-request", "A valid composition workspace header is required.");
+    }
     if (bodyBytes(req.body) > maxBodyBytes) {
       return errorResponse(413, "body-too-large", `Request body exceeds the ${maxBodyBytes}-byte limit.`);
     }
@@ -604,6 +614,7 @@ export function createComposerFileProviderMiddleware(options) {
     const outputsById = "outputsById" in envelope ? envelope.outputsById : Object.create(null);
     try {
       const store = await options.createStore({
+        workspaceId,
         provideJsx(record, request) {
           const output = outputsById[record.id];
           if (output === undefined) throw new OutputRequiredError(request);
@@ -696,6 +707,7 @@ export default function composerFileProviderPlugin(options = {}) {
         mediaEndpoint: MEDIA_FILE_PROVIDER_ENDPOINT,
         capability,
         capabilityHeader: COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER,
+        workspaceHeader: COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER,
         maxBodyBytes: COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES,
         mediaMaxBodyBytes: MEDIA_UPLOAD_MAX_BYTES,
         mediaOperationHeader: MEDIA_FILE_PROVIDER_OPERATION_HEADER,
@@ -708,16 +720,17 @@ export default function composerFileProviderPlugin(options = {}) {
       const activeCapability = capability;
       if (activeCapability === undefined) return;
       const {
-        createFilesystemCompositionStore,
+        createWorkspaceScopedCompositionStore,
         validateCompositionRecord,
       } = await server.ssrLoadModule(appModuleId("src/composer/storage/file-provider/dev-server-entry.ts"));
       const handler = createComposerFileProviderMiddleware({
         capability: activeCapability,
         validateRecord: validateCompositionRecord,
-        createStore: ({ provideJsx }) => createFilesystemCompositionStore({
+        createStore: ({ workspaceId, provideJsx }) => createWorkspaceScopedCompositionStore(
           compositionsRoot,
-          provideJsx,
-        }),
+          workspaceId,
+          { provideJsx },
+        ),
       });
       const { createFilesystemMediaStore } = await server.ssrLoadModule(appModuleId("src/media/storage/file-provider/dev-server-entry.ts"));
       const mediaStoreRoot = explicitMediaRoot ?? resolve(workspaceRoot, MEDIA_FILE_PROVIDER_ROOT);

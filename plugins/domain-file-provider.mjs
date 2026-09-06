@@ -13,9 +13,11 @@
 import {
   FILE_PROVIDER_MAX_BODY_BYTES,
   FILE_PROVIDER_OPERATION_HEADER,
+  FILE_PROVIDER_WORKSPACE_HEADER,
   bodyBytes,
   domainFileProviderEndpoint,
   errorResponse,
+  isSafeWorkspaceHeader,
   json,
   validateRequestHead,
 } from "./file-provider-http.mjs";
@@ -87,7 +89,8 @@ export function serializeDomainError(domain, cause, fallbackOperation, isDomainE
  *   isDomainError: (value: unknown) => boolean,
  *   operations: Record<string, (store: any, payload: unknown) => Promise<unknown> | unknown>,
  *   applyTransaction?: (store: any, request: {expectedMutationToken?: string, steps: readonly {operation: string, payload?: unknown}[]}) => Promise<unknown>,
- *   createStore: () => Promise<any>,
+ *   workspaceScoped?: boolean,
+ *   createStore: (workspaceId: string | undefined) => Promise<any>,
  * }} options
  */
 export function createDomainFileProviderMiddleware(options) {
@@ -99,6 +102,14 @@ export function createDomainFileProviderMiddleware(options) {
     if (headError !== undefined) return headError;
     if (bodyBytes(req.body) > maxBodyBytes) {
       return errorResponse(413, "body-too-large", `Request body exceeds the ${maxBodyBytes}-byte limit.`);
+    }
+
+    // A scoped domain refuses to answer without a workspace rather than
+    // falling back to the unscoped domain root: an unscoped write would land
+    // in the shared tree every workspace's directory sits beside.
+    const workspaceId = req.headers[FILE_PROVIDER_WORKSPACE_HEADER];
+    if (options.workspaceScoped !== false && !isSafeWorkspaceHeader(workspaceId)) {
+      return errorResponse(400, "invalid-request", `A valid ${options.domain} workspace header is required.`);
     }
 
     const operation = req.headers[FILE_PROVIDER_OPERATION_HEADER];
@@ -123,7 +134,7 @@ export function createDomainFileProviderMiddleware(options) {
     }
 
     try {
-      const store = await options.createStore();
+      const store = await options.createStore(workspaceId);
       const result = operation === TRANSACTION_OPERATION
         ? await options.applyTransaction(store, payload)
         : await options.operations[operation](store, payload);

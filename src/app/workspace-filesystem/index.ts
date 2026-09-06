@@ -17,7 +17,7 @@ export {
   workspaceDomainRoots,
   workspaceScopedRoot,
   type WorkspaceDomainRoots,
-} from "./scope";
+} from "../../shared/workspace-scope";
 export {
   FilesystemWorkspaceRegistry,
   createFilesystemWorkspaceRegistry,

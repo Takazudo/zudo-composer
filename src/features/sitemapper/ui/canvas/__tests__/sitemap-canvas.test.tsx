@@ -51,7 +51,7 @@ function props(document = doc(), sources: ReadonlyMap<string, PageSourceLabel> =
 
 describe("SitemapCanvas", () => {
   it("offers Add child page for a Mapping-sourced canvas node", async () => {
-    const value = doc(); value.root[0]!.source = { kind: "mapping", ref: { providerId: "mapping-indexeddb", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug" } };
+    const value = doc(); value.root[0]!.source = { kind: "mapping", ref: { providerId: "mapping-filesystem", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug" } };
     const callbacks = props(value); render(<SitemapCanvas {...callbacks} />);
     fireEvent.click(screen.getByRole("button", { name: "Actions for Home" }));
     const add = await screen.findByRole("menuitem", { name: "Add child page" });

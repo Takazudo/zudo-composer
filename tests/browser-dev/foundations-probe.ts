@@ -110,6 +110,6 @@ export async function createSitemap(page: Page, name: string): Promise<void> {
   const dialog = page.getByRole("dialog", { name: "Create sitemap" });
   await dialog.getByRole("textbox", { name: "Sitemap name" }).fill(name);
   await dialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(name);
 }

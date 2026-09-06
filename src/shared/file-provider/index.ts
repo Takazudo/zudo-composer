@@ -4,6 +4,7 @@ export {
   FILE_PROVIDER_OPERATION_HEADER,
   FILE_PROVIDER_STATUS_BY_CODE,
   FILE_PROVIDER_TRANSACTION_OPERATION,
+  FILE_PROVIDER_WORKSPACE_HEADER,
   domainFileProviderEndpoint,
   fileProviderStatus,
   isFileProviderResponse,

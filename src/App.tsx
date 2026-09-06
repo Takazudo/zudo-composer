@@ -5,12 +5,7 @@ import { createProductionProviderIntegration, type ProductionProviderIntegration
 import { WorkspaceContext } from "./app/workspace-context";
 import { parseIntent, formatIntent } from "./app/route-intents";
 import { Button } from "./components/ui";
-import { workspaceDatabaseName } from "./app/workspace-storage";
-import { CONTENT_DATABASE_NAME } from "./content";
-import { COMPOSER_DATABASE_NAME } from "./composer/storage/indexeddb/types";
-import { MAPPING_DATABASE_NAME } from "./mapping/storage/indexeddb/types";
-import { SITEMAPPER_DATABASE_NAME } from "./sitemapper/storage/indexeddb/types";
-import { WORKSPACE_DATABASE_NAME } from "./app/workspace-storage";
+import { isAuthoringPersistenceChannel } from "./app/persistence-channels";
 import { createProjectMediaUsageInspection } from "./site-project/media/usage";
 import { subscribePersistenceChanges } from "./shared/persistence-generation";
 import { Shell } from "./app/shell";
@@ -186,10 +181,7 @@ export function App({ themeController, integration }: AppProps = {}) {
   const mediaContentServices = useMemo(() => createMediaContentServices(
     providers.contentProviders,
     () => providers.sessions.flush(),
-    (listener) => subscribePersistenceChanges((database) => {
-      const workspaceId = providers.workspace.id;
-      if (database === WORKSPACE_DATABASE_NAME || database === "compositions:files" || (workspaceId && [CONTENT_DATABASE_NAME, COMPOSER_DATABASE_NAME, MAPPING_DATABASE_NAME, SITEMAPPER_DATABASE_NAME].some((name) => database === workspaceDatabaseName(name, workspaceId)))) listener();
-    }),
+    (listener) => subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel)) listener(); }),
     createProjectMediaUsageInspection({
       readProject: async () => { const result = await providers.getCurrentSiteProject({ flushSessions: false }); if (result.status !== "ready") throw new Error(result.error.message); return result.project; },
       catalog: providers.componentProvider.catalog,

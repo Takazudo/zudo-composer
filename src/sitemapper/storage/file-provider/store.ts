@@ -108,6 +108,8 @@ function decodeInitialization(value: unknown, operation: BrowserSitemapOperation
 export interface CreateFileProviderSitemapStoreOptions {
   config: SitemapFileProviderConfig;
   fetchImpl?: typeof fetch;
+  /** The open workspace this provider's records are scoped to. */
+  workspace?: () => string;
 }
 
 export class FileProviderSitemapStore implements SitemapFileProviderStore {
@@ -119,6 +121,7 @@ export class FileProviderSitemapStore implements SitemapFileProviderStore {
       options.config,
       sitemapFileProviderErrorAdapter,
       options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+      options.workspace,
     );
   }
 
@@ -150,6 +153,19 @@ export class FileProviderSitemapStore implements SitemapFileProviderStore {
     const records = await this.client.call<unknown>("read-all");
     if (!Array.isArray(records)) throw malformed("list", "a malformed Sitemap snapshot");
     return records.map((record) => decodeRecord(record, "list"));
+  }
+
+  /** The durable content fingerprint the record store commits with. */
+  async snapshot(): Promise<{ mutationToken: string; records: readonly SitemapRecord[] }> {
+    const value = await this.client.call<unknown>("snapshot");
+    if (!isPlainObject(value) || typeof value.mutationToken !== "string" || !Array.isArray(value.records)) {
+      throw malformed("list", "a malformed Sitemap snapshot");
+    }
+    return { mutationToken: value.mutationToken, records: value.records.map((record) => decodeRecord(record, "list")) };
+  }
+
+  async mutationToken(): Promise<string> {
+    return (await this.snapshot()).mutationToken;
   }
 
   async initialize(): Promise<SitemapInitializationOutcome> {

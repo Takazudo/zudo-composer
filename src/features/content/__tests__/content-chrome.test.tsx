@@ -36,14 +36,14 @@ describe("Content route intents", () => {
     ] }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
     model.document.presentation = { groups: [], inverses: [], views: [{ id: "contact", label: "Contact", fieldIds: ["summary"] }] };
     const entry = createContentEntryRecord(model.id, { title: "Person", summary: "Visible" }, { id: "person", timestamp: model.createdAt });
-    visit("/content?provider=content-indexeddb&model=people&entry=person&view=contact");
+    visit("/content?provider=content-filesystem&model=people&entry=person&view=contact");
     render(<ContentApp provider={createMemoryContentProvider({ models: [model], entries: [entry] })} />);
     expect(await screen.findByRole("textbox", { name: "Summary" })).toHaveValue("Visible");
     expect(screen.queryByRole("textbox", { name: "Private detail" })).toBeNull();
     await waitFor(() => expect(new URLSearchParams(window.location.search).get("view")).toBe("contact"));
   });
   it("opens the model and Entry the link names", async () => {
-    visit("/content?provider=content-indexeddb&model=articles&entry=entry-1");
+    visit("/content?provider=content-filesystem&model=articles&entry=entry-1");
     render(<ContentApp provider={createMemoryContentProvider()} />);
 
     const title = await screen.findByRole("textbox", { name: "Entry title" });
@@ -52,19 +52,19 @@ describe("Content route intents", () => {
     expect(within(tree).getByRole("treeitem", { name: /^Hello/ })).toHaveAttribute("aria-selected", "true");
   });
   it("keeps an unavailable view explicit instead of rewriting it to the model route", async () => {
-    visit("/content?provider=content-indexeddb&model=articles&view=missing");
+    visit("/content?provider=content-filesystem&model=articles&view=missing");
     render(<ContentApp provider={createMemoryContentProvider()} />);
     expect(await screen.findByText('Content view "missing" is unavailable for this model.')).toBeInTheDocument();
     expect(new URLSearchParams(window.location.search).get("view")).toBe("missing");
     const tree = screen.getByRole("tree", { name: "Content" });
     fireEvent.click(within(tree).getByRole("treeitem", { name: /^Hello/ }));
     expect(await screen.findByRole("textbox", { name: "Entry title" })).toHaveValue("Hello");
-    await waitFor(() => expect(window.location.search).toBe("?provider=content-indexeddb&model=articles&entry=entry-1"));
+    await waitFor(() => expect(window.location.search).toBe("?provider=content-filesystem&model=articles&entry=entry-1"));
     expect(screen.queryByText('Content view "missing" is unavailable for this model.')).toBeNull();
   });
 
   it("reports a malformed link instead of quietly opening the bare route", async () => {
-    visit("/content?provider=content-indexeddb&model=articles&model=journal");
+    visit("/content?provider=content-filesystem&model=articles&model=journal");
     render(<ContentApp provider={createMemoryContentProvider()} />);
 
     expect(await screen.findByText("This link must include one model id.")).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe("Content route intents", () => {
 
   it("shows a failed recovery load alongside the route error until a successful retry", async () => {
     const provider = createMemoryContentProvider();
-    visit("/content?provider=content-indexeddb&model=articles&view=missing");
+    visit("/content?provider=content-filesystem&model=articles&view=missing");
     render(<ContentApp provider={provider} />);
     await screen.findByText('Content view "missing" is unavailable for this model.');
     const load = vi.spyOn(provider.store, "getEntry").mockRejectedValueOnce(new Error("Entry provider temporarily unavailable."));
@@ -82,10 +82,10 @@ describe("Content route intents", () => {
     fireEvent.click(entry);
     const failure = await screen.findByText(/Entry provider temporarily unavailable\./);
     expect(failure).toHaveTextContent('Content view "missing" is unavailable for this model.');
-    expect(window.location.search).toBe("?provider=content-indexeddb&model=articles&view=missing");
+    expect(window.location.search).toBe("?provider=content-filesystem&model=articles&view=missing");
     fireEvent.click(entry);
     expect(await screen.findByRole("textbox", { name: "Entry title" })).toHaveValue("Hello");
-    await waitFor(() => expect(window.location.search).toBe("?provider=content-indexeddb&model=articles&entry=entry-1"));
+    await waitFor(() => expect(window.location.search).toBe("?provider=content-filesystem&model=articles&entry=entry-1"));
     expect(screen.queryByText(/Entry provider temporarily unavailable\./)).toBeNull();
     expect(screen.queryByText(/Content view "missing" is unavailable/)).toBeNull();
     expect(load).toHaveBeenCalledTimes(2);
@@ -93,10 +93,10 @@ describe("Content route intents", () => {
 
   it("follows the selection in the address bar, so a copied URL reopens it", async () => {
     const tree = await openArticles();
-    await waitFor(() => expect(window.location.search).toBe("?provider=content-indexeddb&model=articles"));
+    await waitFor(() => expect(window.location.search).toBe("?provider=content-filesystem&model=articles"));
 
     fireEvent.click(within(tree).getByRole("treeitem", { name: /^Hello/ }));
-    await waitFor(() => expect(window.location.search).toBe("?provider=content-indexeddb&model=articles&entry=entry-1"));
+    await waitFor(() => expect(window.location.search).toBe("?provider=content-filesystem&model=articles&entry=entry-1"));
   });
 });
 

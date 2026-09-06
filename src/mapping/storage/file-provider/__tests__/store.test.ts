@@ -14,9 +14,10 @@ import {
   FILE_PROVIDER_CAPABILITY_HEADER,
   FILE_PROVIDER_MAX_BODY_BYTES,
   FILE_PROVIDER_OPERATION_HEADER,
+  FILE_PROVIDER_WORKSPACE_HEADER,
   domainFileProviderEndpoint,
 } from "../../../../shared/file-provider";
-import { createFilesystemMappingStore } from "../../filesystem";
+import { createWorkspaceScopedMappingStore } from "../dev-server-entry";
 import { mappingFileProviderErrorAdapter } from "../error-adapter";
 import { FileProviderMappingStore, createFileProviderMappingProvider } from "../store";
 import { MAPPING_FILE_PROVIDER_DOMAIN, MAPPING_FILE_PROVIDER_OPERATIONS } from "../types";
@@ -42,8 +43,13 @@ const config = {
   capability: CAPABILITY,
   capabilityHeader: FILE_PROVIDER_CAPABILITY_HEADER,
   operationHeader: FILE_PROVIDER_OPERATION_HEADER,
+  workspaceHeader: FILE_PROVIDER_WORKSPACE_HEADER,
   maxBodyBytes: FILE_PROVIDER_MAX_BODY_BYTES,
 };
+
+/** The endpoint scopes every request to a workspace directory below the root. */
+const WORKSPACE = "wire-workspace";
+const workspace = () => WORKSPACE;
 
 const sandboxes: string[] = [];
 
@@ -59,7 +65,7 @@ async function connected(): Promise<{ store: FileProviderMappingStore; requests:
     capability: CAPABILITY,
     isDomainError: (value: unknown) => value instanceof MappingPersistenceError,
     operations: MAPPING_PROVIDER_OPERATIONS,
-    createStore: () => createFilesystemMappingStore({ mappingsRoot: root }),
+    createStore: (workspaceId: string | undefined) => createWorkspaceScopedMappingStore(root, workspaceId!),
     applyTransaction: (store: { applyTransaction(request: unknown): Promise<unknown> }, request: unknown) => store.applyTransaction(request),
   });
   const requests: string[] = [];
@@ -77,14 +83,14 @@ async function connected(): Promise<{ store: FileProviderMappingStore; requests:
     });
     return new Response(response.body, { status: response.status, headers: response.headers });
   }) satisfies typeof fetch;
-  return { store: new FileProviderMappingStore({ config, fetchImpl }), requests, fetchImpl };
+  return { store: new FileProviderMappingStore({ config, fetchImpl, workspace }), requests, fetchImpl };
 }
 
 /** Sends the shared `transaction` wire operation directly: Mapping has no batch method on its store surface, so only the raw wire shape exercises it. */
 async function sendTransaction(fetchImpl: typeof fetch, payload: unknown): Promise<{ mutationToken: string; records: readonly { id: string }[] }> {
   const response = await fetchImpl(config.endpoint, {
     method: "POST",
-    headers: { "content-type": "application/json", [config.capabilityHeader]: config.capability, [config.operationHeader]: "transaction" },
+    headers: { "content-type": "application/json", [config.capabilityHeader]: config.capability, [config.operationHeader]: "transaction", [config.workspaceHeader!]: WORKSPACE },
     body: JSON.stringify(payload),
   });
   const body = await response.json() as { ok: boolean; result?: { mutationToken: string; records: readonly { id: string }[] }; error?: { code: string } };
@@ -101,6 +107,9 @@ describe("Mapping file provider over the dev endpoint", () => {
     expect(await store.list()).toMatchObject([{ id: "a" }]);
     expect(await store.get("a")).toMatchObject({ status: "loaded", record: { id: "a" } });
     expect(await store.get("missing")).toEqual({ status: "not-found", id: "missing" });
+
+    expect((await store.readAll()).map(({ id }) => id)).toEqual(["a"]);
+    expect(await store.snapshot()).toMatchObject({ records: [{ id: "a" }] });
 
     expect(await store.delete("missing")).toBe(false);
     expect(await store.delete("a")).toBe(true);
@@ -143,6 +152,7 @@ describe("Mapping file provider over the dev endpoint", () => {
 
   it("reports an unreachable dev server as an unavailable Mapping error", async () => {
     const store = new FileProviderMappingStore({
+      workspace,
       config,
       fetchImpl: (() => Promise.reject(new TypeError("Failed to fetch"))) satisfies typeof fetch,
     });
@@ -150,7 +160,7 @@ describe("Mapping file provider over the dev endpoint", () => {
   });
 
   it("refuses a request body larger than the endpoint accepts before sending it", async () => {
-    const store = new FileProviderMappingStore({ config: { ...config, maxBodyBytes: 64 }, fetchImpl: (() => { throw new Error("must not send"); }) satisfies typeof fetch });
+    const store = new FileProviderMappingStore({ config: { ...config, maxBodyBytes: 64 }, workspace, fetchImpl: (() => { throw new Error("must not send"); }) satisfies typeof fetch });
     await expect(store.seed({ mappings: [mapping("a")] })).rejects.toMatchObject({ operation: "seed", code: "unavailable" });
   });
 
@@ -164,7 +174,7 @@ describe("Mapping file provider over the dev endpoint", () => {
 
   it("exposes the initialization surface as a Mapping provider", async () => {
     const { fetchImpl } = await connected();
-    const provider = createFileProviderMappingProvider({ config, fetchImpl });
+    const provider = createFileProviderMappingProvider({ config, fetchImpl, workspace });
     expect(provider.descriptor).toBe(MAPPING_PROVIDERS.filesystem);
     expect(provider.store.provider.id).toBe(providerId);
     expect(await provider.initialization.initialize()).toEqual({ status: "ready", summaries: [] });

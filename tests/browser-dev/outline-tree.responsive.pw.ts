@@ -94,7 +94,7 @@ async function openSitemapper(page: Page, name: string): Promise<void> {
   await dialog.getByRole("button", { name: "Create sitemap" }).click();
   // Creating navigates to the record's own URL, so the editor is reached the
   // same way a deep link reaches it.
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(name);
 }
 

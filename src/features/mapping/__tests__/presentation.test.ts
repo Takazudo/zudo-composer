@@ -132,8 +132,8 @@ describe("Mapping bind menu compatibility", () => {
 
 describe("Mapping presentation helpers", () => {
   it("round-trips a provider-qualified record key", () => {
-    expect(parseRefKey(refKey({ providerId: "content-indexeddb", recordId: "model-1" })))
-      .toEqual({ providerId: "content-indexeddb", recordId: "model-1" });
+    expect(parseRefKey(refKey({ providerId: "content-filesystem", recordId: "model-1" })))
+      .toEqual({ providerId: "content-filesystem", recordId: "model-1" });
   });
 
   it("labels a sample Entry with the Content route's own rule", () => {

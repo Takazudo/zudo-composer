@@ -9,7 +9,7 @@
 
 import { lstat, rm } from "node:fs/promises";
 import { errorCode } from "../../shared/node-fs";
-import { workspaceDomainRoots, type WorkspaceDomainRoots } from "./scope";
+import { workspaceDomainRoots, type WorkspaceDomainRoots } from "../../shared/workspace-scope";
 import { WorkspaceRegistryError } from "./types";
 
 export interface WorkspaceDirectoryOperations {

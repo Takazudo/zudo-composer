@@ -1,23 +1,24 @@
 /**
  * Stable SiteProject provider ids and their current browser-provider ids.
  *
- * The two identities intentionally happen to match today. Keeping the mapping
- * explicit prevents adapters from accepting arbitrary provider strings and
- * leaves the portable contract independent of browser provider construction.
+ * Authoring persists to the host project's files, so every domain names its
+ * filesystem provider. Keeping the mapping explicit prevents adapters from
+ * accepting arbitrary provider strings and leaves the portable contract
+ * independent of browser provider construction; the two identities happen to
+ * match again today.
  */
 export const SITE_PROJECT_PROVIDER_REGISTRY = Object.freeze({
   compositions: Object.freeze({
-    indexeddb: Object.freeze({ logicalId: "indexeddb", browserProviderId: "indexeddb" }),
     files: Object.freeze({ logicalId: "files", browserProviderId: "files" }),
   }),
   content: Object.freeze({
-    "content-indexeddb": Object.freeze({ logicalId: "content-indexeddb", browserProviderId: "content-indexeddb" }),
+    "content-filesystem": Object.freeze({ logicalId: "content-filesystem", browserProviderId: "content-filesystem" }),
   }),
   mappings: Object.freeze({
-    "mapping-indexeddb": Object.freeze({ logicalId: "mapping-indexeddb", browserProviderId: "mapping-indexeddb" }),
+    "mapping-filesystem": Object.freeze({ logicalId: "mapping-filesystem", browserProviderId: "mapping-filesystem" }),
   }),
   sitemaps: Object.freeze({
-    "sitemap-indexeddb": Object.freeze({ logicalId: "sitemap-indexeddb", browserProviderId: "sitemap-indexeddb" }),
+    "sitemap-filesystem": Object.freeze({ logicalId: "sitemap-filesystem", browserProviderId: "sitemap-filesystem" }),
   }),
 } as const);
 

@@ -4,11 +4,20 @@ import type {
   CompositionRecord,
 } from "../../library";
 
+/**
+ * Refresh-hint channel for the filesystem composition provider. Compositions
+ * predate the shared domain transport and keep their own endpoint, so the
+ * channel name is spelled here rather than derived from a domain name.
+ */
+export const COMPOSITION_FILE_PROVIDER_CHANNEL = "compositions:files";
+
 /** Injected only into dev client bundles by the Vite file-provider plugin. */
 export interface ComposerFileProviderConfig {
   endpoint: string;
   capability: string;
   capabilityHeader: string;
+  /** Names the workspace whose composition directory the request addresses. */
+  workspaceHeader: string;
   maxBodyBytes: number;
 }
 

@@ -5,7 +5,7 @@ import { project, entry } from "../../compiler/__tests__/fixtures";
 import { createSiteProjectApiService } from "../service";
 import type { CompletedRelease, ReleasePlan, SiteProjectActiveSelection } from "../types";
 import { fixture, call, review, PNG } from "../../../../server/site-project-local/__tests__/release-fixture";
-const ref = (recordId: string) => ({ providerId: "content-indexeddb", modelId: "articles", recordId });
+const ref = (recordId: string) => ({ providerId: "content-filesystem", modelId: "articles", recordId });
 const publish = (recordId: string) => ({ ref: ref(recordId), action: "publish" as const });
 async function release(service: Parameters<typeof call>[0], plan: ReleasePlan, expectedActive: SiteProjectActiveSelection | null = null) {
   await call(service, "apply", { plan });
@@ -74,7 +74,7 @@ describe("protocol-2 staged release API", () => {
   });
   it("blocks incoming references when selected removal excludes their published dependency", async () => {
     const { service } = await fixture(); const value = project({ entries: [entry("a"), entry("b")] });
-    value.providers.content[0]!.models[0]!.document.fields.push({ id: "related", key: "related", label: "Related", required: false, kind: "reference", target: { providerId: "content-indexeddb", recordId: "articles" } });
+    value.providers.content[0]!.models[0]!.document.fields.push({ id: "related", key: "related", label: "Related", required: false, kind: "reference", target: { providerId: "content-filesystem", recordId: "articles" } });
     value.providers.content[0]!.entries[0]!.values.related = ref("b");
     const first = await review(service, value, { selection: [publish("a"), publish("b")] }); const active = await release(service, first);
     value.providers.content[0]!.entries[1]!.lifecycle = "draft";

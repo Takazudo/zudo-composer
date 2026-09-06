@@ -52,6 +52,7 @@ function field(payload, key) {
 const OPERATIONS = {
   list: (store) => store.list(),
   "read-all": (store) => store.readAll(),
+  snapshot: (store) => store.snapshot(),
   get: (store, payload) => store.get(field(payload, "id")),
   put: (store, payload) => store.put(field(payload, "record")),
   delete: (store, payload) => store.delete(field(payload, "id")),
@@ -71,7 +72,7 @@ export default function sitemapperDomainProvider(options = {}) {
     /** @param {any} module @param {string} root */
     bind: (module, root) => ({
       isDomainError: module.isSitemapPersistenceError,
-      createStore: () => module.createFilesystemSitemapStore({ sitemapsRoot: root }),
+      createStore: (workspaceId) => module.createWorkspaceScopedSitemapStore(root, workspaceId),
       operations: OPERATIONS,
       applyTransaction: (store, request) => store.applyTransaction(request),
     }),

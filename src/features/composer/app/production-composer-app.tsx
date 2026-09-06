@@ -216,6 +216,9 @@ export function ProductionComposerApp({
     () => new Map(providers.map((provider) => [provider.descriptor.id, provider])),
     [providers],
   );
+  // The first declared provider, not a hard-coded id: which provider backs
+  // Compositions is the SiteProject's to declare, and it changed once already.
+  const defaultProviderId = providers[0]?.descriptor.id ?? COMPOSITION_PROVIDERS.files.id;
   const idFactory = useMemo(() => injectedIdFactory ?? createUuidIdFactory(), [injectedIdFactory]);
   const nodeIdFactory = useMemo(
     () => injectedNodeIdFactory ?? createUuidIdFactory(),
@@ -300,7 +303,7 @@ export function ProductionComposerApp({
               : undefined;
           },
         },
-        defaultProviderId: COMPOSITION_PROVIDERS.indexeddb.id,
+        defaultProviderId,
         preference,
         history: navigation,
         createDetailSession: (ref, record): ComposerDetailSession => {
@@ -327,7 +330,7 @@ export function ProductionComposerApp({
           return session;
         },
       }),
-    [navigation, preference, providersById],
+    [defaultProviderId, navigation, preference, providersById],
   );
 
   useEffect(() => coordinator.subscribe(setState), [coordinator]);
@@ -795,7 +798,7 @@ export function ProductionComposerApp({
     const candidate = bootProviderId ?? (state?.view !== "not-found" ? state?.providerId : null);
     return candidate && providersById.has(candidate)
       ? candidate
-      : COMPOSITION_PROVIDERS.indexeddb.id;
+      : defaultProviderId;
   })();
 
   if (bootProviderId || state?.view === "index") {

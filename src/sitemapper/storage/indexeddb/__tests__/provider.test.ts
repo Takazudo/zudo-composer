@@ -1,7 +1,25 @@
 import { IDBFactory as FDBFactory } from "fake-indexeddb";
 import { describe, expect, it, vi } from "vitest";
 import { subscribePersistenceChanges } from "../../../../shared/persistence-generation";
-import { workspaceDatabaseName, workspaceScopedFactory } from "../../../../app/workspace-storage";
+
+/**
+ * Workspace scoping used to live in the app layer, which now scopes filesystem
+ * directories instead. The IndexedDB provider still has to behave correctly
+ * under a name-rewriting factory, so the rewrite is spelled here, in the only
+ * suite that still exercises it.
+ */
+function workspaceDatabaseName(database: string, workspaceId: string): string {
+  return `${database}-workspace-v1-${workspaceId}`;
+}
+function workspaceScopedFactory(factory: IDBFactory, identity: () => string): IDBFactory {
+  return new Proxy(factory, { get(value, property) {
+    if (property === "open") return (name: string, version?: number) => value.open(workspaceDatabaseName(name, identity()), version);
+    if (property === "deleteDatabase") return (name: string) => value.deleteDatabase(workspaceDatabaseName(name, identity()));
+    const member: unknown = Reflect.get(value, property, value);
+    return typeof member === "function" ? member.bind(value) : member;
+  } });
+}
+
 import { isSitemapCollectionStore, SitemapPersistenceError } from "../../../library";
 import type { SitemapRecord } from "../../../library";
 import { SITEMAP_SCHEMA_VERSION } from "../../../model";
@@ -99,7 +117,7 @@ describe("IndexedDB Sitemap provider", () => {
     await expect(provider.store.put(record("new"))).resolves.toBeUndefined();
   });
   it("keeps blocked reset pending until deletion completes and notifies the exact workspace database", async () => {
-    const rawFactory = new FDBFactory(); const factory = workspaceScopedFactory(rawFactory, () => "sitemap-reset")!;
+    const rawFactory = new FDBFactory(); const factory = workspaceScopedFactory(rawFactory, () => "sitemap-reset");
     const provider = createIndexedDbSitemapProvider({ idbFactory: factory }); await provider.initialization.initialize();
     await provider.store.put(record("old"));
     const blocker = await inspectDatabase(factory); let blocked = false;

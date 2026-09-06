@@ -28,10 +28,16 @@ export interface FileProviderCallOptions {
  * host filesystem, and the hint bus carries no data.
  */
 export class DomainFileProviderClient<Operation extends string, DomainError extends Error> {
+  /**
+   * `workspace` is consulted per request rather than captured, because a single
+   * provider instance outlives the workspace it was opened against: the app
+   * switches workspaces without rebuilding its providers.
+   */
   constructor(
     private readonly config: FileProviderConfig,
     private readonly adapter: FileProviderErrorAdapter<Operation, DomainError>,
     private readonly fetchImpl: typeof fetch,
+    private readonly workspace?: () => string,
   ) {}
 
   call<T>(operation: Operation, payload?: unknown, options: FileProviderCallOptions = {}): Promise<T> {
@@ -64,6 +70,16 @@ export class DomainFileProviderClient<Operation extends string, DomainError exte
         `Request body exceeds the ${this.config.maxBodyBytes}-byte limit.`,
       );
     }
+    let workspaceHeaders: Record<string, string> = {};
+    if (this.config.workspaceHeader !== undefined) {
+      if (this.workspace === undefined) {
+        throw this.adapter.transportError(
+          operation,
+          `The development ${this.adapter.domain} provider is workspace-scoped but no workspace was supplied.`,
+        );
+      }
+      workspaceHeaders = { [this.config.workspaceHeader]: this.workspace() };
+    }
     let response: Response;
     try {
       response = await this.fetchImpl(this.config.endpoint, {
@@ -72,6 +88,7 @@ export class DomainFileProviderClient<Operation extends string, DomainError exte
           "content-type": "application/json",
           [this.config.capabilityHeader]: this.config.capability,
           [this.config.operationHeader]: operation,
+          ...workspaceHeaders,
         },
         body,
         cache: "no-store",
@@ -135,6 +152,7 @@ export function readDomainFileProviderConfig(
     && typeof candidate.capability === "string"
     && typeof candidate.capabilityHeader === "string"
     && typeof candidate.operationHeader === "string"
+    && (candidate.workspaceHeader === undefined || typeof candidate.workspaceHeader === "string")
     && typeof candidate.maxBodyBytes === "number"
     ? (candidate as FileProviderConfig)
     : undefined;

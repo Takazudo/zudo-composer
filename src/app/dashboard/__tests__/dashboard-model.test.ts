@@ -142,8 +142,8 @@ describe("attentionView", () => {
       sitemaps: {
         status: "ok",
         value: [
-          { kind: "unassigned-page", id: "p1", label: "About", detail: "no source", href: "/sitemapper?provider=sitemap-indexeddb&sitemap=s1&page=p1" },
-          { kind: "unassigned-page", id: "p2", label: "Careers", detail: "no source", href: "/sitemapper?provider=sitemap-indexeddb&sitemap=s1&page=p2" },
+          { kind: "unassigned-page", id: "p1", label: "About", detail: "no source", href: "/sitemapper?provider=sitemap-filesystem&sitemap=s1&page=p1" },
+          { kind: "unassigned-page", id: "p2", label: "Careers", detail: "no source", href: "/sitemapper?provider=sitemap-filesystem&sitemap=s1&page=p2" },
         ],
       },
       content: { status: "unavailable", error: "Content could not be read." },
@@ -183,7 +183,7 @@ describe("pipelineStages", () => {
 });
 
 describe("lastWrite", () => {
-  const record = { kind: "sitemap", id: "s1", label: "Marketing", updatedAt: AT(26), href: "/sitemapper?provider=sitemap-indexeddb&sitemap=s1" } as const;
+  const record = { kind: "sitemap", id: "s1", label: "Marketing", updatedAt: AT(26), href: "/sitemapper?provider=sitemap-filesystem&sitemap=s1" } as const;
 
   it("reads the newest record the summary returned", () => {
     expect(lastWrite({ records: [record], unavailable: [] } as WorkspaceRecent)).toEqual({ status: "known", at: AT(26) });

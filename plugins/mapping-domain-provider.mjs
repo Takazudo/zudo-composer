@@ -50,6 +50,8 @@ function field(payload, key) {
 /** One wire operation per `MappingStore` method, plus the two initialization entry points. */
 const OPERATIONS = {
   list: (store) => store.list(),
+  "read-all": (store) => store.readAll(),
+  snapshot: (store) => store.snapshot(),
   get: (store, payload) => store.get(field(payload, "id")),
   put: (store, payload) => store.put(field(payload, "record")),
   delete: (store, payload) => store.delete(field(payload, "id")),
@@ -69,7 +71,7 @@ export default function mappingDomainProvider(options = {}) {
     /** @param {any} module @param {string} root */
     bind: (module, root) => ({
       isDomainError: module.isMappingPersistenceError,
-      createStore: () => module.createFilesystemMappingStore({ mappingsRoot: root }),
+      createStore: (workspaceId) => module.createWorkspaceScopedMappingStore(root, workspaceId),
       operations: OPERATIONS,
       applyTransaction: (store, request) => store.applyTransaction(request),
     }),

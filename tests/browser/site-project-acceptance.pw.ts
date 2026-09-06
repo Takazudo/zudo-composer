@@ -161,7 +161,7 @@ test("review stages A while newer working B survives local activation and reload
   await page.getByRole("button", { name: "Build staged candidate", exact: true }).click();
   await page.getByRole("button", { name: "Activate locally", exact: true }).click();
   await expect(page.getByText(/Activated locally\. Publication reconciliation/)).toBeVisible();
-  await page.goto("/content?provider=content-indexeddb&model=about-content&entry=about-entry");
+  await page.goto("/content?provider=content-filesystem&model=about-content&entry=about-entry");
   await expect(heading).toHaveValue("Newer working B");
   expect(failures).toEqual([]);
 });

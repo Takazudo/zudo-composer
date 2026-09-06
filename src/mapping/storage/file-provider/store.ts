@@ -109,6 +109,8 @@ function decodeInitialization(value: unknown, operation: BrowserMappingOperation
 export interface CreateFileProviderMappingStoreOptions {
   config: MappingFileProviderConfig;
   fetchImpl?: typeof fetch;
+  /** The open workspace this provider's records are scoped to. */
+  workspace?: () => string;
 }
 
 export class FileProviderMappingStore implements MappingFileProviderStore {
@@ -120,7 +122,27 @@ export class FileProviderMappingStore implements MappingFileProviderStore {
       options.config,
       mappingFileProviderErrorAdapter,
       options.fetchImpl ?? globalThis.fetch.bind(globalThis),
+      options.workspace,
     );
+  }
+
+  /** The durable content fingerprint the record store commits with. */
+  async snapshot(): Promise<{ mutationToken: string; records: readonly MappingRecord[] }> {
+    const value = await this.client.call<unknown>("snapshot");
+    if (!isPlainObject(value) || typeof value.mutationToken !== "string" || !Array.isArray(value.records)) {
+      throw malformed("list", "a malformed Mapping snapshot");
+    }
+    return { mutationToken: value.mutationToken, records: value.records.map((record) => decodeRecord(record, "list")) };
+  }
+
+  async mutationToken(): Promise<string> {
+    return (await this.snapshot()).mutationToken;
+  }
+
+  async readAll(): Promise<readonly MappingRecord[]> {
+    const records = await this.client.call<unknown>("read-all");
+    if (!Array.isArray(records)) throw malformed("list", "a malformed Mapping record set");
+    return records.map((record) => decodeRecord(record, "list"));
   }
 
   async list(): Promise<readonly MappingSummary[]> {

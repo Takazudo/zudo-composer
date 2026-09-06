@@ -274,7 +274,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await page.getByRole("textbox", { name: "Heading", exact: true }).blur();
   await expect(saveStatus(page)).toContainText("Saved");
   // Opening a record is a deep link the author can copy.
-  await expect(page).toHaveURL(/\/content\?provider=content-indexeddb&model=about-content&entry=about-entry$/);
+  await expect(page).toHaveURL(/\/content\?provider=content-filesystem&model=about-content&entry=about-entry$/);
 
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
@@ -301,7 +301,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await sampleRow.getByRole("link", { name: "Sample Studio sitemap", exact: true }).click();
   // Opening a Sitemap is a real navigation to the record's own URL, and the
   // editor chrome names the record it loaded.
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Sample Studio sitemap");
   // Scoped to the toolbar: the outline's terminal add rows are called "Add page"
   // too, and it is the toolbar action this line means to find. `EditorChrome`
@@ -582,7 +582,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Mapping journey");
   await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
 
   // Issue #165 moved the Sitemapper onto `OutlineTree` and `EditorChrome`: the
   // outline is a real `tree` of `treeitem` rows, and the inspector is a pane
@@ -835,7 +835,7 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   const responsiveDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await responsiveDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Responsive panels");
   await responsiveDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
   // `EditorChrome` replaced the Sitemapper's own tablist with the shared pane
   // switch, and the editor renames the three panes. Scoped to the group rather
   // than matched page-wide: the toolbar's View control also offers a "Canvas",

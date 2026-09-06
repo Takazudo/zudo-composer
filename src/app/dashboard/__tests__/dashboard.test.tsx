@@ -33,8 +33,8 @@ function readyRecent(overrides: Partial<WorkspaceRecent> = {}): WorkspaceRecent 
         id: "entry-welcome",
         label: "Welcome to the newsroom",
         updatedAt: twelveMinutesAgo(),
-        href: "/content?provider=content-indexeddb&model=news&entry=entry-welcome",
-        intent: { route: "content", providerId: "content-indexeddb", modelId: "news", entryId: "entry-welcome" },
+        href: "/content?provider=content-filesystem&model=news&entry=entry-welcome",
+        intent: { route: "content", providerId: "content-filesystem", modelId: "news", entryId: "entry-welcome" },
       },
       {
         kind: "pattern",
@@ -48,8 +48,8 @@ function readyRecent(overrides: Partial<WorkspaceRecent> = {}): WorkspaceRecent 
         id: "marketing",
         label: "Marketing site",
         updatedAt: new Date(Date.now() - 30 * 60 * MINUTE_MS).toISOString(),
-        href: "/sitemapper?provider=sitemap-indexeddb&sitemap=marketing",
-        intent: { route: "sitemapper", providerId: "sitemap-indexeddb", sitemapId: "marketing" },
+        href: "/sitemapper?provider=sitemap-filesystem&sitemap=marketing",
+        intent: { route: "sitemapper", providerId: "sitemap-filesystem", sitemapId: "marketing" },
       },
     ],
     unavailable: [],
@@ -67,7 +67,7 @@ function readyAttention(overrides: Partial<WorkspaceAttention> = {}): WorkspaceA
           id: "articles-blog",
           label: "Articles → Blog post",
           detail: "Target prop ProseMd.markdown no longer exists.",
-          href: "/mapping?provider=mapping-indexeddb&mapping=articles-blog",
+          href: "/mapping?provider=mapping-filesystem&mapping=articles-blog",
         },
       ],
     },
@@ -79,8 +79,8 @@ function readyAttention(overrides: Partial<WorkspaceAttention> = {}): WorkspaceA
           id: "about",
           label: "About",
           detail: '"Marketing site" has a page with no Composition or Mapping source.',
-          href: "/sitemapper?provider=sitemap-indexeddb&sitemap=marketing&page=about",
-          intent: { route: "sitemapper", providerId: "sitemap-indexeddb", sitemapId: "marketing", pageId: "about" },
+          href: "/sitemapper?provider=sitemap-filesystem&sitemap=marketing&page=about",
+          intent: { route: "sitemapper", providerId: "sitemap-filesystem", sitemapId: "marketing", pageId: "about" },
         },
       ],
     },
@@ -92,8 +92,8 @@ function readyAttention(overrides: Partial<WorkspaceAttention> = {}): WorkspaceA
           id: "article-41",
           label: "Article 41",
           detail: "Slug is required.",
-          href: "/content?provider=content-indexeddb&model=articles&entry=article-41",
-          intent: { route: "content", providerId: "content-indexeddb", modelId: "articles", entryId: "article-41" },
+          href: "/content?provider=content-filesystem&model=articles&entry=article-41",
+          intent: { route: "content", providerId: "content-filesystem", modelId: "articles", entryId: "article-41" },
         },
       ],
     },
@@ -189,9 +189,9 @@ describe("Dashboard", () => {
 
     const recent = await screen.findByRole("region", { name: "Recent activity" });
     expect(within(recent).getAllByRole("link").map((row) => row.getAttribute("href"))).toEqual([
-      "/content?provider=content-indexeddb&model=news&entry=entry-welcome",
+      "/content?provider=content-filesystem&model=news&entry=entry-welcome",
       "/composer",
-      "/sitemapper?provider=sitemap-indexeddb&sitemap=marketing",
+      "/sitemapper?provider=sitemap-filesystem&sitemap=marketing",
     ]);
     expect(within(recent).getByText("Welcome to the newsroom")).toBeInTheDocument();
     expect(within(recent).getByText("Entry")).toBeInTheDocument();
@@ -205,10 +205,10 @@ describe("Dashboard", () => {
     const attention = await screen.findByRole("region", { name: "Needs attention" });
     expect(within(attention).getByRole("link", { name: "Fix Articles → Blog post" })).toHaveAttribute(
       "href",
-      "/mapping?provider=mapping-indexeddb&mapping=articles-blog",
+      "/mapping?provider=mapping-filesystem&mapping=articles-blog",
     );
-    expect(within(attention).getByRole("link", { name: "Assign About" })).toHaveAttribute("href", "/sitemapper?provider=sitemap-indexeddb&sitemap=marketing&page=about");
-    expect(within(attention).getByRole("link", { name: "Review Article 41" })).toHaveAttribute("href", "/content?provider=content-indexeddb&model=articles&entry=article-41");
+    expect(within(attention).getByRole("link", { name: "Assign About" })).toHaveAttribute("href", "/sitemapper?provider=sitemap-filesystem&sitemap=marketing&page=about");
+    expect(within(attention).getByRole("link", { name: "Review Article 41" })).toHaveAttribute("href", "/content?provider=content-filesystem&model=articles&entry=article-41");
     expect(within(attention).getByText("Target prop ProseMd.markdown no longer exists.")).toBeInTheDocument();
   });
 

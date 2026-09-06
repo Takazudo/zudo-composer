@@ -9,12 +9,7 @@ import { createMediaContentServices } from "../../features/media";
 import { MediaFieldPicker, MediaRouteContent } from "../../features/media";
 import { ContentRouteContent } from "../../features/content";
 import { notifyPersistenceChange } from "../../shared/persistence-generation";
-import { CONTENT_DATABASE_NAME } from "../../content";
-import { COMPOSER_DATABASE_NAME } from "../../composer/storage/indexeddb/types";
-import { MAPPING_DATABASE_NAME } from "../../mapping/storage/indexeddb/types";
-import { SITEMAPPER_DATABASE_NAME } from "../../sitemapper/storage/indexeddb/types";
-import { WORKSPACE_DATABASE_NAME } from "../workspace-storage";
-import { workspaceDatabaseName } from "../workspace-storage";
+import { AUTHORING_PERSISTENCE_CHANNELS } from "../persistence-channels";
 import * as releaseFeature from "../../features/release";
 
 vi.mock("../provider-integration", () => ({ createProductionProviderIntegration: () => { throw new Error("Inject the test workspace."); } }));
@@ -42,8 +37,8 @@ function workspace(id = "one") {
     workspace: { id, reset: vi.fn(), open: vi.fn() },
     initialization: { initialize: vi.fn(async () => ({ status: "ready" })), retry: vi.fn(async () => ({ status: "ready" })) },
     subscribeChanges: () => () => undefined,
-    compositionProviders: [{ descriptor: { id: "indexeddb" } }], contentProviders: [{ descriptor: { id: "content-indexeddb" } }],
-    mappingProviders: [{ descriptor: { id: "mapping-indexeddb" } }], sitemapProvider: { descriptor: { id: "sitemap-indexeddb" } },
+    compositionProviders: [{ descriptor: { id: "files" } }], contentProviders: [{ descriptor: { id: "content-filesystem" } }],
+    mappingProviders: [{ descriptor: { id: "mapping-filesystem" } }], sitemapProvider: { descriptor: { id: "sitemap-filesystem" } },
     contentCatalog: { listModels: async () => ({ entries: [], failures: [] }) }, compositionCatalog: { listCompositions: async () => ({ entries: [], failures: [] }) },
   };
 }
@@ -82,7 +77,7 @@ describe("application workspace lifetime", () => {
   it("adapts Content field picking and exact Media usage locations without feature globals", async () => {
     const mediaProvider = { descriptor: { id: "media-files" } };
     const integration = { ...workspace(), mediaProvider };
-    window.history.replaceState(null, "", "/content?provider=content-indexeddb&model=articles");
+    window.history.replaceState(null, "", "/content?provider=content-filesystem&model=articles");
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     await screen.findByRole("heading", { name: "Content editor" });
     const contentProps = vi.mocked(ContentRouteContent).mock.lastCall![0];
@@ -93,12 +88,12 @@ describe("application workspace lifetime", () => {
     fireEvent.click(screen.getByRole("link", { name: "Media" }));
     await screen.findByRole("heading", { name: "Media editor" });
     const mediaProps = vi.mocked(MediaRouteContent).mock.lastCall![0];
-    expect(mediaProps.usageHref!({ providerId: "content-indexeddb", modelId: "articles", entryId: "entry-1", fieldId: "body", valuePath: ["cards", 2] }))
-      .toBe("/content?provider=content-indexeddb&model=articles&entry=entry-1&field=body&path=%2Ff%3Acards%2Fi%3A2");
-    expect(mediaProps.usageHref!({ providerId: "content-indexeddb", modelId: "articles", entryId: "entry-1", fieldId: "hero", valuePath: [] }))
-      .toBe("/content?provider=content-indexeddb&model=articles&entry=entry-1&field=hero");
+    expect(mediaProps.usageHref!({ providerId: "content-filesystem", modelId: "articles", entryId: "entry-1", fieldId: "body", valuePath: ["cards", 2] }))
+      .toBe("/content?provider=content-filesystem&model=articles&entry=entry-1&field=body&path=%2Ff%3Acards%2Fi%3A2");
+    expect(mediaProps.usageHref!({ providerId: "content-filesystem", modelId: "articles", entryId: "entry-1", fieldId: "hero", valuePath: [] }))
+      .toBe("/content?provider=content-filesystem&model=articles&entry=entry-1&field=hero");
   });
-  it("invalidates Media usage only for the exact workspace Content database", async () => {
+  it("invalidates Media usage on every authoring channel and on nothing else", async () => {
     const integration = workspace();
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     await screen.findByRole("heading", { name: "Workspace one" });
@@ -106,17 +101,14 @@ describe("application workspace lifetime", () => {
     const listener = vi.fn(); const stop = subscribe(listener);
     try {
       notifyPersistenceChange("media");
-      notifyPersistenceChange(CONTENT_DATABASE_NAME);
-      notifyPersistenceChange(workspaceDatabaseName(CONTENT_DATABASE_NAME, "other"));
+      notifyPersistenceChange("sidebar-preferences");
       integration.sessions.register({ feature: "Media", providerId: "media-files" }, { flush: async () => undefined }).changed();
       expect(listener).not.toHaveBeenCalled();
-      notifyPersistenceChange(workspaceDatabaseName(CONTENT_DATABASE_NAME, "one"));
-      for (const database of [COMPOSER_DATABASE_NAME, MAPPING_DATABASE_NAME, SITEMAPPER_DATABASE_NAME]) notifyPersistenceChange(workspaceDatabaseName(database, "one"));
-      notifyPersistenceChange(WORKSPACE_DATABASE_NAME); notifyPersistenceChange("compositions:files");
-      expect(listener).toHaveBeenCalledTimes(6);
+      for (const channel of AUTHORING_PERSISTENCE_CHANNELS) notifyPersistenceChange(channel);
+      expect(listener).toHaveBeenCalledTimes(AUTHORING_PERSISTENCE_CHANNELS.length);
     } finally { stop(); }
-    notifyPersistenceChange(workspaceDatabaseName(CONTENT_DATABASE_NAME, "one"));
-    expect(listener).toHaveBeenCalledTimes(6);
+    notifyPersistenceChange(AUTHORING_PERSISTENCE_CHANNELS[0]!);
+    expect(listener).toHaveBeenCalledTimes(AUTHORING_PERSISTENCE_CHANNELS.length);
   });
   it.each(["rail", "portal"])("flushes real Mapping edits before %s navigation and retains failed edits", async (kind) => {
     const record = mappingRecord([]), h = harness([record]);
@@ -162,7 +154,7 @@ describe("application workspace lifetime", () => {
   });
   it("waits for registered saves before navigation and keeps the editor mounted while waiting", async () => {
     const integration = workspace(); let finish!: () => void;
-    integration.sessions.register({ feature: "Content", providerId: "content-indexeddb", recordId: "draft" }, { flush: () => new Promise<void>((resolve) => { finish = resolve; }) });
+    integration.sessions.register({ feature: "Content", providerId: "content-filesystem", recordId: "draft" }, { flush: () => new Promise<void>((resolve) => { finish = resolve; }) });
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     await screen.findByRole("heading", { name: "Workspace one" });
     const input = screen.getByRole("textbox");
@@ -173,10 +165,10 @@ describe("application workspace lifetime", () => {
   });
   it("keeps navigation/review on the current route and surfaces provider/record save failure", async () => {
     const integration = workspace();
-    integration.sessions.register({ feature: "Content", providerId: "content-indexeddb", recordId: "draft" }, { flush: async () => { throw new Error("disk full"); } });
+    integration.sessions.register({ feature: "Content", providerId: "content-filesystem", recordId: "draft" }, { flush: async () => { throw new Error("disk full"); } });
     render(<App integration={integration as unknown as ProductionProviderIntegration} />); await screen.findByRole("heading", { name: "Workspace one" });
     fireEvent.click(screen.getByRole("link", { name: "Review & release" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Content (content-indexeddb / draft): disk full");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Content (content-filesystem / draft): disk full");
     expect(window.location.pathname).toBe("/"); expect(screen.getByRole("textbox")).toHaveValue("draft");
   });
   it("swaps only a successfully initialized reset replacement and retains the old integration after failure", async () => {

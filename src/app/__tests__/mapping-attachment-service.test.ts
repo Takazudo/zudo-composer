@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { activeComponentProvider } from "../../features/composer/active-pack";
 import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { createMappingAttachmentService } from "../mapping-attachment-service";
@@ -6,9 +6,17 @@ import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import type { WorkspaceRecord } from "../workspace-record";
 import { providerFixture, PNG } from "../../features/media/__tests__/versioned-fixture";
 import { createProductionProviderIntegration } from "../provider-integration";
-import { IDBFactory } from "fake-indexeddb";
+import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../test/workspace-providers";
 import { createHash } from "node:crypto";
 import { serializeSiteProject } from "../../site-project/model/canonical";
+
+const hosts: TemporaryWorkspaceProviders[] = [];
+afterEach(async () => { await Promise.all(hosts.splice(0).map((value) => value.dispose())); });
+async function host(): Promise<TemporaryWorkspaceProviders> {
+  const value = await createTemporaryWorkspaceProviders();
+  hosts.push(value);
+  return value;
+}
 
 describe("mapping attachment aggregate service", () => {
   it("attaches an unpersisted candidate with the real production Media store and metadata CAS", async () => {
@@ -18,11 +26,10 @@ describe("mapping attachment aggregate service", () => {
     const source = project.providers.compositions[0]!.records.find(({ id }) => id === "journal-entry-page")!;
     delete source.document.binding;
     source.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-media/asset-${asset.id}`, children: "Download" }, slots: {} });
-    const idb = new IDBFactory();
-    const integration = createProductionProviderIntegration({ project, sourceRevision: createHash("sha256").update(serializeSiteProject(project)).digest("hex"), mediaProvider: provider, compositionIdbFactory: idb, contentIdbFactory: idb, mappingIdbFactory: idb, sitemapIdbFactory: idb });
+    const integration = createProductionProviderIntegration({ project, sourceRevision: createHash("sha256").update(serializeSiteProject(project)).digest("hex"), mediaProvider: provider, createProviders: (await host()).createProviders });
     expect((await integration.initialization.initialize()).status).toBe("ready");
     const before = await integration.workspace.metadata();
-    await integration.mappingAttachmentService.attach({ composition: { providerId: "indexeddb", recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } });
+    await integration.mappingAttachmentService.attach({ composition: { providerId: "files", recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-filesystem", recordId: "journal-entry-mapping" } });
     const after = await integration.workspace.metadata();
     expect(after.mutationToken).toBeGreaterThan(before.mutationToken);
     expect(after.metadata.collectionAttachments).toHaveLength(1);
@@ -34,7 +41,7 @@ describe("mapping attachment aggregate service", () => {
     const source = project.providers.compositions[0]!.records.find(({ id }) => id === "journal-entry-page")!;
     delete source.document.binding;
     source.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-media/asset-${asset.id}`, children: "Download" }, slots: {} });
-    const attachment = { id: "cards", order: 0, composition: { providerId: "indexeddb", recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } } as const;
+    const attachment = { id: "cards", order: 0, composition: { providerId: "files", recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-filesystem", recordId: "journal-entry-mapping" } } as const;
     project.collectionAttachments.push(attachment);
     const metadata = { id: "workspace", mutationToken: 0 } as WorkspaceRecord;
     const options = { getCurrentSiteProject: async () => ({ status: "ready" as const, project }), workspace: { metadata: async () => metadata, updateMetadata: async () => metadata }, componentCatalog: activeComponentProvider.catalog, subscribe: () => () => undefined };
@@ -69,7 +76,7 @@ describe("mapping attachment aggregate service", () => {
       subscribe: () => () => undefined,
     });
 
-    const attachmentTarget = { composition: { providerId: "indexeddb" as const, recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-indexeddb" as const, recordId: "journal-entry-mapping" } };
+    const attachmentTarget = { composition: { providerId: "files" as const, recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-filesystem" as const, recordId: "journal-entry-mapping" } };
     const attaching = service.attach(attachmentTarget);
     await updateStartedGate;
     let flushed = false;
@@ -85,7 +92,7 @@ describe("mapping attachment aggregate service", () => {
   });
 
   it("guards destructive mutations from workspace metadata even when the Mapping snapshot is broken", async () => {
-    const attachment = { id: "edge", order: 0, composition: { providerId: "indexeddb", recordId: "owner" }, target: { nodeId: "missing", slotId: "content" }, mapping: { providerId: "mapping-indexeddb", recordId: "mapping" } } as const;
+    const attachment = { id: "edge", order: 0, composition: { providerId: "files", recordId: "owner" }, target: { nodeId: "missing", slotId: "content" }, mapping: { providerId: "mapping-filesystem", recordId: "mapping" } } as const;
     const metadata = { id: "workspace", mutationToken: 0, metadata: { collectionAttachments: [attachment] } } as unknown as WorkspaceRecord;
     let snapshotReads = 0;
     const service = createMappingAttachmentService({
