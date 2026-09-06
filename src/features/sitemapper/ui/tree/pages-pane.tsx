@@ -20,10 +20,14 @@ export interface PagesPaneProps {
   onExpandedChange: (ids: readonly string[]) => void;
   onAdd: (request: OutlineAddRequest) => void;
   onAddChild: (pageId: string) => void;
-  onRename: (pageId: string) => void;
+  onRename: (pageId: string, title?: string) => void;
   onMove: (pageId: string, direction: "up" | "down") => void;
   onDuplicate: (pageId: string) => void;
   onDelete: (pageId: string) => void;
+  /** Main Outline mode reuses the canonical tree without collapsing the nav rail. */
+  showCollapseButton?: boolean;
+  heading?: string;
+  class?: string;
 }
 
 function Legend(): JSX.Element {
@@ -50,6 +54,9 @@ export function PagesPane({
   onMove,
   onDuplicate,
   onDelete,
+  showCollapseButton = true,
+  heading = "Pages",
+  class: className,
 }: PagesPaneProps): JSX.Element {
   const { setActivePane } = useEditorChrome();
   const index = useMemo(() => indexDocument(document), [document]);
@@ -67,8 +74,8 @@ export function PagesPane({
   }
 
   return (
-    <Pane label="Pages">
-      <PaneHeader title="Pages" count={index.byId.size} actions={<RailCollapseButton rail="nav" />} />
+    <Pane label={heading} class={className}>
+      <PaneHeader title={heading} count={index.byId.size} actions={showCollapseButton ? <RailCollapseButton rail="nav" /> : undefined} />
       <PaneBody>
         <OutlineTree
           label="Pages"
@@ -81,6 +88,7 @@ export function PagesPane({
           onExpandedChange={onExpandedChange}
           canInsert={canInsert}
           onAdd={onAdd}
+          onRename={onRename}
           addLabel={(parent) => (parent === null ? "Add root page" : "Add page")}
           legend={<Legend />}
           renderActions={(node) => {

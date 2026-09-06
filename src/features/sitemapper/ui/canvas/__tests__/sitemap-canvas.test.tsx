@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SitemapDocument, SitemapNode } from "../../../../../sitemapper/model";
 import { SITEMAP_SCHEMA_VERSION } from "../../../../../sitemapper/model";
 import type { PageSourceLabel } from "../page-source";
-import SitemapCanvas, { clampCanvasZoom, MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM } from "../sitemap-canvas";
+import SitemapCanvas, { canvasStageMargin, clampCanvasZoom, fitCanvasZoom, MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM } from "../sitemap-canvas";
 
 class ResizeObserverStub {
   observe(): void {}
@@ -121,6 +121,26 @@ describe("SitemapCanvas", () => {
     expect(clampCanvasZoom(5)).toBe(MAX_CANVAS_ZOOM);
     expect(clampCanvasZoom(0)).toBe(MIN_CANVAS_ZOOM);
     expect(clampCanvasZoom(0.7549)).toBe(0.75);
+  });
+
+  it("fits against the limiting viewport dimension, including tall maps", () => {
+    expect(fitCanvasZoom(1000, 500, 1000, 2000)).toBe(0.4);
+    expect(fitCanvasZoom(500, 1000, 1000, 500)).toBe(0.5);
+    expect(fitCanvasZoom(2000, 2000, 1000, 1000)).toBe(MAX_CANVAS_ZOOM);
+    expect(canvasStageMargin(1000, 500, 1)).toBe(250);
+    expect(canvasStageMargin(500, 1000, 0.5)).toBe(0);
+    expect(canvasStageMargin(800, 100, 1)).toBe(350);
+    expect(canvasStageMargin(1000, 500, 0.4)).toBe(400);
+    expect(canvasStageMargin(1000, 500, 0.5)).toBe(375);
+    expect(canvasStageMargin(1000, 500, MAX_CANVAS_ZOOM)).toBe(125);
+  });
+
+  it("exposes explicit layout choices while keeping Auto as the responsive default", async () => {
+    const callbacks = { ...props(), layoutPreference: "auto" as const, onLayoutPreferenceChange: vi.fn() };
+    render(<SitemapCanvas {...callbacks} />);
+    expect(screen.getByRole("radiogroup", { name: "Layout" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Outline" }));
+    expect(callbacks.onLayoutPreferenceChange).toHaveBeenCalledWith("outline");
   });
 
   it("wires Create Home page on an empty document", () => {

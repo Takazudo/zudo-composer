@@ -91,4 +91,15 @@ describe("Sitemapper pages pane", () => {
     expect(screen.getByRole("treeitem", { name: /Composition/ })).toBeInTheDocument();
     expect(document.querySelectorAll(".cms-tree__legend .cms-tree-dot")).toHaveLength(3);
   });
+  it("passes F2/IME rename through the shared tree callback", () => {
+    const onRename = vi.fn();
+    render(<PagesPane {...paneProps(documentOf([page("home", "Home")]), { onRename })} />);
+    const row = screen.getByRole("treeitem", { name: /Home/ });
+    row.focus();
+    fireEvent.keyDown(row, { key: "F2" });
+    const input = document.querySelector(".cms-tree-rename input") as HTMLInputElement;
+    fireEvent.input(input, { target: { value: "Accueil" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRename).toHaveBeenCalledWith("home", "Accueil");
+  });
 });
