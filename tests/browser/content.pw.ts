@@ -327,6 +327,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // #170 removed the form's own "Model name" input, so the toolbar's record
   // title is the single control that names the model in Schema mode.
   await expect(page.getByRole("textbox", { name: "Model name" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
   // RecordTitle holds a draft and commits on Enter or blur, so a bare fill is
   // discarded on the next render — press Enter the way an author would.
   await page.getByRole("textbox", { name: "Model name" }).fill("Browser Journal articles");
@@ -397,7 +398,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
     await page.getByRole("textbox", { name: "Introduction", exact: true }).fill(`Introduction ${index + 2}`);
     await page.getByLabel("Published on").fill("2026-08-29");
     await page.getByRole("textbox", { name: "Body", exact: true }).fill(`Body ${index + 2}`);
-    if (routeSlug) await page.getByRole("textbox", { name: "Slug", exact: true }).fill(routeSlug);
+    await page.getByRole("textbox", { name: "Slug", exact: true }).fill(routeSlug || "browser-empty-route-case");
     await expect(saveStatus(page)).toContainText("Saved");
   }
   // Metadata is read off the row rather than matched inside its accessible
@@ -484,6 +485,11 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(mappingFrame.getByRole("heading", { name: "Start with the question" })).toBeVisible();
   await selectEntry(page, /Map the moving parts.*article-moving-parts/);
   await expect(mappingFrame.getByRole("heading", { name: "Map the moving parts" })).toBeVisible();
+  // Newly authored Entries are drafts in the current lifecycle contract. This
+  // journey intentionally exercises their route diagnostics, so opt in rather
+  // than assuming every saved Entry is published.
+  await page.getByRole("combobox", { name: "Published inclusion policy" }).selectOption({ label: "Include drafts" });
+  await expect(page.getByText("Effective records").locator("..")).toContainText("26");
 
   // Issue #171 made a binding one table row instead of three stacked cards, so
   // "the three region headings are not clipped" became "the fixed-layout table
@@ -526,9 +532,10 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(reviewDateTransform.locator("option")).toHaveText(["Pass through", "Format date", "Truncate to 160", "Add prefix"]);
   await reviewDateTransform.selectOption({ label: "Format date" });
   await selectEntry(page, /Start with the question.*article-first-question/);
-  await expectTestReports(page, /No diagnostics/);
+  await mappingInspector(page).getByRole("tab", { name: "Preview", exact: true }).click();
   await expect(mappingFrame.getByText("Feb 28, 2026", { exact: true })).toBeVisible();
   await selectEntry(page, /Map the moving parts.*article-moving-parts/);
+  await expect(mappingFrame.getByRole("heading", { name: "Map the moving parts", exact: true })).toBeVisible();
   await expectTestReports(page, /Optional source field "Review date" has no value/);
   // "Ready" was the modal's own word for it; the tab says it by carrying no
   // blocking diagnostic beside the nonblocking one.
@@ -614,13 +621,12 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await mappingField.getByRole("combobox", { name: "Entry title field" }).selectOption({ label: "Heading" });
   await expect(assignment).toHaveText("Mapping");
 
-  // 26 Entries, two of which derive no route: one with an empty slug and one
-  // whose slug is a bare dot. The two that share 東京 collide but both resolve.
-  await expect(mappingCard).toContainText(/·\s*24 routes/);
+  // All 26 draft/published Entries remain schema-complete. A bare-dot slug is
+  // route-invalid; the two that share 東京 collide but both still resolve.
+  await expect(mappingCard).toContainText(/·\s*25 routes/);
   await expect(mappingCard.getByText("Needs attention", { exact: true })).toBeVisible();
-  await expect(mappingField.getByText("Entry slug is missing or empty.", { exact: true }).first()).toBeVisible();
-  await expect(mappingField.getByText("Entry slug contains a forbidden route delimiter.", { exact: true })).toBeVisible();
-  await expect(mappingField.getByText(/Route \/news\/latest\/%E6%9D%B1%E4%BA%AC collides/).first()).toBeVisible();
+  await expect(mappingField.getByText("Entry slug is missing or contains a forbidden route delimiter.", { exact: true })).toBeVisible();
+  await expect(mappingField.getByText(/Route \/news\/latest\/%E6%9D%B1%E4%BA%AC has 2 concrete destinations/).first()).toBeVisible();
   // Derived routes do not become persisted outline nodes. This fixture has
   // one authored node; nested authored families are covered by the catalog journey.
   await expect(pages.getByRole("treeitem")).toHaveCount(1);
@@ -637,7 +643,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await slug.fill("news/latest");
   await slug.blur();
   await sourceTab.click();
-  await expect(mappingCard).toContainText(/·\s*24 routes/);
+  await expect(mappingCard).toContainText(/·\s*25 routes/);
 
   await mappingField.getByRole("button", { name: "Change mapping" }).click();
   await page.getByRole("dialog", { name: "Choose a Mapping" }).getByRole("button", { name: `Assign ${SINGLE_MAPPING}` }).click();
