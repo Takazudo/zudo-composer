@@ -1,15 +1,10 @@
 // The host config zudo-composer resolves at startup.
 //
-// It is written as a plain typed object rather than through
-// `defineComposerConfig` because zudo-composer does not publish an `exports`
-// map yet — packaging is a later step. Every path setting is left at its
-// default; `pack` is the one setting with no default.
-interface HostComposerConfig {
-  pack: string;
-}
+// `defineComposerConfig` comes from the package's `./config` subpath: an
+// identity function whose only job is to type this object. Every path setting
+// is left at its default; `pack` is the one setting with no default.
+import { defineComposerConfig } from "zudo-composer/config";
 
-const config: HostComposerConfig = {
+export default defineComposerConfig({
   pack: "@zudo-sg/ui/composer-pack",
-};
-
-export default config;
+});

@@ -31,11 +31,15 @@ async function installedPackageDigest(directory) {
   };
   await visit(root, ""); return sha(releaseJson(entries));
 }
+// Sources that decide a release's compiler identity. Tests are excluded — both
+// `__tests__` directories and colocated `*.test.ts` — because they are stripped
+// from the published package's `files` allowlist; including them would give an
+// installed zudo-composer a different identity from the repository it came from.
 async function compilerIdentity() {
   const root = resolve(import.meta.dirname, "../../src"), files = [];
   const visit = async (relativePath) => { for (const entry of await readdir(join(root, relativePath), { withFileTypes: true })) {
     if (entry.name === "__tests__") continue; if (entry.isSymbolicLink()) throw new Error("Compiler identity cannot follow symlinks.");
-    const path = `${relativePath}/${entry.name}`; if (entry.isDirectory()) await visit(path); else if (entry.name.endsWith(".ts")) files.push([path, await readFile(join(root, path), "utf8")]);
+    const path = `${relativePath}/${entry.name}`; if (entry.isDirectory()) await visit(path); else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) files.push([path, await readFile(join(root, path), "utf8")]);
   } };
   for (const domain of ["site-project", "composer", "content", "mapping", "sitemapper", "media", "shared", "../packages/component-contract/src"]) await visit(domain);
   files.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);

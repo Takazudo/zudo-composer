@@ -14,6 +14,7 @@
 
 import { isAbsolute, posix, resolve } from "node:path";
 import { resolveWorkspaceRoot } from "../../plugins/roots.mjs";
+import { defineComposerConfig } from "./define.mjs";
 import {
   DATA_DOMAIN_SEGMENTS,
   DEFAULT_SETTINGS,
@@ -22,6 +23,12 @@ import {
   type ComposerSettingDefaults,
   type ComposerSettings,
 } from "./settings";
+
+// The identity helper a host imports lives in `./define.mjs`: it is the whole
+// `zudo-composer/config` runtime, and it must stay plain JavaScript so a host
+// config can load it out of `node_modules`. Re-exported here so this module
+// stays the single place the config contract is read from.
+export { defineComposerConfig };
 
 /** The config file a host writes, resolved against the host project root. */
 export const CONFIG_FILE_NAME = "zudo-composer.config.ts";
@@ -86,15 +93,6 @@ export interface ResolvedComposerConfig {
 export interface ComposerRuntime {
   /** Environment the per-setting overrides are read from. */
   env?: Record<string, string | undefined>;
-}
-
-/**
- * Identity helper. A host imports it purely for the types — it evaluates to its
- * argument, so whatever loads `zudo-composer.config.ts` never needs the rest of
- * the package to be resolvable.
- */
-export function defineComposerConfig(config: ComposerConfig): ComposerConfig {
-  return config;
 }
 
 function fail(message: string): never {

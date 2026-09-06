@@ -12,5 +12,12 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["server/config/**/*.ts", "plugins/roots.d.mts"]
+  // `fixtures/host` is in this program on purpose: it is the only place the
+  // published `zudo-composer/config` subpath is resolved the way a host does.
+  "include": [
+    "server/config/**/*.ts",
+    "server/config/**/*.d.mts",
+    "plugins/roots.d.mts",
+    "fixtures/host/zudo-composer.config.ts"
+  ]
 }
