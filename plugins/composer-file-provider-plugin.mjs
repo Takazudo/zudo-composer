@@ -55,8 +55,9 @@ export const MEDIA_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
 // never reads the host config itself — every lane passes `mediaStoreRoot`
 // explicitly — so this is only the fallback for a direct caller.
 export const MEDIA_FILE_PROVIDER_ROOT = "cms/media";
-// A URL naming the default store path, whatever `mediaStoreRoot` was set to.
-// The catalog and the private version bytes are never source files.
+// A URL naming the conventional store directory is refused even when the store
+// was configured elsewhere: the catalog and the private version bytes are never
+// source files, so Vite must not reach them through `/@fs` or a source URL.
 const MEDIA_STORE_PATH = new RegExp(`(?:^|/)${MEDIA_FILE_PROVIDER_ROOT}(?:/|$)`);
 
 /** Explicit option, then the environment override, then the workspace default. */
