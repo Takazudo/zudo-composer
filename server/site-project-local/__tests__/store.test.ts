@@ -190,9 +190,16 @@ describe("immutable local release storage", () => {
   });
   it("enforces cross-process CAS", async () => {
     const { testRoot, store } = await fixture(); await store.list();
+    // Keep the stale lock: this spec covers both concurrent stale-lock recovery and the CAS race.
     await mkdir(join(testRoot, ".transaction-lock")); await writeFile(join(testRoot, ".transaction-lock", "owner.json"), JSON.stringify({ pid: 2147483647, nonce: "a".repeat(24) }));
-    const run = (name: string) => new Promise<{ status: string }>((done, fail) => { const child = spawn(process.execPath, ["--import", "tsx", join(process.cwd(), "server/site-project-local/__tests__/store-worker.ts"), testRoot, name], { stdio: ["ignore", "pipe", "pipe"] }); let stdout = "", stderr = ""; child.stdout.on("data", (value) => { stdout += String(value); }); child.stderr.on("data", (value) => { stderr += String(value); }); child.on("error", fail); child.on("close", (code) => code === 0 ? done(JSON.parse(stdout)) : fail(new Error(stderr))); });
-    expect((await Promise.all([run("A"), run("B")])).map(({ status }) => status).sort()).toEqual(["conflict", "ok"]);
+    // Above the store's 10s production default so a starved runner has more room for one child to
+    // win; still well under the server project's testTimeout: 20_000 (vitest.config.ts) so genuine
+    // exhaustion is a nameable lock timeout, not an opaque vitest kill. Child boot and ensureRoot()
+    // are outside this budget because the deadline starts after them.
+    const lockTimeoutMs = 12_000;
+    const run = (name: string) => new Promise<{ name: string; status: string; message?: string }>((done, fail) => { const child = spawn(process.execPath, ["--import", "tsx", join(process.cwd(), "server/site-project-local/__tests__/store-worker.ts"), testRoot, name, String(lockTimeoutMs)], { stdio: ["ignore", "pipe", "pipe"] }); let stdout = "", stderr = ""; child.stdout.on("data", (value) => { stdout += String(value); }); child.stderr.on("data", (value) => { stderr += String(value); }); child.on("error", fail); child.on("close", (code) => code === 0 ? done({ name, ...JSON.parse(stdout) as { status: string; message?: string } }) : fail(new Error(stderr))); });
+    const results = await Promise.all([run("A"), run("B")]);
+    expect(results.map(({ status }) => status).sort(), JSON.stringify(results)).toEqual(["conflict", "ok"]);
   });
   it.each(["after-write", "after-file-sync", "after-close", "before-rename", "after-rename", "after-directory-sync", "stage-files-durable"])("recovers staging interruption at %s without an active change", async (point) => {
     let failed = false; const { store, testRoot } = await fixture({ fault(current) { if (!failed && current === point) { failed = true; throw new Error("interrupted"); } } });
@@ -230,7 +237,7 @@ describe("immutable local release storage", () => {
   });
   it("does not steal a live writer lock and recovers a provably dead writer", async () => {
     const { store, testRoot } = await fixture(); await store.list(); const lock = join(testRoot, ".transaction-lock"); await mkdir(lock); await writeFile(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, nonce: "a".repeat(24) }));
-    expect(await createLocalSiteProjectStore({ testRoot, lockTimeoutMs: 15 }).list()).toMatchObject({ status: "unavailable" });
+    expect(await createLocalSiteProjectStore({ testRoot, lockTimeoutMs: 15 }).list()).toMatchObject({ status: "unavailable", message: expect.stringContaining("Release writer lock unavailable") });
     await writeFile(join(lock, "owner.json"), JSON.stringify({ pid: 2147483647, nonce: "a".repeat(24) })); expect(await store.list()).toMatchObject({ status: "ok" });
   });
   it("supports a symlinked ancestor but rejects root replacement during writes", async () => {
