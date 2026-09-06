@@ -178,8 +178,17 @@ export function registerCatalogJourney(lane: string) {
       expect(staged.staged.mediaLock.pins).toEqual(expect.arrayContaining([expect.objectContaining({ assetId: ownedAssetId, checksum: ownedVersionChecksum })]));
       await changeDraft(other, "Newer private working B"); await other.close();
       await page.getByRole("button", { name: "Build staged candidate" }).click();
+      const activating = responseFor(page, "activate");
       await page.getByRole("button", { name: "Activate locally", exact: true }).click();
+      const active = (await (await activating).json()).result.active;
+      expect(active).toEqual({ projectId: "catalog-editorial-example", revision: staged.revision, buildId: staged.buildId });
       await expect(page.getByText(/Activated locally\. Publication reconciliation/)).toBeVisible();
+      await expect.poll(() => page.evaluate(async () => {
+        const sourcePath = "/src/features/delivery/activated-source.ts", packPath = "/src/features/composer/active-pack.ts";
+        const [{ activatedDeliverySource }, { activeComponentProvider }] = await Promise.all([import(sourcePath), import(packPath)]);
+        const source = activatedDeliverySource(activeComponentProvider).read();
+        return source.status === "ready" ? source.artifact.identity : { status: source.status };
+      }), { timeout: COLD_SITE_DELIVERY_TIMEOUT_MS }).toEqual(active);
       await page.goto("/site");
       // Activation invalidates the dev SiteDelivery module graph. Give its
       // first render the same cold-route budget as the unbundled authoring UI.

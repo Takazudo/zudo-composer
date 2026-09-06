@@ -56,13 +56,17 @@ export function siteProjectSourcePlugin(options) {
       const configuredRoot = process.env.ZUDO_SITE_PROJECT_ROOT?.trim();
       const localRoot = configuredRoot ? resolve(configuredRoot) : resolve(viteServer.config.root, ".zudo-site-project");
       const active = resolve(localRoot, "active.json");
+      // Active selection is replaced atomically. Keep a stable directory watch
+      // as well as the exact file watch so repeated rename/unlink/add cycles do
+      // not detach chokidar from the new inode.
+      viteServer.watcher.add(localRoot);
       viteServer.watcher.add(active);
-      let watched = new Set([active]), requested = 0, applied = 0, refreshing = false, notifyPending = false, retryTimer, retryDelay = 25, closed = false;
+      let watched = new Set([localRoot, active]), requested = 0, applied = 0, refreshing = false, notifyPending = false, retryTimer, retryDelay = 25, closed = false;
       const pathsFor = (loaded) => {
-        if (!loaded) return new Set([active]);
+        if (!loaded) return new Set([localRoot, active]);
         const { projectId, revision, buildId } = loaded.release.identity;
         const buildRoot = resolve(localRoot, "builds", buildId);
-        return new Set([active, resolve(localRoot, "projects", projectId, `${revision}.json`), resolve(buildRoot, "stage.json"), resolve(buildRoot, "build.json"), resolve(buildRoot, "complete.json"), ...Object.keys(loaded.release.files).map((name) => resolve(buildRoot, name))]);
+        return new Set([localRoot, active, resolve(localRoot, "projects", projectId, `${revision}.json`), resolve(buildRoot, "stage.json"), resolve(buildRoot, "build.json"), resolve(buildRoot, "complete.json"), ...Object.keys(loaded.release.files).map((name) => resolve(buildRoot, name))]);
       };
       const refresh = async () => {
         if (closed || refreshing) return; refreshing = true;

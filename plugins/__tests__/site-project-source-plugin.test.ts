@@ -42,6 +42,7 @@ describe("siteProjectSourcePlugin", () => {
       moduleGraph: { getModuleById: vi.fn(() => ({ id: RESOLVED_SITE_PROJECT_SOURCE_ID })), invalidateModule }, reloadModule,
       ws: { send }, ssrLoadModule: vi.fn(),
     });
+    expect(watcher.add).toHaveBeenCalledWith("/repo/.zudo-site-project");
     await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith(`/repo/.zudo-site-project/projects/demo/${identity.revision}.json`));
     for (const name of ["stage.json", "build.json", "complete.json", "module-0000.mjs", `media-sha256-${"4".repeat(64)}.png`]) expect(watcher.add).toHaveBeenCalledWith(`/repo/.zudo-site-project/builds/${identity.buildId}/${name}`);
     const source = await plugin.load?.call({} as never, RESOLVED_SITE_PROJECT_SOURCE_ID, {} as never);
@@ -105,6 +106,7 @@ describe("siteProjectSourcePlugin", () => {
     await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith(nextModule));
     expect(watcher.unwatch.mock.invocationCallOrder[0]).toBeGreaterThan(watcher.add.mock.invocationCallOrder.at(-1)!);
     expect(watcher.unwatch).toHaveBeenCalledWith(oldModule);
+    expect(watcher.unwatch).not.toHaveBeenCalledWith("/repo/.zudo-site-project");
     expect(send).toHaveBeenCalledTimes(1);
     expect(readDevRelease).toHaveBeenCalledTimes(4);
   });
