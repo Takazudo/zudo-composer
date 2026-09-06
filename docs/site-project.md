@@ -171,7 +171,10 @@ the symbolic values below with the exact returned IDs/digests:
 
 For a replacement activation, `expectedActive` is the exact prior triple, not
 null. `get` requires `{projectId,revision}`. `discard` requires
-`{projectId,buildId,expectedActive}`. Neither operation accepts revision aliases.
+`{projectId,buildId,expectedStageGeneration,expectedActive}`. Use `stageGeneration`
+from apply (including idempotent apply) or `list.stageGenerations[buildId]`.
+This is the exact visible stage incarnation, not merely a build hash or the
+current global catalog generation. Neither operation accepts revision aliases.
 
 Responses use `{ok:true,result:…}` or `{ok:false,error:{code,message,diagnostics?}}`.
 CLI exit 0 means success; exit 2 means protocol/validation/compile/not-found/CAS
@@ -184,7 +187,7 @@ The default private root is `.zudo-site-project`; `ZUDO_SITE_PROJECT_ROOT` suppl
 an explicit disposable root for isolated tests. Layout:
 
 ```text
-heads.json                       stage order, heads, generation, approval/discard receipts
+heads.json                       stage order/incarnations, heads, generation, receipts
 active.json                      sole active project/revision/buildId triple
 projects/PROJECT/REVISION.json    immutable canonical project
 stages/BUILD_ID.json              immutable lock/toolchain/publication inputs
@@ -198,7 +201,12 @@ unsafe paths fail closed. A live writer lock is never stolen. A provably dead
 writer can be recovered; an ownerless/invalid lock requires explicit inspection.
 Stage application order is persisted explicitly, not inferred from build hashes:
 discarding the current C in A→B→C restores B. Discard receipts make retry of a
-committed discard idempotent. Durable partial stage/build files can be retried
+committed discard idempotent only for its original incarnation. Restaging the
+same build assigns a fresh monotonic stage generation; a delayed old discard
+cannot remove it. Heads validation checks exclusive visible/discarded sets,
+generation order, exact project heads, complete approval coverage, immutable
+stage identities and retained active references before any receipt shortcut.
+Durable partial stage/build files can be retried
 with the same inputs. A valid already-copied Media destination is verified by
 path, size, signature/MIME and digest before any source reader is consulted, so
 retry can complete while that source is unavailable. Corrupt destinations block.

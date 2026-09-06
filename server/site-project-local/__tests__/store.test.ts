@@ -5,17 +5,46 @@ import { describe, expect, it } from "vitest";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
 import { compileSiteProject } from "../../../src/site-project/compiler";
 import { serializeSiteProject } from "../../../src/site-project/model/canonical";
+import { releaseJson } from "../../../src/site-project/api/review";
 import { fixture, stageFor, sha, catalog, review, call, PNG } from "./release-fixture";
 import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV } from "../store";
 const applyInput = (value = project()) => ({ project: value, stage: stageFor(value), expectedRevision: null, expectedActive: null, expectedGeneration: 0 });
 async function build(value = project()) { const compiled = await compileSiteProject(value, { componentCatalog: catalog }); if (compiled.status !== "ready") throw new Error("Fixture compile failed"); return compiled.build; }
 describe("immutable local release storage", () => {
+  it("binds discard retries to the original stage incarnation across restage ABA", async () => {
+    const { store } = await fixture(); const input = applyInput();
+    const first = await store.apply(input); expect(first).toMatchObject({ status: "ok", value: { stageGeneration: 1 } });
+    const original = { projectId: input.stage.projectId, buildId: input.stage.buildId, expectedStageGeneration: 1, expectedActive: null };
+    expect(await store.discard(original)).toMatchObject({ status: "ok" }); expect(await store.discard(original)).toMatchObject({ status: "ok" });
+    expect(await store.apply({ ...input, expectedGeneration: 2 })).toMatchObject({ status: "ok", value: { stageGeneration: 3 } });
+    expect(await store.list()).toMatchObject({ status: "ok", value: { stageGenerations: { [input.stage.buildId]: 3 } } });
+    expect(await store.getStage({ projectId: input.stage.projectId, buildId: input.stage.buildId, approvalDigest: input.stage.planDigest })).toMatchObject({ status: "ok", stageGeneration: 3 });
+    expect(await store.discard(original)).toEqual({ status: "conflict" });
+    expect(await store.getStage({ projectId: input.stage.projectId, buildId: input.stage.buildId })).toMatchObject({ status: "ok" });
+    const current = { ...original, expectedStageGeneration: 3 };
+    expect(await store.discard(current)).toMatchObject({ status: "ok" }); expect(await store.discard(original)).toEqual({ status: "conflict" }); expect(await store.discard(current)).toMatchObject({ status: "ok" });
+  });
+  it.each(["visible-discarded", "head", "order", "duplicate", "approval", "incarnation"])("rejects canonical contradictory heads %s before idempotent success", async (kind) => {
+    const { store, testRoot } = await fixture(); const a = applyInput(), b = applyInput({ ...project(), name: "B" });
+    await store.apply(a); await store.apply({ ...b, expectedRevision: a.stage.revision, expectedGeneration: 1 });
+    const path = join(testRoot, "heads.json"), heads = JSON.parse(await readFile(path, "utf8"));
+    if (kind === "visible-discarded") heads.discarded[a.stage.buildId] = { identity: { projectId: a.stage.projectId, revision: a.stage.revision, buildId: a.stage.buildId }, stageGeneration: 1 };
+    if (kind === "head") heads.projects[a.stage.projectId] = { revision: a.stage.revision, buildId: a.stage.buildId };
+    if (kind === "order") heads.stageOrder.reverse();
+    if (kind === "duplicate") heads.stageOrder.push(a.stage.buildId);
+    if (kind === "approval") heads.approvals = {};
+    if (kind === "incarnation") delete heads.stageGenerations[a.stage.buildId];
+    const corrupt = releaseJson(heads); await writeFile(path, corrupt);
+    expect(await store.apply(a)).toMatchObject({ status: "unavailable" });
+    expect(await store.discard({ projectId: a.stage.projectId, buildId: a.stage.buildId, expectedStageGeneration: 1, expectedActive: null })).toMatchObject({ status: "unavailable" });
+    expect(await readFile(path, "utf8")).toBe(corrupt);
+  });
   it("restores the immediately preceding project head, not the greatest hash", async () => {
     const { store } = await fixture();
     const candidates = Array.from({ length: 8 }, (_, index) => applyInput({ ...project(), name: `Candidate ${index}` })).sort((a, b) => a.stage.buildId < b.stage.buildId ? -1 : 1);
     const a = candidates[7]!, b = candidates[0]!, c = candidates[4]!;
     await store.apply(a); await store.apply({ ...b, expectedRevision: a.stage.revision, expectedGeneration: 1 }); await store.apply({ ...c, expectedRevision: b.stage.revision, expectedGeneration: 2 });
-    expect(await store.discard({ projectId: c.stage.projectId, buildId: c.stage.buildId, expectedActive: null })).toMatchObject({ status: "ok" });
+    expect(await store.discard({ projectId: c.stage.projectId, buildId: c.stage.buildId, expectedStageGeneration: 3, expectedActive: null })).toMatchObject({ status: "ok" });
     expect(await store.list()).toMatchObject({ status: "ok", value: { projects: [expect.objectContaining({ head: b.stage.revision })] } });
   });
   it("resumes a durable pinned Media copy without consulting unavailable source bytes", async () => {
@@ -38,7 +67,7 @@ describe("immutable local release storage", () => {
     if (operation !== "apply") await store.apply(input);
     if (operation === "activate") await store.complete({ stage: input.stage, build: output });
     let once = true; const faulty = createLocalSiteProjectStore({ testRoot, componentPack: catalog.pack, fault(point) { if (once && point === `lock-cleanup-${step}`) { once = false; throw new Error("Cleanup failed"); } } });
-    const run = (target: typeof store) => operation === "apply" ? target.apply(input) : operation === "build" ? target.complete({ stage: input.stage, build: output }) : operation === "activate" ? target.activate({ target: identity, expectedActive: null }) : target.discard({ projectId: identity.projectId, buildId: identity.buildId, expectedActive: null });
+    const run = (target: typeof store) => operation === "apply" ? target.apply(input) : operation === "build" ? target.complete({ stage: input.stage, build: output }) : operation === "activate" ? target.activate({ target: identity, expectedActive: null }) : target.discard({ projectId: identity.projectId, buildId: identity.buildId, expectedStageGeneration: 1, expectedActive: null });
     expect(await run(faulty)).toMatchObject({ status: "uncertain", identity, message: expect.stringContaining(identity.buildId) });
     expect(await run(store)).toMatchObject({ status: "ok" });
   });
@@ -55,7 +84,7 @@ describe("immutable local release storage", () => {
     expect(await store.apply(next)).toMatchObject({ status: "ok" }); expect(await store.apply(next)).toMatchObject({ status: "ok" });
     expect(await store.getStage({ projectId: next.stage.projectId, buildId: next.stage.buildId, approvalDigest: next.stage.planDigest })).toMatchObject({ status: "ok" });
     expect(await store.getStage({ projectId: next.stage.projectId, buildId: next.stage.buildId, approvalDigest: first.stage.planDigest })).toEqual({ status: "not-found" });
-    await store.discard({ projectId: next.stage.projectId, buildId: next.stage.buildId, expectedActive: null });
+    await store.discard({ projectId: next.stage.projectId, buildId: next.stage.buildId, expectedStageGeneration: 1, expectedActive: null });
     expect(await store.apply({ ...next, expectedGeneration: 2, stage: { ...next.stage, planDigest: "f".repeat(64) } })).toMatchObject({ status: "ok" });
   });
   it("lists immutable stages for multiple provider-neutral project identities", async () => {
@@ -75,8 +104,8 @@ describe("immutable local release storage", () => {
     expect(await store.apply(changed)).toEqual({ status: "conflict" });
     expect(await store.apply({ ...changed, expectedRevision: active.revision, expectedActive: active, expectedGeneration: 1 })).toMatchObject({ status: "ok", value: { active } });
     expect(await store.get(active)).toMatchObject({ status: "ok", value: { project: { name: first.project.name } } });
-    expect(await store.discard({ projectId: active.projectId, buildId: active.buildId, expectedActive: active })).toEqual({ status: "conflict" });
-    expect(await store.discard({ projectId: changed.stage.projectId, buildId: changed.stage.buildId, expectedActive: active })).toMatchObject({ status: "ok" });
+    expect(await store.discard({ projectId: active.projectId, buildId: active.buildId, expectedStageGeneration: 1, expectedActive: active })).toEqual({ status: "conflict" });
+    expect(await store.discard({ projectId: changed.stage.projectId, buildId: changed.stage.buildId, expectedStageGeneration: 2, expectedActive: active })).toMatchObject({ status: "ok" });
     expect(await store.readActiveProject()).toMatchObject({ status: "ok", value: { buildId: active.buildId } });
   });
   it.each([1, 2, 3, 4])("supports idempotent stages and concurrent distinct writers with generation/project CAS %#", async () => {

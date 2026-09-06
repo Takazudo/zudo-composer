@@ -27,7 +27,7 @@ const mutationFailure = (error: unknown) => error instanceof ReleaseCommitUncert
 const inside = (root: string, path: string) => { const part = relative(root, path); return part === "" || (part !== ".." && !part.startsWith(`..${sep}`) && !isAbsolute(part)); };
 const exists = async (path: string) => { try { await lstat(path); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; } };
 async function syncDirectory(path: string) { const handle = await open(path, "r"); try { await handle.sync(); } finally { await handle.close(); } }
-interface Heads { schemaVersion: 2; generation: number; projects: Record<string, { revision: string; buildId: string }>; stageOrder: string[]; approvals: Record<string, string>; discarded: Record<string, SiteProjectActiveSelection> }
+interface Heads { schemaVersion: 2; generation: number; projects: Record<string, { revision: string; buildId: string }>; stageOrder: string[]; stageGenerations: Record<string, number>; approvals: Record<string, string>; discarded: Record<string, { identity: SiteProjectActiveSelection; stageGeneration: number }> }
 interface CommitState { identity?: SiteProjectActiveSelection }
 interface CleanupTicket { path: string; owner: string; inode: number; phase: "owner" | "directory" | "sync" }
 export interface LocalSiteProjectStoreOptions {
@@ -183,9 +183,33 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     }
   }
   private async heads(): Promise<Heads> {
-    const path = join(this.root, "heads.json"); if (!await exists(path)) return { schemaVersion: 2, generation: 0, projects: {}, stageOrder: [], approvals: {}, discarded: {} };
+    const path = join(this.root, "heads.json"); if (!await exists(path)) { if (await exists(join(this.root, "active.json"))) throw new Error("Active pointer has no retained heads catalog."); return { schemaVersion: 2, generation: 0, projects: {}, stageOrder: [], stageGenerations: {}, approvals: {}, discarded: {} }; }
     const value = await this.json(path) as Heads;
-    if (!value || Object.keys(value).sort().join(",") !== "approvals,discarded,generation,projects,schemaVersion,stageOrder" || value.schemaVersion !== 2 || !Number.isSafeInteger(value.generation) || value.generation < 0 || !value.discarded || typeof value.discarded !== "object" || Array.isArray(value.discarded) || Object.entries(value.discarded).some(([id, target]) => !validActive(target) || id !== target.buildId) || !value.projects || typeof value.projects !== "object" || Array.isArray(value.projects) || !value.approvals || typeof value.approvals !== "object" || Array.isArray(value.approvals) || !Array.isArray(value.stageOrder) || new Set(value.stageOrder).size !== value.stageOrder.length || value.stageOrder.some((id) => !SHA.test(id)) || Object.entries(value.approvals).some(([digest, id]) => !SHA.test(digest) || !value.stageOrder.includes(id))) throw new Error("Invalid release heads schema.");
+    const object = (item: unknown) => !!item && typeof item === "object" && !Array.isArray(item);
+    if (!value || Object.keys(value).sort().join(",") !== "approvals,discarded,generation,projects,schemaVersion,stageGenerations,stageOrder" || value.schemaVersion !== 2 || !Number.isSafeInteger(value.generation) || value.generation < 0 || ![value.projects, value.stageGenerations, value.approvals, value.discarded].every(object) || !Array.isArray(value.stageOrder) || new Set(value.stageOrder).size !== value.stageOrder.length || value.stageOrder.some((id) => !SHA.test(id))) throw new Error("Invalid release heads schema.");
+    if (Object.keys(value.stageGenerations).sort().join() !== [...value.stageOrder].sort().join()) throw new Error("Visible stage generations differ from stage order.");
+    const lastHeads = new Map<string, { revision: string; buildId: string }>(), stages = new Map<string, StagedRelease>(), generations = new Set<number>();
+    let priorGeneration = 0;
+    for (const id of value.stageOrder) {
+      const generation = value.stageGenerations[id]!;
+      if (!Number.isSafeInteger(generation) || generation <= priorGeneration || generation > value.generation || Object.hasOwn(value.discarded, id)) throw new Error("Contradictory visible stage incarnation/order.");
+      priorGeneration = generation; generations.add(generation);
+      const stage = await this.json(join(this.root, "stages", `${id}.json`));
+      if (!validStage(stage) || stage.buildId !== id || !await this.stored(stage.projectId, stage.revision)) throw new Error("Visible stage inputs are missing or corrupt.");
+      stages.set(id, stage); lastHeads.set(stage.projectId, { revision: stage.revision, buildId: id });
+    }
+    if (releaseJson(value.projects) !== releaseJson(Object.fromEntries(lastHeads))) throw new Error("Project heads contradict visible stage lineage.");
+    const approved = new Set<string>();
+    for (const [digest, id] of Object.entries(value.approvals)) { if (!SHA.test(digest) || !stages.has(id)) throw new Error("Approval receipt is not visible."); approved.add(id); }
+    if (approved.size !== stages.size) throw new Error("Visible stage has no approval receipt.");
+    for (const [id, receipt] of Object.entries(value.discarded)) {
+      if (!object(receipt) || Object.keys(receipt).sort().join() !== "identity,stageGeneration" || !validActive(receipt.identity) || receipt.identity.buildId !== id || stages.has(id) || !Number.isSafeInteger(receipt.stageGeneration) || receipt.stageGeneration < 1 || receipt.stageGeneration >= value.generation || generations.has(receipt.stageGeneration) || await exists(join(this.root, "builds", id, "complete.json"))) throw new Error("Contradictory discarded stage receipt.");
+      const stage = await this.json(join(this.root, "stages", `${id}.json`));
+      if (!validStage(stage) || !sameRelease(receipt.identity, { projectId: stage.projectId, revision: stage.revision, buildId: stage.buildId }) || !await this.stored(stage.projectId, stage.revision)) throw new Error("Discard receipt identity differs from staged inputs.");
+      generations.add(receipt.stageGeneration);
+    }
+    const active = await this.active();
+    if (active && (!stages.has(active.buildId) || !sameRelease(active, { projectId: stages.get(active.buildId)!.projectId, revision: stages.get(active.buildId)!.revision, buildId: active.buildId }) || !await exists(join(this.root, "builds", active.buildId, "complete.json")))) throw new Error("Active identity is not a retained completed stage.");
     for (const [projectId, head] of Object.entries(value.projects)) if (!validActive({ projectId, ...head })) throw new Error("Invalid project head.");
     return value;
   }
@@ -236,7 +260,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
         if (!retained.some((stage) => stage.buildId === head.buildId && stage.revision === head.revision)) throw new Error("Project head is not retained.");
         projects.push({ projectId, name: stored.project.name, revisions: [...new Set(retained.map(({ revision }) => revision))].sort(), head: head.revision, stages: retained.map(({ buildId }) => buildId).sort() });
       }
-      return { status: "ok" as const, value: { projects, active, generation: heads.generation } };
+      return { status: "ok" as const, value: { projects, active, generation: heads.generation, stageGenerations: heads.stageGenerations } };
     }); } catch (error) { return unavailable(error); }
   }
   async get(input: { projectId: string; revision: string }): ReturnType<SiteProjectStoreAdapter["get"]> {
@@ -245,7 +269,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       const value = await this.stored(input.projectId, input.revision); return value ? { status: "ok" as const, value } : { status: "not-found" as const };
     }); } catch (error) { return unavailable(error); }
   }
-  async getStage(input: { projectId: string; buildId: string; approvalDigest?: string }): ReturnType<SiteProjectStoreAdapter["getStage"]> { try { return await this.lock(async () => { if (input.approvalDigest !== undefined && (await this.heads()).approvals[input.approvalDigest] !== input.buildId) return { status: "not-found" as const }; const value = await this.stage(input.projectId, input.buildId); return value ? { status: "ok" as const, value } : { status: "not-found" as const }; }); } catch (error) { return unavailable(error); } }
+  async getStage(input: { projectId: string; buildId: string; approvalDigest?: string }): ReturnType<SiteProjectStoreAdapter["getStage"]> { try { return await this.lock(async () => { const heads = await this.heads(); if (input.approvalDigest !== undefined && heads.approvals[input.approvalDigest] !== input.buildId) return { status: "not-found" as const }; const value = await this.stage(input.projectId, input.buildId); return value ? { status: "ok" as const, value, stageGeneration: heads.stageGenerations[input.buildId]! } : { status: "not-found" as const }; }); } catch (error) { return unavailable(error); } }
   async getCompleted(input: { projectId: string; buildId: string }): ReturnType<SiteProjectBuildAdapter["getCompleted"]> { try { return await this.lock(async () => { const value = await this.completed(input.projectId, input.buildId); return value ? { status: "ok" as const, value } : { status: "not-found" as const }; }); } catch (error) { return unavailable(error); } }
   async readActiveProject(): Promise<SiteProjectAdapterReadResult<(StoredSiteProject & { buildId: string }) | null>> {
     try { return await this.lock(async () => {
@@ -260,7 +284,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     try { return await this.lock(async () => {
       if (!validStage(input.stage) || input.project.schemaVersion !== 2 || input.stage.projectId !== input.project.id || (this.options.componentPack && !validateSiteProject(input.project, { componentPack: this.options.componentPack }).ok) || hash(serializeSiteProject(input.project)) !== input.stage.revision) throw new Error("Invalid immutable staged inputs.");
       const heads = await this.heads(), active = await this.active(); const existing = await this.stage(input.project.id, input.stage.buildId);
-      if (existing && heads.approvals[input.stage.planDigest] === existing.buildId) return { status: "ok" as const, value: { revision: existing.revision, buildId: existing.buildId, active } };
+      if (existing && heads.approvals[input.stage.planDigest] === existing.buildId) return { status: "ok" as const, value: { revision: existing.revision, buildId: existing.buildId, stageGeneration: heads.stageGenerations[existing.buildId]!, active } };
       if (heads.generation !== input.expectedGeneration || (heads.projects[input.project.id]?.revision ?? null) !== input.expectedRevision || !sameRelease(active, input.expectedActive)) return { status: "conflict" as const };
       const directory = join(this.root, "projects", input.project.id); await this.directory(directory);
       await this.write(join(directory, `${input.stage.revision}.json`), serializeSiteProject(input.project), true);
@@ -275,8 +299,9 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       await this.write(stagePath, releaseJson(retainedStage), true); await this.hit("stage-files-durable");
       if (input.verifyApproval && !await input.verifyApproval()) return { status: "conflict" as const };
       heads.projects[input.project.id] = { revision: input.stage.revision, buildId: input.stage.buildId }; heads.stageOrder = heads.stageOrder.filter((id) => id !== input.stage.buildId); heads.stageOrder.push(input.stage.buildId); heads.approvals[input.stage.planDigest] = input.stage.buildId; delete heads.discarded[input.stage.buildId]; heads.generation++;
+      heads.stageGenerations[input.stage.buildId] = heads.generation;
       await this.write(join(this.root, "heads.json"), releaseJson(heads), false, { projectId: input.stage.projectId, revision: input.stage.revision, buildId: input.stage.buildId });
-      return { status: "ok" as const, value: { revision: input.stage.revision, buildId: input.stage.buildId, active } };
+      return { status: "ok" as const, value: { revision: input.stage.revision, buildId: input.stage.buildId, stageGeneration: heads.generation, active } };
     }); } catch (error) { return mutationFailure(error); }
   }
   async activate(input: Parameters<SiteProjectStoreAdapter["activate"]>[0]): ReturnType<SiteProjectStoreAdapter["activate"]> {
@@ -285,17 +310,21 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
   async discard(input: Parameters<SiteProjectStoreAdapter["discard"]>[0]): ReturnType<SiteProjectStoreAdapter["discard"]> {
     try { return await this.lock(async () => {
       const heads = await this.heads(), active = await this.active();
-      if (heads.discarded[input.buildId]?.projectId === input.projectId) return { status: "ok" as const, value: { active } };
+      if (!Number.isSafeInteger(input.expectedStageGeneration) || input.expectedStageGeneration < 1) return { status: "conflict" as const };
+      const discarded = heads.discarded[input.buildId];
+      if (discarded?.identity.projectId === input.projectId && discarded.stageGeneration === input.expectedStageGeneration) return { status: "ok" as const, value: { active } };
+      if (heads.stageGenerations[input.buildId] !== input.expectedStageGeneration) return { status: "conflict" as const };
       const stage = await this.stage(input.projectId, input.buildId); if (!stage) return { status: "not-found" as const };
       if (!sameRelease(active, input.expectedActive) || active?.buildId === input.buildId || await exists(join(this.root, "builds", input.buildId, "complete.json"))) return { status: "conflict" as const };
       heads.stageOrder = heads.stageOrder.filter((id) => id !== input.buildId);
+      delete heads.stageGenerations[input.buildId];
       heads.approvals = Object.fromEntries(Object.entries(heads.approvals).filter(([, id]) => id !== input.buildId));
       if (heads.projects[input.projectId]?.buildId === input.buildId) {
         const remaining = []; for (const id of heads.stageOrder) { const item = await this.stage(input.projectId, id); if (item) remaining.push(item); }
         const next = remaining.at(-1); if (next) heads.projects[input.projectId] = { revision: next.revision, buildId: next.buildId }; else delete heads.projects[input.projectId];
       }
       const identity = { projectId: stage.projectId, revision: stage.revision, buildId: stage.buildId };
-      heads.discarded[input.buildId] = identity; heads.generation++;
+      heads.discarded[input.buildId] = { identity, stageGeneration: input.expectedStageGeneration }; heads.generation++;
       await this.write(join(this.root, "heads.json"), releaseJson(heads), false, identity);
       return { status: "ok" as const, value: { active } };
     }); } catch (error) { return mutationFailure(error); }

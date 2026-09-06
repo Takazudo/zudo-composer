@@ -27,12 +27,12 @@ export type SiteProjectAdapterReadResult<T> = { status: "ok"; value: T } | { sta
 export type SiteProjectAdapterMutationResult<T> = SiteProjectAdapterReadResult<T> | { status: "conflict" } | { status: "uncertain"; message: string; identity: SiteProjectActiveSelection };
 /** Every mutation compares all preconditions under the adapter's one transaction lock. */
 export interface SiteProjectStoreAdapter {
-  list(): Promise<SiteProjectAdapterReadResult<{ projects: readonly SiteProjectListEntry[]; active: SiteProjectActiveSelection | null; generation: number }>>;
+  list(): Promise<SiteProjectAdapterReadResult<{ projects: readonly SiteProjectListEntry[]; active: SiteProjectActiveSelection | null; generation: number; stageGenerations: Readonly<Record<string, number>> }>>;
   get(input: { projectId: string; revision: string }): Promise<SiteProjectAdapterReadResult<StoredSiteProject>>;
-  getStage(input: { projectId: string; buildId: string; approvalDigest?: string }): Promise<SiteProjectAdapterReadResult<StagedRelease>>;
-  apply(input: { project: SiteProject; stage: StagedRelease; expectedRevision: string | null; expectedActive: SiteProjectActiveSelection | null; expectedGeneration: number; verifyApproval?(): Promise<boolean> }): Promise<SiteProjectAdapterMutationResult<{ revision: string; buildId: string; active: SiteProjectActiveSelection | null }>>;
+  getStage(input: { projectId: string; buildId: string; approvalDigest?: string }): Promise<{ status: "ok"; value: StagedRelease; stageGeneration: number } | { status: "not-found" } | { status: "unavailable"; message: string }>;
+  apply(input: { project: SiteProject; stage: StagedRelease; expectedRevision: string | null; expectedActive: SiteProjectActiveSelection | null; expectedGeneration: number; verifyApproval?(): Promise<boolean> }): Promise<SiteProjectAdapterMutationResult<{ revision: string; buildId: string; stageGeneration: number; active: SiteProjectActiveSelection | null }>>;
   activate(input: { target: SiteProjectActiveSelection; expectedActive: SiteProjectActiveSelection | null }): Promise<SiteProjectAdapterMutationResult<{ active: SiteProjectActiveSelection }>>;
-  discard(input: { projectId: string; buildId: string; expectedActive: SiteProjectActiveSelection | null }): Promise<SiteProjectAdapterMutationResult<{ active: SiteProjectActiveSelection | null }>>;
+  discard(input: { projectId: string; buildId: string; expectedStageGeneration: number; expectedActive: SiteProjectActiveSelection | null }): Promise<SiteProjectAdapterMutationResult<{ active: SiteProjectActiveSelection | null }>>;
 }
 export interface SiteProjectBuildAdapter {
   complete(input: { stage: StagedRelease; build: SiteBuildPlan }): Promise<SiteProjectAdapterMutationResult<CompletedRelease>>;
@@ -54,7 +54,7 @@ export type SiteProjectApiRequest =
   | { protocolVersion: 2; operation: "apply"; plan: ReleasePlan }
   | { protocolVersion: 2; operation: "build" | "completed"; projectId: string; buildId: string }
   | { protocolVersion: 2; operation: "activate"; projectId: string; revision: string; buildId: string; expectedActive: SiteProjectActiveSelection | null }
-  | { protocolVersion: 2; operation: "discard"; projectId: string; buildId: string; expectedActive: SiteProjectActiveSelection | null };
+  | { protocolVersion: 2; operation: "discard"; projectId: string; buildId: string; expectedStageGeneration: number; expectedActive: SiteProjectActiveSelection | null };
 export interface SiteProjectApiError { code: SiteProjectApiErrorCode; message: string; identity?: SiteProjectActiveSelection; diagnostics?: readonly JsonValue[] }
 export type SiteProjectApiResponse = { ok: true; result: JsonValue } | { ok: false; error: SiteProjectApiError };
 export interface SiteProjectApiService { handle(request: unknown): Promise<SiteProjectApiResponse>; serialize(request: unknown): Promise<string> }

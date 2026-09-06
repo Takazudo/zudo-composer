@@ -12,7 +12,7 @@ import { SITE_PROJECT_API_PROTOCOL_VERSION, type CompletedRelease, type ReleaseP
 const digest = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const keys = (value: Record<string, unknown>, expected: readonly string[]) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 const active = (value: unknown): value is SiteProjectActiveSelection | null => value === null || (isPlainObject(value) && keys(value, ["projectId", "revision", "buildId"]) && isSafeRecordId(value.projectId) && digest(value.revision) && digest(value.buildId));
-const shapes = { describe: [], list: [], active: [], get: ["projectId", "revision"], plan: ["project", "workingPrecondition", "selection", "expectedRevision", "expectedActive"], apply: ["plan"], build: ["projectId", "buildId"], completed: ["projectId", "buildId"], activate: ["projectId", "revision", "buildId", "expectedActive"], discard: ["projectId", "buildId", "expectedActive"] };
+const shapes = { describe: [], list: [], active: [], get: ["projectId", "revision"], plan: ["project", "workingPrecondition", "selection", "expectedRevision", "expectedActive"], apply: ["plan"], build: ["projectId", "buildId"], completed: ["projectId", "buildId"], activate: ["projectId", "revision", "buildId", "expectedActive"], discard: ["projectId", "buildId", "expectedStageGeneration", "expectedActive"] };
 const planKeys = ["schemaVersion", "workingProject", "workingPrecondition", "candidate", "selection", "expectedRevision", "expectedActive", "storeGeneration", "projectRevision", "buildId", "mediaLock", "toolchain", "changes", "checks", "affected", "publication", "planDigest"];
 const fail = (code: SiteProjectApiErrorCode, message: string, diagnostics?: readonly unknown[]): SiteProjectApiResponse => ({ ok: false, error: { code, message, ...(diagnostics ? { diagnostics: diagnostics as JsonValue[] } : {}) } });
 const ok = (result: unknown): SiteProjectApiResponse => ({ ok: true, result: result as JsonValue });
@@ -26,6 +26,7 @@ function parse(value: unknown): SiteProjectApiRequest | SiteProjectApiResponse {
     const plan = value.plan;
     if (!isPlainObject(plan) || !keys(plan, planKeys) || plan.schemaVersion !== 2 || !digest(plan.planDigest) || !digest(plan.projectRevision) || !digest(plan.buildId) || !isPlainObject(plan.candidate) || !isPlainObject(plan.workingProject) || !active(plan.expectedActive) || !(plan.expectedRevision === null || digest(plan.expectedRevision)) || !Number.isSafeInteger(plan.storeGeneration) || Number(plan.storeGeneration) < 0 || !validateReleaseToolchain(plan.toolchain) || !(plan.mediaLock === null || validateMediaReferenceLock(plan.mediaLock)) || ![plan.selection, plan.changes, plan.checks, plan.affected, plan.publication].every(Array.isArray)) return fail("malformed-request", "Apply requires the exact detached protocol-2 approved plan.");
   }
+  if (value.operation === "discard" && (!Number.isSafeInteger(value.expectedStageGeneration) || Number(value.expectedStageGeneration) < 1)) return fail("malformed-request", "Discard requires the exact visible stage generation.");
   return value as unknown as SiteProjectApiRequest;
 }
 const adapterFailure = (result: { status: string; message?: string; identity?: SiteProjectActiveSelection }): SiteProjectApiResponse => result.status === "uncertain"
@@ -64,7 +65,7 @@ export function createSiteProjectApiService(dependencies: SiteProjectApiDependen
         const { planDigest, ...body } = approved;
         if (await dependencies.hash(releaseJson(body)) !== planDigest) return fail("conflict", "Approval digest does not match its detached plan.");
         const existing = await dependencies.projectStore.getStage({ projectId: approved.candidate.id, buildId: approved.buildId, approvalDigest: planDigest });
-        if (existing.status === "ok") return ok({ staged: existing.value, idempotent: true });
+        if (existing.status === "ok") return ok({ staged: existing.value, stageGeneration: existing.stageGeneration, idempotent: true });
         if (existing.status === "unavailable") return adapterFailure(existing);
         if (dependencies.isWorkingCurrent && !await dependencies.isWorkingCurrent(approved.workingProject, approved.workingPrecondition)) return fail("conflict", "Working generations changed after review.");
         const fresh = await plan(approved.workingProject, approved.workingPrecondition, approved.selection, approved.expectedRevision, approved.expectedActive);

@@ -26,7 +26,8 @@ describe("protocol-2 staged release API", () => {
     expect(await service.handle({ protocolVersion: 2, operation: "activate", projectId: plan.candidate.id, revision: plan.projectRevision, buildId: plan.buildId, expectedActive: null })).toMatchObject({ ok: false, error: { code: "not-found" } });
     await call(service, "build", { projectId: plan.candidate.id, buildId: plan.buildId }); expect(await call(service, "active")).toEqual({ active: null });
     const active = await release(service, plan); expect(await store.readActiveProject()).toMatchObject({ status: "ok", value: { revision: active.revision, buildId: active.buildId } });
-    expect(await service.handle({ protocolVersion: 2, operation: "discard", projectId: active.projectId, buildId: active.buildId, expectedActive: active })).toMatchObject({ ok: false, error: { code: "conflict" } });
+    expect(await service.handle({ protocolVersion: 2, operation: "discard", projectId: active.projectId, buildId: active.buildId, expectedStageGeneration: 1, expectedActive: active })).toMatchObject({ ok: false, error: { code: "conflict" } });
+    expect(await service.handle({ protocolVersion: 2, operation: "discard", projectId: active.projectId, buildId: active.buildId, expectedActive: active })).toMatchObject({ ok: false, error: { code: "malformed-request" } });
   });
   it("publishes only selected changes over the immutable activated Content baseline", async () => {
     const { service } = await fixture(); const initial = project({ entries: [entry("a", "Old A"), entry("b", "Old B")] });
