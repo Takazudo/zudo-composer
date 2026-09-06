@@ -79,4 +79,32 @@ describe("CompositionPreviewHost", () => {
     expect(renderSnapshot).toHaveBeenCalledTimes(2);
     expect(current).toHaveBeenCalledTimes(2);
   });
+
+  it("relays an already-resolved linked snapshot without projecting it to local-only data", () => {
+    const renderSnapshot = vi.fn();
+    const createBridge = vi.fn(() => ({
+      render: renderSnapshot,
+      updateSession: vi.fn(),
+      restoreFocus: vi.fn(),
+      dispose: vi.fn(),
+      ready: false,
+      terminal: false,
+      revision: 0,
+    }));
+    const local = previewDocument("consumer");
+    const source = previewDocument("source");
+    const snapshot = {
+      document: local,
+      localRecordId: "consumer",
+      linked: {
+        sourceRecordId: "source",
+        sourceDocument: source,
+        outlet: { id: "main", label: "Main", target: { parentId: "node", slotId: component.slots[0]?.id ?? "children" } },
+      },
+    };
+
+    render(<CompositionPreviewHost componentProvider={activeComponentProvider} document={null} snapshot={snapshot} createBridge={createBridge as never} location={{ src: "/composer/preview", targetOrigin: "https://example.test" }} hostWindow={{ addEventListener() {}, removeEventListener() {} }} />);
+
+    expect(renderSnapshot).toHaveBeenCalledWith(snapshot, expect.objectContaining({ mode: "preview" }));
+  });
 });

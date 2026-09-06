@@ -44,6 +44,17 @@ function openDialog(): HTMLElement {
 }
 
 describe("Dialog", () => {
+  it("leaves composing and already-handled Escape to its inner owner", () => {
+    render(<DialogHarness />);
+    const dialog = openDialog();
+    fireEvent.keyDown(dialog, { key: "Escape", isComposing: true });
+    fireEvent.keyDown(dialog, { key: "Escape", keyCode: 229 });
+    const handled = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    handled.preventDefault(); fireEvent(dialog, handled);
+    expect(dialog).toHaveAttribute("open");
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
   it("stays out of the accessibility tree until it is opened", () => {
     render(<DialogHarness />);
     expect(screen.queryByRole("dialog")).toBeNull();

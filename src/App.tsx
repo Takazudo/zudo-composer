@@ -1,16 +1,33 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Dashboard } from "./app/dashboard";
-import { createProductionProviderIntegration } from "./app/provider-integration";
+import { CatalogEditorialExampleLoader } from "./app/catalog-example-panel";
+import { createCatalogEditorialExample } from "./site-project/sample/example-loader";
+import { activeSiteProjectValidationContext } from "./app/site-project-manifest";
+import { createProductionProviderIntegration, type ProductionProviderIntegration } from "./app/provider-integration";
+import { WorkspaceContext } from "./app/workspace-context";
+import { parseIntent, formatIntent } from "./app/route-intents";
+import { Button } from "./components/ui";
+import { workspaceDatabaseName } from "./app/workspace-storage";
+import { CONTENT_DATABASE_NAME } from "./content";
+import { COMPOSER_DATABASE_NAME } from "./composer/storage/indexeddb/types";
+import { MAPPING_DATABASE_NAME } from "./mapping/storage/indexeddb/types";
+import { SITEMAPPER_DATABASE_NAME } from "./sitemapper/storage/indexeddb/types";
+import { WORKSPACE_DATABASE_NAME } from "./app/workspace-storage";
+import { createProjectMediaUsageInspection } from "./site-project/media/usage";
+import { subscribePersistenceChanges } from "./shared/persistence-generation";
 import { Shell } from "./app/shell";
 import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
 import { ContentRouteContent } from "./features/content";
 import { MappingRouteContent } from "./features/mapping";
-import { MediaRouteContent } from "./features/media";
+import { MediaFieldPicker, MediaRouteContent, createMediaContentServices } from "./features/media";
 import { SitemapperRouteContent } from "./features/sitemapper";
+import { ReleaseRoute, createReleaseController, createReleaseTransport } from "./features/release";
+import { createApplicationOperationGate } from "./app/operation-gate";
 import { SiteDelivery } from "./features/delivery/site-delivery";
-import { isSitePath } from "./features/delivery/routing";
+import { activatedDeliverySource } from "./features/delivery/activated-source";
+import { isSitePath, isWorkingPreviewPath } from "./features/delivery/routing";
 import { bootstrapTheme, createThemeController, type ThemeController } from "./theme/theme";
 
 function NotFound() { return <main class="route-placeholder"><h1>Not found</h1><p>This standalone route does not exist.</p><a href="/">Return home</a></main>; }
@@ -18,9 +35,16 @@ function NotFound() { return <main class="route-placeholder"><h1>Not found</h1><
 export interface AppProps {
   /** Main bootstrapping supplies the already-observing controller. */
   themeController?: ThemeController;
+  integration?: ProductionProviderIntegration;
 }
 
-export function App({ themeController }: AppProps = {}) {
+export function App({ themeController, integration }: AppProps = {}) {
+  const operationGate = useMemo(createApplicationOperationGate, []);
+  const [exampleGateBusy, setExampleGateBusy] = useState(operationGate.busy);
+  const [examplePreviousWorkspaceId, setExamplePreviousWorkspaceId] = useState<string>();
+  const [exampleCreationNotice, setExampleCreationNotice] = useState<string>();
+  useEffect(() => operationGate.subscribe(() => setExampleGateBusy(operationGate.busy)), [operationGate]);
+  const swapCommitted = useRef<(() => void) | null>(null);
   const ownedThemeController = useMemo(
     () => (themeController ? null : createThemeController(bootstrapTheme())),
     [themeController],
@@ -34,20 +58,196 @@ export function App({ themeController }: AppProps = {}) {
   }, [activeThemeController]);
   useEffect(() => () => ownedThemeController?.dispose(), [ownedThemeController]);
 
-  const providers = useMemo(createProductionProviderIntegration, []);
+  const [providers, setProviders] = useState(() => integration ?? createProductionProviderIntegration());
+  const activatedSource = useMemo(() => activatedDeliverySource(providers.componentProvider), [providers.componentProvider]);
+  const workingPreviewSource = useMemo(() => ({ kind: "working-preview" as const, providers }), [providers]);
+  const [location, setLocation] = useState(() => window.location.pathname + window.location.search + window.location.hash);
+  const [routeEpoch, setRouteEpoch] = useState(0);
+  const locationRef = useRef(location);
+  locationRef.current = location;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  const navigationTicket = useRef(0);
+  const replacing = useRef(false);
+  const historyIndex = useRef<number>(Number.isInteger(window.history.state?.workspaceIndex) ? window.history.state.workspaceIndex : 0);
+  const traversal = useRef<{ phase: "restoring" | "waiting" | "committing"; target: string; targetIndex: number; delta: number } | null>(null);
+  useEffect(() => { window.history.replaceState({ ...window.history.state, workspaceIndex: historyIndex.current }, ""); }, []);
+  const flush = async () => {
+    const outcome = await providers.sessions.flush();
+    if (outcome.status === "failed") throw new Error(outcome.failures.map((failure) => `${failure.feature} (${failure.providerId}${failure.recordId ? ` / ${failure.recordId}` : ""}): ${failure.error.message}`).join("; "));
+    if (outcome.status === "changed") throw new Error("Edits changed while saving. Finish the edit and try navigation again.");
+  };
+  const navigate = async (href: string, replace = false): Promise<boolean> => {
+    if (replacing.current || traversal.current) return false;
+    const ticket = ++navigationTicket.current;
+    setBusy(true); setError(null);
+    try {
+      const url = new URL(href, window.location.href);
+      if (url.origin !== window.location.origin) throw new Error("This is not a workspace destination.");
+      await flush();
+      if (ticket !== navigationTicket.current) return false;
+      if (isSitePath(url.pathname) || isWorkingPreviewPath(url.pathname) || url.pathname === "/composer/preview") { window.location.assign(url.href); return true; }
+      const next = url.pathname + url.search + url.hash;
+      if (next !== locationRef.current) setRouteEpoch((value) => value + 1);
+      if (replace || next !== locationRef.current) {
+        if (!replace) historyIndex.current++;
+        window.history[replace ? "replaceState" : "pushState"]({ workspaceIndex: historyIndex.current }, "", next);
+      }
+      setLocation(next);
+      requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus());
+      return true;
+    } catch (cause) { if (ticket === navigationTicket.current) setError(cause instanceof Error ? cause.message : "Navigation failed."); return false; }
+    finally { if (ticket === navigationTicket.current) setBusy(false); }
+  };
+  const replaceWorkspace = async (action: () => Promise<ProductionProviderIntegration>): Promise<boolean> => {
+    if (replacing.current || traversal.current || busy) return false;
+    const releaseGate = operationGate.claim("replacement"); if (!releaseGate) return false;
+    replacing.current = true;
+    setBusy(true); setError(null);
+    try { await flush(); const replacement = await action(); if (operationGate.disposed) return false; if (replacement === providers) { setReady(true); return true; } await new Promise<void>((resolve) => { swapCommitted.current = resolve; setProviders(replacement); setReady(true); }); return true; }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Workspace could not be opened. The existing workspace remains selected."); return false; }
+    finally { replacing.current = false; setBusy(false); releaseGate(); }
+  };
+  const retry = async () => {
+    setBusy(true); setError(null);
+    try { const result = await providers.initialization.retry(); if (result.status !== "ready") throw result.error; setReady(true); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Workspace initialization failed."); }
+    finally { setBusy(false); }
+  };
+  useEffect(() => {
+    let live = true;
+    setReady(false);
+    void providers.initialization.initialize().then((result) => {
+      if (!live) return;
+      if (result.status === "ready") { setReady(true); setError(null); }
+      else setError(result.error.message);
+    }).catch((cause: unknown) => { if (live) setError(cause instanceof Error ? cause.message : "Workspace initialization failed."); });
+    return () => { live = false; };
+  }, [providers]);
+  useEffect(() => {
+    const pop = (event: PopStateEvent) => {
+      // The shell owns browser traversal while mounted. Feature coordinators
+      // must not independently transition before the workspace save barrier.
+      event.stopImmediatePropagation();
+      const target = window.location.pathname + window.location.search + window.location.hash;
+      const transition = traversal.current;
+      if (transition?.phase === "committing") {
+        historyIndex.current = transition.targetIndex;
+        window.history.replaceState({ ...window.history.state, workspaceIndex: historyIndex.current }, "");
+        traversal.current = null;
+        setRouteEpoch((value) => value + 1); setLocation(target); setBusy(false);
+        requestAnimationFrame(() => document.getElementById("workspace-destination")?.focus());
+        return;
+      }
+      if (transition?.phase === "restoring") {
+        if (Number.isInteger(event.state?.workspaceIndex) && event.state.workspaceIndex !== historyIndex.current) { window.history.go(historyIndex.current - event.state.workspaceIndex); return; }
+        transition.phase = "waiting";
+        void flush().then(() => { if (traversal.current !== transition) return; transition.phase = "committing"; window.history.go(transition.delta); }).catch((cause: unknown) => {
+          if (traversal.current !== transition) return;
+          traversal.current = null; setBusy(false); setError(cause instanceof Error ? cause.message : "Navigation failed.");
+        });
+        return;
+      }
+      const targetIndex = Number.isInteger(event.state?.workspaceIndex) ? event.state.workspaceIndex as number : historyIndex.current - 1;
+      const delta = targetIndex - historyIndex.current;
+      if (!delta) return;
+      navigationTicket.current++; // Supersede any pending link navigation before rolling back.
+      // Restore the current entry by traversal, never by overwriting the
+      // destination. A rejected flush leaves Back/Forward history intact.
+      traversal.current = { phase: "restoring", target, targetIndex, delta };
+      setBusy(true); setError(null); window.history.go(-delta);
+    };
+    const selection = (event: Event) => {
+      const next = window.location.pathname + window.location.search + window.location.hash;
+      if ((event as CustomEvent).detail === "push") historyIndex.current++;
+      window.history.replaceState({ ...window.history.state, workspaceIndex: historyIndex.current }, "");
+      locationRef.current = next; setLocation(next);
+    };
+    const click = (event: MouseEvent) => {
+      if (isSitePath(new URL(locationRef.current, window.location.origin).pathname) || isWorkingPreviewPath(new URL(locationRef.current, window.location.origin).pathname)) return;
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !(event.target instanceof Element)) return;
+      const anchor = event.target.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.getAttribute("aria-disabled") === "true") return;
+      const url = new URL(anchor.href);
+      if (url.origin !== window.location.origin || !["/", "/content", "/composer", "/mapping", "/sitemapper", "/media", "/review", "/website-preview", "/site"].includes(url.pathname)) return;
+      event.preventDefault(); void navigate(url.href);
+    };
+    window.addEventListener("popstate", pop, true);
+    window.addEventListener("workspace-route-selection", selection);
+    document.addEventListener("click", click);
+    return () => { window.removeEventListener("popstate", pop, true); window.removeEventListener("workspace-route-selection", selection); document.removeEventListener("click", click); };
+  });
   // One read model for the whole chrome; the rail's counts come from it, and
   // the Dashboard route reuses this instance rather than initializing a second.
   const workspaceSummary = useMemo(() => createWorkspaceSummary(providers), [providers]);
-  const path = window.location.pathname;
+  const release = useMemo(() => createReleaseController(providers, createReleaseTransport(), operationGate), [providers, operationGate]);
+  useLayoutEffect(() => { swapCommitted.current?.(); swapCommitted.current = null; }, [providers]);
+  useEffect(() => () => { operationGate.dispose(); swapCommitted.current?.(); swapCommitted.current = null; }, [operationGate]);
+  useEffect(() => () => release.dispose(), [release]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (providers.sessions.hasPending || release.getSnapshot().busy || operationGate.kind === "replacement") { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [providers, release]);
+  const mediaContentServices = useMemo(() => createMediaContentServices(
+    providers.contentProviders,
+    () => providers.sessions.flush(),
+    (listener) => subscribePersistenceChanges((database) => {
+      const workspaceId = providers.workspace.id;
+      if (database === WORKSPACE_DATABASE_NAME || database === "compositions:files" || (workspaceId && [CONTENT_DATABASE_NAME, COMPOSER_DATABASE_NAME, MAPPING_DATABASE_NAME, SITEMAPPER_DATABASE_NAME].some((name) => database === workspaceDatabaseName(name, workspaceId)))) listener();
+    }),
+    createProjectMediaUsageInspection({
+      readProject: async () => { const result = await providers.getCurrentSiteProject({ flushSessions: false }); if (result.status !== "ready") throw new Error(result.error.message); return result.project; },
+      catalog: providers.componentProvider.catalog,
+      mediaStore: providers.mediaProvider?.store,
+      href: (location) => {
+        const path = location.selectionPath ?? location.valuePath;
+        return location.domain === "content" && location.modelId
+          ? formatIntent({ route: "content", providerId: location.providerId, modelId: location.modelId, entryId: location.recordId, ...(location.fieldId ? { fieldId: location.fieldId } : {}), ...(path.length ? { valuePath: path } : {}) })
+          : formatIntent({ route: "composer", providerId: location.providerId, compositionId: location.sourceRecordId ?? location.recordId });
+      },
+    }),
+  ), [providers]);
+  const mappingAttachmentService = useMemo(() => providers.mappingAttachmentService, [providers]);
+  useEffect(() => () => workspaceSummary.dispose?.(), [workspaceSummary]);
+  const path = new URL(location, window.location.origin).pathname;
   useEffect(() => { if (path === "/sitemapper") void providers.compositionCatalog.listCompositions().catch(() => undefined); }, [path, providers]);
-  if (isSitePath(path)) return <SiteDelivery providers={providers} pathname={path} />;
+  if (isSitePath(path)) return <SiteDelivery source={activatedSource} pathname={path} />;
+  if (isWorkingPreviewPath(path)) return <SiteDelivery source={workingPreviewSource} pathname={path} />;
   let content: ComponentChildren;
-  if (path === "/composer") content = <ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} />;
-  else if (path === "/content") content = <ContentRouteContent provider={providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} />;
-  else if (path === "/mapping") content = <MappingRouteContent provider={providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} />;
+  const intent = parseIntent(location);
+  const target = intent.status === "matched" ? intent.intent : null;
+  const providerKnown = !target || !("providerId" in target) || (target.route === "content" ? providers.contentProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "composer" ? providers.compositionProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "mapping" ? providers.mappingProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "media" ? providers.mediaProvider?.descriptor.id === target.providerId : providers.sitemapProvider.descriptor?.id === target.providerId);
+  if (!ready) content = <main class="route-placeholder"><h1>Open workspace</h1><p>{error ? "The workspace is unavailable. Retry opening it, or create a new workspace from the configured source. Existing drafts remain stored." : "Opening the selected workspace…"}</p><Button disabled={busy} onClick={() => void retry()}>Retry opening</Button><Button disabled={busy} onClick={() => void replaceWorkspace(() => providers.workspace.reset())}>Create fresh workspace</Button></main>;
+  else if (intent.status === "invalid" || !providerKnown) content = <main class="route-placeholder"><h1>Invalid workspace link</h1><p role="alert">{intent.status === "invalid" ? intent.message : "The requested provider is unavailable. No other record was selected."}</p></main>;
+  else if (path === "/composer") content = <ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} />;
+  else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} renderMediaPicker={(request) => <MediaFieldPicker provider={providers.mediaProvider} {...request} />} />;
+  else if (path === "/mapping") content = <MappingRouteContent provider={target?.route === "mapping" ? providers.mappingProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} attachmentCallbacks={mappingAttachmentService} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
-  else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} />;
-  else if (path === "/") content = <Dashboard summary={workspaceSummary} />;
+  else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} contentServices={mediaContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;
+  else if (path === "/") content = <><Dashboard summary={workspaceSummary} /><CatalogEditorialExampleLoader
+    context={activeSiteProjectValidationContext} available={!!providers.mediaProvider} busy={busy || exampleGateBusy}
+    creationNotice={exampleCreationNotice}
+    previousWorkspace={examplePreviousWorkspaceId && examplePreviousWorkspaceId !== providers.workspace.id ? { id: examplePreviousWorkspaceId, open: () => replaceWorkspace(() => providers.workspace.open(examplePreviousWorkspaceId)) } : undefined}
+    create={async () => {
+      const previousId = providers.workspace.id;
+      const opened = await replaceWorkspace(async () => {
+        const result = (await createCatalogEditorialExample({ confirmed: true, context: activeSiteProjectValidationContext, media: providers.mediaProvider, loadExample: (project, revision, commit) => providers.workspace.loadExample(project, revision, commit) }))!;
+        setExampleCreationNotice(result.message);
+        return result.value;
+      });
+      if (opened) setExamplePreviousWorkspaceId(previousId);
+      return opened;
+    }}
+  /></>;
+  else if (path === "/review") content = <ReleaseRoute controller={release} href={(item) => {
+    if (!("domain" in item)) return item.path.includes("media") ? "/media" : item.path.includes("sitemap") ? "/sitemapper" : item.path.includes("mapping") ? "/mapping" : item.path.includes("content") ? "/content" : null;
+    if (item.domain === "content-entry") { const entry = release.getSnapshot().working?.providers.content.find(({ id }) => id === item.providerId)?.entries.find(({ id }) => id === item.recordId); return entry ? formatIntent({ route: "content", providerId: item.providerId, modelId: entry.modelId, entryId: entry.id }) : "/content"; }
+    if (item.domain === "content-model") return formatIntent({ route: "content", providerId: item.providerId, modelId: item.recordId });
+    if (item.domain === "compositions") return formatIntent({ route: "composer", providerId: item.providerId, compositionId: item.recordId });
+    return item.domain === "media" ? "/media" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
+  }} />;
   else content = <NotFound />;
-  return <Shell path={path} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}>{content}</Shell>;
+  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}><div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
 }

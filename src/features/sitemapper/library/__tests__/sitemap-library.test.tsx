@@ -3,8 +3,10 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { SitemapProvider, SitemapRecord } from "../../../../sitemapper/library";
+import { SITEMAP_PROVIDERS, type SitemapProvider, type SitemapRecord } from "../../../../sitemapper/library";
 import { SitemapLibrary } from "../sitemap-library";
+import { WorkspaceContext } from "../../../../app/workspace-context";
+import type { ProductionProviderIntegration } from "../../../../app/provider-integration";
 
 const originalShowModal = HTMLDialogElement.prototype.showModal;
 const originalClose = HTMLDialogElement.prototype.close;
@@ -22,7 +24,7 @@ function record(id = "product-map", name = "Product map", unassigned = true): Si
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     document: {
-      schemaVersion: 2,
+      schemaVersion: 3, navigation: { primary: [], footer: [] },
       id,
       name,
       root: [{
@@ -48,6 +50,7 @@ function provider(initial: SitemapRecord[] = []): { provider: SitemapProvider; r
   return {
     records,
     provider: {
+      descriptor: SITEMAP_PROVIDERS.indexeddb,
       store: {
         list: async () => summaries(),
         get: async (id) => records.has(id) ? { status: "loaded", record: records.get(id)! } : { status: "not-found", id },
@@ -86,7 +89,7 @@ describe("Sitemaps library", () => {
 
     fireEvent.input(input, { target: { value: "Launch map" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?sitemap=new-map"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?provider=sitemap-indexeddb&sitemap=new-map"));
     expect(setup.records.get("new-map")?.document.name).toBe("Launch map");
     expect(prompt).not.toHaveBeenCalled();
   });
@@ -95,7 +98,7 @@ describe("Sitemaps library", () => {
     const setup = provider([record(), record("brand-map", "Brand map", false)]);
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
 
-    expect(await screen.findByRole("link", { name: "Product map" })).toHaveAttribute("href", "/sitemapper?sitemap=product-map");
+    expect(await screen.findByRole("link", { name: "Product map" })).toHaveAttribute("href", "/sitemapper?provider=sitemap-indexeddb&sitemap=product-map");
     expect(screen.getByText("1 unassigned")).toBeInTheDocument();
     expect(screen.getByText("All assigned")).toBeInTheDocument();
     expect(screen.getByText("2 of 2 sitemaps · Browser storage")).toBeInTheDocument();
@@ -161,6 +164,18 @@ describe("Sitemaps library", () => {
     expect(confirm).not.toHaveBeenCalled();
   });
 
+  it("blocks deletion of the active Sitemap before touching storage", async () => {
+    const setup = provider([record()]);
+    const metadata = { metadata: { activeSitemap: { providerId: "sitemap-indexeddb", recordId: "product-map" } } };
+    const integration = { workspace: { metadata: async () => metadata } } as unknown as ProductionProviderIntegration;
+    render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><SitemapLibrary provider={setup.provider} navigate={vi.fn()} /></WorkspaceContext.Provider>);
+    fireEvent.click(await screen.findByRole("button", { name: "More actions for Product map" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete Product map?" })).getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("The active Sitemap cannot be deleted. Select another Sitemap as active first.")).toBeInTheDocument();
+    expect(setup.records.has("product-map")).toBe(true);
+  });
+
   it("deletes a bulk selection and leaves the bulk bar behind with it", async () => {
     const setup = provider([record(), record("brand-map", "Brand map", false)]);
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
@@ -188,6 +203,18 @@ describe("Sitemaps library", () => {
 
     await waitFor(() => expect(clear).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("No sitemaps yet")).toBeInTheDocument();
+  });
+
+  it("blocks clear-library while the active Sitemap is still selected", async () => {
+    const setup = provider([record(), record("brand-map", "Brand map", false)]);
+    const clear = vi.spyOn(setup.provider.store, "clear");
+    const metadata = { metadata: { activeSitemap: { providerId: "sitemap-indexeddb", recordId: "product-map" } } };
+    const integration = { workspace: { metadata: async () => metadata } } as unknown as ProductionProviderIntegration;
+    render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><SitemapLibrary provider={setup.provider} navigate={vi.fn()} /></WorkspaceContext.Provider>);
+    fireEvent.click(await screen.findByRole("button", { name: "Clear library" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: "Clear library?" })).getByRole("button", { name: "Clear library" }));
+    expect(await screen.findByText("The active Sitemap cannot be deleted. Select another Sitemap as active first.")).toBeInTheDocument();
+    expect(clear).not.toHaveBeenCalled();
   });
 
   it("leaves the Sitemap library untouched when clearing is cancelled", async () => {
@@ -241,8 +268,8 @@ describe("Sitemaps library", () => {
 
   it("reports a malformed deep link instead of silently showing the library", async () => {
     const setup = provider();
-    render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} notice={<p role="alert">The Sitemap id is malformed.</p>} />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("The Sitemap id is malformed.");
+    render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} notice={<p role="alert">The sitemap id is malformed.</p>} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("The sitemap id is malformed.");
   });
 });
 

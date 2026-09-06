@@ -33,7 +33,8 @@ import {
   type IdFactory,
   type ReuseConsumerLifecycleOutcome,
 } from "../../../composer/browser";
-import { parseIntent } from "../../../app/route-intents";
+import { notifyRouteSelection, parseIntent } from "../../../app/route-intents";
+import { useWorkspace } from "../../../app/workspace-context";
 import { Banner, Button, EmptyState } from "../../../components/ui";
 import type { ComposerComponentProvider } from "../active-pack";
 import { CompositionLibrary } from "../library";
@@ -125,9 +126,9 @@ function lifecycleOutcomeMessage(outcome: Exclude<ReuseConsumerLifecycleOutcome,
 
 function browserNavigation(): ComposerBrowserNavigation {
   return {
-    read: () => ({ pathname: window.location.pathname, hash: window.location.hash }),
-    push: (url) => window.history.pushState(null, "", url),
-    replace: (url) => window.history.replaceState(null, "", url),
+    read: () => ({ pathname: window.location.pathname, search: window.location.search, hash: window.location.hash }),
+    push: (url) => { window.history.pushState(null, "", url); notifyRouteSelection("push"); },
+    replace: (url) => { window.history.replaceState(null, "", url); notifyRouteSelection(); },
     subscribe: (listener) => {
       let scheduled = false;
       const schedule = () => {
@@ -138,10 +139,8 @@ function browserNavigation(): ComposerBrowserNavigation {
           listener();
         });
       };
-      window.addEventListener("hashchange", schedule);
       window.addEventListener("popstate", schedule);
       return () => {
-        window.removeEventListener("hashchange", schedule);
         window.removeEventListener("popstate", schedule);
       };
     },
@@ -163,22 +162,9 @@ function canonicalResolution(
   location: ComposerRouteLocation,
   config: ComposerRouteConfig,
 ): { resolution: ReturnType<typeof parseComposerRoute>; url: string; history: ComposerTransitionIntent["history"] } {
-  if (
-    location.pathname === COMPOSER_DOCUMENT_PATH &&
-    (location.hash === "" || location.hash === "#/")
-  ) {
-    const route = { kind: "index" } as const;
-    const url = formatComposerRoute(route);
-    return {
-      resolution: { status: "matched", route },
-      url,
-      history:
-        location.hash === "#/" ? "already-applied" : "replace",
-    };
-  }
   return {
     resolution: parseComposerRoute(location, config),
-    url: `${location.pathname}${location.hash}`,
+    url: `${location.pathname}${location.search}${location.hash ?? ""}`,
     history: "already-applied",
   };
 }
@@ -204,6 +190,7 @@ export function ProductionComposerApp({
   preview,
   readIntentSearch,
 }: ProductionComposerAppProps): JSX.Element {
+  const workspaceIntegration = useWorkspace()?.integration;
   const reuseManifest = componentProvider.catalog;
   const navigation = useMemo(
     () => injectedNavigation ?? browserNavigation(),
@@ -257,7 +244,7 @@ export function ProductionComposerApp({
   // mount — a plain mount-effect flag would reopen the dialog every time the
   // index view remounts after a detour through a detail route.
   const [pendingNewIntent, setPendingNewIntent] = useState(
-    () => intentOutcome.status === "matched" && intentOutcome.intent.route === "composer" && intentOutcome.intent.action === "new",
+    () => intentOutcome.status === "matched" && intentOutcome.intent.route === "composer" && "action" in intentOutcome.intent && intentOutcome.intent.action === "new",
   );
   const [initializationNotice, setInitializationNotice] =
     useState<CompositionRecoveryOutcome | null>(null);
@@ -269,6 +256,18 @@ export function ProductionComposerApp({
   stateRef.current = state;
   const activeRef = state?.view === "detail" ? routeRef(state.route) : null;
   const activeProvider = activeRef ? providersById.get(activeRef.providerId) : undefined;
+  const editorSession = state?.view === "detail" ? state.session as ProductionDetailSession : null;
+  useEffect(() => {
+    if (!workspaceIntegration || !editorSession) return;
+    const ref = editorSession.queue.ref;
+    const registered = workspaceIntegration.sessions.register({ feature: "Composition", ...ref, workspaceId: workspaceIntegration.workspace.id }, {
+      flush: async () => { editorSession.flushPendingProps(ref); await editorSession.queue.flush(); },
+      retry: () => editorSession.queue.retry(),
+    });
+    let revision = editorSession.queue.state.draftRevision;
+    const unsubscribe = editorSession.queue.subscribe((next) => { if (revision !== next.draftRevision) { revision = next.draftRevision; registered.changed(); } });
+    return () => { unsubscribe(); registered.detach(); };
+  }, [workspaceIntegration, editorSession]);
   const activeReuseService = useMemo(
     () => (activeProvider ? createCompositionReuseService(activeProvider.store, reuseManifest) : null),
     [activeProvider],
@@ -361,6 +360,7 @@ export function ProductionComposerApp({
         return (
           locationGeneration === locationGenerationRef.current &&
           current.pathname === location.pathname &&
+          current.search === location.search &&
           current.hash === location.hash
         );
       };
@@ -565,7 +565,26 @@ export function ProductionComposerApp({
         await activeProvider.store.put(record);
         return summarizeComposition(record);
       },
-      delete: (ref) => provider(ref.providerId).store.delete(ref.recordId),
+      delete: async (ref) => {
+        const activeProvider = provider(ref.providerId);
+        const loaded = await activeProvider.store.get(ref.recordId);
+        if (loaded.status === "not-found") return false;
+        if (loaded.status !== "loaded") throw new Error(failedLoadMessage(loaded));
+        if (loaded.record.document.publication?.kind !== "global-template") {
+          return activeProvider.store.delete(ref.recordId);
+        }
+        const outcome = await createCompositionReuseLifecycleService(activeProvider, {
+          manifest: reuseManifest,
+          nodeIdFactory,
+          now: () => nowRef.current(),
+        }).deleteSource(ref);
+        if (outcome.status === "deleted") return true;
+        if (outcome.status === "not-found") return false;
+        if (outcome.status === "blocked") {
+          throw new Error(`Cannot delete this Global template while ${outcome.dependents.length} consumer${outcome.dependents.length === 1 ? " is" : "s are"} still linked.`);
+        }
+        throw new Error(outcome.message);
+      },
       clear: (providerId) => provider(providerId).store.clear(),
       exportJsx: async (ref) => {
         const activeProvider = provider(ref.providerId);
@@ -579,6 +598,50 @@ export function ProductionComposerApp({
         }
         const outcome = generateBrowserJsxExport({ record, manifest: reuseManifest, resolution });
         return { documentName: record.document.name, outcome };
+      },
+      resolvePreview: async (ref) => {
+        const activeProvider = provider(ref.providerId);
+        const loaded = await activeProvider.store.get(ref.recordId);
+        if (loaded.status !== "loaded") {
+          return {
+            status: "not-found" as const,
+            ref,
+            message: failedLoadMessage(loaded),
+          };
+        }
+        const record = cloneJson(loaded.record);
+        if (!record.document.binding) {
+          return {
+            status: "ready" as const,
+            ref,
+            revision: record.updatedAt,
+            snapshot: { document: record.document, localRecordId: record.id },
+          };
+        }
+        const resolution = await createCompositionReuseService(activeProvider.store, reuseManifest).resolve(record);
+        if (resolution.status !== "resolved") {
+          return {
+            status: "blocked" as const,
+            ref,
+            message: resolution.status === "incompatible-local-root"
+              ? resolution.message
+              : `Linked template preview is unavailable (${resolution.status.replaceAll("-", " ")}).`,
+          };
+        }
+        return {
+          status: "ready" as const,
+          ref,
+          revision: `${record.updatedAt}:${resolution.source.updatedAt}`,
+          snapshot: {
+            document: record.document,
+            localRecordId: record.id,
+            linked: {
+              sourceRecordId: resolution.source.id,
+              sourceDocument: cloneJson(resolution.source.document),
+              outlet: cloneJson(resolution.outlet),
+            },
+          },
+        };
       },
     };
   }, [idFactory, navigate, nodeIdFactory, providersById, reuseManifest]);
@@ -702,7 +765,17 @@ export function ProductionComposerApp({
       const session = state.session as ProductionDetailSession;
       await session.flushPendingProps(ref);
       await session.queue.flush();
-      await provider.store.delete(ref.recordId);
+      if (session.queue.state.draft.document.publication?.kind === "global-template") {
+        if (!activeLifecycleService) throw new Error("The active provider cannot verify Global-template dependencies.");
+        const outcome = await activeLifecycleService.deleteSource(ref);
+        if (outcome.status === "blocked") {
+          throw new Error(`Cannot delete this Global template while ${outcome.dependents.length} consumer${outcome.dependents.length === 1 ? " is" : "s are"} still linked.`);
+        }
+        if (outcome.status === "unavailable" || outcome.status === "load-error") throw new Error(outcome.message);
+        if (outcome.status === "not-found") throw new Error("This Composition no longer exists in the active provider.");
+      } else {
+        await provider.store.delete(ref.recordId);
+      }
     } catch (reason) {
       setDetailOperationError(
         reason instanceof Error ? reason.message : "The composition could not be deleted.",
@@ -712,7 +785,7 @@ export function ProductionComposerApp({
     // Replace history: the record this entry pointed at no longer exists, so
     // Back must not return to an editor for it.
     await navigate({ kind: "index" }, "replace", ref.providerId);
-  }, [navigate, providersById, state]);
+  }, [activeLifecycleService, navigate, providersById, state]);
 
   const availableProviders = useMemo(
     () => providers.map(({ descriptor }) => ({ descriptor, available: true })),
@@ -731,6 +804,7 @@ export function ProductionComposerApp({
         {transitionError && <Banner tone="err">{errorText(transitionError)}</Banner>}
         {intentOutcome.status === "invalid" && <Banner tone="err">{intentOutcome.message}</Banner>}
         <CompositionLibrary
+          componentProvider={componentProvider}
           providers={availableProviders}
           initialProviderId={preferredProviderId}
           intents={libraryIntents}

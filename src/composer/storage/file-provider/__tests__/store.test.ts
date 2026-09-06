@@ -16,6 +16,7 @@ vi.mock("virtual:composer-file-provider-config", () => ({
 }));
 
 import { createFileProviderCompositionStore } from "../store";
+import { subscribePersistenceChanges } from "../../../../shared/persistence-generation";
 
 const T1 = "2026-01-02T03:04:05.000Z";
 
@@ -47,6 +48,37 @@ beforeEach(() => {
 });
 
 describe("browser file-provider adapter", () => {
+  it("notifies committed delete, dependency-checked delete and clear, but not failed or blocked operations", async () => {
+    const changed = vi.fn(); const stop = subscribePersistenceChanges(changed);
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock })!;
+    if (!isCompositionLifecycleStore(store)) throw new Error("Missing lifecycle capability");
+    try {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: true }));
+      await store.delete("alpha");
+      fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: { status: "deleted" } }));
+      await store.deleteWithDependencyCheck("alpha");
+      fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: null }));
+      await store.clear();
+      expect(changed.mock.calls).toEqual([["compositions:files"], ["compositions:files"], ["compositions:files"]]);
+      changed.mockClear();
+      fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: { status: "blocked", dependents: [] } }));
+      await store.deleteWithDependencyCheck("alpha");
+      for (const action of [() => store.delete("alpha"), () => store.deleteWithDependencyCheck("alpha"), () => store.clear()]) {
+        fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false, error: { code: "write-failed", message: "failed" } }, 500));
+        await expect(action()).rejects.toThrow();
+      }
+      expect(changed).not.toHaveBeenCalled();
+    } finally { stop(); }
+  });
+  it("reads validated persisted snapshots without derived-output planning", async () => {
+    const result = { mutationToken: "a".repeat(64), records: [record()] };
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result }));
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock })!;
+    expect(await store.snapshot!()).toEqual(result);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]!.body))).toEqual({ operation: "snapshot" });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, result: { ...result, records: [{}] } }));
+    await expect(store.snapshot!()).rejects.toMatchObject({ code: "validation" });
+  });
   it("plans put output from the server-supplied closure without exposing paths", async () => {
     const value = record();
     fetchMock

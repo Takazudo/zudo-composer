@@ -1,3 +1,4 @@
+import { advanceMutationToken, readMutationToken, notifyPersistenceChange, PersistenceGenerationError } from "../../../shared/persistence-generation";
 import {
   compareSitemapSummariesNewestFirst,
   loadSitemapRecord,
@@ -18,7 +19,8 @@ import {
   sitemapPersistenceError,
   transactionComplete,
 } from "./provider";
-import { SITEMAPS_STORE_NAME } from "./types";
+import { SITEMAPS_STORE_NAME, META_STORE_NAME, SITEMAPPER_DATABASE_VERSION, SITEMAPPER_META_KEYS } from "./types";
+import { SITEMAP_SCHEMA_VERSION } from "../../model";
 
 interface InitializationFailure {
   id: string;
@@ -32,6 +34,23 @@ export interface SitemapInitializationScan {
 
 export class IndexedDbSitemapStore implements SitemapStore {
   constructor(private readonly runtime: IndexedDbSitemapRuntime) {}
+
+  async mutationToken(): Promise<number> {
+    return this.run("list", "readonly", (store) => readMutationToken(store.transaction));
+  }
+
+  async snapshot(): Promise<{ mutationToken: number; records: readonly SitemapRecord[] }> {
+    return this.run("list", "readonly", async (store) => {
+      const token = await readMutationToken(store.transaction);
+      const raw = await requestResult(store.getAll()) as unknown[];
+      const records = raw.map((value) => {
+        const loaded = loadSitemapRecord(value);
+        if (loaded.status !== "loaded") throw sitemapPersistenceError("list", "validation", "Invalid Sitemap snapshot.", false);
+        return loaded.record;
+      });
+      return { mutationToken: token, records };
+    });
+  }
 
   async list(): Promise<readonly SitemapSummary[]> {
     const scan = await this.scan("list");
@@ -127,12 +146,6 @@ export class IndexedDbSitemapStore implements SitemapStore {
     });
   }
 
-  async forceClear(): Promise<void> {
-    await this.run("clear", "readwrite", async (store) => {
-      await requestResult(store.clear());
-    });
-  }
-
   async scanForInitialization(): Promise<SitemapInitializationScan> {
     return this.scan("initialize");
   }
@@ -173,17 +186,28 @@ export class IndexedDbSitemapStore implements SitemapStore {
     }
     let transaction: IDBTransaction;
     try {
-      transaction = connection.db.transaction(SITEMAPS_STORE_NAME, mode);
+      transaction = connection.db.transaction([SITEMAPS_STORE_NAME, META_STORE_NAME], mode);
     } catch (error) {
       throw mapSitemapOperationalError(operation, mode, error);
     }
     const done = transactionComplete(transaction);
     try {
+      const metaRecords = await requestResult(transaction.objectStore(META_STORE_NAME).getAll()) as unknown[];
+      const schema = metaRecords.find((value) => value && typeof value === "object" && "key" in value && value.key === SITEMAPPER_META_KEYS.schema);
+      const mutation = metaRecords.find((value) => value && typeof value === "object" && "key" in value && value.key === "mutation");
+      if (metaRecords.length !== 2 || !schema || typeof schema !== "object" || Object.keys(schema).sort().join(",") !== "databaseVersion,key,recordSchemaVersion" || !("databaseVersion" in schema) || schema.databaseVersion !== SITEMAPPER_DATABASE_VERSION || !("recordSchemaVersion" in schema) || schema.recordSchemaVersion !== SITEMAP_SCHEMA_VERSION || !mutation || Object.keys(mutation).sort().join(",") !== "key,token") {
+        throw sitemapPersistenceError(operation, "unsupported-version", "Sitemap database metadata is missing or unsupported. The source was preserved; explicit reset is required.", false);
+      }
+      await readMutationToken(transaction);
       const result = await action(transaction.objectStore(SITEMAPS_STORE_NAME));
+      if (mode === "readwrite") await advanceMutationToken(transaction);
       await done;
+      if (mode === "readwrite") notifyPersistenceChange(connection.db.name);
       return result;
     } catch (error) {
+      try { transaction.abort(); } catch { /* Already completed. */ }
       void done.catch(() => undefined);
+      if (error instanceof PersistenceGenerationError) throw sitemapPersistenceError(operation, error.code, error.message, false);
       throw mapSitemapOperationalError(operation, mode, error);
     }
   }

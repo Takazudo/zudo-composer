@@ -4,6 +4,7 @@ import type {
   ContentEntryRecord,
   ContentLoadOutcome,
   ContentModelRecord,
+  ContentEntryRef,
 } from "../model";
 
 export const CONTENT_PROVIDERS = {
@@ -29,10 +30,12 @@ export interface ContentEntrySnapshot {
 }
 
 export type ContentPersistenceOperation =
+  | "read-all" | "transact" | "reconcile-publication"
   | "initialize" | "list-models" | "get-model" | "put-model" | "delete-model"
   | "count-entries" | "get-entry" | "page-entries" | "scan-entries"
   | "put-entry" | "delete-entry" | "remove-field" | "seed" | "clear";
 export type ContentPersistenceErrorCode =
+  | "conflict" | "reference-in-use" | "dependency-in-use" | "unsupported-transaction"
   | "unavailable" | "blocked" | "versionchange" | "unsupported-version"
   | "validation" | "not-found" | "immutable-kind" | "field-in-use"
   | "field-removal-required" | "single-cardinality" | "read-failed"
@@ -56,6 +59,10 @@ export interface ContentSeed {
 
 export interface ContentStore {
   readonly provider: { readonly id: string; readonly label: string };
+  readonly transactionScope: "provider" | "unsupported";
+  readAll(): Promise<ContentSnapshot>;
+  transact(mutation: ContentMutation): Promise<ContentSnapshot>;
+  reconcilePublication(reconciliations: readonly ContentPublicationReconciliation[], activationGeneration: number, signal?: AbortSignal): Promise<ContentSnapshot & { activationGeneration: number }>;
   listModels(): Promise<readonly ContentModelSummary[]>;
   getModel(id: string): Promise<ContentLoadOutcome<ContentModelRecord>>;
   putModel(record: ContentModelRecord): Promise<void>;
@@ -69,6 +76,25 @@ export interface ContentStore {
   removeField(modelId: string, fieldId: string): Promise<void>;
   seed(seed: ContentSeed): Promise<void>;
   clear(): Promise<void>;
+}
+
+export interface ContentSnapshot extends ContentSeed { providerId: string; mutationToken: number }
+export type ContentMutationOperation =
+  | { kind: "put-model"; record: ContentModelRecord }
+  | { kind: "put-entry"; record: ContentEntryRecord }
+  | { kind: "delete-entry"; id: string }
+  | { kind: "unpublish-entry"; id: string }
+  | { kind: "delete-model"; id: string }
+  | { kind: "remove-field"; modelId: string; fieldId: string };
+export interface ContentMutation {
+  expectedMutationToken: number;
+  operations: readonly ContentMutationOperation[];
+}
+export interface ContentPublicationReconciliation {
+  ref: ContentEntryRef;
+  expectedGeneration: number;
+  expectedDigest: string;
+  lifecycle: ContentEntryRecord["lifecycle"];
 }
 
 export type ContentRecoveryReason = "invalid" | "future-schema";

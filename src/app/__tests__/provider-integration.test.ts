@@ -10,6 +10,7 @@ import { activeComponentProvider } from "../../features/composer/active-pack";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import { createProductionProviderIntegration } from "../provider-integration";
 import { createWorkspaceSummary } from "../workspace-summary";
+import { workspaceDatabaseName, WORKSPACE_DATABASE_NAME } from "../workspace-storage";
 
 const sample = () => loadSampleSiteProject(activeSiteProjectValidationContext);
 const revision = (project: ReturnType<typeof sample>) => createHash("sha256").update(serializeSiteProject(project), "utf8").digest("hex");
@@ -36,6 +37,8 @@ function fileProvider(records: readonly CompositionRecord[]): CompositionProvide
     descriptor: COMPOSITION_PROVIDERS.files,
     store: {
       provider: COMPOSITION_PROVIDERS.files,
+      snapshot: async () => ({ mutationToken: JSON.stringify([...byId.values()]), records: structuredClone([...byId.values()]) }),
+      mutationToken: async () => JSON.stringify([...byId.values()]),
       list: async () => [...byId.values()].map(summarizeComposition),
       get: async (id) => { const record = byId.get(id); return record ? { status: "loaded" as const, record: structuredClone(record) } : { status: "not-found" as const, id }; },
       put: async (record) => { byId.set(record.id, structuredClone(record)); return { canonical: { status: "saved" as const }, derived: { status: "current" as const, records: [] } }; },
@@ -64,6 +67,107 @@ describe("SiteProject provider integration", () => {
     if (compiled.status === "ready") expect(compiled.build.routes).toHaveLength(7);
   });
 
+  it("does not turn Mapping save-session generation changes into attachment notifications", async () => {
+    const current = integration();
+    await current.initialization.initialize();
+    const changed = vi.fn();
+    const stop = current.mappingAttachmentService.subscribe?.(changed);
+    const session = current.sessions.register({ feature: "test", providerId: "mapping-indexeddb" }, { flush: async () => undefined });
+    session.changed();
+    await Promise.resolve();
+    expect(changed).not.toHaveBeenCalled();
+    session.detach();
+    await current.sessions.flush();
+    stop?.();
+  });
+
+  it("provides a real provider-qualified attachment aggregate with CAS persistence and materialized preview", async () => {
+    const current = integration();
+    expect(await current.initialization.initialize()).toEqual({ status: "ready" });
+    const linked = await current.compositionProviders[0]!.store.get("journal-entry-page");
+    if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
+    const detachedDocument = structuredClone(linked.record.document);
+    delete detachedDocument.binding;
+    await current.compositionProviders[0]!.store.put({ ...linked.record, document: detachedDocument });
+
+    const before = await current.mappingAttachmentService.list();
+    const target = before.targets.find((candidate) => candidate.composition.recordId === "home-page" && candidate.nodeId === "home-copy-stack" && candidate.slotId === "content");
+    if (!target) throw new Error("Expected the sample home stack named slot.");
+    expect(before.attachments).toEqual([]);
+
+    await current.mappingAttachmentService.attach({ composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } });
+    const metadata = await current.workspace.metadata();
+    expect(metadata.metadata.collectionAttachments).toHaveLength(1);
+    const attachment = metadata.metadata.collectionAttachments[0]!;
+    expect(attachment).toMatchObject({ composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } });
+
+    const after = await current.mappingAttachmentService.list();
+    expect(after.attachments).toHaveLength(1);
+    expect(after.attachments[0]!.effectiveEntries.map((entry) => entry.id)).toEqual(["article-small-loops", "article-moving-parts", "article-first-question"]);
+    expect(JSON.stringify(after.attachments[0]!.materializedDocument)).toContain("__zudo_collection_");
+    const preview = await current.mappingAttachmentService.preview(attachment);
+    expect(preview.status).toBe("ready");
+    let mutated = false;
+    await expect(current.mappingAttachmentService.withMappingMutation({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" }, async () => { mutated = true; })).rejects.toThrow(/attached/);
+    expect(mutated).toBe(false);
+    await expect(current.mappingAttachmentService.assertMappingDeletable({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" })).rejects.toThrow(/attached/);
+
+    await current.mappingAttachmentService.detach(attachment);
+    expect((await current.workspace.metadata()).metadata.collectionAttachments).toEqual([]);
+    await expect(current.mappingAttachmentService.assertMappingDeletable({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" })).resolves.toBeUndefined();
+  });
+
+  it("keeps stale attachment records detachable and scopes compiler diagnostics to their own edge", async () => {
+    const current = integration();
+    await current.initialization.initialize();
+    const linked = await current.compositionProviders[0]!.store.get("journal-entry-page");
+    if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
+    const detachedDocument = structuredClone(linked.record.document);
+    delete detachedDocument.binding;
+    await current.compositionProviders[0]!.store.put({ ...linked.record, document: detachedDocument });
+
+    const attachments = [
+      { id: "valid-attachment", order: 0, composition: { providerId: "indexeddb" as const, recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-indexeddb" as const, recordId: "journal-entry-mapping" } },
+      { id: "stale-attachment", order: 1, composition: { providerId: "indexeddb" as const, recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "missing-slot" }, mapping: { providerId: "mapping-indexeddb" as const, recordId: "journal-entry-mapping" } },
+    ];
+    const metadata = await current.workspace.metadata();
+    await current.workspace.updateMetadata(metadata.mutationToken, { collectionAttachments: attachments });
+
+    const snapshot = await current.mappingAttachmentService.list();
+    const valid = snapshot.attachments.find((item) => item.attachment.id === "valid-attachment");
+    const stale = snapshot.attachments.find((item) => item.attachment.id === "stale-attachment");
+    expect(valid?.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain("attachment-target-invalid");
+    expect(stale).toMatchObject({ target: { slotLabel: "Missing named slot", nodeId: "home-copy-stack", slotId: "missing-slot" } });
+    expect(stale?.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ severity: "blocking" })]));
+
+    await current.mappingAttachmentService.detach(stale!.attachment);
+    expect((await current.workspace.metadata()).metadata.collectionAttachments).toHaveLength(1);
+    await current.mappingAttachmentService.detach(valid!.attachment);
+    expect((await current.workspace.metadata()).metadata.collectionAttachments).toEqual([]);
+  });
+
+  it("serializes attachment writes from two integrations sharing one workspace", async () => {
+    const factories = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
+    const first = integration(factories);
+    await first.initialization.initialize();
+    const linked = await first.compositionProviders[0]!.store.get("journal-entry-page");
+    if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
+    const detachedDocument = structuredClone(linked.record.document);
+    delete detachedDocument.binding;
+    await first.compositionProviders[0]!.store.put({ ...linked.record, document: detachedDocument });
+    const second = integration(factories);
+    await second.initialization.initialize();
+    const target = (await first.mappingAttachmentService.list()).targets.find((candidate) => candidate.composition.recordId === "home-page" && candidate.nodeId === "home-copy-stack" && candidate.slotId === "content");
+    if (!target) throw new Error("Expected the sample home stack named slot.");
+    const request = { composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } };
+
+    const outcomes = await Promise.allSettled([first.mappingAttachmentService.attach(request), second.mappingAttachmentService.attach(request)]);
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === "rejected")).toHaveLength(1);
+    expect((await first.workspace.metadata()).metadata.collectionAttachments).toHaveLength(1);
+    await first.mappingAttachmentService.detach((await first.mappingAttachmentService.list()).attachments[0]!.attachment);
+  });
+
   it("is idempotent, preserves an authoring edit, and detaches snapshots from the checked-in sample", async () => {
     const current = integration(); await current.initialization.initialize(); await current.initialization.initialize();
     const before = await current.compositionProviders[0]!.store.get("services-page");
@@ -77,7 +181,7 @@ describe("SiteProject provider integration", () => {
     expect(sample().providers.compositions[0]!.records.find(({ id }) => id === "services-page")!.document.name).toBe("Services page");
   });
 
-  it("isolates browser records by exact activated revision while preserving edits within one revision", async () => {
+  it("preserves newer authoring records and metadata across changed activated source and reload", async () => {
     const factories = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
     const firstProject = sample();
     const firstRevision = revision(firstProject);
@@ -129,18 +233,9 @@ describe("SiteProject provider integration", () => {
       sitemapIdbFactory: factories.sitemap,
     });
     const secondSnapshot = await second.getCurrentSiteProject();
-    expect(secondSnapshot).toMatchObject({
-      status: "ready",
-      project: {
-        name: "Second revision source",
-        providers: {
-          compositions: [{ records: expect.arrayContaining([expect.objectContaining({ document: expect.objectContaining({ name: "Second revision services" }) })]) }],
-          content: [{ entries: expect.arrayContaining([expect.objectContaining({ values: expect.objectContaining({ "about-heading-field": "Second revision about" }) })]) }],
-          mappings: [{ records: expect.arrayContaining([expect.objectContaining({ document: expect.objectContaining({ name: "Second revision mapping" }) })]) }],
-          sitemaps: [{ records: [expect.objectContaining({ document: expect.objectContaining({ root: [expect.objectContaining({ title: "Second revision home" })] }) })] }],
-        },
-      },
-    });
+    expect(secondSnapshot).toEqual(firstSnapshot);
+    expect(second.workspace.id).toBe(first.workspace.id);
+    expect((await second.workspace.metadata()).baselineRevision).toBe(firstRevision);
   });
 
   it("rejects a non-canonical source revision before provider initialization", async () => {
@@ -166,7 +261,7 @@ describe("SiteProject provider integration", () => {
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("missing its canonical revision") } });
   });
 
-  it("fails closed before opening provider databases when revision locking fails", async () => {
+  it("fails closed before opening provider databases when workspace seed locking fails", async () => {
     const factory = new FDBFactory(); const opened: string[] = [];
     const trackedFactory = new Proxy(factory, {
       get(target, property) {
@@ -185,8 +280,8 @@ describe("SiteProject provider integration", () => {
     try {
       const project = sample();
       const current = createProductionProviderIntegration({ project, sourceRevision: revision(project) });
-      expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: true, message: expect.stringContaining("storage lock") } });
-      expect(opened).toEqual([]);
+      expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { retryable: true, message: expect.stringContaining("locking unavailable") } });
+      expect(new Set(opened)).toEqual(new Set([WORKSPACE_DATABASE_NAME]));
     } finally {
       vi.unstubAllGlobals();
       if (hadOwnLocks) Object.defineProperty(navigator, "locks", { configurable: true, value: priorLocks });
@@ -259,11 +354,13 @@ describe("SiteProject provider integration", () => {
     expect(await current.getCurrentSiteProject()).toMatchObject({ status: "ready" });
   });
 
-  it("serializes destructive startFresh and recreates the complete graph", async () => {
+  it("rejects in-place startFresh and creates a separately selected complete workspace on reset", async () => {
     const current = integration(); await current.initialization.initialize();
     const [fresh, concurrent] = await Promise.all([current.initialization.startFresh(), current.initialization.initialize()]);
-    expect(fresh).toEqual({ status: "ready" }); expect(concurrent).toEqual({ status: "ready" });
-    const snapshot = await current.getCurrentSiteProject();
+    expect(fresh).toMatchObject({ status: "error", error: { code: "reset-required" } }); expect(concurrent).toEqual({ status: "ready" });
+    const next = await current.workspace.reset();
+    expect(next.workspace.id).not.toBe(current.workspace.id);
+    const snapshot = await next.getCurrentSiteProject();
     expect(snapshot).toMatchObject({ status: "ready", project: { providers: { compositions: [{ records: expect.arrayContaining([expect.objectContaining({ id: "site-frame" })]) }], sitemaps: [{ records: [expect.objectContaining({ id: "sample-studio-sitemap" })] }] } } });
   });
 
@@ -295,7 +392,7 @@ describe("SiteProject provider integration", () => {
     expect(await prior.compositionProviders[0]!.store.delete("services-page")).toBe(true);
 
     const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: compositionFactory, contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
-    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "sitemap", message: expect.stringContaining("indexeddb:services-page") } });
+    expect(await current.getCurrentSiteProject()).toMatchObject({ status: "error" });
     expect(await current.sitemapProvider.store.list()).toEqual([]);
   });
 
@@ -312,7 +409,7 @@ describe("SiteProject provider integration", () => {
     about.source.ref.recordId = "missing-mapping";
     await prior.sitemapProvider.store.put(live);
     const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
-    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "sitemap", message: expect.stringContaining("mapping-indexeddb:missing-mapping") } });
+    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "snapshot", message: expect.stringContaining("missing-mapping") } });
   });
 
   it("exposes and snapshots exactly the declared Composition provider set", async () => {
@@ -338,7 +435,7 @@ describe("SiteProject provider integration", () => {
   it("preserves non-retryable Content version failures through initialize and retry wrappers", async () => {
     const project = sample();
     const projectRevision = revision(project);
-    const contentFactory = new FDBFactory(); const newer = await request(contentFactory.open(`${CONTENT_DATABASE_NAME}--site-project--${projectRevision}`, CONTENT_DATABASE_VERSION + 1)); newer.close();
+    const contentFactory = new FDBFactory(); const newer = await request(contentFactory.open(workspaceDatabaseName(CONTENT_DATABASE_NAME, "initial"), CONTENT_DATABASE_VERSION + 1)); newer.close();
     const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: new FDBFactory(), contentIdbFactory: contentFactory, mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
     expect(await current.contentProvider.initialization.initialize()).toMatchObject({ status: "error", error: { retryable: false, message: expect.stringContaining("newer") } });
     expect(await current.contentProvider.initialization.retry()).toMatchObject({ status: "error", error: { retryable: false, message: expect.stringContaining("newer") } });

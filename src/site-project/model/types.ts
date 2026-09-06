@@ -6,7 +6,16 @@ import type { SitemapRecord } from "../../sitemapper/library";
 import type { RecordId } from "../../shared";
 import type { SiteProjectProviderId } from "./provider-registry";
 
-export const SITE_PROJECT_SCHEMA_VERSION = 1 as const;
+export const SITE_PROJECT_SCHEMA_VERSION = 2 as const;
+
+export interface SiteProjectCollectionAttachment {
+  id: RecordId;
+  /** Deterministic authored ordering across distinct target slots. */
+  order: number;
+  composition: SiteProjectRecordRef<SiteProjectProviderId<"compositions">>;
+  target: { nodeId: string; slotId: string };
+  mapping: SiteProjectRecordRef<SiteProjectProviderId<"mappings">>;
+}
 
 export interface SiteProjectComponentPackRequirement {
   contractVersion: ComponentPackManifest["contractVersion"];
@@ -55,6 +64,7 @@ export interface SiteProject {
   componentPack: SiteProjectComponentPackRequirement;
   providers: SiteProjectProviders;
   activeSitemap: SiteProjectRecordRef<SiteProjectProviderId<"sitemaps">>;
+  collectionAttachments: SiteProjectCollectionAttachment[];
 }
 
 export type SiteProjectDiagnosticSeverity = "error";
@@ -91,7 +101,16 @@ export type SiteProjectDiagnosticCode =
   | "wrong-sitemap-provider"
   | "dangling-sitemap-route-field"
   | "dangling-sitemap-title-field"
-  | "invalid-sitemap-title-field";
+  | "invalid-sitemap-title-field"
+  | "invalid-sitemap-selected-entry"
+  | "invalid-collection-attachment"
+  | "duplicate-collection-attachment"
+  | "attachment-composition-not-found"
+  | "attachment-mapping-not-found"
+  | "attachment-mapping-not-collection"
+  | "attachment-target-not-found"
+  | "attachment-slot-not-found"
+  | "attachment-slot-conflict";
 
 export interface SiteProjectDiagnostic {
   severity: SiteProjectDiagnosticSeverity;

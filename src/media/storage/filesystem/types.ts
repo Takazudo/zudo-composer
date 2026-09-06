@@ -1,11 +1,12 @@
 import type { IdFactory } from "../../../shared/id-factory";
 import type { SafeRootFilesystemOperations } from "../../../shared/node-fs";
+import type { link } from "node:fs/promises";
 import type { MediaByteSource, MediaType } from "../../library";
 
-export type FilesystemMediaStoreOperations = SafeRootFilesystemOperations;
+export interface FilesystemMediaStoreOperations extends SafeRootFilesystemOperations { link: typeof link }
 
 export interface FilesystemMediaStoreOptions {
-  /** The fixed `media-store` directory containing records/ and public/. */
+  /** The fixed `media-store` directory containing catalog.json, private versions/ and static public/. */
   mediaStoreRoot: string;
   /** Test/fault-injection seam. Omitted methods use Node's filesystem. */
   operations?: Partial<FilesystemMediaStoreOperations>;
@@ -23,7 +24,12 @@ export interface MediaUploadInput {
   declaredMediaType: string;
   bytes: MediaByteSource;
   signal?: AbortSignal;
+  folderId?: string | null;
+  note?: string;
+  expectedMutationToken?: string;
 }
+
+export interface MediaReplaceInput { bytes: MediaByteSource; signal?: AbortSignal }
 
 export interface SniffedMedia {
   mediaType: MediaType;

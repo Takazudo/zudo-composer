@@ -11,6 +11,11 @@ import {
   type SitemapCommandResult,
   type SitemapPagePropsPatch,
 } from "../../../sitemapper/commands";
+import {
+  editSitemapNavigation,
+  type SitemapMenu,
+  type SitemapNavigationCommand,
+} from "../../../sitemapper/commands/navigation";
 import { traversalOrder } from "../../../sitemapper/model";
 import type { SitemapDocument } from "../../../sitemapper/model";
 
@@ -40,7 +45,8 @@ export type SitemapperAction =
   | { type: "select"; pageId: string | null }
   | { type: "toggleExpanded"; pageId: string }
   | { type: "setExpanded"; pageId: string; expanded: boolean }
-  | { type: "setExpandedIds"; pageIds: readonly string[] };
+  | { type: "setExpandedIds"; pageIds: readonly string[] }
+  | { type: "editNavigation"; menu: SitemapMenu; command: SitemapNavigationCommand };
 
 export interface SitemapperReducerResult {
   state: SitemapperControllerState;
@@ -78,6 +84,20 @@ function commandResult(
   if (!result.changed) return { state, error: null, documentChanged: false };
   return {
     state: { ...state, document: result.document, selectedId: result.selectedId },
+    error: null,
+    documentChanged: true,
+  };
+}
+
+function navigationResult(
+  state: SitemapperControllerState,
+  menu: SitemapMenu,
+  command: SitemapNavigationCommand,
+): SitemapperReducerResult {
+  const result = editSitemapNavigation(state.document, menu, command);
+  if (!result.ok) return { state, error: `Navigation could not be updated (${result.code}).`, documentChanged: false };
+  return {
+    state: { ...state, document: result.document },
     error: null,
     documentChanged: true,
   };
@@ -137,5 +157,7 @@ export function applySitemapperAction(
         error: null,
         documentChanged: false,
       };
+    case "editNavigation":
+      return navigationResult(state, action.menu, action.command);
   }
 }

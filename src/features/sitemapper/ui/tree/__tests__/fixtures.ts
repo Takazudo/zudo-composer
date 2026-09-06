@@ -11,7 +11,7 @@ export function page(
 
 export function fixtureDocument(): SitemapDocument {
   return {
-    schemaVersion: SITEMAP_SCHEMA_VERSION,
+    schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] },
     id: "tree-test",
     name: "Tree test",
     root: [

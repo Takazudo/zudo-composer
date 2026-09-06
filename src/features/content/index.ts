@@ -6,4 +6,5 @@ export * from "./markdown-editor";
 export * from "./markdown-formatting";
 export * from "./presentation";
 export * from "./route-content";
+export type { ContentMediaPickerRenderer } from "./structured-field-editor";
 export * from "./preview-source";

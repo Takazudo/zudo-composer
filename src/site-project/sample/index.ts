@@ -2,6 +2,8 @@ import rawSampleSiteProject from "./sample-site-project.json";
 import { validateSiteProject } from "../model/validation";
 import type { SiteProject, SiteProjectValidationContext } from "../model/types";
 
+export * from "./catalog-editorial";
+
 /** Load a detached copy of the checked-in sample after validating the active public pack contract. */
 export function loadSampleSiteProject(context: SiteProjectValidationContext): SiteProject {
   const result = validateSiteProject(structuredClone(rawSampleSiteProject), context);

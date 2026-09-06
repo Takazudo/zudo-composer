@@ -8,7 +8,7 @@ export const CONTENT_META_STORE_NAME = "meta";
 export const CONTENT_MODEL_CREATED_AT_INDEX = "createdAt-id";
 export const CONTENT_ENTRY_MODEL_CREATED_AT_INDEX = "modelId-createdAt-id";
 export const CONTENT_ENTRY_MODEL_INDEX = "modelId";
-export const CONTENT_META_KEYS = { schema: "schema" } as const;
+export const CONTENT_META_KEYS = { schema: "schema", mutation: "mutation", activation: "activation" } as const;
 
 export interface ContentSchemaMeta {
   key: typeof CONTENT_META_KEYS.schema;

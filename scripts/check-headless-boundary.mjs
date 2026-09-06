@@ -23,7 +23,7 @@ const forbidden = [
   ['provider application coupling', /@zudo-sg\/ui|zudo-doc|@takazudo\/zfb|\bzfb\b/i],
   ['application alias', /(?:from|import\()\s*["']@\//],
   ['removed source adapter', /sourceAdapters?|JsxSourceAdapter/],
-  ['removed schema compatibility', /COMPOSITION_SCHEMA_V1|decodedFromSchemaVersion|MigrationMeta|CleanupMeta|localStorage/i],
+  ['removed schema compatibility', /COMPOSITION_SCHEMA_V1|decodedFromSchemaVersion|MigrationMeta|CleanupMeta|\blocalStorage\b/i],
   ['headless Preact dependency', /(?:^|\n)\s*import\s+(?:type\s+)?(?:[^;\n]+?\s+from\s+)?["']preact(?:\/|["'])/],
   ['application-layer dependency', /(?:from|import\()\s*["'][^"']*(?:features|src\/app|\/app\/)[^"']*["']/],
 ];

@@ -18,11 +18,14 @@ import {
   type ChipTone,
   type DataTableColumn,
 } from "../../components/ui";
-import type { MappingTarget, MappingTransform } from "../../mapping";
+import type { MappingBinding, MappingTarget, MappingTransform } from "../../mapping";
 import { BindMenu } from "./bind-menu";
 import {
   compatibleSourceGroups,
   fieldIcon,
+  parseProjectionKey,
+  projectionKey,
+  projectionLabel,
   targetKey,
   targetKindIcon,
   targetLabel,
@@ -45,6 +48,7 @@ export interface BindingsPaneProps {
   notice?: JSX.Element | null;
   onBind: (sourceFieldId: string, target: MappingTarget) => void;
   onRebind: (bindingId: string, sourceFieldId: string) => void;
+  onProjection: (bindingId: string, projection: MappingBinding["projection"]) => void;
   onTransform: (bindingId: string, transform: MappingTransform) => void;
   onMove: (bindingId: string, direction: -1 | 1) => void;
   onRemove: (bindingId: string) => void;
@@ -98,6 +102,7 @@ export function BindingsPane({
   notice,
   onBind,
   onRebind,
+  onProjection,
   onTransform,
   onMove,
   onRemove,
@@ -132,6 +137,19 @@ export function BindingsPane({
       header: "Transform",
       cell: (row) => (
         <span class="cms-mapping-transform">
+          <Select
+            size="sm"
+            value={projectionKey(row.binding.projection)}
+            aria-label={`Projection for ${rowName(row)}`}
+            onChange={(event) => onProjection(row.binding.id, parseProjectionKey(event.currentTarget.value, row.projections))}
+          >
+            {row.projections.length === 0 ? <option value={projectionKey(row.binding.projection)}>{projectionLabel(row.binding.projection, row.source)}</option> : null}
+            {row.projections.map((projection) => (
+              <option key={projectionKey(projection.projection)} value={projectionKey(projection.projection)}>
+                {projection.label}
+              </option>
+            ))}
+          </Select>
           <Select
             size="sm"
             value={row.binding.transform.kind}

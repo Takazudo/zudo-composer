@@ -7,6 +7,7 @@ import type { CompositionCatalog } from "../catalog";
 import type { AppliedMappingBinding, MappingDefinitionDiagnostic, MappingDefinitionResolution, MappingEntryDiagnostic, MappingEvaluationResult, MappingRecord, ResolvedMappingBinding } from "../model";
 import { validateMappingTransform } from "../model";
 import { applyMappingTransform, isCanonicalDate, isMappingCompatible } from "./compatibility";
+import { projectContentValue, resolveMappingProjectionDefinition, type MappingRouteProjectionResolver } from "./projections";
 import { discoverMappingTargets } from "./targets";
 
 function targetKey(target: { nodeId: string; prop: string }): string { return `${target.nodeId}\u0000${target.prop}`; }
@@ -29,18 +30,20 @@ export async function resolveMappingDefinition(mapping: MappingRecord, catalogs:
       const structuredTarget = structuredTargetByKey.get(key);
       diagnostics.push({ scope: "definition", severity: "blocking", code: structuredTarget ? "structured-target-unsupported" : nodeExists ? "target-field-missing" : "target-node-missing", bindingId: binding.id, target: binding.target, message: structuredTarget?.message ?? (nodeExists ? `Target field "${binding.target.prop}" no longer exists on node "${binding.target.nodeId}".` : `Target node "${binding.target.nodeId}" no longer exists.`) });
     }
+    const projection = source ? resolveMappingProjectionDefinition(source, binding.projection) : undefined;
+    if (projection?.status === "invalid") diagnostics.push({ scope: "definition", severity: "blocking", code: "source-projection-invalid", bindingId: binding.id, sourceFieldId: source?.id, message: projection.message });
     if (!validateMappingTransform(binding.transform)) diagnostics.push({ scope: "definition", severity: "blocking", code: "invalid-transform-config", bindingId: binding.id, message: `Binding "${binding.id}" has an invalid transform configuration.` });
-    else if (source && target && !isMappingCompatible(source.kind, target.kind, binding.transform)) diagnostics.push({ scope: "definition", severity: "blocking", code: "incompatible-binding", bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `${source.kind} cannot map to ${target.kind} with ${binding.transform.kind}.` });
-    else if (source && target && !seenTargets.has(`accepted:${key}`)) { bindings.push({ binding, source, target }); seenTargets.add(`accepted:${key}`); }
+    else if (projection?.status === "ready" && target && !isMappingCompatible(projection.kind, target.kind, binding.transform)) diagnostics.push({ scope: "definition", severity: "blocking", code: "incompatible-binding", bindingId: binding.id, sourceFieldId: source?.id, target: binding.target, message: `${projection.kind} cannot map to ${target.kind} with ${binding.transform.kind}.` });
+    else if (source && target && projection?.status === "ready" && !seenTargets.has(`accepted:${key}`)) { bindings.push({ binding, source, target }); seenTargets.add(`accepted:${key}`); }
   }
   return { status: diagnostics.length ? "blocked" : "ready", mapping, contentModel: content.record, composition: composition.record, targets: discovery.targets, bindings, diagnostics };
 }
 
 function findNode(nodes: readonly CompositionNode[], id: string): CompositionNode | undefined { for (const node of nodes) { if (node.id === id) return node; for (const children of Object.values(node.slots)) { const found = findNode(children, id); if (found) return found; } } return undefined; }
 
-export async function evaluateMapping(mapping: MappingRecord, entry: ContentEntryRecord, catalogs: { content: ContentCatalog; compositions: CompositionCatalog }, manifest: ComponentCatalog): Promise<MappingEvaluationResult> {
+export async function evaluateMapping(mapping: MappingRecord, entry: ContentEntryRecord, catalogs: { content: ContentCatalog; compositions: CompositionCatalog }, manifest: ComponentCatalog, options: { routeResolver?: MappingRouteProjectionResolver } = {}): Promise<MappingEvaluationResult> {
   const definition = await resolveMappingDefinition(mapping, catalogs, manifest);
-  return evaluateResolvedMapping(definition, entry);
+  return evaluateResolvedMapping(definition, entry, options);
 }
 
 /**
@@ -50,7 +53,7 @@ export async function evaluateMapping(mapping: MappingRecord, entry: ContentEntr
  * and synchronous so authoring surfaces can render every current draft
  * revision without rereading either Content or Mapping storage.
  */
-export function evaluateResolvedMapping(definition: MappingDefinitionResolution, entry: ContentEntryRecord): MappingEvaluationResult {
+export function evaluateResolvedMapping(definition: MappingDefinitionResolution, entry: ContentEntryRecord, options: { routeResolver?: MappingRouteProjectionResolver } = {}): MappingEvaluationResult {
   const mapping = definition.mapping;
   const document = definition.composition ? cloneJson(definition.composition.document) : undefined;
   if (definition.status === "blocked" || !document) return { status: "blocked", ...(document ? { document } : {}), definitionDiagnostics: definition.diagnostics, entryDiagnostics: [], appliedBindings: [], appliedBindingCount: 0, unchangedStaticCount: mapping.document.bindings.length };
@@ -59,9 +62,13 @@ export function evaluateResolvedMapping(definition: MappingDefinitionResolution,
   for (const resolved of definition.bindings) {
     const { binding, source, target } = resolved; const value = entry.values[source.id];
     if (value === undefined || (typeof value === "string" && value.trim().length === 0)) { const blocking = source.required; entryDiagnostics.push({ scope: "entry", severity: blocking ? "blocking" : "nonblocking", code: blocking ? "required-value-missing" : "optional-value-missing", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `${blocking ? "Required" : "Optional"} source field "${source.label}" has no value; the static target value is unchanged.` }); continue; }
+    if (source.kind === "date" && typeof value === "string" && !isCanonicalDate(value)) { entryDiagnostics.push({ scope: "entry", severity: "blocking", code: "invalid-canonical-date", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `Source date for "${source.label}" is not canonical YYYY-MM-DD.` }); continue; }
     if (!isValueValidForField(source, value)) { entryDiagnostics.push({ scope: "entry", severity: "blocking", code: "invalid-source-value", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `Source value for "${source.label}" does not match ${source.kind}.` }); continue; }
-    if (source.kind === "date" && !isCanonicalDate(value as string)) { entryDiagnostics.push({ scope: "entry", severity: "blocking", code: "invalid-canonical-date", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `Source date for "${source.label}" is not canonical YYYY-MM-DD.` }); continue; }
-    const transformed = applyMappingTransform(value as string | number | boolean, binding.transform);
+    const projected = projectContentValue({ field: source, entry, projection: binding.projection, providerId: mapping.document.contentModel.providerId, ...(options.routeResolver ? { routeResolver: options.routeResolver } : {}) });
+    if (projected.status !== "projected") { entryDiagnostics.push({ scope: "entry", severity: "blocking", code: projected.status === "invalid" ? "source-projection-invalid" : projected.status, entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: projected.message }); continue; }
+    const projection = resolveMappingProjectionDefinition(source, binding.projection);
+    if (projection.status === "ready" && projection.kind === "date" && typeof projected.value === "string" && !isCanonicalDate(projected.value)) { entryDiagnostics.push({ scope: "entry", severity: "blocking", code: "invalid-canonical-date", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `Source date for "${source.label}" is not canonical YYYY-MM-DD.` }); continue; }
+    const transformed = applyMappingTransform(projected.value as string | number | boolean, binding.transform);
     if (target.kind === "select" && !target.options?.includes(transformed as string)) { entryDiagnostics.push({ scope: "entry", severity: "blocking", code: "select-option-invalid", entryId: entry.id, bindingId: binding.id, sourceFieldId: source.id, target: binding.target, message: `Value "${String(transformed)}" is not a current option for "${target.fieldLabel}".` }); continue; }
     const node = findNode(document.root, target.target.nodeId); if (node) { node.props[target.target.prop] = transformed; appliedBindings.push({ bindingId: binding.id, sourceFieldId: source.id, target: { ...target.target }, value: transformed }); }
   }

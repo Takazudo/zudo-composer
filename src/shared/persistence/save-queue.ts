@@ -135,8 +135,8 @@ export interface SaveQueue<
   /** Resolve once the newest draft is saved, or reject at the first persistent failure. */
   flush(): Promise<void>;
   /**
-   * Detach immediately and resolve after the current write settles. Pending drafts are not
-   * started; route transitions that require persistence must successfully flush first.
+   * Stop accepting edits and drain the newest retained draft, including writes
+   * queued behind an active write. Failures remain available to flush/retry.
    */
   close(): Promise<void>;
   /** Subscribe to state transitions. The current state is delivered immediately. */
@@ -275,7 +275,6 @@ class RevisionAwareSaveQueue<
   }
 
   retry(): void {
-    this.assertOpen();
     if (this.active || this.savedRevision === this.latest.revision) return;
     this.failure = null;
     this.publish();
@@ -283,7 +282,6 @@ class RevisionAwareSaveQueue<
   }
 
   flush(): Promise<void> {
-    if (this.isClosed) return Promise.reject(this.errors.closed());
     if (this.failure) return Promise.reject(this.failure.error);
     if (this.savedRevision === this.latest.revision) return Promise.resolve();
 
@@ -298,11 +296,11 @@ class RevisionAwareSaveQueue<
     if (this.closePromise) return this.closePromise;
 
     this.isClosed = true;
-    const error = this.errors.closed();
-    this.rejectFlushWaiters(error);
-    const activeSettlement = this.active?.settled ?? Promise.resolve();
     this.publish();
-    this.closePromise = activeSettlement.then(() => undefined);
+    this.closePromise = this.flush();
+    // Unmount callers commonly discard close's return value. Keep failure in
+    // state and future flush calls while preventing an unhandled rejection.
+    void this.closePromise.catch(() => undefined);
     return this.closePromise;
   }
 
@@ -337,7 +335,6 @@ class RevisionAwareSaveQueue<
 
   private startNewestAttempt(): void {
     if (
-      this.isClosed ||
       this.active ||
       this.failure ||
       this.savedRevision === this.latest.revision
@@ -364,7 +361,7 @@ class RevisionAwareSaveQueue<
   ): void {
     if (!this.active || this.active.token !== token) return;
     this.active = null;
-    if (this.isClosed || !sameRef(snapshot.ref, this.ref)) return;
+    if (!sameRef(snapshot.ref, this.ref)) return;
 
     this.savedRevision = Math.max(this.savedRevision, snapshot.revision);
     this.lastOutcome = result === undefined ? undefined : result;
@@ -383,7 +380,7 @@ class RevisionAwareSaveQueue<
   ): void {
     if (!this.active || this.active.token !== token) return;
     this.active = null;
-    if (this.isClosed || !sameRef(snapshot.ref, this.ref)) return;
+    if (!sameRef(snapshot.ref, this.ref)) return;
 
     const error = this.errors.persistence(reason);
     this.failure = { revision: snapshot.revision, error };
@@ -453,7 +450,7 @@ class RevisionAwareSaveQueue<
   }
 
   private resolveFlushWaiters(): void {
-    if (this.savedRevision !== this.latest.revision || this.failure || this.isClosed) return;
+    if (this.savedRevision !== this.latest.revision || this.failure) return;
     const waiters = [...this.flushWaiters];
     this.flushWaiters.clear();
     for (const waiter of waiters) waiter.resolve();

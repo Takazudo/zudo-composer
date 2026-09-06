@@ -4,8 +4,8 @@ const createdAt = "2026-01-02T03:04:05.000Z";
 const contentModel = { providerId: "content-indexeddb", recordId: "article-model" };
 const composition = { providerId: "indexeddb" as const, recordId: "article-page" };
 const bindings: readonly MappingBinding[] = [
-  { id: "binding-title", sourceFieldId: "field-title", target: { nodeId: "hero-node", prop: "title" }, transform: { kind: "identity" } },
-  { id: "binding-summary", sourceFieldId: "field-summary", target: { nodeId: "body-node", prop: "body" }, transform: { kind: "truncate-160" } },
+  { id: "binding-title", sourceFieldId: "field-title", projection: { kind: "value" }, target: { nodeId: "hero-node", prop: "title" }, transform: { kind: "identity" } },
+  { id: "binding-summary", sourceFieldId: "field-summary", projection: { kind: "value" }, target: { nodeId: "body-node", prop: "body" }, transform: { kind: "truncate-160" } },
 ];
 
 /** Browser-verification fixture matrix: populated, empty, invalid-long-label, dialog and broken-ref states. */

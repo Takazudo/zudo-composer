@@ -1,206 +1,206 @@
-import type { MediaInitializationOutcome, MediaProvider, MediaSummary } from "../../media";
-
-export type MediaReferenceScan =
-  | { status: "idle" }
-  | { status: "scanning"; mediaId: string }
-  | { status: "complete"; mediaId: string; references: readonly string[] }
-  | { status: "unavailable"; mediaId: string; message: string }
-  | { status: "error"; mediaId: string; message: string };
-
-/**
- * Feedback for one completed action, rendered as a dismissible `Banner`.
- *
- * The route used to keep a `message` string in the header and rewrite it on
- * every transition, which made a permanent line of prose out of what is really
- * an event. A notice is replaced by the next action and can be dismissed;
- * durable state (connected provider, failed store) is a chip or a banner of its
- * own, never this.
- */
-export interface MediaNotice {
-  readonly tone: "info" | "err";
-  readonly text: string;
-}
-
-export interface MediaLibraryState {
-  phase: "idle" | "loading" | "ready" | "recovery" | "error";
-  records: readonly MediaSummary[];
-  /** Why the store could not be read; only set in the `error` phase. */
-  errorMessage: string | null;
-  recoveryMessage: string | null;
-  notice: MediaNotice | null;
-  referenceScan: MediaReferenceScan;
-}
+import { summarizeMedia, type MediaProvider, type MediaSummary, type MediaSnapshot, type MediaRecord, type MediaMetadataPatch, type MediaFolderPatch } from "../../media";
+import type { MediaFileProviderStore } from "../../media/storage/file-provider";
+import type { MediaContentServices, MediaUsageScan, MediaInsertionTarget, MediaUse } from "../../media/integration/content";
 
 export interface MediaLibraryControllerOptions {
   writeClipboard?: (text: string) => void | Promise<void>;
-  /** Integrations may scan known sources, but these results can never prove safety. */
-  scanReferences?: (mediaUrl: string) => Promise<readonly string[]>;
+  contentServices?: MediaContentServices;
 }
-
-const initialState: MediaLibraryState = {
-  phase: "idle",
-  records: [],
-  errorMessage: null,
-  recoveryMessage: null,
-  notice: null,
-  referenceScan: { status: "idle" },
-};
-
-const errorMessage = (reason: unknown, fallback: string): string => reason instanceof Error ? reason.message : fallback;
-
-const MEDIA_PUBLIC_EXTENSION = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/gif": "gif",
-  "image/webp": "webp",
-  "application/pdf": "pdf",
-} as const satisfies Record<MediaSummary["mediaType"], string>;
-
-export function mediaPublicFileName(record: Pick<MediaSummary, "id" | "mediaType">): string {
-  return `media-${record.id}.${MEDIA_PUBLIC_EXTENSION[record.mediaType]}`;
+export interface MediaLibraryState {
+  phase: "idle" | "loading" | "ready" | "recovery" | "error";
+  records: readonly MediaSummary[];
+  snapshot: MediaSnapshot | null;
+  errorMessage: string | null;
+  recoveryMessage: string | null;
+  notice: { tone: "info" | "err"; text: string } | null;
+  busy: boolean;
+  operation: string | null;
+  generation: number;
+  uncertain: boolean;
 }
-
-export function mediaUrl(record: Pick<MediaSummary, "id" | "mediaType">): string {
-  return `/uploaded-media/${encodeURIComponent(mediaPublicFileName(record))}`;
+export function versionedMediaStore(provider: MediaProvider): MediaFileProviderStore | undefined {
+  const store = provider.store as Partial<MediaFileProviderStore>;
+  return store.capabilities?.snapshot && typeof store.snapshot === "function" ? store as MediaFileProviderStore : undefined;
 }
-
-export function mediaMarkdown(record: Pick<MediaSummary, "id" | "mediaType" | "fileName">): string {
-  const alt = record.fileName
-    .replace(/\.[^.]+$/, "")
-    .replace(/([\\[\]])/g, "\\$1");
-  return `![${alt}](${mediaUrl(record)})`;
+export function mediaPublicFileName(record: Pick<MediaSummary, "url">): string { return record.url.split("/").at(-1)!; }
+export function mediaUrl(record: Pick<MediaSummary, "authoringUrl">): string { return record.authoringUrl; }
+export function mediaMarkdown(record: Pick<MediaSummary, "authoringUrl" | "fileName" | "mediaType">): string {
+  const label = record.fileName.replace(/\.[^.]+$/, "").replace(/([\\[\]])/g, "\\$1");
+  return `${record.mediaType.startsWith("image/") ? "!" : ""}[${label}](${record.authoringUrl})`;
 }
+const message = (error: unknown) => error instanceof Error ? error.message : "Media operation failed.";
 
 export class MediaLibraryController {
-  private current: MediaLibraryState = initialState;
-  private readonly listeners = new Set<(state: MediaLibraryState) => void>();
-  private readonly writeClipboard: (text: string) => void | Promise<void>;
-  private readonly scanReferences?: (mediaUrl: string) => Promise<readonly string[]>;
-  private listRequestId = 0;
-  private referenceRequestId = 0;
-  private alive = true;
-
-  constructor(readonly provider: MediaProvider, options: MediaLibraryControllerOptions = {}) {
-    this.writeClipboard = options.writeClipboard ?? ((text) => {
-      if (!globalThis.navigator?.clipboard) throw new Error("Clipboard access is unavailable.");
-      return globalThis.navigator.clipboard.writeText(text);
+  private current: MediaLibraryState = { phase: "idle", records: [], snapshot: null, errorMessage: null, recoveryMessage: null, notice: null, busy: false, operation: null, generation: 0, uncertain: false };
+  private listeners = new Set<(state: MediaLibraryState) => void>();
+  private request = 0;
+  private pending: Promise<unknown> = Promise.resolve();
+  private drafts = new Map<string, { record: MediaSummary; patch: MediaMetadataPatch }>();
+  private draftSaves = new Map<string, Promise<void>>();
+  private flushing: Promise<void> | undefined;
+  readonly store: MediaFileProviderStore | undefined;
+  readonly contentServices: MediaContentServices | undefined;
+  constructor(readonly provider: MediaProvider, private options: MediaLibraryControllerOptions = {}) {
+    this.store = versionedMediaStore(provider); this.contentServices = options.contentServices;
+  }
+  get state() { return this.current; }
+  subscribe(listener: (state: MediaLibraryState) => void) { this.listeners.add(listener); listener(this.current); return () => { this.listeners.delete(listener); }; }
+  private set(patch: Partial<MediaLibraryState>) { this.current = { ...this.current, ...patch }; for (const listener of this.listeners) listener(this.current); }
+  reportFailure(error: unknown) { this.set({ notice: { tone: "err", text: message(error) } }); }
+  clearNotice() { this.set({ notice: null }); }
+  async initialize() {
+    this.set({ phase: "loading" });
+    try {
+      const outcome = await this.provider.initialization.initialize();
+      if (outcome.status === "error") throw outcome.error;
+      if (outcome.status === "recovery-required") { this.set({ phase: "recovery", recoveryMessage: outcome.recovery.message, records: outcome.summaries }); return; }
+      await this.refresh();
+    } catch (error) { this.set({ phase: "error", errorMessage: message(error) }); }
+  }
+  retryInitialization() { return this.initialize(); }
+  async reload() {
+    if (this.current.busy) throw new Error("Wait for the pending operation before inspecting current state.");
+    await this.refresh();
+    if (this.current.phase !== "ready" || (this.store && !this.current.snapshot)) throw new Error("Authoritative Media inspection did not complete.");
+    this.pending = Promise.resolve();
+    this.set({ uncertain: false, notice: { tone: "info", text: "Authoritative state reloaded. Inspect current records before starting a new operation; unsaved drafts retain their original revisions." } });
+  }
+  async refresh() {
+    const request = ++this.request;
+    this.set({ phase: "loading" });
+    try {
+      const snapshot = this.store ? await this.store.snapshot() : null;
+      const records = snapshot ? snapshot.records.map(summarizeMedia) : await this.provider.store.list();
+      if (request === this.request) this.set({ snapshot, records, phase: "ready", errorMessage: null, recoveryMessage: null });
+    } catch (error) { if (request === this.request) this.set({ phase: "error", errorMessage: message(error) }); throw error; }
+  }
+  capability(name: keyof NonNullable<MediaFileProviderStore["capabilities"]>): boolean { return this.current.phase === "ready" && !this.current.uncertain && this.store?.capabilities[name] === true; }
+  private requireStore(capability: keyof MediaFileProviderStore["capabilities"]): MediaFileProviderStore {
+    if (!this.store || !this.capability(capability)) throw new Error(`Media ${capability} is unavailable for this provider.`);
+    return this.store;
+  }
+  /** Pending writes survive presentation unmount and are visible to release flush. */
+  flush(): Promise<void> {
+    if (this.flushing) return this.flushing;
+    const run = Promise.resolve().then(async () => {
+      await this.pending;
+      while (this.drafts.size) await this.saveDraft(this.drafts.keys().next().value!);
     });
-    this.scanReferences = options.scanReferences;
+    this.flushing = run;
+    void run.finally(() => { if (this.flushing === run) this.flushing = undefined; }).catch(() => undefined);
+    return run;
   }
-
-  get state(): MediaLibraryState { return this.current; }
-  subscribe(listener: (state: MediaLibraryState) => void): () => void { this.listeners.add(listener); listener(this.current); return () => this.listeners.delete(listener); }
-  async initialize(): Promise<void> { await this.runInitialization(() => this.provider.initialization.initialize()); }
-  async retryInitialization(): Promise<void> { await this.runInitialization(() => this.provider.initialization.retry()); }
-  async startFresh(): Promise<void> { await this.runInitialization(() => this.provider.initialization.startFresh()); }
-
-  /** Reports an action failure raised outside the controller's own methods. */
-  reportFailure(reason: unknown, fallback = "Media action failed."): void {
-    this.set({ ...this.current, notice: { tone: "err", text: errorMessage(reason, fallback) } });
+  draftMetadata(record: MediaSummary, patch: MediaMetadataPatch) {
+    this.drafts.set(record.id, { record, patch: { ...this.drafts.get(record.id)?.patch, ...patch } });
+    this.set({ generation: this.current.generation + 1 });
   }
-
-  clearNotice(): void {
-    if (this.current.notice !== null) this.set({ ...this.current, notice: null });
+  saveDraft(id: string): Promise<void> {
+    const active = this.draftSaves.get(id);
+    if (active) return active.then(() => this.drafts.has(id) ? this.saveDraft(id) : undefined);
+    const saving = this.persistDraft(id);
+    this.draftSaves.set(id, saving);
+    void saving.finally(() => { if (this.draftSaves.get(id) === saving) this.draftSaves.delete(id); }).catch(() => undefined);
+    return saving;
   }
-
-  async refresh(): Promise<void> {
-    const requestId = ++this.listRequestId;
-    try {
-      const records = await this.provider.store.list();
-      if (!this.isCurrentList(requestId)) return;
-      // A listing only reports the records that read correctly, so it is no
-      // answer to a quarantine: an upload must not silently dismiss the
-      // recovery banner. Only a fresh initialization can leave that phase.
-      const phase = this.current.phase === "recovery" ? "recovery" : "ready";
-      this.set({ ...this.current, phase, errorMessage: null, records });
-    } catch (reason) {
-      if (!this.isCurrentList(requestId)) return;
-      this.set({ ...this.current, phase: "error", errorMessage: errorMessage(reason, "Media listing failed.") });
-    }
+  private async persistDraft(id: string) {
+    const draft = this.drafts.get(id); if (!draft) return;
+    const saved = await this.updateMetadata(draft.record, draft.patch);
+    const newer = this.drafts.get(id);
+    if (newer && newer !== draft && newer.record.revision === draft.record.revision) this.drafts.set(id, { ...newer, record: summarizeMedia(saved) });
+    if (this.drafts.get(id) === draft) { this.drafts.delete(id); this.set({ generation: this.current.generation + 1 }); }
   }
-
-  async copyMarkdown(record: MediaSummary): Promise<void> {
-    await this.writeClipboard(mediaMarkdown(record));
-    this.note(`Copied Markdown for ${record.fileName}.`);
+  hasDraft(id: string) { return this.drafts.has(id); }
+  discardDraft(id: string) {
+    if (this.current.busy || this.current.uncertain) throw new Error("Resolve the pending or uncertain operation before discarding changes.");
+    this.drafts.delete(id); this.pending = Promise.resolve();
+    this.set({ generation: this.current.generation + 1, notice: null });
   }
-
-  async copyUrl(record: MediaSummary): Promise<void> {
-    await this.writeClipboard(mediaUrl(record));
-    this.note(`Copied the public URL for ${record.fileName}.`);
-  }
-
-  async scanDeleteReferences(record: MediaSummary): Promise<void> {
-    const requestId = ++this.referenceRequestId;
-    if (!this.scanReferences) {
-      this.set({ ...this.current, referenceScan: { status: "unavailable", mediaId: record.id, message: "No enumerable reference sources are connected to this surface." } });
-      return;
-    }
-    this.set({ ...this.current, referenceScan: { status: "scanning", mediaId: record.id } });
-    try {
-      const references = await this.scanReferences(mediaUrl(record));
-      if (!this.alive || requestId !== this.referenceRequestId) return;
-      this.set({ ...this.current, referenceScan: { status: "complete", mediaId: record.id, references } });
-    } catch (reason) {
-      if (!this.alive || requestId !== this.referenceRequestId) return;
-      this.set({ ...this.current, referenceScan: { status: "error", mediaId: record.id, message: errorMessage(reason, "Reference scan failed.") } });
-    }
-  }
-
-  clearReferenceScan(): void { this.referenceRequestId += 1; this.set({ ...this.current, referenceScan: { status: "idle" } }); }
-
-  /**
-   * Deletes one asset or a whole bulk selection. Failures are reported per
-   * record rather than as one rollback: a bulk delete that stops halfway must
-   * still drop the assets that are actually gone, or the grid lies.
-   */
-  async deleteMedia(targets: readonly MediaSummary[]): Promise<void> {
-    const deleted = new Set<string>();
-    let failure: unknown;
-    for (const target of targets) {
-      try {
-        await this.provider.store.delete(target.id);
-        deleted.add(target.id);
-      } catch (reason) {
-        failure = reason;
-        break;
+  private mutate<T>(label: string, task: () => Promise<T>): Promise<T> {
+    if (this.current.busy) return Promise.reject(new Error("Wait for the current Media operation to finish."));
+    if (this.current.phase !== "ready" || this.current.uncertain) return Promise.reject(new Error("Reload authoritative Media state before making changes."));
+    const pending = Promise.resolve().then(async () => {
+      let committed = false;
+      try { const result = await task(); committed = true; await this.refresh(); this.set({ notice: { tone: "info", text: `${label} saved.` } }); return result; }
+      catch (error) {
+        if (committed) {
+          const stale = Object.assign(new Error(`${label} was committed, but the refreshed library could not be read. Do not retry the write; reload authoritative state.`), { code: "committed-stale" });
+          this.set({ uncertain: true }); this.reportFailure(stale); throw stale;
+        }
+        if (error && typeof error === "object" && "code" in error && error.code === "commit-uncertain") this.set({ uncertain: true });
+        await this.refresh().catch(() => undefined); this.reportFailure(error); throw error;
       }
+      finally { this.set({ busy: false, operation: null }); }
+    });
+    this.pending = pending;
+    this.set({ busy: true, operation: label, notice: null, generation: this.current.generation + 1 });
+    void pending.catch(() => undefined); return pending;
+  }
+  updateMetadata(record: MediaSummary, patch: MediaMetadataPatch) {
+    const store = this.requireStore("metadata");
+    return this.mutate("Asset details", () => store.updateMetadata(record.id, patch, { expectedRevision: record.revision }));
+  }
+  createFolder(name: string, parentId: string | null, index: number, token: string) {
+    const store = this.requireStore("folders");
+    return this.mutate("Folder", () => store.createFolder({ name, parentId, index }, token));
+  }
+  updateFolder(id: string, patch: MediaFolderPatch, revision: number, token: string) {
+    const store = this.requireStore("folders");
+    return this.mutate("Folder", () => store.updateFolder(id, patch, { expectedRevision: revision, expectedMutationToken: token }));
+  }
+  changeFolderState(id: string, revision: number, restore: boolean) {
+    const store = this.requireStore("folders");
+    return this.mutate(restore ? "Folder restore" : "Folder trash", () => restore ? store.restoreFolder(id, { expectedRevision: revision }) : store.trashFolder(id, { expectedRevision: revision }));
+  }
+  move(records: readonly MediaSummary[], folderId: string | null) {
+    const store = this.requireStore("metadata");
+    return this.mutate("Move", async () => { for (const record of records) await store.updateMetadata(record.id, { folderId }, { expectedRevision: record.revision }); });
+  }
+  restore(records: readonly MediaSummary[]) {
+    const store = this.requireStore("restore");
+    return this.mutate("Restore", async () => { for (const record of records) await store.restore(record.id, { expectedRevision: record.revision }); });
+  }
+  async scan(record: MediaSummary, fresh = false): Promise<MediaUsageScan> {
+    if (!this.contentServices) return { status: "unavailable", locations: [], tokens: {}, message: "Authoritative Content usage inspection is unavailable; trash is blocked." };
+    return this.contentServices.scan({ providerId: this.provider.descriptor.id, assetId: record.id }, fresh);
+  }
+  async trash(records: readonly MediaSummary[]) {
+    const store = this.requireStore("trash");
+    const ownDrafts = new Set(records.filter((record) => this.hasDraft(record.id)).map(({ id }) => id));
+    if (ownDrafts.size) {
+      await this.flush();
+      records = records.map((record) => ownDrafts.has(record.id) ? this.current.records.find(({ id }) => id === record.id)! : record);
     }
-    if (!this.alive) return;
-    const first = targets[0];
-    this.set({
-      ...this.current,
-      records: this.current.records.filter((record) => !deleted.has(record.id)),
-      referenceScan: { status: "idle" },
-      notice: failure !== undefined
-        ? { tone: "err", text: errorMessage(failure, "The media could not be deleted.") }
-        : { tone: "info", text: deleted.size === 1 && first ? `Deleted ${first.fileName}.` : `Deleted ${deleted.size} assets.` },
+    // Capture before registering this write, so a Content flush cannot wait on itself.
+    const scans = await Promise.all(records.map((record) => this.scan(record, true)));
+    if (scans.some((scan) => scan.status !== "complete" || scan.locations.length > 0 || (scan.additionalLocations?.length ?? 0) > 0)) throw new Error("Trash blocked: active project uses or an incomplete authoritative scan remain.");
+    return this.mutate("Trash", async () => {
+      for (const [index, record] of records.entries()) {
+        if (!await this.contentServices!.isCurrent(scans[index]!)) throw new Error("Content changed during the safety check. Inspect usages again.");
+        await store.trash(record.id, { expectedRevision: record.revision });
+      }
     });
   }
-
-  dispose(): void { this.alive = false; this.listRequestId += 1; this.referenceRequestId += 1; this.listeners.clear(); }
-
-  private note(text: string): void {
-    this.set({ ...this.current, notice: { tone: "info", text } });
+  upload(file: Blob & { name: string }, folderId: string | null): Promise<MediaRecord> {
+    const store = this.requireStore("replace");
+    if (typeof store.upload !== "function") return Promise.reject(new Error("Upload is unavailable."));
+    return this.mutate("Upload", () => store.upload(file, { folderId }));
   }
-
-  private async runInitialization(load: () => Promise<MediaInitializationOutcome>): Promise<void> {
-    const requestId = ++this.listRequestId;
-    this.set({ ...this.current, phase: "loading", errorMessage: null, notice: null });
-    try {
-      const outcome = await load();
-      if (!this.isCurrentList(requestId)) return;
-      if (outcome.status === "ready") this.set({ ...initialState, phase: "ready", records: outcome.summaries });
-      else if (outcome.status === "recovery-required") this.set({ ...initialState, phase: "recovery", records: outcome.summaries, recoveryMessage: outcome.recovery.message });
-      else this.set({ ...initialState, phase: "error", errorMessage: outcome.error.message });
-    } catch (reason) {
-      if (this.isCurrentList(requestId)) this.set({ ...initialState, phase: "error", errorMessage: errorMessage(reason, "Media library initialization failed.") });
-    }
+  replace(record: MediaSummary, file: Blob) {
+    const store = this.requireStore("replace");
+    return this.mutate("Replacement", () => store.replace(record.id, file, { expectedRevision: record.revision }));
   }
-
-  private isCurrentList(requestId: number): boolean { return this.alive && requestId === this.listRequestId; }
-  private set(state: MediaLibraryState): void { if (!this.alive) return; this.current = state; for (const listener of [...this.listeners]) listener(state); }
+  insert(target: MediaInsertionTarget, value: MediaUse) {
+    if (!this.contentServices) return Promise.reject(new Error("Content insertion is unavailable."));
+    return this.mutate("Content usage", async () => {
+      const current = await this.provider.store.get(value.asset.assetId);
+      if (value.asset.providerId !== this.provider.descriptor.id || current.status !== "loaded" || current.record.document.state !== "active") throw new Error("The selected Media asset is unavailable or trashed.");
+      if (value.kind === "image" && !summarizeMedia(current.record).mediaType.startsWith("image/")) throw new Error("The asset is no longer an image. Choose another asset or presentation.");
+      await this.contentServices!.insert(target, value);
+    });
+  }
+  async copyUrl(record: MediaSummary) { await this.copy(record.authoringUrl); }
+  async copyMarkdown(record: MediaSummary) { await this.copy(mediaMarkdown(record)); }
+  async copy(text: string) { await (this.options.writeClipboard ?? ((value) => navigator.clipboard.writeText(value)))(text); this.set({ notice: { tone: "info", text: "Copied." } }); }
+  dispose() { this.request++; this.listeners.clear(); }
 }
-
-export function createMediaLibraryController(provider: MediaProvider, options?: MediaLibraryControllerOptions): MediaLibraryController {
-  return new MediaLibraryController(provider, options);
-}
+export function createMediaLibraryController(provider: MediaProvider, options?: MediaLibraryControllerOptions) { return new MediaLibraryController(provider, options); }

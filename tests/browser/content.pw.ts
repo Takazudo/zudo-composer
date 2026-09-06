@@ -221,6 +221,29 @@ function saveStatus(page: Page): Locator {
   return page.locator(".cms-topbar__status");
 }
 
+test("Content directory, Raw storage, and field-qualified usage links stay model-first", async ({ page }) => {
+  const failures = watchRuntimeFailures(page);
+  await page.goto("/content");
+  await expect(page.getByRole("heading", { name: "All models", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Journal articles.*Browser storage/ })).toBeVisible();
+
+  await contentTree(page).getByRole("treeitem", { name: /^Journal articles/ }).click();
+  await contentTree(page).getByRole("treeitem", { name: /^Map the moving parts/ }).click();
+  const heading = page.getByRole("textbox", { name: "Heading", exact: true });
+  await expect(heading).toBeVisible();
+  const fieldId = (await heading.getAttribute("id"))!.replace(/^content-entry-/, "");
+  const selected = new URL(page.url());
+  selected.searchParams.set("field", fieldId);
+  await page.goto(selected.toString());
+  await expect(page.getByRole("textbox", { name: "Heading", exact: true })).toBeFocused();
+
+  await page.getByRole("tab", { name: "Raw", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Resolved values" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Exact field-ID storage" })).toBeVisible();
+  await expect(page.locator(".sg-content-raw pre").last()).toContainText(`"${fieldId}"`);
+  expect(failures).toEqual([]);
+});
+
 /** The one row-level overflow menu the navigator gives every model and Entry. */
 async function openRowMenu(page: Page, name: string) {
   const row = contentTree(page).getByRole("treeitem", { name: new RegExp(`^${name}`) });
@@ -251,7 +274,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await page.getByRole("textbox", { name: "Heading", exact: true }).blur();
   await expect(saveStatus(page)).toContainText("Saved");
   // Opening a record is a deep link the author can copy.
-  await expect(page).toHaveURL(/\/content\?model=about-content&entry=/);
+  await expect(page).toHaveURL(/\/content\?provider=content-indexeddb&model=about-content&entry=about-entry$/);
 
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
@@ -278,7 +301,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await sampleRow.getByRole("link", { name: "Sample Studio sitemap", exact: true }).click();
   // Opening a Sitemap is a real navigation to the record's own URL, and the
   // editor chrome names the record it loaded.
-  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Sample Studio sitemap");
   // Scoped to the toolbar: the outline's terminal add rows are called "Add page"
   // too, and it is the toolbar action this line means to find. `EditorChrome`
@@ -304,6 +327,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // #170 removed the form's own "Model name" input, so the toolbar's record
   // title is the single control that names the model in Schema mode.
   await expect(page.getByRole("textbox", { name: "Model name" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
   // RecordTitle holds a draft and commits on Enter or blur, so a bare fill is
   // discarded on the next render — press Enter the way an author would.
   await page.getByRole("textbox", { name: "Model name" }).fill("Browser Journal articles");
@@ -374,7 +398,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
     await page.getByRole("textbox", { name: "Introduction", exact: true }).fill(`Introduction ${index + 2}`);
     await page.getByLabel("Published on").fill("2026-08-29");
     await page.getByRole("textbox", { name: "Body", exact: true }).fill(`Body ${index + 2}`);
-    if (routeSlug) await page.getByRole("textbox", { name: "Slug", exact: true }).fill(routeSlug);
+    await page.getByRole("textbox", { name: "Slug", exact: true }).fill(routeSlug || "browser-empty-route-case");
     await expect(saveStatus(page)).toContainText("Saved");
   }
   // Metadata is read off the row rather than matched inside its accessible
@@ -406,11 +430,22 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(contentNav(page).getByRole("button", { name: "Add entry" })).toHaveCount(0);
   await expect(siteSettingsRow).toContainText("(1)");
 
-  // Native date inputs cannot author malformed dates. Keep one stale provider
-  // value to prove Mapping diagnoses it without rewriting the source Entry.
+  // A populated canonical date proves the transform, while another Entry keeps
+  // its optional date empty. Invalid stored dates now require Content recovery.
   await page.evaluate(async () => {
-    const databaseName = (await indexedDB.databases()).find(({ name }) => name?.startsWith("zudo-composer-content--site-project--"))?.name;
-    if (!databaseName) throw new Error("Revision-scoped Content storage was not found.");
+    const workspaceDb = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("zudo-composer-workspaces-v1");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const workspaceId = await new Promise<string>((resolve, reject) => {
+      const request = workspaceDb.transaction("selection", "readonly").objectStore("selection").get("active");
+      request.onsuccess = () => typeof request.result === "string" ? resolve(request.result) : reject(new Error("Active workspace identity was not found."));
+      request.onerror = () => reject(request.error);
+    });
+    workspaceDb.close();
+    const databaseName = `zudo-composer-content-workspace-v1-${workspaceId}`;
+    if (!(await indexedDB.databases()).some(({ name }) => name === databaseName)) throw new Error("Workspace-scoped Content storage was not found.");
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open(databaseName);
       request.onsuccess = () => resolve(request.result);
@@ -429,7 +464,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
       request.onsuccess = () => resolve(request.result as { values: Record<string, unknown> } & Record<string, unknown>);
       request.onerror = () => reject(request.error);
     });
-    entries.put({ ...entry, values: { ...entry.values, [dateFieldId]: "2026-02-30" } });
+    entries.put({ ...entry, values: { ...entry.values, [dateFieldId]: "2026-02-28" } });
     await new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
       transaction.onabort = () => reject(transaction.error);
@@ -450,6 +485,11 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(mappingFrame.getByRole("heading", { name: "Start with the question" })).toBeVisible();
   await selectEntry(page, /Map the moving parts.*article-moving-parts/);
   await expect(mappingFrame.getByRole("heading", { name: "Map the moving parts" })).toBeVisible();
+  // Newly authored Entries are drafts in the current lifecycle contract. This
+  // journey intentionally exercises their route diagnostics, so opt in rather
+  // than assuming every saved Entry is published.
+  await page.getByRole("combobox", { name: "Published inclusion policy" }).selectOption({ label: "Include drafts" });
+  await expect(page.getByText("Effective records").locator("..")).toContainText("26");
 
   // Issue #171 made a binding one table row instead of three stacked cards, so
   // "the three region headings are not clipped" became "the fixed-layout table
@@ -492,8 +532,10 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(reviewDateTransform.locator("option")).toHaveText(["Pass through", "Format date", "Truncate to 160", "Add prefix"]);
   await reviewDateTransform.selectOption({ label: "Format date" });
   await selectEntry(page, /Start with the question.*article-first-question/);
-  await expectTestReports(page, /not canonical YYYY-MM-DD/);
+  await mappingInspector(page).getByRole("tab", { name: "Preview", exact: true }).click();
+  await expect(mappingFrame.getByText("Feb 28, 2026", { exact: true })).toBeVisible();
   await selectEntry(page, /Map the moving parts.*article-moving-parts/);
+  await expect(mappingFrame.getByRole("heading", { name: "Map the moving parts", exact: true })).toBeVisible();
   await expectTestReports(page, /Optional source field "Review date" has no value/);
   // "Ready" was the modal's own word for it; the tab says it by carrying no
   // blocking diagnostic beside the nonblocking one.
@@ -540,7 +582,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Mapping journey");
   await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
 
   // Issue #165 moved the Sitemapper onto `OutlineTree` and `EditorChrome`: the
   // outline is a real `tree` of `treeitem` rows, and the inspector is a pane
@@ -579,14 +621,14 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await mappingField.getByRole("combobox", { name: "Entry title field" }).selectOption({ label: "Heading" });
   await expect(assignment).toHaveText("Mapping");
 
-  // 26 Entries, two of which derive no route: one with an empty slug and one
-  // whose slug is a bare dot. The two that share 東京 collide but both resolve.
-  await expect(mappingCard).toContainText(/·\s*24 routes/);
+  // All 26 draft/published Entries remain schema-complete. A bare-dot slug is
+  // route-invalid; the two that share 東京 collide but both still resolve.
+  await expect(mappingCard).toContainText(/·\s*25 routes/);
   await expect(mappingCard.getByText("Needs attention", { exact: true })).toBeVisible();
-  await expect(mappingField.getByText("Entry slug is missing or empty.", { exact: true }).first()).toBeVisible();
-  await expect(mappingField.getByText("Entry slug contains a forbidden route delimiter.", { exact: true })).toBeVisible();
-  await expect(mappingField.getByText(/Route \/news\/latest\/%E6%9D%B1%E4%BA%AC collides/).first()).toBeVisible();
-  // A Mapping route family owns its own routes and takes no authored children.
+  await expect(mappingField.getByText("Entry slug is missing or contains a forbidden route delimiter.", { exact: true })).toBeVisible();
+  await expect(mappingField.getByText(/Route \/news\/latest\/%E6%9D%B1%E4%BA%AC has 2 concrete destinations/).first()).toBeVisible();
+  // Derived routes do not become persisted outline nodes. This fixture has
+  // one authored node; nested authored families are covered by the catalog journey.
   await expect(pages.getByRole("treeitem")).toHaveCount(1);
 
   // An absolute base derives nothing at all, and the expansion says why rather
@@ -601,7 +643,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await slug.fill("news/latest");
   await slug.blur();
   await sourceTab.click();
-  await expect(mappingCard).toContainText(/·\s*24 routes/);
+  await expect(mappingCard).toContainText(/·\s*25 routes/);
 
   await mappingField.getByRole("button", { name: "Change mapping" }).click();
   await page.getByRole("dialog", { name: "Choose a Mapping" }).getByRole("button", { name: `Assign ${SINGLE_MAPPING}` }).click();
@@ -675,12 +717,16 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   }
   expect(themeColors[0]).not.toBe(themeColors[1]);
 
-  await page.setViewportSize({ width: 375, height: 812 });
-  // Below 64rem the rail leaves the side and becomes the bottom tab strip.
+  await page.setViewportSize({ width: 390, height: 844 });
+  // At 760px and below navigation is a modal drawer, never a bottom tab alias.
   await expect(page.locator(".cms-topbar")).toHaveCSS("height", "48px");
-  await expect(page.locator(".cms-rail")).toHaveCSS("height", "56px");
-  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "Navigation", exact: true });
+  const navigation = drawer.getByRole("navigation", { name: "Main navigation" });
   for (const product of PRODUCT_LINKS) await expect(navigation.getByRole("link", { name: product, exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(page.getByRole("button", { name: "Expand navigation", exact: true })).toBeFocused();
   // `EditorChrome` replaced the route's own tablist with the shared pane
   // switch. Scoped to the group: the toolbar also carries a Preview button.
   const contentPaneSwitch = page.getByRole("radiogroup", { name: "Pane" });
@@ -695,10 +741,17 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
 
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+  await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toHaveCSS("transform", "none");
   for (const product of PRODUCT_LINKS) {
-    const box = await navigation.getByRole("link", { name: product, exact: true }).boundingBox();
-    expect(box?.height).toBeGreaterThanOrEqual(44);
+    const link = navigation.getByRole("link", { name: product, exact: true });
+    await expect(link).toHaveCSS("min-height", "44px");
+    const box = await link.boundingBox();
+    expect(box).not.toBeNull();
+    expect(Math.round(box!.height)).toBeGreaterThanOrEqual(44);
   }
+  await page.keyboard.press("Escape");
   const targets = await page.locator(".sg-content-app button:visible").evaluateAll((nodes) => nodes.map((node) => {
     const { width, height } = node.getBoundingClientRect();
     return { name: node.getAttribute("aria-label") ?? node.textContent?.trim() ?? "button", width, height };
@@ -782,7 +835,7 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   const responsiveDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await responsiveDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Responsive panels");
   await responsiveDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
   // `EditorChrome` replaced the Sitemapper's own tablist with the shared pane
   // switch, and the editor renames the three panes. Scoped to the group rather
   // than matched page-wide: the toolbar's View control also offers a "Canvas",

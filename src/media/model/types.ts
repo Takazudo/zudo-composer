@@ -1,7 +1,7 @@
 import type { RecordId } from "../../shared";
 
 /** The only Media document schema understood by this build. */
-export const MEDIA_SCHEMA_VERSION = 1 as const;
+export const MEDIA_SCHEMA_VERSION = 2 as const;
 export type MediaSchemaVersion = typeof MEDIA_SCHEMA_VERSION;
 
 /**
@@ -34,15 +34,72 @@ export interface MediaDocument {
   schemaVersion: MediaSchemaVersion;
   id: RecordId;
   fileName: string;
+  folderId: string | null;
+  note: string;
+  state: "active" | "trash";
+  currentVersionId: string;
+  versions: MediaVersion[];
+}
+
+export interface MediaVersion {
+  /** SHA-256 identifies immutable bytes, independently of the mutable head. */
+  id: string;
   mediaType: MediaType;
   byteLength: number;
   checksum: string;
+  url: string;
+  createdAt: string;
 }
 
 /** The canonical record envelope persisted by a Media provider. */
 export interface MediaRecord {
   id: RecordId;
+  revision: number;
   createdAt: string;
   updatedAt: string;
   document: MediaDocument;
+}
+
+export interface MediaFolder {
+  id: string;
+  parentId: string | null;
+  name: string;
+  state: "active" | "trash";
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One atomic global metadata snapshot, separate from SiteProject providers. */
+export interface MediaSnapshot {
+  schemaVersion: MediaSchemaVersion;
+  mutationToken: string;
+  records: MediaRecord[];
+  folders: MediaFolder[];
+}
+
+/** Stable provider-qualified identity used by authoring references. */
+export interface MediaAssetRef { providerId: string; assetId: string }
+/** Exact immutable version identity used by release/pin operations. */
+export interface MediaVersionRef extends MediaAssetRef { versionId: string }
+export interface MediaVersionPin extends MediaVersionRef {
+  checksum: string;
+  byteLength: number;
+  mediaType: MediaType;
+  url: string;
+}
+export interface MediaPinManifest { schemaVersion: 1; pins: MediaVersionPin[] }
+
+export const MEDIA_EXTENSION_BY_TYPE = {
+  "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif",
+  "image/webp": "webp", "application/pdf": "pdf",
+} as const;
+
+export function mediaVersionUrl(checksum: string, mediaType: MediaType): string {
+  return `/uploaded-media/sha256-${checksum}.${MEDIA_EXTENSION_BY_TYPE[mediaType]}`;
+}
+
+/** Authoring references retain asset identity; release uses exact version URLs. */
+export function mediaAuthoringUrl(assetId: string): string {
+  return `/uploaded-media/asset-${assetId}`;
 }

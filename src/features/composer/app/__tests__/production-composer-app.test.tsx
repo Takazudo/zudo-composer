@@ -10,6 +10,7 @@ import {
   createIndexedDbCompositionProvider,
   summarizeComposition,
   type CompositionInitializationOutcome,
+  type CompositionDeleteOutcome,
   type CompositionProvider,
   type CompositionRecord,
 } from "../../../../composer/browser";
@@ -64,6 +65,7 @@ function memoryProvider(
     initialize?: () => Promise<CompositionInitializationOutcome>;
     put?: (value: CompositionRecord) => Promise<void>;
     lifecycle?: boolean;
+    deleteWithDependencyCheck?: (id: string) => Promise<CompositionDeleteOutcome>;
   } = {},
 ): CompositionProvider & { records: Map<string, CompositionRecord> } {
   const records = new Map(initial.map((value) => [value.id, structuredClone(value)]));
@@ -88,9 +90,9 @@ function memoryProvider(
   };
   if (overrides.lifecycle) {
     Object.assign(store, {
-      deleteWithDependencyCheck: vi.fn(async (id: string) => (
+      deleteWithDependencyCheck: vi.fn(overrides.deleteWithDependencyCheck ?? (async (id: string) => (
         records.delete(id) ? { status: "deleted" as const } : { status: "not-found" as const }
-      )),
+      ))),
       unpublishWithDependencyCheck: vi.fn(async (id: string) => (
         records.has(id) ? { status: "unpublished" as const } : { status: "not-found" as const }
       )),
@@ -108,12 +110,12 @@ function memoryProvider(
 }
 
 class FakeNavigation implements ComposerBrowserNavigation {
-  private location: { pathname: string; hash: string };
+  private location: { pathname: string; search: string; hash: string };
   private readonly listeners = new Set<() => void>();
   readonly pushes: string[] = [];
   readonly replacements: string[] = [];
 
-  constructor(url = "/composer#/") {
+  constructor(url = "/composer") {
     this.location = this.parse(url);
   }
 
@@ -143,7 +145,7 @@ class FakeNavigation implements ComposerBrowserNavigation {
 
   private parse(url: string) {
     const parsed = new URL(url, "https://example.test");
-    return { pathname: parsed.pathname, hash: parsed.hash };
+    return { pathname: parsed.pathname, search: parsed.search, hash: parsed.hash };
   }
 }
 
@@ -167,12 +169,12 @@ describe("ProductionComposerApp", () => {
     );
 
     expect(await screen.findByRole("link", { name: "Browser copy" })).toBeInTheDocument();
-    expect(navigation.replacements).toContain("/composer#/");
+    expect(navigation.replacements).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
     expect(screen.getByRole("menuitemradio", { name: "Local files" })).toBeInTheDocument();
 
     view.unmount();
-    navigation.visit("/composer#/composition/files/same");
+    navigation.visit("/composer?provider=files&composition=same");
     render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
 
     expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
@@ -212,7 +214,7 @@ describe("ProductionComposerApp", () => {
       root: [],
     });
     expect(indexeddb.records.get("ordinary")?.document.binding).toBeUndefined();
-    expect(navigation.pushes.at(-1)).toBe("/composer#/composition/indexeddb/ordinary");
+    expect(navigation.pushes.at(-1)).toBe("/composer?provider=indexeddb&composition=ordinary");
   });
 
   it("re-resolves a selected same-provider Global template, then persists only its source and outlet binding", async () => {
@@ -268,7 +270,7 @@ describe("ProductionComposerApp", () => {
     consumer.document.root = [consumer.document.root[0]!.slots.content![1]!];
     consumer.document.binding = { sourceRecordId: source.id, outletId: "main" };
     const indexeddb = memoryProvider("indexeddb", [source, consumer], { lifecycle: true });
-    const navigation = new FakeNavigation("/composer#/composition/indexeddb/bound-page");
+    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=bound-page");
     let nodeId = 0;
     const view = render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
@@ -294,7 +296,7 @@ describe("ProductionComposerApp", () => {
     await waitFor(() =>
       expect(navigation.read()).toEqual({
         pathname: "/composer",
-        hash: "#/composition/indexeddb/bound-page",
+        search: "?provider=indexeddb&composition=bound-page", hash: "",
       }),
     );
     expect(screen.queryByRole("button", { name: "Detach" })).not.toBeInTheDocument();
@@ -347,7 +349,7 @@ describe("ProductionComposerApp", () => {
     consumer.document.binding = { sourceRecordId: "site-shell", outletId: "main" };
     const indexeddb = memoryProvider("indexeddb", [source, consumer]);
     const files = memoryProvider("files", [record("unrelated", "Unrelated file")]);
-    const navigation = new FakeNavigation("/composer#/composition/indexeddb/site-shell");
+    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=site-shell");
     render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb, files]}
@@ -399,7 +401,7 @@ describe("ProductionComposerApp", () => {
     // elsewhere in this file: a real `navigation.visit` to its route, once the
     // seeded row (not just the static page header) has actually loaded.
     await screen.findByRole("link", { name: "Product overview" });
-    navigation.visit("/composer#/composition/indexeddb/real-composition");
+    navigation.visit("/composer?provider=indexeddb&composition=real-composition");
     await screen.findByRole("link", { name: "Back to Compositions" });
     const tree = first.container.querySelector(".cms-editor__region--nav") as HTMLElement;
     const inspector = first.container.querySelector(".cms-editor__region--insp") as HTMLElement;
@@ -407,11 +409,11 @@ describe("ProductionComposerApp", () => {
     fireEvent.input(within(inspector).getByLabelText("Label"), {
       target: { value: "Persisted in IndexedDB" },
     });
-    navigation.visit("/composer#/");
+    navigation.visit("/composer");
     await screen.findByRole("heading", { name: "Compositions" });
     first.unmount();
 
-    navigation.visit("/composer#/composition/indexeddb/real-composition");
+    navigation.visit("/composer?provider=indexeddb&composition=real-composition");
     const refreshed = render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[provider]}
@@ -432,7 +434,7 @@ describe("ProductionComposerApp", () => {
   it("wires mounted toolbar, parent keyboard, and canvas history requests to one controller", async () => {
     const initial = record("history", "History");
     const indexeddb = memoryProvider("indexeddb", [initial]);
-    const navigation = new FakeNavigation("/composer#/composition/indexeddb/history");
+    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=history");
     const bridge = makeTestBridge(PREVIEW.previewLocation);
     const view = render(
       <ProductionComposerApp
@@ -480,7 +482,7 @@ describe("ProductionComposerApp", () => {
 
   it("lands a debounce-pending inspector value before the save queue is flushed", async () => {
     const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
-    const navigation = new FakeNavigation("/composer#/composition/indexeddb/alpha");
+    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=alpha");
     const view = render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb]}
@@ -496,7 +498,7 @@ describe("ProductionComposerApp", () => {
     fireEvent.input(within(inspector).getByLabelText("Label"), {
       target: { value: "Last keystroke before leaving" },
     });
-    navigation.visit("/composer#/");
+    navigation.visit("/composer");
 
     await screen.findByRole("heading", { name: "Compositions" });
     const saved = indexeddb.records.get("alpha")!;
@@ -530,7 +532,7 @@ describe("ProductionComposerApp", () => {
     expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
     expect(files.records.get("file-copy")?.document.name).toBe("File copy copy");
     expect(indexeddb.records.has("file-copy")).toBe(false);
-    expect(navigation.pushes.at(-1)).toBe("/composer#/composition/files/file-copy");
+    expect(navigation.pushes.at(-1)).toBe("/composer?provider=files&composition=file-copy");
   });
 
 
@@ -538,7 +540,7 @@ describe("ProductionComposerApp", () => {
   it("duplicates the mounted composition into its active provider and opens its route", async () => {
     const indexeddb = memoryProvider("indexeddb", [record("same", "Browser copy")]);
     const files = memoryProvider("files", [record("same", "File copy")]);
-    const navigation = new FakeNavigation("/composer#/composition/files/same");
+    const navigation = new FakeNavigation("/composer?provider=files&composition=same");
     let nodeId = 0;
     const view = render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
@@ -563,7 +565,7 @@ describe("ProductionComposerApp", () => {
     await waitFor(() =>
       expect(navigation.read()).toEqual({
         pathname: "/composer",
-        hash: "#/composition/files/detail-copy",
+        search: "?provider=files&composition=detail-copy", hash: "",
       }),
     );
     expect(screen.getByLabelText("Composition name")).toHaveValue("File copy copy");
@@ -585,7 +587,7 @@ describe("ProductionComposerApp", () => {
     render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
     await screen.findByRole("heading", { name: "Compositions" });
 
-    navigation.visit("/composer#/composition/files/alpha");
+    navigation.visit("/composer?provider=files&composition=alpha");
 
     expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
     expect(screen.getByLabelText("Composition name")).toHaveValue("File Alpha");
@@ -616,7 +618,7 @@ describe("ProductionComposerApp", () => {
       indexeddb.records.set(recovered.id, recovered);
       return ready(indexeddb.records);
     });
-    const navigation = new FakeNavigation("/composer#/composition/indexeddb/future");
+    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=future");
     render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb]} navigation={navigation} preview={PREVIEW} />);
 
     expect(await screen.findByText("Stored compositions need recovery.")).toBeInTheDocument();
@@ -627,7 +629,7 @@ describe("ProductionComposerApp", () => {
 
     expect(await screen.findByRole("link", { name: "Fresh sample" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Compositions" })).toBeInTheDocument();
-    expect(navigation.replacements.at(-1)).toBe("/composer#/");
+    expect(navigation.replacements.at(-1)).toBe("/composer");
   });
 
   it("does not let slow direct-detail initialization override newer history", async () => {
@@ -636,7 +638,7 @@ describe("ProductionComposerApp", () => {
     const indexeddb = memoryProvider("indexeddb", [alpha], {
       initialize: () => initialization.promise,
     });
-    const navigation = new FakeNavigation("/composer#/composition/indexeddb/alpha");
+    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=alpha");
     render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
         providers={[indexeddb]}
@@ -645,13 +647,13 @@ describe("ProductionComposerApp", () => {
       />,
     );
 
-    navigation.visit("/composer#/");
+    navigation.visit("/composer");
     expect(await screen.findByRole("status")).toHaveTextContent("Loading compositions…");
     initialization.resolve(ready(indexeddb.records));
 
     expect(await screen.findByRole("heading", { name: "Compositions" })).toBeInTheDocument();
     await Promise.resolve();
-    expect(navigation.read()).toEqual({ pathname: "/composer", hash: "#/" });
+    expect(navigation.read()).toEqual({ pathname: "/composer", search: "", hash: "" });
     expect(indexeddb.store.get).not.toHaveBeenCalled();
     expect(screen.queryByRole("link", { name: "Back to Compositions" })).not.toBeInTheDocument();
   });
@@ -674,11 +676,46 @@ describe("ProductionComposerApp", () => {
 
     // A one-shot intent: navigating away and back to the index (remounting
     // CompositionLibrary) must not reopen the dialog a second time.
-    navigation.visit("/composer#/composition/indexeddb/alpha");
+    navigation.visit("/composer?provider=indexeddb&composition=alpha");
     await screen.findByRole("link", { name: "Back to Compositions" });
-    navigation.visit("/composer#/");
+    navigation.visit("/composer");
     await screen.findByRole("link", { name: "Alpha" });
     expect(screen.queryByRole("dialog", { name: "New composition" })).not.toBeInTheDocument();
+  });
+
+  it("dependency-checks deletion of a mounted Global template and keeps the editor open when blocked", async () => {
+    const template = record("site-shell", "Site shell");
+    template.document.publication = {
+      kind: "global-template",
+      outlet: { id: "main", label: "Main", target: { parentId: "sample-section", slotId: "content" } },
+    };
+    const consumer = record("consumer", "Consumer");
+    consumer.document.binding = { sourceRecordId: template.id, outletId: "main" };
+    const indexeddb = memoryProvider("indexeddb", [template, consumer], {
+      lifecycle: true,
+      deleteWithDependencyCheck: vi.fn(async () => ({
+        status: "blocked" as const,
+        dependents: [{ summary: summarizeComposition(consumer), binding: consumer.document.binding! }],
+      })),
+    });
+    render(
+      <ProductionComposerApp
+        componentProvider={fixtureComponentProvider}
+        providers={[indexeddb]}
+        navigation={new FakeNavigation("/composer?provider=indexeddb&composition=site-shell")}
+        preview={PREVIEW}
+      />,
+    );
+    await screen.findByRole("link", { name: "Back to Compositions" });
+    fireEvent.click(screen.getByRole("button", { name: "More composition actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Delete Site shell?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText("Cannot delete this Global template while 1 consumer is still linked.")).toBeInTheDocument();
+    expect(indexeddb.records.has("site-shell")).toBe(true);
+    expect(indexeddb.store.delete).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
   });
 
   it("reports a malformed /composer?new=0 route intent instead of silently opening the dialog", async () => {

@@ -514,6 +514,8 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
         onAdd={api.handleChooserAdd}
         onExpandAncestors={api.handleExpandAncestors}
         onClose={api.closeChooser}
+        resolveTarget={chooser.session?.resolveTarget}
+        onComplete={api.completeChooser}
         patternCatalog={patternCatalog}
         patternCatalogLoading={patternCatalogLoading}
         loadPattern={props.loadPattern}

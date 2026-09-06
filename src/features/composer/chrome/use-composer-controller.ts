@@ -93,7 +93,7 @@ export interface ComposerController {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  add: (target: InsertionTarget, componentId: string) => void;
+  add: (target: InsertionTarget, componentId: string) => ComposerInsertionOutcome;
   rename: (name: string) => void;
   updateProps: (nodeId: string, patch: JsonObject, coalescePaths?: PropCoalescing, removeProps?: readonly string[]) => void;
   /**
@@ -167,8 +167,10 @@ export interface ComposerController {
 
 /** The chooser needs a synchronous command outcome so it never closes after a rejected atomic mutation. */
 export type ComposerForestInsertionOutcome =
-  | { status: "inserted" }
+  | { status: "inserted"; nodeId: string }
   | { status: "rejected"; message: string };
+
+export type ComposerInsertionOutcome = ComposerForestInsertionOutcome;
 
 export interface UseComposerControllerOptions {
   manifest: ComponentCatalog;
@@ -534,7 +536,13 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       redo,
       canUndo: state.mode !== "preview" && historyCanUndo(historyRef.current),
       canRedo: state.mode !== "preview" && historyCanRedo(historyRef.current),
-      add: (target, componentId) => dispatch({ type: "add", target, componentId }),
+      add: (target, componentId) => {
+        const error = dispatch({ type: "add", target, componentId });
+        const nodeId = stateRef.current?.selectedId;
+        return error || !nodeId
+          ? { status: "rejected", message: error ?? "The inserted component could not be selected." }
+          : { status: "inserted", nodeId };
+      },
       rename: (name) => dispatch({ type: "rename", name }),
       updateProps: (nodeId, patch, coalescePaths, removeProps) => dispatch({ type: "updateProps", nodeId, patch, coalescePaths, removeProps }),
       updatePropsDebounced,
@@ -548,7 +556,10 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       paste: (target) => dispatch({ type: "paste", target }),
       insertForest: (sourceRoots, target) => {
         const error = dispatch({ type: "insertForest", sourceRoots, target });
-        return error ? { status: "rejected", message: error } : { status: "inserted" };
+        const nodeId = stateRef.current?.selectedId;
+        return error || !nodeId
+          ? { status: "rejected", message: error ?? "The inserted Pattern could not be selected." }
+          : { status: "inserted", nodeId };
       },
       duplicate: (nodeId) => dispatch({ type: "duplicate", nodeId }),
       drop: (sourceNodeId, target, copy) => dispatch({ type: "drop", sourceNodeId, target, copy }),

@@ -112,29 +112,33 @@ describe("generic revision-aware save queue", () => {
     expect(queue.state).toMatchObject({ status: "saved", savedRevision: 2 });
   });
 
-  it("closes without starting pending drafts and ignores the late write settlement", async () => {
+  it("closes after saving the newest pending draft behind the active write", async () => {
     const { queue, attempts } = queueHarness();
     queue.edit(ref, record("pending"));
     await advancePromises();
+    queue.edit(ref, record("newest"));
 
     const close = queue.close();
     expect(queue.state).toMatchObject({
       closed: true,
       status: "dirty",
-      draftRevision: 1,
+      draftRevision: 2,
       savedRevision: 0,
     });
-    await expect(queue.flush()).rejects.toBeInstanceOf(SaveQueueClosedError);
+    const flushed = queue.flush();
     expect(() => queue.edit(ref, record("after-close"))).toThrow(SaveQueueClosedError);
-    expect(() => queue.retry()).toThrow(SaveQueueClosedError);
 
     attempts[0].resolve();
+    await advancePromises();
+    expect(attempts).toHaveLength(2);
+    attempts[1].resolve();
     await close;
+    await flushed;
     expect(queue.state).toMatchObject({
       closed: true,
-      status: "dirty",
-      draft: { title: "pending" },
-      savedRevision: 0,
+      status: "saved",
+      draft: { title: "newest" },
+      savedRevision: 2,
     });
     expect(queue.close()).toBe(close);
   });

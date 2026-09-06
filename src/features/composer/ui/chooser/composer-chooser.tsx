@@ -75,11 +75,16 @@ export interface ComposerChooserProps {
   /** The richer catalog backing search/filter/display (title/category/description) — same array `manifest` was derived from. */
   entries: readonly ComponentDefinition[];
   /** Fired once, with the CAPTURED target, when a component is chosen. */
-  onAdd: (target: InsertionTarget, componentId: string) => void;
+  /** A rejection keeps the chooser/session open when the controller rejects a changed target. */
+  onAdd: (target: InsertionTarget, componentId: string) => void | { status: "inserted"; nodeId: string } | { status: "rejected"; message: string };
   /** Fired right after `onAdd`, with the captured target's ancestor chain, so callers can `setExpanded` each id. */
   onExpandAncestors: (nodeIds: string[]) => void;
   /** Fired on every close path (Escape, Cancel, backdrop, or after a successful add). */
   onClose: () => void;
+  /** Revalidates a shared-tree pending insertion immediately before mutation. */
+  resolveTarget?: () => InsertionTarget | null;
+  /** Completes the shared-tree transaction and restores focus after a successful insert. */
+  onComplete?: (insertedId?: string) => void;
 
   // ── Pattern service boundary ───────────────────────────────────────────
   // The app owns the active provider and controller. Keeping those operations
@@ -112,7 +117,7 @@ export interface ComposerChooserProps {
 }
 
 export type PatternInsertionOutcome =
-  | { status: "inserted" }
+  | { status: "inserted"; nodeId?: string }
   | { status: "rejected"; message: string };
 
 type ChooserTab = "components" | "patterns";
@@ -161,6 +166,8 @@ export function ComposerChooser({
   onAdd,
   onExpandAncestors,
   onClose,
+  resolveTarget,
+  onComplete,
   patternCatalog,
   patternCatalogLoading = false,
   loadPattern,
@@ -263,12 +270,22 @@ export function ComposerChooser({
 
   function confirmAdd(componentId: string) {
     if (!capturedTarget) return;
+    const currentTarget = resolveTarget ? resolveTarget() : capturedTarget;
+    if (!currentTarget) {
+      setStatus("That insertion point is no longer available. Cancel and choose another location.");
+      return;
+    }
     const entry = catalogById.get(componentId);
-    const ancestors = ancestorChainIds(document, manifest, capturedTarget.parentId);
-    onAdd(capturedTarget, componentId);
+    const ancestors = ancestorChainIds(document, manifest, currentTarget.parentId);
+    const applied = onAdd(currentTarget, componentId);
+    if (applied && applied.status === "rejected") {
+      setStatus(applied.message);
+      return;
+    }
     onExpandAncestors(ancestors);
     setStatus(`${entry?.title ?? componentId} added to ${targetLabel}.`);
-    onClose();
+    if (onComplete) onComplete(applied && applied.status === "inserted" ? applied.nodeId : undefined);
+    else onClose();
   }
 
   function selectPattern(ref: CompositionRecordRef, name: string) {
@@ -315,16 +332,22 @@ export function ComposerChooser({
 
   async function confirmPatternInsertion() {
     if (!capturedTarget || !loadedPattern || !patternEligibility?.eligible || !onInsertPattern || insertingPattern) return;
+    const currentTarget = resolveTarget ? resolveTarget() : capturedTarget;
+    if (!currentTarget) {
+      setPatternInsertError("That insertion point is no longer available. Cancel and choose another location.");
+      return;
+    }
     setPatternInsertError(null);
     setInsertingPattern(true);
     try {
-      const outcome = await onInsertPattern(capturedTarget, loadedPattern.roots);
+      const outcome = await onInsertPattern(currentTarget, loadedPattern.roots);
       if (outcome.status !== "inserted") {
         setPatternInsertError(outcome.message);
         return;
       }
       setStatus(`${loadedPattern.name} added to ${targetLabel}.`);
-      onClose();
+      if (onComplete) onComplete(outcome.nodeId);
+      else onClose();
     } catch (reason) {
       setPatternInsertError(reason instanceof Error ? reason.message : "The Pattern could not be inserted.");
     } finally {

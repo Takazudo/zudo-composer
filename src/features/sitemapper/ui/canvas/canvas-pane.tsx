@@ -7,10 +7,10 @@ import { ComposerIcon, MappingIcon } from "../../../../components/icons";
 import { Chip, DataTable, Pane, PaneBody, PaneHeader, type DataTableColumn } from "../../../../components/ui";
 import type { SitemapDocument, SitemapNode } from "../../../../sitemapper/model";
 import type { SitemapNodeRouteInfo } from "../../../../sitemapper/routes";
-import { SitemapCanvas } from "./sitemap-canvas";
+import { SitemapCanvas, type CanvasLayoutPreference } from "./sitemap-canvas";
 import { describeRouteStatus, type PageSourceLabels } from "./page-source";
 
-export type SitemapView = "tree" | "canvas";
+export type SitemapView = "canvas" | "outline" | "routes" | "navigation";
 
 export interface CanvasPaneProps {
   document: SitemapDocument;
@@ -20,6 +20,8 @@ export interface CanvasPaneProps {
   view: SitemapView;
   selectedId: string | null;
   zoom: number;
+  layoutPreference?: CanvasLayoutPreference;
+  onLayoutPreferenceChange?: (preference: CanvasLayoutPreference) => void;
   /** The load/recovery notice, drawn above the surface it applies to. */
   notice?: JSX.Element | null;
   onZoomChange: (zoom: number) => void;
@@ -46,6 +48,8 @@ export function CanvasPane({
   view,
   selectedId,
   zoom,
+  layoutPreference,
+  onLayoutPreferenceChange,
   notice,
   onZoomChange,
   onSelect,
@@ -97,7 +101,7 @@ export function CanvasPane({
     <Pane variant="canvas" label="Sitemap canvas" class="sg-sitemapper-main">
       <PaneHeader
         class="sg-sitemapper-main__header"
-        title={view === "canvas" ? `Canvas · ${Math.round(zoom * 100)}%` : "Tree"}
+        title={`Canvas · ${Math.round(zoom * 100)}%`}
       />
       <PaneBody class="sg-sitemapper-main__body">
         {/* Always rendered: the body is a two-row grid, and a missing first row
@@ -110,6 +114,8 @@ export function CanvasPane({
             sources={sources}
             selectedId={selectedId}
             zoom={zoom}
+            layoutPreference={layoutPreference}
+            onLayoutPreferenceChange={onLayoutPreferenceChange}
             onZoomChange={onZoomChange}
             onSelect={onSelect}
             onAddChild={onAddChild}

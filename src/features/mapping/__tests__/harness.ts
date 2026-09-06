@@ -22,6 +22,7 @@ import {
 import { createSequentialIdFactory } from "../../../shared";
 import { activeComponentProvider } from "../../composer/active-pack";
 import { MappingEditorController, type MappingContentEntryCatalog, type MappingEditorControllerOptions } from "../controller";
+import type { MappingAttachmentCallbacks } from "../attachments";
 
 export const NOW = "2026-01-02T03:04:05.000Z";
 
@@ -45,6 +46,7 @@ export const model: ContentModelRecord = {
     schemaVersion: 1,
     id: "model-1",
     name: "Articles",
+    description: "",
     kind: "collection",
     fields: [
       { id: "field-title", key: "title", label: "Title", required: true, kind: "text" },
@@ -59,6 +61,8 @@ export const entry: ContentEntryRecord = {
   schemaVersion: 1,
   id: "entry-1",
   modelId: model.id,
+  lifecycle: "draft",
+  generation: 0,
   createdAt: NOW,
   updatedAt: NOW,
   values: { "field-title": "Hello world", "field-flag": true, "field-date": "2026-01-02", "field-slug": "hello-world" },
@@ -93,6 +97,7 @@ export const FILL_TARGET = { nodeId: GRID_NODE, prop: "fill" } as const;
 export const READY_BINDING: MappingBinding = {
   id: "binding-title",
   sourceFieldId: "field-title",
+  projection: { kind: "value" },
   target: { ...HEADING_TARGET },
   transform: { kind: "identity" },
 };
@@ -101,6 +106,7 @@ export const READY_BINDING: MappingBinding = {
 export const INCOMPATIBLE_BINDING: MappingBinding = {
   id: "binding-flag",
   sourceFieldId: "field-flag",
+  projection: { kind: "value" },
   target: { ...EYEBROW_TARGET },
   transform: { kind: "identity" },
 };
@@ -200,12 +206,20 @@ export function harness(
     },
   };
 
+  const attachments: MappingAttachmentCallbacks = {
+    async list() { return { targets: [], attachments: [] }; },
+    async attach() {},
+    async detach() {},
+    async preview() { return { status: "unavailable", effectiveEntries: [], diagnostics: [] }; },
+    async assertMappingDeletable() {},
+    async withMappingMutation(_mapping, action) { return action(); },
+  };
   const controller = new MappingEditorController(
     provider,
     { content, compositions },
     contentEntries,
     activeComponentProvider.catalog,
-    { idFactory: createSequentialIdFactory("test"), now: () => NOW, ...options },
+    { idFactory: createSequentialIdFactory("test"), now: () => NOW, attachments, ...options },
   );
 
   return { controller, provider, records, content, compositions, contentEntries };

@@ -144,6 +144,8 @@ for (const forbidden of [
   "ZUDO_SITE_PROJECT_ROOT",
   "virtual:site-project-source",
   "readActivatedSiteProject",
+  "readActivatedSiteRelease",
+  "readActivatedSiteMedia",
   "SiteProjectApiService",
   "SiteProjectStoreAdapter",
   "createLocalSiteProjectStore",

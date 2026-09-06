@@ -5,6 +5,7 @@
 
 import type { ComponentChildren, JSX } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { useWorkspace } from "../../../app/workspace-context";
 import { DuplicateIcon, EditIcon, PlusIcon, SitemapperIcon, TrashIcon } from "../../../components/icons";
 import {
   BulkBar,
@@ -29,7 +30,6 @@ import { Banner, Button, type DataTableColumn } from "../../../components/ui";
 import { cloneJson, createUuidIdFactory, type IdFactory } from "../../../shared";
 import {
   compareSitemapSummariesNewestFirst,
-  SITEMAP_PROVIDERS,
   summarizeSitemap,
   type SitemapInitializationOutcome,
   type SitemapProvider,
@@ -39,6 +39,7 @@ import {
 import { SITEMAP_SCHEMA_VERSION } from "../../../sitemapper/model";
 import { sitemapperHref } from "../app/sitemapper-intent";
 import { SitemapNameDialog } from "./name-dialog";
+import { withSitemapperWorkspaceLock } from "../app/sitemapper-workspace-lock";
 
 type NameDialogState = { kind: "create" } | { kind: "rename"; id: string; name: string };
 
@@ -66,7 +67,7 @@ function newRecord(id: string, name: string, timestamp: string): SitemapRecord {
     createdAt: timestamp,
     updatedAt: timestamp,
     document: {
-      schemaVersion: SITEMAP_SCHEMA_VERSION,
+      schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] },
       id,
       name,
       root: [{ id: `${id}-home`, title: "Home", source: { kind: "unassigned" }, children: [] }],
@@ -88,7 +89,6 @@ const CONTRACT: LibraryRowContract<SitemapSummary> = {
   id: (row) => row.id,
   name: (row) => row.name,
   icon: () => SitemapperIcon,
-  href: (row) => sitemapperHref(row.id),
   kind: (row) => (row.unassignedCount === 0
     ? { label: "All assigned", tone: "ok" }
     : { label: `${row.unassignedCount} unassigned`, tone: "warn" }),
@@ -135,18 +135,35 @@ export function SitemapLibrary({
   const [busy, setBusy] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<NameDialogState | null>(null);
+  const workspace = useWorkspace();
+  const workspaceIntegration = workspace?.integration;
+
+  const assertNoActiveDeletion = useCallback(async (ids?: readonly string[]): Promise<void> => {
+    if (!workspaceIntegration) return;
+    const metadata = await workspaceIntegration.workspace.metadata();
+    const active = metadata.metadata.activeSitemap;
+    if (active.providerId !== provider.descriptor?.id) return;
+    if (ids !== undefined && !ids.includes(active.recordId)) return;
+    throw new Error("The active Sitemap cannot be deleted. Select another Sitemap as active first.");
+  }, [provider, workspaceIntegration]);
 
   const initialize = useCallback(async (mode: "initialize" | "retry" | "startFresh") => {
     setBusy(true);
     try {
-      setOutcome(await provider.initialization[mode]());
+      if (mode === "startFresh") {
+        const result = await withSitemapperWorkspaceLock(workspaceIntegration?.workspace.id, async () => {
+          await assertNoActiveDeletion();
+          return provider.initialization[mode]();
+        });
+        setOutcome(await result);
+      } else setOutcome(await provider.initialization[mode]());
       setOperationError(null);
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap library could not be initialized."));
     } finally {
       setBusy(false);
     }
-  }, [provider]);
+  }, [assertNoActiveDeletion, provider]);
 
   useEffect(() => { void initialize("initialize"); }, [initialize]);
 
@@ -182,7 +199,7 @@ export function SitemapLibrary({
       await provider.store.put(record);
       commitSummary(summarizeSitemap(record));
       setDialog(null);
-      navigate(sitemapperHref(record.id));
+      navigate(sitemapperHref(provider.descriptor!.id, record.id));
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap could not be created."));
     } finally {
@@ -245,10 +262,13 @@ export function SitemapLibrary({
     // still drop the records that are actually gone, or the list lies.
     const deleted = new Set<string>();
     try {
-      for (const id of ids) {
-        await provider.store.delete(id);
-        deleted.add(id);
-      }
+      await withSitemapperWorkspaceLock(workspaceIntegration?.workspace.id, async () => {
+        await assertNoActiveDeletion(ids);
+        for (const id of ids) {
+          await provider.store.delete(id);
+          deleted.add(id);
+        }
+      });
     } catch (reason) {
       setOperationError(message(reason, "The Sitemap could not be deleted."));
     } finally {
@@ -277,7 +297,10 @@ export function SitemapLibrary({
     setBusy(true);
     setOperationError(null);
     try {
-      await provider.store.clear();
+      await withSitemapperWorkspaceLock(workspaceIntegration?.workspace.id, async () => {
+        await assertNoActiveDeletion(summaries.map((summary) => summary.id));
+        await provider.store.clear();
+      });
       setOutcome({ status: "ready", summaries: [] });
       selection.clear();
     } catch (reason) {
@@ -313,7 +336,8 @@ export function SitemapLibrary({
     </Button>
   );
 
-  const storageLabel = (provider.descriptor ?? SITEMAP_PROVIDERS.indexeddb).label;
+  if (!provider.descriptor) return <Banner tone="err">The Sitemap provider identity is unavailable.</Banner>;
+  const storageLabel = provider.descriptor.label;
   const ready = outcome !== null && outcome.status !== "error";
 
   return (
@@ -377,7 +401,7 @@ export function SitemapLibrary({
           <LibraryTable
             caption="Sitemaps"
             rows={query.rows}
-            contract={CONTRACT}
+            contract={{ ...CONTRACT, href: (row) => sitemapperHref(provider.descriptor!.id, row.id) }}
             columns={COLUMNS}
             selection={selection}
             kindHeader="Assignment"
@@ -398,7 +422,7 @@ export function SitemapLibrary({
             ) : undefined}
             rowMenu={(row) => ({
               label: row.name,
-              open: { id: "open", label: "Open", kbd: "↵", href: sitemapperHref(row.id) },
+              open: { id: "open", label: "Open", kbd: "↵", href: sitemapperHref(provider.descriptor!.id, row.id) },
               actions: [
                 { id: "rename", label: "Rename…", icon: EditIcon, onSelect: () => { setOperationError(null); setDialog({ kind: "rename", id: row.id, name: row.name }); } },
                 { id: "duplicate", label: "Duplicate", icon: DuplicateIcon, onSelect: () => void duplicate(row.id) },

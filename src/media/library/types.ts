@@ -2,6 +2,7 @@ import type {
   MediaBytesMissingReason,
   MediaLoadOutcome,
   MediaRecord,
+  MediaSnapshot, MediaFolder, MediaVersionRef, MediaVersionPin, MediaPinManifest,
 } from "../model";
 import type { MediaType } from "../model";
 import type { RecordId } from "../../shared";
@@ -25,6 +26,13 @@ export interface MediaSummary {
   checksum: string;
   createdAt: string;
   updatedAt: string;
+  revision: number;
+  folderId: string | null;
+  note: string;
+  state: "active" | "trash";
+  versionId: string;
+  url: string;
+  authoringUrl: string;
 }
 
 /** Bytes never travel through a persisted MediaRecord. */
@@ -41,6 +49,7 @@ export type MediaPersistenceOperation =
   | "put"
   | "delete"
   | "seed"
+  | "snapshot" | "replace" | "metadata" | "folder" | "trash" | "restore" | "pin"
   | "clear";
 
 export type MediaPersistenceErrorCode =
@@ -49,6 +58,7 @@ export type MediaPersistenceErrorCode =
   | "versionchange"
   | "unsupported-version"
   | "validation"
+  | "conflict" | "recovery-required" | "commit-uncertain"
   | "not-found"
   | "bytes-missing"
   | "read-failed"
@@ -77,10 +87,39 @@ export interface MediaStore {
   get(id: string): Promise<MediaLoadOutcome>;
   /** `bytes` is separate from JSON metadata and may be a streaming source. */
   put(record: MediaRecord, bytes: MediaByteSource): Promise<void>;
-  delete(id: string): Promise<boolean>;
+  /** Soft trash only. Missing preconditions are rejected, never guessed. */
+  delete(id: string, precondition?: MediaMutationPrecondition): Promise<boolean>;
   /** Optional fixture convenience; filesystem providers need not implement it. */
   seed?(seed: MediaSeed): Promise<void>;
   clear(): Promise<void>;
+}
+
+export interface MediaMutationPrecondition {
+  expectedRevision: number;
+  /** Optional provider-wide CAS in addition to mandatory record/folder CAS. */
+  expectedMutationToken?: string;
+}
+export interface MediaMetadataPatch { fileName?: string; folderId?: string | null; note?: string }
+export interface MediaFolderPatch { name?: string; parentId?: string | null; index?: number }
+export interface MediaListOptions { state?: "active" | "trash" | "all"; folderId?: string | null }
+export const MEDIA_VERSIONED_CAPABILITIES = Object.freeze({ folders: true, metadata: true, replace: true,
+  trash: true, restore: true, exactVersions: true, snapshot: true, permanentDelete: false } as const);
+
+export interface VersionedMediaStore extends MediaStore {
+  readonly capabilities: typeof MEDIA_VERSIONED_CAPABILITIES;
+  list(options?: MediaListOptions): Promise<readonly MediaSummary[]>;
+  snapshot(): Promise<MediaSnapshot>;
+  mutationToken(): Promise<string>;
+  updateMetadata(id: string, patch: MediaMetadataPatch, precondition: MediaMutationPrecondition): Promise<MediaRecord>;
+  trash(id: string, precondition: MediaMutationPrecondition): Promise<MediaRecord>;
+  restore(id: string, precondition: MediaMutationPrecondition): Promise<MediaRecord>;
+  createFolder(input: { name: string; parentId: string | null; index?: number }, expectedMutationToken: string): Promise<MediaFolder>;
+  updateFolder(id: string, patch: MediaFolderPatch, precondition: MediaMutationPrecondition): Promise<MediaFolder>;
+  trashFolder(id: string, precondition: MediaMutationPrecondition): Promise<MediaFolder>;
+  restoreFolder(id: string, precondition: MediaMutationPrecondition): Promise<MediaFolder>;
+  /** Reads and verifies retained bytes even when the asset is in trash. */
+  resolveVersion(ref: MediaVersionRef): Promise<MediaVersionPin>;
+  pinManifest(refs: readonly MediaVersionRef[]): Promise<MediaPinManifest>;
 }
 
 export interface MediaSeed {

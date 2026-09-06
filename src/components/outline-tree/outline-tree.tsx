@@ -1,7 +1,7 @@
 import { Fragment } from "preact";
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { Button, Switch, cx, nextRovingIndex } from "../ui";
+import { Button, Switch, cx, isComposingKey, nextRovingIndex } from "../ui";
 import { OutlineTreeProvider } from "./outline-context";
 import type { OutlineTreeContextValue } from "./outline-context";
 import { OutlineAddRoot, OutlineInsertGap } from "./outline-insert";
@@ -14,7 +14,11 @@ import {
   flattenVisibleRows,
   insertTargetAfter,
   isLastInList,
+  insertSiblings,
+  indexInsertLists,
+  resolveInsertAnchor,
 } from "./tree-model";
+import type { OutlineInsertAnchor } from "./tree-model";
 import type { OutlineInsertTarget, OutlineTreeProps } from "./types";
 
 /** Keys the roving helper answers here; Left/Right belong to the tree itself. */
@@ -62,6 +66,8 @@ export function OutlineTree(props: OutlineTreeProps) {
     canInsert,
     onRequestInsert,
     onAdd,
+    onRename,
+    canRename,
     addLabel = defaultAddLabel,
     showToolbar = true,
     prefKey,
@@ -75,25 +81,54 @@ export function OutlineTree(props: OutlineTreeProps) {
   const currentExpandedIds = expandedIds ?? ownExpandedIds ?? expandableIds;
   const expandedSet = useMemo(() => new Set(currentExpandedIds), [currentExpandedIds]);
   const rows = useMemo(() => flattenVisibleRows(nodes, expandedSet), [nodes, expandedSet]);
+  const insertLists = useMemo(() => indexInsertLists(nodes), [nodes]);
 
   const [prefs, setPrefs] = useState<OutlinePrefs>(() => readOutlinePrefs(prefKey));
-  const [editing, setEditing] = useState<OutlineInsertTarget | null>(null);
+  const [pending, setPending] = useState<{ anchor: OutlineInsertAnchor; inline: boolean; invalidated: boolean } | null>(null);
+  const pendingRef = useRef(pending);
+  const latest = useRef({ nodes, insertLists, canInsert, onAdd, onRequestInsert });
+  latest.current = { nodes, insertLists, canInsert, onAdd, onRequestInsert };
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   const [focusedId, setFocusedId] = useState<string | null>(null);
 
   const rowElements = useRef(new Map<string, HTMLElement>());
   /** The row an insert was requested from, so Escape puts focus back. */
   const editOriginId = useRef<string | null>(null);
   const restoreFocusId = useRef<string | null>(null);
+  const originElement = useRef<HTMLElement | null>(null);
+  const originTerminal = useRef<string | null | undefined>(undefined);
+  const terminalElements = useRef(new Map<string | null, HTMLElement>());
+  const rootElement = useRef<HTMLDivElement>(null);
+  const expandParent = useRef<(id: string) => void>(() => {});
+  expandParent.current = (id) => setExpanded(id, true);
+  const restoreOrigin = useRef(false);
+  const addedFrom = useRef<{ parentId: string | null; ids: Set<string> } | null>(null);
+
+  useEffect(() => () => { pendingRef.current = null; }, []);
 
   useEffect(() => {
     setPrefs(readOutlinePrefs(prefKey));
   }, [prefKey]);
 
   useEffect(() => {
+    if (addedFrom.current) {
+      const { parentId, ids } = addedFrom.current;
+      const inserted = insertSiblings(nodes, parentId)?.filter((node) => !ids.has(node.id));
+      if (inserted?.length === 1 && restoreOrigin.current) restoreFocusId.current = inserted[0].id;
+      addedFrom.current = null;
+    }
     const id = restoreFocusId.current;
-    if (id === null) return;
-    restoreFocusId.current = null;
-    rowElements.current.get(id)?.focus();
+    if (id !== null && rowElements.current.has(id)) {
+      restoreFocusId.current = null;
+      rowElements.current.get(id)?.focus();
+    } else if (restoreOrigin.current) {
+      restoreFocusId.current = null;
+      if (originElement.current?.isConnected) originElement.current.focus();
+      else if (originTerminal.current !== undefined && terminalElements.current.has(originTerminal.current)) {
+        terminalElements.current.get(originTerminal.current)?.focus();
+      } else (rowElements.current.get(editOriginId.current ?? "") ?? rootElement.current)?.focus();
+    }
+    restoreOrigin.current = false;
   });
 
   function focusRow(id: string) {
@@ -127,30 +162,84 @@ export function OutlineTree(props: OutlineTreeProps) {
   function canInsertAt(target: OutlineInsertTarget): boolean {
     // With no gate of its own a tree offers insert points wherever it can act
     // on them — that is, as soon as the host handed it a way to add a node.
-    if (canInsert === undefined) return onAdd !== undefined || onRequestInsert !== undefined;
-    return canInsert(target);
+    const state = latest.current;
+    const siblings = state.insertLists.get(target.parentId);
+    if (siblings === undefined || !Number.isInteger(target.index) || target.index < 0 || target.index > siblings.length) return false;
+    if (state.canInsert === undefined) return state.onAdd !== undefined || state.onRequestInsert !== undefined;
+    return state.canInsert(target);
   }
 
   function requestInsert(target: OutlineInsertTarget, originId: string | null = null) {
     if (!canInsertAt(target)) return;
+    setRenamingId(null);
     editOriginId.current = originId;
-    const outcome = onRequestInsert?.(target);
-    setEditing(onRequestInsert === undefined || outcome === "inline" ? target : null);
+    originElement.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    originTerminal.current = originId === null && target.index === insertLists.get(target.parentId)?.length
+      ? target.parentId : undefined;
+    const transaction = {
+      anchor: { parentId: target.parentId, beforeId: insertSiblings(nodes, target.parentId)?.[target.index]?.id ?? null },
+      inline: onRequestInsert === undefined,
+      invalidated: false,
+    };
+    pendingRef.current = transaction;
+    setPending(transaction);
+    const resolveTarget = () => {
+      if (pendingRef.current !== transaction || transaction.invalidated) return null;
+      const resolved = resolveInsertAnchor(latest.current.nodes, transaction.anchor);
+      return resolved && canInsertAt(resolved) ? resolved : null;
+    };
+    const outcome = onRequestInsert?.(target, {
+      resolveTarget,
+      cancel: () => { if (pendingRef.current === transaction) closeEdit(); },
+      complete: (insertedId) => {
+        if (pendingRef.current !== transaction) return;
+        if (transaction.anchor.parentId !== null) expandParent.current(transaction.anchor.parentId);
+        closeEdit(insertedId);
+      },
+    });
+    if (outcome === "inline" && pendingRef.current === transaction) {
+      transaction.inline = true;
+      setPending({ ...transaction });
+    }
   }
 
-  function closeEdit() {
-    restoreFocusId.current = editOriginId.current;
-    editOriginId.current = null;
-    setEditing(null);
+  function closeEdit(insertedId?: string) {
+    restoreFocusId.current = insertedId ?? editOriginId.current;
+    restoreOrigin.current = insertedId === undefined;
+    pendingRef.current = null;
+    setPending(null);
   }
 
   function commitAdd(target: OutlineInsertTarget, title: string) {
+    if (!canInsertAt(target)) return;
     // An empty branch is not expandable, so nothing holds it open; without this
     // the child about to arrive would make it expandable-and-collapsed and the
     // node the user just added would never appear.
     if (target.parentId !== null && !expandedSet.has(target.parentId)) setExpanded(target.parentId, true);
-    onAdd?.({ ...target, title });
-    closeEdit();
+    addedFrom.current = { parentId: target.parentId, ids: new Set(insertSiblings(nodes, target.parentId)?.map((node) => node.id)) };
+    const insertedId = onAdd?.({ ...target, title });
+    closeEdit(insertedId || undefined);
+  }
+
+  const pendingTarget = pending === null ? null : resolveInsertAnchor(nodes, pending.anchor);
+  const validPendingTarget = !pending?.invalidated && pendingTarget && canInsertAt(pendingTarget) ? pendingTarget : null;
+  const editing = pending?.inline ? validPendingTarget : null;
+
+  // A chooser may retain its draft and report an invalid target via resolveTarget().
+  // Inline editors cannot outlive their row: restore a stable tree focus target.
+  useEffect(() => {
+    if (pending?.inline && validPendingTarget === null) closeEdit();
+    else if (pending && validPendingTarget === null) {
+      pending.invalidated = true;
+      if (pendingRef.current) pendingRef.current.invalidated = true;
+    }
+    if (renamingId !== null && !nodeIds.includes(renamingId)) cancelRename();
+  });
+
+  function cancelRename() {
+    restoreFocusId.current = renamingId;
+    restoreOrigin.current = true;
+    setRenamingId(null);
   }
 
   function handleRowKeyDown(event: KeyboardEvent, id: string) {
@@ -159,7 +248,17 @@ export function OutlineTree(props: OutlineTreeProps) {
     const row = rows[index];
     // A shortcut of the host or the browser — Cmd+A, Ctrl+Home — is not a tree
     // key. `a` in particular would otherwise open an insert editor on Select all.
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.altKey || event.ctrlKey || event.metaKey || isComposingKey(event)) return;
+    if (event.key === "F2" && onRename && (canRename?.(row.node) ?? true)) {
+      event.preventDefault();
+      event.stopPropagation();
+      originElement.current = rowElements.current.get(id) ?? null;
+      originTerminal.current = undefined;
+      pendingRef.current = null;
+      setPending(null);
+      setRenamingId(id);
+      return;
+    }
 
     if (event.key === "ArrowRight") {
       if (row.expandable && !row.expanded) {
@@ -220,11 +319,23 @@ export function OutlineTree(props: OutlineTreeProps) {
     requestInsert,
     commitAdd,
     editing,
+    pending: validPendingTarget,
+    renamingId,
+    commitRename: (id, title) => {
+      const node = rows.find((row) => row.node.id === id)?.node;
+      if (node && (canRename?.(node) ?? true)) onRename?.(id, title);
+      cancelRename();
+    },
+    cancelRename,
     cancelEdit: closeEdit,
     addLabel,
     registerRow: (id, element) => {
       if (element === null) rowElements.current.delete(id);
       else rowElements.current.set(id, element);
+    },
+    registerTerminal: (parentId, element) => {
+      if (element === null) terminalElements.current.delete(parentId);
+      else terminalElements.current.set(parentId, element);
     },
     handleRowKeyDown,
     tabStopId,
@@ -233,6 +344,8 @@ export function OutlineTree(props: OutlineTreeProps) {
 
   return (
     <div
+      ref={rootElement}
+      tabIndex={-1}
       class={cx(
         "cms-tree",
         prefs.slug && "cms-tree--show-slug",
@@ -282,9 +395,7 @@ export function OutlineTree(props: OutlineTreeProps) {
         <div class="cms-tree__nodes" role="tree" aria-label={label}>
           {nodes.map((node, index) => (
             <Fragment key={node.id}>
-              {index === 0 ? null : (
-                <OutlineInsertGap target={{ parentId: null, index }} depth={0} beforeTitle={node.title} root />
-              )}
+              <OutlineInsertGap target={{ parentId: null, index }} depth={0} beforeTitle={node.title} root />
               <OutlineNodeRow
                 node={node}
                 placement={{

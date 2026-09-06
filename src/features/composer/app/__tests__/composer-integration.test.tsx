@@ -439,6 +439,47 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     expect(code).toContain("Stack");
     expect(code.indexOf("SplitLayout")).toBeLessThan(code.indexOf("Stack"));
   });
+
+  it("keeps the shared tree pending-insert session through the chooser and focuses the inserted row", async () => {
+    const s = setup(undefined, makeAbcDocument());
+    fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert before Split Layout" }));
+    fireEvent.click(within(s.chooser()).getByRole("button", { name: "Text" }));
+
+    expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.text, FIXTURE_IDS.split]);
+    await waitFor(() => expect(document.activeElement).toBe(s.treeRow("Text")));
+  });
+
+  it("uses the shared pending session for terminal Add and restores the terminal origin on cancel", async () => {
+    const s = setup();
+    const terminal = within(s.tree()).getByRole("button", { name: "Add component" });
+    fireEvent.click(terminal);
+    fireEvent.click(within(s.chooser()).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(terminal));
+
+    fireEvent.click(terminal);
+    fireEvent.click(within(s.chooser()).getByRole("button", { name: "Stack" }));
+    expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.stack]);
+    await waitFor(() => expect(document.activeElement).toBe(s.treeRow("Stack")));
+  });
+
+  it("routes document/slot row Add and adjacent insert-menu Add through live terminal sessions", async () => {
+    const s = setup(undefined, makeAbcDocument());
+    const documentAdd = within(s.tree()).getByRole("button", { name: "Add component to the document" });
+    fireEvent.click(documentAdd);
+    fireEvent.click(within(s.chooser()).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(documentAdd));
+
+    fireEvent.click(documentAdd);
+    fireEvent.click(within(s.chooser()).getByRole("button", { name: "Text" }));
+    expect(s.canvasDoc().root.map((node) => node.componentId)).toEqual([FIXTURE_IDS.split, FIXTURE_IDS.text]);
+    await waitFor(() => expect(document.activeElement).toBe(s.treeRow("Text")));
+
+    fireEvent.click(within(s.tree()).getByRole("button", { name: "Insert options for Right" }));
+    fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Add component…" }));
+    fireEvent.click(within(s.chooser()).getByRole("button", { name: "Text" }));
+    expect(s.canvasDoc().root[0]!.slots.right!.map((node) => node.props.label ?? node.props.children)).toEqual(["B", "C", "Text"]);
+    await waitFor(() => expect(document.activeElement).toBe(s.treeRowsNamed("Text").find((row) => row.getAttribute("aria-selected") === "true")));
+  });
 });
 
 describe("ComposerIntegration — mutations reflect everywhere (#251)", () => {

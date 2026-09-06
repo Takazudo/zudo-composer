@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Response } from "@playwright/test";
+import { registerCatalogJourney } from "./catalog-editorial-journey";
 
 const SITE_ROUTES = [
   "/site",
@@ -70,7 +71,10 @@ async function expectRouteContent(page: Page, route: string) {
 test("the activated graph appears in every authoring library", async ({ page }) => {
   const failures = watchRuntimeFailures(page);
   await page.goto("/composer");
-  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
+  // The first unbundled Composer route loads the full provider module graph.
+  // Match the established dev-route readiness contract without inflating the
+  // warm library assertions that follow.
+  await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible({ timeout: 60_000 });
   for (const name of ["About page", "Home page", "Journal entry page", "Journal index page", "Services page", "Site frame"]) {
     await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   }
@@ -131,7 +135,7 @@ test("crawls every emitted SiteProject route with refresh, Entry content, chrome
   }
 });
 
-test("an authoring Entry edit survives reload and is reflected by SiteDelivery", async ({ page }) => {
+test("review stages A while newer working B survives local activation and reload", async ({ page }) => {
   test.skip(BROWSER_LANE !== "dev", "the production lane intentionally serves immutable bundled data");
   const failures = watchRuntimeFailures(page);
   await page.goto("/content");
@@ -146,11 +150,38 @@ test("an authoring Entry edit survives reload and is reflected by SiteDelivery",
   // The route publishes its save state through `useEditorStatus`; the shell
   // draws it in the topbar.
   await expect(page.locator(".cms-topbar__status")).toContainText("Saved");
-  await page.goto("/site/about");
-  await expect(page.getByRole("heading", { name: "A browser-edited studio", exact: true })).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "A browser-edited studio", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Review & release", exact: true }).click();
+  await page.getByRole("checkbox", { name: /changed:.*about/ }).check();
+  await page.getByRole("button", { name: "Run release checks", exact: true }).click();
+  await page.getByRole("button", { name: "Approve reviewed candidate", exact: true }).click();
+  await page.getByRole("button", { name: "Apply / stage exact candidate", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Build staged candidate", exact: true })).toBeEnabled();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
+  await contentTree.getByRole("treeitem", { name: /^About content/ }).click();
+  await contentTree.getByRole("treeitem", { name: /^A browser-edited studio/ }).click();
+  await heading.fill("Newer working B"); await heading.blur();
+  await page.getByRole("link", { name: "Review & release", exact: true }).click();
+  await page.getByRole("button", { name: "Build staged candidate", exact: true }).click();
+  await page.getByRole("button", { name: "Activate locally", exact: true }).click();
+  await expect(page.getByText(/Activated locally\. Publication reconciliation/)).toBeVisible();
+  await page.goto("/content?provider=content-indexeddb&model=about-content&entry=about-entry");
+  await expect(heading).toHaveValue("Newer working B");
   expect(failures).toEqual([]);
+});
+
+test("static release inspection never offers write capability", async ({ page }) => {
+  test.skip(BROWSER_LANE !== "dist", "static capability assertion");
+  await page.goto("/review");
+  await expect(page.getByText(/Static read-only mode/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run release checks" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Activate locally" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Export working JSON" })).toBeEnabled();
+  for (const endpoint of ["/__zudo-release", "/__zudo_composer_media_file_provider"]) {
+    const response = await page.request.post(endpoint, { data: { protocolVersion: 2, operation: "describe" } });
+    const body = await response.text();
+    expect(body, `${endpoint} must not expose a deployed authoring protocol`).not.toMatch(/"ok"\s*:\s*(?:true|false)|"capability"\s*:/);
+    expect(response.status() >= 400 || (response.headers()["content-type"] ?? "").includes("text/html")).toBe(true);
+  }
 });
 
 test("missing SiteProject routes show an accessible not-found state", async ({ page }) => {
@@ -158,7 +189,7 @@ test("missing SiteProject routes show an accessible not-found state", async ({ p
   const response = await page.goto("/site/does-not-exist");
   expect(response?.status()).toBe(200);
   await expect(page.getByRole("heading", { name: "Page not found", exact: true })).toBeVisible();
-  await expect(page.getByText("This page is not present in the current Sitemap.", { exact: true })).toBeVisible();
+  await expect(page.getByText("This page is not present in the selected delivery snapshot.", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
   expect(failures).toEqual([]);
 });
@@ -215,3 +246,6 @@ test("dev virtual source contains the CLI-activated project", async ({ page }) =
   expect(source).toContain('"Sample Studio"');
   expect(failures).toEqual([]);
 });
+
+// Last: activation changes only this guarded runner's disposable release root.
+registerCatalogJourney(BROWSER_LANE);

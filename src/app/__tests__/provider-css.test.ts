@@ -73,14 +73,19 @@ describe("provider CSS graph", () => {
   it("shares one shell height contract and accessible neutral navigation states", () => {
     const tokens = readFileSync(resolve("src/styles/app-tokens.css"), "utf8");
     const shell = readFileSync(resolve("src/app/shell.css"), "utf8");
-    // The topbar is one height at every width; the rail becomes a bottom strip.
+    // The topbar remains fixed; mobile uses a modal drawer, not a bottom strip.
     expect(tokens).toContain("--zc-topbar-h: 48px");
-    expect(tokens).toContain("--zc-bottom-strip-h: 56px");
+    expect(tokens).toContain("--zc-rail-w: 244px");
+    expect(tokens).toContain("--zc-rail-w-collapsed: 56px");
     // Untouched route editors still compute `calc(100vh - var(--sg-header-h))`.
     expect(tokens).toContain("--sg-header-h: var(--zc-topbar-h)");
     expect(tokens).not.toContain("--zudo-composer-header-height");
     expect(shell).toContain("grid-template-rows: var(--zc-topbar-h) minmax(0, 1fr)");
-    expect(shell).toMatch(/@media \(max-width: 64rem\)[\s\S]*var\(--zc-bottom-strip-h\)/);
+    expect(shell).toContain("@media (max-width: 760px)");
+    expect(shell).toContain("@media (min-width: 761px) and (max-width: 1100px)");
+    expect(shell).toContain("--zc-rail-w: 218px");
+    expect(shell).toContain("width: min(320px, calc(100vw - 48px))");
+    expect(shell).not.toContain("var(--zc-bottom-strip-h)");
     expect(shell).toMatch(/@media \(hover: hover\)[\s\S]*\.cms-rail__item:hover/);
     expect(shell).toMatch(/focus-visible \{ outline: 2px solid var\(--color-focus\)/);
     expect(shell).toMatch(/@media \(pointer: coarse\)[\s\S]*min-height: 44px/);

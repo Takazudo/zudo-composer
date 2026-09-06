@@ -22,7 +22,7 @@ function node(id: string, children: SitemapNode[] = []): SitemapNode {
 
 function fixture(): SitemapDocument {
   return {
-    schemaVersion: SITEMAP_SCHEMA_VERSION,
+    schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] },
     id: "map",
     name: "Map",
     root: [
@@ -135,12 +135,12 @@ describe("updatePageProps / renamePage", () => {
     } as never)).toMatchObject({ ok: false, code: "invalid-patch" });
   });
 
-  it("rejects authored children below Mapping sources and Mapping conversion of nonempty pages", () => {
+  it("supports authored children below Mapping sources and Mapping conversion of nonempty pages", () => {
     const mappingSource = { kind: "mapping" as const, ref: { providerId: "mapping", recordId: "articles" }, route: { kind: "entry-field" as const, fieldId: "slug" } };
-    expect(updatePageProps(fixture(), "root", { source: mappingSource })).toMatchObject({ ok: false, code: "mapping-children" });
+    expect(updatePageProps(fixture(), "root", { source: mappingSource })).toMatchObject({ ok: true });
     const converted = success(updatePageProps(fixture(), "b", { source: mappingSource })).document;
-    expect(addChildPage(converted, "b", "Synthetic", () => "synthetic")).toMatchObject({ ok: false, code: "mapping-children" });
-    expect(movePage(converted, "a", "b", 0)).toMatchObject({ ok: false, code: "mapping-children" });
+    expect(addChildPage(converted, "b", "Synthetic", () => "synthetic")).toMatchObject({ ok: true });
+    expect(movePage(converted, "a", "b", 0)).toMatchObject({ ok: true });
   });
 });
 
@@ -246,7 +246,7 @@ describe("movePage / reorderPage", () => {
 });
 
 describe("addRootPage", () => {
-  const empty = (): SitemapDocument => ({ schemaVersion: SITEMAP_SCHEMA_VERSION, id: "map", name: "Map", root: [] });
+  const empty = (): SitemapDocument => ({ schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] }, id: "map", name: "Map", root: [] });
 
   it("gives an empty document its single root page", () => {
     const result = success(addRootPage(empty(), "Home", createSequentialIdFactory("page")));

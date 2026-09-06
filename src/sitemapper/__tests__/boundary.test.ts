@@ -50,7 +50,7 @@ describe("standalone Sitemapper boundary", () => {
     expect(app).toContain("provider: SitemapProvider");
     expect(app).not.toContain("createIndexedDbSitemapProvider");
     expect(storage).toContain('SITEMAPPER_DATABASE_NAME = "zudo-composer-sitemapper"');
-    expect(storage).toContain("SITEMAPPER_DATABASE_VERSION = 1");
+    expect(storage).toContain("SITEMAPPER_DATABASE_VERSION = 3");
     expect(SitemapperRouteContent).toBeTypeOf("function");
   });
 });

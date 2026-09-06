@@ -14,7 +14,7 @@ function node(id: string, slug?: string, children: SitemapNode[] = []): SitemapN
 }
 
 function document(root: SitemapNode): SitemapDocument {
-  return { schemaVersion: SITEMAP_SCHEMA_VERSION, id: "test", name: "Test", root: [root] };
+  return { schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] }, id: "test", name: "Test", root: [root] };
 }
 
 function connectorCrossings(layout: CanvasLayout): string[] {

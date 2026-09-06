@@ -1,5 +1,5 @@
 import type { CompositionRecord } from "../../composer/library/types";
-import type { CompositionDocument } from "../../composer/model/types";
+import type { CompositionDocument, CompositionNode } from "../../composer/model/types";
 import { materializeGlobalTemplateView } from "../../composer/reuse/materialize";
 import { resolveGlobalTemplate } from "../../composer/reuse/resolver";
 import type { GlobalTemplateResolutionOutcome } from "../../composer/reuse/types";
@@ -7,10 +7,15 @@ import { planLinkedJsxModules } from "../../composer/source/plan-linked-jsx";
 import type { ContentEntrySnapshot } from "../../content/library/types";
 import type { ContentEntryRecord, ContentModelRecord } from "../../content/model/types";
 import { evaluateResolvedMapping, resolveMappingDefinition } from "../../mapping/resolver/resolver";
+import { evaluateCollectionQuery } from "../../mapping/resolver/collection";
+import type { MappingRouteProjectionResolver } from "../../mapping/resolver/projections";
 import type { MappingDefinitionResolution, MappingRecord } from "../../mapping/model/types";
 import type { SitemapNode } from "../../sitemapper/model/types";
 import { authoredPath, expandSitemapRoutes } from "../../sitemapper/routes/expand";
 import type { DerivedSitemapRoute, SitemapRouteDiagnostic } from "../../sitemapper/routes/types";
+import { resolveSitemapNavigation, sameSitemapEntry } from "../../sitemapper/routes/navigation";
+import { resolveSiteProjectMedia, resolveCompositionMedia } from "../media/impact";
+import { validateMediaReferenceLock, resolvePinnedMedia, isImmutableMediaUrl } from "../../media/references";
 import { compareUnicodeCodePoints } from "../model/canonical";
 import { createInMemorySiteProjectAdapters } from "../model/memory";
 import type { SiteProject, SiteProjectRecordRef } from "../model/types";
@@ -59,6 +64,17 @@ function mappingSelector(ref: SiteProjectRecordRef): string {
 function compositionSelector(ref: SiteProjectRecordRef): string {
   return selector("compositions", ref.providerId, "records", ref.recordId);
 }
+
+function refKey(ref: SiteProjectRecordRef): string { return `${ref.providerId}\u0000${ref.recordId}`; }
+function findCompositionNode(nodes: readonly CompositionNode[], id: string): CompositionNode | undefined { for (const node of nodes) { if (node.id === id) return node; for (const children of Object.values(node.slots)) { const found = findCompositionNode(children, id); if (found) return found; } } return undefined; }
+function repeatIdentityPart(value: string): string { return `${value.length.toString(36)}_${value}`; }
+function repeatedNodeId(attachmentId: string, entryId: string, nodeId: string): string { return `__zudo_collection_${repeatIdentityPart(attachmentId)}_${repeatIdentityPart(entryId)}_${repeatIdentityPart(nodeId)}`; }
+function cloneRepeatedNodes(nodes: readonly CompositionNode[], attachmentId: string, entryId: string): CompositionNode[] {
+  return nodes.map((node) => ({ ...structuredClone(node), id: repeatedNodeId(attachmentId, entryId, node.id), slots: Object.fromEntries(Object.entries(node.slots).map(([slotId, children]) => [slotId, cloneRepeatedNodes(children, attachmentId, entryId)])) }));
+}
+function countNodes(nodes: readonly CompositionNode[]): number { return nodes.reduce((count, node) => count + 1 + Object.values(node.slots).reduce((sum, children) => sum + countNodes(children), 0), 0); }
+function nodeIds(nodes: readonly CompositionNode[]): string[] { return nodes.flatMap((node) => [node.id, ...Object.values(node.slots).flatMap(nodeIds)]); }
+const MAX_MATERIALIZED_NODES = 10_000;
 
 function compareOptional(left: string | undefined, right: string | undefined): number {
   return compareUnicodeCodePoints(left ?? "", right ?? "");
@@ -117,7 +133,7 @@ function routeIdentity(
   active: SiteProjectRecordRef,
   occupied: Set<string>,
 ): string {
-  const values = [project.id, active.providerId, active.recordId, route.nodeId, route.entryId ?? "", route.pathname];
+  const values = [project.id, active.providerId, active.recordId, route.nodeId, route.selectedEntry, route.ancestors.map(({ nodeId, selectedEntry }) => ({ nodeId, selectedEntry })), route.pathname];
   const input = JSON.stringify(values);
   const base = `site-route-${stableHash(input, 0xcbf29ce484222325n)}${stableHash(input, 0x84222325cbf29ce4n)}`;
   let id = base;
@@ -223,6 +239,13 @@ export async function compileSiteProject(
   project: SiteProject,
   options: CompileSiteProjectOptions,
 ): Promise<SiteProjectCompilation> {
+  if (options.mediaLock && !validateMediaReferenceLock(options.mediaLock)) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-lock-invalid", message: "The exact-version Media lock is invalid.", path: "$.mediaLock" }] };
+  const media = resolveSiteProjectMedia(project, options.componentCatalog, { lock: options.mediaLock });
+  const mediaMissing = media.index.references.filter(({ ref }) => !options.mediaLock || !resolvePinnedMedia(ref, options.mediaLock));
+  if ((options.policy ?? "release") === "release" && !media.index.complete) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-impact-incomplete", message: "Managed Media inspection is incomplete. " + media.index.advisory.map(({ reason }) => reason).join(" "), path: "$.mediaLock" }] };
+  if ((options.policy ?? "release") === "release" && media.index.advisory.some(({ value }) => value && isImmutableMediaUrl(value))) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-lock-required", message: "An immutable Media URL has no verified lock association.", path: "$.mediaLock" }] };
+  if ((options.policy ?? "release") === "release" && mediaMissing.length) return { status: "blocked", routes: [], diagnostics: mediaMissing.map(({ location }) => ({ severity: "blocking", code: "media-lock-required", message: "Required managed Media must be captured in an exact-version lock before release compilation.", path: JSON.stringify(location) })) };
+  project = media.project;
   const adapters = createInMemorySiteProjectAdapters(project);
   const snapshot = adapters.project;
   const active = snapshot.activeSitemap;
@@ -280,7 +303,83 @@ export async function compileSiteProject(
     return promise;
   };
 
+  const materializationSources = new Map<string, NonNullable<SiteCompiledRoute["materializationSources"]>[number][]>();
+  const materializeCollectionAttachments = async (
+    ownerRef: SiteProjectRecordRef,
+    sourceDocument: CompositionDocument,
+    routeContext: { pathname: string; nodeId: string },
+    stack: readonly string[] = [],
+    nodeBudget = MAX_MATERIALIZED_NODES,
+  ): Promise<CompositionDocument | undefined> => {
+    const ownerKey = refKey(ownerRef);
+    if (stack.includes(ownerKey)) {
+      diagnostics.push({ severity: "blocking", code: "attachment-cycle", message: `Collection attachment cycle: ${[...stack, ownerKey].join(" -> ")}.`, path: "$.collectionAttachments", ...routeContext });
+      return undefined;
+    }
+    const sourceNodeCount = countNodes(sourceDocument.root);
+    if (sourceNodeCount > nodeBudget) {
+      diagnostics.push({ severity: "blocking", code: "attachment-materialization-limit", message: `Collection attachment materialization exceeds the ${MAX_MATERIALIZED_NODES.toLocaleString("en-US")} component-node limit.`, path: "$.collectionAttachments", ...routeContext });
+      return undefined;
+    }
+    const document = cloneDocument(sourceDocument);
+    const attachments = snapshot.collectionAttachments
+      .filter((item) => refKey(item.composition) === ownerKey)
+      .sort((left, right) => left.order - right.order || compareUnicodeCodePoints(left.id, right.id));
+    const occupied = new Set<string>();
+    const occupiedNodeIds = new Set(nodeIds(document.root));
+    let total = sourceNodeCount;
+    for (const attachment of attachments) {
+      const attachmentPath = `$.collectionAttachments[?(@.id==${JSON.stringify(attachment.id)})]`;
+      const slotKey = `${attachment.target.nodeId}\u0000${attachment.target.slotId}`;
+      if (occupied.has(slotKey)) { diagnostics.push({ severity: "blocking", code: "attachment-slot-conflict", message: "Multiple collection attachments target the same named slot.", path: attachmentPath, ...routeContext }); return undefined; }
+      occupied.add(slotKey);
+      const targetNode = findCompositionNode(document.root, attachment.target.nodeId);
+      const targetComponent = targetNode ? options.componentCatalog.get(targetNode.componentId) : undefined;
+      const slot = targetComponent?.slots.find((candidate) => candidate.id === attachment.target.slotId);
+      if (!targetNode || !slot) { diagnostics.push({ severity: "blocking", code: "attachment-target-invalid", message: "Collection attachment target node/named slot is unavailable.", path: attachmentPath, ...routeContext }); return undefined; }
+      const mapping = adapters.mappings.catalog.resolve(attachment.mapping);
+      if (!mapping) { diagnostics.push({ severity: "blocking", code: "attachment-mapping-not-found", message: "Collection attachment Mapping was not found.", path: attachmentPath, ...routeContext }); return undefined; }
+      if (mapping.document.mode.kind !== "collection") { diagnostics.push({ severity: "blocking", code: "attachment-mapping-not-collection", message: "Collection attachment Mapping is not in collection mode.", path: attachmentPath, ...routeContext }); return undefined; }
+      const prepared = await prepareMapping(mapping);
+      if (prepared.definition.status !== "ready" || !prepared.definition.composition || prepared.content.status !== "resolved") { diagnostics.push({ severity: "blocking", code: "attachment-mapping-blocked", message: "Collection attachment Mapping definition could not be resolved.", path: attachmentPath, ...routeContext }); return undefined; }
+      if (prepared.definition.composition.document.binding) { diagnostics.push({ severity: "blocking", code: "attachment-linked-source-unsupported", message: "Collection attachments require a detached Mapping Composition.", path: attachmentPath, ...routeContext }); return undefined; }
+      const query = evaluateCollectionQuery({ model: prepared.content.model, providerId: mapping.document.contentModel.providerId, entries: prepared.content.snapshot.entries, query: { ...mapping.document.mode.query, publication: options.policy === "authoring-preview" ? mapping.document.mode.query.publication : "published-only" } });
+      for (const item of query.diagnostics) if (item.severity === "blocking") diagnostics.push({ severity: "blocking", code: `attachment-${item.code}`, message: item.message, path: attachmentPath, ...routeContext, ...(item.entryId ? { entry: { providerId: mapping.document.contentModel.providerId, recordId: item.entryId } } : {}) });
+      if (query.status === "blocked") return undefined;
+      const roots: CompositionNode[] = [];
+      for (const entry of query.entries) {
+        const remaining = nodeBudget - total;
+        if (countNodes(prepared.definition.composition.document.root) > remaining) { diagnostics.push({ severity: "blocking", code: "attachment-materialization-limit", message: `Collection attachment materialization exceeds the ${MAX_MATERIALIZED_NODES.toLocaleString("en-US")} component-node limit.`, path: attachmentPath, ...routeContext }); return undefined; }
+        const evaluation = evaluateResolvedMapping(prepared.definition, entry, { routeResolver: routeProjectionResolver(routeContext.pathname) });
+        if (evaluation.status !== "ready" || !evaluation.document) { diagnostics.push({ severity: "blocking", code: "attachment-entry-mapping-blocked", message: `Collection Entry "${entry.id}" could not be mapped.`, path: attachmentPath, ...routeContext, entry: { providerId: mapping.document.contentModel.providerId, recordId: entry.id } }); return undefined; }
+        const nested = await materializeCollectionAttachments(mapping.document.composition, evaluation.document, routeContext, [...stack, ownerKey], remaining);
+        if (!nested) return undefined;
+        const repeatedCount = countNodes(nested.root);
+        if (repeatedCount > remaining) { diagnostics.push({ severity: "blocking", code: "attachment-materialization-limit", message: `Collection attachment materialization exceeds the ${MAX_MATERIALIZED_NODES.toLocaleString("en-US")} component-node limit.`, path: attachmentPath, ...routeContext }); return undefined; }
+        const repeatedIds = nodeIds(nested.root).map((id) => repeatedNodeId(attachment.id, entry.id, id));
+        const repeatedIdSet = new Set(repeatedIds);
+        if (repeatedIdSet.size !== repeatedIds.length || repeatedIds.some((id) => occupiedNodeIds.has(id))) { diagnostics.push({ severity: "blocking", code: "attachment-node-id-conflict", message: `Stable repeated node identity for Entry "${entry.id}" conflicts with an authored or generated node.`, path: attachmentPath, ...routeContext, entry: { providerId: mapping.document.contentModel.providerId, recordId: entry.id } }); return undefined; }
+        for (const id of repeatedIds) occupiedNodeIds.add(id);
+        const sources = materializationSources.get(routeContext.pathname) ?? [];
+        for (const originalNodeId of nodeIds(nested.root)) {
+          const prior = sources.find((source) => source.renderedNodeId === originalNodeId);
+          sources.push({ renderedNodeId: repeatedNodeId(attachment.id, entry.id, originalNodeId), providerId: prior?.providerId ?? mapping.document.composition.providerId, recordId: prior?.recordId ?? mapping.document.composition.recordId, nodeId: prior?.nodeId ?? originalNodeId, attachmentId: prior?.attachmentId ?? attachment.id, entries: [{ providerId: mapping.document.contentModel.providerId, modelId: entry.modelId, recordId: entry.id }, ...(prior?.entries ?? [])] });
+        }
+        materializationSources.set(routeContext.pathname, sources);
+        const repeated = cloneRepeatedNodes(nested.root, attachment.id, entry.id);
+        if (slot.accepts && repeated.some((node) => !slot.accepts!.includes(node.componentId))) { diagnostics.push({ severity: "blocking", code: "attachment-slot-incompatible", message: `Mapped roots for Entry "${entry.id}" are not accepted by the target slot.`, path: attachmentPath, ...routeContext }); return undefined; }
+        roots.push(...repeated);
+        total += repeatedCount;
+      }
+      const existing = targetNode.slots[attachment.target.slotId] ?? [];
+      if (slot.cardinality === "single" && existing.length + roots.length > 1) { diagnostics.push({ severity: "blocking", code: "attachment-slot-cardinality", message: "Collection output exceeds the target slot's single cardinality.", path: attachmentPath, ...routeContext }); return undefined; }
+      targetNode.slots[attachment.target.slotId] = [...existing, ...roots];
+    }
+    return document;
+  };
+
   const expansion = await expandSitemapRoutes({
+    policy: options.policy ?? "release",
     document: adapters.activeSitemap.document,
     catalog: {
       async resolveMapping(ref) {
@@ -299,7 +398,22 @@ export async function compileSiteProject(
     },
   });
 
+  const routeProjectionResolver = (pathname: string): MappingRouteProjectionResolver => ({
+    resolve(ref) {
+      const current = expansion.routes.find((route) => route.pathname === pathname);
+      const context = current ? [...current.ancestors, { nodeId: current.nodeId, selectedEntry: current.selectedEntry }] : [];
+      const candidates = expansion.routes.filter((route) => sameSitemapEntry(route.selectedEntry, ref) && route.ancestors.every((part) => {
+        const existing = context.find((item) => item.nodeId === part.nodeId);
+        return !existing || sameSitemapEntry(existing.selectedEntry, part.selectedEntry);
+      }));
+      if (!candidates.length) return { status: "unavailable" };
+      if (candidates.length !== 1) return { status: "ambiguous" };
+      return { status: "resolved", href: candidates[0]!.pathname };
+    },
+  });
+
   for (const item of expansion.diagnostics) {
+    if (item.severity === "nonblocking") continue;
     const indexed = indexedNodes.get(item.nodeId);
     if (!indexed) continue;
     const source = indexed.node.source;
@@ -342,8 +456,8 @@ export async function compileSiteProject(
     let localRef: SiteProjectRecordRef;
     let localRecord: CompositionRecord | undefined;
     let localDocument: CompositionDocument | undefined;
-    let selectedEntry: SiteProjectRecordRef | undefined;
-    let displayTitle = node.title;
+    let selectedEntry = expanded.selectedEntry;
+    const displayTitle = expanded.displayTitle;
 
     if (node.source.kind === "composition") {
       source = { kind: "composition", ref: { ...node.source.ref } };
@@ -382,12 +496,8 @@ export async function compileSiteProject(
         diagnostics.push({ severity: "blocking", code: "entry-not-found", message: "The route Entry was not found in the prepared Content snapshot.", path: indexed.path, pathname: expanded.pathname, nodeId: node.id, ...(missingEntry ? { entry: missingEntry } : {}) });
         continue;
       }
-      selectedEntry = { providerId: mapping.document.contentModel.providerId, recordId: entry.id };
-      if (node.source.route.kind === "entry-field" && node.source.route.titleFieldId !== undefined) {
-        const entryTitle = entry.values[node.source.route.titleFieldId];
-        if (typeof entryTitle === "string" && entryTitle.trim().length > 0) displayTitle = entryTitle;
-      }
-      const evaluation = evaluateResolvedMapping(definition, entry);
+      selectedEntry = { providerId: mapping.document.contentModel.providerId, modelId: entry.modelId, recordId: entry.id };
+      const evaluation = evaluateResolvedMapping(definition, entry, { routeResolver: routeProjectionResolver(expanded.pathname) });
       for (const item of evaluation.entryDiagnostics.filter((candidate) => candidate.severity === "blocking")) {
         diagnostics.push({ severity: "blocking", code: `mapping-${item.code}`, message: item.message, path: entrySelector(selectedEntry), pathname: expanded.pathname, nodeId: node.id, entry: selectedEntry });
       }
@@ -396,6 +506,12 @@ export async function compileSiteProject(
     }
 
     if (!localRecord || !localDocument) continue;
+    localDocument = await materializeCollectionAttachments(localRef!, localDocument, { pathname: expanded.pathname, nodeId: node.id });
+    if (!localDocument) continue;
+    const resolvedMedia = resolveCompositionMedia(localDocument, options.componentCatalog, { lock: options.mediaLock });
+    const unresolvedMedia = resolvedMedia.index.references.filter(({ ref }) => !options.mediaLock || !resolvePinnedMedia(ref, options.mediaLock));
+    if ((options.policy ?? "release") === "release" && (!resolvedMedia.index.complete || unresolvedMedia.length || resolvedMedia.index.advisory.some(({ value }) => value && isImmutableMediaUrl(value)))) { diagnostics.push({ severity: "blocking", code: "media-lock-required", message: "Materialized Media is incomplete or absent from the exact-version lock.", path: indexed.path, pathname: expanded.pathname, nodeId: node.id }); continue; }
+    localDocument = resolvedMedia.document;
     const providerId = localRef!.providerId;
     const cycle = bindingCycle(providerId, localRef!.recordId, { ...localRecord, document: localDocument }, (ref) => adapters.compositions.catalog.resolve(ref));
     if (cycle) {
@@ -466,8 +582,10 @@ export async function compileSiteProject(
     }
     const modules = batch.records.filter((plan) => plan.status === "generated").map(asModule).sort(compareModules);
     routes.push({
+      ...(materializationSources.has(expanded.pathname) ? { materializationSources: materializationSources.get(expanded.pathname)! } : {}),
       pathname: expanded.pathname,
       displayTitle,
+      ancestors: expanded.ancestors,
       sitemapNode: { id: node.id, path: indexed.path },
       source,
       ...(selectedEntry ? { selectedEntry } : {}),
@@ -501,11 +619,15 @@ export async function compileSiteProject(
     }
   }
   diagnostics.sort(compareDiagnostics);
+  const navigation = resolveSitemapNavigation(adapters.activeSitemap.document.navigation, expansion.routes.filter((expanded) => routes.some((route) => route.pathname === expanded.pathname && route.sitemapNode.id === expanded.nodeId)));
+  for (const item of navigation.diagnostics) diagnostics.push({ severity: "blocking", code: item.code, message: item.message, path: `${selector("sitemaps", active.providerId, "records", active.recordId)}["document"]["navigation"][${JSON.stringify(item.menu)}][?(@.id==${JSON.stringify(item.itemId)})]` });
+  diagnostics.sort(compareDiagnostics);
   if (diagnostics.length > 0) return { status: "blocked", routes, diagnostics };
   return {
     status: "ready",
     build: {
       projectId: snapshot.id,
+      navigation,
       activeSitemap: { ...active },
       routes,
       modules: [...modulesBySpecifier.values()].sort(compareModules),

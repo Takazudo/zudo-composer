@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { requireIsolatedRoots } from "./tests/browser/isolated-roots";
 
-const localRoot = process.env.ZUDO_SITE_PROJECT_ROOT;
-if (!localRoot) throw new Error("ZUDO_SITE_PROJECT_ROOT is required for the isolated SiteProject dev browser lane.");
+const { releaseRoot: localRoot, mediaRoot } = requireIsolatedRoots(process.env);
 
 export default defineConfig({
   testDir: "./tests/browser",
@@ -10,6 +10,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  timeout: 120_000,
+  expect: { timeout: 30_000 },
   reporter: "line",
   use: {
     baseURL: "http://127.0.0.1:4174",
@@ -23,6 +25,6 @@ export default defineConfig({
     url: "http://127.0.0.1:4174",
     reuseExistingServer: false,
     timeout: 30_000,
-    env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: localRoot },
+    env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: localRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot },
   },
 });

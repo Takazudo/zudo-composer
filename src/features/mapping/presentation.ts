@@ -28,8 +28,25 @@ import type {
   MappingTargetDescriptor,
   MappingTransform,
 } from "../../mapping";
+import { resolveMappingProjectionDefinition } from "../../mapping";
 import { contentEntryLabel } from "../content/presentation";
 import { compatibleTransforms } from "./controller";
+import {
+  compatibleTransformsForProjection,
+  projectionKey,
+  sourceProjectionOptions,
+  type MappingProjectionOption,
+} from "./projection-options";
+
+export {
+  compatibleTransformsForProjection,
+  firstCompatibleProjection,
+  parseProjectionKey,
+  projectionKey,
+  projectionLabel,
+  sourceProjectionOptions,
+  type MappingProjectionOption,
+} from "./projection-options";
 
 export interface MappingCatalogRef {
   readonly providerId: string;
@@ -82,6 +99,7 @@ export interface MappingBindingRow {
   readonly target: MappingTargetDescriptor | null;
   /** Compatible transforms, always including the one currently stored. */
   readonly transforms: readonly MappingTransform["kind"][];
+  readonly projections: readonly MappingProjectionOption[];
   readonly diagnostics: readonly MappingDefinitionDiagnostic[];
   readonly status: MappingBindingStatus;
 }
@@ -110,10 +128,12 @@ export function buildBindingRows(
     const target = targets.find((item) => targetKey(item.target) === targetKey(binding.target)) ?? null;
     // The stored transform is always offered, even when nothing about the pair
     // is compatible: a select that cannot show its own value reads as empty.
-    const compatible = source && target ? compatibleTransforms(source.kind, target) : [];
+    const projections = source ? sourceProjectionOptions(source).filter((option) => target ? compatibleTransformsForProjection(option, target).length > 0 || projectionKey(option.projection) === projectionKey(binding.projection) : true) : [];
+    const selectedProjection = source ? resolveMappingProjectionDefinition(source, binding.projection) : null;
+    const compatible = source && target && selectedProjection?.status === "ready" ? compatibleTransforms(selectedProjection.kind, target) : [];
     const transforms = compatible.includes(binding.transform.kind) ? compatible : [...compatible, binding.transform.kind];
     const rowDiagnostics = diagnostics.filter((diagnostic) => diagnostic.bindingId === binding.id);
-    return { binding, index, source, target, transforms, diagnostics: rowDiagnostics, status: statusOf({ source, target, diagnostics: rowDiagnostics }) };
+    return { binding, index, source, target, transforms, projections, diagnostics: rowDiagnostics, status: statusOf({ source, target, diagnostics: rowDiagnostics }) };
   });
 }
 
@@ -153,7 +173,7 @@ export function compatibleSourceGroups(
   target: MappingTargetDescriptor,
   fields: readonly ContentFieldDefinition[],
 ): readonly MappingMenuGroup<ContentFieldDefinition>[] {
-  const compatible = fields.filter((field) => compatibleTransforms(field.kind, target).length > 0);
+  const compatible = fields.filter((field) => sourceProjectionOptions(field).some((projection) => compatibleTransformsForProjection(projection, target).length > 0));
   return groupBy(compatible, (field) => ({ id: field.kind, label: fieldKindLabel(field.kind) }));
 }
 
@@ -162,7 +182,7 @@ export function compatibleTargetGroups(
   source: ContentFieldDefinition,
   targets: readonly MappingTargetDescriptor[],
 ): readonly MappingMenuGroup<MappingTargetDescriptor>[] {
-  const compatible = targets.filter((target) => compatibleTransforms(source.kind, target).length > 0);
+  const compatible = targets.filter((target) => sourceProjectionOptions(source).some((projection) => compatibleTransformsForProjection(projection, target).length > 0));
   return groupBy(compatible, (target) => ({ id: target.target.nodeId, label: target.nodeLabel }));
 }
 
@@ -193,6 +213,21 @@ export function targetLabel(target: MappingTargetDescriptor): string {
   return `${target.componentLabel}.${target.target.prop}`;
 }
 
+/** Stable human-readable path for diagnostics; ids stay visible when labels drift. */
+export function diagnosticPath(diagnostic: MappingDefinitionDiagnostic | { sourceFieldId?: string; target?: MappingTarget; entryId?: string; fieldId?: string }): string | null {
+  const bindingPath = "sourceFieldId" in diagnostic && diagnostic.sourceFieldId && "target" in diagnostic && diagnostic.target
+    ? `source/${diagnostic.sourceFieldId} → target/${diagnostic.target.nodeId}.${diagnostic.target.prop}`
+    : "sourceFieldId" in diagnostic && diagnostic.sourceFieldId
+      ? `source/${diagnostic.sourceFieldId}`
+      : "target" in diagnostic && diagnostic.target
+        ? `target/${diagnostic.target.nodeId}.${diagnostic.target.prop}`
+        : null;
+  if ("entryId" in diagnostic && diagnostic.entryId) return bindingPath ? `entry/${diagnostic.entryId} · ${bindingPath}` : `entry/${diagnostic.entryId}`;
+  if (bindingPath) return bindingPath;
+  if ("fieldId" in diagnostic && diagnostic.fieldId) return `query/${diagnostic.fieldId}`;
+  return null;
+}
+
 export function fieldKindLabel(kind: ContentFieldKind): string {
   switch (kind) {
     case "long-text": return "Long text";
@@ -211,6 +246,7 @@ export function fieldIcon(kind: ContentFieldKind): IconComponent {
     case "slug": return SlugIcon;
     case "color": return ColorIcon;
     case "url": return UrlIcon;
+    case "choice": case "reference": case "reference-list": case "object": case "list": case "media-use": return TextIcon;
   }
 }
 

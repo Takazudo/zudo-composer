@@ -27,7 +27,7 @@ describe("Content records", () => {
     const model = createContentModelRecord({ name: "Posts", kind: "single" }, { id: "posts", timestamp });
     const future = { ...model, document: { ...model.document, schemaVersion: 2 } };
     expect(loadContentModelRecord(future)).toEqual({ status: "future-schema", foundSchemaVersion: 2, raw: future });
-    const malformed = { schemaVersion: 1, id: "entry", modelId: "posts", createdAt: "bad", updatedAt: timestamp, values: {} };
+    const malformed = { schemaVersion: 1, lifecycle: "draft", generation: 0, id: "entry", modelId: "posts", createdAt: "bad", updatedAt: timestamp, values: {} };
     expect(loadContentEntryRecord(malformed)).toEqual({ status: "invalid", issue: expect.objectContaining({ code: "invalid-timestamp" }), raw: malformed });
   });
 });

@@ -5,7 +5,7 @@
    */
   --zc-topbar-h: 48px;
   --zc-bottom-strip-h: 56px;
-  --zc-rail-w: 220px;
+  --zc-rail-w: 244px;
   --zc-rail-w-collapsed: 56px;
   /*
    * Route editors still size themselves with `calc(100vh - var(--sg-header-h))`.

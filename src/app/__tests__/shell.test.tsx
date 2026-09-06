@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import "../../components/overlay/__tests__/overlay-test-environment";
 import type { JSX } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +8,7 @@ import { RAIL_STORAGE_KEY } from "../rail";
 import { Shell } from "../shell";
 import type { WorkspaceCounts, WorkspaceSummary } from "../workspace-summary";
 import { createThemeController, THEME_STORAGE_KEY, type ThemeController } from "../../theme/theme";
+import { readFileSync } from "node:fs";
 
 afterEach(() => {
   cleanup();
@@ -14,6 +16,15 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-theme");
   window.localStorage.removeItem(RAIL_STORAGE_KEY);
   window.localStorage.removeItem(THEME_STORAGE_KEY);
+  vi.unstubAllGlobals();
+});
+
+it("gives percentage-height editors a definite route slot without clipping long pages", () => {
+  const shellStyles = readFileSync("src/app/shell.css", "utf8");
+  const route = shellStyles.match(/\.cms-route-content\s*\{([^}]+)\}/)?.[1];
+  expect(route).toMatch(/(?:^|;)\s*height:\s*100%\s*;/);
+  expect(route).not.toMatch(/overflow\s*:\s*(hidden|clip)/);
+  expect(shellStyles).toMatch(/\.cms-shell-main\s*\{[^}]*overflow:\s*auto/);
 });
 
 function readyCounts(): WorkspaceCounts {
@@ -77,6 +88,85 @@ function PublishingRoute({ crumbs, status }: { crumbs?: { label: string; href?: 
 }
 
 describe("Shell chrome", () => {
+  it("preserves the routed input DOM and value across width changes and complete Browse", () => {
+    const { container } = render(<ShellHarness><input aria-label="Draft" defaultValue="unsaved draft" /></ShellHarness>);
+    const input = screen.getByRole("textbox", { name: "Draft" });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
+    const browse = screen.getByRole("button", { name: "Browse navigation" });
+    browse.focus(); fireEvent.click(browse);
+    const peek = screen.getByRole("dialog", { name: "Browse navigation" });
+    expect(within(peek).getByRole("link", { name: "Review & release" })).toBeInTheDocument();
+    expect(container.querySelector(".app-shell")).toHaveAttribute("data-rail", "collapsed");
+    expect(screen.getByRole("textbox", { name: "Draft" })).toBe(input);
+    expect(input).toHaveValue("unsaved draft");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(browse).toHaveFocus();
+    expect(localStorage.getItem(RAIL_STORAGE_KEY)).toBe("collapsed");
+    fireEvent.click(browse);
+    fireEvent.click(screen.getByRole("button", { name: "Keep expanded" }));
+    expect(localStorage.getItem(RAIL_STORAGE_KEY)).toBe("expanded");
+    expect(screen.getByRole("textbox", { name: "Draft" })).toBe(input);
+  });
+
+  it("honors handled/IME/nested shortcuts and outside pointer focus", () => {
+    const { container } = render(<ShellHarness><input aria-label="Outside destination" /></ShellHarness>);
+    fireEvent.keyDown(document, { key: "\\", ctrlKey: true, isComposing: true });
+    const handled = new KeyboardEvent("keydown", { key: "\\", ctrlKey: true, bubbles: true, cancelable: true }); handled.preventDefault(); fireEvent(document, handled);
+    expect(container.querySelector(".app-shell")).toHaveAttribute("data-rail", "expanded");
+    fireEvent.click(screen.getByRole("button", { name: "Theme: System" }));
+    fireEvent.keyDown(document, { key: "\\", metaKey: true });
+    expect(container.querySelector(".app-shell")).toHaveAttribute("data-rail", "expanded");
+    fireEvent.keyDown(screen.getByRole("menu", { name: "Theme preference" }), { key: "Escape" });
+    fireEvent.keyDown(document, { key: "\\", ctrlKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Browse navigation" }));
+    const input = screen.getByRole("textbox"); input.focus(); fireEvent.pointerDown(input);
+    expect(screen.queryByRole("dialog", { name: "Browse navigation" })).toBeNull();
+    expect(input).toHaveFocus();
+  });
+
+  it("opens an independent mobile modal, traps focus and cleans up at the breakpoint", () => {
+    let listener: (() => void) | undefined;
+    const query = { matches: true, addEventListener: (_: string, callback: () => void) => { listener = callback; }, removeEventListener: () => undefined };
+    vi.stubGlobal("matchMedia", () => query);
+    localStorage.setItem(RAIL_STORAGE_KEY, "collapsed");
+    const { container } = render(<ShellHarness><input aria-label="Draft" defaultValue="kept" /></ShellHarness>);
+    const input = screen.getByRole("textbox");
+    expect(screen.queryByRole("navigation", { name: "Main navigation" })).toBeNull();
+    const trigger = screen.getByRole("button", { name: "Expand navigation" }); trigger.focus(); fireEvent.click(trigger);
+    const drawer = screen.getByRole("dialog", { name: "Navigation" });
+    expect(within(drawer).getByRole("button", { name: "Close navigation" })).toHaveFocus();
+    expect(container.querySelector(".cms-frame")).toHaveAttribute("inert");
+    const first = within(drawer).getByRole("button", { name: "Close navigation" });
+    fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+    expect(within(drawer).getByRole("link", { name: "Website preview — choose preview source" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Tab" }); expect(first).toHaveFocus();
+    fireEvent.keyDown(first, { key: "Escape", isComposing: true }); expect(drawer).toHaveAttribute("open");
+    act(() => { query.matches = false; listener?.(); });
+    expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
+    expect(container.querySelector(".cms-frame")).not.toHaveAttribute("inert");
+    expect(document.body.style.overflow).toBe("");
+    expect(localStorage.getItem(RAIL_STORAGE_KEY)).toBe("collapsed");
+    expect(screen.getByRole("textbox")).toBe(input);
+  });
+  it.each(["Escape", "Close navigation"])("restores mobile focus after inert cleanup on %s", (dismissal) => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    // jsdom does not implement inert: model the browser refusing focus into it.
+    const focus = HTMLElement.prototype.focus;
+    const focusSpy = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (this: HTMLElement, options) {
+      if (!this.closest("[inert]")) focus.call(this, options);
+    });
+    try {
+      const { container } = render(<ShellHarness />);
+      const trigger = screen.getByRole("button", { name: "Expand navigation" });
+      trigger.focus(); fireEvent.click(trigger);
+      const close = within(screen.getByRole("dialog", { name: "Navigation" })).getByRole("button", { name: "Close navigation" });
+      expect(container.querySelector(".cms-frame")).toHaveAttribute("inert");
+      if (dismissal === "Escape") fireEvent.keyDown(close, { key: "Escape" }); else fireEvent.click(close);
+      expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
+      expect(container.querySelector(".cms-frame")).not.toHaveAttribute("inert");
+      expect(trigger).toHaveFocus();
+    } finally { focusSpy.mockRestore(); }
+  });
   it("renders the rail, the topbar, and the route content", () => {
     const { container } = render(<ShellHarness path="/composer" />);
     expect(container.querySelector(".app-shell")).not.toBeNull();
@@ -86,7 +176,7 @@ describe("Shell chrome", () => {
   });
 
   it.each([
-    ["/", "Dashboard"],
+    ["/", "Overview"],
     ["/content", "Content"],
     ["/media", "Media"],
     ["/composer", "Compositions"],

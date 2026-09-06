@@ -1,47 +1,30 @@
-import { createHash } from "node:crypto";
-import { constants, type Dirent, type Stats } from "node:fs";
-import {
-  MediaPersistenceError,
-  compareMediaSummariesNewestFirst,
-  createMediaRecord,
-  summarizeMedia,
-  type MediaByteSource,
-  type MediaInitializationOutcome,
-  type MediaLoadOutcome,
-  type MediaPersistenceOperation,
-  type MediaRecord,
-  type MediaStore,
-  type MediaSummary,
+import { createHash, randomBytes } from "node:crypto";
+import { constants, type Stats } from "node:fs";
+import { link } from "node:fs/promises";
+import { MediaPersistenceError, compareMediaSummariesNewestFirst, createMediaRecord, currentMediaVersion,
+  summarizeMedia, MEDIA_VERSIONED_CAPABILITIES,
+  type MediaPersistenceErrorCode, type MediaPersistenceOperation, type MediaByteSource, type MediaRecord,
+  type MediaInitializationOutcome, type MediaLoadOutcome, type MediaSummary, type VersionedMediaStore,
+  type MediaMutationPrecondition, type MediaMetadataPatch, type MediaFolderPatch, type MediaListOptions,
 } from "../../library";
-import {
-  MEDIA_MAX_BYTE_LENGTH,
-  isValidMediaFileName,
-  loadMediaRecord,
-  validateMediaRecord,
+import { MEDIA_MAX_BYTE_LENGTH, MEDIA_SCHEMA_VERSION, isValidMediaFileName, isMediaRevision,
+  validateMediaRecord, validateMediaSnapshot, mediaVersionUrl, isValidMediaChecksum,
+  type MediaSnapshot, type MediaFolder, type MediaVersionRef, type MediaVersionPin, type MediaPinManifest,
 } from "../../model";
-import { isSafeRecordId } from "../../../shared";
+import { isSafeRecordId, isPlainObject } from "../../../shared";
 import { createUuidIdFactory } from "../../../shared/id-factory";
-import {
-  SafeRootFilesystem,
-  streamingAtomicReplace,
-  type StreamingAtomicWriteResult,
-} from "../../../shared/node-fs";
-import type { FilesystemMediaStoreOptions, MediaUploadInput, SniffedMedia } from "./types";
+import { SafeRootFilesystem, streamingAtomicReplace, type StreamingAtomicWriteResult } from "../../../shared/node-fs";
+import type { FilesystemMediaStoreOptions, MediaUploadInput, SniffedMedia, MediaReplaceInput } from "./types";
 
 const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
-const RECORDS_DIRECTORY = "records";
-const BYTES_DIRECTORY = "public/uploaded-media";
-const RECORD_PATTERN = /^media-([a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?)\.json$/;
-const BYTE_PATTERN = /^media-[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?\.(?:png|jpg|gif|webp|pdf)$/;
-const MAX_ID_ATTEMPTS = 16;
+const BYTES_DIRECTORY = "versions";
+const EMPTY_TOKEN = "0".repeat(64);
 
-const EXTENSION_BY_MEDIA_TYPE = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/gif": "gif",
-  "image/webp": "webp",
-  "application/pdf": "pdf",
-} as const;
+class MediaCatalogRecoveryError extends MediaPersistenceError {
+  constructor(readonly foundSchemaVersion?: number) {
+    super("snapshot", "recovery-required", "Media catalog is malformed or uses an unsupported schema. Source and all bytes are preserved; inspect catalog.json. Automatic reset is unavailable.", false);
+  }
+}
 
 function errorCode(value: unknown): string | undefined {
   if (typeof value !== "object" || value === null || !("code" in value)) return undefined;
@@ -54,7 +37,7 @@ function sameFile(a: Stats, b: Stats): boolean {
 
 function operationError(
   operation: MediaPersistenceOperation,
-  code: "blocked" | "validation" | "read-failed" | "write-failed",
+  code: MediaPersistenceErrorCode,
   message: string,
   cause?: unknown,
 ): MediaPersistenceError {
@@ -148,7 +131,7 @@ async function peekBytes(source: MediaByteSource, signal?: AbortSignal): Promise
       length += bytes.byteLength;
     }
   } catch (cause) {
-    void iterator.return?.();
+    void iterator.return?.().catch(() => undefined);
     throw cause;
   }
   const head = new Uint8Array(length);
@@ -176,27 +159,19 @@ async function peekBytes(source: MediaByteSource, signal?: AbortSignal): Promise
   };
 }
 
-interface CanonicalRecord {
-  outcome: MediaLoadOutcome;
-  stats: Stats;
-}
 
-interface GuardedDirectory {
-  path: string;
-  realPath: string;
-  stats: Stats;
-}
+interface GuardedDirectory { path: string; realPath: string; stats: Stats }
 
-export class FilesystemMediaStore implements MediaStore {
+export class FilesystemMediaStore implements VersionedMediaStore {
   readonly provider = { id: "media-files", label: "Project files" } as const;
-
+  readonly capabilities = MEDIA_VERSIONED_CAPABILITIES;
   private constructor(
     private readonly filesystem: SafeRootFilesystem<MediaPersistenceOperation>,
-    private readonly recordsDirectory: GuardedDirectory,
     private readonly publicDirectory: GuardedDirectory,
     private readonly bytesDirectory: GuardedDirectory,
     private readonly idFactory: (hint?: string) => string,
     private readonly now: () => string,
+    private readonly publishVersion: typeof link,
   ) {}
 
   static async create(options: FilesystemMediaStoreOptions): Promise<FilesystemMediaStore> {
@@ -227,212 +202,400 @@ export class FilesystemMediaStore implements MediaStore {
       return { path, realPath, stats };
     };
     try {
-      const recordsDirectory = await prepareDirectory(RECORDS_DIRECTORY);
       const publicDirectory = await prepareDirectory("public");
       const bytesDirectory = await prepareDirectory(BYTES_DIRECTORY);
       return new FilesystemMediaStore(
         filesystem,
-        recordsDirectory,
         publicDirectory,
         bytesDirectory,
         options.idFactory ?? createUuidIdFactory(),
         options.now ?? (() => new Date().toISOString()),
+        options.operations?.link ?? link,
       );
     } catch (cause) {
       rethrow("initialize", "read-failed", "Could not initialize Media storage directories.", cause);
     }
   }
 
-  async upload(input: MediaUploadInput): Promise<MediaRecord> {
-    if (!isValidMediaFileName(input.fileName)) throw operationError("put", "validation", "Media fileName must be bounded, non-empty display metadata without control characters or separators.");
-    if (typeof input.declaredMediaType !== "string" || input.declaredMediaType.length === 0) throw operationError("put", "validation", "Declared media type must be a non-empty string.");
-    input.signal?.throwIfAborted();
-    const id = await this.mintId();
-    const peeked = await peekBytes(input.bytes, input.signal);
-    const sniffed = sniffMedia(peeked.head);
-    if (sniffed === undefined) {
-      await peeked.cancel().catch(() => undefined);
-      throw operationError("put", "validation", "Media bytes do not match an allowed file signature.");
-    }
-    let result: StreamingAtomicWriteResult;
-    try {
-      result = await this.writeBytes(id, sniffed.extension, peeked.stream, { signal: input.signal });
-    } catch (cause) {
-      await peeked.cancel().catch(() => undefined);
-      throw cause;
-    }
-    const record = createMediaRecord({
-      fileName: input.fileName,
-      mediaType: sniffed.mediaType,
-      byteLength: result.byteLength,
-      checksum: result.checksum,
-    }, { id, timestamp: this.now() });
-    await this.writeRecord(record);
-    return structuredClone(record);
-  }
 
   async initialize(): Promise<MediaInitializationOutcome> {
-    return this.run("initialize", async () => {
-      let entries: Dirent[];
-      try {
-        entries = await this.filesystem.operations.readdir(this.recordsDirectory.path, { withFileTypes: true });
-        await this.assertDirectories("initialize");
-      } catch (cause) {
-        rethrow("initialize", "read-failed", "Could not inspect Media records during initialization.", cause);
+    try { return { status: "ready", summaries: await this.list() }; }
+    catch (cause) {
+      if (cause instanceof MediaPersistenceError && cause.code === "recovery-required") {
+        const foundSchemaVersion = cause instanceof MediaCatalogRecoveryError ? cause.foundSchemaVersion : undefined;
+        return { status: "recovery-required", summaries: [], recovery: {
+          kind: "quarantined", reason: foundSchemaVersion === undefined ? "invalid" : "future-schema", sourcePreserved: true,
+          affectedRecordIds: [], message: cause.message, ...(foundSchemaVersion === undefined ? {} : { foundSchemaVersion }),
+        } };
       }
-
-      const summaries: MediaSummary[] = [];
-      const failures: Array<{ id: string; status: "invalid" | "future-schema"; foundSchemaVersion?: number }> = [];
-      for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-        const match = RECORD_PATTERN.exec(entry.name);
-        if (!match) continue;
-        if (entry.isSymbolicLink() || !entry.isFile()) {
-          throw operationError("initialize", "blocked", `Refusing to initialize from a non-regular Media record path: ${entry.name}`);
-        }
-        const id = match[1]!;
-        const canonical = await this.readCanonical("initialize", id);
-        if (canonical === undefined) continue;
-        if (canonical.outcome.status === "loaded") {
-          summaries.push(summarizeMedia(canonical.outcome.record));
-        } else if (canonical.outcome.status === "future-schema") {
-          failures.push({ id, status: "future-schema", foundSchemaVersion: canonical.outcome.foundSchemaVersion });
-        } else if (canonical.outcome.status === "invalid") {
-          failures.push({ id, status: "invalid" });
-        }
-      }
-      summaries.sort(compareMediaSummariesNewestFirst);
-      if (failures.length === 0) return { status: "ready", summaries };
-
-      const future = failures.find((failure) => failure.status === "future-schema");
-      return {
-        status: "recovery-required",
-        summaries,
-        recovery: {
-          kind: "quarantined",
-          reason: future === undefined ? "invalid" : "future-schema",
-          sourcePreserved: true,
-          affectedRecordIds: failures.map(({ id }) => id),
-          ...(future?.foundSchemaVersion === undefined ? {} : { foundSchemaVersion: future.foundSchemaVersion }),
-          message: future === undefined
-            ? "Media storage contains malformed records. The source data was preserved."
-            : "Media storage contains records from a newer schema. The source data was preserved.",
-        },
-      };
-    });
-  }
-
-  async put(record: MediaRecord, source: MediaByteSource): Promise<void> {
-    const validation = validateMediaRecord(record);
-    if (!validation.ok) throw operationError("put", "validation", validation.issue.message);
-    const snapshot = structuredClone(validation.value);
-    const peeked = await peekBytes(source);
-    const sniffed = sniffMedia(peeked.head);
-    if (sniffed === undefined || sniffed.mediaType !== snapshot.document.mediaType) {
-      await peeked.cancel().catch(() => undefined);
-      throw operationError("put", "validation", "Media byte signature does not match the canonical mediaType.");
-    }
-    try {
-      await this.writeBytes(snapshot.id, sniffed.extension, peeked.stream, {
-        expected: {
-          byteLength: snapshot.document.byteLength,
-          checksum: snapshot.document.checksum,
-        },
-      });
-    } catch (cause) {
-      await peeked.cancel().catch(() => undefined);
       throw cause;
     }
-    await this.writeRecord(snapshot);
   }
-
-  async list(): Promise<readonly MediaSummary[]> {
-    return this.run("list", async () => {
-      let entries;
-      try {
-        entries = await this.filesystem.operations.readdir(this.recordsDirectory.path, { withFileTypes: true });
-        await this.assertDirectories("list");
-      } catch (cause) {
-        rethrow("list", "read-failed", "Could not inspect Media records.", cause);
-      }
-      const summaries: MediaSummary[] = [];
-      for (const entry of entries) {
-        const match = RECORD_PATTERN.exec(entry.name);
-        if (!match || entry.isSymbolicLink() || !entry.isFile()) continue;
-        const canonical = await this.readCanonical("list", match[1]!);
-        if (canonical?.outcome.status === "loaded") summaries.push(summarizeMedia(canonical.outcome.record));
-      }
-      return summaries.sort(compareMediaSummariesNewestFirst);
-    });
+  snapshot(): Promise<MediaSnapshot> { return this.filesystem.run("snapshot", () => this.readCatalog()); }
+  async mutationToken(): Promise<string> { return (await this.snapshot()).mutationToken; }
+  async list(options: MediaListOptions = {}): Promise<readonly MediaSummary[]> {
+    if (!isPlainObject(options) || Object.keys(options).some((key) => !["state", "folderId"].includes(key))
+      || (options.state !== undefined && (typeof options.state !== "string" || !["active", "trash", "all"].includes(options.state)))
+      || (options.folderId !== undefined && options.folderId !== null && !isSafeRecordId(options.folderId))) throw operationError("list", "validation", "Invalid Media list options.");
+    options = { ...options };
+    return (await this.snapshot()).records.filter(({ document }) =>
+      (options.state === "all" || document.state === (options.state ?? "active"))
+      && (options.folderId === undefined || document.folderId === options.folderId))
+      .map(summarizeMedia).sort(compareMediaSummariesNewestFirst);
   }
-
   async get(id: string): Promise<MediaLoadOutcome> {
     this.assertSafeId("get", id);
-    return this.run("get", async () => {
-      const canonical = await this.readCanonical("get", id);
-      if (canonical === undefined) return { status: "not-found", id };
-      if (canonical.outcome.status !== "loaded") return canonical.outcome;
-      const record = canonical.outcome.record;
-      const extension = EXTENSION_BY_MEDIA_TYPE[record.document.mediaType];
-      const integrity = await this.verifyBytes("get", this.bytePath(id, extension), record.document.byteLength, record.document.checksum);
-      if (integrity !== undefined) return { status: "bytes-missing", record: structuredClone(record), reason: integrity };
-      return { status: "loaded", record: structuredClone(record) };
+    const record = (await this.snapshot()).records.find((record) => record.id === id);
+    if (!record) return { status: "not-found", id };
+    const version = currentMediaVersion(record);
+    const integrity = await this.verifyBytes("get", this.versionPath(version.url), version.byteLength, version.checksum);
+    return integrity ? { status: "bytes-missing", record, reason: integrity } : { status: "loaded", record };
+  }
+  async upload(input: MediaUploadInput): Promise<MediaRecord> {
+    input = { ...input };
+    if (!isValidMediaFileName(input.fileName)) throw operationError("put", "validation", "Media filename must be bounded safe display metadata.");
+    if (typeof input.declaredMediaType !== "string" || input.declaredMediaType.length === 0) throw operationError("put", "validation", "Declared MIME type is required.");
+    if (input.note !== undefined && (typeof input.note !== "string" || input.note.length > 10000)) throw operationError("put", "validation", "Media note must be a string of at most 10,000 characters.");
+    const staged = await this.stageBytes(input);
+    try {
+      return await this.mutate("put", input.expectedMutationToken, async (snapshot) => {
+        input.signal?.throwIfAborted();
+        const record = createMediaRecord({ fileName: input.fileName, folderId: input.folderId, note: input.note,
+          mediaType: staged.sniffed.mediaType, ...staged.result }, { id: this.mintId(snapshot), timestamp: this.now() });
+        snapshot.records.push(record);
+        this.assertCatalog(snapshot);
+        await this.commitBytes(staged, currentMediaVersion(record).url);
+        input.signal?.throwIfAborted();
+        return record;
+      }, input.signal);
+    } finally { await this.removeStage(staged.path); }
+  }
+  async replace(id: string, input: MediaReplaceInput, precondition: MediaMutationPrecondition): Promise<MediaRecord> {
+    this.assertSafeId("replace", id);
+    this.assertPrecondition(precondition);
+    precondition = structuredClone(precondition);
+    input = { ...input };
+    this.requireRecord(await this.snapshot(), id, precondition);
+    const staged = await this.stageBytes(input);
+    try {
+      return await this.mutate("replace", precondition.expectedMutationToken, async (snapshot) => {
+        const record = this.requireRecord(snapshot, id, precondition);
+        if (record.document.state !== "active") throw operationError("replace", "validation", "Restore the asset before replacing it.");
+        input.signal?.throwIfAborted();
+        const version = { id: staged.result.checksum, ...staged.result, mediaType: staged.sniffed.mediaType,
+          url: mediaVersionUrl(staged.result.checksum, staged.sniffed.mediaType), createdAt: this.timestamp(record.updatedAt) };
+        if (!record.document.versions.some(({ id }) => id === version.id)) record.document.versions.push(version);
+        record.document.currentVersionId = version.id;
+        this.bump(record);
+        this.assertCatalog(snapshot);
+        await this.commitBytes(staged, version.url);
+        input.signal?.throwIfAborted();
+        return record;
+      }, input.signal);
+    } finally { await this.removeStage(staged.path); }
+  }
+  /** Import is create-only, never a replacement bypass. */
+  async put(record: MediaRecord, bytes: MediaByteSource): Promise<void> {
+    const validation = validateMediaRecord(record);
+    if (!validation.ok) throw operationError("put", "validation", validation.issue.message);
+    const copy = structuredClone(record);
+    if (copy.revision !== 1 || copy.document.versions.length !== 1 || copy.document.state !== "active")
+      throw operationError("put", "validation", "Import accepts only a new single-version active asset.");
+    const version = currentMediaVersion(copy);
+    const staged = await this.stageBytes({ bytes }, { byteLength: version.byteLength, checksum: version.checksum }, version.mediaType);
+    try {
+      await this.mutate("put", undefined, async (snapshot) => {
+        if (snapshot.records.some(({ id }) => id === copy.id)) throw operationError("put", "conflict", "Asset already exists; use replace with its revision.");
+        snapshot.records.push(copy);
+        this.assertCatalog(snapshot);
+        await this.commitBytes(staged, version.url);
+      });
+    } finally { await this.removeStage(staged.path); }
+  }
+  updateMetadata(id: string, patch: MediaMetadataPatch, precondition: MediaMutationPrecondition): Promise<MediaRecord> {
+    if (!patch || Object.keys(patch).length === 0 || Object.keys(patch).some((key) => !["fileName", "folderId", "note"].includes(key)))
+      return Promise.reject(operationError("metadata", "validation", "Unsupported or empty metadata patch."));
+    patch = structuredClone(patch);
+    return this.editRecord("metadata", id, precondition, (record) => {
+      if (record.document.state !== "active") throw operationError("metadata", "validation", "Restore the asset before editing it.");
+      Object.assign(record.document, structuredClone(patch));
     });
   }
-
-  async delete(id: string): Promise<boolean> {
+  trash(id: string, precondition: MediaMutationPrecondition): Promise<MediaRecord> {
+    return this.editRecord("trash", id, precondition, (record) => { record.document.state = "trash"; });
+  }
+  restore(id: string, precondition: MediaMutationPrecondition): Promise<MediaRecord> {
+    return this.editRecord("restore", id, precondition, (record) => { record.document.state = "active"; });
+  }
+  async delete(id: string, precondition?: MediaMutationPrecondition): Promise<boolean> {
     this.assertSafeId("delete", id);
-    return this.run("delete", async () => {
-      const canonical = await this.readCanonical("delete", id);
-      if (canonical === undefined) return false;
-      if (canonical.outcome.status !== "loaded") throw operationError("delete", "validation", `Media record "${id}" is invalid; no files were deleted.`);
-      await this.unlinkValidated("delete", this.recordPath(id), canonical.stats);
-      const extension = EXTENSION_BY_MEDIA_TYPE[canonical.outcome.record.document.mediaType];
-      await this.unlinkIfRegular("delete", this.bytePath(id, extension));
-      return true;
+    this.assertPrecondition(precondition);
+    await this.trash(id, precondition);
+    return true;
+  }
+  clear(): Promise<void> {
+    return Promise.reject(operationError("clear", "blocked", "Permanent purge is unavailable. Trash individual assets with metadata preconditions."));
+  }
+  createFolder(input: { name: string; parentId: string | null; index?: number }, expectedMutationToken: string): Promise<MediaFolder> {
+    if (!isPlainObject(input) || Object.keys(input).some((key) => !["name", "parentId", "index"].includes(key)) || !("name" in input) || !("parentId" in input)) return Promise.reject(operationError("folder", "validation", "Folder input requires name and parentId."));
+    if (typeof expectedMutationToken !== "string") return Promise.reject(operationError("folder", "validation", "Folder creation requires a snapshot mutation token."));
+    input = structuredClone(input);
+    return this.mutate("folder", expectedMutationToken, async (snapshot) => {
+      const timestamp = this.now();
+      const folder: MediaFolder = { id: this.mintId(snapshot), name: input.name, parentId: input.parentId,
+        state: "active", revision: 1, createdAt: timestamp, updatedAt: timestamp };
+      snapshot.folders.push(folder);
+      if (input.index !== undefined) this.placeFolder(snapshot, folder, input.index);
+      return folder;
     });
   }
-
-  async clear(): Promise<void> {
-    await this.run("clear", async () => {
-      let recordEntries: Dirent[];
-      let byteEntries: Dirent[];
-      try {
-        [recordEntries, byteEntries] = await Promise.all([
-          this.filesystem.operations.readdir(this.recordsDirectory.path, { withFileTypes: true }),
-          this.filesystem.operations.readdir(this.bytesDirectory.path, { withFileTypes: true }),
-        ]);
-        await this.assertDirectories("clear");
-      } catch (cause) {
-        rethrow("clear", "read-failed", "Could not inspect Media files before clearing.", cause);
-      }
-      const collect = async (relativeDirectory: string, entries: Dirent[], pattern: RegExp) => {
-        const files: Array<{ path: string; stats: Stats }> = [];
-        for (const entry of entries) {
-          if (!pattern.test(entry.name)) continue;
-          if (entry.isSymbolicLink() || !entry.isFile()) throw operationError("clear", "blocked", `Refusing to clear non-regular Media path: ${entry.name}`);
-          const path = this.filesystem.ownedPath(`${relativeDirectory}/${entry.name}`);
-          const stats = await this.filesystem.operations.lstat(path);
-          if (stats.isSymbolicLink() || !stats.isFile()) throw operationError("clear", "blocked", `Media path changed before clear: ${entry.name}`);
-          files.push({ path, stats });
-        }
-        return files;
-      };
-      const records = await collect(RECORDS_DIRECTORY, recordEntries, RECORD_PATTERN);
-      const bytes = await collect(BYTES_DIRECTORY, byteEntries, BYTE_PATTERN);
-      for (const file of records) await this.unlinkExpected("clear", file.path, file.stats, "record");
-      for (const file of bytes) await this.unlinkExpected("clear", file.path, file.stats, "bytes");
+  updateFolder(id: string, patch: MediaFolderPatch, precondition: MediaMutationPrecondition): Promise<MediaFolder> {
+    if (!patch || Object.keys(patch).length === 0 || Object.keys(patch).some((key) => !["name", "parentId", "index"].includes(key)))
+      return Promise.reject(operationError("folder", "validation", "Unsupported or empty folder patch."));
+    patch = structuredClone(patch);
+    if (patch.index !== undefined && precondition?.expectedMutationToken === undefined) return Promise.reject(operationError("folder", "validation", "Indexed folder moves require the snapshot token."));
+    return this.editFolder(id, precondition, (folder, snapshot) => {
+      if (folder.state !== "active") throw operationError("folder", "validation", "Restore the folder before editing it.");
+      const { index, ...metadata } = patch;
+      Object.assign(folder, metadata);
+      if (index !== undefined) this.placeFolder(snapshot, folder, index);
     });
   }
-
-  private async run<T>(operation: MediaPersistenceOperation, task: () => Promise<T>): Promise<T> {
+  private placeFolder(snapshot: MediaSnapshot, folder: MediaFolder, index: number): void {
+    const remaining = snapshot.folders.filter(({ id }) => id !== folder.id);
+    const siblings = remaining.filter((item) => item.parentId === folder.parentId && item.state === "active");
+    if (!Number.isSafeInteger(index) || index < 0 || index > siblings.length) throw operationError("folder", "validation", "Folder insertion index is outside the current sibling list.");
+    const before = siblings[index];
+    remaining.splice(before ? remaining.indexOf(before) : remaining.length, 0, folder);
+    snapshot.folders = remaining;
+  }
+  trashFolder(id: string, precondition: MediaMutationPrecondition): Promise<MediaFolder> {
+    return this.editFolder(id, precondition, (folder, snapshot) => {
+      if (snapshot.folders.some((child) => child.parentId === id && child.state === "active")
+        || snapshot.records.some(({ document }) => document.folderId === id && document.state === "active"))
+        throw operationError("folder", "validation", "Move or trash active children before trashing a folder.");
+      folder.state = "trash";
+    });
+  }
+  restoreFolder(id: string, precondition: MediaMutationPrecondition): Promise<MediaFolder> {
+    return this.editFolder(id, precondition, (folder) => { folder.state = "active"; });
+  }
+  async resolveVersion(ref: MediaVersionRef): Promise<MediaVersionPin> {
+    ref = structuredClone(ref);
+    return this.resolveFromSnapshot(await this.snapshot(), ref);
+  }
+  async pinManifest(refs: readonly MediaVersionRef[]): Promise<MediaPinManifest> {
+    if (!Array.isArray(refs)) throw operationError("pin", "validation", "Media manifest requires an array of exact-version references.");
+    refs = structuredClone(refs);
+    const snapshot = await this.snapshot();
+    const pins = new Map<string, MediaVersionPin>();
+    for (const ref of refs) {
+      const pin = await this.resolveFromSnapshot(snapshot, ref);
+      pins.set(JSON.stringify([pin.providerId, pin.assetId, pin.versionId]), pin);
+    }
+    return { schemaVersion: 1, pins: [...pins.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, pin]) => pin) };
+  }
+  private async resolveFromSnapshot(snapshot: MediaSnapshot, ref: MediaVersionRef): Promise<MediaVersionPin> {
+    if (!ref || ref.providerId !== this.provider.id || !isSafeRecordId(ref.assetId) || !/^[a-f0-9]{64}$/.test(ref.versionId)) throw operationError("pin", "validation", "Invalid provider-qualified Media version reference.");
+    const record = snapshot.records.find(({ id }) => id === ref.assetId);
+    const version = record?.document.versions.find(({ id }) => id === ref.versionId);
+    if (!version) throw operationError("pin", "not-found", "Exact Media version is not retained.");
+    const integrity = await this.verifyBytes("pin", this.versionPath(version.url), version.byteLength, version.checksum);
+    if (integrity) throw operationError("pin", "bytes-missing", "Exact Media version bytes are missing or corrupted.");
+    return { providerId: this.provider.id, assetId: record!.id, versionId: version.id, checksum: version.checksum,
+      byteLength: version.byteLength, mediaType: version.mediaType, url: version.url };
+  }
+  private editRecord(operation: MediaPersistenceOperation, id: string, precondition: MediaMutationPrecondition, edit: (record: MediaRecord) => void): Promise<MediaRecord> {
+    this.assertSafeId(operation, id);
+    this.assertPrecondition(precondition);
+    precondition = structuredClone(precondition);
+    return this.mutate(operation, precondition.expectedMutationToken, async (snapshot) => {
+      const record = this.requireRecord(snapshot, id, precondition);
+      edit(record); this.bump(record); return record;
+    });
+  }
+  private editFolder(id: string, precondition: MediaMutationPrecondition, edit: (folder: MediaFolder, snapshot: MediaSnapshot) => void): Promise<MediaFolder> {
+    this.assertSafeId("folder", id);
+    this.assertPrecondition(precondition);
+    precondition = structuredClone(precondition);
+    return this.mutate("folder", precondition.expectedMutationToken, async (snapshot) => {
+      const folder = snapshot.folders.find((folder) => folder.id === id);
+      if (!folder) throw operationError("folder", "not-found", "Media folder does not exist.");
+      if (folder.revision !== precondition.expectedRevision) throw operationError("folder", "conflict", "Media folder changed; reload before retrying.");
+      edit(folder, snapshot); this.bump(folder); return folder;
+    });
+  }
+  private assertPrecondition(value: MediaMutationPrecondition | undefined): asserts value is MediaMutationPrecondition {
+    if (!isPlainObject(value) || !isMediaRevision(value.expectedRevision)
+      || Object.keys(value).some((key) => !["expectedRevision", "expectedMutationToken"].includes(key))
+      || (value.expectedMutationToken !== undefined && !isValidMediaChecksum(value.expectedMutationToken)))
+      throw operationError("metadata", "validation", "An explicit expected metadata revision and valid optional snapshot token are required.");
+  }
+  private requireRecord(snapshot: MediaSnapshot, id: string, precondition: MediaMutationPrecondition): MediaRecord {
+    const record = snapshot.records.find((record) => record.id === id);
+    if (!record) throw operationError("metadata", "not-found", "Media asset does not exist.");
+    if (record.revision !== precondition.expectedRevision || (precondition.expectedMutationToken !== undefined && precondition.expectedMutationToken !== snapshot.mutationToken))
+      throw operationError("metadata", "conflict", "Media changed; reload before retrying.");
+    return record;
+  }
+  private timestamp(previous: string): string { const now = this.now(); return now > previous ? now : previous; }
+  private bump(value: { revision: number; updatedAt: string }): void { value.revision += 1; value.updatedAt = this.timestamp(value.updatedAt); }
+  private mintId(snapshot: MediaSnapshot): string {
+    for (let attempt = 0; attempt < 16; attempt++) {
+      const id = this.idFactory("media");
+      this.assertSafeId("put", id);
+      if (!snapshot.records.some((record) => record.id === id) && !snapshot.folders.some((folder) => folder.id === id)) return id;
+    }
+    throw operationError("put", "write-failed", "Could not mint an unused Media id.");
+  }
+  private catalogPath(): string { return this.filesystem.ownedPath("catalog.json"); }
+  private versionPath(url: string): string {
+    if (!/^\/uploaded-media\/sha256-[a-f0-9]{64}\.(png|jpg|gif|webp|pdf)$/.test(url))
+      throw operationError("get", "validation", "Invalid immutable Media URL.");
+    return this.filesystem.ownedPath(BYTES_DIRECTORY + "/" + url.slice("/uploaded-media/".length));
+  }
+  private assertCatalog(snapshot: MediaSnapshot): void {
+    if (!validateMediaSnapshot(snapshot)) throw operationError("metadata", "validation", "Invalid Media metadata graph: check names, revisions, versions, folder parents, cycles, collisions and trash state.");
+  }
+  private async readCatalog(): Promise<MediaSnapshot> {
+    await this.assertDirectories("snapshot");
+    const file = await this.filesystem.readFileNoFollow("snapshot", this.catalogPath());
+    if (!file) return { schemaVersion: MEDIA_SCHEMA_VERSION, mutationToken: EMPTY_TOKEN, records: [], folders: [] };
+    let raw: unknown;
+    try { raw = JSON.parse(file.text); } catch { /* Preserved for manual recovery. */ }
+    if (!validateMediaSnapshot(raw)) throw new MediaCatalogRecoveryError(isPlainObject(raw) && typeof raw.schemaVersion === "number" && raw.schemaVersion > MEDIA_SCHEMA_VERSION ? raw.schemaVersion : undefined);
+    await this.assertDirectories("snapshot");
+    return raw;
+  }
+  /** Kernel O_EXCL serializes cooperating writers across processes. Never steal
+   * an existing lock: after a crash verify no writer is running before manual
+   * .mutation.lock removal. Reads remain available during lock recovery. */
+  private mutate<T>(operation: MediaPersistenceOperation, expectedToken: string | undefined, edit: (snapshot: MediaSnapshot) => Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (expectedToken !== undefined && !isValidMediaChecksum(expectedToken)) return Promise.reject(operationError(operation, "validation", "Expected Media snapshot token must be a valid token."));
     return this.filesystem.run(operation, async () => {
       await this.assertDirectories(operation);
-      return task();
+      const lockPath = this.filesystem.ownedPath(".mutation.lock");
+      let lock;
+      try { lock = await this.filesystem.operations.open(lockPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | NO_FOLLOW, 0o600); }
+      catch (cause) {
+        if (errorCode(cause) === "EEXIST") throw operationError(operation, "conflict", "Another Media writer holds .mutation.lock. Retry after it finishes; after a crash verify no writer is running before manual lock recovery.");
+        rethrow(operation, "write-failed", "Could not acquire Media mutation lock.", cause);
+      }
+      let lockStats: Stats | undefined;
+      let uncertain = false;
+      try {
+        lockStats = await lock.stat();
+        await lock.writeFile(JSON.stringify({ pid: process.pid, createdAt: this.now() }));
+        await lock.sync();
+        await this.syncDirectory(operation, this.filesystem.realRoot);
+        await this.syncDirectory(operation, this.bytesDirectory.path);
+        const snapshot = await this.readCatalog();
+        signal?.throwIfAborted();
+        if (expectedToken !== undefined && expectedToken !== snapshot.mutationToken) throw operationError(operation, "conflict", "Media snapshot changed; reload before retrying.");
+        const result = await edit(snapshot);
+        snapshot.mutationToken = randomBytes(32).toString("hex");
+        this.assertCatalog(snapshot);
+        await this.assertDirectories(operation);
+        await this.commitCatalog(operation, snapshot, signal);
+        return structuredClone(result);
+      } catch (cause) {
+        uncertain = cause instanceof MediaPersistenceError && cause.code === "commit-uncertain";
+        rethrow(operation, "write-failed", "Could not commit Media mutation.", cause);
+      }
+      finally {
+        await lock.close().catch(() => undefined);
+        // Cleanup failure must not report a committed mutation as failed.
+        try {
+          await this.filesystem.assertRoot(operation);
+          const current = await this.filesystem.operations.lstat(lockPath);
+          if (!uncertain && lockStats && current.isFile() && !current.isSymbolicLink() && sameFile(current, lockStats)) await this.filesystem.operations.unlink(lockPath);
+        } catch { /* Retained lock fails closed on next mutation. */ }
+      }
     });
   }
-
+  /** Post-rename durability failures are explicitly uncertain, never reported
+   * as ordinary failed/unchanged mutations. The retained lock blocks retries. */
+  private async commitCatalog(operation: MediaPersistenceOperation, snapshot: MediaSnapshot, signal?: AbortSignal): Promise<void> {
+    const path = this.catalogPath();
+    const temporary = await this.filesystem.openTemporaryFile(operation, path);
+    let committed = false;
+    try {
+      await temporary.handle.writeFile(JSON.stringify(snapshot, null, 2) + "\n");
+      await temporary.handle.sync();
+      await temporary.handle.close();
+      await this.filesystem.assertRoot(operation);
+      await this.assertDirectories(operation);
+      await this.filesystem.assertReplaceablePath(operation, path);
+      signal?.throwIfAborted();
+      await this.filesystem.operations.rename(temporary.path, path);
+      committed = true;
+      try { await this.syncDirectory(operation, this.filesystem.realRoot); }
+      catch (cause) { throw operationError(operation, "commit-uncertain", "Catalog rename completed but directory durability is uncertain. Inspect the exact catalog/token and retained lock before recovery; do not retry blindly.", cause); }
+    } finally {
+      await temporary.handle.close().catch(() => undefined);
+      if (!committed) await this.filesystem.operations.unlink(temporary.path).catch(() => undefined);
+    }
+  }
+  private async syncDirectory(operation: MediaPersistenceOperation, path: string): Promise<void> {
+    let handle;
+    try {
+      await this.filesystem.assertRoot(operation);
+      await this.assertDirectories(operation);
+      handle = await this.filesystem.operations.open(path, constants.O_RDONLY | NO_FOLLOW | (constants.O_DIRECTORY ?? 0));
+      const opened = await handle.stat();
+      const current = await this.filesystem.operations.lstat(path);
+      if (!opened.isDirectory() || current.isSymbolicLink() || !sameFile(opened, current)) throw operationError(operation, "blocked", "Media directory changed before durability sync.");
+      await handle.sync();
+    } catch (cause) { rethrow(operation, "write-failed", "Media directory fsync is required but failed or is unsupported.", cause); }
+    finally { await handle?.close().catch(() => undefined); }
+  }
+  private async stageBytes(input: MediaReplaceInput, expected?: StreamingAtomicWriteResult, expectedType?: string): Promise<StagedMedia> {
+    await this.assertDirectories("put");
+    input.signal?.throwIfAborted();
+    const peeked = await peekBytes(input.bytes, input.signal);
+    const sniffed = sniffMedia(peeked.head);
+    if (!sniffed || (expectedType !== undefined && sniffed.mediaType !== expectedType)) {
+      void peeked.cancel().catch(() => undefined);
+      throw operationError("put", "validation", "Media signature is not allowed or does not match its metadata.");
+    }
+    const path = this.filesystem.ownedPath(".upload-" + randomBytes(24).toString("hex") + ".stage");
+    try {
+      const result = await streamingAtomicReplace(this.filesystem, "put", path, peeked.stream, {
+        byteCap: MEDIA_MAX_BYTE_LENGTH, signal: input.signal,
+        validateResult: (result) => {
+          if (expected && (expected.byteLength !== result.byteLength || expected.checksum !== result.checksum))
+            throw operationError("put", "validation", "Media length or checksum differs from its metadata.");
+        },
+      });
+      return { path, result, sniffed };
+    } catch (cause) { void peeked.cancel().catch(() => undefined); throw cause; }
+  }
+  private async commitBytes(staged: StagedMedia, url: string): Promise<void> {
+    await this.assertDirectories("put");
+    const path = this.versionPath(url);
+    const integrity = await this.verifyBytes("put", path, staged.result.byteLength, staged.result.checksum);
+    if (integrity === undefined) { await this.syncDirectory("put", this.bytesDirectory.path); return; }
+    if (integrity !== "missing") throw operationError("put", "bytes-missing", "Existing immutable bytes are corrupted; replacement cannot overwrite them.");
+    // link is an atomic create-if-absent; even a racing uncooperative creator
+    // cannot have its bytes overwritten by our publication.
+    await this.filesystem.assertRoot("put");
+    await this.assertDirectories("put");
+    try { await this.publishVersion(staged.path, path); }
+    catch (cause) {
+      if (errorCode(cause) === "EEXIST") throw operationError("put", "conflict", "Immutable Media byte path appeared during publication; retry.");
+      rethrow("put", "write-failed", "Could not publish immutable Media bytes.", cause);
+    }
+    await this.syncDirectory("put", this.bytesDirectory.path);
+  }
+  private async removeStage(path: string): Promise<void> {
+    try {
+      await this.filesystem.assertRoot("put");
+      const stats = await this.filesystem.operations.lstat(path);
+      if (stats.isFile() && !stats.isSymbolicLink()) await this.filesystem.operations.unlink(path);
+    } catch { /* Orphan stages never enter the catalog or delivery. */ }
+  }
   private async assertDirectories(operation: MediaPersistenceOperation): Promise<void> {
-    for (const directory of [this.recordsDirectory, this.publicDirectory, this.bytesDirectory]) {
+    for (const directory of [this.publicDirectory, this.bytesDirectory]) {
       try {
         const stats = await this.filesystem.operations.lstat(directory.path);
         const realPath = await this.filesystem.operations.realpath(directory.path);
@@ -450,74 +613,6 @@ export class FilesystemMediaStore implements MediaStore {
     if (!isSafeRecordId(id)) throw operationError(operation, "validation", `Media id is not a stable path-safe id: ${JSON.stringify(id)}`);
   }
 
-  private recordPath(id: string): string {
-    return this.filesystem.ownedPath(`${RECORDS_DIRECTORY}/media-${id}.json`);
-  }
-
-  private bytePath(id: string, extension: SniffedMedia["extension"]): string {
-    return this.filesystem.ownedPath(`${BYTES_DIRECTORY}/media-${id}.${extension}`);
-  }
-
-  private async mintId(): Promise<string> {
-    for (let attempt = 0; attempt < MAX_ID_ATTEMPTS; attempt += 1) {
-      const id = this.idFactory("media");
-      if (!isSafeRecordId(id)) throw operationError("put", "blocked", "Media id source returned an unsafe id.");
-      const record = await this.filesystem.operations.lstat(this.recordPath(id)).catch((cause: unknown) => {
-        if (errorCode(cause) === "ENOENT") return undefined;
-        throw cause;
-      });
-      if (record === undefined) return id;
-      if (record.isSymbolicLink() || !record.isFile()) {
-        throw operationError("put", "blocked", "Refusing to mint an id whose canonical Media path is non-regular.");
-      }
-    }
-    throw operationError("put", "write-failed", "Could not mint an unused Media id.");
-  }
-
-  private async writeBytes(
-    id: string,
-    extension: SniffedMedia["extension"],
-    source: AsyncIterable<Uint8Array>,
-    options: {
-      signal?: AbortSignal;
-      expected?: StreamingAtomicWriteResult;
-    } = {},
-  ): Promise<StreamingAtomicWriteResult> {
-    await this.assertDirectories("put");
-    return streamingAtomicReplace(this.filesystem, "put", this.bytePath(id, extension), source, {
-      byteCap: MEDIA_MAX_BYTE_LENGTH,
-      signal: options.signal,
-      ...(options.expected === undefined ? {} : {
-        validateResult: (result: StreamingAtomicWriteResult) => {
-          if (result.byteLength !== options.expected!.byteLength || result.checksum !== options.expected!.checksum) {
-            throw operationError("put", "validation", "Media bytes do not match the canonical length and checksum.");
-          }
-        },
-      }),
-    });
-  }
-
-  private async writeRecord(record: MediaRecord): Promise<void> {
-    await this.run("put", async () => {
-      await this.filesystem.atomicReplace("put", this.recordPath(record.id), `${JSON.stringify(record, null, 2)}\n`);
-    });
-  }
-
-  private async readCanonical(operation: MediaPersistenceOperation, expectedId: string): Promise<CanonicalRecord | undefined> {
-    const file = await this.filesystem.readFileNoFollow(operation, this.recordPath(expectedId));
-    if (file === undefined) return undefined;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(file.text);
-    } catch {
-      return { stats: file.stats, outcome: { status: "invalid", issue: { code: "invalid-record", message: "Canonical Media record is not valid JSON." }, raw: file.text } };
-    }
-    const outcome = loadMediaRecord(raw);
-    if (outcome.status === "loaded" && outcome.record.id !== expectedId) {
-      return { stats: file.stats, outcome: { status: "invalid", issue: { code: "invalid-record", message: "Canonical Media record id does not match its derived filename." }, raw } };
-    }
-    return { stats: file.stats, outcome };
-  }
 
   private async verifyBytes(operation: MediaPersistenceOperation, path: string, byteLength: number, checksum: string): Promise<"missing" | "checksum-mismatch" | undefined> {
     let before: Stats;
@@ -558,45 +653,9 @@ export class FilesystemMediaStore implements MediaStore {
     }
   }
 
-  private async unlinkValidated(operation: "delete", path: string, expected: Stats): Promise<void> {
-    await this.unlinkExpected(operation, path, expected, "record");
-  }
 
-  private async unlinkExpected(
-    operation: "delete" | "clear",
-    path: string,
-    expected: Stats,
-    label: "record" | "bytes",
-  ): Promise<void> {
-    try {
-      await this.filesystem.assertRoot(operation);
-      await this.assertDirectories(operation);
-      const current = await this.filesystem.operations.lstat(path);
-      if (current.isSymbolicLink() || !current.isFile() || !sameFile(current, expected)) throw operationError(operation, "blocked", `Media ${label} changed before deletion.`);
-      await this.filesystem.operations.unlink(path);
-      await this.filesystem.assertRoot(operation);
-      await this.assertDirectories(operation);
-    } catch (cause) {
-      rethrow(operation, "write-failed", `Could not delete Media ${label}.`, cause);
-    }
-  }
-
-  private async unlinkIfRegular(operation: "delete", path: string): Promise<void> {
-    try {
-      await this.filesystem.assertRoot(operation);
-      await this.assertDirectories(operation);
-      const stats = await this.filesystem.operations.lstat(path);
-      if (stats.isSymbolicLink() || !stats.isFile()) throw operationError(operation, "blocked", "Refusing to delete a non-regular Media byte path.");
-      await this.filesystem.operations.unlink(path);
-      await this.filesystem.assertRoot(operation);
-      await this.assertDirectories(operation);
-    } catch (cause) {
-      if (errorCode(cause) === "ENOENT") return;
-      rethrow(operation, "write-failed", "Could not delete Media bytes.", cause);
-    }
-  }
 }
-
+interface StagedMedia { path: string; result: StreamingAtomicWriteResult; sniffed: SniffedMedia }
 export function createFilesystemMediaStore(options: FilesystemMediaStoreOptions): Promise<FilesystemMediaStore> {
   return FilesystemMediaStore.create(options);
 }

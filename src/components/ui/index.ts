@@ -9,6 +9,10 @@ import "./ui.css";
 
 export { Button } from "./button";
 export type { ButtonProps, ButtonSize, ButtonVariant } from "./button";
+export { DisclosureButton } from "./disclosure-button";
+export type { DisclosureButtonProps } from "./disclosure-button";
+export { InlineRename, isComposingKey } from "./inline-rename";
+export type { InlineRenameProps } from "./inline-rename";
 
 export { Chip } from "./chip";
 export type { ChipProps, ChipTone } from "./chip";

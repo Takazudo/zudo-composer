@@ -144,21 +144,24 @@ export type WorkspaceInitializationOutcome = { status: "ready" } | { status: "er
  * integration free to grow.
  */
 export interface WorkspaceSummaryIntegration {
+  subscribeChanges?(listener: () => void): () => void;
   readonly initialization: { initialize(): Promise<WorkspaceInitializationOutcome>; retry(): Promise<WorkspaceInitializationOutcome> };
   readonly componentProvider: { readonly catalog: ComponentCatalog };
   readonly compositionProviders: readonly {
     readonly descriptor: { readonly id: string; readonly label: string };
     readonly store: { list(): Promise<readonly CompositionSummary[]> };
   }[];
-  readonly contentProvider: { readonly store: Pick<ContentStore, "listModels" | "scanEntries"> };
+  readonly contentProvider: { readonly descriptor: { id: string }; readonly store: Pick<ContentStore, "listModels" | "scanEntries"> };
   readonly contentCatalog: ContentCatalog;
   readonly mappingCatalog: MappingCatalog;
   readonly mappingCompositionCatalog: MappingCompositionCatalog;
-  readonly sitemapProvider: { readonly store: WorkspaceSitemapStore };
-  readonly mediaProvider: { readonly store: Pick<MediaStore, "list"> } | undefined;
+  readonly sitemapProvider: { readonly descriptor?: { id: string }; readonly store: WorkspaceSitemapStore };
+  readonly mediaProvider: { readonly descriptor: { id: string }; readonly store: Pick<MediaStore, "list"> } | undefined;
 }
 
 export interface WorkspaceSummary {
+  subscribe?(listener: () => void): () => void;
+  dispose?(): void;
   counts(): Promise<WorkspaceCounts>;
   recent(limit?: number): Promise<WorkspaceRecent>;
   attention(): Promise<WorkspaceAttention>;
@@ -362,20 +365,22 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
 
   const loadSitemaps = async (): Promise<SitemapsData> => {
     await ensureInitialized();
+    const providerId = integration.sitemapProvider.descriptor?.id;
+    if (!providerId) throw new Error("Sitemap provider identity is unavailable.");
     const sitemaps = await readSitemapRecords(integration.sitemapProvider.store);
     const records: WorkspaceRecord[] = [];
     const attention: WorkspaceAttentionItem[] = [];
     let pages = 0;
     let unassignedPages = 0;
     for (const sitemap of sitemaps) {
-      const intent: RouteIntent = { route: "sitemapper", sitemapId: sitemap.id };
+      const intent: RouteIntent = { route: "sitemapper", providerId, sitemapId: sitemap.id };
       records.push({ kind: "sitemap", id: sitemap.id, label: sitemap.document.name, updatedAt: sitemap.updatedAt, href: formatIntent(intent), intent });
       for (const page of flattenPages(sitemap.document.root)) {
         pages += 1;
         if (page.source.kind !== "unassigned") continue;
         unassignedPages += 1;
         // A page id is provider-generated; only a URL-safe one can carry a page intent.
-        const pageIntent: RouteIntent = isSafeRecordId(page.id) ? { route: "sitemapper", sitemapId: sitemap.id, pageId: page.id } : intent;
+        const pageIntent: RouteIntent = isSafeRecordId(page.id) ? { route: "sitemapper", providerId, sitemapId: sitemap.id, pageId: page.id } : intent;
         attention.push({
           kind: "unassigned-page",
           id: page.id,
@@ -397,7 +402,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     let entries = 0;
     let incompleteEntries = 0;
     for (const model of models) {
-      const modelIntent: RouteIntent = { route: "content", modelId: model.id };
+      const modelIntent: RouteIntent = { route: "content", providerId: integration.contentProvider.descriptor.id, modelId: model.id };
       records.push({ kind: "content-model", id: model.id, label: model.name, updatedAt: model.updatedAt, href: formatIntent(modelIntent), intent: modelIntent });
       const snapshot = await integration.contentProvider.store.scanEntries(model.id);
       entries += snapshot.count;
@@ -405,7 +410,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
       for (const entry of snapshot.entries) {
         const label = entryLabel(snapshot.model, entry);
         labels.set(entry.id, label);
-        const entryIntent: RouteIntent = { route: "content", modelId: model.id, entryId: entry.id };
+        const entryIntent: RouteIntent = { route: "content", providerId: integration.contentProvider.descriptor.id, modelId: model.id, entryId: entry.id };
         records.push({ kind: "content-entry", id: entry.id, label, updatedAt: entry.updatedAt, href: formatIntent(entryIntent), intent: entryIntent });
       }
       const firstDiagnosticByEntry = new Map<RecordId, string>();
@@ -414,7 +419,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
       }
       incompleteEntries += firstDiagnosticByEntry.size;
       for (const [entryId, detail] of firstDiagnosticByEntry) {
-        const entryIntent: RouteIntent = { route: "content", modelId: model.id, entryId };
+        const entryIntent: RouteIntent = { route: "content", providerId: integration.contentProvider.descriptor.id, modelId: model.id, entryId };
         attention.push({ kind: "incomplete-entry", id: entryId, label: labels.get(entryId) ?? entryId, detail, href: formatIntent(entryIntent), intent: entryIntent });
       }
     }
@@ -431,7 +436,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     for (const summary of summaries) {
       bytes += summary.byteLength;
       byType[summary.mediaType] = (byType[summary.mediaType] ?? 0) + 1;
-      const intent: RouteIntent = { route: "media", assetId: summary.id };
+      const intent: RouteIntent = { route: "media", providerId: integration.mediaProvider!.descriptor.id, assetId: summary.id };
       records.push({ kind: "media", id: summary.id, label: summary.fileName, updatedAt: summary.updatedAt, href: formatIntent(intent), intent });
     }
     return { counts: { assets: summaries.length, bytes, byType }, records };
@@ -469,7 +474,11 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     return { compositions, mappings, sitemaps, content, media };
   })());
 
+  const listeners = new Set<() => void>();
+  const stopChanges = integration.subscribeChanges?.(() => { pending = undefined; for (const listener of listeners) listener(); });
   return {
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    dispose() { stopChanges?.(); pending = undefined; listeners.clear(); },
     async counts() {
       const data = await read();
       return {
@@ -505,6 +514,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     },
     refresh() {
       pending = undefined;
+      for (const listener of listeners) listener();
       if (state !== "failed") return;
       state = "idle";
       initialization = undefined;

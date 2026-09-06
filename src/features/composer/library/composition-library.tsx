@@ -32,6 +32,8 @@ import {
   LibraryTable,
   LibraryToolbar,
   LibraryUnavailableBanner,
+  LibraryViewToggle,
+  RowMenu,
   useLibraryConfirm,
   useLibraryQuery,
   useLibrarySelection,
@@ -41,7 +43,8 @@ import {
   type LibrarySort,
 } from "../../../components/library-page";
 import { ConfirmDialog, Dialog, Menu, MenuRadioItem, useMenu } from "../../../components/overlay";
-import { Banner, Button, Field, Input } from "../../../components/ui";
+import { Banner, Button, Chip, Field, Input, SegmentedControl } from "../../../components/ui";
+import type { ComposerComponentProvider } from "../active-pack";
 import { formatComposerRoute } from "../routing";
 import { ComposerExportDialog } from "../ui/export/export-dialog";
 import { NewCompositionDialog } from "./new-composition-dialog";
@@ -50,8 +53,10 @@ import type {
   CompositionLibraryIntents,
   CompositionLibraryProviderCapability,
 } from "./library-contract";
+import { COMPOSITION_PREVIEW_FALLBACK_LIMIT, CompositionLibraryPreview, type CompositionThumbnailDevice } from "./composition-library-preview";
 
 export interface CompositionLibraryProps {
+  componentProvider: ComposerComponentProvider;
   providers: readonly CompositionLibraryProviderCapability[];
   initialProviderId: CompositionProviderId;
   intents: CompositionLibraryIntents;
@@ -244,6 +249,7 @@ function CompositionRenameDialog({
 }
 
 export function CompositionLibrary({
+  componentProvider,
   providers,
   initialProviderId,
   intents,
@@ -265,6 +271,9 @@ export function CompositionLibrary({
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [renameDialog, setRenameDialog] = useState<RenameDialogState>(null);
   const [exportDialog, setExportDialog] = useState<ExportDialogState>(null);
+  const [view, setView] = useState<"table" | "cards">("table");
+  const [thumbnailDevice, setThumbnailDevice] = useState<CompositionThumbnailDevice>("desktop");
+  const [openPreviewKey, setOpenPreviewKey] = useState<string | null>(null);
 
   const startedRef = useRef(false);
   const createdForNavigationRef = useRef<CompositionSummary | null>(null);
@@ -279,6 +288,7 @@ export function CompositionLibrary({
       try {
         const result = await intents[mode](providerId);
         setActiveProviderId(providerId);
+        setOpenPreviewKey(null);
         setOutcome(result);
         if (result.status !== "error") onInitializationApplied?.(providerId, result);
         return result.status !== "error";
@@ -343,6 +353,16 @@ export function CompositionLibrary({
   });
   const selection = useLibrarySelection({ rows: summaries, visibleRows: query.rows, rowId: (row) => row.id });
   const confirm = useLibraryConfirm();
+  const previewDialogNeedsBudget = openPreviewKey !== null
+    && !query.rows.slice(0, COMPOSITION_PREVIEW_FALLBACK_LIMIT).some((row) => `${activeProviderId}:${row.id}` === openPreviewKey);
+
+  useEffect(() => {
+    if (openPreviewKey === null) return;
+    const prefix = `${activeProviderId}:`;
+    if (!openPreviewKey.startsWith(prefix) || !summaries.some((row) => `${prefix}${row.id}` === openPreviewKey)) {
+      setOpenPreviewKey(null);
+    }
+  }, [activeProviderId, openPreviewKey, summaries]);
 
   const commitSummary = (summary: CompositionSummary): void => {
     setOutcome((current) => (current?.status === "ready"
@@ -598,14 +618,22 @@ export function CompositionLibrary({
             query={query}
             searchLabel="Filter compositions"
             searchPlaceholder="Filter by name or ID"
-            end={
+            end={<>
+              <SegmentedControl<CompositionThumbnailDevice>
+                label="Thumbnail device"
+                size="sm"
+                value={thumbnailDevice}
+                onChange={setThumbnailDevice}
+                options={[{ value: "desktop", label: "Desktop previews" }, { value: "phone", label: "Phone previews" }]}
+              />
+              <LibraryViewToggle value={view} onChange={setView} tableLabel="List" />
               <Button size="sm" variant="ghost" disabled={busy} onClick={askClear}>
                 <TrashIcon size="sm" />
                 Clear library
               </Button>
-            }
+            </>}
           />
-          <LibraryTable
+          {view === "table" ? <LibraryTable
             caption="Compositions"
             rows={query.rows}
             contract={contract}
@@ -651,7 +679,50 @@ export function CompositionLibrary({
                 { id: "delete", label: "Delete…", icon: TrashIcon, onSelect: () => askDelete([row.name], [row.id]) },
               ],
             })}
-          />
+          /> : (
+            <div class="cms-composition-library__cards" aria-label="Composition cards">
+              {query.rows.length === 0 ? <LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} /> : query.rows.map((row, index) => {
+                const href = contract.href!(row);
+                const tag = kindTag(row);
+                const previewKey = `${activeProviderId}:${row.id}`;
+                return (
+                  <article key={previewKey} class="cms-composition-card">
+                    <CompositionLibraryPreview
+                      row={row}
+                      providerId={activeProviderId}
+                      componentProvider={componentProvider}
+                      intents={intents}
+                      device={thumbnailDevice}
+                      fallbackNear={index < COMPOSITION_PREVIEW_FALLBACK_LIMIT - (previewDialogNeedsBudget ? 1 : 0)}
+                      dialogOpen={openPreviewKey === previewKey}
+                      onDialogOpenChange={(open) => setOpenPreviewKey(open ? previewKey : null)}
+                    />
+                    <div class="cms-composition-card__body">
+                      <div class="cms-composition-card__meta">
+                        <Chip tone={tag.tone}>{tag.label}</Chip>
+                        <span>{row.nodeCount} node{row.nodeCount === 1 ? "" : "s"}</span>
+                      </div>
+                      <h2><a href={href}>{row.name}</a></h2>
+                      <p>{row.publicationKind === "global-template" ? `Shared layout · ${row.outletLabel || row.outletId || "content outlet"}` : row.publicationKind === "pattern" ? "Reusable structure copied on insertion." : "Local page structure."}</p>
+                    </div>
+                    <div class="cms-composition-card__actions">
+                      <a class="cms-btn cms-btn--sm" href={href}>Edit</a>
+                      <RowMenu
+                        label={row.name}
+                        open={{ id: "open", label: "Open", kbd: "↵", href }}
+                        actions={[
+                          { id: "rename", label: "Rename…", icon: EditIcon, onSelect: () => { setOperationError(null); setRenameDialog({ id: row.id, name: row.name }); } },
+                          { id: "duplicate", label: "Duplicate", icon: DuplicateIcon, onSelect: () => void duplicateRow(row.id) },
+                          { id: "export", label: "Export JSX", icon: DownloadIcon, onSelect: () => void exportRow(row) },
+                        ]}
+                        destructive={[{ id: "delete", label: "Delete…", icon: TrashIcon, onSelect: () => askDelete([row.name], [row.id]) }]}
+                      />
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
           <LibraryPagination summary={`${query.rows.length} of ${summaries.length} compositions · ${activeLabel}`} />
         </>
       ) : null}

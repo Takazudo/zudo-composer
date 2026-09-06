@@ -3,7 +3,7 @@ import type { CompositionRecord } from "../../../composer/library/types";
 import type { ContentEntryRecord, ContentModelRecord } from "../../../content/model/types";
 import type { MappingRecord } from "../../../mapping/model/types";
 import type { SitemapNode } from "../../../sitemapper/model/types";
-import type { SiteProject } from "../../model/types";
+import type { SiteProject, SiteProjectCollectionAttachment } from "../../model/types";
 
 export const timestamp = "2026-08-31T00:00:00.000Z";
 
@@ -34,6 +34,17 @@ export const componentCatalog = createComponentCatalog({
       defaults: { title: "" },
       fields: [{ prop: "title", label: "Title", schema: { type: "string" }, editor: { kind: "text" }, required: true }],
       slots: [],
+    },
+    {
+      id: "single-shell",
+      schemaVersion: 1,
+      title: "Single shell",
+      category: "Test",
+      description: "",
+      source: { module: "@test/single-shell", exportKind: "named", exportName: "SingleShell" },
+      defaults: {},
+      fields: [],
+      slots: [{ id: "body", prop: "body", label: "Body", cardinality: "single", accepts: ["leaf"] }],
     },
   ],
 });
@@ -82,6 +93,7 @@ export function model(kind: "single" | "collection" = "collection"): ContentMode
       schemaVersion: 1,
       id: "articles",
       name: "Articles",
+      description: "",
       kind,
       fields: [
         { id: "title", key: "title", label: "Title", required: true, kind: "text" },
@@ -96,6 +108,8 @@ export function entry(id: string, title: unknown = id, slug: unknown = id): Cont
     schemaVersion: 1,
     id,
     modelId: "articles",
+    lifecycle: "published",
+    generation: 0,
     createdAt: timestamp,
     updatedAt: timestamp,
     values: { title, slug } as ContentEntryRecord["values"],
@@ -108,12 +122,13 @@ export function mapping(compositionId = "landing"): MappingRecord {
     createdAt: timestamp,
     updatedAt: timestamp,
     document: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: "article-page",
       name: "Article page",
       contentModel: { providerId: "content-indexeddb", recordId: "articles" },
       composition: { providerId: "indexeddb", recordId: compositionId },
-      bindings: [{ id: "title-binding", sourceFieldId: "title", target: { nodeId: `${compositionId}-leaf`, prop: "title" }, transform: { kind: "identity" } }],
+      mode: { kind: "single" },
+      bindings: [{ id: "title-binding", sourceFieldId: "title", projection: { kind: "value" }, target: { nodeId: `${compositionId}-leaf`, prop: "title" }, transform: { kind: "identity" } }],
     },
   };
 }
@@ -128,20 +143,24 @@ export function project(options: {
   contentModel?: ContentModelRecord;
   entries?: ContentEntryRecord[];
   mappings?: MappingRecord[];
+  attachments?: SiteProjectCollectionAttachment[];
 } = {}): SiteProject {
   const root = options.root ?? page("home", undefined, { kind: "composition", ref: { providerId: "indexeddb", recordId: "landing" } });
+  const mappings = options.mappings ?? [mapping()];
+  if (!options.mappings && root.source.kind === "mapping" && root.source.route.kind === "entry-field") mappings[0]!.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 100 } };
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "compiler-site",
     name: "Compiler site",
     componentPack: { contractVersion: 2, packId: "compiler-fixture", packVersion: "1.0.0" },
     providers: {
       compositions: [{ id: "indexeddb", records: options.compositions ?? [composition("landing", "Static")] }],
       content: [{ id: "content-indexeddb", models: [options.contentModel ?? model()], entries: options.entries ?? [] }],
-      mappings: [{ id: "mapping-indexeddb", records: options.mappings ?? [mapping()] }],
-      sitemaps: [{ id: "sitemap-indexeddb", records: [{ id: "main", createdAt: timestamp, updatedAt: timestamp, document: { schemaVersion: 2, id: "main", name: "Main", root: [root] } }] }],
+      mappings: [{ id: "mapping-indexeddb", records: mappings }],
+      sitemaps: [{ id: "sitemap-indexeddb", records: [{ id: "main", createdAt: timestamp, updatedAt: timestamp, document: { schemaVersion: 3, navigation: { primary: [], footer: [] }, id: "main", name: "Main", root: [root] } }] }],
     },
     activeSitemap: { providerId: "sitemap-indexeddb", recordId: "main" },
+    collectionAttachments: options.attachments ?? [],
   };
 }
 

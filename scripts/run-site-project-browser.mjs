@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -44,28 +44,37 @@ async function runCli(request, environment) {
 // a symlinked ancestor (e.g. macOS `os.tmpdir()` -> `/private/var/folders/...`).
 const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-site-project-browser-")));
 try {
+  const releaseRoot = join(temporaryRoot, "release");
+  const mediaRoot = join(temporaryRoot, "media");
+  await Promise.all([mkdir(releaseRoot), mkdir(mediaRoot)]);
   const environment = {
-    ZUDO_SITE_PROJECT_ROOT: temporaryRoot,
+    ZUDO_SITE_PROJECT_ROOT: releaseRoot,
+    ZUDO_MEDIA_STORE_ROOT: mediaRoot,
     SITE_PROJECT_BROWSER_LANE: mode,
   };
   const sample = JSON.parse(await readFile(join(root, "src/site-project/sample/sample-site-project.json"), "utf8"));
   const project = mode === "dist"
     ? { ...globalThis.structuredClone(sample), id: "browser-disposable-project", name: "Disposable browser project" }
     : sample;
-  const applyResult = await runCli({
-    protocolVersion: 1,
-    operation: "apply",
+  const plan = await runCli({
+    protocolVersion: 2,
+    operation: "plan",
     project,
+    workingPrecondition: null,
+    selection: project.providers.content.flatMap((provider) => provider.entries.map((entry) => ({ ref: { providerId: provider.id, modelId: entry.modelId, recordId: entry.id }, action: "publish" }))),
     expectedRevision: null,
     expectedActive: null,
   }, environment);
+  const applyResult = await runCli({ protocolVersion: 2, operation: "apply", plan }, environment);
   const revision = applyResult.revision;
   if (typeof revision !== "string" || !/^[a-f0-9]{64}$/u.test(revision)) throw new Error("CLI apply did not return a revision digest.");
+  await runCli({ protocolVersion: 2, operation: "build", projectId: project.id, buildId: applyResult.buildId }, environment);
   await runCli({
-    protocolVersion: 1,
+    protocolVersion: 2,
     operation: "activate",
     projectId: project.id,
     revision,
+    buildId: applyResult.buildId,
     expectedActive: null,
   }, environment);
 

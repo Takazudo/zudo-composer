@@ -1,7 +1,6 @@
 import { Fragment } from "preact";
 import type { JSX } from "preact";
-import { ChevronDownIcon } from "../icons";
-import { cx } from "../ui";
+import { DisclosureButton, InlineRename, cx } from "../ui";
 import { useOutlineTree } from "./outline-context";
 import type { OutlineTreeContextValue } from "./outline-context";
 import { OutlineAddRow, OutlineInsertGap } from "./outline-insert";
@@ -72,18 +71,24 @@ function RowActions({ node }: { node: OutlineNode }) {
   return <span class="cms-tree-acts">{tree.renderActions(node)}</span>;
 }
 
+function RowRename({ node }: { node: OutlineNode }) {
+  const tree = useOutlineTree();
+  if (tree.renamingId !== node.id) return null;
+  return <div class="cms-tree-rename">
+    <InlineRename value={node.title} label={`Rename ${node.title}`}
+      onCommit={(title) => tree.commitRename(node.id, title)} onCancel={tree.cancelRename} />
+  </div>;
+}
+
 function RowToggle({ node, expanded }: { node: OutlineNode; expanded: boolean }) {
   const tree = useOutlineTree();
   return (
-    <button
+    <DisclosureButton
       class="cms-tree-toggle"
-      type="button"
-      aria-expanded={expanded}
+      expanded={expanded}
       aria-label={`${expanded ? "Collapse" : "Expand"} ${node.title}`}
       onClick={() => tree.setExpanded(node.id, !expanded)}
-    >
-      <ChevronDownIcon size="xs" />
-    </button>
+    />
   );
 }
 
@@ -122,6 +127,7 @@ function CategoryRow({ node, placement, expanded }: { node: OutlineNode; placeme
           <RowHint node={node} />
           <RowMeta node={node} />
         </button>
+        <RowRename node={node} />
         <RowActions node={node} />
         {expandable ? <RowToggle node={node} expanded={expanded} /> : null}
       </div>
@@ -154,6 +160,7 @@ function GroupNode({ node, placement, expanded }: { node: OutlineNode; placement
           <RowHint node={node} />
           <RowMeta node={node} />
         </button>
+        <RowRename node={node} />
         <RowActions node={node} />
         {expandable ? <RowToggle node={node} expanded={expanded} /> : null}
       </div>
@@ -175,6 +182,7 @@ function LeafRow({ node, placement }: { node: OutlineNode; placement: RowPlaceme
         <RowHint node={node} />
         <RowMeta node={node} />
       </button>
+      <RowRename node={node} />
       <RowActions node={node} />
     </div>
   );
@@ -202,13 +210,11 @@ export function OutlineChildren({ parent, depth }: { parent: OutlineNode; depth:
     <div class="cms-tree-children" role="group" aria-label={parent.title}>
       {children.map((child, index) => (
         <Fragment key={child.id}>
-          {index === 0 ? null : (
-            <OutlineInsertGap
-              target={{ parentId: parent.id, index }}
-              depth={depth}
-              beforeTitle={child.title}
-            />
-          )}
+          <OutlineInsertGap
+            target={{ parentId: parent.id, index }}
+            depth={depth}
+            beforeTitle={child.title}
+          />
           <OutlineNodeRow
             node={child}
             placement={{

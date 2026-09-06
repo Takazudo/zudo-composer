@@ -1,9 +1,11 @@
 import { createContext, type ComponentChildren, type JSX } from "preact";
-import { useContext, useId, useLayoutEffect, useRef } from "preact/hooks";
+import { useContext, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { allocateOverlayId } from "./overlay-id";
 import { CheckIcon, type IconComponent } from "../icons";
 import { computeMenuPosition } from "./menu-position";
 import { OverlayPortal } from "./portal";
 import type { CloseMenuOptions, MenuController } from "./use-menu";
+import { useMenu } from "./use-menu";
 
 // The CMS popover menu (issue #159): `role="menu"` with roving Arrow/Home/End
 // focus, typeahead, Escape/outside-click dismissal and focus restored to the
@@ -18,6 +20,7 @@ const TYPEAHEAD_RESET_MS = 500;
 
 interface MenuContextValue {
   close: (options?: CloseMenuOptions) => void;
+  register: (panel: HTMLElement) => () => void;
 }
 
 const MenuContext = createContext<MenuContextValue | null>(null);
@@ -86,20 +89,27 @@ export interface MenuProps {
 }
 
 export function Menu({ controller, label, class: className, children }: MenuProps): JSX.Element | null {
+  // A portal is a separate Preact root: explicitly carry the owning menu.
+  const parent = useContext(MenuContext);
   if (!controller.open) return null;
   return (
-    <OverlayPortal hostClass="cms-overlay-portal">
-      <MenuSurface controller={controller} label={label} class={className}>
+    <OverlayPortal hostClass="cms-overlay-portal" container={controller.triggerRef.current?.closest("dialog[open]")}>
+      <MenuSurface controller={controller} label={label} class={className} parent={parent}>
         {children}
       </MenuSurface>
     </OverlayPortal>
   );
 }
 
-function MenuSurface({ controller, label, class: className, children }: MenuProps): JSX.Element {
+function MenuSurface({ controller, label, class: className, children, parent }: MenuProps & { parent: MenuContextValue | null }): JSX.Element {
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const descendants = useRef(new Set<HTMLElement>());
   const typeaheadRef = useRef({ buffer: "", at: 0 });
   const { closeMenu, focusIntent, placement, triggerRef } = controller;
+
+  useLayoutEffect(() => {
+    if (panelRef.current) return parent?.register(panelRef.current);
+  }, [parent]);
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
@@ -124,6 +134,7 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
       const target = event.target as Node | null;
       if (!panel || !target) return;
       if (panel.contains(target)) return;
+      if ([...descendants.current].some((descendant) => descendant.contains(target))) return;
       // The trigger's own click toggles the menu shut; dismissing here too
       // would close and immediately reopen it.
       if (triggerRef.current?.contains(target)) return;
@@ -215,9 +226,11 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
   function onKeyDown(event: JSX.TargetedKeyboardEvent<HTMLDivElement>): void {
     const panel = panelRef.current;
     if (!panel) return;
+    if (event.isComposing || event.keyCode === 229) return;
 
-    if (event.key === "Escape") {
+    if (event.key === "Escape" || (parent && event.key === "ArrowLeft")) {
       event.preventDefault();
+      event.stopPropagation();
       closeMenu();
       return;
     }
@@ -225,7 +238,9 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
       // Menus are not tab stops: Tab dismisses and hands focus back to the
       // trigger, from where the next Tab continues through the page.
       event.preventDefault();
+      event.stopPropagation();
       closeMenu();
+      parent?.close();
       return;
     }
 
@@ -268,7 +283,14 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
   }
 
   return (
-    <MenuContext.Provider value={{ close: closeMenu }}>
+    <MenuContext.Provider value={{
+      close: (options) => { closeMenu(options); parent?.close(options); },
+      register: (panel) => {
+        descendants.current.add(panel);
+        const unregisterParent = parent?.register(panel);
+        return () => { descendants.current.delete(panel); unregisterParent?.(); };
+      },
+    }}>
       <div
         ref={panelRef}
         id={controller.id}
@@ -282,6 +304,32 @@ function MenuSurface({ controller, label, class: className, children }: MenuProp
       </div>
     </MenuContext.Provider>
   );
+}
+
+export interface MenuSubmenuProps {
+  label: string;
+  children: ComponentChildren;
+  disabled?: boolean;
+  icon?: IconComponent;
+}
+
+/** Nested actions such as Arrange. Escape/Left returns to this item's focus. */
+export function MenuSubmenu({ label, children, disabled, icon }: MenuSubmenuProps): JSX.Element {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const controller = useMenu(trigger, { side: "right" });
+  return <>
+    <button ref={trigger} type="button" role="menuitem" tabIndex={-1} class="cms-menu__item" disabled={disabled}
+      {...controller.triggerProps}
+      onKeyDown={(event) => {
+        if (event.isComposing || event.keyCode === 229) return;
+        if (event.key === "ArrowRight" || event.key === "Enter" || event.key === " ") {
+          event.preventDefault(); event.stopPropagation(); controller.openMenu();
+        }
+      }}>
+      <MenuRowContent icon={icon} kbd="›">{label}</MenuRowContent>
+    </button>
+    <Menu controller={controller} label={label}>{children}</Menu>
+  </>;
 }
 
 export interface MenuRowProps {
@@ -398,7 +446,7 @@ export interface MenuSectionProps {
 
 /** A titled run of items. `role="group"` keeps the title out of the item sequence. */
 export function MenuSection({ title, children }: MenuSectionProps): JSX.Element {
-  const titleId = `cms-menu-section-${useId()}`;
+  const [titleId] = useState(() => allocateOverlayId("menu-section"));
   return (
     <div class="cms-menu__section" role="group" aria-labelledby={titleId}>
       <div id={titleId} class="cms-menu__title">{title}</div>

@@ -1,5 +1,6 @@
 import {
   createMediaRecord,
+  currentMediaVersion,
   loadMediaRecord,
   MediaPersistenceError,
   summarizeMedia,
@@ -176,7 +177,8 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
       const storedBytes = bytes.get(id);
       if (storedBytes === undefined) return { status: "loaded", record: cloneRecord(loaded.record) };
       const actualChecksum = await checksum(storedBytes);
-      if (storedBytes.byteLength !== loaded.record.document.byteLength || (actualChecksum !== undefined && actualChecksum !== loaded.record.document.checksum)) {
+      const version = currentMediaVersion(loaded.record);
+      if (storedBytes.byteLength !== version.byteLength || (actualChecksum !== undefined && actualChecksum !== version.checksum)) {
         return { status: "bytes-missing", record: cloneRecord(loaded.record), reason: "checksum-mismatch" };
       }
       return { status: "loaded", record: cloneRecord(loaded.record) };
@@ -201,7 +203,7 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
     seed: async (seed: MediaSeed) => {
       if (options.failWrites) failWrite("seed");
       for (const record of seed.records) {
-        const source = seed.bytes?.[record.id] ?? new Uint8Array(record.document.byteLength);
+        const source = seed.bytes?.[record.id] ?? new Uint8Array(currentMediaVersion(record).byteLength);
         await store.put(record, source);
       }
     },
@@ -237,7 +239,7 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
   };
 }
 
-const defaultRecord = createMediaRecord({ fileName: "sample.png", mediaType: "image/png", byteLength: 0, checksum: FIXTURE_CHECKSUM }, { id: "sample-image", timestamp: FIXTURE_TIMESTAMP });
+const defaultRecord = createMediaRecord({ fileName: "sample.png", mediaType: "image/png", byteLength: 12, checksum: FIXTURE_CHECKSUM }, { id: "sample-image", timestamp: FIXTURE_TIMESTAMP });
 
 export type MediaRenderFixtureName = "populated" | "empty" | "broken";
 
@@ -255,7 +257,7 @@ export const mediaRenderFixtures: Readonly<Record<MediaRenderFixtureName, () => 
           reason: "future-schema",
           sourcePreserved: true,
           affectedRecordIds: ["future-media"],
-          foundSchemaVersion: 2,
+          foundSchemaVersion: 3,
           message: "A newer Media record was preserved.",
         },
       },
@@ -263,7 +265,7 @@ export const mediaRenderFixtures: Readonly<Record<MediaRenderFixtureName, () => 
   }),
 });
 
-/** Compatibility-style singular fixture factory used by route harnesses. */
+/** Default fixture factory used by route harnesses. */
 export function createDefaultMemoryMediaProvider(): MediaProvider {
   return createMemoryMediaProvider({ records: [defaultRecord] });
 }

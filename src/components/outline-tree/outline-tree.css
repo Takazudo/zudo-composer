@@ -141,8 +141,6 @@
 }
 
 .cms-tree-cat__row > .cms-tree-toggle { margin-inline-end: 0; border-inline-end: 0; }
-.cms-tree-toggle svg { transition: rotate .12s; }
-.cms-tree-toggle[aria-expanded="false"] svg { rotate: -90deg; }
 .cms-tree-toggle:hover { color: var(--color-fg); background: var(--color-surface-2); }
 
 /* --------------------------------------------------------------------------
@@ -350,7 +348,7 @@
  *
  * The container is 0px high at all times, so adding one between every pair of
  * sibling rows moves nothing. A dedicated hit-zone element straddles the
- * boundary (+/-0.55rem, +/-22px on coarse pointers) to make a zero-height
+ * boundary (+/-0.55rem on fine pointers) to make a zero-height
  * target hoverable; it deliberately sits over the outer edges of the two
  * neighbouring rows, which is the cost of the technique. The dashed line and
  * the `+` tile are absolutely positioned on the boundary, and so is the inline
@@ -395,7 +393,10 @@
   color: var(--color-muted);
   box-shadow: 0 0 0 3px var(--color-bg);
   opacity: 0;
-  pointer-events: none;
+  /* Keep the semantic tile above the hover-expansion sibling hit-testable.
+   * Visibility is a reveal rule, not an actionability prerequisite: otherwise
+   * pointer entry can hit only the decorative sibling instead of the button. */
+  pointer-events: auto;
   cursor: pointer;
   z-index: var(--tree-z-tile);
 }
@@ -480,10 +481,27 @@
   .cms-tree-add__btn { width: 32px; height: 32px; }
   .cms-tree-add-root { min-height: 44px; }
   .cms-tree-inline--root { min-height: 44px; }
-  .cms-tree-insert__hit { inset-block: -22px; }
+  .cms-tree-insert { height: 44px; }
+  .cms-tree-insert__hit { inset-block: 0; }
+  .cms-tree-insert::before { inset-block-start: 50%; }
+  .cms-tree-insert__btn { inset-block-start: 50%; width: 44px; height: 44px; }
+  .cms-tree-insert > .cms-tree-inline { inset-block-start: 50%; min-height: 44px; }
   .cms-tree-insert::before,
   .cms-tree-insert__btn { opacity: .55; pointer-events: auto; }
 }
+
+.cms-tree-rename {
+  position: absolute;
+  inset: 0;
+  z-index: var(--tree-z-editor);
+  display: flex;
+  align-items: center;
+  padding-inline: var(--sp-2);
+  background: var(--color-surface);
+}
+.cms-tree-rename .cms-input { width: 100%; }
+.cms-tree:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.cms-tree-add.is-active, .cms-tree-add-root.is-active { outline: 2px solid var(--color-focus); }
 
 @media (prefers-reduced-motion: reduce) {
   .cms-tree-toggle svg { transition-duration: .01ms; }

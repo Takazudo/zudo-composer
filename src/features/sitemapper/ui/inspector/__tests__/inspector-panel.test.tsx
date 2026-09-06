@@ -43,7 +43,7 @@ function node(id = "home", title = "Home", composition?: CompositionRef): Sitema
 }
 
 function documentOf(...nodes: SitemapNode[]): SitemapDocument {
-  return { schemaVersion: SITEMAP_SCHEMA_VERSION, id: "inspector-test", name: "Inspector test", root: nodes };
+  return { schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] }, id: "inspector-test", name: "Inspector test", root: nodes };
 }
 
 function resolvedRecord(entry: CatalogEntry) {
@@ -51,7 +51,7 @@ function resolvedRecord(entry: CatalogEntry) {
     id: entry.ref.recordId,
     createdAt: entry.updatedAt,
     updatedAt: entry.updatedAt,
-    document: { schemaVersion: 2, id: entry.ref.recordId, name: entry.name, root: [] },
+    document: { schemaVersion: 3, navigation: { primary: [], footer: [] }, id: entry.ref.recordId, name: entry.name, root: [] },
   };
 }
 

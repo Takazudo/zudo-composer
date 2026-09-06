@@ -1,4 +1,5 @@
 import { fileProviderConfig } from "virtual:composer-file-provider-config";
+import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import {
   COMPOSITION_PROVIDERS,
   CompositionPersistenceError,
@@ -28,11 +29,13 @@ const MAX_OUTPUT_PLAN_ROUNDS = 8;
 
 type Operation = CompositionPersistenceOperation;
 type WireOperation = Operation
+  | "snapshot"
   | "delete-with-dependency-check"
   | "unpublish-with-dependency-check"
   | "save-lifecycle-record";
 
 function persistenceOperation(operation: WireOperation): Operation {
+  if (operation === "snapshot") return "list";
   if (operation === "delete-with-dependency-check") return "delete";
   if (operation === "unpublish-with-dependency-check" || operation === "save-lifecycle-record") return "put";
   return operation;
@@ -147,6 +150,13 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
     return this.requestWithOutputPlan<readonly CompositionSummary[]>("list");
   }
 
+  async snapshot(): Promise<{ mutationToken: string; records: readonly CompositionRecord[] }> {
+    const value = await this.request<{ mutationToken: string; records: readonly CompositionRecord[] }>("snapshot");
+    if (!value || !/^[a-f0-9]{64}$/.test(value.mutationToken) || !Array.isArray(value.records) || value.records.some((record) => !validateCompositionRecord(record).ok)) throw persistenceError("list", "validation", "Invalid Composition snapshot response.", false);
+    return value;
+  }
+  async mutationToken(): Promise<string> { return (await this.snapshot()).mutationToken; }
+
   async get(id: string): Promise<CompositionLoadOutcome> {
     return this.requestWithOutputPlan<CompositionLoadOutcome>("get", { id }, (result) =>
       this.decodeGetResult(result, id),
@@ -191,7 +201,11 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
     const outputsById: Record<string, ComposerFileProviderDerivedOutputPlan> = Object.create(null);
     for (let round = 0; round < MAX_OUTPUT_PLAN_ROUNDS; round += 1) {
       const response = await this.fetchJson<T>(operation, { ...fields, outputsById });
-      if (response.ok) return decodeResult(response.result);
+      if (response.ok) {
+        const result = decodeResult(response.result);
+        if (operation !== "list" && operation !== "get") notifyPersistenceChange("compositions:files");
+        return result;
+      }
       if (response.error.code !== "output-required") {
         throw this.fromServerError(persistenceOperation(operation), response.error);
       }
@@ -263,7 +277,14 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
 
   private async request<T>(operation: WireOperation, fields: Record<string, unknown> = {}): Promise<T> {
     const response = await this.fetchJson<T>(operation, fields);
-    if (response.ok) return response.result;
+    if (response.ok) {
+      const deleted = operation === "delete" && response.result === true;
+      const lifecycleDeleted = operation === "delete-with-dependency-check"
+        && typeof response.result === "object" && response.result !== null
+        && "status" in response.result && response.result.status === "deleted";
+      if (operation === "clear" || deleted || lifecycleDeleted) notifyPersistenceChange("compositions:files");
+      return response.result;
+    }
     throw this.fromServerError(persistenceOperation(operation), response.error);
   }
 

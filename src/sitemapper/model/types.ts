@@ -8,7 +8,7 @@
 import type { RecordId } from "../../shared";
 
 /** The only Sitemap document schema version understood by this build. */
-export const SITEMAP_SCHEMA_VERSION = 2 as const;
+export const SITEMAP_SCHEMA_VERSION = 3 as const;
 export type SitemapSchemaVersion = typeof SITEMAP_SCHEMA_VERSION;
 
 /** A stable reference to a saved Composer composition. */
@@ -33,7 +33,16 @@ export function isSitemapDisplayTitleFieldKind(kind: string): kind is SitemapDis
 
 export type MappingRoute =
   | { kind: "single" }
+  | { kind: "selected-entry"; entry: SitemapEntryRef }
   | { kind: "entry-field"; fieldId: RecordId; titleFieldId?: RecordId };
+
+export interface SitemapEntryRef { providerId: string; modelId: string; recordId: RecordId }
+export interface SitemapAncestorSelection { nodeId: string; entry: SitemapEntryRef }
+export type SitemapNavigationDestination =
+  | { kind: "route"; nodeId: string; entry?: SitemapEntryRef; ancestors?: SitemapAncestorSelection[] }
+  | { kind: "external"; url: string };
+export interface SitemapNavigationItem { id: string; label: string; visible: boolean; destination: SitemapNavigationDestination }
+export interface SitemapNavigation { primary: SitemapNavigationItem[]; footer: SitemapNavigationItem[] }
 
 /** Every authored page has one explicit, persisted source. */
 export type SitemapPageSource =
@@ -56,6 +65,7 @@ export interface SitemapDocument {
   schemaVersion: SitemapSchemaVersion;
   id: string;
   name: string;
+  navigation: SitemapNavigation;
   /** Virtual insertion slot. The array itself is never a page node. */
   root: SitemapNode[];
 }

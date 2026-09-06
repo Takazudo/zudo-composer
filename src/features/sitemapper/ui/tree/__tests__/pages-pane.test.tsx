@@ -11,7 +11,7 @@ import { PagesPane } from "../pages-pane";
 afterEach(cleanup);
 
 function documentOf(root: SitemapNode[]): SitemapDocument {
-  return { schemaVersion: SITEMAP_SCHEMA_VERSION, id: "pages", name: "Pages", root };
+  return { schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] }, id: "pages", name: "Pages", root };
 }
 
 const page = (id: string, title = id, children: SitemapNode[] = []): SitemapNode =>
@@ -62,12 +62,18 @@ describe("Sitemapper pages pane", () => {
     expect(screen.getByRole("treeitem", { name: /About/ })).toBeInTheDocument();
   });
 
-  it("refuses authored children under a Mapping route family", () => {
+  it("offers exact-index authored children under a Mapping route family", () => {
     const mapped = page("home", "Home");
     mapped.source = { kind: "mapping", ref: { providerId: "m", recordId: "articles" }, route: { kind: "single" } };
-    render(<PagesPane {...paneProps(documentOf([mapped]))} />);
-    expect(addRows()).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Add child page to Home" })).toBeDisabled();
+    const props = paneProps(documentOf([mapped]));
+    render(<PagesPane {...props} />);
+    expect(addRows()).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Add child page to Home" }));
+    expect(props.onAddChild).toHaveBeenCalledWith("home");
+    fireEvent.click(screen.getByRole("button", { name: "Add page", exact: true }));
+    const input = screen.getByRole("textbox", { name: "Add page" });
+    fireEvent.input(input, { target: { value: "Nested page" } }); fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onAdd).toHaveBeenCalledWith({ parentId: "home", index: 0, title: "Nested page" });
   });
 
   it("puts move, duplicate and delete behind one row menu, with the root protected", () => {
@@ -90,5 +96,16 @@ describe("Sitemapper pages pane", () => {
     render(<PagesPane {...paneProps(documentOf([home]))} />);
     expect(screen.getByRole("treeitem", { name: /Composition/ })).toBeInTheDocument();
     expect(document.querySelectorAll(".cms-tree__legend .cms-tree-dot")).toHaveLength(3);
+  });
+  it("passes F2/IME rename through the shared tree callback", () => {
+    const onRename = vi.fn();
+    render(<PagesPane {...paneProps(documentOf([page("home", "Home")]), { onRename })} />);
+    const row = screen.getByRole("treeitem", { name: /Home/ });
+    row.focus();
+    fireEvent.keyDown(row, { key: "F2" });
+    const input = document.querySelector(".cms-tree-rename input") as HTMLInputElement;
+    fireEvent.input(input, { target: { value: "Accueil" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRename).toHaveBeenCalledWith("home", "Accueil");
   });
 });

@@ -2,10 +2,11 @@
  * Outline tree — no row moves (epic #156, issue #162).
  *
  * The insert affordance is the whole reason this spec exists. Between every
- * pair of sibling rows sits a container that is 0px high at all times; its hit
+ * pair of sibling rows sits a container that is 0px high on fine pointers; its hit
  * zone, dashed line, `+` tile and inline editor are all absolutely positioned
  * on the row boundary. That technique is only worth anything if it is true in a
  * real browser, so the proof is the one thing a unit test cannot give:
+ * Coarse pointers reserve a dedicated 44px insertion row. The proof compares
  * `getBoundingClientRect()` of every row, before and after hovering a gap and
  * while its inline editor is open.
  *
@@ -14,12 +15,13 @@
  * asks for. Renaming the file silently drops the coarse half.
  *
  * The Sitemapper route adopted `OutlineTree` in issue #165, which is what made
- * this spec live. The skip below is kept as the guard it always was: a route
- * that stops rendering a tree says so instead of failing on a null selector.
+ * this spec live. A missing tree now fails: every current host must retain the
+ * approved shared outline; absence cannot silently skip its acceptance proof.
  */
 
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
+import { ensureDevWorkspace } from "./workspace-bootstrap";
 
 const TREE = ".cms-tree";
 /** Every element that draws a row. Their boxes are the layout contract. */
@@ -45,9 +47,10 @@ interface TreeGeometry {
 }
 
 /**
- * Every row box in one pass, plus the tree's own box and the page scroll — so a
- * stray scroll between two readings shows up as an obvious diff instead of
- * masquerading as every row having moved by the same amount.
+ * Every row box in one pass, normalized to the tree's origin, plus the tree's
+ * own size and page scroll. EditorChrome can move its inner viewport while a
+ * pointer enters an absolutely positioned boundary; that is not a tree layout
+ * shift. Relative boxes still catch any row, gap, width or height movement.
  */
 async function readGeometry(page: Page): Promise<TreeGeometry> {
   return page.evaluate(
@@ -59,12 +62,16 @@ async function readGeometry(page: Page): Promise<TreeGeometry> {
       };
       const tree = document.querySelector(treeSelector);
       if (tree === null) throw new Error("The outline tree left the page mid-measurement.");
+      const treeBox = box(tree);
       return {
-        tree: box(tree),
-        rows: [...tree.querySelectorAll(rowSelector)].map((row) => ({
-          label: (row.textContent ?? "").replace(/\s+/gu, " ").trim().slice(0, 48),
-          box: box(row),
-        })),
+        tree: { ...treeBox, x: 0, y: 0 },
+        rows: [...tree.querySelectorAll(rowSelector)].map((row) => {
+          const rowBox = box(row);
+          return {
+            label: (row.textContent ?? "").replace(/\s+/gu, " ").trim().slice(0, 48),
+            box: { ...rowBox, x: round(rowBox.x - treeBox.x), y: round(rowBox.y - treeBox.y) },
+          };
+        }),
         scrollX: round(window.scrollX),
         scrollY: round(window.scrollY),
       };
@@ -78,6 +85,7 @@ async function opacityOf(locator: Locator): Promise<number> {
 }
 
 async function openSitemapper(page: Page, name: string): Promise<void> {
+  await ensureDevWorkspace(page);
   await page.goto("/sitemapper");
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "New sitemap" }).click();
@@ -86,7 +94,7 @@ async function openSitemapper(page: Page, name: string): Promise<void> {
   await dialog.getByRole("button", { name: "Create sitemap" }).click();
   // Creating navigates to the record's own URL, so the editor is reached the
   // same way a deep link reaches it.
-  await expect(page).toHaveURL(/\/sitemapper\?sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(name);
 }
 
@@ -98,9 +106,13 @@ async function openSitemapper(page: Page, name: string): Promise<void> {
 async function ensureSiblingGap(page: Page): Promise<Locator> {
   if ((await page.locator(GAP).count()) === 0) {
     for (const title of ["Layout probe alpha", "Layout probe beta"]) {
-      await page.locator(ADD_ROW).first().click();
+      // Fixture setup only: the canvas can keep re-centering and reclaiming
+      // focus while CI renders its graph. Invoke the existing button handler
+      // directly; the later unforced insertion-tile click is the pointer proof.
+      const add = page.locator(ADD_ROW).first();
+      await add.evaluate((button: HTMLButtonElement) => button.click());
       const input = page.locator(".cms-tree-add-wrap .cms-tree-inline input").first();
-      await expect(input).toBeFocused();
+      await expect(input).toBeVisible();
       await input.fill(title);
       await input.press("Enter");
       await expect(page.getByRole("treeitem", { name: title })).toBeVisible();
@@ -111,6 +123,36 @@ async function ensureSiblingGap(page: Page): Promise<Locator> {
   return gap;
 }
 
+test("outline insertion preserves IME input, Escape focus and the exact first sibling index", async ({ page }, info) => {
+  await openSitemapper(page, `Exact insertion ${info.project.name}`);
+  const pane = page.getByRole("radiogroup", { name: "Pane" });
+  if (await pane.isVisible()) await pane.getByRole("radio").first().click();
+  const gap = await ensureSiblingGap(page), trigger = gap.locator(".cms-tree-insert__btn");
+  await trigger.focus(); await trigger.press("Enter");
+  const input = page.locator(".cms-tree-inline input"); await expect(input).toBeFocused();
+  await input.fill("未確定"); await input.dispatchEvent("compositionstart", { data: "未確定" });
+  await input.dispatchEvent("keydown", { key: "Enter", code: "Enter", isComposing: true });
+  await input.dispatchEvent("keydown", { key: "Escape", code: "Escape", keyCode: 229 });
+  // Independently prove compositionstart/end tracking, not only key flags.
+  await input.dispatchEvent("keydown", { key: "Enter", code: "Enter", isComposing: false });
+  await input.dispatchEvent("keydown", { key: "Escape", code: "Escape", isComposing: false });
+  await expect(input).toHaveValue("未確定"); await expect(input).toBeFocused();
+  await input.dispatchEvent("compositionend", { data: "未確定" }); await input.press("Escape");
+  await expect(input).toHaveCount(0); await expect(trigger).toBeFocused();
+  await trigger.press("Enter"); await input.fill("Exact first sibling"); await input.press("Enter");
+  await expect(page.getByRole("treeitem", { name: /^Exact first sibling/ })).toBeVisible();
+  await expect(page.locator(".cms-topbar__status")).toContainText("Saved");
+  const titles = await page.evaluate(async () => {
+    const path = "/src/app/provider-integration.ts";
+    const { createProductionProviderIntegration } = await import(path);
+    const integration = createProductionProviderIntegration(); await integration.initialization.initialize();
+    const record = await integration.sitemapProvider.store.get(new URLSearchParams(location.search).get("sitemap"));
+    if (record.status !== "loaded") throw new Error("Inserted Sitemap was not persisted.");
+    return record.record.document.root[0].children.map((node: { title: string }) => node.title);
+  });
+  expect(titles).toEqual(["Exact first sibling", "Layout probe alpha", "Layout probe beta"]);
+});
+
 test("no outline row moves when a gap is hovered or its inline editor is open", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const coarseLane = testInfo.project.name === "coarse";
@@ -118,10 +160,7 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
   await openSitemapper(page, `Outline layout probe ${testInfo.project.name}`);
 
   const tree = page.locator(TREE).first();
-  test.skip(
-    (await page.locator(TREE).count()) === 0,
-    "The Sitemapper route has not adopted OutlineTree yet (issue #165).",
-  );
+  await expect(tree, "The approved Sitemap outline must be present; absence is a regression.").toBeAttached();
   // Below 64rem `EditorChrome` shows one pane at a time behind a "Pane" switch,
   // and the navigator is not the default — so the tree is in the DOM but hidden
   // on the coarse lane. Select the first pane (the navigator) by position rather
@@ -143,12 +182,20 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
   const hit = gap.locator(".cms-tree-insert__hit");
   const tile = gap.locator(".cms-tree-insert__btn");
 
-  await test.step("the container costs no height and its hit zone is reachable", async () => {
-    expect(await gap.evaluate((element) => element.getBoundingClientRect().height)).toBe(0);
+  await test.step("fine pointers use a boundary; coarse pointers reserve a dedicated insertion row", async () => {
+    expect(await gap.evaluate((element) => element.getBoundingClientRect().height)).toBe(coarseLane ? 44 : 0);
     const hitBox = await hit.boundingBox();
     expect(hitBox).not.toBeNull();
-    // ±0.55rem on a fine pointer, ±22px on a coarse one.
+    // ±0.55rem on a fine pointer; the full reserved row on a coarse pointer.
     expect(hitBox!.height).toBeGreaterThanOrEqual(coarseLane ? 40 : 16);
+    if (coarseLane) {
+      const tileBox = await tile.boundingBox();
+      expect(tileBox!.height).toBeGreaterThanOrEqual(44);
+      expect(tileBox!.width).toBeGreaterThanOrEqual(44);
+      const gapBox = await gap.boundingBox();
+      expect(tileBox!.y).toBeGreaterThanOrEqual(gapBox!.y);
+      expect(tileBox!.y + tileBox!.height).toBeLessThanOrEqual(gapBox!.y + gapBox!.height);
+    }
   });
 
   await hit.scrollIntoViewIfNeeded();
@@ -161,21 +208,17 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
     if (coarseLane) expect(await opacityOf(tile)).toBeGreaterThan(0);
     else expect(await opacityOf(tile)).toBe(0);
 
-    // force: true is required and is not a workaround for a defect. The reveal is
-    // keyed on the container (`.cms-tree-insert:hover`), so the hover paints the
-    // `+` tile over the boundary and gives it `pointer-events: auto` — the tile
-    // then occupies the hit zone's centre point. Playwright's actionability check
-    // sees a different hit target and retries until the test times out, even
-    // though the hover has already succeeded and the container stays hovered
-    // (which is exactly why the affordance remains visible when the pointer
-    // travels onto the tile to click it). The mouse still moves, so `:hover`
-    // applies and the opacity assertion below is meaningful.
-    await hit.hover({ force: true });
+    // Exercise the expanded hover strip away from the semantic tile at center.
+    // No forced action: Playwright must resolve the real hit target. Its
+    // actionability scroll is intentionally filtered by tree-relative geometry.
+    await hit.hover({ position: { x: 4, y: 4 } });
     expect(await opacityOf(tile)).toBeGreaterThan(0);
     expect(await readGeometry(page)).toEqual(baseline);
   });
 
   await test.step("the open inline editor floats on the boundary and moves nothing", async () => {
+    // This remains an ordinary, unforced click: Playwright's actionability
+    // check is the browser-level proof that decoration does not intercept it.
     await tile.click();
     const editor = gap.locator(".cms-tree-inline");
     await expect(editor).toBeVisible();
@@ -192,11 +235,13 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
 
     await input.press("Escape");
     await expect(editor).toHaveCount(0);
+    await expect(tile).toBeFocused();
     expect(await readGeometry(page)).toEqual(baseline);
   });
 
   await test.step("the affordance hides again and leaves the rows where they were", async () => {
     await page.mouse.move(0, 0);
+    await page.getByRole("treeitem").first().focus();
     if (!coarseLane) await expect.poll(() => opacityOf(tile)).toBe(0);
     expect(await readGeometry(page)).toEqual(baseline);
   });

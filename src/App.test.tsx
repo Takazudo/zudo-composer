@@ -4,6 +4,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { createProductionProviderIntegration } from './app/provider-integration';
+
+function renderApp() {
+  // Explicit factories use the test lock adapter; jsdom has no browser Web Locks.
+  const factory = new FDBFactory();
+  return render(<App integration={createProductionProviderIntegration({ compositionIdbFactory: factory, contentIdbFactory: factory, mappingIdbFactory: factory, sitemapIdbFactory: factory, mediaProvider: null })} />);
+}
 
 /** The Dashboard heading follows the local clock, so match all three. */
 const GREETING = /^Good (morning|afternoon|evening)\.$/;
@@ -29,44 +36,42 @@ describe('App', () => {
     ['/sitemapper', 'heading', 'Sitemaps', 'Sitemaps'],
     ['/media', 'heading', 'Media', 'Media'],
   ])('mounts the real product on direct refresh at %s', async (route, role, name, railLabel) => {
-    vi.stubGlobal('indexedDB', new FDBFactory());
     window.history.replaceState(null, '', route);
-    render(<App />);
+    renderApp();
     expect(await screen.findByRole(role, { name })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-    expect(nav.querySelectorAll('a')).toHaveLength(7);
+    expect(nav.querySelectorAll('a[data-route]')).toHaveLength(8);
     const current = nav.querySelectorAll('a[aria-current="page"]');
     expect(current).toHaveLength(1);
     expect(current[0]).toHaveTextContent(railLabel);
   });
 
-  it('renders the workspace Dashboard on Home', () => {
-    render(<App />);
+  it('renders the workspace Overview on Home after initialization', async () => {
+    renderApp();
 
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-    expect(nav.querySelectorAll('a')).toHaveLength(7);
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('heading', { name: GREETING })).toBeInTheDocument();
-    // The explainer is the one Dashboard card that owes nothing to a provider,
-    // so it stands before the first read lands.
+    expect(nav.querySelectorAll('a[data-route]')).toHaveLength(8);
+    expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByRole('heading', { name: GREETING })).toBeInTheDocument();
+    // The explainer stays available after the real workspace finishes opening.
     expect(screen.getByRole('region', { name: 'How the pieces connect' })).toBeInTheDocument();
     expect(document.querySelectorAll('.cms-rail__item svg')).toHaveLength(8);
   });
 
-  it('keeps the production Media state truthful without probing a provider', () => {
+  it('keeps the production Media state truthful without probing a provider', async () => {
     const request = vi.fn();
     vi.stubGlobal('fetch', request);
     window.history.replaceState(null, '', '/media');
-    render(<App />);
+    renderApp();
 
-    expect(screen.getByRole('heading', { name: 'Media' })).toBeInTheDocument();
-    expect(screen.getByText('Media file provider not connected')).toBeInTheDocument();
-    expect(screen.getByText(/browsing and uploading media both need the development file provider/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Media' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /upload/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /new folder/i })).toBeDisabled();
     expect(request).not.toHaveBeenCalled();
   });
 
   it('supports theme selection, keyboard movement, Escape, outside close, and focus return', () => {
-    render(<App />);
+    renderApp();
 
     const trigger = screen.getByRole('button', { name: 'Theme: System' });
     fireEvent.click(trigger);
@@ -93,8 +98,9 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Theme: Dark' })).toHaveFocus();
   });
 
-  it('discloses truthful planned email notifications without collecting data or simulating delivery', () => {
-    render(<App />);
+  it('discloses truthful planned email notifications without collecting data or simulating delivery', async () => {
+    renderApp();
+    await screen.findByRole('heading', { name: GREETING });
 
     const trigger = screen.getByRole('button', { name: 'Notifications' });
     fireEvent.click(trigger);
@@ -130,8 +136,9 @@ describe('App', () => {
     expect(main).not.toMatch(/^import .*\.\/App/m);
   });
 
-  it('opens the standalone routes from the Dashboard quick actions', () => {
-    render(<App />);
+  it('opens the standalone routes from the Overview quick actions', async () => {
+    renderApp();
+    await screen.findByRole('heading', { name: GREETING });
 
     // Built through `route-intents`, never a hand-rolled query string.
     expect(screen.getByRole('link', { name: 'New composition' })).toHaveAttribute('href', '/composer?new=1');
@@ -140,19 +147,19 @@ describe('App', () => {
 
   it('mounts the real Sitemapper with its host-injected Composer catalog', async () => {
     window.history.replaceState(null, '', '/sitemapper');
-    render(<App />);
+    renderApp();
     expect(await screen.findByRole('heading', { name: 'Sitemaps' })).toBeInTheDocument();
     expect(screen.queryByText(/being connected/i)).not.toBeInTheDocument();
   });
 
-  it('dispatches Site outside the authoring Shell while preserving author navigation isolation', async () => {
-    vi.stubGlobal('indexedDB', new FDBFactory());
+  it('dispatches Site outside the authoring Shell and never falls back to a draft without an active release', async () => {
     window.history.replaceState(null, '', '/site');
-    const { container } = render(<App />);
-    expect(await screen.findByRole('heading', { name: 'Clear ideas, carefully shaped' })).toBeInTheDocument();
+    const { container } = renderApp();
+    expect(await screen.findByRole('heading', { name: 'Site unavailable' })).toBeInTheDocument();
+    expect(screen.getByText(/No activated local release/)).toBeInTheDocument();
     expect(container.querySelector('.app-shell')).not.toBeInTheDocument();
     expect(container.querySelector('.cms-rail')).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument();
   });
 });

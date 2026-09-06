@@ -7,7 +7,7 @@ import "../../composer/test-support/cleanup";
 import { activeComponentProvider } from "../../composer/active-pack";
 import { MappingApp } from "../mapping-app";
 import type { MappingHarness } from "./harness";
-import { INCOMPATIBLE_BINDING, READY_BINDING, mappingRecord, openedHarness } from "./harness";
+import { CONTENT_REF, INCOMPATIBLE_BINDING, READY_BINDING, mappingRecord, openedHarness } from "./harness";
 
 async function editor(bindings = [READY_BINDING, INCOMPATIBLE_BINDING]) {
   const workspace = await openedHarness(mappingRecord(bindings));
@@ -132,6 +132,7 @@ describe("Mapping editor", () => {
     const { container } = await editor([{
       id: "binding-gone",
       sourceFieldId: "field-removed",
+      projection: { kind: "value" },
       target: { nodeId: "node-removed", prop: "gone" },
       transform: { kind: "identity" },
     }]);
@@ -164,5 +165,27 @@ describe("Mapping editor", () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/mapping"));
     expect(workspace.records.size).toBe(0);
+  });
+
+  it("authors collection mode, publication policy, filters and ordered pins from the source pane", async () => {
+    const record = mappingRecord([READY_BINDING]);
+    record.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 10 } };
+    const workspace = await openedHarness(record);
+    const view = renderApp(workspace, vi.fn());
+
+    expect(screen.getByRole("combobox", { name: "Mapping mode" })).toHaveValue("collection");
+    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+    await waitFor(() => expect(workspace.controller.state.mapping?.document.mode.kind === "collection" && workspace.controller.state.mapping.document.mode.query.conditions).toHaveLength(1));
+    expect(screen.getByRole("combobox", { name: "Filter 1 field" })).toHaveValue("field-title");
+    fireEvent.input(screen.getByRole("spinbutton", { name: "Result limit" }), { target: { value: "2" } });
+    await waitFor(() => expect(workspace.controller.state.mapping?.document.mode.kind === "collection" && workspace.controller.state.mapping.document.mode.query.limit).toBe(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose" }));
+    const dialog = await screen.findByRole("dialog", { name: "Choose ordered pins" });
+    expect(within(dialog).getByText("Hello world")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Hello world/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save pins" }));
+    await waitFor(() => expect(workspace.controller.state.mapping?.document.mode.kind === "collection" && workspace.controller.state.mapping.document.mode.query.pins).toEqual([{ providerId: CONTENT_REF.providerId, modelId: CONTENT_REF.recordId, recordId: "entry-1" }]));
+    view.unmount();
   });
 });

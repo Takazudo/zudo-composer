@@ -44,6 +44,7 @@ export function canonicalizeSiteProject(project: SiteProject): SiteProject {
   for (const provider of copy.providers.mappings) provider.records.sort(compareById);
   copy.providers.sitemaps.sort(compareById);
   for (const provider of copy.providers.sitemaps) provider.records.sort(compareById);
+  copy.collectionAttachments.sort((left, right) => left.order - right.order || compareUnicodeCodePoints(left.id, right.id));
   return copy;
 }
 

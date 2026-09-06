@@ -1,4 +1,5 @@
 import type { Stats } from "node:fs";
+import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import {
   COMPOSITION_PROVIDERS,
@@ -94,6 +95,26 @@ interface DependencyClosure {
 
 export class FilesystemCompositionStore implements CompositionLifecycleStore {
   readonly provider = COMPOSITION_PROVIDERS.files;
+
+  /** Content fingerprint, not a filesystem transaction or notification counter. */
+  async snapshot(): Promise<{ mutationToken: string; records: readonly CompositionRecord[] }> {
+    const read = async () => {
+      const closure = await this.loadDependencyClosure("list");
+      if (closure.entries.some(({ outcome }) => outcome.status !== "loaded")) throw operationError("list", "validation", "Invalid canonical Composition prevents snapshot capture.");
+      const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, canonical(child)])) : value;
+      const records = [...closure.records].sort((a, b) => a.id.localeCompare(b.id));
+      const mutationToken = createHash("sha256").update(JSON.stringify(canonical(records))).digest("hex");
+      return { mutationToken, records };
+    };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const before = await read();
+      const after = await read();
+      if (before.mutationToken === after.mutationToken) return after;
+    }
+    throw operationError("list", "conflict", "Canonical Composition files changed during snapshot capture. Retry.");
+  }
+
+  async mutationToken(): Promise<string> { return (await this.snapshot()).mutationToken; }
 
   private constructor(
     private readonly filesystem: SafeRootFilesystem<CompositionPersistenceOperation>,

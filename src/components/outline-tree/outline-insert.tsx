@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { PlusIcon } from "../icons";
-import { Button, Input, cx } from "../ui";
+import { Button, Input, cx, isComposingKey } from "../ui";
 import { useOutlineTree } from "./outline-context";
 import { isSameTarget } from "./tree-model";
 import type { OutlineInsertTarget, OutlineNode } from "./types";
@@ -26,10 +26,23 @@ function OutlineInlineEditor({ target, depth, label, variant }: InlineEditorProp
   // own wrapper rather than reaching into that component's API.
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState("");
+  const composing = useRef(false);
   const title = value.trim();
 
-  useEffect(() => {
-    wrapperRef.current?.querySelector("input")?.focus();
+  useLayoutEffect(() => {
+    const input = wrapperRef.current?.querySelector("input");
+    if (!input) return;
+    // Native lowercase event names are portable even where the DOM exposes
+    // no oncompositionstart property for Preact's JSX event-name inference.
+    const start = () => { composing.current = true; };
+    const end = () => { composing.current = false; };
+    input.addEventListener("compositionstart", start);
+    input.addEventListener("compositionend", end);
+    input.focus();
+    return () => {
+      input.removeEventListener("compositionstart", start);
+      input.removeEventListener("compositionend", end);
+    };
   }, []);
 
   function commit() {
@@ -50,6 +63,8 @@ function OutlineInlineEditor({ target, depth, label, variant }: InlineEditorProp
         aria-label={label}
         onInput={(event) => setValue(event.currentTarget.value)}
         onKeyDown={(event) => {
+          event.stopPropagation();
+          if (composing.current || isComposingKey(event)) return;
           if (event.key === "Enter") {
             event.preventDefault();
             commit();
@@ -80,12 +95,12 @@ interface InsertGapProps {
 }
 
 /**
- * The zero-height container between two sibling rows.
+ * First/between insertion: zero-height for fine pointers, a reserved touch row.
  *
  * Nothing inside it takes part in flow: the hit zone, the dashed line, the `+`
  * tile and the inline editor are all absolutely positioned on the boundary, so
  * inserting one of these between every pair of rows costs no height and
- * hovering or editing shifts nothing.
+ * hovering or editing shifts nothing. Coarse pointers reserve 44px in flow.
  */
 export function OutlineInsertGap({ target, depth, beforeTitle, root }: InsertGapProps) {
   const tree = useOutlineTree();
@@ -95,11 +110,11 @@ export function OutlineInsertGap({ target, depth, beforeTitle, root }: InsertGap
 
   return (
     <div
-      class={cx("cms-tree-insert", root && "cms-tree-insert--root", editing && "is-active")}
+      class={cx("cms-tree-insert", root && "cms-tree-insert--root", isSameTarget(tree.pending, target) && "is-active")}
       style={{ "--depth": String(depth) }}
     >
       <span class="cms-tree-insert__hit" aria-hidden="true" />
-      <button class="cms-tree-insert__btn" type="button" aria-label={label} onClick={() => tree.requestInsert(target)}>
+      <button class="cms-tree-insert__btn" type="button" aria-label={label} onClick={(event) => { event.currentTarget.focus(); tree.requestInsert(target); }}>
         <PlusIcon size="sm" />
       </button>
       {editing ? <OutlineInlineEditor target={target} depth={depth} label={label} /> : null}
@@ -129,7 +144,7 @@ export function OutlineAddRow({ parent, target, depth }: AddRowProps) {
       {isSameTarget(tree.editing, target) ? (
         <OutlineInlineEditor target={target} depth={depth} label={label} />
       ) : (
-        <button class="cms-tree-add" type="button" onClick={() => tree.requestInsert(target)}>
+        <button ref={(element) => tree.registerTerminal(target.parentId, element)} class={cx("cms-tree-add", isSameTarget(tree.pending, target) && "is-active")} type="button" onClick={(event) => { event.currentTarget.focus(); tree.requestInsert(target); }}>
           <span class="cms-tree-add__btn" aria-hidden="true">
             <PlusIcon size="xs" />
           </span>
@@ -150,7 +165,7 @@ export function OutlineAddRoot({ target }: { target: OutlineInsertTarget }) {
     return <OutlineInlineEditor target={target} depth={0} label={label} variant="root" />;
   }
   return (
-    <button class="cms-tree-add-root" type="button" onClick={() => tree.requestInsert(target)}>
+    <button ref={(element) => tree.registerTerminal(null, element)} class={cx("cms-tree-add-root", isSameTarget(tree.pending, target) && "is-active")} type="button" onClick={(event) => { event.currentTarget.focus(); tree.requestInsert(target); }}>
       <PlusIcon size="sm" />
       {label}
     </button>

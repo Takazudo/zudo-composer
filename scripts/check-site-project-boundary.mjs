@@ -1,20 +1,26 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./deployment-artifact-lib.mjs";
+import { resolveLocalReleaseToolchain } from "../server/site-project-local/toolchain-config.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
 const readJson = (path) => JSON.parse(read(path));
+const canonical = (value) => Array.isArray(value) ? `[${value.map(canonical).join(",")}]` : value && typeof value === "object" ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}` : JSON.stringify(value);
+const digest = (value) => createHash("sha256").update(`${canonical(value)}\n`).digest("hex");
 const packageJson = readJson("package.json");
 const wrangler = readJson("wrangler.jsonc");
 const vite = read("vite.config.ts");
+const bundledRelease = readJson("artifacts/site-release/bundled-release.json");
 const plugin = read("plugins/site-project-source-plugin.mjs");
 const store = read("server/site-project-local/store.ts");
 const browser = read("tests/browser/site-project-acceptance.pw.ts");
 const browserRunner = read("scripts/run-site-project-browser.mjs");
 const browserConfig = read("playwright.site-project.config.ts");
 const browserDistConfig = read("playwright.site-project-dist.config.ts");
+const bundleProducer = read("scripts/generate-bundled-release.ts");
 
 assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/media"]);
 assert.deepEqual(SITE_ROUTES, [
@@ -38,20 +44,32 @@ assert.ok(browserRunner.includes('operation: "activate"'), "browser runner must 
 assert.ok(browserRunner.includes('"dist", "index.html"'), "production browser runner must consume an existing build");
 assert.ok(browserRunner.includes('"playwright.site-project-dist.config.ts"'), "production browser runner must use the Wrangler config");
 assert.ok(browserRunner.includes("env: { ...process.env, ...environment }"), "browser runner must preserve the parent process environment");
+assert.ok(bundleProducer.includes('operation: "plan"') && bundleProducer.includes('operation: "apply"') && bundleProducer.includes('operation: "build"'), "bundled release producer must use protocol-2 review/apply/build");
+assert.ok(bundleProducer.includes("mkdtemp") && bundleProducer.includes("mediaStoreRoot"), "bundled release producer must isolate release and Media state");
+assert.ok(bundleProducer.includes('mode === "--check"'), "bundled release producer must support deterministic drift checks");
 assert.doesNotMatch(browserRunner, /\b(?:pnpm|npm)\s+(?:run\s+)?build\b/, "browser lanes must not rebuild the production artifact");
 assert.ok(browserConfig.includes("reuseExistingServer: false"), "isolated dev browser config must own its server");
 assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must use one deterministic worker");
 assert.ok(browserDistConfig.includes("wrangler dev --local"), "production browser config must use local Wrangler");
 assert.ok(browserDistConfig.includes('CLOUDFLARE_API_TOKEN: ""'), "production browser config must be unauthenticated");
 
-assert.ok(vite.includes("bundledProject"), "Vite config must inject an explicit bundled SiteProject");
-assert.ok(vite.includes("bundledRevision"), "Vite config must inject the bundled project's canonical revision");
-assert.ok(vite.includes("sample-site-project.json"), "Vite config must point at the checked-in sample");
+assert.ok(vite.includes("bundled-release.json"), "Vite config must inject an explicit completed bundled release artifact");
+assert.ok(vite.includes("bundledSource"), "Vite config must pass the immutable bundled delivery source");
+assert.ok(vite.includes("resolveLocalReleaseToolchain"), "Vite config must resolve the current installed release toolchain");
+assert.ok(vite.includes("currentToolchain"), "Vite config must reject a stale bundled runtime attestation");
+assert.equal(bundledRelease.status, "ready");
+assert.ok(bundledRelease.artifact?.toolchain?.installedProviderDigest, "Bundled release must retain its installed runtime attestation");
+assert.deepEqual(bundledRelease.artifact.toolchain, await resolveLocalReleaseToolchain(), "Bundled release must attest the exact current installed runtime");
+assert.equal(bundledRelease.artifact.completionDigest, digest({ identity: bundledRelease.artifact.identity, files: bundledRelease.artifact.files }), "Bundled completion digest must bind its identity and files");
+assert.equal(bundledRelease.artifact.files["build.json"], digest(bundledRelease.artifact.build), "Bundled build digest must bind the embedded compiled plan");
+assert.ok(!existsSync(join(root, "src/features/delivery/bundled-release.json")), "Bundled release data must stay outside the application source boundary");
 assert.ok(vite.includes("publicDir: 'media-store/public'"), "Vite dev server must expose the Media public asset root");
 assert.ok(vite.includes("exclude: ['@zudo-sg/ui', '@takazudo/zfb-md-wasm']"), "Vite dev optimizer must leave provider and WASM resource packages in the normal asset graph");
-assert.match(plugin, /if \(command === "build"\) return serializedModule\(options\.bundledProject, options\.bundledRevision\)/);
+assert.match(plugin, /command === "build" \? options\.bundledSource : await delivery\(\)/);
+assert.match(plugin, /readActivatedSiteRelease/);
+assert.match(plugin, /readActivatedSiteMedia/);
+assert.match(plugin, /release:changed/);
 assert.match(plugin, /export const siteProjectRevision/);
-assert.match(plugin, /readActivatedSiteProject/);
 assert.match(plugin, /process\.env\.ZUDO_SITE_PROJECT_ROOT/);
 assert.match(store, /SITE_PROJECT_LOCAL_ROOT_ENV = "ZUDO_SITE_PROJECT_ROOT"/);
 assert.match(store, /options\.testRoot \?\? configuredLocalRoot\(\)/);
@@ -59,6 +77,8 @@ assert.ok(read(".gitignore").includes(".zudo-site-project/"), "disposable local 
 
 assert.equal(packageJson.scripts["site-project:api"], "tsx server/site-project-local/cli.ts");
 assert.equal(packageJson.scripts["site-project:boundary"], "node scripts/check-site-project-boundary.mjs");
+assert.equal(packageJson.scripts["site-project:bundle"], "tsx scripts/generate-bundled-release.ts --write");
+assert.equal(packageJson.scripts["site-project:bundle:check"], "tsx scripts/generate-bundled-release.ts --check");
 assert.equal(packageJson.scripts["test:browser:site-project"], "node scripts/run-site-project-browser.mjs --dev");
 assert.equal(packageJson.scripts["test:browser:site-project:dist"], "node scripts/run-site-project-browser.mjs --dist");
 const workflow = read(".github/workflows/ci.yml");
@@ -78,6 +98,8 @@ const forbiddenProductionMarkers = [
   "ZUDO_SITE_PROJECT_ROOT",
   "virtual:site-project-source",
   "readActivatedSiteProject",
+  "readActivatedSiteRelease",
+  "readActivatedSiteMedia",
   "SiteProjectApiService",
   "SiteProjectStoreAdapter",
   "createLocalSiteProjectStore",
