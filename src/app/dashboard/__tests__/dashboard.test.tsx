@@ -280,7 +280,7 @@ describe("Dashboard", () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
 
     const storage = await screen.findByRole("region", { name: "Storage" });
-    expect(within(storage).getByText("IndexedDB · zudo-composer")).toBeInTheDocument();
+    expect(within(storage).getByText("Local filesystem · zudo-composer")).toBeInTheDocument();
     expect(within(storage).getByText("Dev only")).toBeInTheDocument();
     expect(within(storage).getByText("12 min ago")).toBeInTheDocument();
   });

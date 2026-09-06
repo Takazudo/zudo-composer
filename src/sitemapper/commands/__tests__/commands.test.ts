@@ -78,7 +78,7 @@ describe("addChildPage / addSiblingPage", () => {
 describe("updatePageProps / renamePage", () => {
   it("merges allowed JSON-safe values, copies refs, and removes optional values with null", () => {
     const before = fixture();
-    const ref = { providerId: "indexeddb", recordId: "product-page" };
+    const ref = { providerId: "files", recordId: "product-page" };
     const updated = success(updatePageProps(before, "b", {
       title: "Basket", slug: "basket", notes: "Shop", source: { kind: "composition", ref },
     }));
@@ -101,10 +101,10 @@ describe("updatePageProps / renamePage", () => {
     expect(empty).toEqual({ ok: true, document: before, selectedId: "b", changed: false });
 
     const withRef = success(updatePageProps(before, "b", {
-      source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "same" } },
+      source: { kind: "composition", ref: { providerId: "files", recordId: "same" } },
     })).document;
     const equivalentRef = updatePageProps(withRef, "b", {
-      source: { kind: "composition", ref: { recordId: "same", providerId: "indexeddb" } },
+      source: { kind: "composition", ref: { recordId: "same", providerId: "files" } },
     });
     expect(equivalentRef).toEqual({ ok: true, document: withRef, selectedId: "b", changed: false });
 
@@ -166,7 +166,7 @@ describe("duplicatePage / cloneSubtreeWithNewIds", () => {
     const source: SitemapNode = {
       id: "product",
       title: "Product",
-      source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "product-composition" } },
+      source: { kind: "composition", ref: { providerId: "files", recordId: "product-composition" } },
       children: [node("details", [node("reviews")])],
     };
     const cloned = cloneSubtreeWithNewIds(source, createSequentialIdFactory("copy"));

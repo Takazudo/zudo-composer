@@ -1,26 +1,38 @@
-import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
-import { describe, expect, it, vi } from "vitest";
-import { createContentModelRecord, createContentEntryRecord, createIndexedDbContentProvider } from "../../../content";
+import * as fs from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { CONTENT_PROVIDERS, createContentModelRecord, createContentEntryRecord } from "../../../content";
+import { createFilesystemContentStore } from "../../../content/storage/filesystem";
+import type { ContentProvider } from "../../../content";
 import { createMediaContentServices, type MediaUse } from "../content";
 const completeImpact = { read: async () => ({ revision: "captured-project", index: { complete: true, references: [], advisory: [] } }), isCurrent: async () => true };
 
-async function content() {
+const sandboxes: string[] = [];
+afterEach(async () => {
+  await Promise.all(sandboxes.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
+});
+
+async function content(): Promise<ContentProvider> {
   const model = createContentModelRecord({ name: "Resources", kind: "collection", fields: [
     { id: "hero", key: "hero", label: "Hero", kind: "media-use", use: "image", required: false },
     { id: "links", key: "links", label: "Links", kind: "list", item: { kind: "media-use", use: "link" }, required: false },
     { id: "nested", key: "nested", label: "Nested", kind: "object", required: false, fields: [{ id: "card", key: "card", label: "Card", required: false, kind: "media-use", use: "card" }] },
   ] }, { id: "resources" });
   const entries = Array.from({ length: 40 }, (_, index) => createContentEntryRecord(model.id, { nested: {} }, { id: `entry-${index}` }));
-  const provider = createIndexedDbContentProvider({ idbFactory: new IDBFactory(), keyRangeFactory: IDBKeyRange, seed: { models: [model], entries } });
-  await provider.initialization.initialize();
-  return provider;
+  const contentRoot = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "zudo-media-content-")));
+  sandboxes.push(contentRoot);
+  const store = await createFilesystemContentStore({ contentRoot });
+  await store.seed({ models: [model], entries });
+  const initialize = async () => ({ status: "ready" as const, models: await store.listModels() });
+  return { descriptor: CONTENT_PROVIDERS.filesystem, store, initialization: { initialize, retry: initialize, startFresh: initialize } };
 }
 describe("injected complete Media / Content integration", () => {
   it("fails closed without full-project inspection and exposes non-Content impacts", async () => {
     const provider = await content(), asset = { providerId: "media-files", assetId: "hero" };
     const absent = createMediaContentServices([provider], async () => undefined);
     expect((await absent.scan(asset)).status).toBe("incomplete");
-    const impact = { ...completeImpact, read: async () => ({ revision: "project", index: { complete: true, references: [{ ref: asset, location: { domain: "compositions" as const, providerId: "indexeddb", recordId: "page", nodeId: "image", property: "src", valuePath: ["src"] } }], advisory: [] } }) };
+    const impact = { ...completeImpact, read: async () => ({ revision: "project", index: { complete: true, references: [{ ref: asset, location: { domain: "compositions" as const, providerId: "files", recordId: "page", nodeId: "image", property: "src", valuePath: ["src"] } }], advisory: [] } }) };
     const service = createMediaContentServices([provider], async () => undefined, undefined, impact);
     expect(await service.scan(asset)).toMatchObject({ status: "complete", additionalLocations: [{ location: { domain: "compositions", recordId: "page", nodeId: "image" } }] });
   });

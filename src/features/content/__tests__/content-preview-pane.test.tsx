@@ -28,7 +28,7 @@ function sourceFixture() {
       { ref: { providerId: "mapping-filesystem", recordId: "broken" }, providerLabel: "Browser mappings", summary: { id: "broken", name: "Broken page", createdAt: stamp, updatedAt: stamp, bindingCount: 1 }, status: "broken", diagnostics: [{ scope: "definition", code: "source-field-missing", severity: "blocking", message: "Body is missing.", bindingId: "binding" }] },
     ],
     document: { schemaVersion: 2, id: "page", name: "Article page", root: [] },
-    context: { mapping: { ref: { providerId: "mapping-filesystem", recordId: "map one" }, id: "map one", name: "Article page" }, composition: { providerId: "composer-indexeddb", recordId: "page", id: "page", name: "Article page" }, contentModel: { ref: { providerId: "content-filesystem", recordId: model.id }, id: model.id, name: model.document.name }, entry: { providerId: "content-filesystem", modelId: model.id, entryId: entry.id }, appliedBindingCount: 1, appliedBindings: [{ bindingId: "binding", sourceFieldId: "body", target: { nodeId: "prose", prop: "markdown" }, value: "## Unsaved draft" }], unchangedStaticCount: 2, diagnostics: [] },
+    context: { mapping: { ref: { providerId: "mapping-filesystem", recordId: "map one" }, id: "map one", name: "Article page" }, composition: { providerId: "composer-files", recordId: "page", id: "page", name: "Article page" }, contentModel: { ref: { providerId: "content-filesystem", recordId: model.id }, id: model.id, name: model.document.name }, entry: { providerId: "content-filesystem", modelId: model.id, entryId: entry.id }, appliedBindingCount: 1, appliedBindings: [{ bindingId: "binding", sourceFieldId: "body", target: { nodeId: "prose", prop: "markdown" }, value: "## Unsaved draft" }], unchangedStaticCount: 2, diagnostics: [] },
     message: "Preview is current.",
   };
   const source = {
@@ -60,7 +60,7 @@ describe("ContentPreviewPane", () => {
     fireEvent.click(await screen.findByRole("tab", { name: /^Mapping/ }));
     const link = screen.getByRole("link", { name: "Open Mapping" });
     expect(link).toHaveAttribute("href", "/mapping?provider=mapping-filesystem&mapping=map%20one");
-    expect(screen.getByText(/Composition: composer-indexeddb \/ Article page/)).toBeInTheDocument();
+    expect(screen.getByText(/Composition: composer-files \/ Article page/)).toBeInTheDocument();
     expect(screen.getByText("Body → prose.markdown")).toBeInTheDocument();
     expect(screen.getByText(/2 bindings left the Composition/)).toBeInTheDocument();
   });

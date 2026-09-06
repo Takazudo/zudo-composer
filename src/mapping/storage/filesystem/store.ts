@@ -205,7 +205,7 @@ export class FilesystemMappingStore implements MappingStore {
     }
   }
 
-  /** Every record must load, exactly as the IndexedDB snapshot path requires. */
+  /** Every record must load; a snapshot is all-or-nothing. */
   private strict(decoded: DecodedMapping, operation: Operation): MappingRecord[] {
     return decoded.records.map((record) => {
       if (record.loaded.status !== "loaded") throw mappingError(operation, "validation", "Invalid Mapping data was preserved. Use explicit recovery.");
@@ -256,9 +256,8 @@ export class FilesystemMappingStore implements MappingStore {
   // ------------------------------------------------------------------- reads
 
   /**
-   * Re-checks the layout marker like every other read, matching the IndexedDB
-   * store's own `mutationToken()`, which validates schema metadata before
-   * returning the token rather than trusting a previous successful read.
+   * Re-checks the layout marker like every other read, rather than trusting a
+   * previous successful read.
    */
   async mutationToken(): Promise<string> {
     return (await this.snapshot()).mutationToken;

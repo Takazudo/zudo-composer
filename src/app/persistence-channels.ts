@@ -1,9 +1,8 @@
 // The refresh-hint channels the authoring application listens on.
 //
-// Under IndexedDB a hint carried a database name, and a database name carried
-// the workspace: `zudo-composer-content-workspace-v1-<id>`. A filesystem
-// provider's hint carries its domain instead, because the workspace is a
-// request header the browser sends rather than part of the store's identity.
+// A hint carries its domain rather than a store identity, because the
+// workspace is a request header the browser sends rather than part of the
+// store's name.
 //
 // The practical consequence is that two windows open on *different* workspaces
 // now hint each other. That is harmless: a hint only asks a listener to re-read,

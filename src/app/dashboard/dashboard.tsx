@@ -376,8 +376,8 @@ function StorageCard({
   return (
     <DashCard title="Storage" titleId="cms-dash-storage">
       <div class="cms-dash-card__pad cms-dash-storage">
-        <StorageRow icon={LibraryIcon} label="Browser storage">
-          <span class="cms-dash-storage__value">IndexedDB · zudo-composer</span>
+        <StorageRow icon={LibraryIcon} label="Project files">
+          <span class="cms-dash-storage__value">Local filesystem · zudo-composer</span>
         </StorageRow>
         <StorageRow icon={FolderIcon} label="Media files">
           <Chip tone="plain">{MEDIA_STORAGE_LABEL[mediaStatus]}</Chip>

@@ -98,7 +98,6 @@
     "@zudo-composer/component-contract": "workspace:*",
     "@zudo-composer/fixture-themeset": "workspace:*",
     "eslint": "^10.9.1",
-    "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
     "preact-render-to-string": "^6.6.6",
     "tsx": "^4.20.5",

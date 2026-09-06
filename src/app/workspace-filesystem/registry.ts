@@ -1,12 +1,10 @@
 // The workspace registry, persisted as project files.
 //
-// The browser registry is one IndexedDB database (`zudo-composer-workspaces-v1`)
-// with a `workspaces` store and a `selection` store, and every operation runs in
-// one readwrite transaction over both. The filesystem registry keeps that
-// contract exactly: the whole registry is one `TransactionalRecordStore`, so a
-// registry mutation still moves from one complete before-state to one complete
-// after-state — a workspace record and the selection pointer can never disagree
-// after a crash, and a half-written registry is never visible.
+// The workspace records and the selection pointer live in one
+// `TransactionalRecordStore`, and every operation runs in one transaction over
+// both, so a registry mutation moves from one complete before-state to one
+// complete after-state — a workspace record and the selection pointer can never
+// disagree after a crash, and a half-written registry is never visible.
 //
 // The record shape, the per-record `mutationToken` precondition and every
 // refusal are shared with the browser registry through `../workspace-record`.

@@ -31,7 +31,7 @@ describe("Banner", () => {
     const onRetry = vi.fn();
     render(
       <Banner tone="err" title="Composition library unavailable." action={<Button size="sm" onClick={onRetry}>Retry</Button>}>
-        IndexedDB could not be opened in this browser session.
+        Project files could not be read in this session.
       </Banner>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));

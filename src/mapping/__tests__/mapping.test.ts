@@ -1,14 +1,15 @@
-import "fake-indexeddb/auto";
-import { IDBFactory as FDBFactory } from "fake-indexeddb";
-import { describe, expect, it } from "vitest";
+import * as fs from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { createComponentCatalog } from "../../composer/model/types";
-import { subscribePersistenceChanges } from "../../shared/persistence-generation";
 import type { CompositionRecord } from "../../composer/library";
 import { createContentCatalog } from "../../content/catalog";
 import type { ContentEntryRecord, ContentFieldKind, ContentModelRecord } from "../../content/model";
 import { CONTENT_ENTRY_SCHEMA_VERSION, CONTENT_FIELD_KINDS, CONTENT_MODEL_SCHEMA_VERSION } from "../../content/model";
-import { createCompositionCatalog, createIndexedDbMappingProvider, createMappingCatalog, createMappingRecord, discoverMappingTargets, evaluateCollectionQuery, evaluateMapping, evaluateResolvedMapping, isMappingCompatible, mapMappingOperationalError, MAPPING_DATABASE_NAME, MAPPING_DATABASE_VERSION, MAPPING_META_STORE_NAME, MAPPING_RECORDS_STORE_NAME, MAPPING_SCHEMA_VERSION, MAPPING_UPDATED_AT_INDEX, projectContentValue, resolveMappingDefinition, validateMappingRecord, validateMappingSourceProjection } from "..";
+import { MAPPING_PROVIDERS, createCompositionCatalog, createMappingCatalog, createMappingRecord, discoverMappingTargets, evaluateCollectionQuery, evaluateMapping, evaluateResolvedMapping, isMappingCompatible, projectContentValue, resolveMappingDefinition, validateMappingRecord, validateMappingSourceProjection } from "..";
 import type { MappingSeedOptions, MappingTransform, ScalarMappingTargetField } from "..";
+import { createFilesystemMappingStore } from "../storage/filesystem";
 
 const stamp = "2026-08-29T00:00:00.000Z";
 const fields = [
@@ -23,8 +24,8 @@ const manifest = createComponentCatalog({ kind: "zudo-composer/component-pack", 
   { id: "copy", schemaVersion: 1, title: "Copy", category: "Test", description: "", source: { module: "x", exportKind: "named", exportName: "Copy" }, defaults: {}, fields: [{ schema: { type: "string" }, editor: { kind: "text" }, prop: "text", label: "Text" }], slots: [] },
 ] });
 
-function mapping(bindings: NonNullable<MappingSeedOptions["bindings"]> = [{ id: "bind-title", sourceFieldId: "title", target: { nodeId: "hero", prop: "title" }, transform: { kind: "identity" } }]) { return createMappingRecord({ id: "article-landing", name: "Article landing", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "indexeddb", recordId: "landing" }, bindings, createdAt: stamp }); }
-function catalogs(contentRecord = model, compositionRecord = composition) { return { content: createContentCatalog([{ descriptor: { id: "content", label: "Content" }, store: { listModels: async () => [], getModel: async () => ({ status: "loaded" as const, record: contentRecord }) } }]), compositions: createCompositionCatalog([{ descriptor: { id: "indexeddb", label: "Compositions" }, store: { list: async () => [], get: async () => ({ status: "loaded" as const, record: compositionRecord }) } }]) }; }
+function mapping(bindings: NonNullable<MappingSeedOptions["bindings"]> = [{ id: "bind-title", sourceFieldId: "title", target: { nodeId: "hero", prop: "title" }, transform: { kind: "identity" } }]) { return createMappingRecord({ id: "article-landing", name: "Article landing", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "files", recordId: "landing" }, bindings, createdAt: stamp }); }
+function catalogs(contentRecord = model, compositionRecord = composition) { return { content: createContentCatalog([{ descriptor: { id: "content", label: "Content" }, store: { listModels: async () => [], getModel: async () => ({ status: "loaded" as const, record: contentRecord }) } }]), compositions: createCompositionCatalog([{ descriptor: { id: "files", label: "Compositions" }, store: { list: async () => [], get: async () => ({ status: "loaded" as const, record: compositionRecord }) } }]) }; }
 function entry(values: ContentEntryRecord["values"]): ContentEntryRecord { return { lifecycle: "draft" as const, generation: 0, schemaVersion: CONTENT_ENTRY_SCHEMA_VERSION, id: "entry-one", modelId: "articles", createdAt: stamp, updatedAt: stamp, values }; }
 
 describe("normative compatibility matrix", () => {
@@ -165,56 +166,24 @@ describe("Mapping model and resolver", () => {
   it("reports optional and required missing independently", async () => { const record = mapping([{ id: "required", sourceFieldId: "title", target: { nodeId: "hero", prop: "title" }, transform: { kind: "identity" } }, { id: "optional", sourceFieldId: "date", target: { nodeId: "hero", prop: "subtitle" }, transform: { kind: "date-medium" } }]); const result = await evaluateMapping(record, entry({}), catalogs(), manifest); expect(result.status).toBe("blocked"); expect(result.entryDiagnostics.map((item) => [item.code, item.severity])).toEqual([["required-value-missing", "blocking"], ["optional-value-missing", "nonblocking"]]); expect(result.document?.root[0]?.props).toMatchObject({ title: "Static", subtitle: "Keep" }); });
   it("uses Content whitespace semantics and treats null as an invalid present value", async () => { const whitespace = await evaluateMapping(mapping(), entry({ title: "  \n" }), catalogs(), manifest); expect(whitespace.entryDiagnostics[0]?.code).toBe("required-value-missing"); const invalid = await evaluateMapping(mapping(), entry({ title: null }), catalogs(), manifest); expect(invalid.entryDiagnostics[0]?.code).toBe("invalid-source-value"); });
   it("validates dates, select options, and Unicode transform limits", async () => { const select = await evaluateMapping(mapping([{ id: "select", sourceFieldId: "tone", target: { nodeId: "hero", prop: "tone" }, transform: { kind: "identity" } }]), entry({ tone: "invalid" }), catalogs(), manifest); expect(select.entryDiagnostics[0]?.code).toBe("select-option-invalid"); const date = await evaluateMapping(mapping([{ id: "date", sourceFieldId: "date", target: { nodeId: "hero", prop: "subtitle" }, transform: { kind: "date-medium" } }]), entry({ date: "2026-02-30" }), catalogs(), manifest); expect(date.entryDiagnostics[0]?.code).toBe("invalid-canonical-date"); const long = "😀".repeat(161); const truncated = await evaluateMapping(mapping([{ id: "unicode", sourceFieldId: "title", target: { nodeId: "hero", prop: "title" }, transform: { kind: "truncate-160" } }]), entry({ title: long }), catalogs(), manifest); expect(Array.from(String(truncated.document?.root[0]?.props.title))).toHaveLength(161); expect(String(truncated.document?.root[0]?.props.title).endsWith("…")).toBe(true); expect(validateMappingRecord({ ...mapping(), document: { ...mapping().document, bindings: [{ id: "x", sourceFieldId: "title", projection: { kind: "value" }, target: { nodeId: "hero", prop: "title" }, transform: { kind: "prefix", prefix: "😀".repeat(81) } }] } }).ok).toBe(false); });
-  it("distinguishes missing, invalid, and provider errors", async () => { const missing = createContentCatalog([{ descriptor: { id: "content", label: "Content" }, store: { listModels: async () => [], getModel: async () => ({ status: "not-found" as const, id: "articles" }) } }]); const failed = createCompositionCatalog([{ descriptor: { id: "indexeddb", label: "Compositions" }, store: { list: async () => [], get: async () => { throw new Error("offline"); } } }]); const result = await resolveMappingDefinition(mapping(), { content: missing, compositions: failed }, manifest); expect(result.diagnostics.map((item) => item.code)).toEqual(["content-model-not-found", "composition-provider-error"]); });
+  it("distinguishes missing, invalid, and provider errors", async () => { const missing = createContentCatalog([{ descriptor: { id: "content", label: "Content" }, store: { listModels: async () => [], getModel: async () => ({ status: "not-found" as const, id: "articles" }) } }]); const failed = createCompositionCatalog([{ descriptor: { id: "files", label: "Compositions" }, store: { list: async () => [], get: async () => { throw new Error("offline"); } } }]); const result = await resolveMappingDefinition(mapping(), { content: missing, compositions: failed }, manifest); expect(result.diagnostics.map((item) => item.code)).toEqual(["content-model-not-found", "composition-provider-error"]); });
 });
 
-describe("IndexedDB Mapping provider", () => {
-  const request = <T,>(value: IDBRequest<T>) => new Promise<T>((resolve, reject) => { value.onsuccess = () => resolve(value.result); value.onerror = () => reject(value.error); });
-  it("creates the exact dedicated schema", async () => { const factory = new FDBFactory(); const provider = createIndexedDbMappingProvider({ idbFactory: factory }); expect(provider.descriptor.id).toBe("mapping-indexeddb"); expect(await provider.initialization.initialize()).toEqual({ status: "ready", summaries: [] }); const db = await request(factory.open(MAPPING_DATABASE_NAME)); expect(db.version).toBe(MAPPING_DATABASE_VERSION); expect([...db.objectStoreNames].sort()).toEqual([MAPPING_META_STORE_NAME, MAPPING_RECORDS_STORE_NAME].sort()); expect([...db.transaction(MAPPING_RECORDS_STORE_NAME).objectStore(MAPPING_RECORDS_STORE_NAME).indexNames]).toEqual([MAPPING_UPDATED_AT_INDEX]); db.close(); });
-  it("supports CRUD, deterministic idempotent seed, and startFresh reseeding", async () => { const seeded = mapping(); const provider = createIndexedDbMappingProvider({ idbFactory: new FDBFactory(), seed: { mappings: [seeded] } }); expect(await provider.initialization.initialize()).toMatchObject({ status: "ready", summaries: [{ id: seeded.id }] }); await provider.store.seed({ mappings: [{ ...seeded, document: { ...seeded.document, name: "Changed" } }] }); expect((await provider.store.get(seeded.id))).toMatchObject({ status: "loaded", record: { document: { name: "Article landing" } } }); await provider.store.put({ ...seeded, updatedAt: "2026-08-30T00:00:00.000Z", document: { ...seeded.document, name: "Updated" } }); expect(await provider.store.list()).toMatchObject([{ name: "Updated" }]); expect(await provider.store.delete(seeded.id)).toBe(true); expect(await provider.store.delete(seeded.id)).toBe(false); expect(await provider.initialization.startFresh()).toMatchObject({ status: "ready", summaries: [{ id: seeded.id }] }); });
-  it("exposes listed/resolved Mapping catalog outcomes", async () => { const provider = createIndexedDbMappingProvider({ idbFactory: new FDBFactory() }); await provider.initialization.initialize(); await provider.store.put(mapping()); const catalog = createMappingCatalog([{ descriptor: provider.descriptor, store: provider.store }]); expect(await catalog.list()).toMatchObject({ status: "listed", entries: [{ ref: { providerId: "mapping-indexeddb", recordId: "article-landing" } }], failures: [] }); expect(await catalog.resolve({ providerId: "mapping-indexeddb", recordId: "article-landing" })).toMatchObject({ status: "resolved", record: { id: "article-landing" } }); expect(await catalog.resolve({ providerId: "missing", recordId: "article-landing" })).toEqual({ status: "not-found" }); });
-  it("quarantines malformed/future records until explicit startFresh", async () => { const factory = new FDBFactory(); const provider = createIndexedDbMappingProvider({ idbFactory: factory }); await provider.initialization.initialize(); const db = await request(factory.open(MAPPING_DATABASE_NAME)); const tx = db.transaction(MAPPING_RECORDS_STORE_NAME, "readwrite"); tx.objectStore(MAPPING_RECORDS_STORE_NAME).put({ id: "bad", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: MAPPING_SCHEMA_VERSION + 1 } }); await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close(); const recovery = await provider.initialization.retry(); expect(recovery).toMatchObject({ status: "recovery-required", recovery: { reason: "future-schema", sourcePreserved: true, affectedRecordIds: ["bad"] } }); await expect(provider.store.list()).rejects.toMatchObject({ code: "validation" }); await expect(provider.store.put(createMappingRecord({ ...mapping().document, id: "bad", createdAt: stamp }))).rejects.toMatchObject({ code: "validation" }); await expect(provider.store.delete("bad")).rejects.toMatchObject({ code: "validation" }); await expect(provider.store.clear()).rejects.toMatchObject({ code: "validation" }); expect(await provider.initialization.startFresh()).toEqual({ status: "ready", summaries: [] }); });
-  it("preserves a physical v1 database until startFresh replaces it with exact v2 metadata", async () => {
-    const factory = new FDBFactory();
-    const opening = factory.open(MAPPING_DATABASE_NAME, 1);
-    opening.onupgradeneeded = () => {
-      const records = opening.result.createObjectStore(MAPPING_RECORDS_STORE_NAME, { keyPath: "id" });
-      records.createIndex(MAPPING_UPDATED_AT_INDEX, ["updatedAt", "id"]);
-      records.put({ id: "legacy", updatedAt: stamp });
-      const meta = opening.result.createObjectStore(MAPPING_META_STORE_NAME, { keyPath: "key" });
-      meta.put({ key: "mutation", token: 0 });
-      meta.put({ key: "schema", databaseVersion: 1, mappingRecordSchemaVersion: 1 });
-    };
-    (await request(opening)).close();
-    const provider = createIndexedDbMappingProvider({ idbFactory: factory });
-    expect(await provider.initialization.initialize()).toMatchObject({ status: "error", error: { code: "unsupported-version" } });
-    const preserved = await request(factory.open(MAPPING_DATABASE_NAME, 1));
-    expect(await request(preserved.transaction(MAPPING_RECORDS_STORE_NAME).objectStore(MAPPING_RECORDS_STORE_NAME).get("legacy"))).toEqual({ id: "legacy", updatedAt: stamp });
-    preserved.close();
-    expect(await provider.initialization.startFresh()).toEqual({ status: "ready", summaries: [] });
-    const current = await request(factory.open(MAPPING_DATABASE_NAME));
-    expect(current.version).toBe(2);
-    expect(await request(current.transaction(MAPPING_META_STORE_NAME).objectStore(MAPPING_META_STORE_NAME).get("schema"))).toEqual({ key: "schema", databaseVersion: 2, mappingRecordSchemaVersion: 2 });
-    current.close();
+describe("Mapping catalog over the filesystem store", () => {
+  const sandboxes: string[] = [];
+  afterEach(async () => {
+    await Promise.all(sandboxes.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
   });
-  it("keeps a blocked startFresh pending until deletion can finish, then recreates and notifies", async () => {
-    const factory = new FDBFactory();
-    const provider = createIndexedDbMappingProvider({ idbFactory: factory });
-    await provider.initialization.initialize();
-    const blocker = await request(factory.open(MAPPING_DATABASE_NAME));
-    blocker.onversionchange = () => { /* Hold the old connection to force deleteDatabase.onblocked. */ };
-    const changes: string[] = [];
-    const unsubscribe = subscribePersistenceChanges((database) => changes.push(database));
-    let settled = false;
-    const pending = provider.initialization.startFresh().finally(() => { settled = true; });
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(settled).toBe(false);
-    expect(changes).toEqual([]);
-    blocker.close();
-    expect(await pending).toEqual({ status: "ready", summaries: [] });
-    expect(changes).toEqual([MAPPING_DATABASE_NAME]);
-    unsubscribe();
+
+  it("exposes listed/resolved Mapping catalog outcomes", async () => {
+    const mappingsRoot = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "zudo-mapping-catalog-")));
+    sandboxes.push(mappingsRoot);
+    const store = await createFilesystemMappingStore({ mappingsRoot });
+    await store.put(mapping());
+    const providerId = MAPPING_PROVIDERS.filesystem.id;
+    const catalog = createMappingCatalog([{ descriptor: MAPPING_PROVIDERS.filesystem, store }]);
+    expect(await catalog.list()).toMatchObject({ status: "listed", entries: [{ ref: { providerId, recordId: "article-landing" } }], failures: [] });
+    expect(await catalog.resolve({ providerId, recordId: "article-landing" })).toMatchObject({ status: "resolved", record: { id: "article-landing" } });
+    expect(await catalog.resolve({ providerId: "missing", recordId: "article-landing" })).toEqual({ status: "not-found" });
   });
-  it("keeps createdAt immutable on update", async () => { const provider = createIndexedDbMappingProvider({ idbFactory: new FDBFactory() }); await provider.initialization.initialize(); const record = mapping(); await provider.store.put(record); await expect(provider.store.put({ ...record, createdAt: "2026-08-30T00:00:00.000Z", updatedAt: "2026-08-30T00:00:00.000Z" })).rejects.toMatchObject({ code: "validation", retryable: false }); });
-  it("types unavailable, blocked, abort, newer-version, and versionchange states", async () => { expect(await createIndexedDbMappingProvider({ idbFactory: null }).initialization.initialize()).toMatchObject({ status: "error", error: { code: "unavailable", retryable: true } }); const blockedRequest = {} as IDBOpenDBRequest; const blockedFactory = { open: () => { queueMicrotask(() => blockedRequest.onblocked?.(new Event("blocked") as IDBVersionChangeEvent)); return blockedRequest; } } as unknown as IDBFactory; expect(await createIndexedDbMappingProvider({ idbFactory: blockedFactory }).initialization.initialize()).toMatchObject({ status: "error", error: { code: "blocked", retryable: true } }); expect(mapMappingOperationalError("put", "readwrite", new DOMException("aborted", "AbortError"))).toMatchObject({ code: "transaction-failed", retryable: true }); const newerFactory = new FDBFactory(); const newer = await request(newerFactory.open(MAPPING_DATABASE_NAME, MAPPING_DATABASE_VERSION + 1)); newer.close(); expect(await createIndexedDbMappingProvider({ idbFactory: newerFactory }).initialization.initialize()).toMatchObject({ status: "error", error: { code: "unsupported-version", retryable: false } }); const factory = new FDBFactory(); const provider = createIndexedDbMappingProvider({ idbFactory: factory }); await provider.initialization.initialize(); const upgrade = await request(factory.open(MAPPING_DATABASE_NAME, MAPPING_DATABASE_VERSION + 1)); upgrade.close(); await expect(provider.store.list()).rejects.toMatchObject({ code: "versionchange", retryable: true }); });
 });

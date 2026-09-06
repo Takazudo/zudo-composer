@@ -119,7 +119,7 @@ describe("Mapping library", () => {
 
     // Pick the second entry of each list.
     fireEvent.change(within(dialog).getByRole("combobox", { name: "Content model" }), { target: { value: "content-filesystem/model-2" } });
-    fireEvent.change(within(dialog).getByRole("combobox", { name: "Composition" }), { target: { value: "indexeddb/composition-2" } });
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Composition" }), { target: { value: "files/composition-2" } });
 
     // The catalogs reload in a different order while the dialog is still open.
     catalogs.reorder();

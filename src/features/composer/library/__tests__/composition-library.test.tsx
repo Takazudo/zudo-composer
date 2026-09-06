@@ -8,6 +8,8 @@ import {
   COMPOSITION_SCHEMA_VERSION,
   CompositionPersistenceError,
   type CompositionInitializationOutcome,
+  type CompositionProviderDescriptor,
+  type CompositionProviderId,
   type CompositionSummary,
   type ReuseCatalogEntry,
 } from "../../../../composer/browser";
@@ -37,10 +39,19 @@ function summary(id: string, name: string, updatedAt = EARLY, createdAt = EARLY)
   return { id, name, createdAt, updatedAt, nodeCount: 3 };
 }
 
+// The compositions domain ships a single provider descriptor; the library
+// still renders a provider switcher, so a second fixture descriptor is what
+// exercises provider scoping and switching.
+const ALTERNATE_PROVIDER: CompositionProviderDescriptor = {
+  id: "alternate" as CompositionProviderId,
+  label: "Alternate storage",
+  storageLabel: "Alternate fixture storage",
+};
+
 const ALPHA = summary("alpha", "Alpha layout", EARLY);
 const BRAVO = summary("bravo", "Bravo layout", LATE);
 const GLOBAL_TEMPLATE: ReuseCatalogEntry = {
-  ref: { providerId: "indexeddb", recordId: "site-shell" },
+  ref: { providerId: ALTERNATE_PROVIDER.id, recordId: "site-shell" },
   summary: {
     ...summary("site-shell", "Site shell", LATE),
     publicationKind: "global-template",
@@ -52,7 +63,7 @@ const GLOBAL_TEMPLATE: ReuseCatalogEntry = {
 };
 
 const defaultProviders: CompositionLibraryProviderCapability[] = [
-  { descriptor: COMPOSITION_PROVIDERS.indexeddb, available: true },
+  { descriptor: ALTERNATE_PROVIDER, available: true },
   { descriptor: COMPOSITION_PROVIDERS.files, available: false },
 ];
 
@@ -85,7 +96,7 @@ function renderLibrary(
   intents = fakeIntents(),
   providers: readonly CompositionLibraryProviderCapability[] = defaultProviders,
 ) {
-  render(<CompositionLibrary componentProvider={fixtureComponentProvider} providers={providers} initialProviderId="indexeddb" intents={intents} />);
+  render(<CompositionLibrary componentProvider={fixtureComponentProvider} providers={providers} initialProviderId={ALTERNATE_PROVIDER.id} intents={intents} />);
   return intents;
 }
 
@@ -120,7 +131,7 @@ describe("CompositionLibrary data and capability states", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
     const cards = screen.getByLabelText("Composition cards");
     const card = within(cards).getByRole("article");
-    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" }));
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "alpha" }));
     const frame = card.querySelector("iframe")!;
     expect(frame).toHaveAttribute("sandbox");
     expect(frame).toHaveAttribute("tabindex", "-1");
@@ -181,7 +192,7 @@ describe("CompositionLibrary data and capability states", () => {
     const deferredCard = screen.getByRole("heading", { name: "Row 5" }).closest("article")!;
     fireEvent.click(within(deferredCard).getByRole("button", { name: "Preview" }));
     dialog = screen.getByRole("dialog", { name: "Preview — Row 5" });
-    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "row-5" }));
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "row-5" }));
     expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
     fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
     expect(document.querySelectorAll(".cms-composition-card iframe")).toHaveLength(COMPOSITION_PREVIEW_FALLBACK_LIMIT);
@@ -192,26 +203,26 @@ describe("CompositionLibrary data and capability states", () => {
     const browserPreview = new Promise<CompositionLibraryPreviewOutcome>((resolve) => { resolveBrowser = resolve; });
     const shared = summary("shared", "Shared composition");
     const providers: CompositionLibraryProviderCapability[] = [
-      { descriptor: COMPOSITION_PROVIDERS.indexeddb, available: true },
+      { descriptor: ALTERNATE_PROVIDER, available: true },
       { descriptor: COMPOSITION_PROVIDERS.files, available: true },
     ];
     const intents = fakeIntents({
       initialize: vi.fn(async () => ready([shared])),
-      resolvePreview: vi.fn(async (ref) => ref.providerId === "indexeddb"
+      resolvePreview: vi.fn(async (ref) => ref.providerId === ALTERNATE_PROVIDER.id
         ? browserPreview
         : { status: "blocked" as const, ref, message: "Files provider preview." }),
     });
     renderLibrary(intents, providers);
     await waitForLibrary();
     fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
-    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "shared" }));
+    await waitFor(() => expect(intents.resolvePreview).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "shared" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
     expect(await screen.findByText("Files provider preview.")).toBeInTheDocument();
     act(() => resolveBrowser({
       status: "blocked",
-      ref: { providerId: "indexeddb", recordId: "shared" },
+      ref: { providerId: ALTERNATE_PROVIDER.id, recordId: "shared" },
       message: "Stale browser preview.",
     }));
     await Promise.resolve();
@@ -264,8 +275,8 @@ describe("CompositionLibrary data and capability states", () => {
     renderLibrary();
     await waitForLibrary();
 
-    expect(screen.getByRole("link", { name: "Bravo layout" })).toHaveAttribute("href", "/composer?provider=indexeddb&composition=bravo");
-    expect(screen.getByRole("link", { name: "Alpha layout" })).toHaveAttribute("href", "/composer?provider=indexeddb&composition=alpha");
+    expect(screen.getByRole("link", { name: "Bravo layout" })).toHaveAttribute("href", "/composer?provider=alternate&composition=bravo");
+    expect(screen.getByRole("link", { name: "Alpha layout" })).toHaveAttribute("href", "/composer?provider=alternate&composition=alpha");
     const rows = dataRows();
     expect(within(rows[0]).getByText("Bravo layout")).toBeInTheDocument();
     expect(within(rows[1]).getByText("Alpha layout")).toBeInTheDocument();
@@ -306,13 +317,13 @@ describe("CompositionLibrary data and capability states", () => {
   it("omits unavailable file controls and switches only to an available provider", async () => {
     renderLibrary();
     await waitForLibrary();
-    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
     expect(screen.queryByRole("menuitemradio", { name: "Local files" })).not.toBeInTheDocument();
   });
 
   it("switches provider and shows its own rows and label", async () => {
     const providers: CompositionLibraryProviderCapability[] = [
-      { descriptor: COMPOSITION_PROVIDERS.indexeddb, available: true },
+      { descriptor: ALTERNATE_PROVIDER, available: true },
       { descriptor: COMPOSITION_PROVIDERS.files, available: true },
     ];
     const intents = fakeIntents({
@@ -321,7 +332,7 @@ describe("CompositionLibrary data and capability states", () => {
     renderLibrary(intents, providers);
     await screen.findByRole("link", { name: "Alpha layout" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
     await screen.findByRole("link", { name: "File composition" });
     expect(screen.getByText("1 of 1 compositions · Local files")).toBeInTheDocument();
@@ -330,7 +341,7 @@ describe("CompositionLibrary data and capability states", () => {
 
   it("preserves the active provider and prior collection when a provider switch fails", async () => {
     const providers: CompositionLibraryProviderCapability[] = [
-      { descriptor: COMPOSITION_PROVIDERS.indexeddb, available: true },
+      { descriptor: ALTERNATE_PROVIDER, available: true },
       { descriptor: COMPOSITION_PROVIDERS.files, available: true },
     ];
     const intents = fakeIntents({
@@ -344,12 +355,12 @@ describe("CompositionLibrary data and capability states", () => {
     renderLibrary(intents, providers);
     await screen.findByRole("link", { name: "Alpha layout" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
     await screen.findByRole("alert");
     expect(screen.getByText("Files could not be listed.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Alpha layout" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Provider: Browser storage" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Provider: Alternate storage" })).toBeInTheDocument();
   });
 
   it("shows recovery with no readable rows and requires safe confirmation before starting fresh", async () => {
@@ -372,11 +383,11 @@ describe("CompositionLibrary data and capability states", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start fresh…" }));
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Start fresh?" })).getByRole("button", { name: "Start fresh" }));
     await screen.findByText("No compositions yet");
-    expect(intents.startFresh).toHaveBeenCalledWith("indexeddb");
+    expect(intents.startFresh).toHaveBeenCalledWith(ALTERNATE_PROVIDER.id);
   });
 
   it("offers a Retry when the store cannot be opened at all", async () => {
-    const error = new CompositionPersistenceError("list", "read-failed", "IndexedDB is unavailable.", true);
+    const error = new CompositionPersistenceError("list", "read-failed", "Project files are unavailable.", true);
     const intents = fakeIntents({ initialize: vi.fn(async () => ({ status: "error" as const, error })) });
     renderLibrary(intents);
 
@@ -398,8 +409,8 @@ describe("CompositionLibrary row and bulk actions", () => {
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
-    await waitFor(() => expect(intents.create).toHaveBeenCalledWith({ providerId: "indexeddb", name: "Untitled composition" }));
-    await waitFor(() => expect(intents.open).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "created" }));
+    await waitFor(() => expect(intents.create).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, name: "Untitled composition" }));
+    await waitFor(() => expect(intents.open).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "created" }));
     expect(screen.getByRole("link", { name: "Created composition" })).toBeInTheDocument();
   });
 
@@ -415,7 +426,7 @@ describe("CompositionLibrary row and bulk actions", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
     await waitFor(() => expect(intents.create).toHaveBeenCalledWith({
-      providerId: "indexeddb",
+      providerId: ALTERNATE_PROVIDER.id,
       name: "Bound page",
       source: { sourceRecordId: "site-shell", outletId: "main" },
     }));
@@ -432,7 +443,7 @@ describe("CompositionLibrary row and bulk actions", () => {
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Alpha renamed" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save name" }));
 
-    await waitFor(() => expect(intents.rename).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" }, "Alpha renamed"));
+    await waitFor(() => expect(intents.rename).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "alpha" }, "Alpha renamed"));
     expect(await screen.findByRole("link", { name: "Alpha renamed" })).toBeInTheDocument();
   });
 
@@ -458,7 +469,7 @@ describe("CompositionLibrary row and bulk actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "More actions for Alpha layout" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
 
-    await waitFor(() => expect(intents.open).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "copy" }));
+    await waitFor(() => expect(intents.open).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "copy" }));
     expect(await screen.findByRole("link", { name: "Alpha layout copy" })).toBeInTheDocument();
   });
 
@@ -470,7 +481,7 @@ describe("CompositionLibrary row and bulk actions", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Export JSX" }));
 
     expect(await screen.findByRole("dialog", { name: "Export — Alpha layout" })).toBeInTheDocument();
-    await waitFor(() => expect(intents.exportJsx).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" }));
+    await waitFor(() => expect(intents.exportJsx).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "alpha" }));
     expect(screen.getByText("export code")).toBeInTheDocument();
   });
 
@@ -485,7 +496,7 @@ describe("CompositionLibrary row and bulk actions", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     await screen.findByText("No compositions yet");
-    expect(intents.delete).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" });
+    expect(intents.delete).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "alpha" });
   });
 
   it("duplicates and deletes a bulk selection without navigating away", async () => {
@@ -505,7 +516,7 @@ describe("CompositionLibrary row and bulk actions", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Alpha layout" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete Alpha layout?" })).getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(intents.delete).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "alpha" }));
+    await waitFor(() => expect(intents.delete).toHaveBeenCalledWith({ providerId: ALTERNATE_PROVIDER.id, recordId: "alpha" }));
   });
 
   it("clears the library behind the shared confirmation", async () => {
@@ -515,7 +526,7 @@ describe("CompositionLibrary row and bulk actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear library" }));
     fireEvent.click(within(screen.getByRole("alertdialog", { name: "Clear library?" })).getByRole("button", { name: "Clear library" }));
 
-    await waitFor(() => expect(intents.clear).toHaveBeenCalledWith("indexeddb"));
+    await waitFor(() => expect(intents.clear).toHaveBeenCalledWith(ALTERNATE_PROVIDER.id));
     expect(await screen.findByText("No compositions yet")).toBeInTheDocument();
   });
 

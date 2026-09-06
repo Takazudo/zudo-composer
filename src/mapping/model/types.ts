@@ -248,7 +248,6 @@ export type MappingInitializationOutcome = { status: "ready"; summaries: readonl
 export interface MappingProvider { descriptor: MappingProviderDescriptor; store: MappingStore; initialization: { initialize(): Promise<MappingInitializationOutcome>; retry(): Promise<MappingInitializationOutcome>; startFresh(): Promise<MappingInitializationOutcome> } }
 
 export const MAPPING_PROVIDERS = {
-  indexeddb: { id: "mapping-indexeddb", label: "Browser storage", storageLabel: "IndexedDB: zudo-composer-mapping" },
   filesystem: { id: "mapping-filesystem", label: "Project files" },
 } as const;
 export type MappingProviderDescriptor = (typeof MAPPING_PROVIDERS)[keyof typeof MAPPING_PROVIDERS];

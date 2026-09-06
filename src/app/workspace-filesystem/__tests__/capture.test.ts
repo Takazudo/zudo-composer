@@ -4,7 +4,7 @@
 // then every token again, and retries three times before reporting `changed`.
 // Nothing about that is storage-specific — which is the point of these tests:
 // the same invariant has to hold when the tokens are filesystem generations
-// rather than IndexedDB counters, across the workspace registry plus the four
+// rather than in-memory counters, across the workspace registry plus the four
 // authoring domains.
 
 import { mkdtemp, rm } from "node:fs/promises";

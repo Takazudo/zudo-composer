@@ -236,8 +236,8 @@ export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models =
       </nav>
       <div class="cms-rail__foot">
         <div class="cms-rail__status">
-          <strong>Browser storage</strong>
-          <span>IndexedDB · zudo-composer</span>
+          <strong>Project files</strong>
+          <span>Local filesystem · zudo-composer</span>
         </div>
       </div>
       <Dialog open={rename !== null} title="Rename pin" onClose={() => setRename(null)}><form onSubmit={(event) => { event.preventDefault(); if (!label.trim()) return; onPinsChange?.(pins.map((pin) => pin === rename ? { ...pin, label: label.trim() } : pin)); setRename(null); }}><label>Pin label<input value={label} maxLength={120} required onInput={(event) => setLabel(event.currentTarget.value)} /></label><Button type="submit">Save label</Button></form></Dialog>

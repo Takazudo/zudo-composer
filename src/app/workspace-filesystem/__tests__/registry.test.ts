@@ -1,4 +1,4 @@
-// The filesystem analogue of the IndexedDB workspace registry.
+// The filesystem workspace registry.
 //
 // Every assertion that survives the move is ported from the browser registry's
 // coverage in `src/app/__tests__/workspace-state.test.ts` and

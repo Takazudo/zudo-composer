@@ -1,8 +1,7 @@
 // Removal of a workspace's authoring directories.
 //
-// The IndexedDB counterpart deletes the four scoped provider databases; here
-// the same four scoped directories are removed. It is called only for an owned,
-// unselected seeding attempt, under that workspace's seed lock, between
+// The four scoped authoring directories are removed. This is called only for an
+// owned, unselected seeding attempt, under that workspace's seed lock, between
 // `markSeedCleanup()` and `discardSeeding()`: the persisted cleanup marker is
 // what makes a failed removal retryable without ever leaving a half-removed
 // workspace reachable.

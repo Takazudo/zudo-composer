@@ -1,4 +1,4 @@
-// The filesystem analogue of the "IndexedDB Mapping provider" describe block in
+// The Mapping provider contract, exercised against the filesystem store. See
 // `src/mapping/__tests__/mapping.test.ts`. Assertions are ported from there
 // wherever the concept survives the move (CRUD, idempotent seed, quarantine,
 // immutable createdAt); the tests that follow them cover what only a
@@ -21,7 +21,7 @@ function mapping(id: string, name = id): MappingRecord {
     id,
     name,
     contentModel: { providerId: "content", recordId: "articles" },
-    composition: { providerId: "indexeddb", recordId: "landing" },
+    composition: { providerId: "files", recordId: "landing" },
     createdAt: stamp,
   });
 }

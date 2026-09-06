@@ -2,11 +2,14 @@
 /** @jsxImportSource preact */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
-import { IDBFactory as FDBFactory } from "fake-indexeddb";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createSequentialIdFactory } from "../../../../shared";
 import { createCompositionCatalog } from "../../../../sitemapper/catalog";
-import { createIndexedDbSitemapProvider } from "../../../../sitemapper/storage/indexeddb/provider";
+import * as fs from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { SITEMAP_PROVIDERS, type SitemapProvider } from "../../../../sitemapper/library";
+import { createFilesystemSitemapStore } from "../../../../sitemapper/storage/filesystem";
 import { ProductionSitemapperApp } from "../production-sitemapper-app";
 
 class ResizeObserverStub {
@@ -24,6 +27,19 @@ beforeAll(() => {
 });
 afterEach(cleanup);
 
+const sitemapSandboxes: string[] = [];
+afterEach(async () => {
+  await Promise.all(sitemapSandboxes.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
+});
+
+async function sitemapProvider(): Promise<SitemapProvider> {
+  const sitemapsRoot = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "zudo-sitemapper-walkthrough-")));
+  sitemapSandboxes.push(sitemapsRoot);
+  const store = await createFilesystemSitemapStore({ sitemapsRoot });
+  const initialize = async () => ({ status: "ready" as const, summaries: await store.list() });
+  return { descriptor: SITEMAP_PROVIDERS.filesystem, store, initialization: { initialize, retry: initialize, startFresh: initialize } };
+}
+
 const composition = {
   id: "hero-composition",
   createdAt: "2026-01-01T00:00:00.000Z",
@@ -33,7 +49,7 @@ const composition = {
 
 function catalog() {
   return createCompositionCatalog([{
-    descriptor: { id: "indexeddb", label: "Browser storage" },
+    descriptor: { id: "files", label: "Project files" },
     store: {
       list: async () => [{ id: composition.id, name: composition.document.name, createdAt: composition.createdAt, updatedAt: composition.updatedAt, nodeCount: 0 }],
       get: async (id: string) => id === composition.id
@@ -45,7 +61,7 @@ function catalog() {
 
 describe("production Sitemapper walkthrough", () => {
   it("creates a sitemap, then reopens it from the deep link the library handed out", async () => {
-    const provider = createIndexedDbSitemapProvider({ idbFactory: new FDBFactory() });
+    const provider = await sitemapProvider();
     const navigate = vi.fn();
     const view = render(
       <ProductionSitemapperApp
@@ -59,14 +75,14 @@ describe("production Sitemapper walkthrough", () => {
       />,
     );
 
-    // A real IndexedDB provider under a loaded suite can take well over the
+    // A real filesystem provider under a loaded suite can take well over the
     // default second to finish initializing.
     fireEvent.click(await screen.findByRole("button", { name: "Create your first sitemap" }, { timeout: 10_000 }));
     const createDialog = screen.getByRole("dialog", { name: "Create sitemap" });
     fireEvent.input(within(createDialog).getByRole("textbox", { name: "Sitemap name" }), { target: { value: "Product map" } });
     fireEvent.click(within(createDialog).getByRole("button", { name: "Create sitemap" }));
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?provider=sitemap-indexeddb&sitemap=product-map-1"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?provider=sitemap-filesystem&sitemap=product-map-1"));
 
     // The link the library produced is the only state the editor needs.
     view.rerender(
@@ -76,7 +92,7 @@ describe("production Sitemapper walkthrough", () => {
         pageIdFactory={createSequentialIdFactory("page")}
         now={() => "2026-04-02T00:00:00.000Z"}
         navigate={navigate}
-        location={{ pathname: "/sitemapper", search: "?provider=sitemap-indexeddb&sitemap=product-map-1" }}
+        location={{ pathname: "/sitemapper", search: "?provider=sitemap-filesystem&sitemap=product-map-1" }}
       />,
     );
 
@@ -86,7 +102,7 @@ describe("production Sitemapper walkthrough", () => {
   });
 
   it("adds, assigns and persists a page, and keeps the URL on the selected one", async () => {
-    const provider = createIndexedDbSitemapProvider({ idbFactory: new FDBFactory() });
+    const provider = await sitemapProvider();
     await provider.store.put({
       id: "walk-map",
       createdAt: "2026-04-01T00:00:00.000Z",
@@ -106,7 +122,7 @@ describe("production Sitemapper walkthrough", () => {
         pageIdFactory={createSequentialIdFactory("page")}
         now={() => "2026-04-02T00:00:00.000Z"}
         navigate={vi.fn()}
-        location={{ pathname: "/sitemapper", search: "?provider=sitemap-indexeddb&sitemap=walk-map" }}
+        location={{ pathname: "/sitemapper", search: "?provider=sitemap-filesystem&sitemap=walk-map" }}
       />,
     );
 
@@ -130,20 +146,20 @@ describe("production Sitemapper walkthrough", () => {
       if (loaded.status !== "loaded") return;
       expect(loaded.record.document.root[0]?.children[0]?.source).toEqual({
         kind: "composition",
-        ref: { providerId: "indexeddb", recordId: "hero-composition" },
+        ref: { providerId: "files", recordId: "hero-composition" },
       });
     });
   });
 
   it("reports a sitemap that is gone rather than opening an empty editor", async () => {
-    const provider = createIndexedDbSitemapProvider({ idbFactory: new FDBFactory() });
+    const provider = await sitemapProvider();
     const navigate = vi.fn();
     render(
       <ProductionSitemapperApp
         provider={provider}
         catalog={catalog()}
         navigate={navigate}
-        location={{ pathname: "/sitemapper", search: "?provider=sitemap-indexeddb&sitemap=missing-map" }}
+        location={{ pathname: "/sitemapper", search: "?provider=sitemap-filesystem&sitemap=missing-map" }}
       />,
     );
 
@@ -153,13 +169,13 @@ describe("production Sitemapper walkthrough", () => {
   });
 
   it("reports a malformed deep link on the library rather than guessing", async () => {
-    const provider = createIndexedDbSitemapProvider({ idbFactory: new FDBFactory() });
+    const provider = await sitemapProvider();
     render(
       <ProductionSitemapperApp
         provider={provider}
         catalog={catalog()}
         navigate={vi.fn()}
-        location={{ pathname: "/sitemapper", search: "?provider=sitemap-indexeddb&sitemap=..%2Fetc" }}
+        location={{ pathname: "/sitemapper", search: "?provider=sitemap-filesystem&sitemap=..%2Fetc" }}
       />,
     );
 

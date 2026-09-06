@@ -88,7 +88,7 @@ describe("Media Markdown consumption", () => {
       id: "article-preview",
       name: "Article preview",
       contentModel: { providerId: "content", recordId: model.id },
-      composition: { providerId: "indexeddb", recordId: composition.id },
+      composition: { providerId: "files", recordId: composition.id },
       bindings: [{
         id: "body-markdown",
         sourceFieldId: "body",
@@ -109,7 +109,7 @@ describe("Media Markdown consumption", () => {
           },
         }]),
         compositions: createCompositionCatalog([{
-          descriptor: { id: "indexeddb", label: "Compositions" },
+          descriptor: { id: "files", label: "Compositions" },
           store: {
             list: async () => [],
             get: async () => ({ status: "loaded", record: composition }),

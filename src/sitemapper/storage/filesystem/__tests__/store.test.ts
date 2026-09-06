@@ -1,4 +1,4 @@
-// The filesystem analogue of `storage/indexeddb/__tests__/provider.test.ts`.
+// The Sitemap provider contract, exercised against the filesystem store.
 // Assertions are ported from there wherever the concept survives the move
 // (CRUD, seed, duplicate-seed rejection, revalidate-every-read, quarantine);
 // the tests that follow them cover what only a filesystem store can get wrong.
