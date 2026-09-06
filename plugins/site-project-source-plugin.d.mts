@@ -6,6 +6,7 @@ import type { MediaType } from "../src/media/model";
 export interface SiteProjectSourcePluginOptions {
   readDevRelease?: () => Promise<{ project: SiteProject; release: CompletedRelease } | null>;
   readDevMedia?: (pathname: string) => Promise<{ bytes: Uint8Array; mediaType: MediaType; identity: CompletedRelease["identity"] } | null>;
+  workspaceRoot?: string;
 }
 
 export declare const SITE_PROJECT_SOURCE_ID = "virtual:site-project-source";

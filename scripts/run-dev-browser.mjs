@@ -16,9 +16,9 @@ function run(command, args, options) {
 
 const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-dev-browser-")));
 try {
-  const releaseRoot = join(temporaryRoot, "release"), mediaRoot = join(temporaryRoot, "media");
-  await Promise.all([mkdir(releaseRoot), mkdir(mediaRoot)]);
-  const environment = { ...process.env, ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot };
+  const releaseRoot = join(temporaryRoot, "release"), mediaRoot = join(temporaryRoot, "media"), compositionsRoot = join(temporaryRoot, "compositions");
+  await Promise.all([mkdir(releaseRoot), mkdir(mediaRoot), mkdir(compositionsRoot)]);
+  const environment = { ...process.env, ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot, ZUDO_COMPOSITIONS_ROOT: compositionsRoot };
   const playwright = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   const result = await run(playwright, ["exec", "playwright", "test", "--config", "playwright.dev.config.ts"], { env: environment });
   if (result.status !== 0) process.exitCode = result.status ?? 1;

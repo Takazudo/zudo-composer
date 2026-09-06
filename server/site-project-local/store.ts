@@ -17,8 +17,10 @@ import { isSafeRecordId } from "../../src/shared/record-identity";
 export const SITE_PROJECT_LOCAL_ROOT_NAME = ".zudo-site-project";
 export const SITE_PROJECT_LOCAL_ROOT_ENV = "ZUDO_SITE_PROJECT_ROOT";
 export const SITE_PROJECT_ACTIVE_FILENAME = "active.json";
-export const DEFAULT_SITE_PROJECT_LOCAL_ROOT = resolve(import.meta.dirname, "../..", SITE_PROJECT_LOCAL_ROOT_NAME);
-const configuredLocalRoot = () => process.env[SITE_PROJECT_LOCAL_ROOT_ENV]?.trim() ? resolve(process.env[SITE_PROJECT_LOCAL_ROOT_ENV]!) : DEFAULT_SITE_PROJECT_LOCAL_ROOT;
+// The host project directory, not the installed package directory: disposable
+// release state belongs to whoever runs the tool.
+const defaultSiteProjectLocalRoot = () => resolve(process.cwd(), SITE_PROJECT_LOCAL_ROOT_NAME);
+const configuredLocalRoot = () => process.env[SITE_PROJECT_LOCAL_ROOT_ENV]?.trim() ? resolve(process.env[SITE_PROJECT_LOCAL_ROOT_ENV]!) : defaultSiteProjectLocalRoot();
 const SHA = /^[a-f0-9]{64}$/;
 const hash = (text: string | Uint8Array) => createHash("sha256").update(text).digest("hex");
 const unavailable = (error: unknown) => ({ status: "unavailable" as const, message: error instanceof Error ? error.message : "Release storage unavailable." });

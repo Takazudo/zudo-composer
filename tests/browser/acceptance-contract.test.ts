@@ -50,17 +50,26 @@ describe("final browser acceptance source contract", () => {
   it("makes the canonical dev browser lane own isolated roots and reject direct config launch", () => {
     const parent = realpathSync(mkdtempSync(join(tmpdir(), "zudo-composer-dev-browser-")));
     try {
-      const releaseRoot = join(parent, "release"), mediaRoot = join(parent, "media"); mkdirSync(releaseRoot); mkdirSync(mediaRoot);
-      const env = { ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot };
-      expect(requireDevBrowserRoots(env)).toEqual({ releaseRoot, mediaRoot });
-      for (const invalid of [{}, { ZUDO_MEDIA_STORE_ROOT: mediaRoot }, { ...env, ZUDO_MEDIA_STORE_ROOT: join(process.cwd(), "media-store") }, { ...env, ZUDO_SITE_PROJECT_ROOT: mediaRoot }]) expect(() => requireDevBrowserRoots(invalid)).toThrow();
+      const releaseRoot = join(parent, "release"), mediaRoot = join(parent, "media"), compositionsRoot = join(parent, "compositions");
+      mkdirSync(releaseRoot); mkdirSync(mediaRoot); mkdirSync(compositionsRoot);
+      const env = { ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot, ZUDO_COMPOSITIONS_ROOT: compositionsRoot };
+      expect(requireDevBrowserRoots(env)).toEqual({ releaseRoot, mediaRoot, compositionsRoot });
+      for (const invalid of [{}, { ZUDO_MEDIA_STORE_ROOT: mediaRoot }, { ...env, ZUDO_MEDIA_STORE_ROOT: join(process.cwd(), "media-store") },
+        { ...env, ZUDO_SITE_PROJECT_ROOT: mediaRoot }, { ...env, ZUDO_COMPOSITIONS_ROOT: undefined },
+        { ...env, ZUDO_COMPOSITIONS_ROOT: join(process.cwd(), "compositions") }, { ...env, ZUDO_COMPOSITIONS_ROOT: mediaRoot },
+      ]) expect(() => requireDevBrowserRoots(invalid)).toThrow();
       const runner = read("scripts/run-dev-browser.mjs"), config = read("playwright.dev.config.ts"), mediaTest = read("tests/browser-dev/media-upload.pw.ts");
       expect(JSON.parse(read("package.json")).scripts["test:browser:dev"]).toBe("node scripts/run-dev-browser.mjs");
-      for (const text of ['join(temporaryRoot, "release")', 'join(temporaryRoot, "media")', "ZUDO_SITE_PROJECT_ROOT: releaseRoot", "ZUDO_MEDIA_STORE_ROOT: mediaRoot"]) expect(runner).toContain(text);
+      for (const text of ['join(temporaryRoot, "release")', 'join(temporaryRoot, "media")', 'join(temporaryRoot, "compositions")',
+        "ZUDO_SITE_PROJECT_ROOT: releaseRoot", "ZUDO_MEDIA_STORE_ROOT: mediaRoot", "ZUDO_COMPOSITIONS_ROOT: compositionsRoot"]) expect(runner).toContain(text);
       expect(runner).toMatch(/finally\s*\{\s*await rm\(temporaryRoot, \{ recursive: true, force: true \}\)/);
       expect(runner).not.toMatch(/process\.env\.\w+\s*=/); expect(runner).not.toContain(".zudo-site-project"); expect(runner).not.toContain('resolve(root, "media-store")');
       expect(config).toContain("requireDevBrowserRoots(process.env)"); expect(config).toContain("reuseExistingServer: false");
       expect(config).toContain("ZUDO_MEDIA_STORE_ROOT: mediaRoot"); expect(config).toContain("ZUDO_SITE_PROJECT_ROOT: releaseRoot");
+      expect(config).toContain("ZUDO_COMPOSITIONS_ROOT: compositionsRoot");
+      // The dev server must take the foreign composition root from that
+      // environment, never from the Vite root or the package directory.
+      expect(read("plugins/composer-file-provider-plugin.mjs")).toContain('COMPOSITIONS_ROOT_ENV = "ZUDO_COMPOSITIONS_ROOT"');
       expect(mediaTest).toContain("requireDevBrowserRoots(process.env)"); expect(mediaTest).toContain('join(mediaRoot, "versions"');
       expect(mediaTest).not.toContain('resolve("media-store/versions"');
     } finally { rmSync(parent, { recursive: true, force: true }); }
