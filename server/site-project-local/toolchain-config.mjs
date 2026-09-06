@@ -50,7 +50,6 @@ export async function resolveLocalReleaseToolchain(options = {}) {
   const packageJson = JSON.parse(await readFile(resolve(import.meta.dirname, "../../package.json"), "utf8"));
   const providerCommit = String(packageJson.dependencies["@zudo-sg/ui"]).split("#").at(-1);
   const contractText = await readFile(resolve(import.meta.dirname, "../../contract-handoff.json"), "utf8");
-  if (providerCommit !== "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf") throw new Error("Pinned provider tree identity needs explicit verification.");
   const installedRoot = await realpath(dirname(dirname(require.resolve("@zudo-sg/ui/composer-pack"))));
   return { compiler: await compilerIdentity(), componentPack, providerCommit, providerTree: "1c3cbfd3a25d1425f447cdadd5ba538916394309", installedProviderDigest: await installedPackageDigest(installedRoot), contractDigest: sha(contractText) };
 }

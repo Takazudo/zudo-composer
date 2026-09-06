@@ -179,15 +179,13 @@ initialization and atomic registry selection succeed. The shell swaps integratio
 then; an old integration continues to address its old drafts. Failed provisional
 seeds are cleaned up under the workspace initialization lock. Blocked/uncertain
 deletion retains one cleanup-pending attempt and retries finish deletion before
-reseeding; ready or selected workspaces are never deleted. The optional catalog
-example has one stable attempt ID and rebinds the current validated project only
-after cleanup. Its persisted before-complete guard cannot be bypassed by an
-ordinary open after a crash. See [the example walkthrough](./catalog-editorial-example.md).
+reseeding; ready or selected workspaces are never deleted. A persisted
+before-complete guard cannot be bypassed by an ordinary open after a crash.
 The
 `initialization.startFresh()` entry point fails with `code: "reset-required"`
 without writes; recovery UI uses `workspace.reset()` and handles its returned
 integration. An unavailable source can still open the selected existing workspace;
-to reset it, supply a valid project to `loadExample`.
+to reset it, supply a valid project to `workspace.create`.
 
 `workspace.metadata()` returns authored project metadata and its durable token.
 `updateMetadata(expectedToken, {name?, activeSitemap?})` persists changes with a

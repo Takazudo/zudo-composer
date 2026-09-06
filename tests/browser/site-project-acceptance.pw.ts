@@ -1,5 +1,4 @@
 import { expect, test, type Page, type Response } from "@playwright/test";
-import { registerCatalogJourney } from "./catalog-editorial-journey";
 
 const SITE_ROUTES = [
   "/site",
@@ -213,6 +212,3 @@ test("dev virtual source contains the CLI-activated project", async ({ page }) =
   expect(source).toContain('"Sample Studio"');
   expect(failures).toEqual([]);
 });
-
-// Last: activation changes only this guarded runner's disposable release root.
-registerCatalogJourney();

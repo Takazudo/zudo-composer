@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { activeComponentProvider } from "../../composer/active-pack";
 import type { CompositionNode } from "../../../composer/model/types";
 import { compileSiteProject } from "../../../site-project/compiler";
-import { loadSampleSiteProject } from "../../../site-project/sample";
+import { loadSampleSiteProject } from "../../../test/site-project-fixture";
 import { DeliveryRuntime, projectTrustedProps } from "../runtime";
 
 afterEach(cleanup);

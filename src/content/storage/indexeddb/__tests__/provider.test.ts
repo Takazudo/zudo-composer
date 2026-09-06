@@ -2,7 +2,6 @@ import { IDBFactory as FDBFactory, IDBKeyRange as FDBKeyRange } from "fake-index
 import { describe, expect, it } from "vitest";
 import { createContentEntryRecord, createContentModelRecord } from "../../../library";
 import type { ContentEntryRecord, ContentModelRecord } from "../../../model";
-import { createSampleContentSeed, SAMPLE_CONTENT_IDS } from "../../../sample";
 import { createIndexedDbContentProvider, mapContentOperationalError } from "../provider";
 import {
   CONTENT_DATABASE_NAME,
@@ -83,10 +82,12 @@ describe("IndexedDB Content provider", () => {
   });
 
   it("seeds explicit identities idempotently and recreates them after startFresh", async () => {
-    const factory = new FDBFactory(); const seed = createSampleContentSeed(3); const provider = createIndexedDbContentProvider({ idbFactory: factory, seed });
-    await provider.initialization.initialize(); await provider.initialization.initialize(); expect(await provider.store.countEntries(SAMPLE_CONTENT_IDS.collection)).toBe(3);
-    await provider.initialization.startFresh(); expect((await provider.store.getModel(SAMPLE_CONTENT_IDS.collection))).toMatchObject({ status: "loaded", record: { id: SAMPLE_CONTENT_IDS.collection } });
-    expect(await provider.store.countEntries(SAMPLE_CONTENT_IDS.collection)).toBe(3);
+    const factory = new FDBFactory();
+    const seed = { models: [model("posts")], entries: [entry("one"), entry("two"), entry("three")] };
+    const provider = createIndexedDbContentProvider({ idbFactory: factory, seed });
+    await provider.initialization.initialize(); await provider.initialization.initialize(); expect(await provider.store.countEntries("posts")).toBe(3);
+    await provider.initialization.startFresh(); expect((await provider.store.getModel("posts"))).toMatchObject({ status: "loaded", record: { id: "posts" } });
+    expect(await provider.store.countEntries("posts")).toBe(3);
   });
 
   it("preserves malformed/future records until explicit startFresh", async () => {

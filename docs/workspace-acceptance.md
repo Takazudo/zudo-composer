@@ -25,18 +25,16 @@ the canvas action, and root/non-root toolbar targets.
 | Area | Current source contract audited | Browser proof / manager visual check |
 | --- | --- | --- |
 | Shell | Content hierarchy from canonical provider models; optional named pins; independent 760px drawer and collapsible desktop rail; no bottom-tab substitute | `workspace.responsive.pw.ts`: all routes at each width/theme, persisted collapse, drawer keyboard trap/Escape/focus, real coarse pointer; visually compare 760 vs 761 |
-| Content | Directory, Entries, Fields/Raw/Used by, grouped/writing task views; stable field-ID storage and provider-qualified refs | `content.pw.ts`, `catalog-editorial-journey.ts`: exact raw envelope, 31 selectable targets, ordered relation survives reload; named task pin persists while the canonical project stays unchanged |
-| Composition | Real installed component cards, device choice, enlarged preview, provider-safe iframe, shared chooser/history | `catalog-editorial-journey.ts`, `composer-undo-redo.pw.ts`, `provider-proof.pw.ts`: actual rendered-card signal, iframe dialog, Escape, existing component/CSS/WASM/export proof |
-| Mapping | Explicit projections and materialization; published/draft policy, filters/sort/limit, pins and effective records | `mapping.pw.ts`, catalog journey: saved pin order and real repeated latest-News output; field/target drift repair remains covered |
-| Sitemap | Canvas and outline retained alongside Routes and Navigation; stable independent menus and ancestor-qualified routes | Catalog journey switches all four views, reads external menu destination, previews a nested route and actual related Product href; `outline-tree.responsive.pw.ts` asserts geometry and exact insertion |
-| Media | Real global bytes, logical folders, metadata, immutable replacement/history, usage-aware trash/restore | `media-upload.pw.ts`, catalog journey: signature/checksum bytes, old URL still serves old bytes, stable asset ID and changed immutable version, exact release lock; inspect per-use labels and folder states |
-| Review | Changes/Checks/Affected, explicit Content selection, local-only apply/build/activate, staged identity independent of newer drafts | Guarded catalog journey: stale cross-tab approval, actual Content CAS rejection, exact staged Media pin, activate initial baseline then selected draft; private newer draft survives first activation |
+| Content | Directory, Entries, Fields/Raw/Used by, grouped/writing task views; stable field-ID storage and provider-qualified refs | `content.pw.ts`: exact raw envelope, ordered relation survives reload; named task pin persists while the canonical project stays unchanged |
+| Composition | Real installed component cards, device choice, enlarged preview, provider-safe iframe, shared chooser/history | `composer-undo-redo.pw.ts`, `provider-proof.pw.ts`: actual rendered-card signal, iframe dialog, Escape, existing component/CSS/WASM/export proof |
+| Mapping | Explicit projections and materialization; published/draft policy, filters/sort/limit, pins and effective records | `mapping.pw.ts`: saved pin order and real repeated latest-News output; field/target drift repair remains covered |
+| Sitemap | Canvas and outline retained alongside Routes and Navigation; stable independent menus and ancestor-qualified routes | `outline-tree.responsive.pw.ts` asserts geometry and exact insertion |
+| Media | Real global bytes, logical folders, metadata, immutable replacement/history, usage-aware trash/restore | `media-upload.pw.ts`: signature/checksum bytes, old URL still serves old bytes, stable asset ID and changed immutable version, exact release lock; inspect per-use labels and folder states |
+| Review | Changes/Checks/Affected, explicit Content selection, local-only apply/build/activate, staged identity independent of newer drafts | `site-project-acceptance.pw.ts`: staged candidate identity stays independent of a newer working draft across local activation and reload |
 | States | Empty/no-match, loading, error, unavailable and stale-target messages are not editable success | `workspace-states.pw.ts`, responsive source: absent IndexedDB, delayed/rejected Media, recovery, no-match, unavailable provider URL; existing unit suites cover blank schemas and incomplete reference diagnostics |
 
 Every module remains navigable: Overview, Content, Media, Compositions,
 Mappings, Sitemaps, Review & release, and the separate Website preview chooser.
-The optional example is reachable through an explicit dashboard action and
-its full walkthrough is [catalog-editorial-example.md](./catalog-editorial-example.md).
 
 ## Viewport and interaction matrix
 
@@ -59,14 +57,11 @@ placement and focus checks. Visually inspect theme contrast, complete assets,
 branch disclosures, adjacent controls, scroll ownership and keyboard focus at
 all breakpoints; screenshots alone do not replace the semantic assertions.
 
-## Full example journey and isolation
+## Activation isolation
 
-`tests/browser/catalog-editorial-journey.ts` is registered **last** by
-`site-project-acceptance.pw.ts`, which the existing guarded runner already
-collects. It requires the runner's `ZUDO_SITE_PROJECT_ROOT` and executes only in
-the dev lane. It intentionally changes that disposable local active release;
-registering it earlier would contaminate bundled-sample assertions. The dist
-lane never runs an authoring/activation substitute.
+`tests/browser/site-project-acceptance.pw.ts` runs only in the guarded dev lane
+and requires the runner's `ZUDO_SITE_PROJECT_ROOT`. Its activation steps change
+that disposable local active release and nothing outside it.
 
 The journey confirms/cancels the real example action, reloads the selected
 workspace, amplifies canonical Content through real provider transactions to 31
