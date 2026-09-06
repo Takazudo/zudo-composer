@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./deployment-artifact-lib.mjs";
+import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./routes.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
