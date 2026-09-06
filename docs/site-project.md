@@ -203,7 +203,9 @@ Stage application order is persisted explicitly, not inferred from build hashes:
 discarding the current C in A→B→C restores B. Discard receipts make retry of a
 committed discard idempotent only for its original incarnation. Restaging the
 same build assigns a fresh monotonic stage generation; a delayed old discard
-cannot remove it. Heads validation checks exclusive visible/discarded sets,
+cannot remove it. Discard retries also require the original expectedActive and a
+matching current active pointer; changing the precondition cannot reuse an old
+receipt. Heads validation checks exclusive visible/discarded sets,
 generation order, exact project heads, complete approval coverage, immutable
 stage identities and retained active references before any receipt shortcut.
 Durable partial stage/build files can be retried

@@ -27,7 +27,7 @@ const mutationFailure = (error: unknown) => error instanceof ReleaseCommitUncert
 const inside = (root: string, path: string) => { const part = relative(root, path); return part === "" || (part !== ".." && !part.startsWith(`..${sep}`) && !isAbsolute(part)); };
 const exists = async (path: string) => { try { await lstat(path); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; } };
 async function syncDirectory(path: string) { const handle = await open(path, "r"); try { await handle.sync(); } finally { await handle.close(); } }
-interface Heads { schemaVersion: 2; generation: number; projects: Record<string, { revision: string; buildId: string }>; stageOrder: string[]; stageGenerations: Record<string, number>; approvals: Record<string, string>; discarded: Record<string, { identity: SiteProjectActiveSelection; stageGeneration: number }> }
+interface Heads { schemaVersion: 2; generation: number; projects: Record<string, { revision: string; buildId: string }>; stageOrder: string[]; stageGenerations: Record<string, number>; approvals: Record<string, string>; discarded: Record<string, { identity: SiteProjectActiveSelection; stageGeneration: number; expectedActive: SiteProjectActiveSelection | null }> }
 interface CommitState { identity?: SiteProjectActiveSelection }
 interface CleanupTicket { path: string; owner: string; inode: number; phase: "owner" | "directory" | "sync" }
 export interface LocalSiteProjectStoreOptions {
@@ -203,7 +203,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     for (const [digest, id] of Object.entries(value.approvals)) { if (!SHA.test(digest) || !stages.has(id)) throw new Error("Approval receipt is not visible."); approved.add(id); }
     if (approved.size !== stages.size) throw new Error("Visible stage has no approval receipt.");
     for (const [id, receipt] of Object.entries(value.discarded)) {
-      if (!object(receipt) || Object.keys(receipt).sort().join() !== "identity,stageGeneration" || !validActive(receipt.identity) || receipt.identity.buildId !== id || stages.has(id) || !Number.isSafeInteger(receipt.stageGeneration) || receipt.stageGeneration < 1 || receipt.stageGeneration >= value.generation || generations.has(receipt.stageGeneration) || await exists(join(this.root, "builds", id, "complete.json"))) throw new Error("Contradictory discarded stage receipt.");
+      if (!object(receipt) || Object.keys(receipt).sort().join() !== "expectedActive,identity,stageGeneration" || !(receipt.expectedActive === null || validActive(receipt.expectedActive)) || !validActive(receipt.identity) || receipt.identity.buildId !== id || stages.has(id) || !Number.isSafeInteger(receipt.stageGeneration) || receipt.stageGeneration < 1 || receipt.stageGeneration >= value.generation || generations.has(receipt.stageGeneration) || await exists(join(this.root, "builds", id, "complete.json"))) throw new Error("Contradictory discarded stage receipt.");
       const stage = await this.json(join(this.root, "stages", `${id}.json`));
       if (!validStage(stage) || !sameRelease(receipt.identity, { projectId: stage.projectId, revision: stage.revision, buildId: stage.buildId }) || !await this.stored(stage.projectId, stage.revision)) throw new Error("Discard receipt identity differs from staged inputs.");
       generations.add(receipt.stageGeneration);
@@ -311,11 +311,12 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     try { return await this.lock(async () => {
       const heads = await this.heads(), active = await this.active();
       if (!Number.isSafeInteger(input.expectedStageGeneration) || input.expectedStageGeneration < 1) return { status: "conflict" as const };
+      if (!sameRelease(active, input.expectedActive)) return { status: "conflict" as const };
       const discarded = heads.discarded[input.buildId];
-      if (discarded?.identity.projectId === input.projectId && discarded.stageGeneration === input.expectedStageGeneration) return { status: "ok" as const, value: { active } };
+      if (discarded?.identity.projectId === input.projectId && discarded.stageGeneration === input.expectedStageGeneration) return sameRelease(discarded.expectedActive, input.expectedActive) ? { status: "ok" as const, value: { active: discarded.expectedActive } } : { status: "conflict" as const };
       if (heads.stageGenerations[input.buildId] !== input.expectedStageGeneration) return { status: "conflict" as const };
       const stage = await this.stage(input.projectId, input.buildId); if (!stage) return { status: "not-found" as const };
-      if (!sameRelease(active, input.expectedActive) || active?.buildId === input.buildId || await exists(join(this.root, "builds", input.buildId, "complete.json"))) return { status: "conflict" as const };
+      if (active?.buildId === input.buildId || await exists(join(this.root, "builds", input.buildId, "complete.json"))) return { status: "conflict" as const };
       heads.stageOrder = heads.stageOrder.filter((id) => id !== input.buildId);
       delete heads.stageGenerations[input.buildId];
       heads.approvals = Object.fromEntries(Object.entries(heads.approvals).filter(([, id]) => id !== input.buildId));
@@ -324,7 +325,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
         const next = remaining.at(-1); if (next) heads.projects[input.projectId] = { revision: next.revision, buildId: next.buildId }; else delete heads.projects[input.projectId];
       }
       const identity = { projectId: stage.projectId, revision: stage.revision, buildId: stage.buildId };
-      heads.discarded[input.buildId] = { identity, stageGeneration: input.expectedStageGeneration }; heads.generation++;
+      heads.discarded[input.buildId] = { identity, stageGeneration: input.expectedStageGeneration, expectedActive: input.expectedActive }; heads.generation++;
       await this.write(join(this.root, "heads.json"), releaseJson(heads), false, identity);
       return { status: "ok" as const, value: { active } };
     }); } catch (error) { return mutationFailure(error); }

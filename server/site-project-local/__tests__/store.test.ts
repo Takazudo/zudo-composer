@@ -11,6 +11,19 @@ import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV } from "../sto
 const applyInput = (value = project()) => ({ project: value, stage: stageFor(value), expectedRevision: null, expectedActive: null, expectedGeneration: 0 });
 async function build(value = project()) { const compiled = await compileSiteProject(value, { componentCatalog: catalog }); if (compiled.status !== "ready") throw new Error("Fixture compile failed"); return compiled.build; }
 describe("immutable local release storage", () => {
+  it("requires the original active precondition and current CAS for discard receipt retries", async () => {
+    const { store } = await fixture(); const a = applyInput(), b = applyInput({ ...project(), name: "Discard me" });
+    await store.apply(a); await store.apply({ ...b, expectedRevision: a.stage.revision, expectedGeneration: 1 });
+    const request = { projectId: b.stage.projectId, buildId: b.stage.buildId, expectedStageGeneration: 2, expectedActive: null };
+    expect(await store.discard(request)).toEqual({ status: "ok", value: { active: null } });
+    expect(await store.discard(request)).toEqual({ status: "ok", value: { active: null } });
+    const active = { projectId: a.stage.projectId, revision: a.stage.revision, buildId: a.stage.buildId };
+    expect(await store.discard({ ...request, expectedActive: active })).toEqual({ status: "conflict" });
+    await store.complete({ stage: a.stage, build: await build() });
+    expect(await store.activate({ target: active, expectedActive: null })).toMatchObject({ status: "ok" });
+    expect(await store.discard(request)).toEqual({ status: "conflict" });
+    expect(await store.discard({ ...request, expectedActive: active })).toEqual({ status: "conflict" });
+  });
   it("binds discard retries to the original stage incarnation across restage ABA", async () => {
     const { store } = await fixture(); const input = applyInput();
     const first = await store.apply(input); expect(first).toMatchObject({ status: "ok", value: { stageGeneration: 1 } });
@@ -28,7 +41,7 @@ describe("immutable local release storage", () => {
     const { store, testRoot } = await fixture(); const a = applyInput(), b = applyInput({ ...project(), name: "B" });
     await store.apply(a); await store.apply({ ...b, expectedRevision: a.stage.revision, expectedGeneration: 1 });
     const path = join(testRoot, "heads.json"), heads = JSON.parse(await readFile(path, "utf8"));
-    if (kind === "visible-discarded") heads.discarded[a.stage.buildId] = { identity: { projectId: a.stage.projectId, revision: a.stage.revision, buildId: a.stage.buildId }, stageGeneration: 1 };
+    if (kind === "visible-discarded") heads.discarded[a.stage.buildId] = { identity: { projectId: a.stage.projectId, revision: a.stage.revision, buildId: a.stage.buildId }, stageGeneration: 1, expectedActive: null };
     if (kind === "head") heads.projects[a.stage.projectId] = { revision: a.stage.revision, buildId: a.stage.buildId };
     if (kind === "order") heads.stageOrder.reverse();
     if (kind === "duplicate") heads.stageOrder.push(a.stage.buildId);
@@ -106,6 +119,8 @@ describe("immutable local release storage", () => {
     expect(await store.get(active)).toMatchObject({ status: "ok", value: { project: { name: first.project.name } } });
     expect(await store.discard({ projectId: active.projectId, buildId: active.buildId, expectedStageGeneration: 1, expectedActive: active })).toEqual({ status: "conflict" });
     expect(await store.discard({ projectId: changed.stage.projectId, buildId: changed.stage.buildId, expectedStageGeneration: 2, expectedActive: active })).toMatchObject({ status: "ok" });
+    expect(await store.discard({ projectId: changed.stage.projectId, buildId: changed.stage.buildId, expectedStageGeneration: 2, expectedActive: active })).toEqual({ status: "ok", value: { active } });
+    expect(await store.discard({ projectId: changed.stage.projectId, buildId: changed.stage.buildId, expectedStageGeneration: 2, expectedActive: null })).toEqual({ status: "conflict" });
     expect(await store.readActiveProject()).toMatchObject({ status: "ok", value: { buildId: active.buildId } });
   });
   it.each([1, 2, 3, 4])("supports idempotent stages and concurrent distinct writers with generation/project CAS %#", async () => {
