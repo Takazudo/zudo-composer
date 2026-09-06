@@ -274,7 +274,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await page.getByRole("textbox", { name: "Heading", exact: true }).blur();
   await expect(saveStatus(page)).toContainText("Saved");
   // Opening a record is a deep link the author can copy.
-  await expect(page).toHaveURL(/\/content\?model=about-content&entry=/);
+  await expect(page).toHaveURL(/\/content\?provider=content-indexeddb&model=about-content&entry=about-entry$/);
 
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
@@ -432,8 +432,19 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // A populated canonical date proves the transform, while another Entry keeps
   // its optional date empty. Invalid stored dates now require Content recovery.
   await page.evaluate(async () => {
-    const databaseName = (await indexedDB.databases()).find(({ name }) => name?.startsWith("zudo-composer-content--site-project--"))?.name;
-    if (!databaseName) throw new Error("Revision-scoped Content storage was not found.");
+    const workspaceDb = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("zudo-composer-workspaces-v1");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const workspaceId = await new Promise<string>((resolve, reject) => {
+      const request = workspaceDb.transaction("selection", "readonly").objectStore("selection").get("active");
+      request.onsuccess = () => typeof request.result === "string" ? resolve(request.result) : reject(new Error("Active workspace identity was not found."));
+      request.onerror = () => reject(request.error);
+    });
+    workspaceDb.close();
+    const databaseName = `zudo-composer-content-workspace-v1-${workspaceId}`;
+    if (!(await indexedDB.databases()).some(({ name }) => name === databaseName)) throw new Error("Workspace-scoped Content storage was not found.");
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open(databaseName);
       request.onsuccess = () => resolve(request.result);
