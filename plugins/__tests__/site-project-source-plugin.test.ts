@@ -54,6 +54,39 @@ describe("siteProjectSourcePlugin", () => {
     expect(reloadModule).toHaveBeenCalledTimes(1);
   });
 
+  it("publishes an activated-release change only after its virtual source reload completes", async () => {
+    const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
+    let finishReload!: () => void;
+    const reloadModule = vi.fn(() => new Promise<void>((resolve) => { finishReload = resolve; }));
+    const send = vi.fn();
+    const identity = { projectId: "ordered", revision: "6".repeat(64), buildId: "7".repeat(64) };
+    const readDevRelease = vi.fn().mockResolvedValue({ project: { id: identity.projectId }, release: { identity, build: {}, completionDigest: "8".repeat(64), files: { "build.json": "9".repeat(64) }, stage: { mediaLock: null, toolchain } } });
+    const plugin = siteProjectSourcePlugin({ bundledSource: bundledSource as never, currentToolchain: toolchain, readDevRelease });
+    (plugin.configResolved as (config: unknown) => void)({ command: "serve" });
+    (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, moduleGraph: { getModuleById: vi.fn(() => ({ id: RESOLVED_SITE_PROJECT_SOURCE_ID })), invalidateModule: vi.fn() }, reloadModule, ws: { send } });
+    await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith("/repo/.zudo-site-project/active.json"));
+    watcher.emit("change", "/repo/.zudo-site-project/active.json");
+    await vi.waitFor(() => expect(reloadModule).toHaveBeenCalledTimes(1));
+    expect(send).not.toHaveBeenCalled();
+    finishReload();
+    await vi.waitFor(() => expect(send).toHaveBeenCalledWith({ type: "custom", event: "release:changed", data: { source: "activated-release" } }));
+  });
+
+  it("retries a failed virtual-source reload before publishing the change", async () => {
+    const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
+    const reloadModule = vi.fn().mockRejectedValueOnce(new Error("transform busy")).mockResolvedValue(undefined);
+    const send = vi.fn();
+    const identity = { projectId: "retry", revision: "a".repeat(64), buildId: "b".repeat(64) };
+    const readDevRelease = vi.fn().mockResolvedValue({ project: { id: identity.projectId }, release: { identity, build: {}, completionDigest: "c".repeat(64), files: { "build.json": "d".repeat(64) }, stage: { mediaLock: null, toolchain } } });
+    const plugin = siteProjectSourcePlugin({ bundledSource: bundledSource as never, currentToolchain: toolchain, readDevRelease });
+    (plugin.configResolved as (config: unknown) => void)({ command: "serve" });
+    (plugin.configureServer as (server: unknown) => void)({ config: { root: "/repo" }, watcher, moduleGraph: { getModuleById: vi.fn(() => ({ id: RESOLVED_SITE_PROJECT_SOURCE_ID })), invalidateModule: vi.fn() }, reloadModule, ws: { send } });
+    await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith("/repo/.zudo-site-project/active.json"));
+    watcher.emit("change", "/repo/.zudo-site-project/active.json");
+    await vi.waitFor(() => expect(reloadModule).toHaveBeenCalledTimes(2));
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it("retains verified watches across bounded transient retries and converges after recovery", async () => {
     const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
     const send = vi.fn(), oldIdentity = { projectId: "old", revision: "1".repeat(64), buildId: "1".repeat(64) }, nextIdentity = { projectId: "next", revision: "2".repeat(64), buildId: "2".repeat(64) };

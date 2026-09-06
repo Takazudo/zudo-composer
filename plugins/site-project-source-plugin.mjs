@@ -42,10 +42,13 @@ export function siteProjectSourcePlugin(options) {
     try { const loaded = await readRelease(); return loaded ? readySource(loaded, "activated-local") : { status: "no-active", message: "No completed local release is activated." }; }
     catch (error) { return { status: "error", message: error instanceof Error ? error.message : "Activated local release is unavailable." }; }
   };
-  const reload = () => {
+  const reload = async () => {
     if (!server) return;
     const module = server.moduleGraph.getModuleById(RESOLVED_SITE_PROJECT_SOURCE_ID);
-    if (module) { server.moduleGraph.invalidateModule(module); void server.reloadModule?.(module); }
+    if (module) {
+      server.moduleGraph.invalidateModule(module);
+      if (server.reloadModule) await server.reloadModule(module);
+    }
     server.ws.send({ type: "custom", event: "release:changed", data: { source: "activated-release" } });
   };
   return {
@@ -76,7 +79,10 @@ export function siteProjectSourcePlugin(options) {
           for (const path of next) if (!watched.has(path)) viteServer.watcher.add(path);
           for (const path of watched) if (!next.has(path)) viteServer.watcher.unwatch(path);
           watched = next; applied = generation;
-          if (notifyPending) { notifyPending = false; reload(); }
+          if (notifyPending) {
+            try { await reload(); notifyPending = false; }
+            catch { notifyPending = true; requested++; scheduleRetry(); break; }
+          }
         } } finally { refreshing = false; if (!closed && applied < requested && !retryTimer) globalThis.queueMicrotask(() => { void refresh(); }); }
       };
       const scheduleRetry = () => { if (retryTimer || closed) return; const delay = retryDelay; retryDelay = Math.min(250, retryDelay * 2); retryTimer = globalThis.setTimeout(() => { retryTimer = undefined; if (!closed) void refresh(); }, delay); };

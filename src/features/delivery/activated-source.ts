@@ -10,7 +10,6 @@ if (import.meta.hot) {
     if (module?.deliverySource) current = module.deliverySource;
     emit();
   });
-  import.meta.hot.on("release:changed", emit);
 }
 
 export function activatedDeliverySource(componentProvider: typeof import("../composer/active-pack").activeComponentProvider): Extract<DeliverySourceContract, { kind: "activated" }> {
