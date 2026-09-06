@@ -1,23 +1,9 @@
-import { isSiteProjectProviderId, serializeSiteProject, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project";
-import { isSafeRecordId } from "../shared";
+import { serializeSiteProject, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project/model";
 import { notifyPersistenceChange, requestValue } from "../shared/persistence-generation";
+import { validateCollectionAttachments, validateWorkspaceRecord, workspaceProjectMetadata, type WorkspaceRecord } from "./workspace-record";
 
 export const WORKSPACE_DATABASE_NAME = "zudo-composer-workspaces-v1";
-export type WorkspaceProjectMetadata = Omit<SiteProject, "providers"> & { providers: { [K in keyof SiteProject["providers"]]: readonly { id: SiteProject["providers"][K][number]["id"] }[] } };
-export interface WorkspaceRecord {
-  schemaVersion: 1;
-  id: string;
-  mutationToken: number;
-  status: "seeding" | "ready";
-  metadata: WorkspaceProjectMetadata;
-  baselineRevision: string;
-  /** Fixed at creation; never replaced by a later injected active source. */
-  seed?: SiteProject;
-  /** No provider may reseed while an earlier failed attempt is being removed. */
-  seedCleanupPending?: true;
-  /** A resumed creation cannot bypass its external before-complete guard. */
-  requiresBeforeComplete?: true;
-}
+
 export function workspaceDatabaseName(database: string, workspaceId: string): string {
   if (!/^[a-zA-Z0-9_-]{1,100}$/.test(workspaceId)) throw new Error("Invalid workspace identity.");
   return `${database}-workspace-v1-${workspaceId}`;
@@ -31,49 +17,6 @@ export function workspaceScopedFactory(factory: IDBFactory | null | undefined, i
     const member: unknown = Reflect.get(value, property, value);
     return typeof member === "function" ? member.bind(value) : member;
   } });
-}
-function metadata(project: SiteProject): WorkspaceProjectMetadata {
-  const copy = structuredClone(project);
-  return { ...copy, providers: {
-    compositions: copy.providers.compositions.map(({ id }) => ({ id })),
-    content: copy.providers.content.map(({ id }) => ({ id })),
-    mappings: copy.providers.mappings.map(({ id }) => ({ id })),
-    sitemaps: copy.providers.sitemaps.map(({ id }) => ({ id })),
-  } };
-}
-
-function validAttachmentShape(value: unknown): value is SiteProjectCollectionAttachment {
-  if (!value || typeof value !== "object") return false;
-  const item = value as Record<string, unknown>;
-  const ref = (candidate: unknown, domain: "compositions" | "mappings"): candidate is { providerId: string; recordId: string } => {
-    if (!candidate || typeof candidate !== "object") return false;
-    const value = candidate as Record<string, unknown>;
-    return Object.keys(value).length === 2 && typeof value.providerId === "string" && isSiteProjectProviderId(domain, value.providerId) && isSafeRecordId(value.recordId);
-  };
-  const target = item.target;
-  return Object.keys(item).length === 5
-    && isSafeRecordId(item.id)
-    && Number.isSafeInteger(item.order) && Number(item.order) >= 0
-    && ref(item.composition, "compositions") && ref(item.mapping, "mappings")
-    && !!target && typeof target === "object"
-    && Object.keys(target as object).length === 2
-    && typeof (target as Record<string, unknown>).nodeId === "string" && Boolean((target as Record<string, unknown>).nodeId)
-    && typeof (target as Record<string, unknown>).slotId === "string" && Boolean((target as Record<string, unknown>).slotId);
-}
-
-function validateCollectionAttachments(value: unknown): value is readonly SiteProjectCollectionAttachment[] {
-  if (!Array.isArray(value) || !value.every(validAttachmentShape)) return false;
-  const ids = new Set<string>();
-  return value.every((attachment) => !ids.has(attachment.id) && (ids.add(attachment.id), true));
-}
-export function projectFromWorkspace(record: WorkspaceRecord): SiteProject {
-  const copy = structuredClone(record.metadata);
-  return { ...copy, providers: {
-    compositions: copy.providers.compositions.map(({ id }) => ({ id, records: [] })),
-    content: copy.providers.content.map(({ id }) => ({ id, models: [], entries: [] })),
-    mappings: copy.providers.mappings.map(({ id }) => ({ id, records: [] })),
-    sitemaps: copy.providers.sitemaps.map(({ id }) => ({ id, records: [] })),
-  } };
 }
 
 export function createWorkspaceStorage(factory: IDBFactory | null | undefined) {
@@ -92,12 +35,7 @@ export function createWorkspaceStorage(factory: IDBFactory | null | undefined) {
     catch (error) { try { tx.abort(); } catch { /* Already settled. */ } void done.catch(() => undefined); throw error; }
     finally { db.close(); }
   }
-  function validate(value: unknown): WorkspaceRecord {
-    if (value && typeof value === "object" && "requiresBeforeComplete" in value && ((value as WorkspaceRecord).requiresBeforeComplete !== true || (value as WorkspaceRecord).status !== "seeding")) throw new Error("Workspace creation guard metadata is invalid.");
-    if (value && typeof value === "object" && "seedCleanupPending" in value && ((value as WorkspaceRecord).seedCleanupPending !== true || (value as WorkspaceRecord).status !== "seeding")) throw new Error("Workspace seed cleanup metadata is invalid.");
-    if (!value || typeof value !== "object" || (value as WorkspaceRecord).schemaVersion !== 1 || !Number.isSafeInteger((value as WorkspaceRecord).mutationToken) || (value as WorkspaceRecord).mutationToken < 0 || !["seeding", "ready"].includes((value as WorkspaceRecord).status) || !(value as WorkspaceRecord).metadata || !validateCollectionAttachments((value as WorkspaceRecord).metadata.collectionAttachments) || typeof (value as WorkspaceRecord).baselineRevision !== "string") throw new Error("Workspace metadata is invalid; explicit recovery is required.");
-    return value as WorkspaceRecord;
-  }
+  const validate = (value: unknown): WorkspaceRecord => validateWorkspaceRecord(value, (message) => { throw new Error(message); });
   return {
     async findSeeding(project: SiteProject, revision: string): Promise<WorkspaceRecord | undefined> {
       return transaction("readonly", async (records) => {
@@ -124,7 +62,7 @@ export function createWorkspaceStorage(factory: IDBFactory | null | undefined) {
           if (record.status !== "seeding" || Boolean(record.requiresBeforeComplete) !== requiresBeforeComplete || record.baselineRevision !== baselineRevision || !record.seed || serializeSiteProject(record.seed) !== serializeSiteProject(project)) throw new Error(`Workspace attempt ${id} already exists with a different or completed identity; open it explicitly.`);
           return record;
         }
-        const record: WorkspaceRecord = { schemaVersion: 1, id, mutationToken: 0, status: "seeding", metadata: metadata(project), baselineRevision, seed: structuredClone(project), ...(requiresBeforeComplete ? { requiresBeforeComplete: true } : {}) };
+        const record: WorkspaceRecord = { schemaVersion: 1, id, mutationToken: 0, status: "seeding", metadata: workspaceProjectMetadata(project), baselineRevision, seed: structuredClone(project), ...(requiresBeforeComplete ? { requiresBeforeComplete: true } : {}) };
         records.add(record);
         return record;
       });

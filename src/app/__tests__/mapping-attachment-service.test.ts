@@ -3,7 +3,7 @@ import { activeComponentProvider } from "../../features/composer/active-pack";
 import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { createMappingAttachmentService } from "../mapping-attachment-service";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
-import type { WorkspaceRecord } from "../workspace-storage";
+import type { WorkspaceRecord } from "../workspace-record";
 import { providerFixture, PNG } from "../../features/media/__tests__/versioned-fixture";
 import { createProductionProviderIntegration } from "../provider-integration";
 import { IDBFactory } from "fake-indexeddb";

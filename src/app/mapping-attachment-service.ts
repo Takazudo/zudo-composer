@@ -8,7 +8,7 @@ import type { VersionedMediaStore } from "../media/library";
 import { serializeSiteProject } from "../site-project/model/canonical";
 import { browserProviderIdFor, validateSiteProject, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project";
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
-import type { WorkspaceRecord } from "./workspace-storage";
+import type { WorkspaceRecord } from "./workspace-record";
 
 interface MappingAttachmentServiceOptions {
   getCurrentSiteProject(options?: { flushSessions?: boolean }): Promise<{ status: "ready"; project: SiteProject } | { status: "error"; error: Error }>;
