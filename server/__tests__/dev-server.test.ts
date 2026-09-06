@@ -6,9 +6,9 @@ import { once } from "node:events";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { APP_ROOT } from "../../plugins/roots.mjs";
+import { APP_ROOT, resolvePublicDir } from "../../plugins/roots.mjs";
 import { APP_ENTRY_MODULE } from "../../plugins/composer-app-html.mjs";
-import { OPTIMIZE_DEPS_EXCLUDE, loadHostConfig, resolveComposerDevConfig, resolveFsAllow, resolvePublicDir } from "../dev-server.mjs";
+import { OPTIMIZE_DEPS_EXCLUDE, loadHostConfig, resolveComposerDevConfig, resolveFsAllow } from "../dev-server.mjs";
 import { resolveComponentPack } from "../../plugins/component-pack.mjs";
 
 const FIXTURE_HOST = resolve(APP_ROOT, "fixtures/host");

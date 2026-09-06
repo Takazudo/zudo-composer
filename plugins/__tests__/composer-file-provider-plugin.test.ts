@@ -348,14 +348,14 @@ describe("media upload request boundary and core integration", () => {
 
   it("streams exact bytes into the media store and returns frozen JSON headers", async () => {
     const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
-    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, "media-store"), idFactory: () => "pixel", now: () => T1 }) });
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT), idFactory: () => "pixel", now: () => T1 }) });
     const res = connectResponse();
     await handler(mediaRequest([bytes.subarray(0, 8), bytes.subarray(8)]), res);
     expect(res.statusCode).toBe(200);
     expect(res.end).toHaveBeenCalledTimes(1);
     expect(res.setHeader).toHaveBeenCalledWith("cache-control", "no-store");
     expect(res.setHeader).toHaveBeenCalledWith("x-content-type-options", "nosniff");
-    expect(await readFile(join(sandbox, `media-store/versions/sha256-${createHash("sha256").update(bytes).digest("hex")}.png`))).toEqual(Buffer.from(bytes));
+    expect(await readFile(join(sandbox, MEDIA_FILE_PROVIDER_ROOT, `versions/sha256-${createHash("sha256").update(bytes).digest("hex")}.png`))).toEqual(Buffer.from(bytes));
   });
 
   it("rejects request-head failures before opening a store", async () => {
@@ -382,7 +382,7 @@ describe("media upload request boundary and core integration", () => {
 
   it("transports JSON folder/metadata CAS, streamed replacement, exact pins and retained trash", async () => {
     let sequence = 0;
-    const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, "media-store"), idFactory: () => `asset-${++sequence}` });
+    const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT), idFactory: () => `asset-${++sequence}` });
     const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: async () => store });
     const send = async (operation: string, data: unknown = {}, id?: string, bytes?: Uint8Array) => {
       const headers = { ...mediaRequest([]).headers, "content-type": bytes ? "application/pdf" : "application/json",
@@ -599,7 +599,7 @@ describe("dev/build registration boundary", () => {
       expect(redirect.headers.location).toBe(url);
       const raw = mediaResponse(); await invokeRegistered(middlewares, mediaRequest("GET", `/@fs/${mediaStoreRoot}/catalog.json`), raw);
       expect(raw.statusCode).toBe(404);
-      await expect(readFile(join(workspaceRoot, "media-store", "catalog.json"))).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(join(workspaceRoot, MEDIA_FILE_PROVIDER_ROOT, "catalog.json"))).rejects.toMatchObject({ code: "ENOENT" });
       expect(setupSource("build", mediaStoreRoot).source).toBe("export const fileProviderConfig = undefined;\n");
     });
     it.each(["relative/media", "/tmp/../media", "/tmp/media/"])("rejects unresolved roots %s", (mediaStoreRoot) => {
@@ -607,7 +607,7 @@ describe("dev/build registration boundary", () => {
       expect(() => createMediaFileMiddleware({ workspaceRoot: sandbox, mediaStoreRoot })).toThrow("absolute resolved");
     });
     it("does not expose or ship failed publication and crash artifacts", async () => {
-      const root = join(sandbox, "media-store");
+      const root = join(sandbox, MEDIA_FILE_PROVIDER_ROOT);
       const store = await createFilesystemMediaStore({ mediaStoreRoot: root, operations: {
         rename: async (from, to) => {
           if (to.endsWith("catalog.json")) throw new Error("injected catalog failure");
@@ -620,19 +620,18 @@ describe("dev/build registration boundary", () => {
       expect(await readFile(join(root, "versions", fileName))).toEqual(Buffer.from(bytes));
       // Reopening represents the same crash artifact with no in-memory state.
       const middleware = createMediaFileMiddleware({ workspaceRoot: sandbox, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: root }) });
-      for (const url of [`/uploaded-media/${fileName}`, `/media-store/versions/${fileName}`, `/@fs/${root}/versions/${fileName}`, `/media-store%2fversions/${fileName}`]) {
+      for (const url of [`/uploaded-media/${fileName}`, `/${MEDIA_FILE_PROVIDER_ROOT}/versions/${fileName}`, `/@fs/${root}/versions/${fileName}`, `/cms/media%2fversions/${fileName}`]) {
         const response = mediaResponse(); const next = vi.fn();
         await invokeRegistered([middleware], mediaRequest("GET", url), response, next);
         expect(response.statusCode).toBe(404); expect(next).not.toHaveBeenCalled();
       }
-      // Vite's publicDir copy cannot include the private crash artifact.
-      const { cp, readdir } = await import("node:fs/promises");
-      await writeFile(join(root, "public", "committed-static.txt"), "static input");
-      const output = join(sandbox, "artifact"); await cp(join(root, "public"), output, { recursive: true });
-      expect(await readdir(output, { recursive: true })).toEqual(["committed-static.txt"]);
+      // The store is not a static root: Vite's publicDir is the host's own
+      // committed-media directory, so a crash artifact has no path into a build.
+      const { readdir } = await import("node:fs/promises");
+      expect(await readdir(root)).not.toContain("public");
     });
     it("resolves authoring URLs to latest while an old exact URL still serves its bytes", async () => {
-      const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, "media-store") });
+      const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT) });
       const original = new TextEncoder().encode("%PDF-1.7\nold immutable version");
       const record = await store.upload({ fileName: "paper.pdf", declaredMediaType: "application/pdf", bytes: original });
       const oldUrl = record.document.versions[0]!.url;

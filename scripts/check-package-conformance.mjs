@@ -143,7 +143,7 @@ for (const required of [
   'src/main.tsx',
   'src/App.tsx',
   'server/cli/run.mjs',
-  'server/cli/api-entry.mjs',
+  'server/cli/release-entry.mjs',
   'server/module-evaluator.mjs',
   'server/config/index.ts',
   'server/site-project-local/toolchain-config.ts',

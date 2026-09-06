@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { API_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
+import { RELEASE_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
 import { forwardedSignals, superviseChild } from "../supervise.mjs";
 
 function fakeProcess(platform = "linux") {
@@ -62,8 +62,8 @@ describe("parseArguments", () => {
     expect(parseArguments(["dev", "--root"])).toEqual({ error: "--root requires a directory." });
   });
 
-  it("forwards every argument after `api` untouched", () => {
-    expect(parseArguments(["api", "--anything", "-h"])).toEqual({ command: "api", rest: ["--anything", "-h"] });
+  it("forwards every argument after `release` untouched", () => {
+    expect(parseArguments(["release", "--anything", "-h"])).toEqual({ command: "release", rest: ["--anything", "-h"] });
   });
 });
 
@@ -81,20 +81,20 @@ describe("runComposerCli", () => {
     expect(bad.exitCode).toBe(1);
   });
 
-  it("spawns the api entry with this Node binary and forwards the remaining arguments", async () => {
+  it("spawns the release entry with this Node binary and forwards the remaining arguments", async () => {
     const proc = fakeProcess();
     const child = fakeChild();
     const spawn = vi.fn(() => child);
-    await runComposerCli(["api", "--flag"], { proc, spawn: spawn as never, exists: () => true });
-    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [API_ENTRY_PATH, "--flag"], { stdio: "inherit" });
+    await runComposerCli(["release", "--flag"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [RELEASE_ENTRY_PATH, "--flag"], { stdio: "inherit" });
   });
 
   it("names the resolved absolute path when the package file is missing, and spawns nothing", async () => {
     const proc = fakeProcess();
     const spawn = vi.fn();
-    await runComposerCli(["api"], { proc, spawn: spawn as never, exists: () => false });
+    await runComposerCli(["release"], { proc, spawn: spawn as never, exists: () => false });
     expect(spawn).not.toHaveBeenCalled();
-    expect(proc.err.join("")).toContain(API_ENTRY_PATH);
+    expect(proc.err.join("")).toContain(RELEASE_ENTRY_PATH);
     expect(proc.exits).toEqual([1]);
   });
 

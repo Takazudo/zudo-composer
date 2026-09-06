@@ -128,7 +128,9 @@ record. No API silently falls back to sample data or mutable current content.
 
 ## JSON-stdin examples
 
-Run `corepack pnpm site-project:api`. Each invocation accepts exactly one UTF-8
+Run `corepack pnpm site-project:api` inside this repository, or `zudo-composer release`
+from an installed host project — the same service, same protocol, same exit codes.
+Each invocation accepts exactly one UTF-8
 JSON object (8 MiB maximum) and writes one canonical JSON response with newline.
 All operation shapes are exact: extra keys are rejected. Obtain current shapes
 and capabilities first:
@@ -197,8 +199,10 @@ an apply/build success.
 
 ## Local files, recovery and verification
 
-The default private root is `.zudo-site-project`; `ZUDO_SITE_PROJECT_ROOT` supplies
-an explicit disposable root for isolated tests. Layout:
+The private root is `.zudo-site-project` **under the host project root** — disposable
+derived state rather than CMS data, so it has no `zudo-composer.config.ts` setting and
+hosts gitignore it. `ZUDO_SITE_PROJECT_ROOT` supplies an explicit disposable root for
+isolated tests. Layout:
 
 ```text
 heads.json                       stage order/incarnations, heads, generation, receipts
@@ -263,8 +267,9 @@ delivery resolves `/site` only from the currently activated, completed local
 release. It verifies the active project/revision/build triple and serves only that
 build's copied checksum-addressed Media bytes; missing or corrupt release state is
 unavailable and never falls back to a working draft. In contrast,
-`/website-preview` flushes and compiles the current live authoring snapshot. A
-production assets-only build embeds one explicit completed sample artifact, so it
-does not need a hosted authoring or release API. Local activation is not deployment;
+`/website-preview` flushes and compiles the current live authoring snapshot. A release
+is stamped with the toolchain that built it, so after a component-pack swap an already
+activated release no longer matches the installed runtime and becomes unavailable
+rather than being served against different components. Local activation is not deployment;
 hosted persistence, authentication, hosted APIs and deployment remain future work
 and are not a claim of this repository.

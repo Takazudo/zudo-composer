@@ -2,7 +2,7 @@
 // The host's resolved config and component pack, for the lanes that have no
 // Vite server to ask.
 //
-// `zudo-composer dev` builds a server around this; `zudo-composer api` runs in
+// `zudo-composer dev` builds a server around this; `zudo-composer release` runs in
 // a child process with no server at all and still has to validate against the
 // host's pack. Both reach TypeScript through the module evaluator, because Node
 // refuses to strip types under `node_modules` — which is where an installed

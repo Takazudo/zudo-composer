@@ -9,7 +9,7 @@
 // an installed package has no config file at the host root to be found.
 
 import { realpathSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { createServer } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import preact from "@preact/preset-vite";
@@ -23,7 +23,7 @@ import { siteProjectSourcePlugin } from "../plugins/site-project-source-plugin.m
 import composerAppHtmlPlugin, { APP_ENTRY_MODULE } from "../plugins/composer-app-html.mjs";
 import componentPackPlugin from "../plugins/component-pack-plugin.mjs";
 import hostStylesPlugin from "../plugins/host-styles-plugin.mjs";
-import { APP_ROOT, resolveWorkspaceRoot } from "../plugins/roots.mjs";
+import { APP_ROOT, resolvePublicDir, resolveWorkspaceRoot } from "../plugins/roots.mjs";
 import { createModuleEvaluator } from "./module-evaluator.mjs";
 import { loadHostConfig } from "./host-context.mjs";
 
@@ -61,26 +61,6 @@ function realpathOrSelf(path) {
 export function resolveFsAllow(workspaceRoot) {
   const candidates = [workspaceRoot, realpathOrSelf(workspaceRoot), APP_ROOT, realpathOrSelf(APP_ROOT)];
   return [...new Set(candidates)];
-}
-
-/**
- * Vite's static directory for a host.
- *
- * Committed media is served at `/<last segment of publicMediaDir>/`, so the
- * static root is that directory's parent. A single-segment `publicMediaDir`
- * would make the parent the host project root and expose the whole tree, so it
- * is refused rather than silently served.
- * @param {string} workspaceRoot
- * @param {string} publicMedia
- */
-export function resolvePublicDir(workspaceRoot, publicMedia) {
-  const publicDir = dirname(publicMedia);
-  if (publicDir === resolve(workspaceRoot)) {
-    throw new Error(
-      `zudo-composer config: \`publicMediaDir\` must sit inside a static directory, not directly at the host project root — received "${publicMedia}". Use a nested path such as "public/uploaded-media".`,
-    );
-  }
-  return publicDir;
 }
 
 /**

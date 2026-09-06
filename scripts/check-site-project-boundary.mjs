@@ -10,6 +10,7 @@ const packageJson = readJson("package.json");
 const vite = read("vite.config.ts");
 const plugin = read("plugins/site-project-source-plugin.mjs");
 const store = read("server/site-project-local/store.ts");
+const roots = read("plugins/roots.mjs");
 const browser = read("tests/browser/site-project-acceptance.pw.ts");
 const browserRunner = read("scripts/run-site-project-browser.mjs");
 const browserConfig = read("playwright.site-project.config.ts");
@@ -37,7 +38,16 @@ assert.ok(browserRunner.includes("env: { ...process.env, ...environment }"), "br
 assert.ok(browserConfig.includes("reuseExistingServer: false"), "isolated dev browser config must own its server");
 assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must use one deterministic worker");
 
-assert.ok(vite.includes("publicDir: 'media-store/public'"), "Vite dev server must expose the Media public asset root");
+// The committed-media static root moves with the host config: pinning a
+// literal here would re-hardcode the directory `publicMediaDir` exists to move.
+assert.ok(
+  vite.includes("publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicMedia)"),
+  "Vite dev server must expose the host's committed media root, resolved from the config",
+);
+assert.ok(
+  vite.includes("?? composerConfig.paths.media"),
+  "Vite must resolve the Media store root from the host config",
+);
 // The excluded pack name is DERIVED from the resolved config, never spelled
 // out: pinning the literal here would quietly re-hardcode the provider that
 // `pack` exists to make swappable.
@@ -50,9 +60,14 @@ assert.match(plugin, /readActivatedSiteRelease/);
 assert.match(plugin, /readActivatedSiteMedia/);
 assert.match(plugin, /release:changed/);
 assert.match(plugin, /export const siteProjectRevision/);
-assert.match(plugin, /process\.env\.ZUDO_SITE_PROJECT_ROOT/);
-assert.match(store, /SITE_PROJECT_LOCAL_ROOT_ENV = "ZUDO_SITE_PROJECT_ROOT"/);
-assert.match(store, /options\.testRoot \?\? configuredLocalRoot\(\)/);
+// One resolver, three consumers: the store, the source plugin's watcher and
+// the release CLI. A private second computation is what let the watcher and the
+// reader drift apart onto different release trees.
+assert.match(plugin, /resolveSiteProjectLocalRoot\(workspaceRoot\)/);
+assert.match(store, /resolveSiteProjectLocalRoot\(resolveWorkspaceRoot\(options\.workspaceRoot\), options\.testRoot\)/);
+assert.match(roots, /SITE_PROJECT_LOCAL_ROOT_ENV = "ZUDO_SITE_PROJECT_ROOT"/);
+assert.match(roots, /process\.env\[SITE_PROJECT_LOCAL_ROOT_ENV\]/);
+assert.match(roots, /resolve\(workspaceRoot, SITE_PROJECT_LOCAL_ROOT_NAME\)/);
 assert.ok(read(".gitignore").includes(".zudo-site-project/"), "disposable local project state must remain ignored");
 
 assert.equal(packageJson.scripts["site-project:api"], "tsx server/site-project-local/cli.ts");
