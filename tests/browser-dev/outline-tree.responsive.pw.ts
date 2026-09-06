@@ -47,9 +47,10 @@ interface TreeGeometry {
 }
 
 /**
- * Every row box in one pass, plus the tree's own box and the page scroll — so a
- * stray scroll between two readings shows up as an obvious diff instead of
- * masquerading as every row having moved by the same amount.
+ * Every row box in one pass, normalized to the tree's origin, plus the tree's
+ * own size and page scroll. EditorChrome can move its inner viewport while a
+ * pointer enters an absolutely positioned boundary; that is not a tree layout
+ * shift. Relative boxes still catch any row, gap, width or height movement.
  */
 async function readGeometry(page: Page): Promise<TreeGeometry> {
   return page.evaluate(
@@ -61,12 +62,16 @@ async function readGeometry(page: Page): Promise<TreeGeometry> {
       };
       const tree = document.querySelector(treeSelector);
       if (tree === null) throw new Error("The outline tree left the page mid-measurement.");
+      const treeBox = box(tree);
       return {
-        tree: box(tree),
-        rows: [...tree.querySelectorAll(rowSelector)].map((row) => ({
-          label: (row.textContent ?? "").replace(/\s+/gu, " ").trim().slice(0, 48),
-          box: box(row),
-        })),
+        tree: { ...treeBox, x: 0, y: 0 },
+        rows: [...tree.querySelectorAll(rowSelector)].map((row) => {
+          const rowBox = box(row);
+          return {
+            label: (row.textContent ?? "").replace(/\s+/gu, " ").trim().slice(0, 48),
+            box: { ...rowBox, x: round(rowBox.x - treeBox.x), y: round(rowBox.y - treeBox.y) },
+          };
+        }),
         scrollX: round(window.scrollX),
         scrollY: round(window.scrollY),
       };
@@ -200,8 +205,12 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
     else expect(await opacityOf(tile)).toBe(0);
 
     // Exercise the expanded hover strip away from the semantic tile at center.
-    // No forced action: the strip and button must each own their intended area.
-    await hit.hover({ position: { x: 1, y: 1 } });
+    // Move the pointer directly after the explicit scroll above: Locator.hover()
+    // performs its own actionability scroll and can move EditorChrome's inner
+    // scroller, which is viewport movement rather than an outline layout shift.
+    const hoverBox = await hit.boundingBox();
+    expect(hoverBox).not.toBeNull();
+    await page.mouse.move(hoverBox!.x + 4, hoverBox!.y + hoverBox!.height / 2);
     expect(await opacityOf(tile)).toBeGreaterThan(0);
     expect(await readGeometry(page)).toEqual(baseline);
   });
