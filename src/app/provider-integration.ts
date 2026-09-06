@@ -347,7 +347,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     if (!authored) throw new ProviderIntegrationError("snapshot", "Workspace metadata is unavailable.");
     const next = projectFromWorkspace(authored);
     for (const declared of next.providers.compositions) {
-      const provider = byDomain.compositions.get(browserProviderIdFor("compositions", declared.id) as "indexeddb" | "files");
+      const provider = byDomain.compositions.get(browserProviderIdFor("compositions", declared.id) as "files");
       if (!provider) throw new ProviderIntegrationError("snapshot", `Composition provider "${declared.id}" is unavailable.`);
       if (capture) { declared.records = [...capture.values[`compositions:${declared.id}`] as typeof declared.records]; continue; }
       if (isCompositionCollectionStore(provider.store)) declared.records = [...await provider.store.readAll()];

@@ -8,7 +8,6 @@ import type {
 } from "../model";
 
 export const CONTENT_PROVIDERS = {
-  indexeddb: { id: "content-indexeddb", label: "Browser storage" },
   filesystem: { id: "content-filesystem", label: "Project files" },
 } as const;
 

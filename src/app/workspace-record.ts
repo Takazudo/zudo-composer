@@ -1,10 +1,9 @@
 // The workspace registry record, independent of where it is stored.
 //
-// Two registries persist this exact shape: the browser IndexedDB registry in
-// `workspace-storage.ts` and the filesystem registry in `workspace-filesystem/`.
+// The filesystem registry in `workspace-filesystem/` persists this exact shape.
 // Everything here is pure model — validation, metadata projection and the
 // project reconstruction — so the Node-side registry can reuse it without
-// pulling IndexedDB or BroadcastChannel code into a server process.
+// pulling browser code into a server process.
 
 import { isSiteProjectProviderId, type SiteProject, type SiteProjectCollectionAttachment } from "../site-project/model";
 import { isSafeRecordId } from "../shared";

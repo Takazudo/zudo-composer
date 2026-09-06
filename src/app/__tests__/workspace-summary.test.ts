@@ -57,7 +57,7 @@ function mappingRecord(id: string, compositionRecordId = "hero"): MappingRecord 
       id,
       name: `Mapping ${id}`,
       contentModel: { providerId: "content-filesystem", recordId: "journal" },
-      composition: { providerId: "indexeddb", recordId: compositionRecordId },
+      composition: { providerId: "files", recordId: compositionRecordId },
       mode: { kind: "single" },
       bindings: [],
     },
@@ -161,7 +161,7 @@ function createFakeIntegration(options: FakeOptions = {}) {
   const integration: WorkspaceSummaryIntegration = {
     initialization: { initialize, retry },
     componentProvider: { catalog: emptyCatalog },
-    compositionProviders: [{ descriptor: { id: "indexeddb", label: "Browser storage" }, store: { list: () => settle(compositions) } }],
+    compositionProviders: [{ descriptor: { id: "files", label: "Project files" }, store: { list: () => settle(compositions) } }],
     contentProvider: { descriptor: { id: "content-filesystem" }, store: { listModels: async () => (models instanceof Error ? Promise.reject(models) : models.map((model): ContentModelSummary => ({ id: model.id, name: model.document.name, kind: model.document.kind, fieldCount: model.document.fields.length, createdAt: model.createdAt, updatedAt: model.updatedAt }))), scanEntries } },
     contentCatalog: {
       listModels: async () => ({ status: "listed", entries: [], failures: [] }),
@@ -219,7 +219,7 @@ describe("createWorkspaceSummary — counts", () => {
       mappingRecords: { journal: mappingRecord("journal"), about: mappingRecord("about", "missing") },
       models: [contentModel("journal", AT(7))],
       entries: { journal: { count: 2, entries: [contentEntry("first", AT(8), { heading: "First" }), contentEntry("second", AT(9), { heading: "" })], diagnostics: [{ entryId: "second", message: "Heading is required." }] } },
-      sitemaps: [sitemapRecord("studio", AT(10), [sitemapNode("home", "Home", { kind: "composition", ref: { providerId: "indexeddb", recordId: "hero" } }, [sitemapNode("drafts", "Drafts", { kind: "unassigned" })])])],
+      sitemaps: [sitemapRecord("studio", AT(10), [sitemapNode("home", "Home", { kind: "composition", ref: { providerId: "files", recordId: "hero" } }, [sitemapNode("drafts", "Drafts", { kind: "unassigned" })])])],
       media: [mediaSummary("hero-image", AT(11), "image/png", 2048), mediaSummary("brochure", AT(1), "application/pdf", 4096), mediaSummary("logo", AT(2), "image/png", 512)],
     });
     const summary = createWorkspaceSummary(integration);
@@ -388,7 +388,7 @@ describe("createWorkspaceSummary — resilience and lifecycle", () => {
     });
     const counts = await createWorkspaceSummary(integration).counts();
 
-    expect(counts.compositions).toEqual({ status: "unavailable", error: "Compositions in Browser storage could not be listed: Composition storage is unavailable." });
+    expect(counts.compositions).toEqual({ status: "unavailable", error: "Compositions in Project files could not be listed: Composition storage is unavailable." });
     expect(counts.sitemaps).toEqual({ status: "unavailable", error: "Sitemap storage is unavailable." });
     expect(value(counts.mappings)).toEqual({ mappings: 1, blockedMappings: 0 });
     expect(value(counts.content)).toEqual({ models: 1, entries: 0, incompleteEntries: 0 });

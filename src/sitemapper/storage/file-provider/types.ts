@@ -22,8 +22,7 @@ export type SitemapWireOperation = (typeof SITEMAP_FILE_PROVIDER_OPERATIONS)[num
 /**
  * `start-fresh` is an initialization entry point, not a store operation;
  * `read-all` and `seed` are Node-store methods that report under `list` and
- * `put` respectively, matching the IndexedDB store's own choice of operation
- * tag for the same calls.
+ * `put` respectively.
  */
 export function sitemapPersistenceOperationOf(operation: SitemapWireOperation): SitemapPersistenceOperation {
   if (operation === "start-fresh") return "clear";

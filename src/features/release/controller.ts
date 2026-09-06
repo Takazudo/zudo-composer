@@ -7,7 +7,6 @@ import { validateStagedRelease } from "../../site-project/api/validation";
 import { canonicalStringifyJson, serializeSiteProject } from "../../site-project/model/canonical";
 import type { SiteProject } from "../../site-project/model";
 import type { ReleaseTransport } from "./transport";
-import { recordReleaseApproval, releaseReceipts, resolveReleaseReceipt, pruneReleaseReceipts, subscribeReleaseJournal, type ReleaseReceipt } from "./journal";
 import { createApplicationOperationGate, type ApplicationOperationGate } from "../../app/operation-gate";
 
 const json = (value: unknown) => canonicalStringifyJson(value as JsonValue);
@@ -23,12 +22,11 @@ export interface ReleaseState {
   active: SiteProjectActiveSelection | null; staged: StagedRelease | null; stageGeneration: number | null; completed: CompletedRelease | null;
   retainedStages: RetainedStage[];
   gateBlocked: boolean;
-  journalPendingCount: number | null;
 }
 /** Application-lifetime release session: unmount never cancels a staged mutation. */
 export function createReleaseController(integration: ProductionProviderIntegration, transport: ReleaseTransport, gate: ApplicationOperationGate = createApplicationOperationGate()) {
   let disposed = false;
-  let state: ReleaseState = { busy: false, phase: "inspect", message: "Inspect the working workspace before review.", error: null, changed: false, plan: null, working: null, choices: [], selection: [], active: null, staged: null, stageGeneration: null, completed: null, retainedStages: [], gateBlocked: gate.busy, journalPendingCount: null };
+  let state: ReleaseState = { busy: false, phase: "inspect", message: "Inspect the working workspace before review.", error: null, changed: false, plan: null, working: null, choices: [], selection: [], active: null, staged: null, stageGeneration: null, completed: null, retainedStages: [], gateBlocked: gate.busy };
   let captured: Captured | null = null, catalog: Catalog | null = null, epoch = 0;
   const reconciliations = new Set<Promise<unknown>>();
   const listeners = new Set<() => void>();
@@ -36,7 +34,6 @@ export function createReleaseController(integration: ProductionProviderIntegrati
   const stopGate = gate.subscribe(() => emit({ gateBlocked: gate.busy }));
   const invalidate = () => { epoch++; emit({ changed: true, ...(state.phase === "approved" || state.phase === "reviewed" ? { phase: "inspect" as const } : {}) }); };
   const stopWorkspace = integration.subscribeChanges(invalidate), stopRelease = transport.subscribe(invalidate);
-  const stopJournal = subscribeReleaseJournal(() => integration.workspace.id, () => { try { emit({ journalPendingCount: releaseReceipts(integration.workspace.id!).length }); } catch { emit({ journalPendingCount: null }); } });
   const call = async <T,>(request: SiteProjectApiRequest): Promise<T> => {
     const result = await transport.request(request, guard);
     if (!result.ok) { if (result.error.code === "commit-uncertain") emit({ phase: "uncertain" }); throw new ReleaseRequestError(result.error.code, result.error.message); }
@@ -55,12 +52,10 @@ export function createReleaseController(integration: ProductionProviderIntegrati
   const precondition = (value: Captured): JsonValue => ({ workspaceId: value.capture.workspaceId, sessionGeneration: value.capture.sessionGeneration, tokens: { ...value.capture.tokens } });
   const run = async (action: () => Promise<void>) => { if (disposed || state.busy) return; const release = gate.claim("release"); if (!release) { emit({ error: "Workspace replacement or another application operation is in progress." }); return; } emit({ busy: true, error: null }); try { await action(); } catch (error) { emit({ error: error instanceof Error ? error.message : "Release operation failed." }); } finally { await Promise.allSettled([...reconciliations]); emit({ busy: false }); release(); } };
   const capture = async () => { const outcome = await integration.captureWorkspace(); if (outcome.status !== "ready") throw new Error(outcome.status === "unavailable" ? outcome.error.message : outcome.status === "save-failed" ? outcome.failures.map(({ error }) => error.message).join("; ") : "Workspace changed during capture; retry after saving."); return outcome; };
-  const readCatalog = async () => { let observed: ReleaseReceipt[] = []; try { observed = releaseReceipts(integration.workspace.id!); } catch { /* Server catalog recovery does not require local storage. */ } catalog = await call<Catalog>({ protocolVersion: 2, operation: "list" }); try { pruneReleaseReceipts(integration.workspace.id!, observed, catalog); emit({ journalPendingCount: releaseReceipts(integration.workspace.id!).length }); } catch { emit({ journalPendingCount: null, error: "Local recovery cleanup unavailable; server catalog remains authoritative." }); } emit({ active: catalog.active, retainedStages: catalog.projects.flatMap(({ projectId, stages }) => stages.map((buildId) => ({ projectId, buildId, stageGeneration: catalog!.stageGenerations[buildId]! }))) }); return catalog; };
-  const cleanupCompleted = (active: SiteProjectActiveSelection) => { try { pruneReleaseReceipts(integration.workspace.id!, releaseReceipts(integration.workspace.id!), { generation: 0, projects: [{ projectId: active.projectId, stages: [active.buildId] }] }); } catch { emit({ error: "Activation succeeded; local recovery cleanup is pending." }); } };
+  const readCatalog = async () => { catalog = await call<Catalog>({ protocolVersion: 2, operation: "list" }); emit({ active: catalog.active, retainedStages: catalog.projects.flatMap(({ projectId, stages }) => stages.map((buildId) => ({ projectId, buildId, stageGeneration: catalog!.stageGenerations[buildId]! }))) }); return catalog; };
   const reconcile = async () => {
     if (state.phase !== "activated" || !state.active || !state.completed) throw new Error("Inspect a matching activated build before reconciliation.");
     const result = await call<{ reconciliation: string }>({ protocolVersion: 2, operation: "activate", ...state.completed.identity, expectedActive: state.active });
-    cleanupCompleted(state.active);
     emit({ message: `Activated locally. Publication reconciliation: ${result.reconciliation}. Newer or different-project working drafts are retained.` });
   };
   const inspectStage = async (target: RetainedStage) => {
@@ -103,21 +98,19 @@ export function createReleaseController(integration: ProductionProviderIntegrati
       const approved = state.plan;
       // Keep exact identity for inspection even when acknowledgement is lost.
       const stage: StagedRelease = { schemaVersion: 2, projectId: approved.candidate.id, revision: approved.projectRevision, buildId: approved.buildId, mediaLock: approved.mediaLock, toolchain: approved.toolchain, planDigest: approved.planDigest, publication: approved.publication };
-      const receipt = recordReleaseApproval(integration.workspace.id!, approved, stage);
       emit({ staged: stage });
       try {
         const result = await call<{ staged: StagedRelease; stageGeneration: number }>({ protocolVersion: 2, operation: "apply", plan: approved });
         emit({ staged: result.staged, stageGeneration: result.stageGeneration, phase: "staged", message: "A is staged. New working edits remain separate while A builds." });
-        try { resolveReleaseReceipt(integration.workspace.id!, receipt); } catch { emit({ message: "Stage committed; cleanup can be retried by inspecting the server catalog." }); }
-      } catch (error) { if (error instanceof ReleaseRequestError && ["conflict", "validation", "malformed-request", "compile-blocked", "unsupported-protocol"].includes(error.code)) { try { resolveReleaseReceipt(integration.workspace.id!, receipt); } catch { /* Authoritative later catalog inspection can prune it. */ } } if ((state as ReleaseState).phase !== "uncertain") emit({ staged: null, phase: "inspect" }); throw error; }
+      } catch (error) { if ((state as ReleaseState).phase !== "uncertain") emit({ staged: null, phase: "inspect" }); throw error; }
     }),
     build: () => run(async () => { if (state.phase !== "staged" || !state.staged) throw new Error("Inspect or stage an exact candidate first."); const completed = await call<CompletedRelease>({ protocolVersion: 2, operation: "build", projectId: state.staged.projectId, buildId: state.staged.buildId }); emit({ completed, phase: "built", message: "Immutable local build completed. It is not activated." }); }),
-    activate: () => run(async () => { if (state.phase !== "built" || !state.completed) throw new Error("A completed exact build is required."); const result = await call<{ active: SiteProjectActiveSelection; reconciliation: string }>({ protocolVersion: 2, operation: "activate", ...state.completed.identity, expectedActive: state.active }); emit({ active: result.active, phase: "activated", message: `Activated locally. Publication reconciliation: ${result.reconciliation}. Newer working drafts are retained.` }); cleanupCompleted(result.active); }),
+    activate: () => run(async () => { if (state.phase !== "built" || !state.completed) throw new Error("A completed exact build is required."); const result = await call<{ active: SiteProjectActiveSelection; reconciliation: string }>({ protocolVersion: 2, operation: "activate", ...state.completed.identity, expectedActive: state.active }); emit({ active: result.active, phase: "activated", message: `Activated locally. Publication reconciliation: ${result.reconciliation}. Newer working drafts are retained.` }); }),
     reconcile: () => run(reconcile),
     discard: () => run(async () => { if (state.phase !== "staged" || !state.staged || !state.stageGeneration) throw new Error("Only an inspected unbuilt stage can be discarded."); await call({ protocolVersion: 2, operation: "discard", projectId: state.staged.projectId, buildId: state.staged.buildId, expectedStageGeneration: state.stageGeneration, expectedActive: state.active }); emit({ staged: null, completed: null, stageGeneration: null, plan: null, phase: "inspect", message: "Local stage discarded; working drafts retained." }); await readCatalog(); }),
     newReview() { if (disposed || gate.busy || state.busy || state.phase === "uncertain") return; emit({ phase: "inspect", staged: null, completed: null, stageGeneration: null, plan: null, selection: [] }); },
     exportProject: () => !disposed && !gate.busy && state.working ? serializeSiteProject(state.working) : null,
-    dispose() { disposed = true; stopGate(); stopWorkspace(); stopRelease(); stopJournal(); transport.dispose(); listeners.clear(); },
+    dispose() { disposed = true; stopGate(); stopWorkspace(); stopRelease(); transport.dispose(); listeners.clear(); },
   };
 }
 export type ReleaseController = ReturnType<typeof createReleaseController>;

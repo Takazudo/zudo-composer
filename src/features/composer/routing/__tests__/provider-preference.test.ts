@@ -10,11 +10,11 @@ describe("Composer provider preference adapter", () => {
     const storage = { getItem: vi.fn(() => "files"), setItem: vi.fn() };
     const preference = createComposerProviderPreference(storage);
     expect(preference.read()).toBe("files");
-    preference.write("indexeddb");
+    preference.write("files");
     expect(storage.getItem).toHaveBeenCalledWith(COMPOSER_PROVIDER_PREFERENCE_KEY);
     expect(storage.setItem).toHaveBeenCalledWith(
       COMPOSER_PROVIDER_PREFERENCE_KEY,
-      "indexeddb",
+      "files",
     );
   });
 

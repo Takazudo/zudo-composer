@@ -87,7 +87,7 @@ function setup(
   getPublicationDependencies?: () => Promise<{ status: "ready"; dependentCount: number }>,
   patternCallbacks?: {
     listPatternCatalog?: () => Promise<ReuseCatalogOutcome>;
-    loadPattern?: (ref: { providerId: "indexeddb" | "files"; recordId: string }) => Promise<ReuseSelectionOutcome>;
+    loadPattern?: (ref: { providerId: "files"; recordId: string }) => Promise<ReuseSelectionOutcome>;
   },
 ) {
   if (seedViewport) localStorage.setItem(LS_COMPOSER_VIEWPORT, seedViewport);
@@ -270,7 +270,7 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
       status: "listed",
       entries: [
         {
-          ref: { providerId: "indexeddb", recordId: patternRecord.id },
+          ref: { providerId: "files", recordId: patternRecord.id },
           kind: "pattern",
           summary: {
             id: patternRecord.id,
@@ -299,7 +299,7 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
     expect(listPatternCatalog).toHaveBeenCalledOnce();
     fireEvent.click(patternRow);
 
-    await waitFor(() => expect(loadPattern).toHaveBeenCalledWith({ providerId: "indexeddb", recordId: "feature-pattern" }));
+    await waitFor(() => expect(loadPattern).toHaveBeenCalledWith({ providerId: "files", recordId: "feature-pattern" }));
     const insert = await within(s.chooser()).findByRole("button", { name: "Insert Pattern" });
     expect((insert as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(insert);
@@ -350,7 +350,7 @@ describe("ComposerIntegration — cross-surface wiring (#251)", () => {
       <ComposerIntegration
         componentProvider={fixtureComponentProvider}
         controllerOptions={controllerOptions(consumer)}
-        reuseResolution={{ ref: { providerId: "indexeddb", recordId: "bound-page" }, resolver }}
+        reuseResolution={{ ref: { providerId: "files", recordId: "bound-page" }, resolver }}
         linkedActions={{ onOpenSource, onDetach: vi.fn() }}
         createBridge={bridge.createBridge}
         previewLocation={bridge.location}

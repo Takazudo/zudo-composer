@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,12 +8,12 @@ const roots = ['src/shared', 'src/composer', 'src/content', 'src/media', 'src/ma
 const files = [];
 const violations = [];
 
-async function walk(directory) {
+async function walk(directory, collected = files) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (entry.name === '__tests__' || entry.name === 'test' || entry.name === 'tests') continue;
     const target = path.join(directory, entry.name);
-    if (entry.isDirectory()) await walk(target);
-    else if (/\.(?:mjs|mts|ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.test.ts')) files.push(target);
+    if (entry.isDirectory()) await walk(target, collected);
+    else if (/\.(?:mjs|mts|ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.test.ts')) collected.push(target);
   }
 }
 
@@ -41,12 +42,34 @@ for (const file of files) {
   }
 }
 
-const indexedDbTypes = await readFile(path.join(repositoryRoot, 'src/composer/storage/indexeddb/types.ts'), 'utf8');
-if (!indexedDbTypes.includes('COMPOSER_DATABASE_NAME = "zudo-composer"')) {
-  violations.push('src/composer/storage/indexeddb/types.ts: current database identity');
+// Persistence never touches browser storage. Authored data, workspace snapshots,
+// preconditions and digests live in project files behind the file-provider
+// protocol; `localStorage` is permitted only for the per-browser UI preferences
+// inventoried in `docs/workspace-design.md`, none of which live under these
+// paths. IndexedDB is gone entirely, so its globals are forbidden outright.
+const BROWSER_STORAGE = /\b(?:localStorage|sessionStorage|indexedDB|IDBDatabase|IDBFactory|IDBOpenDBRequest|IDBTransaction)\b/;
+const persistenceRoots = [
+  'src/composer/storage', 'src/content/storage', 'src/mapping/storage', 'src/sitemapper/storage', 'src/media/storage',
+  'src/site-project', 'src/features/release', 'src/shared', 'server', 'plugins',
+];
+const persistenceFiles = [
+  'src/app/workspace-storage.ts', 'src/app/workspace-seeding.ts', 'src/app/workspace-snapshot.ts', 'src/app/provider-integration.ts',
+];
+const persistenceScanned = [];
+for (const root of persistenceRoots) {
+  const target = path.join(repositoryRoot, root);
+  // #265/#266 removed some of these trees; a path that no longer exists is not a violation.
+  if (!existsSync(target)) continue;
+  await walk(target, persistenceScanned);
 }
-if (!indexedDbTypes.includes('COMPOSER_DATABASE_VERSION = 1')) {
-  violations.push('src/composer/storage/indexeddb/types.ts: clean physical database version');
+for (const file of persistenceFiles) {
+  const target = path.join(repositoryRoot, file);
+  if (existsSync(target)) persistenceScanned.push(target);
+}
+for (const file of persistenceScanned) {
+  if (BROWSER_STORAGE.test(await readFile(file, 'utf8'))) {
+    violations.push(`${path.relative(repositoryRoot, file)}: browser storage in a persistence layer`);
+  }
 }
 
 // Mapping is allowed to consume only the pure catalog/model seams required to

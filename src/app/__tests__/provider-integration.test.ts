@@ -36,8 +36,8 @@ type Domain = "compositions" | "content" | "mappings" | "sitemaps";
 /**
  * Make one domain's first initialization fail, at the provider seam the
  * integration actually calls. It is the transport-agnostic equivalent of the
- * injected open failure the IndexedDB lane used, and it exercises the same
- * thing: a retry has to re-run the whole graph coherently.
+ * injected open failure a store lane would use, and it exercises the same thing:
+ * a retry has to re-run the whole graph coherently.
  */
 function failFirstInitialization(
   create: TemporaryWorkspaceProviders["createProviders"],
@@ -356,11 +356,11 @@ describe("SiteProject provider integration", () => {
     const current = createProductionProviderIntegration({ project: null, createProviders: (await host()).createProviders });
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: true } });
     expect(await current.compositionCatalog.listCompositions()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
-    expect(await current.compositionCatalog.resolveComposition({ providerId: "indexeddb", recordId: "home-page" })).toEqual({ status: "provider-unavailable" });
+    expect(await current.compositionCatalog.resolveComposition({ providerId: "files", recordId: "home-page" })).toEqual({ status: "provider-unavailable" });
     expect(await current.contentCatalog.listModels()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
     expect(await current.contentCatalog.resolveModel({ providerId: "content-filesystem", recordId: "articles" })).toMatchObject({ status: "provider-error", reason: expect.stringContaining("No development SiteProject") });
     expect(await current.mappingCompositionCatalog.list()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
-    expect(await current.mappingCompositionCatalog.resolve({ providerId: "indexeddb", recordId: "home-page" })).toMatchObject({ status: "provider-error", reason: expect.stringContaining("No development SiteProject") });
+    expect(await current.mappingCompositionCatalog.resolve({ providerId: "files", recordId: "home-page" })).toMatchObject({ status: "provider-error", reason: expect.stringContaining("No development SiteProject") });
     expect(await current.mappingCatalog.list()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
     expect(await current.sitemapperMappingCatalog.list()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
   });

@@ -50,7 +50,7 @@ mapping implementation; structured values cannot fall through to stringify.
 ## Atomic storage and graph
 
 `ContentStore.readAll()` returns `{providerId,mutationToken,models,entries}` from
-one IndexedDB transaction. `mutationToken` is a durable, nonnegative safe
+one store transaction. `mutationToken` is a durable, nonnegative safe
 integer, updated in the same transaction as every mutation (including seed,
 clear, schema edits, inverse batches and publication reconciliation). A no-op
 mutation may advance it. Clearing records does not reset the token. Every
@@ -72,7 +72,7 @@ with a second read. It returns `ready`, `changed` (retry), or `unavailable`;
 interval and never depends on cross-tab notification timing.
 
 `store.transactionScope` truthfully reports `provider` or `unsupported`.
-IndexedDB supports one provider's models and entries in one transaction:
+A store transacts one provider's models and entries together:
 
 ```ts
 const snapshot = await store.readAll();
@@ -94,8 +94,8 @@ cannot be changed; used field kinds cannot be changed. Explicit remove-field
 is required for top-level field removal. Update dependent presentation metadata
 in the same transaction before removing a field.
 
-The native IndexedDB store rejects foreign-provider relation schemas before
-writes with `unsupported-transaction`. It cannot lock another provider or
+The store rejects foreign-provider relation schemas before writes with
+`unsupported-transaction`. It cannot lock another provider or
 prove foreign deletion safety. Complete multi-provider snapshots remain
 supported by graph/aggregate import validation. A future atomic coordinator
 can implement those authoring capabilities; supplied stale snapshots cannot.

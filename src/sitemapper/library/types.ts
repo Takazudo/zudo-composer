@@ -129,7 +129,6 @@ export function isSitemapCollectionStore(store: SitemapStore): store is SitemapC
 }
 
 export const SITEMAP_PROVIDERS = {
-  indexeddb: { id: "sitemap-indexeddb", label: "Browser storage", storageLabel: "IndexedDB: zudo-composer-sitemapper" },
   filesystem: { id: "sitemap-filesystem", label: "Project files" },
 } as const;
 export type SitemapProviderDescriptor = (typeof SITEMAP_PROVIDERS)[keyof typeof SITEMAP_PROVIDERS];

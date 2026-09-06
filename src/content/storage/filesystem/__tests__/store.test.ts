@@ -1,6 +1,4 @@
-// The filesystem analogue of `storage/indexeddb/__tests__/rich-transactions.test.ts`.
-// Every assertion about transaction semantics is ported from that spec rather
-// than reinvented, so the two providers are held to one behavioural contract;
+// The Content transaction semantics, exercised against the filesystem store;
 // the tests that follow them cover what only a filesystem store can get wrong.
 
 import * as fs from "node:fs/promises";

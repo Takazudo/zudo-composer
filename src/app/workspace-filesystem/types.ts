@@ -8,11 +8,11 @@ export const WORKSPACE_META_RECORD_ID = "meta";
 export const WORKSPACE_SELECTION_RECORD_ID = "selection";
 
 /**
- * The filesystem counterpart of the IndexedDB registry's `version 1` object
- * stores. A directory of JSON documents cannot be interrogated for its stores
- * and key paths, so the layout it was written with is recorded once and
- * compared on every read. A registry whose marker differs is refused; its
- * records are preserved exactly as found and nothing is re-shaped.
+ * The registry's on-disk layout marker. A directory of JSON documents cannot be
+ * interrogated for its stores and key paths, so the layout it was written with
+ * is recorded once and compared on every read. A registry whose marker differs
+ * is refused; its records are preserved exactly as found and nothing is
+ * re-shaped.
  */
 export const WORKSPACE_REGISTRY_LAYOUT = Object.freeze({
   layoutVersion: 1,

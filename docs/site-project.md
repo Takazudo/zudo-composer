@@ -249,9 +249,10 @@ A browser reconciliation timeout reports `commit-uncertain` / reconciliation
 busy but quarantines the writer lock until that exact callback settles or its
 operator socket disconnects. Later UI/API/CLI activations cannot pass that lane.
 Disconnect aborts pending browser Content transactions; restart also disconnects
-the client. There is no force-unlock of a live reconciliation. Recovery hints are
-bounded, minimal unresolved approvals, pruned only after confirmed outcomes or
-an authoritative catalog proves retention or definitive stale-generation absence.
+the client. There is no force-unlock of a live reconciliation. The server
+catalog's approval receipts are the only recovery record; the browser keeps no
+journal. After `commit-uncertain`, inspect `list` / `active`, then retry the same
+approved plan — apply is idempotent by `planDigest`.
 Preserve the old root before any explicit clean reset.
 
 Focused API/store/CLI tests cover selection, digests/CAS, interrupted writes,

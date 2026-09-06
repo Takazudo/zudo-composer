@@ -281,7 +281,7 @@ export class FilesystemContentStore implements ContentStore {
     }
   }
 
-  /** Every record must load, exactly as the IndexedDB snapshot path requires. */
+  /** Every record must load; a snapshot is all-or-nothing. */
   private strict(decoded: DecodedContent, operation: Operation): ContentSnapshot {
     const models = decoded.models.map((record) => {
       if (record.loaded.status !== "loaded") throw contentError(operation, "validation", "The stored Content model is invalid and was preserved.");

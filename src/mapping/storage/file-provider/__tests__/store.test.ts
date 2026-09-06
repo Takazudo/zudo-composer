@@ -33,7 +33,7 @@ function mapping(id: string, name = id) {
     id,
     name,
     contentModel: { providerId: "content", recordId: "articles" },
-    composition: { providerId: "indexeddb", recordId: "landing" },
+    composition: { providerId: "files", recordId: "landing" },
     createdAt: stamp,
   });
 }

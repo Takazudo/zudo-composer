@@ -18,8 +18,7 @@ export const FILE_PROVIDER_OPERATION_HEADER = "x-zudo-composer-operation";
  * A workspace scopes the four authoring domains to one directory below each
  * domain root, and the roots are the dev server's to resolve — the browser
  * never sees a path. So the browser names the workspace and the server does the
- * joining, which is the same split the IndexedDB lane had when a Proxy rewrote
- * a database name the browser also never spelled out.
+ * joining.
  */
 export const FILE_PROVIDER_WORKSPACE_HEADER = "x-zudo-composer-workspace";
 /** UTF-8 bytes. Large enough for a substantial document graph. */

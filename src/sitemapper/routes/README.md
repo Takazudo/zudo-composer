@@ -5,11 +5,9 @@ arrays. Array order is menu order; item IDs, labels, visibility and destinations
 are persisted independently of the page hierarchy. Empty menus are valid.
 `editSitemapNavigation` updates one menu with exact post-removal insertion indices.
 No older Sitemap schema is read or migrated.
-The physical IndexedDB version is also 3, with exact v3 schema metadata checked
-on every operation. Old or malformed storage remains untouched until explicit
-`startFresh` deletes and recreates the current database. A blocked destructive
-request stays pending until its terminal event, and successful recreation emits
-the exact workspace-scoped persistence change. Authoring integration explicitly
+The stored layout marker is checked on every operation. Old or malformed storage
+remains untouched until an explicit `startFresh` replaces it, and successful
+recreation emits the exact workspace-scoped persistence change. Authoring integration explicitly
 requests `authoring-preview`; visitor compilation remains `release`.
 
 `expandSitemapRoutes` prepares each authored node once, bounds depth and authored

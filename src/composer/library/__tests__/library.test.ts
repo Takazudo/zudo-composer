@@ -19,6 +19,7 @@ import {
 import { createFixtureDocument } from "../../__tests__/fixtures";
 import type {
   CompositionInitializationOutcome,
+  CompositionProviderId,
   CompositionProviderInitializer,
   CompositionRecord,
   CompositionStore,
@@ -317,14 +318,15 @@ describe("composition record helpers", () => {
 
 describe("provider and store contract", () => {
   it("keeps the same record id distinct across isolated provider ids", () => {
-    const indexed = compositionRecordRefKey({ providerId: "indexeddb", recordId: "same" });
     const files = compositionRecordRefKey({ providerId: "files", recordId: "same" });
-    expect(indexed).not.toBe(files);
+    // A ref key must stay provider-qualified even while one provider ships.
+    const other = compositionRecordRefKey({ providerId: "other" as CompositionProviderId, recordId: "same" });
+    expect(files).not.toBe(other);
   });
 
   it("supports a provider-free fake store and typed initialization seam", async () => {
     class FakeStore implements CompositionStore {
-      readonly provider = COMPOSITION_PROVIDERS.indexeddb;
+      readonly provider = COMPOSITION_PROVIDERS.files;
       private readonly records = new Map<string, CompositionRecord>();
 
       async list(): Promise<readonly CompositionSummary[]> {

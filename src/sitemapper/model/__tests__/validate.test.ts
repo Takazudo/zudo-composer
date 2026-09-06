@@ -31,7 +31,7 @@ describe("isStructurallyValidDocument", () => {
         ...node("home", [node("about")]),
         slug: "home",
         notes: "Landing page",
-        source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "home-page" } },
+        source: { kind: "composition", ref: { providerId: "files", recordId: "home-page" } },
       },
     ]);
     const result = isStructurallyValidDocument(value);
@@ -57,7 +57,7 @@ describe("isStructurallyValidDocument", () => {
     ],
     [
       "invalid-source",
-      document([{ ...node("home"), source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "../bad" } } }]),
+      document([{ ...node("home"), source: { kind: "composition", ref: { providerId: "files", recordId: "../bad" } } }]),
     ],
     ["invalid-node-notes", document([{ ...node("home"), notes: 1 } as never])],
     ["invalid-children", document([{ ...node("home"), children: {} } as never])],
@@ -88,7 +88,7 @@ describe("isStructurallyValidDocument", () => {
     const value = document([
       {
         ...node("home"),
-        source: { kind: "composition", ref: { providerId: "indexeddb", recordId: "home", extra: true } },
+        source: { kind: "composition", ref: { providerId: "files", recordId: "home", extra: true } },
       } as never,
     ]);
     expect(code(value)).toBe("invalid-source");

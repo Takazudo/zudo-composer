@@ -4,14 +4,14 @@ import "../../test-support/cleanup";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { act } from "preact/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { IDBFactory as FDBFactory } from "fake-indexeddb";
 import {
   COMPOSITION_PROVIDERS,
-  createIndexedDbCompositionProvider,
   summarizeComposition,
   type CompositionInitializationOutcome,
   type CompositionDeleteOutcome,
   type CompositionProvider,
+  type CompositionProviderDescriptor,
+  type CompositionProviderId,
   type CompositionRecord,
 } from "../../../../composer/browser";
 import { fixtureComponentProvider, createFixtureSampleDocument } from "../../test-support/fixture-pack";
@@ -26,6 +26,14 @@ import {
 import { makeTestBridge } from "../test-support/preview-harness";
 
 const TIMESTAMP = "2026-07-14T00:00:00.000Z";
+// The compositions domain ships a single provider descriptor; the Composer
+// still routes, switches and scopes by provider id, so a second fixture
+// descriptor is what exercises those paths.
+const ALTERNATE_PROVIDER: CompositionProviderDescriptor = {
+  id: "alternate" as CompositionProviderId,
+  label: "Alternate storage",
+  storageLabel: "Alternate fixture storage",
+};
 const PREVIEW = {
   previewLocation: { src: "about:blank", targetOrigin: "https://composer.test" },
 } as const;
@@ -58,7 +66,7 @@ function ready(records: Map<string, CompositionRecord>): CompositionInitializati
 }
 
 function memoryProvider(
-  providerId: "indexeddb" | "files",
+  providerId: "alternate" | "files",
   initial: readonly CompositionRecord[],
   overrides: {
     initialize?: () => Promise<CompositionInitializationOutcome>;
@@ -68,7 +76,7 @@ function memoryProvider(
   } = {},
 ): CompositionProvider & { records: Map<string, CompositionRecord> } {
   const records = new Map(initial.map((value) => [value.id, structuredClone(value)]));
-  const descriptor = COMPOSITION_PROVIDERS[providerId];
+  const descriptor = providerId === "files" ? COMPOSITION_PROVIDERS.files : ALTERNATE_PROVIDER;
   const initialize = overrides.initialize ?? (async () => ready(records));
   const store = {
     provider: descriptor,
@@ -154,34 +162,34 @@ afterEach(() => {
 
 describe("ProductionComposerApp", () => {
   it("normalizes the document URL and keeps same record ids isolated by provider", async () => {
-    const indexeddb = memoryProvider("indexeddb", [record("same", "Browser copy")]);
+    const alternate = memoryProvider("alternate", [record("same", "Browser copy")]);
     const files = memoryProvider("files", [record("same", "File copy")]);
     const navigation = new FakeNavigation("/composer");
     const view = render(
-      <ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />,
+      <ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[alternate, files]} navigation={navigation} preview={PREVIEW} />,
     );
 
     expect(await screen.findByRole("link", { name: "Browser copy" })).toBeInTheDocument();
     expect(navigation.replacements).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
     expect(screen.getByRole("menuitemradio", { name: "Local files" })).toBeInTheDocument();
 
     view.unmount();
     navigation.visit("/composer?provider=files&composition=same");
-    render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
+    render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[alternate, files]} navigation={navigation} preview={PREVIEW} />);
 
     expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
     expect(screen.getByLabelText("Composition name")).toHaveValue("File copy");
-    expect(indexeddb.store.get).not.toHaveBeenCalled();
+    expect(alternate.store.get).not.toHaveBeenCalled();
     expect(files.store.get).toHaveBeenCalledWith("same");
   });
 
   it("creates an empty unbound schema-v2 record only after New-dialog confirmation", async () => {
-    const indexeddb = memoryProvider("indexeddb", []);
+    const alternate = memoryProvider("alternate", []);
     const navigation = new FakeNavigation();
     render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb]}
+        providers={[alternate]}
         navigation={navigation}
         idFactory={() => "ordinary"}
         now={() => TIMESTAMP}
@@ -195,19 +203,19 @@ describe("ProductionComposerApp", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
-    expect(indexeddb.records.has("ordinary")).toBe(false);
+    expect(alternate.records.has("ordinary")).toBe(false);
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: " Ordinary page " } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
     expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
-    expect(indexeddb.records.get("ordinary")?.document).toMatchObject({
+    expect(alternate.records.get("ordinary")?.document).toMatchObject({
       schemaVersion: 2,
       id: "ordinary",
       name: "Ordinary page",
       root: [],
     });
-    expect(indexeddb.records.get("ordinary")?.document.binding).toBeUndefined();
-    expect(navigation.pushes.at(-1)).toBe("/composer?provider=indexeddb&composition=ordinary");
+    expect(alternate.records.get("ordinary")?.document.binding).toBeUndefined();
+    expect(navigation.pushes.at(-1)).toBe("/composer?provider=alternate&composition=ordinary");
   });
 
   it("re-resolves a selected same-provider Global template, then persists only its source and outlet binding", async () => {
@@ -220,11 +228,11 @@ describe("ProductionComposerApp", () => {
         target: { parentId: "sample-section", slotId: "right" },
       },
     };
-    const indexeddb = memoryProvider("indexeddb", [template]);
+    const alternate = memoryProvider("alternate", [template]);
     const navigation = new FakeNavigation();
     render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb]}
+        providers={[alternate]}
         navigation={navigation}
         idFactory={() => "bound-page"}
         now={() => TIMESTAMP}
@@ -239,7 +247,7 @@ describe("ProductionComposerApp", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
     expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
-    expect(indexeddb.records.get("bound-page")?.document).toMatchObject({
+    expect(alternate.records.get("bound-page")?.document).toMatchObject({
       schemaVersion: 2,
       id: "bound-page",
       name: "Bound page",
@@ -262,12 +270,12 @@ describe("ProductionComposerApp", () => {
     const consumer = record("bound-page", "Bound page");
     consumer.document.root = [consumer.document.root[0]!.slots.content![1]!];
     consumer.document.binding = { sourceRecordId: source.id, outletId: "main" };
-    const indexeddb = memoryProvider("indexeddb", [source, consumer], { lifecycle: true });
-    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=bound-page");
+    const alternate = memoryProvider("alternate", [source, consumer], { lifecycle: true });
+    const navigation = new FakeNavigation("/composer?provider=alternate&composition=bound-page");
     let nodeId = 0;
     const view = render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb]}
+        providers={[alternate]}
         navigation={navigation}
         nodeIdFactory={() => `detached-${++nodeId}`}
         now={() => TIMESTAMP}
@@ -281,15 +289,15 @@ describe("ProductionComposerApp", () => {
     fireEvent.click(await within(inspector).findByRole("button", { name: "Detach" }));
 
     await waitFor(() => {
-      const detached = indexeddb.records.get("bound-page")!;
+      const detached = alternate.records.get("bound-page")!;
       expect(detached.document.binding).toBeUndefined();
       expect(detached.document.root[0]?.id).toMatch(/^detached-/);
     });
-    expect((indexeddb.store as unknown as { saveLifecycleRecord: ReturnType<typeof vi.fn> }).saveLifecycleRecord).toHaveBeenCalledOnce();
+    expect((alternate.store as unknown as { saveLifecycleRecord: ReturnType<typeof vi.fn> }).saveLifecycleRecord).toHaveBeenCalledOnce();
     await waitFor(() =>
       expect(navigation.read()).toEqual({
         pathname: "/composer",
-        search: "?provider=indexeddb&composition=bound-page", hash: "",
+        search: "?provider=alternate&composition=bound-page", hash: "",
       }),
     );
     expect(screen.queryByRole("button", { name: "Detach" })).not.toBeInTheDocument();
@@ -305,10 +313,10 @@ describe("ProductionComposerApp", () => {
         target: { parentId: "sample-section", slotId: "right" },
       },
     };
-    const indexeddb = memoryProvider("indexeddb", [template]);
+    const alternate = memoryProvider("alternate", [template]);
     render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb]}
+        providers={[alternate]}
         navigation={new FakeNavigation()}
         idFactory={() => "never-saved"}
         now={() => TIMESTAMP}
@@ -319,13 +327,13 @@ describe("ProductionComposerApp", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
     fireEvent.click(within(dialog).getByRole("button", { name: /Site shell/ }));
-    indexeddb.records.delete("site-shell");
-    vi.mocked(indexeddb.store.put).mockClear();
+    alternate.records.delete("site-shell");
+    vi.mocked(alternate.store.put).mockClear();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("selected Global template changed");
-    expect(indexeddb.store.put).not.toHaveBeenCalled();
-    expect(indexeddb.records.has("never-saved")).toBe(false);
+    expect(alternate.store.put).not.toHaveBeenCalled();
+    expect(alternate.records.has("never-saved")).toBe(false);
   });
 
   it("checks only the active provider's consumers before unpublishing a Global template", async () => {
@@ -340,12 +348,12 @@ describe("ProductionComposerApp", () => {
     };
     const consumer = record("bound-page", "Bound page");
     consumer.document.binding = { sourceRecordId: "site-shell", outletId: "main" };
-    const indexeddb = memoryProvider("indexeddb", [source, consumer]);
+    const alternate = memoryProvider("alternate", [source, consumer]);
     const files = memoryProvider("files", [record("unrelated", "Unrelated file")]);
-    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=site-shell");
+    const navigation = new FakeNavigation("/composer?provider=alternate&composition=site-shell");
     render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb, files]}
+        providers={[alternate, files]}
         navigation={navigation}
         preview={PREVIEW}
       />,
@@ -361,78 +369,25 @@ describe("ProductionComposerApp", () => {
         "Cannot unpublish this Global template while 1 consumer is still bound",
       ),
     );
-    expect(indexeddb.store.list).toHaveBeenCalled();
-    expect(indexeddb.store.get).toHaveBeenCalledWith("bound-page");
+    expect(alternate.store.list).toHaveBeenCalled();
+    expect(alternate.store.get).toHaveBeenCalledWith("bound-page");
     expect(files.store.list).not.toHaveBeenCalled();
-    expect(indexeddb.records.get("site-shell")?.document.publication).toMatchObject({
+    expect(alternate.records.get("site-shell")?.document.publication).toMatchObject({
       kind: "global-template",
       outlet: { id: "main" },
     });
   });
 
 
-  it("persists index-to-detail edits across a fresh mount with the real IndexedDB provider", async () => {
-    const provider = createIndexedDbCompositionProvider({
-      idbFactory: new FDBFactory(),
-      initialDocument: createFixtureSampleDocument,
-      idFactory: () => "real-composition",
-      now: () => TIMESTAMP,
-    });
-    const navigation = new FakeNavigation();
-    const first = render(
-      <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[provider]}
-        navigation={navigation}
-        now={() => TIMESTAMP}
-        preview={PREVIEW}
-      />,
-    );
-
-    // The row's name links to the real detail route; a jsdom `fireEvent.click`
-    // on an `<a>` never drives the injected `FakeNavigation`, so opening the
-    // seeded sample is simulated the same way browser-driven navigation is
-    // elsewhere in this file: a real `navigation.visit` to its route, once the
-    // seeded row (not just the static page header) has actually loaded.
-    await screen.findByRole("link", { name: "Product overview" });
-    navigation.visit("/composer?provider=indexeddb&composition=real-composition");
-    await screen.findByRole("link", { name: "Back to Compositions" });
-    const tree = first.container.querySelector(".cms-editor__region--nav") as HTMLElement;
-    const inspector = first.container.querySelector(".cms-editor__region--insp") as HTMLElement;
-    fireEvent.click(within(tree).getByRole("treeitem", { name: /^Button/ }));
-    fireEvent.input(within(inspector).getByLabelText("Label"), {
-      target: { value: "Persisted in IndexedDB" },
-    });
-    navigation.visit("/composer");
-    await screen.findByRole("heading", { name: "Compositions" });
-    first.unmount();
-
-    navigation.visit("/composer?provider=indexeddb&composition=real-composition");
-    const refreshed = render(
-      <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[provider]}
-        navigation={navigation}
-        now={() => TIMESTAMP}
-        preview={PREVIEW}
-      />,
-    );
-    await screen.findByRole("link", { name: "Back to Compositions" });
-    const refreshedTree = refreshed.container.querySelector(".cms-editor__region--nav") as HTMLElement;
-    const refreshedInspector = refreshed.container.querySelector(".cms-editor__region--insp") as HTMLElement;
-    fireEvent.click(within(refreshedTree).getByRole("treeitem", { name: /^Button/ }));
-    expect(within(refreshedInspector).getByLabelText("Label")).toHaveValue(
-      "Persisted in IndexedDB",
-    );
-  });
-
   it("wires mounted toolbar, parent keyboard, and canvas history requests to one controller", async () => {
     const initial = record("history", "History");
-    const indexeddb = memoryProvider("indexeddb", [initial]);
-    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=history");
+    const alternate = memoryProvider("alternate", [initial]);
+    const navigation = new FakeNavigation("/composer?provider=alternate&composition=history");
     const bridge = makeTestBridge(PREVIEW.previewLocation);
     const view = render(
       <ProductionComposerApp
         componentProvider={fixtureComponentProvider}
-        providers={[indexeddb]}
+        providers={[alternate]}
         navigation={navigation}
         preview={{ ...PREVIEW, createBridge: bridge.createBridge }}
       />,
@@ -474,11 +429,11 @@ describe("ProductionComposerApp", () => {
   });
 
   it("lands a debounce-pending inspector value before the save queue is flushed", async () => {
-    const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
-    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=alpha");
+    const alternate = memoryProvider("alternate", [record("alpha", "Alpha")]);
+    const navigation = new FakeNavigation("/composer?provider=alternate&composition=alpha");
     const view = render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb]}
+        providers={[alternate]}
         navigation={navigation}
         preview={PREVIEW}
       />,
@@ -494,7 +449,7 @@ describe("ProductionComposerApp", () => {
     navigation.visit("/composer");
 
     await screen.findByRole("heading", { name: "Compositions" });
-    const saved = indexeddb.records.get("alpha")!;
+    const saved = alternate.records.get("alpha")!;
     const cta = saved.document.root[0].slots.content?.find(
       (node) => node.id === "sample-button",
     );
@@ -502,13 +457,13 @@ describe("ProductionComposerApp", () => {
   });
 
   it("duplicates and opens only inside the selected provider", async () => {
-    const indexeddb = memoryProvider("indexeddb", [record("same", "Browser copy")]);
+    const alternate = memoryProvider("alternate", [record("same", "Browser copy")]);
     const files = memoryProvider("files", [record("same", "File copy")]);
     const navigation = new FakeNavigation();
     let nodeId = 0;
     render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb, files]}
+        providers={[alternate, files]}
         navigation={navigation}
         idFactory={() => "file-copy"}
         nodeIdFactory={() => `copied-node-${++nodeId}`}
@@ -516,7 +471,7 @@ describe("ProductionComposerApp", () => {
       />,
     );
     await screen.findByRole("link", { name: "Browser copy" });
-    fireEvent.click(screen.getByRole("button", { name: "Provider: Browser storage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Alternate storage" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Local files" }));
     await screen.findByRole("link", { name: "File copy" });
     fireEvent.click(screen.getByRole("button", { name: "More actions for File copy" }));
@@ -524,20 +479,20 @@ describe("ProductionComposerApp", () => {
 
     expect(await screen.findByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
     expect(files.records.get("file-copy")?.document.name).toBe("File copy copy");
-    expect(indexeddb.records.has("file-copy")).toBe(false);
+    expect(alternate.records.has("file-copy")).toBe(false);
     expect(navigation.pushes.at(-1)).toBe("/composer?provider=files&composition=file-copy");
   });
 
 
 
   it("duplicates the mounted composition into its active provider and opens its route", async () => {
-    const indexeddb = memoryProvider("indexeddb", [record("same", "Browser copy")]);
+    const alternate = memoryProvider("alternate", [record("same", "Browser copy")]);
     const files = memoryProvider("files", [record("same", "File copy")]);
     const navigation = new FakeNavigation("/composer?provider=files&composition=same");
     let nodeId = 0;
     const view = render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb, files]}
+        providers={[alternate, files]}
         navigation={navigation}
         idFactory={() => "detail-copy"}
         nodeIdFactory={() => `detail-node-${++nodeId}`}
@@ -569,15 +524,15 @@ describe("ProductionComposerApp", () => {
         (node) => node.componentId === "fixture.button",
       )?.props.children,
     ).toBe("Duplicated latest draft");
-    expect(indexeddb.records.has("detail-copy")).toBe(false);
+    expect(alternate.records.has("detail-copy")).toBe(false);
     expect(files.store.get).toHaveBeenCalledWith("detail-copy");
   });
 
   it("reopens provider-qualified detail routes delivered by browser history", async () => {
-    const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
+    const alternate = memoryProvider("alternate", [record("alpha", "Alpha")]);
     const files = memoryProvider("files", [record("alpha", "File Alpha")]);
     const navigation = new FakeNavigation();
-    render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb, files]} navigation={navigation} preview={PREVIEW} />);
+    render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[alternate, files]} navigation={navigation} preview={PREVIEW} />);
     await screen.findByRole("heading", { name: "Compositions" });
 
     navigation.visit("/composer?provider=files&composition=alpha");
@@ -590,7 +545,7 @@ describe("ProductionComposerApp", () => {
     const records = new Map<string, CompositionRecord>();
     let quarantined = true;
     const recovered = record("fresh", "Fresh sample");
-    const indexeddb = memoryProvider("indexeddb", [], {
+    const alternate = memoryProvider("alternate", [], {
       initialize: async () =>
         quarantined
           ? {
@@ -605,14 +560,14 @@ describe("ProductionComposerApp", () => {
             }
           : ready(records),
     });
-    indexeddb.initialization.startFresh = vi.fn(async () => {
+    alternate.initialization.startFresh = vi.fn(async () => {
       quarantined = false;
       records.set(recovered.id, recovered);
-      indexeddb.records.set(recovered.id, recovered);
-      return ready(indexeddb.records);
+      alternate.records.set(recovered.id, recovered);
+      return ready(alternate.records);
     });
-    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=future");
-    render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[indexeddb]} navigation={navigation} preview={PREVIEW} />);
+    const navigation = new FakeNavigation("/composer?provider=alternate&composition=future");
+    render(<ProductionComposerApp componentProvider={fixtureComponentProvider} providers={[alternate]} navigation={navigation} preview={PREVIEW} />);
 
     expect(await screen.findByText("Stored compositions need recovery.")).toBeInTheDocument();
     expect(screen.getByText(/Future source is quarantined unchanged\./)).toBeInTheDocument();
@@ -628,13 +583,13 @@ describe("ProductionComposerApp", () => {
   it("does not let slow direct-detail initialization override newer history", async () => {
     const initialization = deferred<CompositionInitializationOutcome>();
     const alpha = record("alpha", "Alpha");
-    const indexeddb = memoryProvider("indexeddb", [alpha], {
+    const alternate = memoryProvider("alternate", [alpha], {
       initialize: () => initialization.promise,
     });
-    const navigation = new FakeNavigation("/composer?provider=indexeddb&composition=alpha");
+    const navigation = new FakeNavigation("/composer?provider=alternate&composition=alpha");
     render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb]}
+        providers={[alternate]}
         navigation={navigation}
         preview={PREVIEW}
       />,
@@ -642,21 +597,21 @@ describe("ProductionComposerApp", () => {
 
     navigation.visit("/composer");
     expect(await screen.findByRole("status")).toHaveTextContent("Loading compositions…");
-    initialization.resolve(ready(indexeddb.records));
+    initialization.resolve(ready(alternate.records));
 
     expect(await screen.findByRole("heading", { name: "Compositions" })).toBeInTheDocument();
     await Promise.resolve();
     expect(navigation.read()).toEqual({ pathname: "/composer", search: "", hash: "" });
-    expect(indexeddb.store.get).not.toHaveBeenCalled();
+    expect(alternate.store.get).not.toHaveBeenCalled();
     expect(screen.queryByRole("link", { name: "Back to Compositions" })).not.toBeInTheDocument();
   });
 
   it("opens the New-composition dialog once for the /composer?new=1 route intent", async () => {
-    const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
+    const alternate = memoryProvider("alternate", [record("alpha", "Alpha")]);
     const navigation = new FakeNavigation();
     render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb]}
+        providers={[alternate]}
         navigation={navigation}
         preview={PREVIEW}
         readIntentSearch={() => "?new=1"}
@@ -669,7 +624,7 @@ describe("ProductionComposerApp", () => {
 
     // A one-shot intent: navigating away and back to the index (remounting
     // CompositionLibrary) must not reopen the dialog a second time.
-    navigation.visit("/composer?provider=indexeddb&composition=alpha");
+    navigation.visit("/composer?provider=alternate&composition=alpha");
     await screen.findByRole("link", { name: "Back to Compositions" });
     navigation.visit("/composer");
     await screen.findByRole("link", { name: "Alpha" });
@@ -684,7 +639,7 @@ describe("ProductionComposerApp", () => {
     };
     const consumer = record("consumer", "Consumer");
     consumer.document.binding = { sourceRecordId: template.id, outletId: "main" };
-    const indexeddb = memoryProvider("indexeddb", [template, consumer], {
+    const alternate = memoryProvider("alternate", [template, consumer], {
       lifecycle: true,
       deleteWithDependencyCheck: vi.fn(async () => ({
         status: "blocked" as const,
@@ -694,8 +649,8 @@ describe("ProductionComposerApp", () => {
     render(
       <ProductionComposerApp
         componentProvider={fixtureComponentProvider}
-        providers={[indexeddb]}
-        navigation={new FakeNavigation("/composer?provider=indexeddb&composition=site-shell")}
+        providers={[alternate]}
+        navigation={new FakeNavigation("/composer?provider=alternate&composition=site-shell")}
         preview={PREVIEW}
       />,
     );
@@ -706,16 +661,16 @@ describe("ProductionComposerApp", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     expect(await screen.findByText("Cannot delete this Global template while 1 consumer is still linked.")).toBeInTheDocument();
-    expect(indexeddb.records.has("site-shell")).toBe(true);
-    expect(indexeddb.store.delete).not.toHaveBeenCalled();
+    expect(alternate.records.has("site-shell")).toBe(true);
+    expect(alternate.store.delete).not.toHaveBeenCalled();
     expect(screen.getByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
   });
 
   it("reports a malformed /composer?new=0 route intent instead of silently opening the dialog", async () => {
-    const indexeddb = memoryProvider("indexeddb", [record("alpha", "Alpha")]);
+    const alternate = memoryProvider("alternate", [record("alpha", "Alpha")]);
     render(
       <ProductionComposerApp componentProvider={fixtureComponentProvider}
-        providers={[indexeddb]}
+        providers={[alternate]}
         navigation={new FakeNavigation()}
         preview={PREVIEW}
         readIntentSearch={() => "?new=0"}

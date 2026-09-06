@@ -3,10 +3,9 @@
 // Like Mapping, a Sitemap record is a leaf document with no cross-record graph
 // to protect, so every mutation is expressed as the complete after-state of
 // the whole record set and committed in one `TransactionalRecordStore` step.
-// The IndexedDB store re-validates its physical/schema metadata on every
-// operation rather than trusting a previous success; the filesystem analogue
-// of that is that `decode()` below re-checks the layout marker on every read
-// and every mutation, never only at open.
+// Physical/schema metadata is re-validated on every operation rather than
+// trusted from a previous success: `decode()` below re-checks the layout marker
+// on every read and every mutation, never only at open.
 //
 // Sitemapper has no domain-visible mutation token of its own. Optimistic
 // concurrency for the one operation that needs it — a whole-batch transaction —
@@ -207,7 +206,7 @@ export class FilesystemSitemapStore implements SitemapCollectionStore {
     }
   }
 
-  /** Every record must load, exactly as the IndexedDB snapshot path requires. */
+  /** Every record must load; a snapshot is all-or-nothing. */
   private strict(decoded: DecodedSitemap, operation: Operation): SitemapRecord[] {
     return decoded.records.map((record) => {
       if (record.loaded.status !== "loaded") throw sitemapError(operation, "validation", "Invalid Sitemap data was preserved. Use explicit recovery.");
@@ -256,9 +255,8 @@ export class FilesystemSitemapStore implements SitemapCollectionStore {
   // ------------------------------------------------------------------- reads
 
   /**
-   * Re-checks the layout marker like every other read, matching the IndexedDB
-   * store's own `mutationToken()`, which validates schema metadata before
-   * returning the token rather than trusting a previous successful read.
+   * Re-checks the layout marker like every other read, rather than trusting a
+   * previous successful read.
    */
   async mutationToken(): Promise<string> {
     return (await this.snapshot()).mutationToken;

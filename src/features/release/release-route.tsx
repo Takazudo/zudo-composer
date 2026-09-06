@@ -27,7 +27,6 @@ export function ReleaseRoute({ controller, href }: { controller: ReleaseControll
     <Button disabled={!state.working || blocked} onClick={exportWorking}>Export working JSON</Button>
     <PaneSection title="Retained server stages">
       <p>These records come from the local release catalog, including stages created in another tab or through the CLI. Selecting one never replaces working drafts.</p>
-      <p>Unresolved local recovery hints: {state.journalPendingCount ?? "unavailable"}. Catalog inspection safely resolves these hints.</p>
       <ul>{state.retainedStages.map((stage) => <li key={`${stage.projectId}:${stage.buildId}:${stage.stageGeneration}`}><Identity value={`${stage.projectId} / ${stage.buildId}`} /> · incarnation {stage.stageGeneration} <Button disabled={writeDisabled} onClick={() => void controller.selectStage(stage)}>Inspect stage {stage.buildId.slice(0, 8)}</Button></li>)}</ul>
     </PaneSection>
     <PaneSection title="Select Content changes">

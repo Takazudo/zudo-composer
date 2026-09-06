@@ -16,13 +16,11 @@ export const CONTENT_META_RECORD_ID = "meta";
 export const MAX_CONTENT_ID_LENGTH = 128 - CONTENT_MODEL_RECORD_PREFIX.length;
 
 /**
- * The filesystem counterpart of the IndexedDB provider's exact-physical-shape
- * check.
+ * The provider's exact-physical-shape check.
  *
- * IndexedDB can interrogate a live database for its keyPaths, indexes and
- * uniqueness. A directory of JSON documents cannot be interrogated that way, so
- * the layout it was written with is recorded once, in the domain metadata
- * document, and compared on every open. A store whose marker differs is refused
+ * A directory of JSON documents cannot be interrogated for its keys and
+ * uniqueness, so the layout it was written with is recorded once, in the domain
+ * metadata document, and compared on every open. A store whose marker differs is refused
  * with `unsupported-version`: the records are preserved exactly as found and
  * nothing is re-shaped to fit the current expectation.
  */

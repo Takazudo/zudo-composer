@@ -23,7 +23,7 @@ import {
   useComposerController,
 } from "../use-composer-controller";
 
-const ref = { providerId: "indexeddb", recordId: "record-a" } as const;
+const ref = { providerId: "files", recordId: "record-a" } as const;
 
 function record(): CompositionRecord {
   const document = makeAbcDocument();

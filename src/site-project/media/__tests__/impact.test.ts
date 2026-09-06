@@ -68,7 +68,7 @@ describe("provider-qualified media impact", () => {
     const index = resolveSiteProjectMedia(value, catalog, { providerId: "media-files", snapshot: { schemaVersion: 2, mutationToken: "b".repeat(64), folders: [], records: [media] }, routes: result.build.routes }).index;
     expect(index.references.some(({ location }) => location.domain === "materialization" && location.pathname === "/")).toBe(true);
     const rendered = result.build.routes[0]!;
-    rendered.materializationSources = [{ renderedNodeId: rendered.composition.document.root[0]!.id, providerId: "indexeddb", recordId: "card-source", nodeId: "original-link", attachmentId: "cards", entries: [{ providerId: "content-filesystem", modelId: "articles", recordId: "one" }] }];
+    rendered.materializationSources = [{ renderedNodeId: rendered.composition.document.root[0]!.id, providerId: "files", recordId: "card-source", nodeId: "original-link", attachmentId: "cards", entries: [{ providerId: "content-filesystem", modelId: "articles", recordId: "one" }] }];
     const mapped = resolveSiteProjectMedia(value, catalog, { lock, routes: [rendered] }).index.references.find(({ location }) => location.domain === "materialization")!;
     expect(mapped.location).toMatchObject({ recordId: "card-source", nodeId: "original-link", attachmentId: "cards", entries: [{ recordId: "one" }] });
   });

@@ -256,7 +256,7 @@ describe("Sitemaps library", () => {
 
   it("offers a Retry when the store cannot be opened at all", async () => {
     const setup = provider([record()]);
-    const error = Object.assign(new Error("IndexedDB is unavailable."), { name: "SitemapPersistenceError" });
+    const error = Object.assign(new Error("Project files are unavailable."), { name: "SitemapPersistenceError" });
     setup.provider.initialization.initialize = async () => ({ status: "error", error: error as never });
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
 

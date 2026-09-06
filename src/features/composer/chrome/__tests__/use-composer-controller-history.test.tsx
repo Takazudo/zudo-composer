@@ -30,7 +30,7 @@ import {
   type ComposerController,
 } from "../use-composer-controller";
 
-const ref = { providerId: "indexeddb", recordId: "record-history" } as const;
+const ref = { providerId: "files", recordId: "record-history" } as const;
 
 interface Attempt {
   snapshot: SaveQueueSnapshot<CompositionRecord, CompositionRecordRef>;

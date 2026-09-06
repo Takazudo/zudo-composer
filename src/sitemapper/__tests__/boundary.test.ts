@@ -38,19 +38,16 @@ describe("standalone Sitemapper boundary", () => {
   it("recognizes root, static subpath, and dynamic Composer imports", () => {
     expect(composerDomainImport.test('import type { X } from "../../composer"')).toBe(true);
     expect(composerDomainImport.test('import { X } from "../../composer/browser"')).toBe(true);
-    expect(composerDomainImport.test('const store = import("../../composer/storage/indexeddb")')).toBe(true);
+    expect(composerDomainImport.test('const store = import("../../composer/storage/filesystem")')).toBe(true);
   });
 
-  it("requires host catalog injection and owns a fresh database identity", () => {
+  it("requires host catalog and provider injection", () => {
     const app = readFileSync(resolve(repositoryRoot, "src/features/sitemapper/app/production-sitemapper-app.tsx"), "utf8");
-    const storage = readFileSync(resolve(repositoryRoot, "src/sitemapper/storage/indexeddb/types.ts"), "utf8");
     expect(app).toContain("catalog: CompositionCatalog");
-    expect(app).not.toContain("createIndexedDbCompositionProvider");
+    expect(app).not.toContain("createCompositionCatalog(");
     // The Sitemap provider is owned by the host integration; the route may not build a second one.
     expect(app).toContain("provider: SitemapProvider");
-    expect(app).not.toContain("createIndexedDbSitemapProvider");
-    expect(storage).toContain('SITEMAPPER_DATABASE_NAME = "zudo-composer-sitemapper"');
-    expect(storage).toContain("SITEMAPPER_DATABASE_VERSION = 3");
+    expect(app).not.toContain("createFilesystemSitemapStore");
     expect(SitemapperRouteContent).toBeTypeOf("function");
   });
 });

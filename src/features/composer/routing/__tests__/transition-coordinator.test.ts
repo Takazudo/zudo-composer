@@ -20,6 +20,10 @@ import {
   type ComposerTransitionIntent,
 } from "../transition-coordinator";
 
+// The compositions domain ships a single provider id; routing still resolves
+// every id through the injected registry, so a second fixture id proves it.
+const ALTERNATE = "alternate" as CompositionProviderId;
+
 interface Deferred<T> {
   readonly promise: Promise<T>;
   readonly resolve: (value: T) => void;
@@ -134,10 +138,10 @@ function indexIntent(
 }
 
 function harness(overrides: Partial<ComposerTransitionCoordinatorOptions> = {}) {
-  const indexeddb = provider("indexeddb");
+  const alternate = provider(ALTERNATE);
   const files = provider("files");
   const providers = new Map<string, ComposerRoutingProvider>([
-    ["indexeddb", indexeddb],
+    [ALTERNATE, alternate],
     ["files", files],
   ]);
   const history = { push: vi.fn(), replace: vi.fn() };
@@ -152,7 +156,7 @@ function harness(overrides: Partial<ComposerTransitionCoordinatorOptions> = {}) 
   );
   const coordinator = createComposerTransitionCoordinator({
     registry: { get: (id) => providers.get(id) },
-    defaultProviderId: "indexeddb",
+    defaultProviderId: ALTERNATE,
     preference,
     history,
     createDetailSession,
@@ -160,7 +164,7 @@ function harness(overrides: Partial<ComposerTransitionCoordinatorOptions> = {}) 
   });
   return {
     coordinator,
-    indexeddb,
+    alternate,
     files,
     providers,
     history,
@@ -184,7 +188,7 @@ describe("latest-intent Composer transition coordinator", () => {
       providerId: "files",
       collection: [{ id: "file-a" }],
     });
-    expect(h.indexeddb.list).not.toHaveBeenCalled();
+    expect(h.alternate.list).not.toHaveBeenCalled();
     expect(h.preference.write).toHaveBeenCalledWith("files");
     expect(h.history.push).not.toHaveBeenCalled();
   });
@@ -201,22 +205,22 @@ describe("latest-intent Composer transition coordinator", () => {
     await expect(h.coordinator.transition(indexIntent())).resolves.toMatchObject({
       status: "committed",
     });
-    expect(h.coordinator.state).toMatchObject({ view: "index", providerId: "indexeddb" });
+    expect(h.coordinator.state).toMatchObject({ view: "index", providerId: ALTERNATE });
     expect(h.history.push).toHaveBeenCalledWith("/composer");
   });
 
   it("treats a detail provider as authoritative despite another preference", async () => {
     const h = harness();
     h.preference.read.mockReturnValue("files");
-    h.indexeddb.get.mockResolvedValue(loaded(record("same", "Browser copy")));
-    h.indexeddb.list.mockResolvedValue([summary("same", "Browser copy")]);
+    h.alternate.get.mockResolvedValue(loaded(record("same", "Browser copy")));
+    h.alternate.list.mockResolvedValue([summary("same", "Browser copy")]);
     h.files.get.mockResolvedValue(loaded(record("same", "File copy")));
 
-    await h.coordinator.transition(detailIntent("indexeddb", "same", "already-applied"));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "same", "already-applied"));
 
     expect(h.coordinator.state).toMatchObject({
       view: "detail",
-      providerId: "indexeddb",
+      providerId: ALTERNATE,
       record: { document: { name: "Browser copy" } },
     });
     expect(h.preference.read).not.toHaveBeenCalled();
@@ -276,21 +280,21 @@ describe("latest-intent Composer transition coordinator", () => {
 
   it("lets rapid A→B→C navigation commit only C", async () => {
     const h = harness();
-    h.indexeddb.list.mockResolvedValue([summary("a")]);
-    h.indexeddb.get.mockResolvedValueOnce(loaded(record("a")));
-    await h.coordinator.transition(detailIntent("indexeddb", "a"));
+    h.alternate.list.mockResolvedValue([summary("a")]);
+    h.alternate.get.mockResolvedValueOnce(loaded(record("a")));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "a"));
 
     const bList = deferred<readonly CompositionSummary[]>();
     const bGet = deferred<CompositionLoadOutcome>();
     const cList = deferred<readonly CompositionSummary[]>();
     const cGet = deferred<CompositionLoadOutcome>();
-    h.indexeddb.list.mockReturnValueOnce(bList.promise).mockReturnValueOnce(cList.promise);
-    h.indexeddb.get.mockReturnValueOnce(bGet.promise).mockReturnValueOnce(cGet.promise);
+    h.alternate.list.mockReturnValueOnce(bList.promise).mockReturnValueOnce(cList.promise);
+    h.alternate.get.mockReturnValueOnce(bGet.promise).mockReturnValueOnce(cGet.promise);
 
-    const b = h.coordinator.transition(detailIntent("indexeddb", "b"));
-    await vi.waitFor(() => expect(h.indexeddb.list).toHaveBeenCalledTimes(2));
-    const c = h.coordinator.transition(detailIntent("indexeddb", "c"));
-    await vi.waitFor(() => expect(h.indexeddb.list).toHaveBeenCalledTimes(3));
+    const b = h.coordinator.transition(detailIntent(ALTERNATE, "b"));
+    await vi.waitFor(() => expect(h.alternate.list).toHaveBeenCalledTimes(2));
+    const c = h.coordinator.transition(detailIntent(ALTERNATE, "c"));
+    await vi.waitFor(() => expect(h.alternate.list).toHaveBeenCalledTimes(3));
 
     cList.resolve([summary("c")]);
     cGet.resolve(loaded(record("c")));
@@ -306,24 +310,24 @@ describe("latest-intent Composer transition coordinator", () => {
 
   it("ignores a stale provider-switch failure after a newer switch succeeds", async () => {
     const h = harness();
-    h.indexeddb.get.mockResolvedValueOnce(loaded(record("a")));
-    await h.coordinator.transition(detailIntent("indexeddb", "a"));
+    h.alternate.get.mockResolvedValueOnce(loaded(record("a")));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "a"));
 
     const staleFilesList = deferred<readonly CompositionSummary[]>();
     h.files.list.mockReturnValueOnce(staleFilesList.promise);
     h.files.get.mockResolvedValueOnce(loaded(record("same", "File copy")));
-    h.indexeddb.get.mockResolvedValueOnce(loaded(record("c", "Browser C")));
+    h.alternate.get.mockResolvedValueOnce(loaded(record("c", "Browser C")));
 
     const files = h.coordinator.transition(detailIntent("files", "same", "already-applied"));
     await vi.waitFor(() => expect(h.files.list).toHaveBeenCalledOnce());
-    const browser = h.coordinator.transition(detailIntent("indexeddb", "c", "already-applied"));
+    const browser = h.coordinator.transition(detailIntent(ALTERNATE, "c", "already-applied"));
     await expect(browser).resolves.toMatchObject({ status: "committed" });
 
     staleFilesList.reject(new Error("late files failure"));
     await expect(files).resolves.toEqual({ status: "stale" });
     expect(h.coordinator.state).toMatchObject({
       view: "detail",
-      providerId: "indexeddb",
+      providerId: ALTERNATE,
       record: { document: { name: "Browser C" } },
     });
     expect(h.history.replace).not.toHaveBeenCalled();
@@ -331,19 +335,19 @@ describe("latest-intent Composer transition coordinator", () => {
 
   it("ignores a stale get failure after a newer record succeeds", async () => {
     const h = harness();
-    h.indexeddb.get.mockResolvedValueOnce(loaded(record("a")));
-    await h.coordinator.transition(detailIntent("indexeddb", "a"));
+    h.alternate.get.mockResolvedValueOnce(loaded(record("a")));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "a"));
 
     const staleGet = deferred<CompositionLoadOutcome>();
-    h.indexeddb.get.mockReturnValueOnce(staleGet.promise);
+    h.alternate.get.mockReturnValueOnce(staleGet.promise);
     const stale = h.coordinator.transition(
-      detailIntent("indexeddb", "b", "already-applied"),
+      detailIntent(ALTERNATE, "b", "already-applied"),
     );
-    await vi.waitFor(() => expect(h.indexeddb.get).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(h.alternate.get).toHaveBeenCalledTimes(2));
 
-    h.indexeddb.get.mockResolvedValueOnce(loaded(record("c")));
+    h.alternate.get.mockResolvedValueOnce(loaded(record("c")));
     const latest = h.coordinator.transition(
-      detailIntent("indexeddb", "c", "already-applied"),
+      detailIntent(ALTERNATE, "c", "already-applied"),
     );
     await expect(latest).resolves.toMatchObject({ status: "committed" });
 
@@ -355,8 +359,8 @@ describe("latest-intent Composer transition coordinator", () => {
 
   it("opens the route provider when providers contain the same record id", async () => {
     const h = harness();
-    h.indexeddb.get.mockResolvedValueOnce(loaded(record("shared", "Browser copy")));
-    await h.coordinator.transition(detailIntent("indexeddb", "shared"));
+    h.alternate.get.mockResolvedValueOnce(loaded(record("shared", "Browser copy")));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "shared"));
     h.files.get.mockResolvedValueOnce(loaded(record("shared", "File copy")));
 
     await h.coordinator.transition(detailIntent("files", "shared"));
@@ -373,7 +377,7 @@ describe("latest-intent Composer transition coordinator", () => {
     const pendingRefs: Readonly<CompositionRecordRef>[] = [];
     const old = record("old");
     const oldSession = fakeSession(
-      { providerId: "indexeddb", recordId: "old" },
+      { providerId: ALTERNATE, recordId: "old" },
       old,
       {
         flush: () => flush.promise,
@@ -384,17 +388,17 @@ describe("latest-intent Composer transition coordinator", () => {
     );
     const h = harness({
       createDetailSession: vi.fn((ref, value) =>
-        ref.providerId === "indexeddb" && ref.recordId === "old"
+        ref.providerId === ALTERNATE && ref.recordId === "old"
           ? oldSession
           : fakeSession(ref, value),
       ),
     });
-    h.indexeddb.get.mockResolvedValueOnce(loaded(old));
-    await h.coordinator.transition(detailIntent("indexeddb", "old"));
+    h.alternate.get.mockResolvedValueOnce(loaded(old));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "old"));
 
     const leaving = h.coordinator.transition(indexIntent("already-applied", "files"));
     await Promise.resolve();
-    expect(pendingRefs).toEqual([{ providerId: "indexeddb", recordId: "old" }]);
+    expect(pendingRefs).toEqual([{ providerId: ALTERNATE, recordId: "old" }]);
     expect(h.files.list).not.toHaveBeenCalled();
 
     flush.resolve();
@@ -408,7 +412,7 @@ describe("latest-intent Composer transition coordinator", () => {
     let lateEdit = false;
     const observedDrafts: boolean[] = [];
     const oldSession = fakeSession(
-      { providerId: "indexeddb", recordId: "old" },
+      { providerId: ALTERNATE, recordId: "old" },
       old,
       {
         flushPendingProps: () => {
@@ -418,13 +422,13 @@ describe("latest-intent Composer transition coordinator", () => {
     );
     const h = harness({
       createDetailSession: vi.fn((ref, value) =>
-        ref.providerId === "indexeddb" && ref.recordId === "old"
+        ref.providerId === ALTERNATE && ref.recordId === "old"
           ? oldSession
           : fakeSession(ref, value),
       ),
     });
-    h.indexeddb.get.mockResolvedValueOnce(loaded(old));
-    await h.coordinator.transition(detailIntent("indexeddb", "old"));
+    h.alternate.get.mockResolvedValueOnce(loaded(old));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "old"));
     h.files.get.mockImplementationOnce(() => targetGet.promise);
 
     const leaving = h.coordinator.transition(detailIntent("files", "target"));
@@ -442,7 +446,7 @@ describe("latest-intent Composer transition coordinator", () => {
     const old = record("old", "Mounted draft");
     let flushCalls = 0;
     const oldSession = fakeSession(
-      { providerId: "indexeddb", recordId: "old" },
+      { providerId: ALTERNATE, recordId: "old" },
       old,
       {
         flush: async () => {
@@ -453,13 +457,13 @@ describe("latest-intent Composer transition coordinator", () => {
     );
     const h = harness({
       createDetailSession: vi.fn((ref, value) =>
-        ref.providerId === "indexeddb" && ref.recordId === "old"
+        ref.providerId === ALTERNATE && ref.recordId === "old"
           ? oldSession
           : fakeSession(ref, value),
       ),
     });
-    h.indexeddb.get.mockResolvedValueOnce(loaded(old));
-    await h.coordinator.transition(detailIntent("indexeddb", "old"));
+    h.alternate.get.mockResolvedValueOnce(loaded(old));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "old"));
     h.files.get.mockResolvedValueOnce(loaded(record("target")));
     h.history.replace.mockClear();
 
@@ -469,12 +473,12 @@ describe("latest-intent Composer transition coordinator", () => {
 
     expect(result).toMatchObject({ status: "rolled-back", error: { code: "flush-failed" } });
     expect(h.coordinator.state).toMatchObject({
-      providerId: "indexeddb",
+      providerId: ALTERNATE,
       route: { recordId: "old" },
       draft: { document: { name: "Mounted draft" } },
     });
     expect(h.preference.write).not.toHaveBeenCalledWith("files");
-    expect(h.history.replace).toHaveBeenCalledWith("/composer?provider=indexeddb&composition=old");
+    expect(h.history.replace).toHaveBeenCalledWith("/composer?provider=alternate&composition=old");
   });
 
   it("restores URL and preserves provider, collection, and latest draft when flush fails", async () => {
@@ -482,20 +486,20 @@ describe("latest-intent Composer transition coordinator", () => {
     const draft = record("old", "Typed draft");
     const flushFailure = new Error("disk full");
     const oldSession = fakeSession(
-      { providerId: "indexeddb", recordId: "old" },
+      { providerId: ALTERNATE, recordId: "old" },
       old,
       { draft, flush: async () => Promise.reject(flushFailure) },
     );
     const h = harness({
       createDetailSession: vi.fn((ref, value) =>
-        ref.providerId === "indexeddb" && ref.recordId === "old"
+        ref.providerId === ALTERNATE && ref.recordId === "old"
           ? oldSession
           : fakeSession(ref, value),
       ),
     });
-    h.indexeddb.list.mockResolvedValueOnce([summary("old")]);
-    h.indexeddb.get.mockResolvedValueOnce(loaded(old));
-    await h.coordinator.transition(detailIntent("indexeddb", "old"));
+    h.alternate.list.mockResolvedValueOnce([summary("old")]);
+    h.alternate.get.mockResolvedValueOnce(loaded(old));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "old"));
     h.history.replace.mockClear();
 
     const result = await h.coordinator.transition(
@@ -505,12 +509,12 @@ describe("latest-intent Composer transition coordinator", () => {
     expect(result).toMatchObject({ status: "rolled-back", error: { code: "flush-failed" } });
     expect(h.coordinator.state).toMatchObject({
       view: "detail",
-      providerId: "indexeddb",
+      providerId: ALTERNATE,
       collection: [{ id: "old" }],
       draft: { document: { name: "Typed draft" } },
     });
     expect(h.files.list).not.toHaveBeenCalled();
-    expect(h.history.replace).toHaveBeenCalledWith("/composer?provider=indexeddb&composition=old");
+    expect(h.history.replace).toHaveBeenCalledWith("/composer?provider=alternate&composition=old");
   });
 
   it("makes a stale flush failure inert", async () => {
@@ -519,19 +523,19 @@ describe("latest-intent Composer transition coordinator", () => {
     const secondFlush = deferred<void>();
     let flushCalls = 0;
     const oldSession = fakeSession(
-      { providerId: "indexeddb", recordId: "old" },
+      { providerId: ALTERNATE, recordId: "old" },
       old,
       { flush: () => (++flushCalls === 1 ? firstFlush.promise : secondFlush.promise) },
     );
     const h = harness({
       createDetailSession: vi.fn((ref, value) =>
-        ref.providerId === "indexeddb" && ref.recordId === "old"
+        ref.providerId === ALTERNATE && ref.recordId === "old"
           ? oldSession
           : fakeSession(ref, value),
       ),
     });
-    h.indexeddb.get.mockResolvedValueOnce(loaded(old));
-    await h.coordinator.transition(detailIntent("indexeddb", "old"));
+    h.alternate.get.mockResolvedValueOnce(loaded(old));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "old"));
 
     const stale = h.coordinator.transition(detailIntent("files", "b", "already-applied"));
     await vi.waitFor(() => expect(flushCalls).toBe(1));
@@ -548,9 +552,9 @@ describe("latest-intent Composer transition coordinator", () => {
 
   it("rolls back all state and delays preference writes when target loading fails", async () => {
     const h = harness();
-    h.indexeddb.list.mockResolvedValueOnce([summary("old")]);
-    h.indexeddb.get.mockResolvedValueOnce(loaded(record("old", "Draft stays")));
-    await h.coordinator.transition(detailIntent("indexeddb", "old"));
+    h.alternate.list.mockResolvedValueOnce([summary("old")]);
+    h.alternate.get.mockResolvedValueOnce(loaded(record("old", "Draft stays")));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "old"));
     h.preference.write.mockClear();
     h.history.replace.mockClear();
     h.files.list.mockResolvedValueOnce([summary("target")]);
@@ -565,12 +569,12 @@ describe("latest-intent Composer transition coordinator", () => {
       error: { code: "record-load-failed" },
     });
     expect(h.coordinator.state).toMatchObject({
-      providerId: "indexeddb",
+      providerId: ALTERNATE,
       collection: [{ id: "old" }],
       draft: { document: { name: "Draft stays" } },
     });
     expect(h.preference.write).not.toHaveBeenCalled();
-    expect(h.history.replace).toHaveBeenCalledWith("/composer?provider=indexeddb&composition=old");
+    expect(h.history.replace).toHaveBeenCalledWith("/composer?provider=alternate&composition=old");
   });
 
   it("supports direct load, refresh reconstruction, and back/forward history", async () => {
@@ -584,13 +588,13 @@ describe("latest-intent Composer transition coordinator", () => {
     }
 
     const h = harness();
-    h.indexeddb.get.mockResolvedValueOnce(loaded(record("a")));
-    await h.coordinator.transition(detailIntent("indexeddb", "a", "already-applied"));
+    h.alternate.get.mockResolvedValueOnce(loaded(record("a")));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "a", "already-applied"));
     await h.coordinator.transition(indexIntent("already-applied", "files"));
     expect(h.coordinator.state).toMatchObject({ view: "index", providerId: "files" });
-    h.indexeddb.get.mockResolvedValueOnce(loaded(record("a")));
-    await h.coordinator.transition(detailIntent("indexeddb", "a", "already-applied"));
-    expect(h.coordinator.state).toMatchObject({ view: "detail", providerId: "indexeddb" });
+    h.alternate.get.mockResolvedValueOnce(loaded(record("a")));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "a", "already-applied"));
+    expect(h.coordinator.state).toMatchObject({ view: "detail", providerId: ALTERNATE });
     expect(h.history.push).not.toHaveBeenCalled();
   });
 
@@ -603,14 +607,14 @@ describe("latest-intent Composer transition coordinator", () => {
       indexIntent("already-applied", "files"),
     );
     expect(result).toMatchObject({ status: "rolled-back", error: { code: "unknown-provider" } });
-    expect(h.coordinator.state).toMatchObject({ view: "index", providerId: "indexeddb" });
+    expect(h.coordinator.state).toMatchObject({ view: "index", providerId: ALTERNATE });
   });
 
   it("rejects a registry entry whose provider identity does not match its key", async () => {
     const h = harness();
-    h.indexeddb.get.mockResolvedValueOnce(loaded(record("safe")));
-    await h.coordinator.transition(detailIntent("indexeddb", "safe", "already-applied"));
-    h.providers.set("files", h.indexeddb);
+    h.alternate.get.mockResolvedValueOnce(loaded(record("safe")));
+    await h.coordinator.transition(detailIntent(ALTERNATE, "safe", "already-applied"));
+    h.providers.set("files", h.alternate);
 
     const result = await h.coordinator.transition(
       indexIntent("already-applied", "files"),
@@ -618,6 +622,6 @@ describe("latest-intent Composer transition coordinator", () => {
 
     expect(result).toMatchObject({ status: "rolled-back", error: { code: "unknown-provider" } });
     expect(h.files.list).not.toHaveBeenCalled();
-    expect(h.coordinator.state).toMatchObject({ providerId: "indexeddb" });
+    expect(h.coordinator.state).toMatchObject({ providerId: ALTERNATE });
   });
 });
