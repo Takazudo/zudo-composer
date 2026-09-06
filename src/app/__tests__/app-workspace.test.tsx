@@ -51,7 +51,7 @@ function workspace(id = "one") {
 afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, "", "/"); vi.clearAllMocks(); });
 describe("application workspace lifetime", () => {
   it("warns on closing throughout confirmed example import and stops warning after the committed swap", async () => {
-    let finish!: (value: ProductionProviderIntegration) => void;
+    let finish!: (value: exampleLoader.ExampleCreationResult<ProductionProviderIntegration>) => void;
     const create = vi.spyOn(exampleLoader, "createCatalogEditorialExample").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     const integration = { ...workspace(), mediaProvider: { descriptor: { id: "media-files" } } };
     const warns = () => { const event = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; };
@@ -62,7 +62,7 @@ describe("application workspace lifetime", () => {
       expect(create).not.toHaveBeenCalled(); expect(warns()).toBe(false);
       fireEvent.click(screen.getByRole("button", { name: "Confirm create separate project" }));
       await waitFor(() => expect(create).toHaveBeenCalledTimes(1)); expect(warns()).toBe(true);
-      await act(async () => finish(workspace("example") as unknown as ProductionProviderIntegration));
+      await act(async () => finish({ value: workspace("example") as unknown as ProductionProviderIntegration, mediaStatus: "current" }));
       await screen.findByRole("heading", { name: "Workspace example" });
       expect(warns()).toBe(false); expect(screen.getByRole("button", { name: "Return to previous workspace" })).toBeInTheDocument();
     } finally { create.mockRestore(); }

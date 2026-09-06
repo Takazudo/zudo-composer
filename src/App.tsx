@@ -42,6 +42,7 @@ export function App({ themeController, integration }: AppProps = {}) {
   const operationGate = useMemo(createApplicationOperationGate, []);
   const [exampleGateBusy, setExampleGateBusy] = useState(operationGate.busy);
   const [examplePreviousWorkspaceId, setExamplePreviousWorkspaceId] = useState<string>();
+  const [exampleCreationNotice, setExampleCreationNotice] = useState<string>();
   useEffect(() => operationGate.subscribe(() => setExampleGateBusy(operationGate.busy)), [operationGate]);
   const swapCommitted = useRef<(() => void) | null>(null);
   const ownedThemeController = useMemo(
@@ -227,10 +228,15 @@ export function App({ themeController, integration }: AppProps = {}) {
   else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} contentServices={mediaContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;
   else if (path === "/") content = <><Dashboard summary={workspaceSummary} /><CatalogEditorialExampleLoader
     context={activeSiteProjectValidationContext} available={!!providers.mediaProvider} busy={busy || exampleGateBusy}
+    creationNotice={exampleCreationNotice}
     previousWorkspace={examplePreviousWorkspaceId && examplePreviousWorkspaceId !== providers.workspace.id ? { id: examplePreviousWorkspaceId, open: () => replaceWorkspace(() => providers.workspace.open(examplePreviousWorkspaceId)) } : undefined}
     create={async () => {
       const previousId = providers.workspace.id;
-      const opened = await replaceWorkspace(async () => (await createCatalogEditorialExample({ confirmed: true, context: activeSiteProjectValidationContext, media: providers.mediaProvider, loadExample: (project, revision) => providers.workspace.loadExample(project, revision) }))!);
+      const opened = await replaceWorkspace(async () => {
+        const result = (await createCatalogEditorialExample({ confirmed: true, context: activeSiteProjectValidationContext, media: providers.mediaProvider, loadExample: (project, revision, commit) => providers.workspace.loadExample(project, revision, commit) }))!;
+        setExampleCreationNotice(result.message);
+        return result.value;
+      });
       if (opened) setExamplePreviousWorkspaceId(previousId);
       return opened;
     }}

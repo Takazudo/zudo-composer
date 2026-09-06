@@ -22,8 +22,20 @@ external links, not live stores or promises of service.
    verifies the checked-in 321-byte PDF's SHA-256, uploads through the existing
    Media transport only if no active matching asset exists, verifies its exact
    version, binds the returned provider/asset identity, and validates again.
-   Only then does the current `workspace.loadExample` service create and select
-   the isolated project. It does not apply, build or activate a release.
+   It captures the active record revision, current version/checksum, exact pin
+   and provider mutation token. The current `workspace.loadExample` service
+   seeds and validates all four provider snapshots, then invokes `beforeComplete`
+   to recheck that exact Media state immediately before selecting the project.
+   Changed/trash/missing Media at that check rejects selection. A post-return
+   recheck reports any subsequent drift as **Created workspace: Media changed**,
+   not as a failed creation or a promise of permanent pinning. This does not
+   apply, build or activate a release.
+
+The final Media read is this optional authoring operation's pre-selection
+validation boundary, not a cross-domain filesystem/IndexedDB lock. Media may
+change during/after the ensuing selection transaction; the post-return check
+then exposes that drift without falsely reporting an uncommitted workspace.
+Release review, not example loading, is the exact immutable pin boundary.
 
 This is **not destructive replacement**. Existing workspace databases and the
 activated visitor build remain intact. After creation the dashboard shows the
@@ -33,13 +45,29 @@ workspace listing is not added by this example. The existing workspace selection
 service can reopen a known ID. This example introduces no delete, overwrite or purge action.
 There is no automatic loading on startup or navigation.
 
+Creation uses `example-<bound-project-revision>` as its retry identity. Failed
+seeding marks cleanup pending before deleting only that unselected attempt's
+four scoped IndexedDB databases. Once all deletions complete, its seeding
+metadata is removed. A blocked or uncertain deletion keeps that exact seed
+identity and source; retries finish the queued deletions before idempotently
+reseeding. They cannot mint another workspace for the same revision or let a
+late delete remove freshly reseeded data. Close blocking connections and retry
+the same example. A ready workspace is never deleted, cleared or overwritten;
+attempting to create an already completed identity reports its ID for explicit
+opening instead. Other generic creation callers reuse matching unfinished seeds.
+
+A persisted guard marker prevents a crash-interrupted example seed from being
+selected through ordinary workspace opening or low-level completion without
+repeating its original before-complete validation.
+
 Media is global, not part of the four project provider snapshots. The one asset
 is the repository's intentionally blank `deployment-sample.pdf`: it demonstrates
 real byte/version integrity and per-use link labels, not a product photograph,
 logo or useful support manual. Three Product uses and one Site settings use
 share its identity but have different labels. If Media import succeeds and
 later workspace creation fails, the asset remains in the library; retry verifies
-and reuses it. It is never silently purged. Corrupt bytes, unavailable Media or
+and reuses it. It is never silently purged. Failed *workspace seed* databases are
+separately eligible for the guarded cleanup above. Corrupt bytes, unavailable Media or
 failed validation block creation without changing the selected workspace. A
 cross-tab uncertain Media commit must settle through the Media provider's normal
 recovery before creation can succeed.
@@ -122,5 +150,7 @@ they do not mutate the real Media catalog or selected browser workspace. They
 check current-schema validation, actual mapped/repeated output, relation order,
 external URLs, nested ancestors, draft policy, exact Media lock, selected-draft
 dependency checks, cancel/unavailable/corrupt input, preserved prior workspace,
-and deduplicated retry after an additive import. The manager owns the complete
+and deduplicated retry after an additive import, Media replace/trash immediately
+before selection, blocked cleanup followed by same-ID retry, and truthful
+post-selection Media drift. The manager owns the complete
 interactive browser walkthrough and production artifact checks.

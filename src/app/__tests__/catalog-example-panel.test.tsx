@@ -45,3 +45,9 @@ it("offers the preserved workspace through the injected existing selection servi
   fireEvent.click(screen.getByRole("button", { name: "Return to previous workspace" }));
   expect(open).toHaveBeenCalledTimes(1);
 });
+it("distinguishes a committed workspace with later Media drift from a failed creation", () => {
+  render(<CatalogEditorialExampleLoader context={context} available busy={false} create={vi.fn()} creationNotice="The workspace was created; its mutable Media head changed after selection." />);
+  expect(screen.getByText("Created workspace: Media changed")).toBeInTheDocument();
+  expect(screen.getByText(/mutable Media head changed after selection/)).toBeInTheDocument();
+  expect(screen.queryByText("Example not opened")).not.toBeInTheDocument();
+});
