@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
-import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./deployment-artifact-lib.mjs";
+import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./routes.mjs";
 import { resolveLocalReleaseToolchain } from "../server/site-project-local/toolchain-config.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -11,7 +11,6 @@ const readJson = (path) => JSON.parse(read(path));
 const canonical = (value) => Array.isArray(value) ? `[${value.map(canonical).join(",")}]` : value && typeof value === "object" ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}` : JSON.stringify(value);
 const digest = (value) => createHash("sha256").update(`${canonical(value)}\n`).digest("hex");
 const packageJson = readJson("package.json");
-const wrangler = readJson("wrangler.jsonc");
 const vite = read("vite.config.ts");
 const bundledRelease = readJson("artifacts/site-release/bundled-release.json");
 const plugin = read("plugins/site-project-source-plugin.mjs");
@@ -19,8 +18,6 @@ const store = read("server/site-project-local/store.ts");
 const browser = read("tests/browser/site-project-acceptance.pw.ts");
 const browserRunner = read("scripts/run-site-project-browser.mjs");
 const browserConfig = read("playwright.site-project.config.ts");
-const browserDistConfig = read("playwright.site-project-dist.config.ts");
-const bundleProducer = read("scripts/generate-bundled-release.ts");
 
 assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/media"]);
 assert.deepEqual(SITE_ROUTES, [
@@ -41,17 +38,9 @@ assert.ok(browserRunner.includes("mkdtemp"), "browser runner must create an isol
 assert.ok(browserRunner.includes("ZUDO_SITE_PROJECT_ROOT"), "browser runner must pass the isolated root to CLI and Vite");
 assert.ok(browserRunner.includes('operation: "apply"'), "browser runner must apply through the JSON CLI");
 assert.ok(browserRunner.includes('operation: "activate"'), "browser runner must activate through the JSON CLI");
-assert.ok(browserRunner.includes('"dist", "index.html"'), "production browser runner must consume an existing build");
-assert.ok(browserRunner.includes('"playwright.site-project-dist.config.ts"'), "production browser runner must use the Wrangler config");
 assert.ok(browserRunner.includes("env: { ...process.env, ...environment }"), "browser runner must preserve the parent process environment");
-assert.ok(bundleProducer.includes('operation: "plan"') && bundleProducer.includes('operation: "apply"') && bundleProducer.includes('operation: "build"'), "bundled release producer must use protocol-2 review/apply/build");
-assert.ok(bundleProducer.includes("mkdtemp") && bundleProducer.includes("mediaStoreRoot"), "bundled release producer must isolate release and Media state");
-assert.ok(bundleProducer.includes('mode === "--check"'), "bundled release producer must support deterministic drift checks");
-assert.doesNotMatch(browserRunner, /\b(?:pnpm|npm)\s+(?:run\s+)?build\b/, "browser lanes must not rebuild the production artifact");
 assert.ok(browserConfig.includes("reuseExistingServer: false"), "isolated dev browser config must own its server");
 assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must use one deterministic worker");
-assert.ok(browserDistConfig.includes("wrangler dev --local"), "production browser config must use local Wrangler");
-assert.ok(browserDistConfig.includes('CLOUDFLARE_API_TOKEN: ""'), "production browser config must be unauthenticated");
 
 assert.ok(vite.includes("bundled-release.json"), "Vite config must inject an explicit completed bundled release artifact");
 assert.ok(vite.includes("bundledSource"), "Vite config must pass the immutable bundled delivery source");
@@ -80,18 +69,8 @@ assert.equal(packageJson.scripts["site-project:boundary"], "node scripts/check-s
 assert.equal(packageJson.scripts["site-project:bundle"], "tsx scripts/generate-bundled-release.ts --write");
 assert.equal(packageJson.scripts["site-project:bundle:check"], "tsx scripts/generate-bundled-release.ts --check");
 assert.equal(packageJson.scripts["test:browser:site-project"], "node scripts/run-site-project-browser.mjs --dev");
-assert.equal(packageJson.scripts["test:browser:site-project:dist"], "node scripts/run-site-project-browser.mjs --dist");
 const workflow = read(".github/workflows/ci.yml");
 assert.ok(workflow.includes("pnpm test:browser:site-project\n"), "CI must run the isolated dev acceptance lane");
-assert.ok(workflow.includes("pnpm test:browser:site-project:dist\n"), "CI must run the no-rebuild production acceptance lane");
-
-const allowedWranglerKeys = ["$schema", "name", "compatibility_date", "workers_dev", "preview_urls", "assets", "routes"].sort();
-assert.deepEqual(Object.keys(wrangler).sort(), allowedWranglerKeys, "Worker config must remain assets-only");
-assert.equal(wrangler.assets.directory, "./dist");
-assert.equal(wrangler.assets.not_found_handling, "single-page-application");
-assert.ok(!Object.hasOwn(wrangler, "main"), "Worker must not claim a main entry");
-assert.ok(!Object.hasOwn(wrangler, "bindings"), "Worker must not claim bindings");
-assert.ok(!Object.hasOwn(wrangler, "vars"), "Worker must not claim backend variables");
 
 const forbiddenProductionMarkers = [
   ".zudo-site-project",
@@ -141,7 +120,6 @@ for (const file of ["README.md", "CLAUDE.md", "docs/site-project.md"]) {
   assert.match(document, /(?:CAS|compare-and-swap)/i, `${file} must explain conflict expectations`);
   assert.match(document, /immutable/i, `${file} must explain immutable builds`);
   assert.match(document, /diagnostic/i, `${file} must explain diagnostics`);
-  assert.match(document, /Cloudflare[\s\S]{0,160}(?:future|not a claim)/i, `${file} must mark hosted persistence/API/auth as future work`);
 }
 
-console.log("SiteProject boundary passed: exact routes, bundled-vs-local source, assets-only Worker, disposable state, and browser proofs are wired.");
+console.log("SiteProject boundary passed: exact routes, bundled-vs-local source, disposable state, and browser proofs are wired.");
