@@ -742,9 +742,14 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
   await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toHaveCSS("transform", "none");
   for (const product of PRODUCT_LINKS) {
-    const box = await navigation.getByRole("link", { name: product, exact: true }).boundingBox();
-    expect(box?.height).toBeGreaterThanOrEqual(44);
+    const link = navigation.getByRole("link", { name: product, exact: true });
+    await expect(link).toHaveCSS("min-height", "44px");
+    const box = await link.boundingBox();
+    expect(box).not.toBeNull();
+    expect(Math.round(box!.height)).toBeGreaterThanOrEqual(44);
   }
   await page.keyboard.press("Escape");
   const targets = await page.locator(".sg-content-app button:visible").evaluateAll((nodes) => nodes.map((node) => {
