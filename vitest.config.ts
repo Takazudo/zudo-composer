@@ -51,9 +51,11 @@ export default defineConfig({
           environment: 'jsdom',
           setupFiles: ['./src/test/setup.ts'],
           // Provider specs now drive real filesystem stores (fsync per commit) instead of
-          // in-memory IndexedDB, so the 5s default times out under full-suite parallel load
-          // while passing comfortably in isolation. Same reason the server project raises it.
-          testTimeout: 20_000,
+          // in-memory IndexedDB. The heaviest of them take ~75s of test time on their own,
+          // and under full-suite parallel load they contend for the disk badly enough to
+          // blow past 20s while passing in isolation. Same reason the server project raises
+          // its own timeout; the cost here is real I/O, not a hung promise.
+          testTimeout: 60_000,
           exclude: [...configDefaults.exclude, '**/worktrees/**', 'server/**'],
         },
       },
