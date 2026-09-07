@@ -183,9 +183,27 @@ export function SitemapCanvas({
     scroller.scrollTop = Math.max(0, (element.offsetTop + element.offsetHeight / 2) * zoom - scroller.clientHeight / 2);
   }, [selectedId, zoom]);
 
+  /**
+   * The selection this canvas has already brought into view.
+   *
+   * A layout recomputation is a measurement settling — fonts arriving, panes
+   * sizing, the graph finishing its first render — and not a request to scroll.
+   * Re-asserting the reveal on each one scrolled the selected node's ancestors
+   * repeatedly (measured at up to nine times for a single selection), which
+   * pulls the page back under whoever is working in it and moves every other
+   * row on the route while it happens. `layout` stays in the dependencies so a
+   * selection made before its node exists is still revealed by the first layout
+   * that has it — but once, not on every later measurement.
+   */
+  const revealedRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!selectedId) return;
-    nodeRefs.current.get(selectedId)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    if (!selectedId) { revealedRef.current = null; return; }
+    if (revealedRef.current === selectedId) return;
+    const element = nodeRefs.current.get(selectedId);
+    if (!element) return;
+    revealedRef.current = selectedId;
+    element.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [selectedId, layout]);
 
   const fit = useCallback(() => {
