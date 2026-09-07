@@ -8,10 +8,10 @@
  *   .cms-table th, .cms-table td { height: 44px }   (40px / 34px on a fine pointer)
  *   .cms-table__actions > * { opacity: 1 }          (0 until hover, and there is no hover here)
  *
- * The dev lane owns the only coarse project but activates no SiteProject, so no
- * library there ever renders a table; the dist lane serves the bundled sample
- * but had only a desktop project. `playwright.config.ts` now routes this file
- * to a coarse project of its own — the `.coarse.pw.ts` suffix is load-bearing,
+ * The dev lane activates no SiteProject, so no library there ever renders a
+ * table. The host lane does — its runner activates the sample into the host
+ * before the server starts — and `playwright.host.config.ts` routes this file
+ * to a coarse project of its own. The `.coarse.pw.ts` suffix is load-bearing,
  * and renaming it would run these assertions on a fine pointer where every rule
  * they check is switched off and all of them would pass while proving nothing.
  */

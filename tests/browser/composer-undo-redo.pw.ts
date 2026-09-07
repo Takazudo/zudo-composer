@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
+import { watchRuntimeFailures } from "../runtime-failures";
 
 /**
  * `.cms-tree-acts` is `width: 0; opacity: 0` until its row is hovered or
@@ -16,20 +17,6 @@ async function treeRowAction(structure: Locator, action: string): Promise<void> 
   await button.click();
 }
 
-
-function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => {
-    const errorText = request.failure()?.errorText;
-    if (errorText === "net::ERR_ABORTED") return;
-    failures.push(`request: ${request.url()} (${errorText})`);
-  });
-  return failures;
-}
 
 test("Composer composes, edits, and recovers through toolbar and canvas history", async ({ page }) => {
   test.setTimeout(120_000);

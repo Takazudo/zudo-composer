@@ -2,24 +2,11 @@
 // Content, and the shared responsive/theme/focus seams the Content panes own.
 // Mapping-owned coverage lives in `mapping.pw.ts`.
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { watchRuntimeFailures } from "../runtime-failures";
 
 const PRODUCT_LINKS = ["Compositions", "Content", "Mappings", "Sitemaps", "Media"] as const;
 const COLLECTION_MAPPING = "Journal entry mapping";
 const SINGLE_MAPPING = "Browser Site settings mapping";
-
-function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => {
-    const errorText = request.failure()?.errorText;
-    if (errorText === "net::ERR_ABORTED") return;
-    failures.push(`request: ${request.url()} (${errorText})`);
-  });
-  return failures;
-}
 
 async function selectOptionMatching(select: Locator, label: RegExp) {
   const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value");
@@ -225,7 +212,7 @@ test("Content directory, Raw storage, and field-qualified usage links stay model
   const failures = watchRuntimeFailures(page);
   await page.goto("/content");
   await expect(page.getByRole("heading", { name: "All models", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Journal articles.*Browser storage/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Journal articles.*Project files/ })).toBeVisible();
 
   await contentTree(page).getByRole("treeitem", { name: /^Journal articles/ }).click();
   await contentTree(page).getByRole("treeitem", { name: /^Map the moving parts/ }).click();
@@ -663,7 +650,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
 
   await sourceKind.getByRole("radio", { name: "Composition", exact: true }).click();
   await inspector.getByRole("button", { name: "Choose composition" }).click();
-  await page.getByRole("dialog", { name: "Choose a composition" }).getByRole("button", { name: /Assign Journal entry page from Browser storage/ }).click();
+  await page.getByRole("dialog", { name: "Choose a composition" }).getByRole("button", { name: /Assign Journal entry page from Local files/ }).click();
   const compositionField = inspector.getByRole("group", { name: "Composition" });
   await expect(compositionField.getByText("Journal entry page", { exact: true })).toBeVisible();
   await expect(assignment).toHaveText("Composition");

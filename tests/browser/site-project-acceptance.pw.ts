@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Response } from "@playwright/test";
+import { watchRuntimeFailures } from "../runtime-failures";
 
 const SITE_ROUTES = [
   "/site",
@@ -9,20 +10,6 @@ const SITE_ROUTES = [
   "/site/journal/review-in-small-loops",
   "/site/journal/start-with-the-question",
 ] as const;
-
-function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => {
-    const errorText = request.failure()?.errorText;
-    if (errorText === "net::ERR_ABORTED") return;
-    failures.push(`request: ${request.url()} (${errorText})`);
-  });
-  return failures;
-}
 
 async function useTheme(page: Page, theme: "light" | "dark") {
   await page.evaluate((value) => {

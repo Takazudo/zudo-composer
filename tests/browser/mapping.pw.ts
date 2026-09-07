@@ -2,22 +2,9 @@
 // the direct-preview isolation that the Mapping preview iframe depends on.
 // Content-owned coverage lives in `content.pw.ts`.
 import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
+import { watchRuntimeFailures } from "../runtime-failures";
 
 const JOURNAL_MAPPING = "/mapping?provider=mapping-filesystem&mapping=journal-entry-mapping";
-
-function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => {
-    const errorText = request.failure()?.errorText;
-    if (errorText === "net::ERR_ABORTED") return;
-    failures.push(`request: ${request.url()} (${errorText})`);
-  });
-  return failures;
-}
 
 async function selectOptionMatching(select: Locator, label: RegExp) {
   const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value");

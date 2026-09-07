@@ -10,9 +10,9 @@
  * across two lanes by filename suffix, so what they both need lives here.
  *
  * The dev server may have no activated release. `ensureDevWorkspace` explicitly
- * initializes the test-owned IndexedDB source through the current validated
- * workspace service; it never bypasses unavailable initialization to fake a
- * listing. This does not activate a release. Activation remains in the guarded
+ * initializes a test-owned source through the current validated workspace
+ * service; it never bypasses unavailable initialization to fake a listing.
+ * This does not activate a release. Activation remains in the guarded
  * SiteProject lane with its disposable local release root.
  */
 
@@ -48,21 +48,6 @@ const ROUTE_READY: Record<FoundationRoute, (page: Page) => Locator> = {
   "/sitemapper": (page) => page.getByRole("heading", { name: "Sitemaps", exact: true }),
   "/composer": (page) => page.locator(".cms-shell-main > *").first(),
 };
-
-/** Console errors, page errors and failed requests, collected as they happen. */
-export function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => {
-    const errorText = request.failure()?.errorText;
-    if (errorText === "net::ERR_ABORTED") return;
-    failures.push(`request: ${request.url()} (${errorText})`);
-  });
-  return failures;
-}
 
 /**
  * A horizontal-overflow failure that names the elements sticking out, rather

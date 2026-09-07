@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
+import { watchRuntimeFailures } from "../runtime-failures";
 
 /**
  * `.cms-tree-acts` is `width: 0; opacity: 0` until its row is hovered or
@@ -31,16 +32,6 @@ const COMPONENTS = [
   "SplitLayout",
   "Stack",
 ] as const;
-
-function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => failures.push(`request: ${request.url()} (${request.failure()?.errorText})`));
-  return failures;
-}
 
 async function useTheme(page: Page, theme: "light" | "dark") {
   await page.evaluate((value) => {
@@ -185,13 +176,13 @@ test("clean Sitemapper assigns and resolves the seeded About page catalog entry"
   await page.getByRole("button", { name: "Choose composition" }).click();
   const picker = page.getByRole("dialog", { name: "Choose a composition" });
   await expect(picker.getByText("About page", { exact: true })).toBeVisible();
-  await picker.getByRole("button", { name: /Assign About page from Browser storage/i }).click();
+  await picker.getByRole("button", { name: /Assign About page from Local files/i }).click();
   // Scoped to the Composition group: the shell rail also shows the active
-  // provider ("Browser storage") in its foot, so a page-wide text match is
+  // provider ("Local files") in its foot, so a page-wide text match is
   // ambiguous and would pass on the rail rather than on the assignment.
   const compositionField = page.getByRole("group", { name: "Composition" });
   await expect(compositionField.getByText("About page", { exact: true })).toBeVisible();
-  await expect(compositionField.getByText("Browser storage", { exact: true })).toBeVisible();
+  await expect(compositionField.getByText("Local files", { exact: true })).toBeVisible();
 
   for (const theme of ["light", "dark"] as const) await useTheme(page, theme);
   await page.setViewportSize({ width: 375, height: 812 });
