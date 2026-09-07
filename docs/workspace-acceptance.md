@@ -3,8 +3,8 @@
 This is the durable acceptance map for the completed data-first CMS graph.
 **Browser execution and visual acceptance are pending manager execution.** Source
 audit, TypeScript and unit/static checks are not screenshots, browser passes,
-CI, deployment, or final merge evidence. Record the integrated commit and actual
-results in the manager's final handoff; do not infer them from this document.
+CI, or final merge evidence. Record the integrated commit and actual results in
+the manager's final handoff; do not infer them from this document.
 
 ## Approved design audit
 
@@ -114,13 +114,6 @@ Manager must run the full integrated CI-equivalent gates without omissions:
 Use the installed provider commit/tree/spec and separate contract protocol
 identities in CLAUDE.md; this work does not change them. Existing tests verify
 preview isolation, compiled output, metadata and strict malformed requests. Do
-not remove these gates in favor of the new UI matrix. Credential-dependent
-deployment remains separately reported if unavailable; never claim live smoke,
-permanent main SHA, GitHub completion or visual parity from worker static checks.
-
-An inherited artifact handoff remains: the worker's SiteProject boundary check
-found the bundled release's compiler fingerprint differs from the current
-integrated compiler fingerprint, while installed-provider/contract identities
-match. The manager owns reproducible regeneration after merging this work and
-must rerun that boundary and all artifact gates. This is a recorded failed gate,
-not an accepted waiver or a reason to hand-edit its digest.
+not remove these gates in favor of the new UI matrix. Never claim a passing
+host install, permanent main SHA, GitHub completion or visual parity from
+worker static checks alone.

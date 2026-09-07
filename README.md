@@ -1,23 +1,30 @@
 # zudo-composer
 
-`zudo-composer` is the permanent standalone home of five Preact authoring
-products:
+`zudo-composer` is an installable Preact authoring **tool**, not an application
+with its own content. A host project installs it, points it at its own
+components and a `zudo-composer.config.ts`, and gets five authoring products
+over a shared filesystem storage engine:
 
-- Composer owns its document model, source generation, reuse rules, storage,
-  chrome, preview renderer, and same-origin iframe protocol.
-- Content owns its model, Entry library, browser storage, and authoring UI.
-- Mapping owns its binding model, resolver, browser storage, preview handoff,
-  and authoring UI.
-- Sitemapper owns its page-tree model, storage, library, authoring UI, and the
-  catalog integration that resolves saved Composer records.
+- Composer owns its document model, source generation, reuse rules, chrome,
+  preview renderer, and same-origin iframe protocol.
+- Content owns its model, Entry library, and authoring UI.
+- Mapping owns its binding model, resolver, preview handoff, and authoring UI.
+- Sitemapper owns its page-tree model, library, authoring UI, and the catalog
+  integration that resolves saved Composer records.
 - Media owns its metadata model, library route, and upload/delivery boundaries.
 
-The products do not depend on zudo-doc, a zfb application runtime/configuration,
-or a styleguide registry. `zudo-sg` has a narrower permanent role: its installed
-`@zudo-sg/ui` package supplies typed component sidecars, the runtime component
-pack, and canonical Composer CSS. That provider transitively owns the focused
-`@takazudo/zfb-md-wasm` renderer used by `ProseMd`; this is not a zfb application
-dependency.
+All five persist to the host's own project files — the four JSON domains plus
+media, under paths the host's `zudo-composer.config.ts` controls (see
+[Settings and host directory layout](#settings-and-host-directory-layout)
+below). The tool does not depend on zudo-doc, a zfb
+application runtime/configuration, or a styleguide registry. `zudo-sg` has a
+narrower permanent role in this repository: its installed `@zudo-sg/ui`
+package is this repo's own dogfood component pack, supplying typed component
+sidecars, the runtime component pack, and canonical Composer CSS. That
+provider transitively owns the focused `@takazudo/zfb-md-wasm` renderer used
+by `ProseMd`; this is not a zfb application dependency. A host is free to
+install a different themeset instead — see
+[Component packs and themesets](#component-packs-and-themesets).
 
 ## Routes and assets
 
@@ -84,6 +91,50 @@ export default defineComposerConfig({
 { "scripts": { "dev": "zudo-composer dev" } }
 ```
 
+### Settings and host directory layout
+
+Every setting except `pack` has a default and is resolved host-root-relative;
+`dataDir` re-bases the five settings below it, so moving all CMS data is one
+edit. `publicMediaDir` and `styles` are not CMS data and are never re-based.
+
+| Setting | Default | What it is |
+| --- | --- | --- |
+| `dataDir` | `cms` | Root for the four JSON domains plus media |
+| `compositionsDir` | `cms/compositions` | Composition JSON, including global templates |
+| `contentDir` | `cms/content` | Content-domain JSON |
+| `mappingsDir` | `cms/mappings` | Mapping-domain JSON |
+| `sitemapsDir` | `cms/sitemaps` | Sitemapper-domain JSON |
+| `mediaDir` | `cms/media` | Media content-addressed store |
+| `publicMediaDir` | `public/uploaded-media` | Published media bytes the host commits and serves |
+| `styles` | `styles/base.css` | The host's base CSS entry — see [Styles ownership](#styles-ownership) |
+| `pack` | *(required, no default)* | Component-pack module specifier — see below |
+
+A minimal host that keeps every default and supplies its components as a
+self-reference looks like this:
+
+```text
+my-site/
+├── package.json                 # name: "my-site", exports: { "./components": … }
+├── pnpm-workspace.yaml           # onlyBuiltDependencies: [component-contract]
+├── zudo-composer.config.ts       # pack: "my-site/components"
+├── components/
+│   └── pack.ts                   # the component pack `exports` resolves to
+├── styles/
+│   └── base.css                  # imported pack CSS + Tailwind @source
+├── public/
+│   └── uploaded-media/           # publicMediaDir — committed, served bytes
+└── cms/                          # dataDir — everything the tool authors
+    ├── compositions/
+    ├── content/
+    ├── mappings/
+    ├── sitemaps/
+    └── media/
+```
+
+Every setting can also be overridden per-environment as
+`ZUDO_COMPOSER_<SETTING_NAME>` (for example `ZUDO_COMPOSER_DATA_DIR`), with
+precedence explicit config > environment > default.
+
 ### Component packs and themesets
 
 A component pack is always addressed as a **package**, never as a path — the
@@ -101,6 +152,30 @@ its own `name` plus `"exports": { "./components": "./components/pack.ts" }`, and
 both Node and Vite resolve a package's reference to itself whenever `exports` is
 present. Its name must be a valid lowercase npm name, and no exported subpath
 segment may be `src`.
+
+Either shape's entry module must export `componentPack` built with
+`defineComponentPack`/`defineComponent` from `@zudo-composer/component-contract`
+— a plain object is rejected. A minimal self-reference pack:
+
+```tsx
+// components/pack.ts, exported as "./components" in package.json
+import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
+import { Banner, type BannerProps } from "./banner";
+
+const banner = defineComponent<BannerProps>()(Banner, {
+  id: "site.banner",
+  schemaVersion: 1,
+  title: "Banner",
+  category: "Content",
+  description: "The host's own headline component.",
+  source: { module: "my-site/components", exportKind: "named", exportName: "Banner" },
+  defaults: { headline: "Banner" },
+  fields: [{ prop: "headline", label: "Headline", schema: { type: "string" }, editor: { kind: "text" } }],
+});
+
+export const componentPack = defineComponentPack({ packId: "my-site", packVersion: "1.0.0", components: [banner] });
+export { Banner };
+```
 
 Swapping a themeset is two edits and no tool change: the `pack` value above, and
 the `@import` in the host's `styles` entry. zudo-composer never falls back to a
