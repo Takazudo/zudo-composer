@@ -42,6 +42,16 @@ export function createLocalSiteProjectApiService(options: LocalSiteProjectServic
     if (!mediaStore) { try { await lstat(join(mediaRoot, "catalog.json")); mediaStore = await createFilesystemMediaStore({ mediaStoreRoot: mediaRoot }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } }
     return createSiteProjectApiService({ componentCatalog: catalog, projectStore: store, buildStore: store, hash: async (text) => sha(text), toolchain, mediaStore, isWorkingCurrent: options.isWorkingCurrent, reconcilePublication: options.reconcilePublication });
   };
-  const handle: SiteProjectApiService["handle"] = async (request) => { try { return await (await create()).handle(request); } catch { return { ok: false, error: { code: "unavailable", message: "Release toolchain or Media capability is unavailable." } }; } };
+  // The reason is carried, not swallowed. Every failure here used to reach the
+  // Review route as one unactionable sentence, so a host wired without its pack
+  // and a host whose Media directory is unreadable were indistinguishable — and
+  // the route reports the message verbatim to whoever has to fix it.
+  const handle: SiteProjectApiService["handle"] = async (request) => {
+    try { return await (await create()).handle(request); }
+    catch (cause) {
+      const reason = cause instanceof Error ? cause.message : String(cause);
+      return { ok: false, error: { code: "unavailable", message: `Release toolchain or Media capability is unavailable. ${reason}` } };
+    }
+  };
   return { handle, serialize: async (request) => releaseJson(await handle(request)) };
 }
