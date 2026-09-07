@@ -20,6 +20,10 @@ const BIN = resolve(APP_ROOT, "bin/zudo-composer.mjs");
  * drained rather than ended: closing the child's stdout would kill it before
  * the signal under test ever arrives.
  */
+// eslint-disable-next-line no-control-regex
+const ANSI = /\u001B\[[0-9;]*[A-Za-z]/g;
+const stripAnsi = (value: string) => value.replace(ANSI, "");
+
 function firstLocalUrl(child: ChildProcess, waitMs = 45_000): Promise<string> {
   return new Promise((settle, fail) => {
     let output = "";
@@ -43,7 +47,10 @@ function firstLocalUrl(child: ChildProcess, waitMs = 45_000): Promise<string> {
     );
     const read = (chunk: unknown) => {
       output += String(chunk);
-      const url = /http:\/\/localhost:\d+/.exec(output)?.[0];
+      // Vite styles the port, and CI forces color even when stdout is a pipe, so the raw
+      // text reads `localhost:<ESC>[1m46801<ESC>[22m`. Match against a stripped copy or
+      // the URL is invisible on exactly the machines that matter.
+      const url = /http:\/\/localhost:\d+/.exec(stripAnsi(output))?.[0];
       if (!url) return;
       done(() => {
         child.stdout!.resume();
