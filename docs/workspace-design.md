@@ -162,14 +162,15 @@ readers or migrations.
 ## Workspace lifetime and capture
 
 `ProductionProviderIntegration.workspace` owns mutable identity independently
-from active source revision/build. The registry is `zudo-composer-workspaces-v1`;
-provider databases are `<provider-database>-workspace-v1-<workspaceId>`. No old
-revision database is read, migrated or deleted. The default first open reserves
+from active source revision/build. Durable workspace metadata lives in the
+host project's files, in one filesystem registry under `<dataDir>/workspaces`
+(see [Workspace scoping on the filesystem](#workspace-scoping-on-the-filesystem)
+below for its exact shape and locking). The default first open reserves
 `initial` once; the fixed seed manifest is persisted before any provider boot.
-Browser Web Locks serialize initial multi-database seeding across tabs. A failed
-seed retains its original manifest for retry; ready workspaces never seed again.
-Missing selected workspaces, provider databases or malformed metadata require
-explicit recovery, never silent reconstruction from activated source.
+A failed seed retains its original manifest for retry; ready workspaces never
+seed again. Missing selected workspaces, domain directories or malformed
+metadata require explicit recovery, never silent reconstruction from activated
+source.
 
 `workspace.open(id)` returns an initialized integration for that existing
 workspace. `create(project, baselineRevision, options?)` and `loadExample(...)`

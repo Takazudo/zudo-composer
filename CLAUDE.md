@@ -2,27 +2,43 @@
 
 ## Permanent ownership
 
-This repository is the standalone owner of Composer model/source/reuse/storage,
-chrome, preview rendering, and iframe protocol; Content model/storage/library/UI;
-Mapping model/storage/resolver/UI; and Sitemapper model/storage/library, UI, and
-Composer-catalog integration; and Media metadata, library, and upload/delivery
-boundaries.
+This repository is the permanent home of `zudo-composer`, an installable
+authoring **tool**, not an application with its own content. It owns the
+Composer document model, source generation, reuse rules, chrome, preview
+renderer and same-origin iframe protocol; the Content model, Entry library and
+authoring UI; the Mapping binding model, resolver and authoring UI; the
+Sitemapper page-tree model, library, authoring UI and Composer-catalog
+integration; the Media metadata model, library route and upload/delivery
+boundaries; and the shared filesystem storage engine
+(`TransactionalRecordStore`) all five domains persist through.
+
+A host project installs this tool, writes one `zudo-composer.config.ts` at its
+own root, and owns everything the tool authors into that host: its
+**components** (code — either host-local source reached through the host's own
+`exports` self-reference, or an installed themeset package; never a path), its
+**templates** (data, not code — a Composition whose `publication.kind` is
+`"global-template"`, stored under `compositionsDir` like any other composition;
+there is no templates directory or template file format), and its **CMS data**
+(the four JSON domains plus media, rooted at `dataDir`/`mediaDir`). See the
+settings table in [`README.md`](./README.md) for the full default layout.
 
 zudo-sg owns only the installed `@zudo-sg/ui` provider: typed component
 sidecars, runtime pack, and canonical Composer CSS. Its transitive focused
 `@takazudo/zfb-md-wasm` dependency is allowed for `ProseMd`; no zudo-doc, zfb
 application runtime/config, virtual-zfb, or styleguide registry may enter this
-application. Never copy provider components or add a fallback registry.
+tool. Never copy provider components or add a fallback registry. `@zudo-sg/ui`
+is otherwise an ordinary component pack — any themeset that satisfies the same
+contract is interchangeable with it.
 
 Exact routes are `/`, `/composer`, same-origin `/composer/preview`, `/content`,
-`/mapping`, `/sitemapper`, `/media`, and the bundled SiteProject delivery routes `/site`,
-`/site/about`, `/site/services`, `/site/journal`,
+`/mapping`, `/sitemapper`, `/media`, and the sample SiteProject delivery routes
+`/site`, `/site/about`, `/site/services`, `/site/journal`,
 `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
 and `/site/journal/start-with-the-question`; emitted files live under
-`/assets/`, while committed images and PDFs from the host's `publicMediaDir`
-are delivered under `/uploaded-media/`. Upload authoring remains dev-only. Keep Vite
-base `/` and the preview graph isolated from the host application and filesystem
-provider.
+`/assets/`, while committed images and PDFs from this repository's own
+`publicMediaDir` are delivered under `/uploaded-media/`. Upload authoring
+remains dev-only. Keep Vite base `/` and the preview graph isolated from a
+consuming host project and its file-provider plumbing.
 
 The SiteProject operator/API guide is [`docs/site-project.md`](./docs/site-project.md).
 It is the source for provider-scoped graph, whole-project apply, active

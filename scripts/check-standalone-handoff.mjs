@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
 import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./routes.mjs";
 
@@ -14,6 +14,7 @@ const appTokens = read("src/styles/app-tokens.css");
 
 const providerSha = "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf";
 const providerTree = "1c3cbfd3a25d1425f447cdadd5ba538916394309";
+const frozenProvenance = "f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2";
 const contractPackageSha = "9b774b827e9f6fec14379995ac2c691ccc3b7e5b";
 const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}`;
 const contractSpec = `git+https://github.com/Takazudo/zudo-composer.git#${contractPackageSha}`;
@@ -44,6 +45,32 @@ for (const [size, value] of Object.entries({ xs: "0.75rem", sm: "1rem", md: "1.2
   assert.match(appTokens, new RegExp(`--spacing-icon-${size}:\\s*${value.replace(".", "\\.")};`), `missing local icon token ${size}`);
 }
 
+// The host-facing surface a breaking rename would silently drift out from
+// under the docs: the bin name, the config file a host writes, and the
+// `dataDir` convention every settings default hangs off. Each is asserted
+// against its actual source, not just hardcoded, so renaming the bin or the
+// config file here fails this gate instead of only going stale in prose.
+const binEntry = packageJson.bin?.["zudo-composer"];
+assert.equal(binEntry, "./bin/zudo-composer.mjs", "package.json must publish the zudo-composer executable at its documented path");
+assert.ok(existsSync(join(root, binEntry)), `the published bin entry point ${binEntry} must exist`);
+
+const configSource = read("server/config/config.ts");
+const configFileNameMatch = configSource.match(/export const CONFIG_FILE_NAME = "([^"]+)"/);
+assert.ok(configFileNameMatch, "server/config/config.ts must export a literal CONFIG_FILE_NAME");
+const CONFIG_FILE_NAME = configFileNameMatch[1];
+assert.equal(CONFIG_FILE_NAME, "zudo-composer.config.ts");
+
+const settingsSource = read("server/config/settings.ts");
+const dataDirDefaultMatch = settingsSource.match(/dataDir:\s*"([^"]+)"/);
+assert.ok(dataDirDefaultMatch, "server/config/settings.ts must set a literal dataDir default");
+assert.equal(dataDirDefaultMatch[1], "cms");
+
+for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]]) {
+  assert.ok(document.includes(`\`${CONFIG_FILE_NAME}\``), `${name} must name the host config file ${CONFIG_FILE_NAME}`);
+}
+assert.match(readme, /\bdataDir\b[\s\S]{0,60}`cms`|`cms`[\s\S]{0,60}\bdataDir\b/, "README must document the dataDir convention and its cms default");
+assert.match(readme, /`pack`[\s\S]{0,80}(?:required|only setting without a default)/i, "README must document pack as the one required, default-less setting");
+
 for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]]) {
   const normalized = document.replace(/\s+/g, " ").toLowerCase();
   for (const phrase of [
@@ -68,17 +95,53 @@ for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]])
     "link:",
     "path:",
   ]) assert.ok(normalized.includes(phrase.toLowerCase()), `${name} is missing permanent handoff phrase: ${phrase}`);
+  for (const route of SPA_ROUTES) assert.ok(document.includes(`\`${route}\``), `${name} is missing route ${route}`);
+  assert.ok(document.includes("`/assets/`"), `${name} is missing the asset root`);
   assert.doesNotMatch(document, /e127c8a66a223472732e0cb1098296d07b1658ec|3070424cc8b55e63e8d44ee81b238b6777341bc3/, `${name} must not publish a provisional target SHA`);
 }
 
-assert.match(readme, /Composer owns[\s\S]{0,120}document model[\s\S]{0,80}source generation/i);
-assert.match(readme, /Content owns[\s\S]{0,120}model[\s\S]{0,80}storage/i);
-assert.match(readme, /Mapping owns[\s\S]{0,120}binding[\s\S]{0,80}storage/i);
-assert.match(readme, /Sitemapper owns[\s\S]{0,120}page-tree model[\s\S]{0,80}storage/i);
-assert.match(guidance, /owner of Composer model\/source/i);
-assert.match(guidance, /Content model\/storage/i);
-assert.match(guidance, /Mapping model\/storage/i);
-assert.match(guidance, /Sitemapper model\/storage/i);
+// The exhaustive set of permanent identities this project may publish in prose:
+// the frozen zudo-sg provenance commit, the pinned provider commit/tree, and the
+// external component-contract package commit. A fifth hex string of hash length
+// appearing in either document is either an accidental provisional checkpoint or
+// an undocumented new identity — both are bugs the loose "includes" checks above
+// cannot catch.
+const documentedHashes = new Set(
+  [...`${readme}\n${guidance}`.matchAll(/\b[a-f0-9]{40}\b/gi)].map((match) => match[0].toLowerCase()),
+);
+assert.deepEqual(
+  documentedHashes,
+  new Set([frozenProvenance, providerSha, providerTree, contractPackageSha]),
+  "README/CLAUDE must contain only the four permanent provenance/provider/tree/contract identities",
+);
+const provisionalHashes = [...`${readme}\n${guidance}`.matchAll(/(?<![a-f0-9])[a-f0-9]{7,39}(?![a-f0-9])/gi)]
+  .map((match) => match[0]);
+assert.deepEqual(provisionalHashes, [], "README/CLAUDE must not publish abbreviated or provisional checkpoint hashes");
+
+// Ownership framing: the tool owns the five domains' models/UI over a shared
+// filesystem engine; a host project owns what it authors through them
+// (components, templates, CMS data). This replaced the pre-conversion "this
+// repository owns Composer storage" framing, which stopped being true once
+// storage moved to host-configured directories.
+// Multi-word phrases below tolerate a line wrap between words: reflowed prose
+// puts a newline anywhere a space could go, so a literal-space regex is one
+// re-wrap away from a false failure.
+function phraseMatcher(phrase) {
+  const words = phrase.split(" ").map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(words.join("\\s+"), "i");
+}
+assert.match(readme, /installable Preact authoring \*\*tool\*\*/i, "README must frame zudo-composer as an installable tool, not an application");
+assert.match(readme, phraseMatcher("Composer owns its document model, source generation, reuse rules, chrome"));
+assert.match(readme, phraseMatcher("Content owns its model, Entry library, and authoring UI"));
+assert.match(readme, phraseMatcher("Mapping owns its binding model, resolver, preview handoff, and authoring UI"));
+assert.match(readme, phraseMatcher("Sitemapper owns its page-tree model, library, authoring UI"));
+assert.match(guidance, /permanent home of `zudo-composer`[\s\S]{0,80}installable[\s\S]{0,40}tool/i, "CLAUDE.md must frame zudo-composer as an installable tool, not an application");
+assert.match(guidance, phraseMatcher("Composer document model, source generation, reuse rules, chrome"));
+assert.match(guidance, phraseMatcher("Content model, Entry library and authoring UI"));
+assert.match(guidance, phraseMatcher("Mapping binding model, resolver and authoring UI"));
+assert.match(guidance, phraseMatcher("Sitemapper page-tree model, library, authoring UI"));
+assert.match(guidance, /host project installs this tool[\s\S]{0,300}owns everything the tool authors/i, "CLAUDE.md must state that a host project owns what the tool authors into it");
+assert.match(guidance, /\*\*components\*\*[\s\S]{0,400}\*\*templates\*\*[\s\S]{0,400}\*\*CMS data\*\*/i, "CLAUDE.md must spell out the components/templates/CMS-data ownership split");
 
 for (const document of [readme, guidance]) {
   assert.match(document, /same-origin/i);
@@ -179,4 +242,4 @@ for (const forbidden of ["workspace:", "file:", "link:", "path:", "packages/ui",
   assert.ok(!packageJson.dependencies["@zudo-sg/ui"].includes(forbidden), `provider spec uses forbidden resolution: ${forbidden}`);
 }
 
-console.log("Standalone handoff boundary passed: ownership, routes, provider/contract identities, and clean-break policy are locked.");
+console.log("Standalone handoff boundary passed: tool/host ownership framing, the bin/config/dataDir host contract, routes, provider/contract identities, and clean-break policy are locked.");
