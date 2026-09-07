@@ -50,6 +50,10 @@ export default defineConfig({
           name: 'app',
           environment: 'jsdom',
           setupFiles: ['./src/test/setup.ts'],
+          // Provider specs now drive real filesystem stores (fsync per commit) instead of
+          // in-memory IndexedDB, so the 5s default times out under full-suite parallel load
+          // while passing comfortably in isolation. Same reason the server project raises it.
+          testTimeout: 20_000,
           exclude: [...configDefaults.exclude, '**/worktrees/**', 'server/**'],
         },
       },
