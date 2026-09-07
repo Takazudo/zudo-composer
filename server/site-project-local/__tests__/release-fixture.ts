@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach } from "vitest";
@@ -24,7 +24,9 @@ export const toolchain = { compiler: "fixture/2", componentPack: { packId: catal
 export const pack = { manifest: catalog.pack } as unknown as TrustedComponentPack;
 export const PNG = Uint8Array.from([137,80,78,71,13,10,26,10,1,2,3,4]);
 export async function fixture(options: LocalSiteProjectStoreOptions & { media?: boolean } = {}) {
-  const parent = await mkdtemp(join(tmpdir(), "release-v2-")); roots.push(parent);
+  // Resolved, because the host root a store is given is resolved too and macOS
+  // `tmpdir()` is a symlink (`/var` -> `/private/var`).
+  const parent = await realpath(await mkdtemp(join(tmpdir(), "release-v2-"))); roots.push(parent);
   const testRoot = join(parent, "release"), mediaRoot = join(parent, "media");
   const media = options.media ? await createFilesystemMediaStore({ mediaStoreRoot: mediaRoot }) : undefined;
   const store = createLocalSiteProjectStore({ ...options, testRoot, componentPack: catalog.pack, readMedia: async (pin) => (async function* () { yield new Uint8Array(await readFile(join(mediaRoot, "versions", pin.url.split("/").at(-1)!))); })() });

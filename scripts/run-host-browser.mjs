@@ -13,13 +13,16 @@
 // claim, and `smoke-host-install.mjs` is where it is made.
 
 import { spawn } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const root = resolve(import.meta.dirname, "..");
-if (process.argv.length !== 2) throw new Error("Usage: node scripts/run-host-browser.mjs");
+// Extra arguments pass straight through to Playwright, so a single spec can be
+// re-run against a real host fixture (`... -- tests/browser/x.pw.ts -g "name"`).
+// Without this the whole lane is the only way to reproduce one failure.
+const playwrightArgs = process.argv.slice(2).filter((argument) => argument !== "--");
 
 function run(command, args, { input, ...options } = {}) {
   return new Promise((resolveRun, reject) => {
@@ -115,18 +118,49 @@ async function activateSampleProject(hostRoot) {
   }, hostRoot);
 }
 
-// `realpath` matters rather than being cosmetic: macOS `os.tmpdir()` is a
-// symlink, and the lane compares this root against Vite's own resolved paths.
-const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-host-browser-")));
-try {
-  const hostRoot = createHostFixture(temporaryRoot);
-  await activateSampleProject(hostRoot);
-  const playwright = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-  const result = await run(playwright, ["exec", "playwright", "test", "--config", "playwright.host.config.ts"], {
-    env: { ...process.env, ZUDO_COMPOSER_HOST_ROOT: hostRoot },
-    stdio: "inherit",
-  });
-  if (result.status !== 0) process.exitCode = result.status ?? 1;
-} finally {
-  await rm(temporaryRoot, { recursive: true, force: true });
+/**
+ * One spec file, one host project.
+ *
+ * Authored state used to be per browser CONTEXT — an IndexedDB database that
+ * Playwright discarded with the page. It is a directory tree now, shared by
+ * every spec the same server answers, so one spec's renames and binding edits
+ * are the next spec's starting position. Giving each file its own tree and its
+ * own server restores the isolation the storage change took away; ordering
+ * inside a file is still the file's own business.
+ */
+const SPEC_FILES = readdirSync(join(root, "tests/browser"))
+  .filter((name) => name.endsWith(".pw.ts") && name !== "site-project-acceptance.pw.ts")
+  .sort()
+  .map((name) => `tests/browser/${name}`);
+
+/**
+ * A run targeting named specs keeps them together; otherwise every file runs on
+ * its own. Each run also gets its own output directory, because Playwright
+ * clears that directory on start and would otherwise leave only the last file's
+ * traces behind.
+ */
+const specTargets = playwrightArgs.some((argument) => argument.includes(".pw.ts"))
+  ? [playwrightArgs]
+  : SPEC_FILES.map((file) => [
+      file,
+      `--output=test-results/playwright-host/${file.slice("tests/browser/".length, -".pw.ts".length)}`,
+      ...playwrightArgs,
+    ]);
+
+for (const target of specTargets) {
+  // `realpath` matters rather than being cosmetic: macOS `os.tmpdir()` is a
+  // symlink, and the lane compares this root against Vite's own resolved paths.
+  const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-host-browser-")));
+  try {
+    const hostRoot = createHostFixture(temporaryRoot);
+    await activateSampleProject(hostRoot);
+    const playwright = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+    const result = await run(playwright, ["exec", "playwright", "test", "--config", "playwright.host.config.ts", ...target], {
+      env: { ...process.env, ZUDO_COMPOSER_HOST_ROOT: hostRoot },
+      stdio: "inherit",
+    });
+    if (result.status !== 0) process.exitCode = result.status ?? 1;
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 }

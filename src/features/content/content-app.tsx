@@ -40,6 +40,15 @@ const MODE_OPTIONS = [
   { value: "relationships" as const, label: "Relationships", icon: CopyIcon },
 ];
 
+/**
+ * Every mode acts on the OPEN model, and opening one is a provider read now
+ * rather than an in-memory lookup. Left live during that read, a mode the
+ * author picks is silently reverted the moment the load commits its own
+ * default — so the control refuses the choice until there is a model to apply
+ * it to, instead of taking it and dropping it.
+ */
+const NO_MODEL_MODE_OPTIONS = MODE_OPTIONS.map((option) => ({ ...option, disabled: true }));
+
 /** The save queue's vocabulary, translated into the chrome's four states. */
 function statusOf(status: ContentSaveStatus, detail: string, onRetry: () => void): EditorStatus | null {
   switch (status) {
@@ -264,7 +273,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
           label="Editor mode"
           size="sm"
           value={state.workMode}
-          options={MODE_OPTIONS}
+          options={state.model === null ? NO_MODEL_MODE_OPTIONS : MODE_OPTIONS}
           onChange={(mode) => run(async () => { if (mode === "model-fields") await controller.inspectSchema(); else if (mode === "relationships") await controller.inspectRelationships(); else controller.browseEntries(); setDeepSelection(null); acceptVisibleSelection(); })}
         />
       }
