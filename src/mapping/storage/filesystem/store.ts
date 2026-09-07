@@ -373,12 +373,17 @@ export class FilesystemMappingStore implements MappingStore {
    * drives instead of a bespoke `transact` operation.
    */
   async applyTransaction(request: MappingTransactionRequest): Promise<MappingTransactionResult> {
-    const records = await this.mutate<readonly MappingRecord[]>("transact", (before) => {
+    await this.mutate<readonly MappingRecord[]>("transact", (before) => {
       let current = before;
       for (const step of request.steps) current = this.applyStep(current, step);
       return { records: current, value: current };
     }, { expectedMutationToken: request.expectedMutationToken });
-    return { mutationToken: await this.mutationToken(), records };
+    // Token and records must come from ONE read. Taking the token separately
+    // after the commit lock is released lets another writer's token be paired
+    // with this transaction's records, and the caller quotes that token back as
+    // its next `expectedMutationToken` — a CAS that passes against state it
+    // never saw.
+    return this.snapshot();
   }
 
   private applyStep(records: readonly MappingRecord[], step: MappingTransactionStep): readonly MappingRecord[] {

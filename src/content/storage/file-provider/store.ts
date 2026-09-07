@@ -126,7 +126,7 @@ function decodeInitialization(value: unknown, operation: ContentPersistenceOpera
       recovery: value.recovery as unknown as ContentRecoveryOutcome,
     };
   }
-  if (value.status === "error") {
+  if (value.status === "error" && isPlainObject(value.error)) {
     return { status: "error", error: contentFileProviderErrorAdapter.fromWire(value.error as never, operation) };
   }
   throw malformed(operation, "a malformed initialization outcome");

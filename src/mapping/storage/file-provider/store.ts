@@ -100,7 +100,7 @@ function decodeInitialization(value: unknown, operation: BrowserMappingOperation
       recovery: value.recovery as unknown as MappingRecoveryOutcome,
     };
   }
-  if (value.status === "error") {
+  if (value.status === "error" && isPlainObject(value.error)) {
     return { status: "error", error: mappingFileProviderErrorAdapter.fromWire(value.error as never, operation) };
   }
   throw malformed(operation, "a malformed initialization outcome");

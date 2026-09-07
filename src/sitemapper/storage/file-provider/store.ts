@@ -99,7 +99,7 @@ function decodeInitialization(value: unknown, operation: BrowserSitemapOperation
       recovery: value.recovery as unknown as SitemapRecoveryOutcome,
     };
   }
-  if (value.status === "error") {
+  if (value.status === "error" && isPlainObject(value.error)) {
     return { status: "error", error: sitemapFileProviderErrorAdapter.fromWire(value.error as never, operation) };
   }
   throw malformed(operation, "a malformed initialization outcome");
