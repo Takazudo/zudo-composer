@@ -229,6 +229,15 @@ export function useComposerController(options: UseComposerControllerOptions): Co
   const recordRef = useRef<CompositionRecord | null>(null);
   const stateRef = useRef<ComposerControllerState | null>(null);
   const historyRef = useRef<ComposerHistory>(createHistory());
+  /**
+   * The last root policy this controller actually KNEW, which is not the same
+   * as the last one it was told. `unresolved` means the resolver has not
+   * answered yet — at mount, or because a provider read failed — and the answer
+   * it eventually gives is usually the contract already recorded. Comparing
+   * against the last known policy is what keeps a round trip through
+   * `unresolved` from counting as two material changes.
+   */
+  const lastKnownRootPolicyRef = useRef<RootPolicy | null>(null);
   if (stateRef.current === null) {
     const record = cloneJson(options.record);
     if (record.id !== record.document.id || options.saveQueue.ref.recordId !== record.id) {
@@ -243,6 +252,7 @@ export function useComposerController(options: UseComposerControllerOptions): Co
       saveStatus: saveStatusFromQueue(options.saveQueue.state),
       derivedOutput: derivedOutputFromQueue(options.saveQueue.state),
     });
+    if (stateRef.current.rootPolicy.kind !== "unresolved") lastKnownRootPolicyRef.current = stateRef.current.rootPolicy;
   }
 
   const [state, setState] = useState<ComposerControllerState>(stateRef.current);
@@ -328,8 +338,17 @@ export function useComposerController(options: UseComposerControllerOptions): Co
         };
         historyRef.current = breakHistoryCoalescing(historyRef.current);
       } else {
-        if (action.type === "setRootPolicy" && !sameRootPolicy(current.rootPolicy, next.rootPolicy)) {
-          historyRef.current = clearHistory();
+        if (action.type === "setRootPolicy") {
+          // Losing sight of the contract is not a change to it. A resolver read
+          // that fails transiently reports `unresolved` and then reports the
+          // same contract again a moment later; clearing on each leg destroyed
+          // the author's undo stack for a round trip they never asked for.
+          const known = next.rootPolicy.kind === "unresolved" ? null : next.rootPolicy;
+          const previouslyKnown = lastKnownRootPolicyRef.current;
+          historyRef.current = known !== null && previouslyKnown !== null && !sameRootPolicy(previouslyKnown, known)
+            ? clearHistory()
+            : breakHistoryCoalescing(historyRef.current);
+          if (known !== null) lastKnownRootPolicyRef.current = known;
         } else {
           historyRef.current = breakHistoryCoalescing(historyRef.current);
         }
