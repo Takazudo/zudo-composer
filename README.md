@@ -153,6 +153,30 @@ both Node and Vite resolve a package's reference to itself whenever `exports` is
 present. Its name must be a valid lowercase npm name, and no exported subpath
 segment may be `src`.
 
+Either shape's entry module must export `componentPack` built with
+`defineComponentPack`/`defineComponent` from `@zudo-composer/component-contract`
+— a plain object is rejected. A minimal self-reference pack:
+
+```tsx
+// components/pack.ts, exported as "./components" in package.json
+import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
+import { Banner, type BannerProps } from "./banner";
+
+const banner = defineComponent<BannerProps>()(Banner, {
+  id: "site.banner",
+  schemaVersion: 1,
+  title: "Banner",
+  category: "Content",
+  description: "The host's own headline component.",
+  source: { module: "my-site/components", exportKind: "named", exportName: "Banner" },
+  defaults: { headline: "Banner" },
+  fields: [{ prop: "headline", label: "Headline", schema: { type: "string" }, editor: { kind: "text" } }],
+});
+
+export const componentPack = defineComponentPack({ packId: "my-site", packVersion: "1.0.0", components: [banner] });
+export { Banner };
+```
+
 Swapping a themeset is two edits and no tool change: the `pack` value above, and
 the `@import` in the host's `styles` entry. zudo-composer never falls back to a
 bundled pack — an unresolvable specifier is a startup error naming the specifier
