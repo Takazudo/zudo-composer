@@ -7,6 +7,9 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 
+/** The application entry every host boots, package-relative. */
+export const APP_ENTRY = "src/main.tsx";
+
 /** The installed package directory. Never derived from `config.root`. */
 export const APP_ROOT = resolve(fileURLToPath(import.meta.url), "../..");
 
@@ -87,6 +90,25 @@ export function resolveSiteProjectLocalRoot(workspaceRoot, configured) {
   const fromEnvironment = process.env[SITE_PROJECT_LOCAL_ROOT_ENV]?.trim();
   if (fromEnvironment) return resolve(fromEnvironment);
   return resolve(workspaceRoot, SITE_PROJECT_LOCAL_ROOT_NAME);
+}
+
+/**
+ * What a dev server compiles before anyone asks for it.
+ *
+ * The application entry and its graph are transformed on demand, so the first
+ * route pays for the whole tree while the author waits at a blank workspace:
+ * measured here at ~16s cold against ~1s warm for an installed host, and ~2.3s
+ * against ~0.25s for this repository's own server. Warming the app sources
+ * removes that penalty for the first page anyone opens — including the first
+ * spec of a browser lane, which no longer inherits a server another spec file
+ * warmed up. Test sources are excluded because no route imports them.
+ */
+export function resolveAppWarmupFiles() {
+  return [
+    resolve(APP_ROOT, APP_ENTRY),
+    resolve(APP_ROOT, "src/**/*.{ts,tsx,css}"),
+    `!${resolve(APP_ROOT, "src/**/__tests__/**")}`,
+  ];
 }
 
 /**

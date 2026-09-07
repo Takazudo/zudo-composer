@@ -12,7 +12,7 @@ import sitemapperDomainProvider from './plugins/sitemapper-domain-provider.mjs';
 import workspaceDomainProvider, { resolveWorkspaceRegistryRoot } from './plugins/workspace-domain-provider.mjs';
 import componentPackPlugin from './plugins/component-pack-plugin.mjs';
 import hostStylesPlugin from './plugins/host-styles-plugin.mjs';
-import { APP_ROOT, readRootEnvironment, resolveFsAllow, resolvePublicDir, resolveSiteProjectLocalRoot, resolveWatchIgnored } from './plugins/roots.mjs';
+import { APP_ROOT, readRootEnvironment, resolveAppWarmupFiles, resolveFsAllow, resolvePublicDir, resolveSiteProjectLocalRoot, resolveWatchIgnored } from './plugins/roots.mjs';
 import { CONFIG_FILE_NAME, composer } from './server/config/index.ts';
 import hostConfig from './zudo-composer.config.ts';
 
@@ -78,6 +78,7 @@ export default defineConfig({
         resolveSiteProjectLocalRoot(composerConfig.workspaceRoot),
       ]),
     },
+    warmup: { clientFiles: resolveAppWarmupFiles() },
   },
   plugins: [
     componentPack,

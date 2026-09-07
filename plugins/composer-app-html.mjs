@@ -13,11 +13,12 @@
 
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { APP_ROOT, appModuleId } from "./roots.mjs";
+import { APP_ENTRY, APP_ROOT, appModuleId } from "./roots.mjs";
 
 /** The shell the package serves for every authoring route. */
 export const APP_HTML_PATH = resolve(APP_ROOT, "index.html");
-export const APP_ENTRY_MODULE = "src/main.tsx";
+// The warmup list and this shell must name the same entry, so it has one home.
+export const APP_ENTRY_MODULE = APP_ENTRY;
 /** The exact attribute value in `index.html` that this plugin rewrites. */
 export const APP_ENTRY_HTML_SRC = `"/${APP_ENTRY_MODULE}"`;
 

@@ -24,7 +24,7 @@ import { siteProjectSourcePlugin } from "../plugins/site-project-source-plugin.m
 import composerAppHtmlPlugin, { APP_ENTRY_MODULE } from "../plugins/composer-app-html.mjs";
 import componentPackPlugin from "../plugins/component-pack-plugin.mjs";
 import hostStylesPlugin from "../plugins/host-styles-plugin.mjs";
-import { APP_ROOT, resolveFsAllow, resolvePublicDir, resolveSiteProjectLocalRoot, resolveWatchIgnored, resolveWorkspaceRoot } from "../plugins/roots.mjs";
+import { APP_ROOT, resolveAppWarmupFiles, resolveFsAllow, resolvePublicDir, resolveSiteProjectLocalRoot, resolveWatchIgnored, resolveWorkspaceRoot } from "../plugins/roots.mjs";
 import { createModuleEvaluator } from "./module-evaluator.mjs";
 import { loadHostConfig } from "./host-context.mjs";
 
@@ -89,24 +89,6 @@ export function resolvePreactAliases(appRoot = APP_ROOT) {
 }
 
 /**
- * What the dev server compiles before anyone asks for it.
- *
- * The app entry and its graph live in the PACKAGE, not under the host `root`,
- * so nothing about a host project makes Vite transform them ahead of the first
- * request: the whole tree is compiled on demand while the author waits at a
- * blank workspace. Measured against this repository's own browser lane, the
- * first route took ~16s cold and ~1s warm; warming the app sources brings the
- * cold number to ~3s. Test sources are excluded because no route imports them.
- */
-function appWarmupFiles() {
-  return [
-    resolve(APP_ROOT, APP_ENTRY_MODULE),
-    resolve(APP_ROOT, "src/**/*.{ts,tsx,css}"),
-    `!${resolve(APP_ROOT, "src/**/__tests__/**")}`,
-  ];
-}
-
-/**
  * The complete inline Vite config for a host-rooted dev server.
  * @param {{workspaceRoot?: string, env?: Record<string, string | undefined>}} [options]
  */
@@ -143,7 +125,7 @@ export async function resolveComposerDevConfig(options = {}) {
       server: {
         fs: { allow: [...resolveFsAllow(workspaceRoot), componentPack.identity.packageRoot] },
         watch: { ignored: resolveWatchIgnored([paths.data, paths.compositions, paths.content, paths.mappings, paths.sitemaps, paths.media, paths.publicMedia, resolveSiteProjectLocalRoot(workspaceRoot)]) },
-        warmup: { clientFiles: appWarmupFiles() },
+        warmup: { clientFiles: resolveAppWarmupFiles() },
       },
       // Every CMS root comes from the resolved config, passed explicitly, so
       // the plugins' own `ZUDO_COMPOSITIONS_ROOT` / `ZUDO_MEDIA_STORE_ROOT`
