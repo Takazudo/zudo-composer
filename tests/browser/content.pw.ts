@@ -231,6 +231,15 @@ test("Content directory, Raw storage, and field-qualified usage links stay model
   expect(failures).toEqual([]);
 });
 
+/**
+ * What the seeded Journal model is called by the time the tests after the
+ * browser journey run. The lane gives one host project per spec FILE, so the
+ * journey's rename is the starting position for everything below it — authored
+ * state is a directory tree now, not a per-context database Playwright throws
+ * away with the page.
+ */
+const RENAMED_JOURNAL_MODEL = "Browser Journal articles";
+
 /** The one row-level overflow menu the navigator gives every model and Entry. */
 async function openRowMenu(page: Page, name: string) {
   const row = contentTree(page).getByRole("treeitem", { name: new RegExp(`^${name}`) });
@@ -419,46 +428,19 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
 
   // A populated canonical date proves the transform, while another Entry keeps
   // its optional date empty. Invalid stored dates now require Content recovery.
-  await page.evaluate(async () => {
-    const workspaceDb = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("zudo-composer-workspaces-v1");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const workspaceId = await new Promise<string>((resolve, reject) => {
-      const request = workspaceDb.transaction("selection", "readonly").objectStore("selection").get("active");
-      request.onsuccess = () => typeof request.result === "string" ? resolve(request.result) : reject(new Error("Active workspace identity was not found."));
-      request.onerror = () => reject(request.error);
-    });
-    workspaceDb.close();
-    const databaseName = `zudo-composer-content-workspace-v1-${workspaceId}`;
-    if (!(await indexedDB.databases()).some(({ name }) => name === databaseName)) throw new Error("Workspace-scoped Content storage was not found.");
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(databaseName);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const transaction = db.transaction(["models", "entries"], "readwrite");
-    const model = await new Promise<{ document: { fields: Array<{ id: string; key: string }> } }>((resolve, reject) => {
-      const request = transaction.objectStore("models").get("journal-articles");
-      request.onsuccess = () => resolve(request.result as { document: { fields: Array<{ id: string; key: string }> } });
-      request.onerror = () => reject(request.error);
-    });
-    const dateFieldId = model.document.fields.find((field) => field.key === "reviewDate")!.id;
-    const entries = transaction.objectStore("entries");
-    const entry = await new Promise<{ values: Record<string, unknown> } & Record<string, unknown>>((resolve, reject) => {
-      const request = entries.get("article-first-question");
-      request.onsuccess = () => resolve(request.result as { values: Record<string, unknown> } & Record<string, unknown>);
-      request.onerror = () => reject(request.error);
-    });
-    entries.put({ ...entry, values: { ...entry.values, [dateFieldId]: "2026-02-28" } });
-    await new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve();
-      transaction.onabort = () => reject(transaction.error);
-      transaction.onerror = () => undefined;
-    });
-    db.close();
-  });
+  // Storage is the host filesystem, so the value is authored where an author
+  // authors it — the Entry's own deep link. The retired IndexedDB store could
+  // be written from the page; reaching around this one would prove less than
+  // driving the editor that owns the write.
+  await page.goto("/content?provider=content-filesystem&model=journal-articles&entry=article-first-question");
+  // The deep link resolves in two steps, so wait for the Entry itself: a bare
+  // `fill` can otherwise land on the previous record's form, and the status
+  // chip already reads "Saved" at that moment and proves nothing.
+  await expect(page.getByRole("textbox", { name: "Heading", exact: true })).toHaveValue("Start with the question");
+  await page.getByLabel("Review date").fill("2026-02-28");
+  await page.getByLabel("Review date").blur();
+  await expect(page.getByLabel("Review date")).toHaveValue("2026-02-28");
+  await expect(saveStatus(page)).toContainText("Saved");
 
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
@@ -676,7 +658,7 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/content");
-  await contentTree(page).getByRole("treeitem", { name: /^Journal articles/ }).click();
+  await contentTree(page).getByRole("treeitem", { name: new RegExp(`^${RENAMED_JOURNAL_MODEL}`) }).click();
   // Three regions of the shared chrome, not three floating cards: they share a
   // top edge, sit inside the viewport, and never overlap.
   const regions = page.locator(".cms-editor__region");
@@ -749,8 +731,8 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   // Back to the navigator by position: hosts rename these panes freely.
   await contentPaneSwitch.getByRole("radio").nth(0).click();
   await expect(contentNav(page)).toBeVisible();
-  await openRowMenu(page, "Journal articles");
-  const deleteTrigger = contentNav(page).getByRole("button", { name: "More actions for Journal articles" });
+  await openRowMenu(page, RENAMED_JOURNAL_MODEL);
+  const deleteTrigger = contentNav(page).getByRole("button", { name: `More actions for ${RENAMED_JOURNAL_MODEL}` });
   await page.getByRole("menuitem", { name: /^Delete model/ }).click();
   // The shared destructive question is an `alertdialog`, never a `dialog`.
   const dialog = page.getByRole("alertdialog", { name: "Delete model?" });

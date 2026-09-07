@@ -119,19 +119,35 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   const assetPath = (response: Response) => new URL(response.url()).pathname;
   expect(new Set(focusedAssets.filter((response) => assetPath(response).endsWith(".wasm")).map(assetPath)).size).toBe(1);
   expect(new Set(focusedAssets.filter((response) => assetPath(response).endsWith(".mjs")).map(assetPath)).size).toBe(1);
-  // The reload above refetches each asset, so every path appears twice. `vite preview` serves
-  // them `Cache-Control: no-cache` with an ETag, so the second hit may be revalidated into a 304 —
-  // a healthy cache hit that carries no body and no entity headers, and for which `ok()` is false.
-  // Accept that one status, keep every other failure loud, and still demand a real body per asset.
+  // The reload above refetches each asset, so every path appears twice. The server sends them
+  // with an ETag, so the second hit may be revalidated into a 304 — a healthy cache hit that
+  // carries no body and no entity headers, and for which `ok()` is false. Accept that one
+  // status, keep every other failure loud, and still demand a real body per asset.
+  //
+  // The path is the provenance claim. This lane is a dev server rooted at a host project, so it
+  // serves the focused dependency from the installed package over `/@fs/` — the retired `dist`
+  // lane's emitted `/assets/` path does not exist here, and asserting it proved nothing about
+  // WHICH package answered.
+  //
+  // A `?url` import and the bytes it names share one pathname here, and only the first is
+  // JavaScript, so the request decides the expected type. The bytes themselves are asserted
+  // once below, which is the claim that actually matters.
+  const isUrlImport = (response: Response) => new URL(response.url()).searchParams.has("url");
   const servedWithBody = new Set<string>();
   for (const response of focusedAssets) {
-    expect(response.url()).toContain("/assets/");
+    expect(assetPath(response)).toContain("/@takazudo/zfb-md-wasm/");
     expect(response.ok() || response.status() === 304).toBe(true);
     if (!response.ok()) continue;
     servedWithBody.add(assetPath(response));
-    expect(response.headers()["content-type"]).toMatch(assetPath(response).endsWith(".wasm") ? /^application\/wasm/ : /javascript/);
+    expect(response.headers()["content-type"]).toMatch(
+      assetPath(response).endsWith(".wasm") && !isUrlImport(response) ? /^application\/wasm/ : /javascript/,
+    );
   }
   expect(servedWithBody).toEqual(new Set(focusedAssets.map(assetPath)));
+  expect(focusedAssets.some((response) => response.ok()
+    && assetPath(response).endsWith(".wasm")
+    && !isUrlImport(response)
+    && /^application\/wasm/.test(response.headers()["content-type"] ?? ""))).toBe(true);
 
   for (const theme of ["light", "dark"] as const) {
     await useTheme(page, theme);
