@@ -67,7 +67,7 @@ contract, which the package declares as a **peer dependency** so the host's own
 ```sh
 pnpm add -D \
   "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
-  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#9b774b827e9f6fec14379995ac2c691ccc3b7e5b"
+  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#b66d52bb273a10010485efb2d06f80cee8001bd6"
 ```
 
 The host also declares the package its `pack` comes from. A pack is resolved
