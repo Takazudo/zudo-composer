@@ -178,10 +178,14 @@
   --sg-composer-panel-bg: var(--color-surface);
   --sg-composer-canvas-backdrop: oklch(0.910 0.008 255);
   --sg-composer-guide: oklch(0.610 0.018 255);
-  /* Prose roles the chrome reads by name; the pack no longer supplies them. */
+  /* Prose roles the chrome reads by name; the pack no longer supplies them.
+     `--color-info` carries its own rung rather than aliasing the accent: the
+     Composer preview iframe loads this sheet over the pack's, and the pack
+     paints syntax keywords from the accent and function names from info, so an
+     alias collapsed two token colors into one in every previewed code block. */
   --color-text: var(--color-fg);
   --color-link: var(--color-accent);
-  --color-info: var(--color-accent);
+  --color-info: oklch(0.485 0.122 245);
 }
 
 :root[data-theme="dark"] {
@@ -224,7 +228,7 @@
   --sg-composer-guide: oklch(0.550 0.020 255);
   --color-text: var(--color-fg);
   --color-link: var(--color-accent);
-  --color-info: var(--color-accent);
+  --color-info: oklch(0.680 0.130 245);
 }
 
 @theme {
