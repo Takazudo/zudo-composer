@@ -178,6 +178,18 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
     .poll(() => page.evaluate(() => window.matchMedia("(pointer: coarse)").matches))
     .toBe(coarseLane);
 
+  // `outline-tree.css` reveals the insertion tile from `@media (hover: hover)`,
+  // so that query — not the pointer type — is what the hover half of this test
+  // actually depends on. A desktop project running on a browser that reports no
+  // hovering pointer cannot reveal the tile at all, and would otherwise fail
+  // several steps later as an unexplained invisible element. Assert the
+  // capability where it can still be read as a lane fact.
+  await expect
+    .poll(() => page.evaluate(() => window.matchMedia("(hover: hover)").matches), {
+      message: "The desktop project must report a hovering pointer; the tile is revealed from @media (hover: hover).",
+    })
+    .toBe(!coarseLane);
+
   const gap = await ensureSiblingGap(page);
   const hit = gap.locator(".cms-tree-insert__hit");
   const tile = gap.locator(".cms-tree-insert__btn");
