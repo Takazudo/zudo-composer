@@ -19,8 +19,8 @@ Exact routes are `/`, `/composer`, same-origin `/composer/preview`, `/content`,
 `/site/about`, `/site/services`, `/site/journal`,
 `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
 and `/site/journal/start-with-the-question`; emitted files live under
-`/assets/`, while committed images and PDFs from `media-store/public` are
-delivered under `/uploaded-media/`. Upload authoring remains dev-only. Keep Vite
+`/assets/`, while committed images and PDFs from the host's `publicMediaDir`
+are delivered under `/uploaded-media/`. Upload authoring remains dev-only. Keep Vite
 base `/` and the preview graph isolated from the host application and filesystem
 provider.
 
@@ -76,9 +76,11 @@ relationship for the external UI-provider dependency.
 - Contract handoff: `corepack pnpm contract:conformance`, `corepack pnpm
   contract:negative-scan`, and `corepack pnpm contract:external-install --
   --exact`.
-- Built artifact: `corepack pnpm test:browser:dist`, `corepack pnpm
-  test:browser:dev`, and `corepack pnpm test:browser:site-project` after the one
-  production build. No browser lane may rebuild `dist`.
+- Browser lanes: `corepack pnpm test:browser:host`, `corepack pnpm
+  test:browser:dev`, and `corepack pnpm test:browser:site-project`. Each owns one
+  machine-global port, so none may run concurrently, and no lane may rebuild.
+- Host install: `corepack pnpm smoke:host-install`, the only proof that packs the
+  package and installs it into a project outside this repository.
 
 Do not weaken frozen install, negative dependency scans, exact provider pin, or
 the 12-component runtime/CSS/WASM proof to make a gate pass.
