@@ -32,6 +32,8 @@ import type {
 const JSON_SUFFIX = ".composition.json";
 const JSX_SUFFIX = ".tsx";
 const OWNED_JSON_PATTERN = /^composition-([a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?)\.composition\.json$/;
+/** How many times a read re-reads its dependency closure before giving up. */
+const STALE_PLAN_ATTEMPTS = 3;
 function errorCode(value: unknown): string | undefined {
   if (typeof value !== "object" || value === null || !("code" in value)) return undefined;
   return typeof value.code === "string" ? value.code : undefined;
@@ -155,48 +157,67 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
   }
 
   async list(): Promise<readonly CompositionSummary[]> {
-    const closure = await this.loadDependencyClosure("list");
-    const currentClosure = closure;
-    const targetIds = currentClosure.records.map((record) => record.id);
-    const plans = await this.prepareDerivedOutputs("list", currentClosure, targetIds);
+    return this.replanningOnStalePlan(async () => {
+      const closure = await this.loadDependencyClosure("list");
+      const targetIds = closure.records.map((record) => record.id);
+      const plans = await this.prepareDerivedOutputs("list", closure, targetIds);
 
-    return this.run("list", async () => {
-      await this.assertClosureUnchanged("list", currentClosure);
-      const outputs = await this.applyDerivedOutputs("list", currentClosure, plans, targetIds);
-      return currentClosure.records
-        .map((record) => ({
-          ...summarizeComposition(record),
-          ...(outputs.get(record.id) === undefined ? {} : { derivedOutput: outputs.get(record.id) }),
-        }))
-        .sort(compareCompositionSummariesNewestFirst);
+      return this.run("list", async () => {
+        await this.assertClosureUnchanged("list", closure);
+        const outputs = await this.applyDerivedOutputs("list", closure, plans, targetIds);
+        return closure.records
+          .map((record) => ({
+            ...summarizeComposition(record),
+            ...(outputs.get(record.id) === undefined ? {} : { derivedOutput: outputs.get(record.id) }),
+          }))
+          .sort(compareCompositionSummariesNewestFirst);
+      });
     });
   }
 
   async get(id: string): Promise<CompositionLoadOutcome> {
     this.assertSafeId("get", id);
-    const closure = await this.loadDependencyClosure("get");
-    const target = closure.byId.get(id)?.outcome;
-    if (target === undefined) {
-      // The closure intentionally skips symlinks; a direct get must still
-      // report a hostile canonical path rather than pretending it is absent.
-      await this.readCanonical("get", id);
-      return { status: "not-found", id };
-    }
-    if (target.status !== "loaded") return target;
+    return this.replanningOnStalePlan(async () => {
+      const closure = await this.loadDependencyClosure("get");
+      const target = closure.byId.get(id)?.outcome;
+      if (target === undefined) {
+        // The closure intentionally skips symlinks; a direct get must still
+        // report a hostile canonical path rather than pretending it is absent.
+        await this.readCanonical("get", id);
+        return { status: "not-found", id };
+      }
+      if (target.status !== "loaded") return target;
 
-    const currentClosure = closure;
-    const current = currentClosure.byId.get(id)?.outcome;
-    if (current?.status !== "loaded") return current ?? { status: "not-found", id };
-    const targetIds = this.outputTargetsForGet(current.record, currentClosure);
-    const plans = await this.prepareDerivedOutputs("get", currentClosure, targetIds);
-    return this.run("get", async () => {
-      await this.assertClosureUnchanged("get", currentClosure);
-      const outputs = await this.applyDerivedOutputs("get", currentClosure, plans, targetIds);
-      return {
-        ...current,
-        ...(outputs.get(id) === undefined ? {} : { derivedOutput: outputs.get(id) }),
-      };
+      const targetIds = this.outputTargetsForGet(target.record, closure);
+      const plans = await this.prepareDerivedOutputs("get", closure, targetIds);
+      return this.run("get", async () => {
+        await this.assertClosureUnchanged("get", closure);
+        const outputs = await this.applyDerivedOutputs("get", closure, plans, targetIds);
+        return {
+          ...target,
+          ...(outputs.get(id) === undefined ? {} : { derivedOutput: outputs.get(id) }),
+        };
+      });
     });
+  }
+
+  /**
+   * Derived output is planned OUTSIDE the mutation lock, because generating JSX
+   * can need a round trip to the browser. Any canonical write that lands inside
+   * that window makes `assertClosureUnchanged` reject the plan as a conflict —
+   * and the Composer writes on every edit, so a read racing a save is ordinary.
+   * Such a plan is stale, not wrong, so read the closure and plan again. Only a
+   * closure that never holds still across these attempts is a real conflict.
+   */
+  private async replanningOnStalePlan<T>(attempt: () => Promise<T>): Promise<T> {
+    for (let remaining = STALE_PLAN_ATTEMPTS; remaining > 1; remaining -= 1) {
+      try {
+        return await attempt();
+      } catch (cause) {
+        if (!(cause instanceof CompositionPersistenceError) || cause.code !== "conflict") throw cause;
+      }
+    }
+    return attempt();
   }
 
   /**
