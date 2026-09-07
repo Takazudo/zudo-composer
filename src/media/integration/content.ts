@@ -27,24 +27,50 @@ export interface MediaContentServices {
   insert(target: MediaInsertionTarget, value: MediaUse): Promise<void>;
 }
 
+/** How many times a scan repeats a read that reported itself unstable. */
+const STABLE_READ_ATTEMPTS = 3;
+
 /** Domain-only adapter. Enumerates whole provider snapshots, never UI pages. */
 export function createMediaContentServices(providers: readonly ContentProvider[], flush: () => Promise<unknown>, subscribeChanges: (listener: () => void) => () => void = () => () => undefined, impact?: ProjectMediaUsageInspection): MediaContentServices {
   const stores = providers.map(({ store }) => store);
   const listeners = new Set<() => void>();
   let stopChanges: (() => void) | undefined;
-  const scans = new Map<string, Promise<MediaUsageScan>>();
+  /**
+   * Cached scans, each tagged with the workspace generation it was STARTED in.
+   * Clearing the map on a change is not enough on its own: a scan already in
+   * flight resolves afterwards and would be cached as current, so a hint that
+   * lands mid-scan used to leave the pre-change answer sitting in the cache for
+   * the next caller — which is how Media trash stayed blocked on a Content
+   * entry that had already been deleted.
+   */
+  const scans = new Map<string, { generation: number; result: Promise<MediaUsageScan> }>();
+  let generation = 0;
+  const flushStatus = (value: unknown) => value && typeof value === "object" && "status" in value ? String((value as { status: unknown }).status) : "ready";
   const capture = async () => {
-    const result = await flush();
-    if (result && typeof result === "object" && "status" in result && result.status !== "ready") throw new Error("Save pending Content changes before inspecting Media uses.");
+    // A flush reports `changed` when edits landed while it was saving. Nobody is
+    // typing during a Media scan — that is the application's own churn settling
+    // — so it is a flush to repeat rather than an answer. `failed` stays an
+    // error: a save that did not land must not be scanned around.
+    let result = await flush();
+    for (let attempt = 1; flushStatus(result) === "changed" && attempt < STABLE_READ_ATTEMPTS; attempt += 1) result = await flush();
+    if (flushStatus(result) !== "ready") throw new Error("Save pending Content changes before inspecting Media uses.");
     if (!stores.length) throw new Error("Authoritative Content providers are unavailable.");
-    return readContentGraph(stores);
+    for (let attempt = 1; ; attempt += 1) {
+      const graph = await readContentGraph(stores);
+      // `changed` is the capture asking to be repeated — an authoring write
+      // landed between the read and its verification, which is ordinary now
+      // that a capture is a provider round trip rather than a memory read. Only
+      // a graph that never holds still is reported to the caller, because
+      // nothing re-runs a scan that reported itself unusable.
+      if (graph.status !== "changed" || attempt >= STABLE_READ_ATTEMPTS) return graph;
+    }
   };
   return {
     subscribeChanges(listener) {
       const subscription = () => listener();
       listeners.add(subscription);
       if (!stopChanges) {
-        try { stopChanges = subscribeChanges(() => { scans.clear(); for (const notify of [...listeners]) notify(); }); }
+        try { stopChanges = subscribeChanges(() => { generation += 1; scans.clear(); for (const notify of [...listeners]) notify(); }); }
         catch (error) { listeners.delete(subscription); throw error; }
       }
       return () => {
@@ -54,8 +80,9 @@ export function createMediaContentServices(providers: readonly ContentProvider[]
     },
     scan(asset, fresh = false) {
       const key = JSON.stringify([asset.providerId, asset.assetId]);
+      const startedIn = generation;
       const existing = scans.get(key);
-      if (!fresh && existing) return existing;
+      if (!fresh && existing && existing.generation === startedIn) return existing.result;
       const pending = (async (): Promise<MediaUsageScan> => {
       try {
         const graph = await capture();
@@ -77,8 +104,12 @@ export function createMediaContentServices(providers: readonly ContentProvider[]
           message: complete ? "Complete managed Media impact scan across Content, Composition properties, Markdown destinations and route materializations. External/advisory references are not proof of non-use." : `The authoritative Media impact scan is incomplete; trash is blocked. ${impact ? inspected?.index.advisory.slice(0, 3).map(({ reason }) => reason).join(" ") ?? "Project inspection failed." : "Full-project inspection is unavailable."}` };
       } catch (error) { return { status: "unavailable", locations: [], tokens: {}, message: error instanceof Error ? error.message : "Content scan unavailable." }; }
       })();
-      scans.set(key, pending);
-      void pending.then((result) => { if ((!listeners.size || result.status !== "complete") && scans.get(key) === pending) scans.delete(key); });
+      scans.set(key, { generation: startedIn, result: pending });
+      void pending.then((result) => {
+        const entry = scans.get(key);
+        if (entry?.result !== pending) return;
+        if (!listeners.size || result.status !== "complete" || entry.generation !== generation) scans.delete(key);
+      });
       return pending;
     },
     async isCurrent(scan) {

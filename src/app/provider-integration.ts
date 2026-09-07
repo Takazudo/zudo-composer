@@ -577,8 +577,20 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       return { status: "unavailable", source: current, error: cause instanceof Error ? cause : new Error("Snapshot read failed.", { cause }) };
     }
   };
+  /**
+   * Capturing the workspace is a provider round trip since the stores moved onto
+   * the filesystem, and every authoring write hints every domain, so a write
+   * landing inside the capture window is ordinary rather than exceptional. The
+   * capture reports that as `changed`, which is a read asking to be repeated —
+   * and no caller repeats it, so a Media usage scan or a release preview that
+   * happened to overlap one edit stayed unusable until something unrelated
+   * triggered it again. Only a workspace that never holds still is an error.
+   */
+  const STABLE_CAPTURE_ATTEMPTS = 3;
   const getCurrentSiteProject = async (captureOptions: { flushSessions?: boolean } = {}): Promise<SiteProjectSnapshotOutcome> => {
-    const value = captureOptions.flushSessions === false ? await captureWithoutSessions(false) : await capture(false);
+    const once = () => captureOptions.flushSessions === false ? captureWithoutSessions(false) : capture(false);
+    let value = await once();
+    for (let attempt = 1; value.status === "changed" && attempt < STABLE_CAPTURE_ATTEMPTS; attempt += 1) value = await once();
     if (value.status !== "ready") return { status: "error", error: new ProviderIntegrationError("snapshot", value.status === "unavailable" ? `${value.source}: ${value.error.message}` : value.status === "save-failed" ? value.failures.map((failure) => `${failure.feature}/${failure.providerId}/${failure.recordId ?? "operation"}: ${failure.error.message}`).join("; ") : `Workspace changed during capture: ${value.sources.join(", ")}.`) };
     try { return { status: "ready", project: await snapshotNow(value.capture, true) }; }
     catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Snapshot validation failed.") }; }
