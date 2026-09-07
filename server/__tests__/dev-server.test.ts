@@ -20,20 +20,41 @@ const BIN = resolve(APP_ROOT, "bin/zudo-composer.mjs");
  * drained rather than ended: closing the child's stdout would kill it before
  * the signal under test ever arrives.
  */
-function firstLocalUrl(child: ChildProcess): Promise<string> {
+function firstLocalUrl(child: ChildProcess, waitMs = 45_000): Promise<string> {
   return new Promise((settle, fail) => {
     let output = "";
+    let errors = "";
+    // Capture stderr rather than draining it: without this a child that boots but never
+    // reaches "Local: http://…" fails as a bare timeout with no cause attached, which is
+    // indistinguishable from the suite simply being slow.
+    const readErr = (chunk: unknown) => {
+      errors += String(chunk);
+    };
+    const done = (run: () => void) => {
+      clearTimeout(timer);
+      child.stdout!.off("data", read);
+      child.stderr!.off("data", readErr);
+      run();
+    };
+    const detail = () => `\n--- stdout ---\n${output}\n--- stderr ---\n${errors}`;
+    const timer = setTimeout(
+      () => done(() => fail(new Error(`dev server never advertised a local URL in ${waitMs}ms:${detail()}`))),
+      waitMs,
+    );
     const read = (chunk: unknown) => {
       output += String(chunk);
       const url = /http:\/\/localhost:\d+/.exec(output)?.[0];
       if (!url) return;
-      child.stdout!.off("data", read);
-      child.stdout!.resume();
-      settle(url);
+      done(() => {
+        child.stdout!.resume();
+        settle(url);
+      });
     };
     child.stdout!.on("data", read);
-    child.stderr!.resume();
-    child.once("exit", () => fail(new Error(`dev server exited before listening:\n${output}`)));
+    child.stderr!.on("data", readErr);
+    child.once("exit", (code, signal) =>
+      done(() => fail(new Error(`dev server exited before listening (code=${code} signal=${signal}):${detail()}`))),
+    );
   });
 }
 
