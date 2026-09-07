@@ -87,7 +87,11 @@ export default defineConfig({
       styles: composerConfig.settings.styles,
       configPath: composerConfig.configPath,
     }),
-    releaseApiPlugin({ mediaStoreRoot }),
+    // The same three the installed-host server passes. Without the pack the
+    // release toolchain cannot resolve — it never falls back to a bundled pack —
+    // and every release request answers `unavailable`, which is how this
+    // repository's own dev server had no working Review route at all.
+    releaseApiPlugin({ mediaStoreRoot, workspaceRoot: composerConfig.workspaceRoot, packIdentity: componentPack.identity }),
     // The release reader re-derives the current toolchain to compare it with
     // the activated release's, so it needs the same pack the service stamped
     // with. `dev-server.mjs` passes both; without them here the reader throws

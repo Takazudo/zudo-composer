@@ -48,7 +48,14 @@ describe("final browser acceptance source contract", () => {
     expect(read("server/site-project-local/cli.ts")).toContain("validateMediaStoreRoot(process.env.ZUDO_MEDIA_STORE_ROOT)");
     const vite = read("vite.config.ts");
     expect(vite).toContain("process.env.ZUDO_MEDIA_STORE_ROOT");
-    expect(vite).toContain("releaseApiPlugin({ mediaStoreRoot })");
+    // Matched as arguments rather than as one exact literal: this asserts that
+    // the release plugin is handed the isolated Media root AND the resolved
+    // pack, not that its argument list never grows. Without the pack the
+    // release toolchain cannot resolve — it never falls back to a bundled one —
+    // and every release request answers `unavailable`, which is what left this
+    // repository's own Review route inoperable.
+    expect(vite).toMatch(/releaseApiPlugin\(\{[^}]*\bmediaStoreRoot\b[^}]*\}\)/u);
+    expect(vite).toMatch(/releaseApiPlugin\(\{[^}]*packIdentity: componentPack\.identity[^}]*\}\)/u);
     expect(vite).toMatch(/composerFileProviderPlugin\(\{[\s\S]*?\bmediaStoreRoot,/);
   });
   it("makes the installed-host lane own a disposable host project and reject direct config launch", () => {
