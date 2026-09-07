@@ -12,7 +12,7 @@ import sitemapperDomainProvider from './plugins/sitemapper-domain-provider.mjs';
 import workspaceDomainProvider, { resolveWorkspaceRegistryRoot } from './plugins/workspace-domain-provider.mjs';
 import componentPackPlugin from './plugins/component-pack-plugin.mjs';
 import hostStylesPlugin from './plugins/host-styles-plugin.mjs';
-import { APP_ROOT, readRootEnvironment, resolvePublicDir } from './plugins/roots.mjs';
+import { APP_ROOT, readRootEnvironment, resolveFsAllow, resolvePublicDir } from './plugins/roots.mjs';
 import { CONFIG_FILE_NAME, composer } from './server/config/index.ts';
 import hostConfig from './zudo-composer.config.ts';
 
@@ -26,25 +26,33 @@ const componentPack = componentPackPlugin({ workspaceRoot: composerConfig.worksp
 // names workspaces. Every root is resolved here and passed to its plugin
 // explicitly — no plugin reads the config file itself.
 //
-// The dev browser lane hands the compositions root in through the environment
-// so it writes into an isolated temporary tree. It has to win over the config
-// here, and it has to be the same value the workspace registry scopes and
-// removes directories under — one root, two consumers.
+// A `dataDir` setting must be host-relative, so a lane that needs to author
+// into a temporary tree cannot express that as configuration. `ZUDO_DATA_ROOT`
+// is the absolute equivalent, and it re-bases every domain beneath it exactly
+// as `dataDir` re-bases the relative ones. Without it a browser lane leaves
+// content, mappings, sitemaps and the workspace registry in THIS repository,
+// where the next run inherits a registry pointing at a deleted tree.
+//
+// The two single-domain overrides still win over it, which is the precedence
+// the isolated dev lane and the SiteProject lane already rely on.
+const dataRoot = readRootEnvironment(process.env.ZUDO_DATA_ROOT, 'Data root');
+const domainRoot = (domain: 'compositions' | 'content' | 'mappings' | 'sitemaps' | 'media') =>
+  dataRoot ? resolve(dataRoot, domain) : composerConfig.paths[domain];
 const compositionsRoot = readRootEnvironment(process.env.ZUDO_COMPOSITIONS_ROOT, 'Compositions root')
-  ?? composerConfig.paths.compositions;
+  ?? domainRoot('compositions');
 const domainRoots = {
   compositions: compositionsRoot,
-  content: composerConfig.paths.content,
-  mappings: composerConfig.paths.mappings,
-  sitemaps: composerConfig.paths.sitemaps,
+  content: domainRoot('content'),
+  mappings: domainRoot('mappings'),
+  sitemaps: domainRoot('sitemaps'),
 };
-const workspaceRegistryRoot = resolveWorkspaceRegistryRoot(composerConfig.paths.data);
+const workspaceRegistryRoot = resolveWorkspaceRegistryRoot(dataRoot ?? composerConfig.paths.data);
 
 // The content-addressed Media store, and the committed bytes the host's own
 // static pipeline serves. Both come from the resolved config; the browser lanes
 // keep their absolute-root override so they can write into a temporary tree.
 const mediaStoreRoot = readRootEnvironment(process.env.ZUDO_MEDIA_STORE_ROOT, 'Media store root')
-  ?? composerConfig.paths.media;
+  ?? domainRoot('media');
 
 export default defineConfig({
   publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicMedia),
@@ -55,6 +63,10 @@ export default defineConfig({
   // them on demand. The pack's name is derived, never spelled out — that is
   // what makes the themeset swap one config edit.
   optimizeDeps: { exclude: [componentPack.identity.packageName, '@takazudo/zfb-md-wasm'] },
+  // `componentPackPlugin` declares an fs-allow entry for the pack, and any
+  // declared entry replaces Vite's root-derived default. Naming both roots here
+  // is what keeps this repo's own sources readable while the pack stays so.
+  server: { fs: { allow: resolveFsAllow(APP_ROOT) } },
   plugins: [
     componentPack,
     hostStylesPlugin({
@@ -63,7 +75,11 @@ export default defineConfig({
       configPath: composerConfig.configPath,
     }),
     releaseApiPlugin({ mediaStoreRoot }),
-    siteProjectSourcePlugin(),
+    // The release reader re-derives the current toolchain to compare it with
+    // the activated release's, so it needs the same pack the service stamped
+    // with. `dev-server.mjs` passes both; without them here the reader throws
+    // and every route reports that no SiteProject is activated.
+    siteProjectSourcePlugin({ workspaceRoot: composerConfig.workspaceRoot, packIdentity: componentPack.identity }),
     composerFileProviderPlugin({
       mediaStoreRoot,
       compositionsRoot,

@@ -3,6 +3,7 @@
 // host project's node_modules the package directory and the host project
 // directory are different places, and no single Vite root satisfies both.
 
+import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 
@@ -100,4 +101,30 @@ export function resolvePublicDir(workspaceRoot, publicMedia) {
     );
   }
   return publicDir;
+}
+
+/** @param {string} path */
+function realpathOrSelf(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+/**
+ * Directories Vite is allowed to read files from.
+ *
+ * Vite derives its default allow-list from the *host* root, but the component
+ * pack plugin declares an allow entry of its own, and any declared entry
+ * replaces that default — so both roots have to be named here or the host's own
+ * sources become 403s. Both are listed with their realpaths as well: under pnpm
+ * the package is reached through a symlink into `node_modules/.pnpm`, and
+ * fs-allow comparisons happen on whichever of the two forms the request
+ * produced.
+ * @param {string} workspaceRoot
+ */
+export function resolveFsAllow(workspaceRoot) {
+  const candidates = [workspaceRoot, realpathOrSelf(workspaceRoot), APP_ROOT, realpathOrSelf(APP_ROOT)];
+  return [...new Set(candidates)];
 }
