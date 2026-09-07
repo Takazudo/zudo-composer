@@ -52,10 +52,14 @@ for (const width of WORKSPACE_WIDTHS) for (const theme of ["light", "dark"] as c
   });
 }
 
-test("static capabilities and stale targets remain truthful instead of silently selecting another record", async ({ page }) => {
+test("release capabilities and stale targets remain truthful instead of silently selecting another record", async ({ page }) => {
+  // Review offers its actions only over a direct loopback connection to the
+  // local development server. This lane is an installed host running exactly
+  // that, so the actions are live; the "Static read-only mode" wording belongs
+  // to a served-without-a-server case no supported lane produces any more.
   await page.goto("/review");
-  await expect(page.getByText(/Static read-only mode/)).toBeVisible();
-  for (const name of ["Run release checks", "Apply / stage exact candidate", "Build staged candidate", "Activate locally"]) await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
+  await expect(page.getByText(/Static read-only mode/)).toHaveCount(0);
+  for (const name of ["Run release checks", "Apply / stage exact candidate", "Build staged candidate", "Activate locally"]) await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
   await page.goto("/media?provider=media-files&asset=missing-browser-asset");
   await expect(page.getByRole("alert").first()).toBeVisible();
   await page.goto("/content?provider=unknown-provider&model=missing");

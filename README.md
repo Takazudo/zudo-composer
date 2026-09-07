@@ -35,12 +35,12 @@ The Vite application has base `/` and these exact SPA routes:
 - `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
   `/site/journal/start-with-the-question` — compiler-emitted Entry routes
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
-- `/uploaded-media/` — committed images and PDFs copied from `media-store/public`
+- `/uploaded-media/` — committed images and PDFs from the host's `publicMediaDir`
 
 The preview route is an implementation boundary, not an independent public
 product. Build-emitted assets remain rooted at `/assets/`, while committed media
 is delivered from `/uploaded-media/`. Upload authoring is available only in local
-development, but committed media delivery is part of the built artifact.
+development.
 
 The provider-scoped SiteProject graph, whole-project apply rule, active identity,
 JSON-stdin API, CAS revisions, immutable builds, diagnostics, local editing
@@ -62,6 +62,11 @@ pnpm add -D \
   "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
   "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#9b774b827e9f6fec14379995ac2c691ccc3b7e5b"
 ```
+
+The host also declares the package its `pack` comes from. A pack is resolved
+from the HOST root, and a release attests the dependency spec the host used, so
+a host that names `@acme/themeset/composer-pack` depends on `@acme/themeset`
+itself; only the self-reference shape below is exempt.
 
 The host then declares `zudo-composer.config.ts` at its own root and runs the
 bin. `pack` is the only setting without a default:
@@ -166,32 +171,55 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm dev
 ```
 
-The main repository gate includes lint, typecheck, headless/handoff boundaries,
-the class-name gate, unit tests, one production build, and the provider artifact
-boundary:
+`pnpm check` is the bounded offline gate: lint, typecheck, the headless, handoff
+and class-name boundaries, the provider identity boundary, unit tests, one
+production build, and the built-artifact boundary.
 
 ```sh
 corepack pnpm check
 ```
 
-CI additionally verifies the component-contract handoff and serves that same
-built `dist` directory to Chromium:
+The provider boundary is split in two. `provider:boundary` checks the manifest
+spec, the lockfile resolution and the parity between the installed pack's
+generated component list and its sidecars — none of which needs a build, so it
+runs on a bare checkout. `dist:boundary` checks what `vite build` emitted and
+requires `pnpm build` first.
+
+CI additionally verifies the component-contract handoff and runs the three
+browser lanes:
 
 ```sh
 corepack pnpm contract:conformance
 corepack pnpm contract:negative-scan
 corepack pnpm contract:external-install -- --exact
-corepack pnpm test:browser:dist
+corepack pnpm test:browser:host
 corepack pnpm test:browser:dev
 corepack pnpm test:browser:site-project
 ```
 
-`test:browser` is the convenience command when no build exists; it builds and
-then delegates to `test:browser:dist`. The Media dev lane exercises upload
-transport without changing the built artifact. The SiteProject helper adds an
-isolated CLI-activated dev lane. CI deliberately builds exactly once.
+Each lane owns one port and one server, so none of them may run concurrently:
 
-Both `test:browser:dist` and `test:browser:dev` route specs to a viewport by
+| Lane | Server | Port | Specs |
+| --- | --- | --- | --- |
+| `test:browser:host` | `zudo-composer dev`, rooted at a disposable host project | 4173 | `tests/browser`, minus the SiteProject spec |
+| `test:browser:dev` | this repository's own `pnpm dev` | 5173 | `tests/browser-dev` |
+| `test:browser:site-project` | this repository's own Vite, with a CLI-activated release | 4174 | `tests/browser/site-project-acceptance.pw.ts` |
+
+The host lane is the one that runs the package the way a host does — through its
+`bin`, against a project it has never seen. It activates the sample SiteProject
+into that project first, because a library with no activated project has no rows
+to look at.
+
+`smoke:host-install` goes further and is the only proof that involves a real
+install: it packs the package, installs it into a bare project outside this
+repository, boots it with no sample activation, authors through the browser,
+restarts, and finally removes the tool to confirm the host keeps its data.
+
+```sh
+corepack pnpm smoke:host-install
+```
+
+Both `test:browser:host` and `test:browser:dev` route specs to a viewport by
 filename: `*.coarse.pw.ts` runs only on a 390x844 touch project, and
 `*.responsive.pw.ts` runs on both. The rules those specs check are switched off
 on a fine pointer, so a coarse spec that reaches the desktop project passes
@@ -221,8 +249,9 @@ To update the provider:
 3. Regenerate `pnpm-lock.yaml`, then prove a clean
    `corepack pnpm install --frozen-lockfile` resolves the same codeload SHA.
 4. Run `corepack pnpm check`, all three contract commands above, and
-   `corepack pnpm test:browser:dist`. The provider boundary must still prove
-   the exact 12 IDs/runtime exports, canonical CSS, and one focused WASM/glue.
+   `corepack pnpm test:browser:host`. The provider and dist boundaries must
+   still prove the exact 12 IDs/runtime exports, canonical CSS, and one focused
+   WASM/glue.
 
 Do not copy provider components into this repository or add a fallback registry.
 
@@ -249,13 +278,12 @@ This repository is a locally run tool. It has no deployment target, no hosting
 provider, no deployed hostname, and no deployment credentials. Hosting is
 deliberately deferred to a future adapter and is out of scope here.
 
-Build and prove the exact artifact locally:
+Prove the exact artifact locally:
 
 ```sh
 corepack pnpm install --frozen-lockfile
-corepack pnpm build
-corepack pnpm provider:boundary
-corepack pnpm test:browser:dist
+corepack pnpm check
+corepack pnpm smoke:host-install
 ```
 
 Nothing in CI publishes, uploads, or authenticates against a hosting account.

@@ -1,8 +1,9 @@
 import type { Page } from "@playwright/test";
 const prepared = new WeakSet<Page>();
-/** Test-owned IndexedDB only. Dev without an activated release is unavailable;
- * initialize an explicit validated source through the real workspace service.
- * This is fixture setup, not a production fallback or a storage mock.
+/** Test-owned fixture setup only. Dev without an activated release is
+ * unavailable; initialize an explicit validated source through the real
+ * workspace service, which writes it to the host's filesystem exactly as
+ * authoring does. This is not a production fallback or a storage mock.
  */
 export async function ensureDevWorkspace(page: Page): Promise<void> {
   if (prepared.has(page)) return;

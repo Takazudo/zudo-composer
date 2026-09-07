@@ -1,0 +1,265 @@
+// The install proof: a real host project, outside this repository, that
+// installs the packed package and runs it.
+//
+// Everything else in the gate exercises zudo-composer from inside its own
+// checkout, where a workspace install hoists dependencies the host root can see
+// and every source file is one relative path away. This script is the only
+// place that answers the question the whole conversion rests on: does a
+// stranger's project, holding nothing but a tarball, boot the tool, author with
+// it, keep the data across a restart, and still own that data once the tool is
+// removed again?
+//
+// Five claims, in order, each failing loudly on its own line:
+//   1. install   — the packed tarball resolves and installs from a bare host
+//   2. boot      — `zudo-composer dev` serves every documented route with NO
+//                  prerequisite sample activation
+//   3. author    — a record created in the browser lands as JSON on the HOST's
+//                  disk, under the host's own configured directories
+//   4. restart   — a restarted server and a FRESH browser context still see it,
+//                  which is what proves nothing hid in browser storage
+//   5. discard   — removing the tool leaves the CMS data behind, readable
+//
+// It deliberately uses the host-self-reference pack shape: the host owns its
+// components, so the proof needs no second package and stays about zudo-composer.
+
+import { execFile as execFileCallback, spawn } from "node:child_process";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { promisify } from "node:util";
+import { chromium } from "@playwright/test";
+
+const execFile = promisify(execFileCallback);
+const root = resolve(import.meta.dirname, "..");
+const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const PORT = 4175;
+const ORIGIN = `http://127.0.0.1:${PORT}`;
+const HOST_NAME = "zudo-composer-install-smoke-host";
+const SITEMAP_NAME = "Install smoke sitemap";
+
+/** Routes the README promises a host. Each must answer the shell, not a 404. */
+const ROUTES = ["/", "/composer", "/content", "/mapping", "/sitemapper", "/media"];
+
+/**
+ * Directories a host agrees zudo-composer may write into. `node_modules` is the
+ * package manager's; the rest come from `zudo-composer.config.ts` defaults plus
+ * the disposable release root. Anything else appearing under the host root is a
+ * write-confinement failure.
+ */
+const WRITABLE = ["node_modules", "cms", "public", ".zudo-site-project"];
+
+function step(message) {
+  process.stdout.write(`[host-install] ${message}\n`);
+}
+
+async function run(command, args, cwd, options = {}) {
+  const { stdout, stderr } = await execFile(command, args, { cwd, env: process.env, maxBuffer: 64 * 1024 * 1024, ...options });
+  return { stdout, stderr };
+}
+
+/** Every path beneath `directory`, relative and sorted, excluding `node_modules`. */
+async function tree(directory, prefix = "") {
+  const entries = await readdir(join(directory, prefix), { withFileTypes: true });
+  const paths = [];
+  for (const entry of entries) {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.name === "node_modules") continue;
+    paths.push(path);
+    if (entry.isDirectory()) paths.push(...await tree(directory, path));
+  }
+  return paths.sort();
+}
+
+async function waitForServer() {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    try {
+      const response = await fetch(`${ORIGIN}/@vite/client`);
+      if (response.ok) return;
+    } catch {
+      // Not listening yet.
+    }
+    await new Promise((settle) => setTimeout(settle, 500));
+  }
+  throw new Error(`The installed dev server never answered on ${ORIGIN}.`);
+}
+
+/**
+ * Start the host's own installed bin and resolve once it is serving. The child
+ * gets its own process group so the whole Vite tree can be signalled at once.
+ */
+async function startHostServer(hostRoot) {
+  const child = spawn(pnpm, ["exec", "zudo-composer", "dev", "--host", "127.0.0.1", "--port", String(PORT), "--strict-port"], {
+    cwd: hostRoot,
+    env: process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
+  let output = "";
+  child.stdout.on("data", (chunk) => { output += String(chunk); });
+  child.stderr.on("data", (chunk) => { output += String(chunk); });
+  // A server that dies during startup has to lose the race rather than let it
+  // run out the full poll budget. The listener is dropped as soon as the race
+  // is decided, so a later exit can never reject a promise nobody is awaiting.
+  const exited = new Promise((_, reject) => {
+    child.on("exit", (code) => reject(new Error(`The installed dev server exited with ${code}:\n${output}`)));
+  });
+  try {
+    await Promise.race([waitForServer(), exited]);
+  } finally {
+    child.removeAllListeners("exit");
+  }
+  return {
+    output: () => output,
+    async stop() {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      const stopped = new Promise((settle) => child.once("exit", settle).once("error", settle));
+      try { process.kill(-child.pid, "SIGTERM"); } catch { return; }
+      await stopped;
+    },
+  };
+}
+
+/**
+ * Open a workspace and create one sitemap through the real authoring UI.
+ *
+ * A failure here reports what the page was actually showing: this runs against
+ * a host nobody can open afterwards, so a bare locator timeout would leave
+ * nothing to diagnose from.
+ */
+async function authorOneSitemap(page) {
+  try {
+    await page.goto(`${ORIGIN}/sitemapper`);
+    // A freshly installed host has no activated SiteProject and therefore no
+    // workspace, which is the state this proof wants: the library offers to
+    // create one, and that offer is the documented way in. Whichever of the two
+    // buttons appears first decides whether that step is needed at all.
+    const create = page.getByRole("button", { name: "Create fresh workspace" });
+    const newSitemap = page.getByRole("button", { name: "New sitemap" });
+    await Promise.race([
+      create.waitFor({ state: "visible", timeout: 90_000 }),
+      newSitemap.waitFor({ state: "visible", timeout: 90_000 }),
+    ]);
+    if (await create.isVisible()) {
+      await create.click();
+      await create.waitFor({ state: "hidden", timeout: 90_000 });
+    }
+    await newSitemap.click({ timeout: 90_000 });
+    const dialog = page.getByRole("dialog", { name: "Create sitemap" });
+    await dialog.getByRole("textbox", { name: "Sitemap name" }).fill(SITEMAP_NAME);
+    await dialog.getByRole("button", { name: "Create sitemap" }).click();
+    await page.getByRole("textbox", { name: "Sitemap name" }).waitFor({ timeout: 60_000 });
+  } catch (cause) {
+    const text = await page.locator("body").innerText().catch(() => "<no body>");
+    throw new Error(`Authoring failed on the installed host. The page was showing:\n${text}`, { cause });
+  }
+}
+
+const workspace = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-install-smoke-")));
+const hostRoot = join(workspace, "host");
+let server;
+try {
+  step("packing the package and the contract it declares as a peer");
+  const packDirectory = join(workspace, "tarballs");
+  await mkdir(packDirectory, { recursive: true });
+  const tarballs = {};
+  for (const [name, directory] of [["zudo-composer", root], ["@zudo-composer/component-contract", join(root, "packages/component-contract")]]) {
+    const { stdout } = await run(pnpm, ["pack", "--pack-destination", packDirectory], directory);
+    tarballs[name] = stdout.trim().split("\n").at(-1);
+    if (!tarballs[name]?.endsWith(".tgz")) throw new Error(`pnpm pack did not name a tarball for ${name}: ${stdout}`);
+  }
+
+  step("writing a bare host project that has never seen this repository");
+  for (const directory of ["styles", "components", "public/uploaded-media",
+    "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/media"]) {
+    await mkdir(join(hostRoot, directory), { recursive: true });
+  }
+  // `fixtures/self-host` is the reference shape; only its package name is
+  // rewritten, so this host proves the same seam under a name of its own rather
+  // than inheriting the fixture's identity.
+  for (const file of ["components/pack.ts", "components/components.tsx", "styles/base.css"]) {
+    const source = await readFile(join(root, "fixtures/self-host", file), "utf8");
+    await writeFile(join(hostRoot, file), source.replaceAll("self-host/components", `${HOST_NAME}/components`));
+  }
+  await writeFile(join(hostRoot, "zudo-composer.config.ts"), `import { defineComposerConfig } from "zudo-composer/config";\n\nexport default defineComposerConfig({ pack: "${HOST_NAME}/components" });\n`);
+  await writeFile(join(hostRoot, "package.json"), `${JSON.stringify({
+    name: HOST_NAME,
+    version: "0.0.0",
+    private: true,
+    type: "module",
+    // The self-reference pack shape: the host's own `exports` is what makes
+    // `${HOST_NAME}/components` a public bare import the contract admits.
+    exports: { "./components": "./components/pack.ts" },
+    scripts: { dev: "zudo-composer dev" },
+    devDependencies: {
+      "zudo-composer": `file:${tarballs["zudo-composer"]}`,
+      "@zudo-composer/component-contract": `file:${tarballs["@zudo-composer/component-contract"]}`,
+    },
+  }, null, 2)}\n`);
+  // pnpm 10 and later refuse to prepare a dependency that runs build scripts
+  // unless the host allows it by name. This is the entry the README documents.
+  await writeFile(join(hostRoot, "pnpm-workspace.yaml"), 'onlyBuiltDependencies:\n  - "@zudo-composer/component-contract"\n');
+
+  step("installing");
+  await run(pnpm, ["install", "--ignore-workspace"], hostRoot);
+  const installedTree = await tree(hostRoot);
+
+  step("booting, with no sample activation of any kind");
+  server = await startHostServer(hostRoot);
+  for (const route of ROUTES) {
+    const response = await fetch(`${ORIGIN}${route}`, { headers: { accept: "text/html" } });
+    if (!response.ok) throw new Error(`${route} answered ${response.status} on a freshly installed host.`);
+  }
+  if (/Failed to resolve dependency/.test(server.output())) {
+    throw new Error(`The installed dev server could not resolve its own dependencies:\n${server.output()}`);
+  }
+
+  step("authoring one record through the browser");
+  const browser = await chromium.launch();
+  const authoring = await browser.newContext();
+  await authorOneSitemap(await authoring.newPage());
+  await authoring.close();
+
+  const sitemapsDirectory = join(hostRoot, "cms/sitemaps");
+  const authored = (await tree(sitemapsDirectory)).filter((path) => path.endsWith(".json"));
+  if (authored.length === 0) throw new Error(`Authoring wrote no JSON under ${sitemapsDirectory}.`);
+  const authoredJson = await Promise.all(authored.map((path) => readFile(join(sitemapsDirectory, path), "utf8")));
+  if (!authoredJson.some((text) => text.includes(SITEMAP_NAME))) {
+    throw new Error(`No file under ${sitemapsDirectory} carries the authored name.`);
+  }
+
+  step("checking that every write landed inside the host's own directories");
+  const written = (await tree(hostRoot)).filter((path) => !installedTree.includes(path));
+  const escaped = written.filter((path) => !WRITABLE.includes(path.split("/")[0]));
+  if (escaped.length > 0) throw new Error(`Writes escaped the host's directories: ${escaped.join(", ")}`);
+
+  step("restarting the server and reopening in a fresh browser context");
+  await server.stop();
+  server = await startHostServer(hostRoot);
+  const reopened = await browser.newContext();
+  const page = await reopened.newPage();
+  await page.goto(`${ORIGIN}/sitemapper`);
+  await page.getByRole("link", { name: SITEMAP_NAME, exact: true }).waitFor({ timeout: 60_000 });
+  await reopened.close();
+  await browser.close();
+
+  step("removing the tool and confirming the host keeps its data");
+  await server.stop();
+  server = undefined;
+  const manifest = JSON.parse(await readFile(join(hostRoot, "package.json"), "utf8"));
+  delete manifest.devDependencies["zudo-composer"];
+  await writeFile(join(hostRoot, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await rm(join(hostRoot, "node_modules"), { recursive: true, force: true });
+  for (const [path, text] of authored.map((path, index) => [path, authoredJson[index]])) {
+    const survived = await readFile(join(sitemapsDirectory, path), "utf8");
+    if (survived !== text) throw new Error(`${path} changed when the tool was removed.`);
+    JSON.parse(survived);
+  }
+  for (const file of ["components/pack.ts", "styles/base.css", "zudo-composer.config.ts"]) {
+    await readFile(join(hostRoot, file), "utf8");
+  }
+
+  step(`passed: ${ROUTES.length} routes, ${authored.length} authored record file(s), all writes confined to ${WRITABLE.join("/")}, data survived removal.`);
+} finally {
+  await server?.stop();
+  await rm(workspace, { recursive: true, force: true });
+}

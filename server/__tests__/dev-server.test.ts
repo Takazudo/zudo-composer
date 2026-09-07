@@ -3,12 +3,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { once } from "node:events";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { APP_ROOT, resolvePublicDir } from "../../plugins/roots.mjs";
 import { APP_ENTRY_MODULE } from "../../plugins/composer-app-html.mjs";
-import { OPTIMIZE_DEPS_EXCLUDE, loadHostConfig, resolveComposerDevConfig, resolveFsAllow } from "../dev-server.mjs";
+import { OPTIMIZE_DEPS_EXCLUDE, loadHostConfig, resolveComposerDevConfig, resolvePreactAliases } from "../dev-server.mjs";
+import { resolveFsAllow } from "../../plugins/roots.mjs";
 import { resolveComponentPack } from "../../plugins/component-pack.mjs";
 
 const FIXTURE_HOST = resolve(APP_ROOT, "fixtures/host");
@@ -70,6 +71,38 @@ describe("resolveFsAllow", () => {
   });
 });
 
+describe("resolvePreactAliases", () => {
+  // `@preact/preset-vite` injects these five into `optimizeDeps.include`, and
+  // Vite resolves an include entry from the HOST root, where a real install
+  // cannot see zudo-composer's own preact.
+  const specifiers = ["preact", "preact/jsx-runtime", "preact/jsx-dev-runtime", "preact/debug", "preact/devtools"];
+
+  it("pins every specifier the preact preset asks the optimizer to prebundle", () => {
+    const aliases = resolvePreactAliases();
+    expect(aliases.map(({ find }) => find.source)).toEqual(
+      specifiers.map((specifier) => `^${specifier.replace("/", "\\/")}$`),
+    );
+  });
+
+  it("points at directories, so Vite reads each subpackage's own browser entry", () => {
+    for (const { replacement } of resolvePreactAliases()) {
+      expect(statSync(replacement).isDirectory()).toBe(true);
+      expect(existsSync(join(replacement, "package.json"))).toBe(true);
+    }
+  });
+
+  it("anchors each pattern, so `preact/hooks` keeps resolving relative to its importer", () => {
+    for (const { find } of resolvePreactAliases()) {
+      expect(find.test("preact/hooks")).toBe(false);
+      expect(find.test("preact/compat")).toBe(false);
+    }
+  });
+
+  it("declares nothing when the host supplies its own preact", () => {
+    expect(resolvePreactAliases(host)).toEqual([]);
+  });
+});
+
 describe("resolvePublicDir", () => {
   it("is the parent of the published-media directory", () => {
     expect(resolvePublicDir("/host", "/host/public/uploaded-media")).toBe("/host/public");
@@ -109,6 +142,7 @@ describe("resolveComposerDevConfig", () => {
     expect(inlineConfig.optimizeDeps?.entries).toEqual([resolve(APP_ROOT, APP_ENTRY_MODULE)]);
     // The pack's own directory is allowed too: it is outside the host root.
     expect(inlineConfig.server?.fs?.allow).toEqual([...resolveFsAllow(FIXTURE_HOST), pack.packageRoot]);
+    expect(inlineConfig.resolve?.alias).toEqual(resolvePreactAliases());
     const names = inlineConfig.plugins?.flat().map((plugin) => (plugin as { name?: string } | undefined)?.name);
     expect(names).toContain("zudo-composer-app-html");
     expect(names).toContain("zudo-component-pack");

@@ -1,8 +1,16 @@
 import { expect, test } from "@playwright/test";
 import { ensureDevWorkspace } from "./workspace-bootstrap";
 
-test("missing IndexedDB is an explicit unavailable workspace, not synthetic editable data", async ({ page }) => {
-  await page.addInitScript(() => Object.defineProperty(globalThis, "indexedDB", { value: undefined, configurable: true }));
+// The workspace source is the host's filesystem, reached through the workspace
+// domain provider. Refusing that endpoint is the only way to reach the
+// unavailable state on purpose — the browser holds no workspace storage of its
+// own to take away.
+test("an unavailable workspace source stays explicit, not synthetic editable data", async ({ page }) => {
+  await page.route("**/__zudo_composer_workspace_provider", (route) => route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({ ok: false, error: { domain: "workspace", operation: "list", code: "unavailable", message: "Injected browser availability failure" } }),
+  }));
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Open workspace" })).toBeVisible();
   await expect(page.getByRole("alert").first()).toBeVisible();
