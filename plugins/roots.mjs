@@ -46,7 +46,13 @@ export function validateRootOverride(root, label) {
  * @param {string | undefined} configured
  */
 export function resolveWorkspaceRoot(configured) {
-  return validateRootOverride(configured, "Workspace root") ?? resolve(process.cwd());
+  // Realpath is load-bearing, not cosmetic. The transactional record store
+  // refuses a generations directory whose `realpath` differs from the path it
+  // was given, so any symlinked segment in the host root makes every authoring
+  // write fail closed as `blocked`. macOS hits this by default — `/var` is a
+  // symlink to `/private/var` — so a host under a temp dir, or any project
+  // reached through a symlink, is otherwise unusable.
+  return realpathOrSelf(validateRootOverride(configured, "Workspace root") ?? resolve(process.cwd()));
 }
 
 /**
@@ -81,6 +87,22 @@ export function resolveSiteProjectLocalRoot(workspaceRoot, configured) {
   const fromEnvironment = process.env[SITE_PROJECT_LOCAL_ROOT_ENV]?.trim();
   if (fromEnvironment) return resolve(fromEnvironment);
   return resolve(workspaceRoot, SITE_PROJECT_LOCAL_ROOT_NAME);
+}
+
+/**
+ * Directories Vite's watcher must leave alone.
+ *
+ * Authored data lives UNDER the Vite root, and the Composer writes on every
+ * edit: canonical JSON plus derived `.tsx` output. Watched, each of those saves
+ * starts an HMR round that re-executes the app entry and remounts the whole
+ * application mid-edit — undo/redo history, the open editor and its in-flight
+ * save are all discarded. The application refreshes itself from its own
+ * `zudo-workspace-persistence-v1` hints, so it needs nothing from the watcher.
+ * @param {readonly (string | undefined)[]} roots
+ */
+export function resolveWatchIgnored(roots) {
+  return [...new Set(roots.filter((root) => typeof root === "string" && root !== ""))]
+    .map((root) => `${resolve(root).split(sep).join("/")}/**`);
 }
 
 /**

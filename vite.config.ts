@@ -12,7 +12,7 @@ import sitemapperDomainProvider from './plugins/sitemapper-domain-provider.mjs';
 import workspaceDomainProvider, { resolveWorkspaceRegistryRoot } from './plugins/workspace-domain-provider.mjs';
 import componentPackPlugin from './plugins/component-pack-plugin.mjs';
 import hostStylesPlugin from './plugins/host-styles-plugin.mjs';
-import { APP_ROOT, readRootEnvironment, resolveFsAllow, resolvePublicDir } from './plugins/roots.mjs';
+import { APP_ROOT, readRootEnvironment, resolveFsAllow, resolvePublicDir, resolveSiteProjectLocalRoot, resolveWatchIgnored } from './plugins/roots.mjs';
 import { CONFIG_FILE_NAME, composer } from './server/config/index.ts';
 import hostConfig from './zudo-composer.config.ts';
 
@@ -66,7 +66,19 @@ export default defineConfig({
   // `componentPackPlugin` declares an fs-allow entry for the pack, and any
   // declared entry replaces Vite's root-derived default. Naming both roots here
   // is what keeps this repo's own sources readable while the pack stays so.
-  server: { fs: { allow: resolveFsAllow(APP_ROOT) } },
+  server: {
+    fs: { allow: resolveFsAllow(APP_ROOT) },
+    watch: {
+      ignored: resolveWatchIgnored([
+        composerConfig.paths.data,
+        ...Object.values(domainRoots),
+        mediaStoreRoot,
+        composerConfig.paths.publicMedia,
+        workspaceRegistryRoot,
+        resolveSiteProjectLocalRoot(composerConfig.workspaceRoot),
+      ]),
+    },
+  },
   plugins: [
     componentPack,
     hostStylesPlugin({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import {
@@ -22,7 +22,9 @@ function resolveConfig(user: Parameters<typeof composer>[0] = {}, env: Record<st
 }
 
 async function withHostRoot(run: (root: string) => Promise<void>) {
-  const root = await mkdtemp(resolve(tmpdir(), "zudo-composer-config-"));
+  // Resolved, because `resolveWorkspaceRoot` resolves the root it is given and
+  // macOS `tmpdir()` is a symlink (`/var` -> `/private/var`).
+  const root = await realpath(await mkdtemp(resolve(tmpdir(), "zudo-composer-config-")));
   try {
     await run(root);
   } finally {

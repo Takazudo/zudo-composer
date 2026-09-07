@@ -7,5 +7,6 @@ export function readRootEnvironment(value: string | undefined, label: string): s
 export const SITE_PROJECT_LOCAL_ROOT_NAME: string;
 export const SITE_PROJECT_LOCAL_ROOT_ENV: string;
 export function resolveSiteProjectLocalRoot(workspaceRoot: string, configured?: string): string;
+export function resolveWatchIgnored(roots: readonly (string | undefined)[]): string[];
 export function resolvePublicDir(workspaceRoot: string, publicMedia: string): string;
 export function resolveFsAllow(workspaceRoot: string): string[];
