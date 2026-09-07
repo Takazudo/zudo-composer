@@ -16,9 +16,13 @@ function run(command, args, options) {
 
 const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-dev-browser-")));
 try {
-  const releaseRoot = join(temporaryRoot, "release"), mediaRoot = join(temporaryRoot, "media"), compositionsRoot = join(temporaryRoot, "compositions");
-  await Promise.all([mkdir(releaseRoot), mkdir(mediaRoot), mkdir(compositionsRoot)]);
-  const environment = { ...process.env, ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot, ZUDO_COMPOSITIONS_ROOT: compositionsRoot };
+  const releaseRoot = join(temporaryRoot, "release"), mediaRoot = join(temporaryRoot, "media"),
+    compositionsRoot = join(temporaryRoot, "compositions"), dataRoot = join(temporaryRoot, "data");
+  await Promise.all([mkdir(releaseRoot), mkdir(mediaRoot), mkdir(compositionsRoot), mkdir(dataRoot)]);
+  // The data root covers content, mappings, sitemaps and the workspace registry.
+  // Isolating compositions alone left the registry in this repository, so the
+  // NEXT run opened a workspace whose composition tree had been deleted.
+  const environment = { ...process.env, ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot, ZUDO_COMPOSITIONS_ROOT: compositionsRoot, ZUDO_DATA_ROOT: dataRoot };
   const playwright = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   const result = await run(playwright, ["exec", "playwright", "test", "--config", "playwright.dev.config.ts"], { env: environment });
   if (result.status !== 0) process.exitCode = result.status ?? 1;

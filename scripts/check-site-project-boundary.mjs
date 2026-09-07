@@ -12,6 +12,7 @@ const plugin = read("plugins/site-project-source-plugin.mjs");
 const store = read("server/site-project-local/store.ts");
 const roots = read("plugins/roots.mjs");
 const browser = read("tests/browser/site-project-acceptance.pw.ts");
+const runtimeFailures = read("tests/runtime-failures.ts");
 const browserRunner = read("scripts/run-site-project-browser.mjs");
 const browserConfig = read("playwright.site-project.config.ts");
 
@@ -28,8 +29,11 @@ assert.deepEqual(SITE_ROUTES, [
 assert.deepEqual(SPA_ROUTES, [...AUTHORING_ROUTES, ...SITE_ROUTES]);
 for (const route of SITE_ROUTES) assert.ok(browser.includes(`"${route}"`) || browser.includes(`'${route}'`), `browser proof is missing ${route}`);
 assert.ok(browser.includes("page.reload()"), "browser proof must include direct-refresh assertions");
-assert.ok(browser.includes("requestfailed"), "browser proof must watch failed requests");
-assert.ok(browser.includes("console"), "browser proof must watch console errors");
+// Both lanes share one watcher now, so the proof is that the spec uses it and
+// that the watcher still watches both channels.
+assert.ok(browser.includes("watchRuntimeFailures(page)"), "browser proof must collect runtime failures");
+assert.ok(runtimeFailures.includes("requestfailed"), "the shared watcher must watch failed requests");
+assert.ok(runtimeFailures.includes('message.type() !== "error"'), "the shared watcher must watch console errors");
 assert.ok(browserRunner.includes("mkdtemp"), "browser runner must create an isolated local-project root");
 assert.ok(browserRunner.includes("ZUDO_SITE_PROJECT_ROOT"), "browser runner must pass the isolated root to CLI and Vite");
 assert.ok(browserRunner.includes('operation: "apply"'), "browser runner must apply through the JSON CLI");
@@ -44,8 +48,10 @@ assert.ok(
   vite.includes("publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicMedia)"),
   "Vite dev server must expose the host's committed media root, resolved from the config",
 );
+// Media falls back to the host config through the same domain resolver every
+// other CMS root uses, so the fallback is asserted where it is defined.
 assert.ok(
-  vite.includes("?? composerConfig.paths.media"),
+  vite.includes("?? domainRoot('media')") && vite.includes("dataRoot ? resolve(dataRoot, domain) : composerConfig.paths[domain]"),
   "Vite must resolve the Media store root from the host config",
 );
 // The excluded pack name is DERIVED from the resolved config, never spelled

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { requireDevBrowserRoots } from "./tests/browser-dev/isolated-roots";
 
-const { releaseRoot, mediaRoot, compositionsRoot } = requireDevBrowserRoots(process.env);
+const { releaseRoot, mediaRoot, compositionsRoot, dataRoot } = requireDevBrowserRoots(process.env);
 
 export default defineConfig({
   testDir: "./tests/browser-dev",
@@ -40,6 +40,6 @@ export default defineConfig({
     url: "http://localhost:5173",
     reuseExistingServer: false,
     timeout: 30_000,
-    env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot, ZUDO_COMPOSITIONS_ROOT: compositionsRoot },
+    env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot, ZUDO_COMPOSITIONS_ROOT: compositionsRoot, ZUDO_DATA_ROOT: dataRoot },
   },
 });
