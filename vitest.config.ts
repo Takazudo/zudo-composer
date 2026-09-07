@@ -20,7 +20,10 @@ export default defineConfig({
           environment: 'node',
           // These specs spawn real Node processes (CLI framing, cross-process CAS) and
           // a 5s in-process default reads as a regression under full-suite load (#179).
-          testTimeout: 20_000,
+          // One of them boots the packaged bin end to end, which pays for a cold Vite
+          // start plus dependency optimization — that alone exceeded 20s on a CI runner
+          // while passing locally, so the ceiling covers a real cold boot, not a hang.
+          testTimeout: 60_000,
           // `worktrees/` holds nested git checkouts of this same repo. Without this the
           // root run collects every sibling worktree's specs as if they were ours, which
           // inflates counts, reruns another branch's tests against this tree, and reports
