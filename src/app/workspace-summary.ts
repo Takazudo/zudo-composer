@@ -3,8 +3,8 @@
 //
 // Two rules shape the design:
 //
-//   1. Sources resolve INDEPENDENTLY. IndexedDB cannot transact across the four
-//      authoring databases and the Media provider is a separate dev service, so
+//   1. Sources resolve INDEPENDENTLY. Nothing transacts across the four
+//      authoring domains and the Media provider is a separate dev service, so
 //      a single failure must degrade one panel rather than blank the dashboard.
 //      Every source therefore returns `ok` or `unavailable` on its own — except
 //      Media, which can also be `absent`: there is no dev provider configured

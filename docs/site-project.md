@@ -6,11 +6,6 @@ Compositions, Content models/entries, Mappings, and Sitemaps. Media remains glob
 and separate. Release inputs include an exact Media lock without adding a fifth
 project provider domain.
 
-The optional [catalog & editorial example walkthrough](./catalog-editorial-example.md)
-starts from the authoring dashboard's explicit **Create catalog & editorial
-example** action. It creates a separate workspace, preserves the current one,
-and leaves the bundled deployment and active release unchanged.
-
 The current local release API is **protocol 2**. There are no protocol-1 readers,
 migrations, compatibility adapters, or second active-build pointer. An old local
 layout is refused and preserved for explicit operator inspection/reset.
@@ -56,13 +51,17 @@ checksum/signature/size-verify exact retained versions; they do not copy all Med
 files or fetch latest. Each build's `media-sha256-…` file maps to its pin's
 `/uploaded-media/sha256-…` URL for a later explicit artifact exporter.
 
-The local toolchain records the declared provider Git commit/tree separately from
-`installedProviderDigest`, a SHA-256 attestation of the actual resolved installed
-package's stable relative paths, permission modes and file bytes. Its traversal
-rejects internal symlinks/special files and detects entry/root changes. Altering
-installed runtime bytes changes the build identity, regardless of package URL.
-The toolchain also binds component-pack identity, contract handoff digest, and a fingerprint of production headless
-compiler/domain/contract source. An incomplete stage cannot be compiled using a
+The local toolchain records the component pack as a package, because that is
+what it is: `packSpecifier` is the configured `pack` value, `packSource` is the
+host's dependency spec for it (or `self` for a host self-reference), and
+`installedPackDigest` is a SHA-256 attestation of the actual resolved package's
+stable relative paths, permission modes and file bytes. A nested `node_modules`
+is skipped — it is never part of a package's published bytes — while the
+traversal otherwise rejects internal symlinks/special files and detects
+entry/root changes. Altering installed runtime bytes changes the build identity,
+regardless of package URL. The toolchain also binds component-pack identity, the
+contract package digest, and a fingerprint of production headless
+compiler/domain source. An incomplete stage cannot be compiled using a
 different toolchain. Already completed artifacts remain readable/activatable
 without recompiling them through newer tools.
 
@@ -129,7 +128,9 @@ record. No API silently falls back to sample data or mutable current content.
 
 ## JSON-stdin examples
 
-Run `corepack pnpm site-project:api`. Each invocation accepts exactly one UTF-8
+Run `corepack pnpm site-project:api` inside this repository, or `zudo-composer release`
+from an installed host project — the same service, same protocol, same exit codes.
+Each invocation accepts exactly one UTF-8
 JSON object (8 MiB maximum) and writes one canonical JSON response with newline.
 All operation shapes are exact: extra keys are rejected. Obtain current shapes
 and capabilities first:
@@ -151,7 +152,7 @@ head revision and active triple from `list` for subsequent reviews.
 ```sh
 node --input-type=module <<'NODE' | corepack pnpm site-project:api > release-plan.json
 import { readFileSync } from 'node:fs';
-const project = JSON.parse(readFileSync('src/site-project/sample/sample-site-project.json', 'utf8'));
+const project = JSON.parse(readFileSync('src/test/site-project-fixture.json', 'utf8'));
 const selection = project.providers.content.flatMap(p => p.entries.map(e => ({
   ref: { providerId: p.id, modelId: e.modelId, recordId: e.id }, action: 'publish'
 })));
@@ -198,8 +199,10 @@ an apply/build success.
 
 ## Local files, recovery and verification
 
-The default private root is `.zudo-site-project`; `ZUDO_SITE_PROJECT_ROOT` supplies
-an explicit disposable root for isolated tests. Layout:
+The private root is `.zudo-site-project` **under the host project root** — disposable
+derived state rather than CMS data, so it has no `zudo-composer.config.ts` setting and
+hosts gitignore it. `ZUDO_SITE_PROJECT_ROOT` supplies an explicit disposable root for
+isolated tests. Layout:
 
 ```text
 heads.json                       stage order/incarnations, heads, generation, receipts
@@ -250,22 +253,23 @@ A browser reconciliation timeout reports `commit-uncertain` / reconciliation
 busy but quarantines the writer lock until that exact callback settles or its
 operator socket disconnects. Later UI/API/CLI activations cannot pass that lane.
 Disconnect aborts pending browser Content transactions; restart also disconnects
-the client. There is no force-unlock of a live reconciliation. Recovery hints are
-bounded, minimal unresolved approvals, pruned only after confirmed outcomes or
-an authoritative catalog proves retention or definitive stale-generation absence.
+the client. There is no force-unlock of a live reconciliation. The server
+catalog's approval receipts are the only recovery record; the browser keeps no
+journal. After `commit-uncertain`, inspect `list` / `active`, then retry the same
+approved plan — apply is idempotent by `planDigest`.
 Preserve the old root before any explicit clean reset.
 
 Focused API/store/CLI tests cover selection, digests/CAS, interrupted writes,
 immutable Media copies, completion corruption, symlinks and concurrent writers.
 The integration owner runs `site-project:boundary`, full CI/artifact gates and
-the guarded `test:browser:site-project` / `test:browser:site-project:dist` lanes.
-The latter consumes an existing artifact and must not rebuild it. Vite development
+the guarded `test:browser:site-project` lane. Vite development
 delivery resolves `/site` only from the currently activated, completed local
 release. It verifies the active project/revision/build triple and serves only that
 build's copied checksum-addressed Media bytes; missing or corrupt release state is
 unavailable and never falls back to a working draft. In contrast,
-`/website-preview` flushes and compiles the current live authoring snapshot. A
-production assets-only build embeds one explicit completed sample artifact, so it
-does not need a hosted authoring or release API. Local activation is not deployment;
-Cloudflare persistence, authentication, hosted APIs and deployment remain future
-work and are not a claim of this repository.
+`/website-preview` flushes and compiles the current live authoring snapshot. A release
+is stamped with the toolchain that built it, so after a component-pack swap an already
+activated release no longer matches the installed runtime and becomes unavailable
+rather than being served against different components. Local activation is not deployment;
+hosted persistence, authentication, hosted APIs and deployment remain future work
+and are not a claim of this repository.

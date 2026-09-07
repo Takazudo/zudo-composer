@@ -199,19 +199,42 @@ export interface MappingEvaluationResult {
   unchangedStaticCount: number;
 }
 
-export type MappingPersistenceOperation = "initialize" | "list" | "get" | "put" | "delete" | "seed" | "clear";
-export type MappingPersistenceErrorCode = "unavailable" | "blocked" | "versionchange" | "unsupported-version" | "validation" | "read-failed" | "write-failed" | "transaction-failed" | "unknown";
+// Runtime tables, not bare unions: a provider that rebuilds an error from a
+// wire payload has to decide whether a received operation/code is one of ours,
+// and a union alone cannot answer that at runtime.
+export const MAPPING_PERSISTENCE_OPERATIONS = ["initialize", "list", "get", "put", "delete", "seed", "clear", "transact"] as const;
+export type MappingPersistenceOperation = (typeof MAPPING_PERSISTENCE_OPERATIONS)[number];
+export const MAPPING_PERSISTENCE_ERROR_CODES = [
+  "unavailable", "blocked", "versionchange", "unsupported-version", "validation",
+  "conflict", "read-failed", "write-failed", "transaction-failed", "commit-uncertain", "unknown",
+] as const;
+export type MappingPersistenceErrorCode = (typeof MAPPING_PERSISTENCE_ERROR_CODES)[number];
+
+export function isMappingPersistenceOperation(value: unknown): value is MappingPersistenceOperation {
+  return (MAPPING_PERSISTENCE_OPERATIONS as readonly unknown[]).includes(value);
+}
+
+export function isMappingPersistenceErrorCode(value: unknown): value is MappingPersistenceErrorCode {
+  return (MAPPING_PERSISTENCE_ERROR_CODES as readonly unknown[]).includes(value);
+}
 
 export class MappingPersistenceError extends Error {
   readonly name = "MappingPersistenceError";
   constructor(readonly operation: MappingPersistenceOperation, readonly code: MappingPersistenceErrorCode, message: string, readonly retryable: boolean, options?: { cause?: unknown }) { super(message, options); }
+
+  /**
+   * Structured context the shared file-provider transport forwards verbatim.
+   * `retryable` is not derivable from the code alone, so it has to cross the
+   * wire rather than be re-guessed browser-side.
+   */
+  get details(): { retryable: boolean } { return { retryable: this.retryable }; }
 }
 
 export interface MappingSummary { id: RecordId; name: string; createdAt: string; updatedAt: string; bindingCount: number }
 export interface MappingStore {
   snapshot?(): Promise<import("../../shared/persistence-generation").PersistedSnapshot<MappingRecord>>;
   mutationToken?(): Promise<number | string>;
-  readonly provider: typeof MAPPING_PROVIDERS.indexeddb;
+  readonly provider: MappingProviderDescriptor;
   list(): Promise<readonly MappingSummary[]>;
   get(id: string): Promise<MappingLoadOutcome>;
   put(record: MappingRecord): Promise<void>;
@@ -222,9 +245,12 @@ export interface MappingStore {
 export interface MappingSeed { mappings: readonly MappingRecord[] }
 export interface MappingRecoveryOutcome { kind: "quarantined"; reason: "invalid" | "future-schema"; sourcePreserved: true; affectedRecordIds: readonly string[]; foundSchemaVersion?: number; message: string }
 export type MappingInitializationOutcome = { status: "ready"; summaries: readonly MappingSummary[] } | { status: "recovery-required"; summaries: readonly MappingSummary[]; recovery: MappingRecoveryOutcome } | { status: "error"; error: MappingPersistenceError };
-export interface MappingProvider { descriptor: typeof MAPPING_PROVIDERS.indexeddb; store: MappingStore; initialization: { initialize(): Promise<MappingInitializationOutcome>; retry(): Promise<MappingInitializationOutcome>; startFresh(): Promise<MappingInitializationOutcome> } }
+export interface MappingProvider { descriptor: MappingProviderDescriptor; store: MappingStore; initialization: { initialize(): Promise<MappingInitializationOutcome>; retry(): Promise<MappingInitializationOutcome>; startFresh(): Promise<MappingInitializationOutcome> } }
 
-export const MAPPING_PROVIDERS = { indexeddb: { id: "mapping-indexeddb", label: "Browser storage", storageLabel: "IndexedDB: zudo-composer-mapping" } } as const;
+export const MAPPING_PROVIDERS = {
+  filesystem: { id: "mapping-filesystem", label: "Project files" },
+} as const;
+export type MappingProviderDescriptor = (typeof MAPPING_PROVIDERS)[keyof typeof MAPPING_PROVIDERS];
 
 export interface MappingSeedOptions {
   id: RecordId;

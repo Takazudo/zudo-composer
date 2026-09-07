@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { ComponentPackManifest } from "@zudo-composer/component-contract";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, rmdir, unlink } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import type { SiteProjectActiveSelection, SiteProjectAdapterReadResult, SiteProjectBuildAdapter, SiteProjectStoreAdapter, StoredSiteProject, StagedRelease, CompletedRelease } from "../../src/site-project/api/types";
 import { releaseJson, sameRelease } from "../../src/site-project/api/review";
 import { serializeSiteProject } from "../../src/site-project/model/canonical";
@@ -13,12 +13,14 @@ import type { MediaVersionPin } from "../../src/media/model";
 import type { SiteProject } from "../../src/site-project/model";
 import type { SiteBuildPlan } from "../../src/site-project/compiler";
 import { isSafeRecordId } from "../../src/shared/record-identity";
+import { resolveSiteProjectLocalRoot, resolveWorkspaceRoot } from "../../plugins/roots.mjs";
 
-export const SITE_PROJECT_LOCAL_ROOT_NAME = ".zudo-site-project";
-export const SITE_PROJECT_LOCAL_ROOT_ENV = "ZUDO_SITE_PROJECT_ROOT";
+// The host project directory, not the installed package directory: disposable
+// release state belongs to whoever runs the tool. The resolver lives in
+// `plugins/roots.mjs` so the Vite source plugin — plain JavaScript, and unable
+// to import this TypeScript module — shares the single implementation.
+export { SITE_PROJECT_LOCAL_ROOT_NAME, SITE_PROJECT_LOCAL_ROOT_ENV, resolveSiteProjectLocalRoot } from "../../plugins/roots.mjs";
 export const SITE_PROJECT_ACTIVE_FILENAME = "active.json";
-export const DEFAULT_SITE_PROJECT_LOCAL_ROOT = resolve(import.meta.dirname, "../..", SITE_PROJECT_LOCAL_ROOT_NAME);
-const configuredLocalRoot = () => process.env[SITE_PROJECT_LOCAL_ROOT_ENV]?.trim() ? resolve(process.env[SITE_PROJECT_LOCAL_ROOT_ENV]!) : DEFAULT_SITE_PROJECT_LOCAL_ROOT;
 const SHA = /^[a-f0-9]{64}$/;
 const hash = (text: string | Uint8Array) => createHash("sha256").update(text).digest("hex");
 const unavailable = (error: unknown) => ({ status: "unavailable" as const, message: error instanceof Error ? error.message : "Release storage unavailable." });
@@ -31,6 +33,8 @@ interface Heads { schemaVersion: 2; generation: number; activationGeneration: nu
 interface CommitState { identity?: SiteProjectActiveSelection }
 interface CleanupTicket { path: string; owner: string; inode: number; phase: "owner" | "directory" | "sync" }
 export interface LocalSiteProjectStoreOptions {
+  /** Absolute host project root. The release root resolves beneath it. */
+  workspaceRoot?: string;
   testRoot?: string; lockTimeoutMs?: number; fault?(point: string): void | Promise<void>;
   componentPack?: ComponentPackManifest;
   readMedia?(pin: MediaVersionPin): Promise<AsyncIterable<Uint8Array>>;
@@ -51,7 +55,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
   private commitState?: CommitState;
   private pendingCleanup?: CleanupTicket;
   private cleanupRetry?: Promise<void>;
-  constructor(private readonly options: LocalSiteProjectStoreOptions = {}) { this.root = resolve(options.testRoot ?? configuredLocalRoot()); }
+  constructor(private readonly options: LocalSiteProjectStoreOptions = {}) { this.root = resolveSiteProjectLocalRoot(resolveWorkspaceRoot(options.workspaceRoot), options.testRoot); }
   private hit(point: string) { return this.options.fault?.(point); }
   private async directory(path: string) {
     if (!inside(this.root, path)) throw new Error("Directory escaped release root.");

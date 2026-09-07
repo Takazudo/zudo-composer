@@ -27,9 +27,15 @@ describe("immutable UI provider dependency", () => {
   it("pins the advertised Git spec and one workspace component contract", () => {
     const pkg = JSON.parse(readFileSync(resolve("package.json"), "utf8")) as {
       dependencies: Record<string, string>;
+      devDependencies: Record<string, string>;
+      peerDependencies: Record<string, string>;
     };
     expect(pkg.dependencies["@zudo-sg/ui"]).toBe(SPEC);
-    expect(pkg.dependencies["@zudo-composer/component-contract"]).toBe("workspace:*");
+    // The contract is consumed from the workspace here but published as a peer, so it
+    // must never appear in `dependencies` — a `workspace:*` spec there would ship.
+    expect(pkg.dependencies["@zudo-composer/component-contract"]).toBeUndefined();
+    expect(pkg.devDependencies["@zudo-composer/component-contract"]).toBe("workspace:*");
+    expect(pkg.peerDependencies["@zudo-composer/component-contract"]).toBe("1.0.0");
     expect(pkg.dependencies["@zudo-sg/ui"]).not.toMatch(/(?:^|:)(?:file|link|path):|\.\.|packages\/ui/);
   });
 
@@ -45,7 +51,11 @@ describe("immutable UI provider dependency", () => {
 
     expect(importer).toContain(`specifier: ${SPEC}`);
     expect(importer).toContain(`version: ${TARBALL}(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)`);
-    expect(packageBlock).toContain(`resolution: {gitHosted: true, tarball: ${TARBALL}}`);
+    // pnpm records an `integrity:` field between `gitHosted:` and `tarball:` when it
+    // re-resolves a Git dependency, so assert the two load-bearing parts separately
+    // rather than matching one contiguous string.
+    expect(packageBlock).toMatch(/resolution: \{gitHosted: true,/);
+    expect(packageBlock).toContain(`tarball: ${TARBALL}}`);
     expect(packageBlock).toContain("version: 0.1.0");
     expect(snapshot).toContain("'@zudo-composer/component-contract': link:packages/component-contract");
     for (const block of [importer, packageBlock, snapshot]) {

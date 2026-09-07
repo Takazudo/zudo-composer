@@ -1,14 +1,9 @@
 import { spawn } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const root = resolve(import.meta.dirname, "..");
-const argumentsList = process.argv.slice(2);
-const mode = argumentsList[0] === "--dist" ? "dist" : argumentsList[0] === "--dev" ? "dev" : null;
-if (!mode || argumentsList.length !== 1) {
-  throw new Error("Usage: node scripts/run-site-project-browser.mjs --dev|--dist");
-}
 
 function run(command, args, { input, ...options } = {}) {
   return new Promise((resolveRun, reject) => {
@@ -46,16 +41,13 @@ const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer
 try {
   const releaseRoot = join(temporaryRoot, "release");
   const mediaRoot = join(temporaryRoot, "media");
-  await Promise.all([mkdir(releaseRoot), mkdir(mediaRoot)]);
-  const environment = {
-    ZUDO_SITE_PROJECT_ROOT: releaseRoot,
-    ZUDO_MEDIA_STORE_ROOT: mediaRoot,
-    SITE_PROJECT_BROWSER_LANE: mode,
-  };
-  const sample = JSON.parse(await readFile(join(root, "src/site-project/sample/sample-site-project.json"), "utf8"));
-  const project = mode === "dist"
-    ? { ...globalThis.structuredClone(sample), id: "browser-disposable-project", name: "Disposable browser project" }
-    : sample;
+  // The data root covers content, mappings, sitemaps and the workspace
+  // registry. Without it the lane seeds its workspace into THIS repository's
+  // `cms/`, which both leaves state behind and makes the run order matter.
+  const dataRoot = join(temporaryRoot, "data");
+  await Promise.all([mkdir(releaseRoot), mkdir(mediaRoot), mkdir(dataRoot)]);
+  const environment = { ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot, ZUDO_DATA_ROOT: dataRoot };
+  const project = JSON.parse(await readFile(join(root, "src/test/site-project-fixture.json"), "utf8"));
   const plan = await runCli({
     protocolVersion: 2,
     operation: "plan",
@@ -78,10 +70,8 @@ try {
     expectedActive: null,
   }, environment);
 
-  if (mode === "dist") await access(join(root, "dist", "index.html"));
   const playwright = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-  const config = mode === "dev" ? "playwright.site-project.config.ts" : "playwright.site-project-dist.config.ts";
-  const result = await run(playwright, ["exec", "playwright", "test", "--config", config, "tests/browser/site-project-acceptance.pw.ts"], {
+  const result = await run(playwright, ["exec", "playwright", "test", "--config", "playwright.site-project.config.ts", "tests/browser/site-project-acceptance.pw.ts"], {
     env: { ...process.env, ...environment },
     stdio: "inherit",
   });

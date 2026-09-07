@@ -121,8 +121,8 @@ describe("MappingEditorController", () => {
     const broken = createMappingRecord({
       id: "mapping-broken",
       name: "Broken",
-      contentModel: { providerId: "content-indexeddb", recordId: "missing" },
-      composition: { providerId: "indexeddb", recordId: "missing" },
+      contentModel: { providerId: "content-filesystem", recordId: "missing" },
+      composition: { providerId: "files", recordId: "missing" },
       createdAt: NOW,
     });
     const h = harness([broken]);
@@ -230,12 +230,12 @@ describe("MappingEditorController", () => {
       order: 0,
       composition: { ...COMPOSITION_REF },
       target: { nodeId: HEADING_NODE, slotId: "body" },
-      mapping: { providerId: "mapping-indexeddb", recordId: source.id },
+      mapping: { providerId: "mapping-filesystem", recordId: source.id },
     } as const;
     const item: MappingAttachmentItem = {
       attachment,
       target: { composition: { ...COMPOSITION_REF }, compositionName: "Article page", nodeId: HEADING_NODE, slotId: "body", slotLabel: "Body", componentId: "ui.section-heading", cardinality: "many" },
-      mapping: { providerId: "mapping-indexeddb", recordId: source.id },
+      mapping: { providerId: "mapping-filesystem", recordId: source.id },
       mappingName: source.document.name,
       effectiveEntries: [entry],
       staticFallback: composition.document,
@@ -257,8 +257,8 @@ describe("MappingEditorController", () => {
     const h = harness([source], RESOLVED_ENTRIES, { attachments: callbacks });
     await h.controller.initialize();
     await h.controller.open(source.id);
-    await h.controller.attachCollection({ composition: { ...COMPOSITION_REF }, target: { nodeId: HEADING_NODE, slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: source.id } });
-    expect(requests[0]).toBe(`indexeddb/composition-1:${HEADING_NODE}.body:mapping-indexeddb/${source.id}`);
+    await h.controller.attachCollection({ composition: { ...COMPOSITION_REF }, target: { nodeId: HEADING_NODE, slotId: "body" }, mapping: { providerId: "mapping-filesystem", recordId: source.id } });
+    expect(requests[0]).toBe(`files/composition-1:${HEADING_NODE}.body:mapping-filesystem/${source.id}`);
     expect(h.controller.state.attachments.snapshot?.attachments).toHaveLength(1);
     await expect(h.controller.setMode("single")).rejects.toThrow(/attached Mapping/);
     expect(h.controller.state.mapping?.document.mode.kind).toBe("collection");
@@ -272,11 +272,11 @@ describe("MappingEditorController", () => {
   it("keeps list and preview request epochs independent while rejecting a late preview after selection refresh", async () => {
     const source = mappingRecord([]);
     source.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 10 } };
-    const attachment = { id: "feed", order: 0, composition: { ...COMPOSITION_REF }, target: { nodeId: HEADING_NODE, slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: source.id } } as const;
+    const attachment = { id: "feed", order: 0, composition: { ...COMPOSITION_REF }, target: { nodeId: HEADING_NODE, slotId: "body" }, mapping: { providerId: "mapping-filesystem", recordId: source.id } } as const;
     const item: MappingAttachmentItem = {
       attachment,
       target: { composition: { ...COMPOSITION_REF }, compositionName: "Article page", nodeId: HEADING_NODE, slotId: "body", slotLabel: "Body", componentId: "ui.section-heading", cardinality: "many" },
-      mapping: { providerId: "mapping-indexeddb", recordId: source.id },
+      mapping: { providerId: "mapping-filesystem", recordId: source.id },
       mappingName: source.document.name,
       effectiveEntries: [entry],
       staticFallback: composition.document,

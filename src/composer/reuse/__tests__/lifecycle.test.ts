@@ -88,7 +88,7 @@ function lifecycleProvider(
       .filter((value) => value.id !== sourceRecordId && value.document.binding?.sourceRecordId === sourceRecordId)
       .map((value) => ({ summary: summarizeComposition(value), binding: structuredClone(value.document.binding!) }));
   const store: CompositionLifecycleStore = {
-    provider: COMPOSITION_PROVIDERS.indexeddb,
+    provider: COMPOSITION_PROVIDERS.files,
     list: async () => [...records.values()].map(summarizeComposition),
     get: async (id) => load(id),
     put: async (value) => {
@@ -121,7 +121,7 @@ function lifecycleProvider(
       records.set(value.id, structuredClone(value));
     },
   };
-  return { provider: { descriptor: COMPOSITION_PROVIDERS.indexeddb, store }, records };
+  return { provider: { descriptor: COMPOSITION_PROVIDERS.files, store }, records };
 }
 
 describe("provider-safe reuse lifecycle service", () => {
@@ -133,7 +133,7 @@ describe("provider-safe reuse lifecycle service", () => {
       now: () => T2,
     });
 
-    await expect(service.detachAsSnapshot({ providerId: "indexeddb", recordId: "consumer" })).resolves.toMatchObject({
+    await expect(service.detachAsSnapshot({ providerId: "files", recordId: "consumer" })).resolves.toMatchObject({
       status: "detached",
       kind: "snapshot",
       record: { updatedAt: T2, document: { id: "consumer", root: [{ componentId: "shell" }] } },
@@ -153,7 +153,7 @@ describe("provider-safe reuse lifecycle service", () => {
       now: () => T2,
     });
 
-    await expect(service.detachAsSnapshot({ providerId: "indexeddb", recordId: "consumer" })).resolves.toEqual({
+    await expect(service.detachAsSnapshot({ providerId: "files", recordId: "consumer" })).resolves.toEqual({
       status: "save-failed",
       message: "injected lifecycle save failure",
     });
@@ -169,7 +169,7 @@ describe("provider-safe reuse lifecycle service", () => {
       now: () => T2,
     });
 
-    await expect(service.removeBrokenBinding({ providerId: "indexeddb", recordId: "consumer" })).resolves.toMatchObject({
+    await expect(service.removeBrokenBinding({ providerId: "files", recordId: "consumer" })).resolves.toMatchObject({
       status: "detached",
       kind: "removed-broken-binding",
       record: { document: { root: [{ id: "local" }] } },

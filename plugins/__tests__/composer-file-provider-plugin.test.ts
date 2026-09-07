@@ -1,10 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { PassThrough, Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFilesystemCompositionStore } from "../../src/composer/storage/filesystem";
+import { createWorkspaceScopedCompositionStore } from "../../src/composer/storage/file-provider/dev-server-entry";
 import { createFilesystemMediaStore } from "../../src/media/storage/filesystem";
 import { createMediaRecord } from "../../src/media/library";
 import {
@@ -13,9 +14,13 @@ import {
   type CompositionRecord,
 } from "../../src/composer/library";
 import { createFixtureDocument } from "../../src/composer/__tests__/fixtures";
+import { APP_ROOT, appModuleId } from "../roots.mjs";
+import { workspaceScopedRoot } from "../../src/shared/workspace-scope";
 import plugin, {
   COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER,
   COMPOSER_FILE_PROVIDER_ENDPOINT,
+  COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER,
+  COMPOSITIONS_ROOT_ENV,
   MEDIA_FILE_PROVIDER_ENDPOINT,
   MEDIA_FILE_PROVIDER_FILE_NAME_HEADER,
   MEDIA_FILE_PROVIDER_OPERATION_HEADER,
@@ -26,9 +31,12 @@ import plugin, {
   createComposerFileProviderMiddleware,
   createMediaFileMiddleware,
   createMediaUploadMiddleware,
+  resolveCompositionsRoot,
 } from "../composer-file-provider-plugin.mjs";
 
 const CAPABILITY = "test-capability-value-that-is-not-guessable";
+/** Compositions are workspace scoped; the header names the workspace directory. */
+const WORKSPACE = "test-workspace";
 const T1 = "2026-01-02T03:04:05.000Z";
 
 let sandbox: string;
@@ -59,6 +67,7 @@ function request(
       "sec-fetch-site": "same-origin",
       "content-type": "application/json; charset=utf-8",
       [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: CAPABILITY,
+      [COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER]: WORKSPACE,
     },
     body: overrides.rawBody ?? JSON.stringify(body),
     protocol: overrides.protocol,
@@ -78,8 +87,8 @@ function makeHandler(options: { maxBodyBytes?: number } = {}) {
     capability: CAPABILITY,
     maxBodyBytes: options.maxBodyBytes,
     validateRecord: validateCompositionRecord,
-    createStore: ({ provideJsx }) => createFilesystemCompositionStore({
-      compositionsRoot: root,
+    createStore: ({ workspaceId, provideJsx }) => createFilesystemCompositionStore({
+      compositionsRoot: workspaceScopedRoot(join(sandbox, "compositions"), workspaceId),
       provideJsx,
     }),
   });
@@ -87,7 +96,8 @@ function makeHandler(options: { maxBodyBytes?: number } = {}) {
 
 beforeEach(async () => {
   sandbox = await mkdtemp(join(tmpdir(), "composer-file-provider-"));
-  root = join(sandbox, "compositions");
+  // The endpoint writes below the workspace directory, not the domain root.
+  root = workspaceScopedRoot(join(sandbox, "compositions"), WORKSPACE);
 });
 
 afterEach(async () => {
@@ -293,7 +303,7 @@ describe("file-provider core integration", () => {
   });
 
   it("never reports a failed derived repair as a successful read", async () => {
-    await mkdir(root);
+    await mkdir(root, { recursive: true });
     const initial = await createFilesystemCompositionStore({
       compositionsRoot: root,
       provideJsx: () => "initial",
@@ -338,14 +348,14 @@ describe("media upload request boundary and core integration", () => {
 
   it("streams exact bytes into the media store and returns frozen JSON headers", async () => {
     const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
-    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, "media-store"), idFactory: () => "pixel", now: () => T1 }) });
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT), idFactory: () => "pixel", now: () => T1 }) });
     const res = connectResponse();
     await handler(mediaRequest([bytes.subarray(0, 8), bytes.subarray(8)]), res);
     expect(res.statusCode).toBe(200);
     expect(res.end).toHaveBeenCalledTimes(1);
     expect(res.setHeader).toHaveBeenCalledWith("cache-control", "no-store");
     expect(res.setHeader).toHaveBeenCalledWith("x-content-type-options", "nosniff");
-    expect(await readFile(join(sandbox, `media-store/versions/sha256-${createHash("sha256").update(bytes).digest("hex")}.png`))).toEqual(Buffer.from(bytes));
+    expect(await readFile(join(sandbox, MEDIA_FILE_PROVIDER_ROOT, `versions/sha256-${createHash("sha256").update(bytes).digest("hex")}.png`))).toEqual(Buffer.from(bytes));
   });
 
   it("rejects request-head failures before opening a store", async () => {
@@ -372,7 +382,7 @@ describe("media upload request boundary and core integration", () => {
 
   it("transports JSON folder/metadata CAS, streamed replacement, exact pins and retained trash", async () => {
     let sequence = 0;
-    const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, "media-store"), idFactory: () => `asset-${++sequence}` });
+    const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT), idFactory: () => `asset-${++sequence}` });
     const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: async () => store });
     const send = async (operation: string, data: unknown = {}, id?: string, bytes?: Uint8Array) => {
       const headers = { ...mediaRequest([]).headers, "content-type": bytes ? "application/pdf" : "application/json",
@@ -480,9 +490,9 @@ describe("media upload request boundary and core integration", () => {
 describe("dev/build registration boundary", () => {
   type RegisteredMiddleware = (request: unknown, response: unknown, next: () => unknown) => unknown;
 
-  function setupSource(command: "serve" | "build", mediaStoreRoot?: string, projectRoot = sandbox) {
-    const instance = plugin({ mediaStoreRoot });
-    instance.configResolved({ command, root: projectRoot });
+  function setupSource(command: "serve" | "build", mediaStoreRoot?: string, workspaceRoot = sandbox) {
+    const instance = plugin({ mediaStoreRoot, workspaceRoot });
+    instance.configResolved({ command });
     const resolved = instance.resolveId("virtual:composer-file-provider-config");
     expect(resolved).toBe("\0virtual:composer-file-provider-config");
     const source = instance.load(resolved);
@@ -508,11 +518,11 @@ describe("dev/build registration boundary", () => {
     await dispatch();
   }
 
-  async function setupServeServer(mediaStoreRoot?: string, projectRoot = sandbox) {
-    const { instance, source } = setupSource("serve", mediaStoreRoot, projectRoot);
+  async function setupServeServer(mediaStoreRoot?: string, workspaceRoot = sandbox) {
+    const { instance, source } = setupSource("serve", mediaStoreRoot, workspaceRoot);
     const middlewares: RegisteredMiddleware[] = [];
     const ssrLoadModule = vi.fn().mockResolvedValue({
-      createFilesystemCompositionStore,
+      createWorkspaceScopedCompositionStore,
       createFilesystemMediaStore,
       validateCompositionRecord,
     });
@@ -568,8 +578,8 @@ describe("dev/build registration boundary", () => {
   describe("uploaded-media direct serving", () => {
     it("uploads, redirects and serves only from an explicit isolated root without exposing it", async () => {
       const mediaStoreRoot = join(sandbox, "isolated-media");
-      const projectRoot = join(sandbox, "project"); await mkdir(projectRoot);
-      const { middlewares, source } = await setupServeServer(mediaStoreRoot, projectRoot);
+      const workspaceRoot = join(sandbox, "project"); await mkdir(workspaceRoot);
+      const { middlewares, source } = await setupServeServer(mediaStoreRoot, workspaceRoot);
       expect(source).not.toContain(mediaStoreRoot);
       const config = JSON.parse(source.match(/= (.*);/)![1]!);
       const bytes = Buffer.from("%PDF-1.7\nisolated upload");
@@ -589,15 +599,15 @@ describe("dev/build registration boundary", () => {
       expect(redirect.headers.location).toBe(url);
       const raw = mediaResponse(); await invokeRegistered(middlewares, mediaRequest("GET", `/@fs/${mediaStoreRoot}/catalog.json`), raw);
       expect(raw.statusCode).toBe(404);
-      await expect(readFile(join(projectRoot, "media-store", "catalog.json"))).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(join(workspaceRoot, MEDIA_FILE_PROVIDER_ROOT, "catalog.json"))).rejects.toMatchObject({ code: "ENOENT" });
       expect(setupSource("build", mediaStoreRoot).source).toBe("export const fileProviderConfig = undefined;\n");
     });
     it.each(["relative/media", "/tmp/../media", "/tmp/media/"])("rejects unresolved roots %s", (mediaStoreRoot) => {
       expect(() => plugin({ mediaStoreRoot })).toThrow("absolute resolved");
-      expect(() => createMediaFileMiddleware({ projectRoot: sandbox, mediaStoreRoot })).toThrow("absolute resolved");
+      expect(() => createMediaFileMiddleware({ workspaceRoot: sandbox, mediaStoreRoot })).toThrow("absolute resolved");
     });
     it("does not expose or ship failed publication and crash artifacts", async () => {
-      const root = join(sandbox, "media-store");
+      const root = join(sandbox, MEDIA_FILE_PROVIDER_ROOT);
       const store = await createFilesystemMediaStore({ mediaStoreRoot: root, operations: {
         rename: async (from, to) => {
           if (to.endsWith("catalog.json")) throw new Error("injected catalog failure");
@@ -609,25 +619,24 @@ describe("dev/build registration boundary", () => {
       const fileName = `sha256-${createHash("sha256").update(bytes).digest("hex")}.pdf`;
       expect(await readFile(join(root, "versions", fileName))).toEqual(Buffer.from(bytes));
       // Reopening represents the same crash artifact with no in-memory state.
-      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: root }) });
-      for (const url of [`/uploaded-media/${fileName}`, `/media-store/versions/${fileName}`, `/@fs/${root}/versions/${fileName}`, `/media-store%2fversions/${fileName}`]) {
+      const middleware = createMediaFileMiddleware({ workspaceRoot: sandbox, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: root }) });
+      for (const url of [`/uploaded-media/${fileName}`, `/${MEDIA_FILE_PROVIDER_ROOT}/versions/${fileName}`, `/@fs/${root}/versions/${fileName}`, `/cms/media%2fversions/${fileName}`]) {
         const response = mediaResponse(); const next = vi.fn();
         await invokeRegistered([middleware], mediaRequest("GET", url), response, next);
         expect(response.statusCode).toBe(404); expect(next).not.toHaveBeenCalled();
       }
-      // Vite's publicDir copy cannot include the private crash artifact.
-      const { cp, readdir } = await import("node:fs/promises");
-      await writeFile(join(root, "public", "committed-static.txt"), "static input");
-      const output = join(sandbox, "artifact"); await cp(join(root, "public"), output, { recursive: true });
-      expect(await readdir(output, { recursive: true })).toEqual(["committed-static.txt"]);
+      // The store is not a static root: Vite's publicDir is the host's own
+      // committed-media directory, so a crash artifact has no path into a build.
+      const { readdir } = await import("node:fs/promises");
+      expect(await readdir(root)).not.toContain("public");
     });
     it("resolves authoring URLs to latest while an old exact URL still serves its bytes", async () => {
-      const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, "media-store") });
+      const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT) });
       const original = new TextEncoder().encode("%PDF-1.7\nold immutable version");
       const record = await store.upload({ fileName: "paper.pdf", declaredMediaType: "application/pdf", bytes: original });
       const oldUrl = record.document.versions[0]!.url;
       const replacement = await store.replace(record.id, { bytes: new TextEncoder().encode("%PDF-1.7\nnew immutable version") }, { expectedRevision: 1 });
-      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, createStore: async () => store });
+      const middleware = createMediaFileMiddleware({ workspaceRoot: sandbox, createStore: async () => store });
       const response = mediaResponse();
       await invokeRegistered([middleware], mediaRequest("GET", `/uploaded-media/asset-${record.id}`), response);
       expect(response.statusCode).toBe(307); expect(response.headers["cache-control"]).toBe("no-store");
@@ -702,7 +711,7 @@ describe("dev/build registration boundary", () => {
 
     it("rejects unsafe names before touching the filesystem", async () => {
       const lstat = vi.fn();
-      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, operations: { lstat } });
+      const middleware = createMediaFileMiddleware({ workspaceRoot: sandbox, operations: { lstat } });
       const unsafeUrls = [
         "/uploaded-media/../x",
         "/uploaded-media/media-a.png/../b.png",
@@ -722,7 +731,7 @@ describe("dev/build registration boundary", () => {
 
     it("rejects names outside the store byte pattern", async () => {
       const lstat = vi.fn();
-      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, operations: { lstat } });
+      const middleware = createMediaFileMiddleware({ workspaceRoot: sandbox, operations: { lstat } });
       const overlongId = "a".repeat(129);
       const driftedUrls = [
         "/uploaded-media/media-_a.png",
@@ -744,7 +753,7 @@ describe("dev/build registration boundary", () => {
 
     it("passes POST requests to the next middleware", async () => {
       const lstat = vi.fn();
-      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, operations: { lstat } });
+      const middleware = createMediaFileMiddleware({ workspaceRoot: sandbox, operations: { lstat } });
       const next = vi.fn();
 
       await invokeRegistered([middleware], mediaRequest("POST", "/uploaded-media/media-post.png"), mediaResponse(), next);
@@ -760,7 +769,7 @@ describe("dev/build registration boundary", () => {
       await writeFile(outside, Buffer.from("outside"));
       await symlink(outside, join(bytesRoot, "sha256-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png"));
       await mkdir(join(bytesRoot, "sha256-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.png"));
-      const middleware = createMediaFileMiddleware({ projectRoot: sandbox });
+      const middleware = createMediaFileMiddleware({ workspaceRoot: sandbox });
 
       for (const fileName of ["sha256-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png", "sha256-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.png"]) {
         const next = vi.fn();
@@ -776,7 +785,7 @@ describe("dev/build registration boundary", () => {
       const fileName = `sha256-${createHash("sha256").update(bytes).digest("hex")}.png`;
       await writeMediaBytes(fileName, bytes);
       const open = vi.fn().mockRejectedValue(Object.assign(new Error("permission denied"), { code: "EACCES" }));
-      const middleware = createMediaFileMiddleware({ projectRoot: sandbox, operations: { open }, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT) }) });
+      const middleware = createMediaFileMiddleware({ workspaceRoot: sandbox, operations: { open }, createStore: () => createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT) }) });
       const response = mediaResponse();
 
       await invokeRegistered([middleware], mediaRequest("GET", `/uploaded-media/${fileName}`), response);
@@ -813,7 +822,7 @@ describe("dev/build registration boundary", () => {
   it("rejects repeated Connect chunks over the limit exactly once", async () => {
     const { source, middlewares, ssrLoadModule } = await setupServeServer();
     const config = JSON.parse(source.match(/= (.*);/)?.[1] ?? "null");
-    expect(ssrLoadModule).toHaveBeenCalledWith("/src/composer/storage/file-provider/dev-server-entry.ts");
+    expect(ssrLoadModule).toHaveBeenCalledWith(appModuleId("src/composer/storage/file-provider/dev-server-entry.ts"));
 
     const requestStream = Readable.from([
       Buffer.alloc(config.maxBodyBytes, 97),
@@ -889,5 +898,49 @@ describe("dev/build registration boundary", () => {
     await instance.configureServer?.({ ssrLoadModule, middlewares: { use } } as never);
     expect(ssrLoadModule).not.toHaveBeenCalled();
     expect(use).not.toHaveBeenCalled();
+  });
+
+  it("writes compositions into a foreign workspace root while loading package entries from the package", async () => {
+    const workspaceRoot = join(sandbox, "host-project"); await mkdir(workspaceRoot);
+    const { source, middlewares, ssrLoadModule } = await setupServeServer(undefined, workspaceRoot);
+    const config = JSON.parse(source.match(/= (.*);/)![1]!);
+    const body = JSON.stringify({ operation: "put", record: record(), outputsById: { alpha: generated("export const exact = 1;\n") } });
+    const requestStream = Object.assign(Readable.from([Buffer.from(body)]), {
+      method: "POST", url: COMPOSER_FILE_PROVIDER_ENDPOINT,
+      headers: {
+        host: "localhost:4321", origin: "http://localhost:4321", "sec-fetch-site": "same-origin", "content-type": "application/json",
+        [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: config.capability,
+        [COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER]: WORKSPACE,
+      },
+    });
+    const response = { statusCode: 0, setHeader: vi.fn(), end: vi.fn() };
+    await invokeRegistered(middlewares, requestStream, response);
+    expect(response.statusCode).toBe(200);
+    const stored = JSON.parse(await readFile(join(workspaceScopedRoot(join(workspaceRoot, "compositions"), WORKSPACE), "composition-alpha.composition.json"), "utf8"));
+    expect(stored.id).toBe("alpha");
+    // The package directory and the process working directory are both foreign
+    // to the host workspace and must stay untouched.
+    for (const foreign of new Set([APP_ROOT, process.cwd(), sandbox])) {
+      await expect(readFile(join(foreign, "compositions", "composition-alpha.composition.json"))).rejects.toMatchObject({ code: "ENOENT" });
+    }
+    const specifiers = ssrLoadModule.mock.calls.map(([value]) => value as string);
+    expect(specifiers).toHaveLength(2);
+    for (const specifier of specifiers) {
+      expect(specifier.startsWith("/@fs")).toBe(true);
+      expect(specifier).toContain(APP_ROOT.split(sep).join("/"));
+    }
+    expect(specifiers).toContain(appModuleId("src/media/storage/file-provider/dev-server-entry.ts"));
+  });
+
+  it("resolves the compositions root from the explicit option, then the environment, then the workspace", () => {
+    const workspaceRoot = join(sandbox, "host-project");
+    expect(resolveCompositionsRoot(workspaceRoot)).toBe(join(workspaceRoot, "compositions"));
+    try {
+      vi.stubEnv(COMPOSITIONS_ROOT_ENV, join(sandbox, "elsewhere"));
+      expect(resolveCompositionsRoot(workspaceRoot)).toBe(join(sandbox, "elsewhere"));
+      expect(resolveCompositionsRoot(workspaceRoot, join(sandbox, "explicit"))).toBe(join(sandbox, "explicit"));
+      vi.stubEnv(COMPOSITIONS_ROOT_ENV, "relative/compositions");
+      expect(() => resolveCompositionsRoot(workspaceRoot)).toThrow("absolute resolved");
+    } finally { vi.unstubAllEnvs(); }
   });
 });

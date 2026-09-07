@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.host-config.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  // `fixtures/host` is in this program on purpose: it is the only place the
+  // published `zudo-composer/config` subpath is resolved the way a host does.
+  "include": [
+    "server/config/**/*.ts",
+    "server/config/**/*.d.mts",
+    "plugins/roots.d.mts",
+    "zudo-composer.config.ts",
+    "fixtures/host/zudo-composer.config.ts",
+    "fixtures/themeset-host/zudo-composer.config.ts",
+    "fixtures/self-host/zudo-composer.config.ts"
+  ]
+}

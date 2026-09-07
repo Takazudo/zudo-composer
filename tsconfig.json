@@ -4,6 +4,8 @@
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" },
     { "path": "./tsconfig.site-project-local.json" },
+    { "path": "./tsconfig.host-config.json" },
+    { "path": "./tsconfig.cli.json" },
     { "path": "./packages/component-contract" }
   ]
 }

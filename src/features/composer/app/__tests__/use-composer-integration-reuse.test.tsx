@@ -63,7 +63,7 @@ describe("useComposerIntegration — provider-scoped reuse resolution", () => {
     document.binding = { sourceRecordId: "source", outletId: "outlet-main" };
 
     const config = (recordId: string): ComposerReuseResolutionOptions => ({
-      ref: { providerId: "indexeddb", recordId },
+      ref: { providerId: "files", recordId },
       resolver,
     });
     const { result, rerender } = renderHook(

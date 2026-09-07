@@ -125,8 +125,8 @@ export function mapping(compositionId = "landing"): MappingRecord {
       schemaVersion: 2,
       id: "article-page",
       name: "Article page",
-      contentModel: { providerId: "content-indexeddb", recordId: "articles" },
-      composition: { providerId: "indexeddb", recordId: compositionId },
+      contentModel: { providerId: "content-filesystem", recordId: "articles" },
+      composition: { providerId: "files", recordId: compositionId },
       mode: { kind: "single" },
       bindings: [{ id: "title-binding", sourceFieldId: "title", projection: { kind: "value" }, target: { nodeId: `${compositionId}-leaf`, prop: "title" }, transform: { kind: "identity" } }],
     },
@@ -145,7 +145,7 @@ export function project(options: {
   mappings?: MappingRecord[];
   attachments?: SiteProjectCollectionAttachment[];
 } = {}): SiteProject {
-  const root = options.root ?? page("home", undefined, { kind: "composition", ref: { providerId: "indexeddb", recordId: "landing" } });
+  const root = options.root ?? page("home", undefined, { kind: "composition", ref: { providerId: "files", recordId: "landing" } });
   const mappings = options.mappings ?? [mapping()];
   if (!options.mappings && root.source.kind === "mapping" && root.source.route.kind === "entry-field") mappings[0]!.document.mode = { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 100 } };
   return {
@@ -154,18 +154,18 @@ export function project(options: {
     name: "Compiler site",
     componentPack: { contractVersion: 2, packId: "compiler-fixture", packVersion: "1.0.0" },
     providers: {
-      compositions: [{ id: "indexeddb", records: options.compositions ?? [composition("landing", "Static")] }],
-      content: [{ id: "content-indexeddb", models: [options.contentModel ?? model()], entries: options.entries ?? [] }],
-      mappings: [{ id: "mapping-indexeddb", records: mappings }],
-      sitemaps: [{ id: "sitemap-indexeddb", records: [{ id: "main", createdAt: timestamp, updatedAt: timestamp, document: { schemaVersion: 3, navigation: { primary: [], footer: [] }, id: "main", name: "Main", root: [root] } }] }],
+      compositions: [{ id: "files", records: options.compositions ?? [composition("landing", "Static")] }],
+      content: [{ id: "content-filesystem", models: [options.contentModel ?? model()], entries: options.entries ?? [] }],
+      mappings: [{ id: "mapping-filesystem", records: mappings }],
+      sitemaps: [{ id: "sitemap-filesystem", records: [{ id: "main", createdAt: timestamp, updatedAt: timestamp, document: { schemaVersion: 3, navigation: { primary: [], footer: [] }, id: "main", name: "Main", root: [root] } }] }],
     },
-    activeSitemap: { providerId: "sitemap-indexeddb", recordId: "main" },
+    activeSitemap: { providerId: "sitemap-filesystem", recordId: "main" },
     collectionAttachments: options.attachments ?? [],
   };
 }
 
 export const mappingSource = (kind: "single" | "entry-field" = "entry-field", titleFieldId?: string) => ({
   kind: "mapping" as const,
-  ref: { providerId: "mapping-indexeddb", recordId: "article-page" },
+  ref: { providerId: "mapping-filesystem", recordId: "article-page" },
   route: kind === "single" ? { kind: "single" as const } : { kind: "entry-field" as const, fieldId: "slug", ...(titleFieldId ? { titleFieldId } : {}) },
 });

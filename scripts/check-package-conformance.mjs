@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from 'node:child_process';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,3 +80,110 @@ assert([...packedPaths].every((entry) => !entry.startsWith('src/')), 'packed art
 assert([...packedPaths].every((entry) => !entry.endsWith('.test.ts')), 'packed artifact must not expose package tests');
 
 console.log(`Package conformance passed: ${packageJson.name}@${packageJson.version}`);
+
+// ---------------------------------------------------------------------------
+// The root package a host installs.
+//
+// Its allowlist is the whole risk: `zudo-composer dev` evaluates the package's
+// TypeScript sources through Vite, so anything the launcher touches has to be
+// in the archive, and a missing entry surfaces only inside a consumer. Every
+// assertion below is checked against the packed file list, never against the
+// allowlist that produced it.
+// ---------------------------------------------------------------------------
+
+const rootPackageJson = JSON.parse(await readFile(path.join(repositoryRoot, 'package.json'), 'utf8'));
+
+assert(rootPackageJson.private === undefined, 'the root package must stay publishable (no `private`)');
+assert(rootPackageJson.bin?.['zudo-composer'] === './bin/zudo-composer.mjs', 'the `zudo-composer` bin must point at ./bin/zudo-composer.mjs');
+assert(
+  rootPackageJson.peerDependencies?.['@zudo-composer/component-contract'] === '1.0.0',
+  'the contract must be a peerDependency so a host resolves one instance',
+);
+
+// Dev-only for this repository, runtime-required for a host: the installed
+// launcher imports all four.
+for (const runtime of ['vite', '@preact/preset-vite', '@tailwindcss/vite', 'tailwindcss']) {
+  assert(rootPackageJson.dependencies?.[runtime] !== undefined, `${runtime} is loaded by the installed launcher and must be a runtime dependency`);
+  assert(rootPackageJson.devDependencies?.[runtime] === undefined, `${runtime} must not also be a devDependency`);
+}
+for (const [field, specs] of Object.entries({ dependencies: rootPackageJson.dependencies, peerDependencies: rootPackageJson.peerDependencies })) {
+  for (const [name, spec] of Object.entries(specs ?? {})) {
+    assert(!String(spec).startsWith('workspace:'), `${field}.${name} must not ship a workspace: spec`);
+  }
+}
+
+const expectedRootExports = {
+  '.': { types: './server/dev-server.d.mts', default: './server/dev-server.mjs' },
+  './config': { types: './server/config/define.d.mts', default: './server/config/define.mjs' },
+  './vite': { types: './plugins/index.d.mts', default: './plugins/index.mjs' },
+  './styles': './src/style.css',
+  './package.json': './package.json',
+};
+assert(JSON.stringify(rootPackageJson.exports) === JSON.stringify(expectedRootExports), 'the root package exports map changed');
+
+let rootPackedMetadata;
+try {
+  const result = await execFile(pnpmExecutable, ['pack', '--dry-run', '--json'], { cwd: repositoryRoot, maxBuffer: 32 * 1024 * 1024 });
+  rootPackedMetadata = parsePackJson(result.stdout);
+} catch (error) {
+  fail(`root pnpm pack conformance check failed: ${error instanceof Error ? error.message : String(error)}`);
+}
+const rootPackedPaths = new Set((rootPackedMetadata.files ?? []).map((entry) => entry.path));
+
+// Every `exports` and `bin` target, resolved against what actually ships.
+const exportTargets = Object.values(expectedRootExports).flatMap((entry) => (typeof entry === 'string' ? [entry] : Object.values(entry)));
+for (const target of [...exportTargets, rootPackageJson.bin['zudo-composer']]) {
+  assert(rootPackedPaths.has(target.replace(/^\.\//u, '')), `packed archive omits the declared entry point ${target}`);
+}
+
+// Sources the launcher loads, plus the inputs release identity is derived from.
+for (const required of [
+  'index.html',
+  'contract-handoff.json',
+  'src/main.tsx',
+  'src/App.tsx',
+  'server/cli/run.mjs',
+  'server/cli/release-entry.mjs',
+  'server/module-evaluator.mjs',
+  'server/config/index.ts',
+  'server/site-project-local/toolchain-config.ts',
+  'server/host-context.mjs',
+  'plugins/component-pack.mjs',
+  'plugins/component-pack-plugin.mjs',
+  'plugins/host-styles-plugin.mjs',
+  'plugins/roots.mjs',
+  'plugins/composer-app-html.mjs',
+  'packages/component-contract/src/index.ts',
+]) {
+  assert(rootPackedPaths.has(required), `packed archive omits the runtime file ${required}`);
+}
+
+// `compilerIdentity()` hashes every non-test source under the contract's `src`,
+// so the archive must carry exactly that set. The allowlist names those files
+// one by one — a directory entry would drag the colocated test in, because the
+// nested `package.json` makes the parent's negations stop applying inside it —
+// and naming files is only safe while something notices a new one.
+const contractSources = (await readdir(path.join(packageRoot, 'src')))
+  .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+  .sort();
+const packedContractSources = [...rootPackedPaths]
+  .filter((entry) => entry.startsWith('packages/component-contract/src/'))
+  .map((entry) => entry.slice('packages/component-contract/src/'.length))
+  .sort();
+assert(
+  JSON.stringify(packedContractSources) === JSON.stringify(contractSources),
+  `packed contract sources drifted from disk: add the missing file to the root \`files\` allowlist (packed ${JSON.stringify(packedContractSources)}, on disk ${JSON.stringify(contractSources)})`,
+);
+
+for (const packed of rootPackedPaths) {
+  assert(!/(?:^|\/)__tests__\//u.test(packed), `packed archive exposes a test directory: ${packed}`);
+  assert(!/(?:^|\/)type-tests\//u.test(packed), `packed archive exposes type tests: ${packed}`);
+  assert(!/\.test\./u.test(packed), `packed archive exposes a test file: ${packed}`);
+  assert(!packed.startsWith('src/test/'), `packed archive exposes test helpers: ${packed}`);
+  assert(!packed.startsWith('fixtures/'), `packed archive exposes the host fixture: ${packed}`);
+  assert(!packed.startsWith('tests/'), `packed archive exposes browser tests: ${packed}`);
+  assert(!/^playwright[.a-z-]*\.config\.ts$/u.test(packed), `packed archive exposes Playwright configuration: ${packed}`);
+  assert(!packed.startsWith('scripts/'), `packed archive exposes repository scripts: ${packed}`);
+}
+
+console.log(`Package conformance passed: ${rootPackageJson.name} (${rootPackedPaths.size} packed files)`);

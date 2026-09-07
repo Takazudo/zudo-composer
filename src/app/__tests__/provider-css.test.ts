@@ -3,13 +3,15 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-describe("provider CSS graph", () => {
-  it("imports the canonical provider stylesheet once before app tokens, source, and rules", () => {
+describe("host and tool CSS ownership", () => {
+  it("keeps pack CSS out of the tool's own sheet and loads the host's first", () => {
+    // Since Takazudo/zudo-composer#264 the pack's stylesheet belongs to the HOST's `styles`
+    // entry. The tool sheet is Tailwind utilities over its own tokens, so a
+    // themeset that ships neither cannot break the editor chrome.
     const base = readFileSync(resolve("src/base.css"), "utf8");
-    const providerImport = '@import "@zudo-sg/ui/styles/composer.css";';
-    expect(base.match(/@zudo-sg\/ui\/styles\/composer\.css/g)).toHaveLength(1);
+    expect(base).not.toContain("@zudo-sg/ui");
     const positions = [
-      base.indexOf(providerImport),
+      base.indexOf('@import "tailwindcss/utilities";'),
       base.indexOf('@import "./styles/app-tokens.css";'),
       base.indexOf('@source "./";'),
       base.indexOf("* { box-sizing"),
@@ -17,7 +19,24 @@ describe("provider CSS graph", () => {
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
     expect(readFileSync(resolve("src/style.css"), "utf8")).toContain('@import "./base.css";');
-    expect(readFileSync(resolve("src/features/composer/preview/preview-entry.ts"), "utf8")).toContain('import "../../../base.css";');
+
+    // Both entries pull the host sheet before their own, so the pack's cascade
+    // lands first and the chrome's own rules stay on top of it.
+    const main = readFileSync(resolve("src/main.tsx"), "utf8");
+    expect(main.indexOf('import("virtual:zudo-composer-host-styles")')).toBeGreaterThan(-1);
+    expect(main.indexOf('import("virtual:zudo-composer-host-styles")')).toBeLessThan(main.indexOf('import("./style.css")'));
+    const preview = readFileSync(resolve("src/features/composer/preview/preview-entry.ts"), "utf8");
+    expect(preview.indexOf('import "virtual:zudo-composer-host-styles";')).toBeLessThan(preview.indexOf('import "../../../base.css";'));
+  });
+
+  it("makes the dogfood host the sole importer of its pack's CSS", () => {
+    // The repo root is a host too: `pnpm dev` and the artifact gates resolve
+    // their pack and styles through the root config exactly as an install does.
+    const hostStyles = readFileSync(resolve("styles/base.css"), "utf8");
+    expect(hostStyles.match(/@zudo-sg\/ui\/styles\/composer\.css/g)).toHaveLength(1);
+    const config = readFileSync(resolve("zudo-composer.config.ts"), "utf8");
+    expect(config).toContain('pack: "@zudo-sg/ui/composer-pack"');
+    expect(config).toContain('styles: "styles/base.css"');
   });
 
   it("preserves the installed provider import and package-source order", () => {
@@ -62,11 +81,13 @@ describe("provider CSS graph", () => {
     expect(sitemapperTokens).not.toContain("100vh");
   });
 
-  it("keeps provider WASM resources out of Vite's dev dependency optimizer", () => {
+  it("keeps the configured pack and WASM resources out of Vite's dev dependency optimizer", () => {
     const vite = readFileSync(resolve("vite.config.ts"), "utf8");
-    expect(vite).toContain("publicDir: 'media-store/public'");
+    expect(vite).toContain("publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicMedia)");
+    // Derived, never spelled out: a literal here would re-hardcode the very
+    // provider that `pack` exists to make swappable.
     expect(vite).toMatch(
-      /optimizeDeps\s*:\s*\{\s*exclude\s*:\s*\[\s*["']@zudo-sg\/ui["']\s*,\s*["']@takazudo\/zfb-md-wasm["']\s*\]\s*,?\s*\}/s,
+      /optimizeDeps\s*:\s*\{\s*exclude\s*:\s*\[\s*componentPack\.identity\.packageName\s*,\s*["']@takazudo\/zfb-md-wasm["']\s*\]\s*,?\s*\}/s,
     );
   });
 

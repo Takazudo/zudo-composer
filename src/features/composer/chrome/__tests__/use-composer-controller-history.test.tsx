@@ -30,7 +30,7 @@ import {
   type ComposerController,
 } from "../use-composer-controller";
 
-const ref = { providerId: "indexeddb", recordId: "record-history" } as const;
+const ref = { providerId: "files", recordId: "record-history" } as const;
 
 interface Attempt {
   snapshot: SaveQueueSnapshot<CompositionRecord, CompositionRecordRef>;
@@ -370,6 +370,51 @@ describe("useComposerController — history", () => {
     act(() => result.current.setRootPolicy({ kind: "resolved", accepts: [F.box], cardinality: "single" }));
     expect(result.current.canUndo).toBe(false);
     expect(result.current.canRedo).toBe(false);
+  });
+
+  it("keeps history across a round trip through an unresolved root policy", () => {
+    // The reuse resolver reads through a provider, and a read that fails
+    // transiently reports `unresolved` before reporting the same contract
+    // again. Neither leg is a change to the contract, so neither may cost the
+    // author their undo stack.
+    const source = makeAbcDocument();
+    source.binding = { sourceRecordId: "source", outletId: "outlet" };
+    const resolved = { kind: "resolved", accepts: [F.box, F.widgetA], cardinality: "many" } as const;
+    const { result } = setup(source, resolved);
+    act(() => result.current.rename("Undoable"));
+    expect(result.current.canUndo).toBe(true);
+
+    act(() => result.current.setRootPolicy({ kind: "unresolved" }));
+    expect(result.current.canUndo).toBe(true);
+    act(() => result.current.setRootPolicy({ kind: "resolved", accepts: [F.widgetA, F.box], cardinality: "many" }));
+    expect(result.current.canUndo).toBe(true);
+  });
+
+  it("clears history when the first resolution materially changes a policy it had already known", () => {
+    const source = makeAbcDocument();
+    source.binding = { sourceRecordId: "source", outletId: "outlet" };
+    const { result } = setup(source, { kind: "resolved", accepts: [F.box, F.widgetA], cardinality: "many" });
+    act(() => result.current.rename("Undoable"));
+
+    act(() => result.current.setRootPolicy({ kind: "unresolved" }));
+    act(() => result.current.setRootPolicy({ kind: "resolved", accepts: [F.box], cardinality: "single" }));
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.canRedo).toBe(false);
+  });
+
+  it("keeps history when the first resolution arrives after the author has already composed", () => {
+    // A bound record mounts `unresolved` and the resolver answers a provider
+    // round trip later. Anything composed in that window used to be discarded
+    // the moment the answer landed.
+    const source = makeAbcDocument();
+    source.binding = { sourceRecordId: "source", outletId: "outlet" };
+    const { result } = setup(source);
+    expect(result.current.state.rootPolicy.kind).toBe("unresolved");
+    act(() => result.current.rename("Composed while resolving"));
+    expect(result.current.canUndo).toBe(true);
+
+    act(() => result.current.setRootPolicy({ kind: "resolved", accepts: [F.box, F.widgetA], cardinality: "many" }));
+    expect(result.current.canUndo).toBe(true);
   });
 
   it("clears both stacks after each accepted publication/binding barrier", () => {

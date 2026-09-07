@@ -1,0 +1,14 @@
+{
+  "name": "@zudo-composer/fixture-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "In-repo dogfood host: the smallest project that installs zudo-composer and runs its bin.",
+  "scripts": {
+    "dev": "zudo-composer dev"
+  },
+  "devDependencies": {
+    "@zudo-composer/component-contract": "workspace:*",
+    "zudo-composer": "workspace:*"
+  }
+}

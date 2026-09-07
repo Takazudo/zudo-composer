@@ -18,7 +18,7 @@ type DeliveryState =
   | { status: "provider-error"; message: string; retryable: boolean }
   | { status: "validation-error"; message: string }
   | { status: "compiler-error"; message: string }
-  | { status: "ready"; sourceKind: "activated-local" | "bundled-static" | "working-preview"; project: SiteProject; build: SiteBuildPlan; sitemap: SitemapDocument };
+  | { status: "ready"; sourceKind: "activated-local" | "working-preview"; project: SiteProject; build: SiteBuildPlan; sitemap: SitemapDocument };
 
 function activeSitemap(project: SiteProject): SitemapDocument | undefined {
   return project.providers.sitemaps
@@ -166,6 +166,6 @@ export function SiteDelivery({ source, pathname = window.location.pathname, onCo
   if (state.status === "compiler-error") return <StateMessage heading="Site build blocked" message={<>This site cannot be published until its configuration is fixed. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />;
   if (!route) return <StateMessage heading="Page not found" message="This page is not present in the selected delivery snapshot." focus={focusAfterRetry.current} onFocused={completeRetryFocus}><a href={basePath}>Return to site home</a></StateMessage>;
   const componentProvider = source.kind === "activated" ? source.componentProvider : source.providers.componentProvider;
-  const label = state.sourceKind === "working-preview" ? "Live working preview — not activated" : state.sourceKind === "activated-local" ? "Activated local release — not deployed" : "Bundled static sample";
+  const label = state.sourceKind === "working-preview" ? "Live working preview — not activated" : "Activated local release — not deployed";
   return <DeliveryGuard><DeliveryChrome project={state.project} build={state.build} sitemap={state.sitemap} route={route} pack={componentProvider.pack} report={onComponentError} focus={focusAfterRetry.current} onFocused={completeRetryFocus} basePath={basePath} label={label} /></DeliveryGuard>;
 }

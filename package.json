@@ -1,9 +1,50 @@
 {
   "name": "zudo-composer",
   "version": "0.0.0",
-  "private": true,
+  "description": "Local-first component composition workspace: an authoring dev server a host project installs and runs.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Takazudo/zudo-composer.git"
+  },
   "type": "module",
   "packageManager": "pnpm@11.5.2",
+  "bin": {
+    "zudo-composer": "./bin/zudo-composer.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./server/dev-server.d.mts",
+      "default": "./server/dev-server.mjs"
+    },
+    "./config": {
+      "types": "./server/config/define.d.mts",
+      "default": "./server/config/define.mjs"
+    },
+    "./vite": {
+      "types": "./plugins/index.d.mts",
+      "default": "./plugins/index.mjs"
+    },
+    "./styles": "./src/style.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "index.html",
+    "contract-handoff.json",
+    "plugins",
+    "server",
+    "src",
+    "packages/component-contract/src/fixtures.ts",
+    "packages/component-contract/src/index.ts",
+    "packages/component-contract/src/runtime.ts",
+    "packages/component-contract/src/types.ts",
+    "packages/component-contract/src/validation.ts",
+    "!**/__tests__",
+    "!**/type-tests",
+    "!**/*.test.*",
+    "!src/test"
+  ],
   "engines": {
     "node": "^22.13.0 || >=24.0.0"
   },
@@ -13,31 +54,25 @@
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
     "test": "vitest run",
-    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm site-project:boundary && pnpm deployment:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm test && pnpm build && pnpm provider:boundary && pnpm deploy:dry-run",
+    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm provider:boundary && pnpm test && pnpm build && pnpm dist:boundary",
     "headless:negative-scan": "node scripts/check-headless-boundary.mjs",
     "contract:conformance": "node scripts/check-package-conformance.mjs",
     "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
     "contract:external-install": "node scripts/verify-contract-install.mjs",
     "site-project:boundary": "node scripts/check-site-project-boundary.mjs",
-    "site-project:bundle": "tsx scripts/generate-bundled-release.ts --write",
-    "site-project:bundle:check": "tsx scripts/generate-bundled-release.ts --check",
     "provider:boundary": "node scripts/check-provider-boundary.mjs",
-    "deployment:boundary": "node scripts/check-deployment-boundary.mjs",
+    "dist:boundary": "node scripts/check-dist-artifact.mjs",
     "handoff:boundary": "node scripts/check-standalone-handoff.mjs",
     "styles:class-names": "node scripts/check-class-names.mjs",
-    "deployment:manifest": "node scripts/deployment-artifact.mjs write",
-    "deployment:manifest:check": "node scripts/deployment-artifact.mjs check",
-    "deploy:dry-run": "wrangler deploy --dry-run",
-    "deploy": "wrangler deploy",
-    "smoke:local": "node scripts/smoke-deployment.mjs --local",
-    "smoke:live": "node scripts/smoke-deployment.mjs --base-url https://zudo-composer.zudolab.dev",
     "site-project:api": "tsx server/site-project-local/cli.ts",
     "site-project:check": "vitest run server/site-project-local plugins/__tests__/site-project-source-plugin.test.ts",
-    "test:browser": "pnpm build && pnpm test:browser:dist",
-    "test:browser:dist": "playwright test",
-    "test:browser:site-project": "node scripts/run-site-project-browser.mjs --dev",
-    "test:browser:site-project:dist": "node scripts/run-site-project-browser.mjs --dist",
-    "test:browser:dev": "node scripts/run-dev-browser.mjs"
+    "smoke:host-install": "node scripts/smoke-host-install.mjs",
+    "test:browser:host": "node scripts/run-host-browser.mjs",
+    "test:browser:dev": "node scripts/run-dev-browser.mjs",
+    "test:browser:site-project": "node scripts/run-site-project-browser.mjs"
+  },
+  "peerDependencies": {
+    "@zudo-composer/component-contract": "1.0.0"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",
@@ -46,30 +81,29 @@
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.9",
     "@lezer/highlight": "^1.2.3",
-    "@zudo-composer/component-contract": "workspace:*",
+    "@preact/preset-vite": "^2.10.6",
+    "@tailwindcss/vite": "^4.3.3",
     "@zudo-sg/ui": "git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf",
     "preact": "^10.29.8",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.2.2",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
-    "@preact/preset-vite": "^2.10.6",
-    "@tailwindcss/vite": "^4.3.3",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/preact": "^3.2.4",
     "@types/node": "^26.4.0",
+    "@zudo-composer/component-contract": "workspace:*",
+    "@zudo-composer/fixture-themeset": "workspace:*",
     "eslint": "^10.9.1",
-    "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
     "preact-render-to-string": "^6.6.6",
-    "tailwindcss": "^4.3.3",
     "tsx": "^4.20.5",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.68.0",
-    "vite": "^8.2.2",
-    "vitest": "^4.1.11",
-    "wrangler": "4.127.1"
+    "vitest": "^4.1.11"
   }
 }

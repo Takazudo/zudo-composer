@@ -67,8 +67,8 @@ function project(): SiteProject {
       schemaVersion: 2 as const,
       id: "article-page",
       name: "Article page",
-      contentModel: { providerId: "content-indexeddb", recordId: "articles" },
-      composition: { providerId: "indexeddb" as const, recordId: "landing" },
+      contentModel: { providerId: "content-filesystem", recordId: "articles" },
+      composition: { providerId: "files" as const, recordId: "landing" },
       mode: { kind: "single" as const },
       bindings: [{ id: "title-binding", sourceFieldId: "title", projection: { kind: "value" as const }, target: { nodeId: "hero-node", prop: "title" }, transform: { kind: "identity" as const } }],
     },
@@ -82,7 +82,7 @@ function project(): SiteProject {
       navigation: { primary: [], footer: [] },
       id: "main",
       name: "Main",
-      root: [{ id: "home", title: "Home", source: { kind: "mapping" as const, ref: { providerId: "mapping-indexeddb", recordId: "article-page" }, route: { kind: "single" as const } }, children: [] }],
+      root: [{ id: "home", title: "Home", source: { kind: "mapping" as const, ref: { providerId: "mapping-filesystem", recordId: "article-page" }, route: { kind: "single" as const } }, children: [] }],
     },
   };
   return {
@@ -92,20 +92,19 @@ function project(): SiteProject {
     componentPack: { contractVersion: manifest.contractVersion, packId: manifest.packId, packVersion: manifest.packVersion },
     providers: {
       compositions: [
-        { id: "files", records: [{ ...structuredClone(composition), id: "landing", document: { ...structuredClone(composition.document), id: "landing" } }] },
-        { id: "indexeddb", records: [composition] },
+        { id: "files", records: [composition] },
       ],
-      content: [{ id: "content-indexeddb", models: [model], entries: [entry] }],
-      mappings: [{ id: "mapping-indexeddb", records: [mapping] }],
-      sitemaps: [{ id: "sitemap-indexeddb", records: [sitemap] }],
+      content: [{ id: "content-filesystem", models: [model], entries: [entry] }],
+      mappings: [{ id: "mapping-filesystem", records: [mapping] }],
+      sitemaps: [{ id: "sitemap-filesystem", records: [sitemap] }],
     },
-    activeSitemap: { providerId: "sitemap-indexeddb", recordId: "main" },
+    activeSitemap: { providerId: "sitemap-filesystem", recordId: "main" },
     collectionAttachments: [],
   };
 }
 
 describe("SiteProject contract", () => {
-  it("validates a provider-scoped graph and permits equal record ids in different providers", () => {
+  it("validates a provider-scoped graph", () => {
     expect(validateSiteProject(project(), context)).toEqual({ ok: true, project: project(), diagnostics: [] });
   });
 
@@ -140,7 +139,7 @@ describe("SiteProject contract", () => {
   it("validates provider-qualified collection attachment ownership and exclusive named slots", () => {
     const value = project();
     value.providers.mappings[0]!.records[0]!.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit: 10 } };
-    value.collectionAttachments = [{ id: "feed", order: 0, composition: { providerId: "indexeddb", recordId: "landing" }, target: { nodeId: "hero-node", slotId: "body" }, mapping: { providerId: "mapping-indexeddb", recordId: "article-page" } }];
+    value.collectionAttachments = [{ id: "feed", order: 0, composition: { providerId: "files", recordId: "landing" }, target: { nodeId: "hero-node", slotId: "body" }, mapping: { providerId: "mapping-filesystem", recordId: "article-page" } }];
     expect(validateSiteProject(value, context).ok).toBe(true);
     value.collectionAttachments.push({ ...structuredClone(value.collectionAttachments[0]!), id: "feed-two", order: 1 });
     expect(validateSiteProject(value, context)).toMatchObject({ ok: false, diagnostics: [expect.objectContaining({ code: "attachment-slot-conflict", path: "$.collectionAttachments[1].target" })] });
@@ -168,15 +167,14 @@ describe("SiteProject contract", () => {
     ["future aggregate", (value: MutableProject) => { (value as { schemaVersion: number }).schemaVersion = 3; }, "future-schema", "$.schemaVersion"],
     ["pack mismatch", (value: MutableProject) => { value.componentPack.packVersion = "2"; }, "component-pack-mismatch", "$.componentPack"],
     ["future domain record", (value: MutableProject) => { (value.providers.mappings[0]!.records[0]!.document as { schemaVersion: number }).schemaVersion = 3; }, "malformed-record", "$.providers.mappings[0].records[0].document.schemaVersion"],
-    ["component schema mismatch", (value: MutableProject) => { value.providers.compositions[1]!.records[0]!.document.root[0]!.componentVersion = 2; }, "component-pack-incompatible", "$.providers.compositions[1].records[0].document.root[0]"],
+    ["component schema mismatch", (value: MutableProject) => { value.providers.compositions[0]!.records[0]!.document.root[0]!.componentVersion = 2; }, "component-pack-incompatible", "$.providers.compositions[0].records[0].document.root[0]"],
     ["unknown provider", (value: MutableProject) => { (value.providers.compositions[0] as { id: string }).id = "arbitrary"; }, "unknown-provider", "$.providers.compositions[0].id"],
-    ["duplicate provider", (value: MutableProject) => { value.providers.compositions.push(structuredClone(value.providers.compositions[1]!)); }, "duplicate-provider", "$.providers.compositions[2].id"],
-    ["duplicate record", (value: MutableProject) => { value.providers.compositions[1]!.records.push(structuredClone(value.providers.compositions[1]!.records[0]!)); }, "duplicate-record", "$.providers.compositions[1].records[1].id"],
+    ["duplicate provider", (value: MutableProject) => { value.providers.compositions.push(structuredClone(value.providers.compositions[0]!)); }, "duplicate-provider", "$.providers.compositions[1].id"],
+    ["duplicate record", (value: MutableProject) => { value.providers.compositions[0]!.records.push(structuredClone(value.providers.compositions[0]!.records[0]!)); }, "duplicate-record", "$.providers.compositions[0].records[1].id"],
     ["unsafe project id", (value: MutableProject) => { value.id = "../bad"; }, "unsafe-id", "$.id"],
     ["missing active Sitemap", (value: MutableProject) => { value.activeSitemap.recordId = "missing"; }, "invalid-active-sitemap", "$.activeSitemap"],
     ["Entry/model mismatch", (value: MutableProject) => { value.providers.content[0]!.entries[0]!.modelId = "missing"; }, "dangling-content-model", "$.providers.content[0].entries[0].modelId"],
     ["dangling Mapping ref", (value: MutableProject) => { value.providers.mappings[0]!.records[0]!.document.composition.recordId = "missing"; }, "dangling-mapping-reference", "$.providers.mappings[0].records[0].document.composition"],
-    ["wrong Mapping provider", (value: MutableProject) => { value.providers.mappings[0]!.records[0]!.document.composition.providerId = "files"; value.providers.compositions[0]!.records = []; }, "wrong-mapping-provider", "$.providers.mappings[0].records[0].document.composition"],
     ["unknown nested provider", (value: MutableProject) => { (value.providers.mappings[0]!.records[0]!.document.contentModel as { providerId: string }).providerId = "arbitrary"; }, "unknown-provider", "$.providers.mappings[0].records[0].document.contentModel.providerId"],
     ["dangling Mapping target field", (value: MutableProject) => { value.providers.mappings[0]!.records[0]!.document.bindings[0]!.target.prop = "missing"; }, "dangling-mapping-target", "$.providers.mappings[0].records[0].document.bindings[0].target.prop"],
     ["dangling Sitemap ref", (value: MutableProject) => { const source = value.providers.sitemaps[0]!.records[0]!.document.root[0]!.source; if (source.kind === "mapping") source.ref.recordId = "missing"; }, "dangling-sitemap-reference", "$.providers.sitemaps[0].records[0].document.root[0].source.ref"],
@@ -210,16 +208,16 @@ describe("SiteProject contract", () => {
 
   it("validates Composition binding ownership against a same-provider Global-template outlet", () => {
     const value = project();
-    const consumer = structuredClone(value.providers.compositions[1]!.records[0]!);
+    const consumer = structuredClone(value.providers.compositions[0]!.records[0]!);
     consumer.id = "consumer";
     consumer.document.id = "consumer";
     consumer.document.binding = { sourceRecordId: "landing", outletId: "main" };
-    value.providers.compositions[1]!.records.push(consumer);
+    value.providers.compositions[0]!.records.push(consumer);
     const result = validateSiteProject(value, context);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.diagnostics).toContainEqual(expect.objectContaining({
       code: "invalid-composition-binding",
-      path: "$.providers.compositions[1].records[1].document.binding",
+      path: "$.providers.compositions[0].records[1].document.binding",
     }));
   });
 
@@ -241,12 +239,12 @@ describe("in-memory SiteProject adapters", () => {
   it("exposes immutable provider-qualified stores, catalogs, and the active Sitemap", () => {
     const source = project();
     const adapters = createInMemorySiteProjectAdapters(source);
-    source.providers.compositions[1]!.records[0]!.document.name = "mutated outside";
-    expect(adapters.compositions.catalog.resolve({ providerId: "indexeddb", recordId: "landing" })?.document.name).toBe("Landing");
+    source.providers.compositions[0]!.records[0]!.document.name = "mutated outside";
+    expect(adapters.compositions.catalog.resolve({ providerId: "files", recordId: "landing" })?.document.name).toBe("Landing");
     expect(adapters.compositions.catalog.resolve({ providerId: "files", recordId: "landing" })).toBeDefined();
-    expect(adapters.content.catalog.resolveModel({ providerId: "content-indexeddb", recordId: "articles" })?.id).toBe("articles");
-    expect(adapters.content.catalog.listEntries({ providerId: "content-indexeddb", recordId: "articles" })).toHaveLength(1);
-    expect(adapters.mappings.catalog.resolve({ providerId: "mapping-indexeddb", recordId: "article-page" })?.id).toBe("article-page");
+    expect(adapters.content.catalog.resolveModel({ providerId: "content-filesystem", recordId: "articles" })?.id).toBe("articles");
+    expect(adapters.content.catalog.listEntries({ providerId: "content-filesystem", recordId: "articles" })).toHaveLength(1);
+    expect(adapters.mappings.catalog.resolve({ providerId: "mapping-filesystem", recordId: "article-page" })?.id).toBe("article-page");
     expect(adapters.activeSitemap.id).toBe("main");
     expect(Object.isFrozen(adapters.project)).toBe(true);
     expect("set" in adapters.compositions.stores).toBe(false);

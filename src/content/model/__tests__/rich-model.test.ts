@@ -4,7 +4,7 @@ import { createContentValueSchema, isValueValidForField, loadContentEntryRecord,
 import type { ContentFieldDefinition, ContentValueSchema } from "..";
 
 const timestamp = "2026-01-01T00:00:00.000Z";
-const target = { providerId: "content-indexeddb", recordId: "items" };
+const target = { providerId: "content-filesystem", recordId: "items" };
 const ref = { providerId: target.providerId, modelId: target.recordId, recordId: "entry" };
 const field = (schema: ContentValueSchema, id = "value", required = true): ContentFieldDefinition => ({ id, key: id, label: id, required, ...schema });
 

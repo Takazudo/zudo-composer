@@ -13,7 +13,7 @@ describe("Content field/path navigation", () => {
   const entry = createContentEntryRecord("cards", { title: "First", details: { caption: "Focused" } }, { id: "card", timestamp: stamp });
 
   it("opens and focuses an exact provider/model/entry/field/path target", async () => {
-    window.history.replaceState(null, "", "/content?provider=content-indexeddb&model=cards&entry=card&field=details&path=%2Ff%3Acaption");
+    window.history.replaceState(null, "", "/content?provider=content-filesystem&model=cards&entry=card&field=details&path=%2Ff%3Acaption");
     render(<ContentApp provider={createMemoryContentProvider({ models: [model], entries: [entry] })} />);
     const caption = await screen.findByRole("textbox", { name: "Caption" });
     await waitFor(() => expect(caption).toHaveFocus());
@@ -22,7 +22,7 @@ describe("Content field/path navigation", () => {
   });
 
   it("keeps the Entry open and explains a stale value location", async () => {
-    window.history.replaceState(null, "", "/content?provider=content-indexeddb&model=cards&entry=card&field=missing");
+    window.history.replaceState(null, "", "/content?provider=content-filesystem&model=cards&entry=card&field=missing");
     render(<ContentApp provider={createMemoryContentProvider({ models: [model], entries: [entry] })} />);
     expect(await screen.findByText(/requested field or structured value no longer exists/)).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Caption" })).toHaveValue("Focused");
@@ -31,7 +31,7 @@ describe("Content field/path navigation", () => {
   it("clears a prior field/path target when the navigator accepts another Entry or model", async () => {
     const second = createContentEntryRecord("cards", { title: "Second", details: { caption: "Other" } }, { id: "second", timestamp: stamp });
     const other = createContentModelRecord({ name: "Other model", kind: "collection", fields: [] }, { id: "other", timestamp: stamp });
-    window.history.replaceState(null, "", "/content?provider=content-indexeddb&model=cards&entry=card&field=details&path=%2Ff%3Acaption");
+    window.history.replaceState(null, "", "/content?provider=content-filesystem&model=cards&entry=card&field=details&path=%2Ff%3Acaption");
     render(<ContentApp provider={createMemoryContentProvider({ models: [model, other], entries: [entry, second] })} />);
     await screen.findByRole("textbox", { name: "Caption" });
     fireEvent.click(screen.getByRole("treeitem", { name: /^Second/ }));
@@ -43,9 +43,9 @@ describe("Content field/path navigation", () => {
   it("focuses the exact nested reference-list row named by an incoming graph location", async () => {
     const people = createContentModelRecord({ name: "People", kind: "collection", fields: [{ id: "name", key: "name", label: "Name", required: true, kind: "text" }] }, { id: "people", timestamp: stamp });
     const alice = createContentEntryRecord("people", { name: "Alice" }, { id: "alice", timestamp: stamp }), bob = createContentEntryRecord("people", { name: "Bob" }, { id: "bob", timestamp: stamp });
-    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "details", key: "details", label: "Details", required: false, kind: "object", fields: [{ id: "authors", key: "authors", label: "Authors", required: false, kind: "reference-list", target: { providerId: "content-indexeddb", recordId: "people" }, ordered: false }] }] }, { id: "articles", timestamp: stamp });
-    const article = createContentEntryRecord("articles", { details: { authors: [{ providerId: "content-indexeddb", modelId: "people", recordId: "alice" }, { providerId: "content-indexeddb", modelId: "people", recordId: "bob" }] } }, { id: "article", timestamp: stamp });
-    window.history.replaceState(null, "", "/content?provider=content-indexeddb&model=articles&entry=article&field=details&path=%2Ff%3Aauthors%2Fi%3A1");
+    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "details", key: "details", label: "Details", required: false, kind: "object", fields: [{ id: "authors", key: "authors", label: "Authors", required: false, kind: "reference-list", target: { providerId: "content-filesystem", recordId: "people" }, ordered: false }] }] }, { id: "articles", timestamp: stamp });
+    const article = createContentEntryRecord("articles", { details: { authors: [{ providerId: "content-filesystem", modelId: "people", recordId: "alice" }, { providerId: "content-filesystem", modelId: "people", recordId: "bob" }] } }, { id: "article", timestamp: stamp });
+    window.history.replaceState(null, "", "/content?provider=content-filesystem&model=articles&entry=article&field=details&path=%2Ff%3Aauthors%2Fi%3A1");
     render(<ContentApp provider={createMemoryContentProvider({ models: [people, articles], entries: [alice, bob, article] })} />);
     await waitFor(() => expect(document.activeElement).toHaveAttribute("data-content-value-path", "/f:authors/i:1"));
     expect(screen.queryByText(/requested field or structured value no longer exists/)).toBeNull();
@@ -53,7 +53,7 @@ describe("Content field/path navigation", () => {
 
   it("renders the activated-baseline dependency explicitly for published Entries", async () => {
     const published = { ...entry, lifecycle: "published" as const };
-    window.history.replaceState(null, "", "/content?provider=content-indexeddb&model=cards&entry=card");
+    window.history.replaceState(null, "", "/content?provider=content-filesystem&model=cards&entry=card");
     render(<ContentApp provider={createMemoryContentProvider({ models: [model], entries: [published] })} />);
     expect(await screen.findByText("Published · baseline unavailable")).toBeVisible();
     expect(screen.queryByText("Published · pending changes")).toBeNull();

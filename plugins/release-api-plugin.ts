@@ -2,6 +2,9 @@ import { randomBytes } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isIP } from "node:net";
 import { validateMediaStoreRoot } from "./composer-file-provider-plugin.mjs";
+import { appModuleId } from "./roots.mjs";
+import { COMPONENT_PACK_ID } from "./component-pack-plugin.mjs";
+import type { ResolvedComponentPack } from "./component-pack.d.mts";
 import type { IncomingMessage } from "node:http";
 import type { Plugin, WebSocketClient } from "vite";
 
@@ -22,7 +25,7 @@ export function trustedReleaseRequest(req: Pick<IncomingMessage, "headers" | "so
   try { const url = new URL(`${https ? "https" : "http"}://${host}`); return url.host === host && origin === url.origin && Number(url.port || (https ? 443 : 80)) === req.socket.localPort; } catch { return false; }
 }
 /** Serve-only loopback operator capability; no secret is emitted in build mode. */
-export default function releaseApiPlugin(options: { mediaStoreRoot?: string } = {}): Plugin {
+export default function releaseApiPlugin(options: { mediaStoreRoot?: string; workspaceRoot?: string; packIdentity?: ResolvedComponentPack } = {}): Plugin {
   const mediaStoreRoot = validateMediaStoreRoot(options.mediaStoreRoot);
   let serving = false;
   const capability = nonce();
@@ -36,7 +39,15 @@ export default function releaseApiPlugin(options: { mediaStoreRoot?: string } = 
       server.ws.on("connection", (socket, request) => { if (trustedReleaseRequest(request, !!server.config.server.https)) trustedSockets.add(socket); });
       const contexts = new AsyncLocalStorage<{ ask(payload: unknown): Promise<unknown> }>();
       let service: Promise<{ handle(request: unknown): Promise<unknown> }> | undefined;
-      const api = () => service ??= server.ssrLoadModule("/server/site-project-local/service.ts").then((module) => module.createLocalSiteProjectApiService({
+      // Server-side validation runs against the pack the host configured, not
+      // a bundled one: the same `virtual:zudo-composer-pack` the browser loads.
+      const api = () => service ??= Promise.all([
+        server.ssrLoadModule(appModuleId("server/site-project-local/service.ts")),
+        server.ssrLoadModule(COMPONENT_PACK_ID),
+      ]).then(([module, packModule]) => module.createLocalSiteProjectApiService({
+        pack: packModule.componentPack,
+        packIdentity: options.packIdentity,
+        workspaceRoot: options.workspaceRoot,
         mediaStoreRoot,
         isWorkingCurrent: async (project: unknown, precondition: unknown) => (await contexts.getStore()?.ask({ kind: "current", project, precondition })) === true,
         reconcilePublication: async (active: unknown, changes: unknown, activationGeneration: number) => { const result = await contexts.getStore()?.ask({ kind: "reconcile", active, changes, activationGeneration }); return result === "applied" || result === "changed" ? result : "unavailable"; },

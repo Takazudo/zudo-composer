@@ -2,24 +2,11 @@
 // Content, and the shared responsive/theme/focus seams the Content panes own.
 // Mapping-owned coverage lives in `mapping.pw.ts`.
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { watchRuntimeFailures } from "../runtime-failures";
 
 const PRODUCT_LINKS = ["Compositions", "Content", "Mappings", "Sitemaps", "Media"] as const;
 const COLLECTION_MAPPING = "Journal entry mapping";
 const SINGLE_MAPPING = "Browser Site settings mapping";
-
-function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => {
-    const errorText = request.failure()?.errorText;
-    if (errorText === "net::ERR_ABORTED") return;
-    failures.push(`request: ${request.url()} (${errorText})`);
-  });
-  return failures;
-}
 
 async function selectOptionMatching(select: Locator, label: RegExp) {
   const value = await select.locator("option").filter({ hasText: label }).first().getAttribute("value");
@@ -225,7 +212,7 @@ test("Content directory, Raw storage, and field-qualified usage links stay model
   const failures = watchRuntimeFailures(page);
   await page.goto("/content");
   await expect(page.getByRole("heading", { name: "All models", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Journal articles.*Browser storage/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Journal articles.*Project files/ })).toBeVisible();
 
   await contentTree(page).getByRole("treeitem", { name: /^Journal articles/ }).click();
   await contentTree(page).getByRole("treeitem", { name: /^Map the moving parts/ }).click();
@@ -243,6 +230,15 @@ test("Content directory, Raw storage, and field-qualified usage links stay model
   await expect(page.locator(".sg-content-raw pre").last()).toContainText(`"${fieldId}"`);
   expect(failures).toEqual([]);
 });
+
+/**
+ * What the seeded Journal model is called by the time the tests after the
+ * browser journey run. The lane gives one host project per spec FILE, so the
+ * journey's rename is the starting position for everything below it — authored
+ * state is a directory tree now, not a per-context database Playwright throws
+ * away with the page.
+ */
+const RENAMED_JOURNAL_MODEL = "Browser Journal articles";
 
 /** The one row-level overflow menu the navigator gives every model and Entry. */
 async function openRowMenu(page: Page, name: string) {
@@ -274,7 +270,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await page.getByRole("textbox", { name: "Heading", exact: true }).blur();
   await expect(saveStatus(page)).toContainText("Saved");
   // Opening a record is a deep link the author can copy.
-  await expect(page).toHaveURL(/\/content\?provider=content-indexeddb&model=about-content&entry=about-entry$/);
+  await expect(page).toHaveURL(/\/content\?provider=content-filesystem&model=about-content&entry=about-entry$/);
 
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
@@ -301,7 +297,7 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   await sampleRow.getByRole("link", { name: "Sample Studio sitemap", exact: true }).click();
   // Opening a Sitemap is a real navigation to the record's own URL, and the
   // editor chrome names the record it loaded.
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Sample Studio sitemap");
   // Scoped to the toolbar: the outline's terminal add rows are called "Add page"
   // too, and it is the toolbar action this line means to find. `EditorChrome`
@@ -432,46 +428,19 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
 
   // A populated canonical date proves the transform, while another Entry keeps
   // its optional date empty. Invalid stored dates now require Content recovery.
-  await page.evaluate(async () => {
-    const workspaceDb = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("zudo-composer-workspaces-v1");
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const workspaceId = await new Promise<string>((resolve, reject) => {
-      const request = workspaceDb.transaction("selection", "readonly").objectStore("selection").get("active");
-      request.onsuccess = () => typeof request.result === "string" ? resolve(request.result) : reject(new Error("Active workspace identity was not found."));
-      request.onerror = () => reject(request.error);
-    });
-    workspaceDb.close();
-    const databaseName = `zudo-composer-content-workspace-v1-${workspaceId}`;
-    if (!(await indexedDB.databases()).some(({ name }) => name === databaseName)) throw new Error("Workspace-scoped Content storage was not found.");
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(databaseName);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const transaction = db.transaction(["models", "entries"], "readwrite");
-    const model = await new Promise<{ document: { fields: Array<{ id: string; key: string }> } }>((resolve, reject) => {
-      const request = transaction.objectStore("models").get("journal-articles");
-      request.onsuccess = () => resolve(request.result as { document: { fields: Array<{ id: string; key: string }> } });
-      request.onerror = () => reject(request.error);
-    });
-    const dateFieldId = model.document.fields.find((field) => field.key === "reviewDate")!.id;
-    const entries = transaction.objectStore("entries");
-    const entry = await new Promise<{ values: Record<string, unknown> } & Record<string, unknown>>((resolve, reject) => {
-      const request = entries.get("article-first-question");
-      request.onsuccess = () => resolve(request.result as { values: Record<string, unknown> } & Record<string, unknown>);
-      request.onerror = () => reject(request.error);
-    });
-    entries.put({ ...entry, values: { ...entry.values, [dateFieldId]: "2026-02-28" } });
-    await new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve();
-      transaction.onabort = () => reject(transaction.error);
-      transaction.onerror = () => undefined;
-    });
-    db.close();
-  });
+  // Storage is the host filesystem, so the value is authored where an author
+  // authors it — the Entry's own deep link. The retired IndexedDB store could
+  // be written from the page; reaching around this one would prove less than
+  // driving the editor that owns the write.
+  await page.goto("/content?provider=content-filesystem&model=journal-articles&entry=article-first-question");
+  // The deep link resolves in two steps, so wait for the Entry itself: a bare
+  // `fill` can otherwise land on the previous record's form, and the status
+  // chip already reads "Saved" at that moment and proves nothing.
+  await expect(page.getByRole("textbox", { name: "Heading", exact: true })).toHaveValue("Start with the question");
+  await page.getByLabel("Review date").fill("2026-02-28");
+  await page.getByLabel("Review date").blur();
+  await expect(page.getByLabel("Review date")).toHaveValue("2026-02-28");
+  await expect(saveStatus(page)).toContainText("Saved");
 
   await page.goto("/mapping");
   await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
@@ -582,7 +551,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Mapping journey");
   await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
 
   // Issue #165 moved the Sitemapper onto `OutlineTree` and `EditorChrome`: the
   // outline is a real `tree` of `treeitem` rows, and the inspector is a pane
@@ -663,7 +632,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
 
   await sourceKind.getByRole("radio", { name: "Composition", exact: true }).click();
   await inspector.getByRole("button", { name: "Choose composition" }).click();
-  await page.getByRole("dialog", { name: "Choose a composition" }).getByRole("button", { name: /Assign Journal entry page from Browser storage/ }).click();
+  await page.getByRole("dialog", { name: "Choose a composition" }).getByRole("button", { name: /Assign Journal entry page from Local files/ }).click();
   const compositionField = inspector.getByRole("group", { name: "Composition" });
   await expect(compositionField.getByText("Journal entry page", { exact: true })).toBeVisible();
   await expect(assignment).toHaveText("Composition");
@@ -689,7 +658,7 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/content");
-  await contentTree(page).getByRole("treeitem", { name: /^Journal articles/ }).click();
+  await contentTree(page).getByRole("treeitem", { name: new RegExp(`^${RENAMED_JOURNAL_MODEL}`) }).click();
   // Three regions of the shared chrome, not three floating cards: they share a
   // top edge, sit inside the viewport, and never overlap.
   const regions = page.locator(".cms-editor__region");
@@ -762,8 +731,8 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   // Back to the navigator by position: hosts rename these panes freely.
   await contentPaneSwitch.getByRole("radio").nth(0).click();
   await expect(contentNav(page)).toBeVisible();
-  await openRowMenu(page, "Journal articles");
-  const deleteTrigger = contentNav(page).getByRole("button", { name: "More actions for Journal articles" });
+  await openRowMenu(page, RENAMED_JOURNAL_MODEL);
+  const deleteTrigger = contentNav(page).getByRole("button", { name: `More actions for ${RENAMED_JOURNAL_MODEL}` });
   await page.getByRole("menuitem", { name: /^Delete model/ }).click();
   // The shared destructive question is an `alertdialog`, never a `dialog`.
   const dialog = page.getByRole("alertdialog", { name: "Delete model?" });
@@ -835,7 +804,7 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   const responsiveDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await responsiveDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Responsive panels");
   await responsiveDialog.getByRole("button", { name: "Create sitemap" }).click();
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
   // `EditorChrome` replaced the Sitemapper's own tablist with the shared pane
   // switch, and the editor renames the three panes. Scoped to the group rather
   // than matched page-wide: the toolbar's View control also offers a "Canvas",

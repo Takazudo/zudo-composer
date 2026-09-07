@@ -1,0 +1,14 @@
+export const APP_ROOT: string;
+export function fsModuleId(absolutePath: string): string;
+export function appModuleId(relativePath: string): string;
+export function validateRootOverride(root: string | undefined, label: string): string | undefined;
+export function resolveWorkspaceRoot(configured: string | undefined): string;
+export function readRootEnvironment(value: string | undefined, label: string): string | undefined;
+export const SITE_PROJECT_LOCAL_ROOT_NAME: string;
+export const SITE_PROJECT_LOCAL_ROOT_ENV: string;
+export function resolveSiteProjectLocalRoot(workspaceRoot: string, configured?: string): string;
+export const APP_ENTRY: string;
+export function resolveAppWarmupFiles(): string[];
+export function resolveWatchIgnored(roots: readonly (string | undefined)[]): string[];
+export function resolvePublicDir(workspaceRoot: string, publicMedia: string): string;
+export function resolveFsAllow(workspaceRoot: string): string[];

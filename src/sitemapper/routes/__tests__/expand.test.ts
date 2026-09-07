@@ -9,7 +9,7 @@ import { editSitemapNavigation } from "../../commands/navigation";
 
 const stamp = "2026-08-29T00:00:00.000Z";
 const defaultQuery: MappingCollectionQuery = { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 100 };
-const mapping = (mode: "single" | "collection" = "collection", query: MappingCollectionQuery = defaultQuery): MappingRecord => ({ id: "mapping", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 2, id: "mapping", name: "Articles", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "indexeddb", recordId: "article" }, mode: mode === "single" ? { kind: "single" } : { kind: "collection", query }, bindings: [] } });
+const mapping = (mode: "single" | "collection" = "collection", query: MappingCollectionQuery = defaultQuery): MappingRecord => ({ id: "mapping", createdAt: stamp, updatedAt: stamp, document: { schemaVersion: 2, id: "mapping", name: "Articles", contentModel: { providerId: "content", recordId: "articles" }, composition: { providerId: "files", recordId: "article" }, mode: mode === "single" ? { kind: "single" } : { kind: "collection", query }, bindings: [] } });
 const model = (kind: "single" | "collection" = "collection", fieldKind: "slug" | "text" = "slug"): ContentModelRecord => ({ id: "articles", createdAt: stamp, updatedAt: stamp, document: { description: "", schemaVersion: 1, id: "articles", name: "Articles", kind, fields: [
   { id: "slug", key: "slug", label: "Slug", required: true, kind: fieldKind },
   { id: "title", key: "title", label: "Title", required: false, kind: "text" },

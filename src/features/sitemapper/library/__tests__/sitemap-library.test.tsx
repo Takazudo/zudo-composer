@@ -50,7 +50,7 @@ function provider(initial: SitemapRecord[] = []): { provider: SitemapProvider; r
   return {
     records,
     provider: {
-      descriptor: SITEMAP_PROVIDERS.indexeddb,
+      descriptor: SITEMAP_PROVIDERS.filesystem,
       store: {
         list: async () => summaries(),
         get: async (id) => records.has(id) ? { status: "loaded", record: records.get(id)! } : { status: "not-found", id },
@@ -89,7 +89,7 @@ describe("Sitemaps library", () => {
 
     fireEvent.input(input, { target: { value: "Launch map" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?provider=sitemap-indexeddb&sitemap=new-map"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/sitemapper?provider=sitemap-filesystem&sitemap=new-map"));
     expect(setup.records.get("new-map")?.document.name).toBe("Launch map");
     expect(prompt).not.toHaveBeenCalled();
   });
@@ -98,10 +98,10 @@ describe("Sitemaps library", () => {
     const setup = provider([record(), record("brand-map", "Brand map", false)]);
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
 
-    expect(await screen.findByRole("link", { name: "Product map" })).toHaveAttribute("href", "/sitemapper?provider=sitemap-indexeddb&sitemap=product-map");
+    expect(await screen.findByRole("link", { name: "Product map" })).toHaveAttribute("href", "/sitemapper?provider=sitemap-filesystem&sitemap=product-map");
     expect(screen.getByText("1 unassigned")).toBeInTheDocument();
     expect(screen.getByText("All assigned")).toBeInTheDocument();
-    expect(screen.getByText("2 of 2 sitemaps · Browser storage")).toBeInTheDocument();
+    expect(screen.getByText("2 of 2 sitemaps · Project files")).toBeInTheDocument();
   });
 
   it("filters by assignment and comes back from Clear filters", async () => {
@@ -111,7 +111,7 @@ describe("Sitemaps library", () => {
 
     fireEvent.input(screen.getByRole("searchbox", { name: "Filter sitemaps" }), { target: { value: "brand" } });
     expect(dataRows()).toHaveLength(1);
-    expect(screen.getByText("1 of 2 sitemaps · Browser storage")).toBeInTheDocument();
+    expect(screen.getByText("1 of 2 sitemaps · Project files")).toBeInTheDocument();
 
     fireEvent.input(screen.getByRole("searchbox", { name: "Filter sitemaps" }), { target: { value: "nothing here" } });
     expect(screen.getByText("No matches for “nothing here”")).toBeInTheDocument();
@@ -166,7 +166,7 @@ describe("Sitemaps library", () => {
 
   it("blocks deletion of the active Sitemap before touching storage", async () => {
     const setup = provider([record()]);
-    const metadata = { metadata: { activeSitemap: { providerId: "sitemap-indexeddb", recordId: "product-map" } } };
+    const metadata = { metadata: { activeSitemap: { providerId: "sitemap-filesystem", recordId: "product-map" } } };
     const integration = { workspace: { metadata: async () => metadata } } as unknown as ProductionProviderIntegration;
     render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><SitemapLibrary provider={setup.provider} navigate={vi.fn()} /></WorkspaceContext.Provider>);
     fireEvent.click(await screen.findByRole("button", { name: "More actions for Product map" }));
@@ -208,7 +208,7 @@ describe("Sitemaps library", () => {
   it("blocks clear-library while the active Sitemap is still selected", async () => {
     const setup = provider([record(), record("brand-map", "Brand map", false)]);
     const clear = vi.spyOn(setup.provider.store, "clear");
-    const metadata = { metadata: { activeSitemap: { providerId: "sitemap-indexeddb", recordId: "product-map" } } };
+    const metadata = { metadata: { activeSitemap: { providerId: "sitemap-filesystem", recordId: "product-map" } } };
     const integration = { workspace: { metadata: async () => metadata } } as unknown as ProductionProviderIntegration;
     render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><SitemapLibrary provider={setup.provider} navigate={vi.fn()} /></WorkspaceContext.Provider>);
     fireEvent.click(await screen.findByRole("button", { name: "Clear library" }));
@@ -256,7 +256,7 @@ describe("Sitemaps library", () => {
 
   it("offers a Retry when the store cannot be opened at all", async () => {
     const setup = provider([record()]);
-    const error = Object.assign(new Error("IndexedDB is unavailable."), { name: "SitemapPersistenceError" });
+    const error = Object.assign(new Error("Project files are unavailable."), { name: "SitemapPersistenceError" });
     setup.provider.initialization.initialize = async () => ({ status: "error", error: error as never });
     render(<SitemapLibrary provider={setup.provider} navigate={vi.fn()} />);
 

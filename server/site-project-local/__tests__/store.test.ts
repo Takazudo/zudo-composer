@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
@@ -7,7 +7,8 @@ import { compileSiteProject } from "../../../src/site-project/compiler";
 import { serializeSiteProject } from "../../../src/site-project/model/canonical";
 import { releaseJson } from "../../../src/site-project/api/review";
 import { fixture, stageFor, sha, catalog, review, call, PNG, toolchain } from "./release-fixture";
-import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV } from "../store";
+import { createLocalSiteProjectStore, SITE_PROJECT_LOCAL_ROOT_ENV, SITE_PROJECT_LOCAL_ROOT_NAME } from "../store";
+import { APP_ROOT } from "../../../plugins/roots.mjs";
 import type { CompletedRelease, SiteProjectActiveSelection } from "../../../src/site-project/api/types";
 import { readActivatedSiteRelease } from "../dev-reader";
 const applyInput = (value = project()) => ({ project: value, stage: stageFor(value), expectedRevision: null, expectedActive: null, expectedGeneration: 0 });
@@ -129,7 +130,7 @@ describe("immutable local release storage", () => {
     const context = await fixture(), plan = await review(context.service, project());
     await release(context.service, plan);
     await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain })).resolves.toMatchObject({ release: { stage: { toolchain } } });
-    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: { ...toolchain, installedProviderDigest: "f".repeat(64) } })).rejects.toThrow(/current installed runtime/);
+    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: { ...toolchain, installedPackDigest: "f".repeat(64) } })).rejects.toThrow(/current installed runtime/);
   });
   it.each(["apply", "build", "activate", "discard"].flatMap((operation) => ["unlink", "rmdir", "sync"].map((step) => ({ operation, step }))))("reports committed $operation cleanup $step as uncertain and retries idempotently", async ({ operation, step }) => {
     const { store, testRoot } = await fixture(); const input = applyInput(), output = await build();
@@ -243,5 +244,17 @@ describe("immutable local release storage", () => {
   it("uses the explicit disposable environment root", async () => {
     const { testRoot } = await fixture(); const prior = process.env[SITE_PROJECT_LOCAL_ROOT_ENV]; process.env[SITE_PROJECT_LOCAL_ROOT_ENV] = testRoot;
     try { expect(createLocalSiteProjectStore().root).toBe(testRoot); } finally { if (prior === undefined) delete process.env[SITE_PROJECT_LOCAL_ROOT_ENV]; else process.env[SITE_PROJECT_LOCAL_ROOT_ENV] = prior; }
+  });
+  it("roots disposable release state under the host project, never the package directory", async () => {
+    const { parent } = await fixture(); const prior = process.env[SITE_PROJECT_LOCAL_ROOT_ENV]; delete process.env[SITE_PROJECT_LOCAL_ROOT_ENV];
+    try {
+      const store = createLocalSiteProjectStore({ workspaceRoot: parent, componentPack: catalog.pack });
+      expect(store.root).toBe(join(parent, SITE_PROJECT_LOCAL_ROOT_NAME));
+      expect(await store.apply(applyInput())).toMatchObject({ status: "ok" });
+      expect(await readdir(join(parent, SITE_PROJECT_LOCAL_ROOT_NAME))).toContain("heads.json");
+      // The installed package directory and the working directory are not the
+      // host: neither may collect release state.
+      for (const foreign of [APP_ROOT, process.cwd()]) await expect(lstat(join(foreign, SITE_PROJECT_LOCAL_ROOT_NAME))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally { if (prior === undefined) delete process.env[SITE_PROJECT_LOCAL_ROOT_ENV]; else process.env[SITE_PROJECT_LOCAL_ROOT_ENV] = prior; }
   });
 });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
-import { AUTHORING_ROUTES, LIVE_ORIGIN, SITE_ROUTES, SPA_ROUTES } from "./deployment-artifact-lib.mjs";
+import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./routes.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -10,7 +10,6 @@ const readme = read("README.md");
 const guidance = read("CLAUDE.md");
 const packageJson = readJson("package.json");
 const contractHandoff = readJson("contract-handoff.json");
-const wrangler = readJson("wrangler.jsonc");
 const appTokens = read("src/styles/app-tokens.css");
 
 const providerSha = "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf";
@@ -31,19 +30,46 @@ assert.deepEqual(SITE_ROUTES, [
   "/site/journal/start-with-the-question",
 ]);
 assert.deepEqual(SPA_ROUTES, [...AUTHORING_ROUTES, ...SITE_ROUTES]);
-assert.equal(LIVE_ORIGIN, "https://zudo-composer.zudolab.dev");
-assert.equal(wrangler.name, "zudo-composer");
-assert.deepEqual(wrangler.routes, [{ pattern: "zudo-composer.zudolab.dev", custom_domain: true }]);
 assert.equal(packageJson.dependencies["@zudo-sg/ui"], providerSpec);
-assert.equal(packageJson.dependencies["@zudo-composer/component-contract"], "workspace:*");
+// The contract is a peer of the published package and a workspace dev
+// dependency of this repository. Both halves are load-bearing: the peer keeps a
+// host on one contract instance, the dev spec keeps `workspace:*` out of what
+// ships.
+assert.equal(packageJson.peerDependencies["@zudo-composer/component-contract"], "1.0.0");
+assert.equal(packageJson.devDependencies["@zudo-composer/component-contract"], "workspace:*");
+assert.equal(packageJson.dependencies["@zudo-composer/component-contract"], undefined);
 assert.equal(contractHandoff.rootGitSpec, contractSpec);
 assert.equal(packageJson.scripts["handoff:boundary"], "node scripts/check-standalone-handoff.mjs");
 assert.ok(packageJson.scripts.check.includes("pnpm handoff:boundary"));
-assert.equal(packageJson.scripts.deploy, "wrangler deploy");
-assert.equal(packageJson.scripts["deploy:dry-run"], "wrangler deploy --dry-run");
 for (const [size, value] of Object.entries({ xs: "0.75rem", sm: "1rem", md: "1.25rem", lg: "1.5rem" })) {
   assert.match(appTokens, new RegExp(`--spacing-icon-${size}:\\s*${value.replace(".", "\\.")};`), `missing local icon token ${size}`);
 }
+
+// The host-facing surface a breaking rename would silently drift out from
+// under the docs: the bin name, the config file a host writes, and the
+// `dataDir` convention every settings default hangs off. Each is asserted
+// against its actual source, not just hardcoded, so renaming the bin or the
+// config file here fails this gate instead of only going stale in prose.
+const binEntry = packageJson.bin?.["zudo-composer"];
+assert.equal(binEntry, "./bin/zudo-composer.mjs", "package.json must publish the zudo-composer executable at its documented path");
+assert.ok(existsSync(join(root, binEntry)), `the published bin entry point ${binEntry} must exist`);
+
+const configSource = read("server/config/config.ts");
+const configFileNameMatch = configSource.match(/export const CONFIG_FILE_NAME = "([^"]+)"/);
+assert.ok(configFileNameMatch, "server/config/config.ts must export a literal CONFIG_FILE_NAME");
+const CONFIG_FILE_NAME = configFileNameMatch[1];
+assert.equal(CONFIG_FILE_NAME, "zudo-composer.config.ts");
+
+const settingsSource = read("server/config/settings.ts");
+const dataDirDefaultMatch = settingsSource.match(/dataDir:\s*"([^"]+)"/);
+assert.ok(dataDirDefaultMatch, "server/config/settings.ts must set a literal dataDir default");
+assert.equal(dataDirDefaultMatch[1], "cms");
+
+for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]]) {
+  assert.ok(document.includes(`\`${CONFIG_FILE_NAME}\``), `${name} must name the host config file ${CONFIG_FILE_NAME}`);
+}
+assert.match(readme, /\bdataDir\b[\s\S]{0,60}`cms`|`cms`[\s\S]{0,60}\bdataDir\b/, "README must document the dataDir convention and its cms default");
+assert.match(readme, /`pack`[\s\S]{0,80}(?:required|only setting without a default)/i, "README must document pack as the one required, default-less setting");
 
 for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]]) {
   const normalized = document.replace(/\s+/g, " ").toLowerCase();
@@ -54,9 +80,6 @@ for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]])
     providerSha,
     providerTree,
     providerSpec,
-    "CLOUDFLARE_API_TOKEN",
-    "CLOUDFLARE_ACCOUNT_ID",
-    "zudo-composer.zudolab.dev",
     "no users",
     "persisted production data",
     "migrations",
@@ -74,15 +97,15 @@ for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]])
   ]) assert.ok(normalized.includes(phrase.toLowerCase()), `${name} is missing permanent handoff phrase: ${phrase}`);
   for (const route of SPA_ROUTES) assert.ok(document.includes(`\`${route}\``), `${name} is missing route ${route}`);
   assert.ok(document.includes("`/assets/`"), `${name} is missing the asset root`);
-  assert.ok(document.includes("pnpm deploy:dry-run"), `${name} is missing dry-run guidance`);
-  assert.ok(document.includes("pnpm smoke:local"), `${name} is missing local smoke guidance`);
-  assert.ok(document.includes("pnpm smoke:live"), `${name} is missing live smoke guidance`);
-  assert.match(document, /pnpm deploy(?!:dry-run)\b/, `${name} is missing real deploy guidance`);
-  assert.match(document, /wrangler login/i, `${name} is missing Wrangler login guidance`);
-  assert.match(document, /wrangler whoami/i, `${name} is missing Wrangler identity guidance`);
   assert.doesNotMatch(document, /e127c8a66a223472732e0cb1098296d07b1658ec|3070424cc8b55e63e8d44ee81b238b6777341bc3/, `${name} must not publish a provisional target SHA`);
 }
 
+// The exhaustive set of permanent identities this project may publish in prose:
+// the frozen zudo-sg provenance commit, the pinned provider commit/tree, and the
+// external component-contract package commit. A fifth hex string of hash length
+// appearing in either document is either an accidental provisional checkpoint or
+// an undocumented new identity — both are bugs the loose "includes" checks above
+// cannot catch.
 const documentedHashes = new Set(
   [...`${readme}\n${guidance}`.matchAll(/\b[a-f0-9]{40}\b/gi)].map((match) => match[0].toLowerCase()),
 );
@@ -95,14 +118,30 @@ const provisionalHashes = [...`${readme}\n${guidance}`.matchAll(/(?<![a-f0-9])[a
   .map((match) => match[0]);
 assert.deepEqual(provisionalHashes, [], "README/CLAUDE must not publish abbreviated or provisional checkpoint hashes");
 
-assert.match(readme, /Composer owns[\s\S]{0,120}document model[\s\S]{0,80}source generation/i);
-assert.match(readme, /Content owns[\s\S]{0,120}model[\s\S]{0,80}storage/i);
-assert.match(readme, /Mapping owns[\s\S]{0,120}binding[\s\S]{0,80}storage/i);
-assert.match(readme, /Sitemapper owns[\s\S]{0,120}page-tree model[\s\S]{0,80}storage/i);
-assert.match(guidance, /owner of Composer model\/source/i);
-assert.match(guidance, /Content model\/storage/i);
-assert.match(guidance, /Mapping model\/storage/i);
-assert.match(guidance, /Sitemapper model\/storage/i);
+// Ownership framing: the tool owns the five domains' models/UI over a shared
+// filesystem engine; a host project owns what it authors through them
+// (components, templates, CMS data). This replaced the pre-conversion "this
+// repository owns Composer storage" framing, which stopped being true once
+// storage moved to host-configured directories.
+// Multi-word phrases below tolerate a line wrap between words: reflowed prose
+// puts a newline anywhere a space could go, so a literal-space regex is one
+// re-wrap away from a false failure.
+function phraseMatcher(phrase) {
+  const words = phrase.split(" ").map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(words.join("\\s+"), "i");
+}
+assert.match(readme, /installable Preact authoring \*\*tool\*\*/i, "README must frame zudo-composer as an installable tool, not an application");
+assert.match(readme, phraseMatcher("Composer owns its document model, source generation, reuse rules, chrome"));
+assert.match(readme, phraseMatcher("Content owns its model, Entry library, and authoring UI"));
+assert.match(readme, phraseMatcher("Mapping owns its binding model, resolver, preview handoff, and authoring UI"));
+assert.match(readme, phraseMatcher("Sitemapper owns its page-tree model, library, authoring UI"));
+assert.match(guidance, /permanent home of `zudo-composer`[\s\S]{0,80}installable[\s\S]{0,40}tool/i, "CLAUDE.md must frame zudo-composer as an installable tool, not an application");
+assert.match(guidance, phraseMatcher("Composer document model, source generation, reuse rules, chrome"));
+assert.match(guidance, phraseMatcher("Content model, Entry library and authoring UI"));
+assert.match(guidance, phraseMatcher("Mapping binding model, resolver and authoring UI"));
+assert.match(guidance, phraseMatcher("Sitemapper page-tree model, library, authoring UI"));
+assert.match(guidance, /host project installs this tool[\s\S]{0,300}owns everything the tool authors/i, "CLAUDE.md must state that a host project owns what the tool authors into it");
+assert.match(guidance, /\*\*components\*\*[\s\S]{0,400}\*\*templates\*\*[\s\S]{0,400}\*\*CMS data\*\*/i, "CLAUDE.md must spell out the components/templates/CMS-data ownership split");
 
 for (const document of [readme, guidance]) {
   assert.match(document, /same-origin/i);
@@ -112,7 +151,6 @@ for (const document of [readme, guidance]) {
   assert.match(document, /component-contract handoff[\s\S]{0,500}(?:separate|distinct)/i);
   assert.match(document, /UI-provider|UI provider|provider updates?/i);
   assert.match(document, /(?:never|do not)[\s\S]{0,120}cop(?:y|ied)[\s\S]{0,80}provider|copied provider source/i);
-  assert.match(document, /only after (?:the )?(?:Phase 3 root )?merge|only after merge|before the Phase 3 root merges/i);
 }
 
 function files(directory) {
@@ -204,4 +242,4 @@ for (const forbidden of ["workspace:", "file:", "link:", "path:", "packages/ui",
   assert.ok(!packageJson.dependencies["@zudo-sg/ui"].includes(forbidden), `provider spec uses forbidden resolution: ${forbidden}`);
 }
 
-console.log("Standalone handoff boundary passed: ownership, routes, provider/contract identities, clean-break policy, and deployment handoff are locked.");
+console.log("Standalone handoff boundary passed: tool/host ownership framing, the bin/config/dataDir host contract, routes, provider/contract identities, and clean-break policy are locked.");

@@ -27,7 +27,7 @@ export function controllerOptions(
     updatedAt: NOW,
     document: { ...cloneJson(document), id: recordId },
   };
-  const ref: CompositionRecordRef = { providerId: "indexeddb", recordId: record.id };
+  const ref: CompositionRecordRef = { providerId: "files", recordId: record.id };
   const saveQueue = createSaveQueue<CompositionRecord, CompositionRecordRef, CompositionSaveOutcome>({
     ref,
     initialRecord: record,

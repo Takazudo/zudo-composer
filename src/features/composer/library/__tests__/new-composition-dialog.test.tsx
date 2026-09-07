@@ -18,7 +18,7 @@ beforeAll(() => {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 const TEMPLATE: ReuseCatalogEntry = {
-  ref: { providerId: "indexeddb", recordId: "site-shell" },
+  ref: { providerId: "files", recordId: "site-shell" },
   summary: {
     id: "site-shell",
     name: "Site shell",
@@ -38,7 +38,7 @@ const TEMPLATE: ReuseCatalogEntry = {
 function baseProps(overrides: Partial<Parameters<typeof NewCompositionDialog>[0]> = {}) {
   return {
     open: true,
-    providerId: "indexeddb" as const,
+    providerId: "files" as const,
     intents: { listTemplates: vi.fn(async () => ({ status: "listed" as const, entries: [TEMPLATE] })) },
     onSubmit: vi.fn(async () => ({ status: "created" as const })),
     onRetryNavigation: vi.fn(async () => ({ status: "created" as const })),
@@ -81,7 +81,7 @@ describe("NewCompositionDialog", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
     await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith({
-      providerId: "indexeddb",
+      providerId: "files",
       name: "Consumer",
       source: { sourceRecordId: "site-shell", outletId: "main" },
     }));

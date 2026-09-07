@@ -10,12 +10,12 @@ describe("Media workspace", () => {
   it("shows actionable additional project uses inside the blocked trash dialog", async () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
-    const services = completeServices({ scan: async () => ({ status: "complete", locations: [], tokens: {}, message: "Complete project scan", additionalLocations: [{ href: "/composer?record=page", location: { domain: "materialization", providerId: "indexeddb", recordId: "page", nodeId: "hero", property: "markdown", valuePath: ["markdown"], pathname: "/about", markdown: { from: 4, to: 32, useFrom: 0, useTo: 33 } } }] }) });
+    const services = completeServices({ scan: async () => ({ status: "complete", locations: [], tokens: {}, message: "Complete project scan", additionalLocations: [{ href: "/composer?record=page", location: { domain: "materialization", providerId: "files", recordId: "page", nodeId: "hero", property: "markdown", valuePath: ["markdown"], pathname: "/about", markdown: { from: 4, to: 32, useFrom: 0, useTo: 33 } } }] }) });
     render(<MediaApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
     fireEvent.click(within(screen.getByRole("complementary", { name: "Asset details" })).getByRole("button", { name: "Trash…", exact: true }));
     const dialog = await screen.findByRole("dialog", { name: "Move assets to trash?" });
-    expect(await within(dialog).findByRole("link", { name: "indexeddb / page" })).toHaveAttribute("href", "/composer?record=page");
+    expect(await within(dialog).findByRole("link", { name: "files / page" })).toHaveAttribute("href", "/composer?record=page");
     expect(dialog).toHaveTextContent("Markdown 4–32"); expect(dialog).toHaveTextContent("/about");
     expect(within(dialog).getByRole("button", { name: "Move to trash" })).toBeDisabled();
   });

@@ -25,7 +25,7 @@ function SchemaHarness({ controller }: { controller: ContentAuthoringController 
 describe("generic structured Content authoring", () => {
   it("uses the complete target catalog and persists ordered reference values", async () => {
     const people = createContentModelRecord({ name: "People", kind: "collection", fields: [{ id: "name", key: "name", label: "Name", required: true, kind: "text" }] }, { id: "people", timestamp: stamp });
-    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "authors", key: "authors", label: "Authors", required: false, kind: "reference-list", target: { providerId: "content-indexeddb", recordId: "people" }, ordered: true }] }, { id: "articles", timestamp: stamp });
+    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "authors", key: "authors", label: "Authors", required: false, kind: "reference-list", target: { providerId: "content-filesystem", recordId: "people" }, ordered: true }] }, { id: "articles", timestamp: stamp });
     const targets = Array.from({ length: 30 }, (_, index) => createContentEntryRecord("people", { name: `Person ${index + 1}` }, { id: `person-${index + 1}`, timestamp: stamp }));
     const article = createContentEntryRecord("articles", {}, { id: "article", timestamp: stamp });
     const provider = createMemoryContentProvider({ models: [people, articles], entries: [...targets, article] });

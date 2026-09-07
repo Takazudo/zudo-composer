@@ -14,7 +14,7 @@
  * off here and every one of those assertions would pass vacuously.
  *
  * #166's two library proofs are not here at all: the dev lane activates no
- * SiteProject, so no library on it can list. They live on the dist lane, in
+ * SiteProject, so no library on it can list. They live on the host lane, in
  * `tests/browser/library-chrome.pw.ts`, which explains why.
  */
 
@@ -26,8 +26,8 @@ import {
   expectSaved,
   gotoRoute,
   ROUTES,
-  watchRuntimeFailures,
 } from "./foundations-probe";
+import { watchRuntimeFailures } from "../runtime-failures";
 
 const RAIL_FIXTURE = "Foundations rail geometry";
 

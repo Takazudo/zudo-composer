@@ -7,6 +7,7 @@ import {
   resolveGlobalTemplate,
   resolveGlobalTemplateLoad,
   type ComponentDefinition,
+  type CompositionProviderId,
   type CompositionRecord,
   type CompositionSummary,
   type ReuseReadProvider,
@@ -117,14 +118,18 @@ function summary(
   };
 }
 
+// Reuse is provider-scoped, so proving isolation needs a second id even while
+// the compositions domain ships a single provider.
+const OTHER_PROVIDER_ID = "other" as CompositionProviderId;
+
 function provider(
   records: readonly CompositionRecord[],
   summaries: readonly CompositionSummary[] = records.map((value) => summary(value.id)),
-  providerId: "indexeddb" | "files" = "indexeddb",
+  providerId: CompositionProviderId = COMPOSITION_PROVIDERS.files.id,
 ): ReuseReadProvider {
   const byId = new Map(records.map((value) => [value.id, value]));
   return {
-    provider: COMPOSITION_PROVIDERS[providerId],
+    provider: { ...COMPOSITION_PROVIDERS.files, id: providerId },
     list: async () => summaries,
     get: async (id) => {
       const value = byId.get(id);
@@ -135,7 +140,7 @@ function provider(
 
 describe("reuse catalog", () => {
   it("lists only eligible lightweight sources in stable order and retains provider-qualified identity", async () => {
-    const current = { providerId: "indexeddb" as const, recordId: "current" };
+    const current = { providerId: COMPOSITION_PROVIDERS.files.id, recordId: "current" };
     const active = provider([], [
       summary("same-id", { updatedAt: "2026-07-14T01:00:00.000Z", publicationKind: "pattern" }),
       summary("global", {
@@ -159,13 +164,13 @@ describe("reuse catalog", () => {
       status: "listed",
       entries: [
         {
-          ref: { providerId: "indexeddb", recordId: "global" },
+          ref: { providerId: "files", recordId: "global" },
           summary: expect.objectContaining({ id: "global" }),
           kind: "global-template",
           outlet: { id: "outlet-main", label: "Main content" },
         },
         {
-          ref: { providerId: "indexeddb", recordId: "same-id" },
+          ref: { providerId: "files", recordId: "same-id" },
           summary: expect.objectContaining({ id: "same-id" }),
           kind: "pattern",
         },
@@ -173,11 +178,11 @@ describe("reuse catalog", () => {
     });
 
     const isolated = createCompositionReuseService(
-      provider([], [summary("same-id", { publicationKind: "pattern" })], "files"),
+      provider([], [summary("same-id", { publicationKind: "pattern" })], OTHER_PROVIDER_ID),
       manifest,
     );
     await expect(isolated.listCatalog()).resolves.toMatchObject({
-      entries: [{ ref: { providerId: "files", recordId: "same-id" } }],
+      entries: [{ ref: { providerId: OTHER_PROVIDER_ID, recordId: "same-id" } }],
     });
   });
 
@@ -187,13 +192,13 @@ describe("reuse catalog", () => {
     const service = createCompositionReuseService(provider([empty, local]), manifest);
 
     await expect(
-      service.loadSelection({ providerId: "indexeddb", recordId: "empty" }),
+      service.loadSelection({ providerId: "files", recordId: "empty" }),
     ).resolves.toMatchObject({ status: "empty", reason: "empty-pattern" });
     await expect(
-      service.loadSelection({ providerId: "indexeddb", recordId: "local" }),
+      service.loadSelection({ providerId: "files", recordId: "local" }),
     ).resolves.toMatchObject({ status: "invalid", reason: "not-reusable" });
     await expect(
-      service.loadSelection({ providerId: "files", recordId: "empty" }),
+      service.loadSelection({ providerId: OTHER_PROVIDER_ID, recordId: "empty" }),
     ).resolves.toMatchObject({ status: "unavailable" });
 
     const failing: ReuseReadProvider = {
@@ -204,7 +209,7 @@ describe("reuse catalog", () => {
     };
     await expect(
       createCompositionReuseService(failing, manifest).loadSelection({
-        providerId: "indexeddb",
+        providerId: "files",
         recordId: "anything",
       }),
     ).resolves.toMatchObject({ status: "load-error", message: "disk read failed" });
@@ -228,8 +233,8 @@ describe("reuse catalog", () => {
     await expect(service.listDependents("source")).resolves.toMatchObject({
       status: "listed",
       dependents: [
-        { ref: { providerId: "indexeddb", recordId: "newest" } },
-        { ref: { providerId: "indexeddb", recordId: "older" } },
+        { ref: { providerId: "files", recordId: "newest" } },
+        { ref: { providerId: "files", recordId: "older" } },
       ],
     });
   });

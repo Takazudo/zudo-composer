@@ -89,7 +89,7 @@ describe("LibraryUnavailableBanner", () => {
     render(
       <LibraryUnavailableBanner
         title="Composition library unavailable."
-        description="IndexedDB could not be opened in this browser session."
+        description="Project files could not be read in this session."
         onRetry={onRetry}
       />,
     );

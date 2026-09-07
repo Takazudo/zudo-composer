@@ -17,8 +17,3 @@ export {
   reorderPage,
   updatePageProps,
 } from "./commands";
-
-export {
-  createSampleSitemap,
-  SAMPLE_SITEMAP,
-} from "../sample/sample-sitemap";

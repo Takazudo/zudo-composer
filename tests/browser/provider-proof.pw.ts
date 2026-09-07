@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
+import { watchRuntimeFailures } from "../runtime-failures";
 
 /**
  * `.cms-tree-acts` is `width: 0; opacity: 0` until its row is hovered or
@@ -31,16 +32,6 @@ const COMPONENTS = [
   "SplitLayout",
   "Stack",
 ] as const;
-
-function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => failures.push(`request: ${request.url()} (${request.failure()?.errorText})`));
-  return failures;
-}
 
 async function useTheme(page: Page, theme: "light" | "dark") {
   await page.evaluate((value) => {
@@ -128,19 +119,35 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   const assetPath = (response: Response) => new URL(response.url()).pathname;
   expect(new Set(focusedAssets.filter((response) => assetPath(response).endsWith(".wasm")).map(assetPath)).size).toBe(1);
   expect(new Set(focusedAssets.filter((response) => assetPath(response).endsWith(".mjs")).map(assetPath)).size).toBe(1);
-  // The reload above refetches each asset, so every path appears twice. `vite preview` serves
-  // them `Cache-Control: no-cache` with an ETag, so the second hit may be revalidated into a 304 —
-  // a healthy cache hit that carries no body and no entity headers, and for which `ok()` is false.
-  // Accept that one status, keep every other failure loud, and still demand a real body per asset.
+  // The reload above refetches each asset, so every path appears twice. The server sends them
+  // with an ETag, so the second hit may be revalidated into a 304 — a healthy cache hit that
+  // carries no body and no entity headers, and for which `ok()` is false. Accept that one
+  // status, keep every other failure loud, and still demand a real body per asset.
+  //
+  // The path is the provenance claim. This lane is a dev server rooted at a host project, so it
+  // serves the focused dependency from the installed package over `/@fs/` — the retired `dist`
+  // lane's emitted `/assets/` path does not exist here, and asserting it proved nothing about
+  // WHICH package answered.
+  //
+  // A `?url` import and the bytes it names share one pathname here, and only the first is
+  // JavaScript, so the request decides the expected type. The bytes themselves are asserted
+  // once below, which is the claim that actually matters.
+  const isUrlImport = (response: Response) => new URL(response.url()).searchParams.has("url");
   const servedWithBody = new Set<string>();
   for (const response of focusedAssets) {
-    expect(response.url()).toContain("/assets/");
+    expect(assetPath(response)).toContain("/@takazudo/zfb-md-wasm/");
     expect(response.ok() || response.status() === 304).toBe(true);
     if (!response.ok()) continue;
     servedWithBody.add(assetPath(response));
-    expect(response.headers()["content-type"]).toMatch(assetPath(response).endsWith(".wasm") ? /^application\/wasm/ : /javascript/);
+    expect(response.headers()["content-type"]).toMatch(
+      assetPath(response).endsWith(".wasm") && !isUrlImport(response) ? /^application\/wasm/ : /javascript/,
+    );
   }
   expect(servedWithBody).toEqual(new Set(focusedAssets.map(assetPath)));
+  expect(focusedAssets.some((response) => response.ok()
+    && assetPath(response).endsWith(".wasm")
+    && !isUrlImport(response)
+    && /^application\/wasm/.test(response.headers()["content-type"] ?? ""))).toBe(true);
 
   for (const theme of ["light", "dark"] as const) {
     await useTheme(page, theme);
@@ -176,7 +183,7 @@ test("clean Sitemapper assigns and resolves the seeded About page catalog entry"
 
   // Creating navigates to the record's own URL: `/sitemapper` is the library
   // and `/sitemapper?sitemap=` is one Sitemap, so the editor is a real route.
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Provider proof");
   await expect(page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /Home/ })).toBeVisible();
 
@@ -185,13 +192,13 @@ test("clean Sitemapper assigns and resolves the seeded About page catalog entry"
   await page.getByRole("button", { name: "Choose composition" }).click();
   const picker = page.getByRole("dialog", { name: "Choose a composition" });
   await expect(picker.getByText("About page", { exact: true })).toBeVisible();
-  await picker.getByRole("button", { name: /Assign About page from Browser storage/i }).click();
+  await picker.getByRole("button", { name: /Assign About page from Local files/i }).click();
   // Scoped to the Composition group: the shell rail also shows the active
-  // provider ("Browser storage") in its foot, so a page-wide text match is
+  // provider ("Local files") in its foot, so a page-wide text match is
   // ambiguous and would pass on the rail rather than on the assignment.
   const compositionField = page.getByRole("group", { name: "Composition" });
   await expect(compositionField.getByText("About page", { exact: true })).toBeVisible();
-  await expect(compositionField.getByText("Browser storage", { exact: true })).toBeVisible();
+  await expect(compositionField.getByText("Local files", { exact: true })).toBeVisible();
 
   for (const theme of ["light", "dark"] as const) await useTheme(page, theme);
   await page.setViewportSize({ width: 375, height: 812 });

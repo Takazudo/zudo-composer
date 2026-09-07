@@ -6,6 +6,6 @@ import { createFileProviderCompositionStore } from "../store";
 describe("production file-provider boundary", () => {
   it("has no virtual capability or usable provider when the build-shaped module is used", () => {
     expect(fileProviderConfig).toBeUndefined();
-    expect(createFileProviderCompositionStore({ catalog: fixtureManifest })).toBeUndefined();
+    expect(createFileProviderCompositionStore({ catalog: fixtureManifest, workspace: () => "test-workspace" })).toBeUndefined();
   });
 });

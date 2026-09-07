@@ -1,57 +1,72 @@
 import { createHash } from "node:crypto";
-import { IDBFactory as FDBFactory } from "fake-indexeddb";
-import { describe, expect, it, vi } from "vitest";
-import { COMPOSITION_PROVIDERS, summarizeComposition, type CompositionProvider, type CompositionRecord } from "../../composer/browser";
-import { CONTENT_DATABASE_NAME, CONTENT_DATABASE_VERSION } from "../../content/storage/indexeddb/types";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ContentPersistenceError } from "../../content/library";
 import { compileSiteProject } from "../../site-project/compiler";
 import { serializeSiteProject } from "../../site-project/model/canonical";
-import { loadSampleSiteProject } from "../../site-project/sample";
+import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { activeComponentProvider } from "../../features/composer/active-pack";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
-import { createProductionProviderIntegration } from "../provider-integration";
+import { createProductionProviderIntegration, type WorkspaceProviderSet } from "../provider-integration";
 import { createWorkspaceSummary } from "../workspace-summary";
-import { workspaceDatabaseName, WORKSPACE_DATABASE_NAME } from "../workspace-storage";
+import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../test/workspace-providers";
 
 const sample = () => loadSampleSiteProject(activeSiteProjectValidationContext);
 const revision = (project: ReturnType<typeof sample>) => createHash("sha256").update(serializeSiteProject(project), "utf8").digest("hex");
-const integration = (factories = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() }) => {
-  const project = sample();
+
+const hosts: TemporaryWorkspaceProviders[] = [];
+afterEach(async () => { await Promise.all(hosts.splice(0).map((value) => value.dispose())); });
+
+/** One temporary host project; every integration in a test shares it. */
+async function host(): Promise<TemporaryWorkspaceProviders> {
+  const value = await createTemporaryWorkspaceProviders();
+  hosts.push(value);
+  return value;
+}
+
+async function integration(project = sample(), current?: TemporaryWorkspaceProviders) {
   return createProductionProviderIntegration({
-    project, sourceRevision: revision(project), compositionIdbFactory: factories.composition, contentIdbFactory: factories.content, mappingIdbFactory: factories.mapping, sitemapIdbFactory: factories.sitemap,
+    project,
+    sourceRevision: revision(project),
+    createProviders: (current ?? await host()).createProviders,
   });
-};
+}
 
-function failFirstOpen(backing: IDBFactory): IDBFactory {
+type Domain = "compositions" | "content" | "mappings" | "sitemaps";
+
+/**
+ * Make one domain's first initialization fail, at the provider seam the
+ * integration actually calls. It is the transport-agnostic equivalent of the
+ * injected open failure a store lane would use, and it exercises the same thing:
+ * a retry has to re-run the whole graph coherently.
+ */
+function failFirstInitialization(
+  create: TemporaryWorkspaceProviders["createProviders"],
+  domain: Domain,
+): TemporaryWorkspaceProviders["createProviders"] {
   let fail = true;
-  return new Proxy(backing, { get(target, property) { if (property === "open") return (...args: Parameters<IDBFactory["open"]>) => { if (fail) { fail = false; throw new Error("injected open failure"); } return target.open(...args); }; const value = Reflect.get(target, property, target) as unknown; return typeof value === "function" ? value.bind(target) : value; } }) as IDBFactory;
-}
-
-function request<T>(value: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => { value.onsuccess = () => resolve(value.result); value.onerror = () => reject(value.error); });
-}
-
-function fileProvider(records: readonly CompositionRecord[]): CompositionProvider {
-  const byId = new Map(records.map((record) => [record.id, structuredClone(record)]));
-  const ready = async () => ({ status: "ready" as const, summaries: [...byId.values()].map(summarizeComposition) });
-  return {
-    descriptor: COMPOSITION_PROVIDERS.files,
-    store: {
-      provider: COMPOSITION_PROVIDERS.files,
-      snapshot: async () => ({ mutationToken: JSON.stringify([...byId.values()]), records: structuredClone([...byId.values()]) }),
-      mutationToken: async () => JSON.stringify([...byId.values()]),
-      list: async () => [...byId.values()].map(summarizeComposition),
-      get: async (id) => { const record = byId.get(id); return record ? { status: "loaded" as const, record: structuredClone(record) } : { status: "not-found" as const, id }; },
-      put: async (record) => { byId.set(record.id, structuredClone(record)); return { canonical: { status: "saved" as const }, derived: { status: "current" as const, records: [] } }; },
-      delete: async (id) => byId.delete(id),
-      clear: async () => { byId.clear(); },
-    },
-    initialization: { initialize: ready, retry: ready, startFresh: ready },
+  return (workspace) => {
+    const set = create(workspace);
+    const provider = set[domain];
+    return {
+      ...set,
+      [domain]: {
+        ...provider,
+        initialization: {
+          ...provider.initialization,
+          initialize: async () => {
+            if (!fail) return provider.initialization.initialize();
+            fail = false;
+            throw new Error("injected initialization failure");
+          },
+        },
+      },
+    } as WorkspaceProviderSet;
   };
 }
 
 describe("SiteProject provider integration", () => {
   it("seeds the exact provider graph and compiles the provider-backed snapshot to seven routes", async () => {
-    const current = integration();
+    const current = await integration();
     expect((await current.compositionCatalog.listCompositions()).entries).toHaveLength(6);
     expect(await current.initialization.initialize()).toEqual({ status: "ready" });
     const snapshot = await current.getCurrentSiteProject();
@@ -68,11 +83,11 @@ describe("SiteProject provider integration", () => {
   });
 
   it("does not turn Mapping save-session generation changes into attachment notifications", async () => {
-    const current = integration();
+    const current = await integration();
     await current.initialization.initialize();
     const changed = vi.fn();
     const stop = current.mappingAttachmentService.subscribe?.(changed);
-    const session = current.sessions.register({ feature: "test", providerId: "mapping-indexeddb" }, { flush: async () => undefined });
+    const session = current.sessions.register({ feature: "test", providerId: "mapping-filesystem" }, { flush: async () => undefined });
     session.changed();
     await Promise.resolve();
     expect(changed).not.toHaveBeenCalled();
@@ -82,7 +97,7 @@ describe("SiteProject provider integration", () => {
   });
 
   it("provides a real provider-qualified attachment aggregate with CAS persistence and materialized preview", async () => {
-    const current = integration();
+    const current = await integration();
     expect(await current.initialization.initialize()).toEqual({ status: "ready" });
     const linked = await current.compositionProviders[0]!.store.get("journal-entry-page");
     if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
@@ -95,11 +110,11 @@ describe("SiteProject provider integration", () => {
     if (!target) throw new Error("Expected the sample home stack named slot.");
     expect(before.attachments).toEqual([]);
 
-    await current.mappingAttachmentService.attach({ composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } });
+    await current.mappingAttachmentService.attach({ composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-filesystem", recordId: "journal-entry-mapping" } });
     const metadata = await current.workspace.metadata();
     expect(metadata.metadata.collectionAttachments).toHaveLength(1);
     const attachment = metadata.metadata.collectionAttachments[0]!;
-    expect(attachment).toMatchObject({ composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } });
+    expect(attachment).toMatchObject({ composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-filesystem", recordId: "journal-entry-mapping" } });
 
     const after = await current.mappingAttachmentService.list();
     expect(after.attachments).toHaveLength(1);
@@ -108,17 +123,17 @@ describe("SiteProject provider integration", () => {
     const preview = await current.mappingAttachmentService.preview(attachment);
     expect(preview.status).toBe("ready");
     let mutated = false;
-    await expect(current.mappingAttachmentService.withMappingMutation({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" }, async () => { mutated = true; })).rejects.toThrow(/attached/);
+    await expect(current.mappingAttachmentService.withMappingMutation({ providerId: "mapping-filesystem", recordId: "journal-entry-mapping" }, async () => { mutated = true; })).rejects.toThrow(/attached/);
     expect(mutated).toBe(false);
-    await expect(current.mappingAttachmentService.assertMappingDeletable({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" })).rejects.toThrow(/attached/);
+    await expect(current.mappingAttachmentService.assertMappingDeletable({ providerId: "mapping-filesystem", recordId: "journal-entry-mapping" })).rejects.toThrow(/attached/);
 
     await current.mappingAttachmentService.detach(attachment);
     expect((await current.workspace.metadata()).metadata.collectionAttachments).toEqual([]);
-    await expect(current.mappingAttachmentService.assertMappingDeletable({ providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" })).resolves.toBeUndefined();
+    await expect(current.mappingAttachmentService.assertMappingDeletable({ providerId: "mapping-filesystem", recordId: "journal-entry-mapping" })).resolves.toBeUndefined();
   });
 
   it("keeps stale attachment records detachable and scopes compiler diagnostics to their own edge", async () => {
-    const current = integration();
+    const current = await integration();
     await current.initialization.initialize();
     const linked = await current.compositionProviders[0]!.store.get("journal-entry-page");
     if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
@@ -127,8 +142,8 @@ describe("SiteProject provider integration", () => {
     await current.compositionProviders[0]!.store.put({ ...linked.record, document: detachedDocument });
 
     const attachments = [
-      { id: "valid-attachment", order: 0, composition: { providerId: "indexeddb" as const, recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-indexeddb" as const, recordId: "journal-entry-mapping" } },
-      { id: "stale-attachment", order: 1, composition: { providerId: "indexeddb" as const, recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "missing-slot" }, mapping: { providerId: "mapping-indexeddb" as const, recordId: "journal-entry-mapping" } },
+      { id: "valid-attachment", order: 0, composition: { providerId: "files" as const, recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-filesystem" as const, recordId: "journal-entry-mapping" } },
+      { id: "stale-attachment", order: 1, composition: { providerId: "files" as const, recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "missing-slot" }, mapping: { providerId: "mapping-filesystem" as const, recordId: "journal-entry-mapping" } },
     ];
     const metadata = await current.workspace.metadata();
     await current.workspace.updateMetadata(metadata.mutationToken, { collectionAttachments: attachments });
@@ -147,19 +162,19 @@ describe("SiteProject provider integration", () => {
   });
 
   it("serializes attachment writes from two integrations sharing one workspace", async () => {
-    const factories = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
-    const first = integration(factories);
+    const project = await host();
+    const first = await integration(sample(), project);
     await first.initialization.initialize();
     const linked = await first.compositionProviders[0]!.store.get("journal-entry-page");
     if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
     const detachedDocument = structuredClone(linked.record.document);
     delete detachedDocument.binding;
     await first.compositionProviders[0]!.store.put({ ...linked.record, document: detachedDocument });
-    const second = integration(factories);
+    const second = await integration(sample(), project);
     await second.initialization.initialize();
     const target = (await first.mappingAttachmentService.list()).targets.find((candidate) => candidate.composition.recordId === "home-page" && candidate.nodeId === "home-copy-stack" && candidate.slotId === "content");
     if (!target) throw new Error("Expected the sample home stack named slot.");
-    const request = { composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-indexeddb", recordId: "journal-entry-mapping" } };
+    const request = { composition: target.composition, target: { nodeId: target.nodeId, slotId: target.slotId }, mapping: { providerId: "mapping-filesystem", recordId: "journal-entry-mapping" } };
 
     const outcomes = await Promise.allSettled([first.mappingAttachmentService.attach(request), second.mappingAttachmentService.attach(request)]);
     expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
@@ -169,7 +184,7 @@ describe("SiteProject provider integration", () => {
   });
 
   it("is idempotent, preserves an authoring edit, and detaches snapshots from the checked-in sample", async () => {
-    const current = integration(); await current.initialization.initialize(); await current.initialization.initialize();
+    const current = await integration(); await current.initialization.initialize(); await current.initialization.initialize();
     const before = await current.compositionProviders[0]!.store.get("services-page");
     if (before.status !== "loaded") throw new Error("missing seed");
     await current.compositionProviders[0]!.store.put({ ...before.record, updatedAt: "2026-09-01T00:00:00.000Z", document: { ...before.record.document, name: "Edited services" } });
@@ -182,16 +197,13 @@ describe("SiteProject provider integration", () => {
   });
 
   it("preserves newer authoring records and metadata across changed activated source and reload", async () => {
-    const factories = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
+    const project = await host();
     const firstProject = sample();
     const firstRevision = revision(firstProject);
     const first = createProductionProviderIntegration({
       project: firstProject,
       sourceRevision: firstRevision,
-      compositionIdbFactory: factories.composition,
-      contentIdbFactory: factories.content,
-      mappingIdbFactory: factories.mapping,
-      sitemapIdbFactory: factories.sitemap,
+      createProviders: project.createProviders,
     });
     expect(await first.initialization.initialize()).toEqual({ status: "ready" });
     const firstServices = await first.compositionProviders[0]!.store.get("services-page");
@@ -205,10 +217,7 @@ describe("SiteProject provider integration", () => {
     const firstReload = createProductionProviderIntegration({
       project: firstProject,
       sourceRevision: firstRevision,
-      compositionIdbFactory: factories.composition,
-      contentIdbFactory: factories.content,
-      mappingIdbFactory: factories.mapping,
-      sitemapIdbFactory: factories.sitemap,
+      createProviders: project.createProviders,
     });
     const firstSnapshot = await firstReload.getCurrentSiteProject();
     expect(firstSnapshot).toMatchObject({
@@ -227,10 +236,7 @@ describe("SiteProject provider integration", () => {
     const second = createProductionProviderIntegration({
       project: secondProject,
       sourceRevision: secondRevision,
-      compositionIdbFactory: factories.composition,
-      contentIdbFactory: factories.content,
-      mappingIdbFactory: factories.mapping,
-      sitemapIdbFactory: factories.sitemap,
+      createProviders: project.createProviders,
     });
     const secondSnapshot = await second.getCurrentSiteProject();
     expect(secondSnapshot).toEqual(firstSnapshot);
@@ -242,10 +248,7 @@ describe("SiteProject provider integration", () => {
     const current = createProductionProviderIntegration({
       project: sample(),
       sourceRevision: "not-a-revision",
-      compositionIdbFactory: new FDBFactory(),
-      contentIdbFactory: new FDBFactory(),
-      mappingIdbFactory: new FDBFactory(),
-      sitemapIdbFactory: new FDBFactory(),
+      createProviders: (await host()).createProviders,
     });
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("SHA-256") } });
   });
@@ -253,65 +256,50 @@ describe("SiteProject provider integration", () => {
   it("rejects an explicit project without a canonical source revision", async () => {
     const current = createProductionProviderIntegration({
       project: sample(),
-      compositionIdbFactory: new FDBFactory(),
-      contentIdbFactory: new FDBFactory(),
-      mappingIdbFactory: new FDBFactory(),
-      sitemapIdbFactory: new FDBFactory(),
+      createProviders: (await host()).createProviders,
     } as unknown as Parameters<typeof createProductionProviderIntegration>[0]);
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("missing its canonical revision") } });
   });
 
-  it("fails closed before opening provider databases when workspace seed locking fails", async () => {
-    const factory = new FDBFactory(); const opened: string[] = [];
-    const trackedFactory = new Proxy(factory, {
-      get(target, property) {
-        if (property === "open") return (name: string, version?: number) => {
-          opened.push(name);
-          return version === undefined ? target.open(name) : target.open(name, version);
-        };
-        const value = Reflect.get(target, property, target) as unknown;
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
+  it("fails closed before writing any provider directory when workspace seed locking fails", async () => {
+    const project = await host();
     const hadOwnLocks = Object.hasOwn(navigator, "locks");
     const priorLocks = navigator.locks;
-    vi.stubGlobal("indexedDB", trackedFactory);
     Object.defineProperty(navigator, "locks", { configurable: true, value: { request: () => Promise.reject(new Error("locking unavailable")) } });
+    let workspaceId: string | undefined;
     try {
-      const project = sample();
-      const current = createProductionProviderIntegration({ project, sourceRevision: revision(project) });
+      const current = await integration(sample(), project);
       expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { retryable: true, message: expect.stringContaining("locking unavailable") } });
-      expect(new Set(opened)).toEqual(new Set([WORKSPACE_DATABASE_NAME]));
+      // The registry record exists — the attempt was recorded before the lock —
+      // but not one authoring directory was written.
+      workspaceId = current.workspace.id;
     } finally {
-      vi.unstubAllGlobals();
       if (hadOwnLocks) Object.defineProperty(navigator, "locks", { configurable: true, value: priorLocks });
       else Reflect.deleteProperty(navigator, "locks");
     }
+    expect(workspaceId).toBeDefined();
+    expect(await project.storage.missingDirectories(workspaceId!)).toEqual(["compositions", "content", "mappings", "sitemaps"]);
   });
 
   it("rejects a portable static-only graph that cannot back every browser authoring workspace", async () => {
     const project = sample();
     const root = project.providers.sitemaps[0]!.records[0]!.document.root[0]!;
     const about = root.children.find(({ id }) => id === "about-node")!;
-    about.source = { kind: "composition", ref: { providerId: "indexeddb", recordId: "about-page" } };
+    about.source = { kind: "composition", ref: { providerId: "files", recordId: "about-page" } };
     root.children.find(({ id }) => id === "journal-node")!.children = [];
     project.providers.content = [];
     project.providers.mappings = [];
     const current = createProductionProviderIntegration({
       project,
       sourceRevision: revision(project),
-      compositionIdbFactory: new FDBFactory(),
-      contentIdbFactory: new FDBFactory(),
-      mappingIdbFactory: new FDBFactory(),
-      sitemapIdbFactory: new FDBFactory(),
+      createProviders: (await host()).createProviders,
     });
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("content") } });
   });
 
-  it.each(["composition", "content", "mapping", "sitemap"] as const)("recovers a %s phase failure without false readiness", async (phase) => {
-    const backing = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
-    const factories = { ...backing, [phase]: failFirstOpen(backing[phase]) };
-    const current = integration(factories);
+  it.each(["compositions", "content", "mappings", "sitemaps"] as const)("recovers a %s phase failure without false readiness", async (domain) => {
+    const project = await host();
+    const current = createProductionProviderIntegration({ project: sample(), sourceRevision: revision(sample()), createProviders: failFirstInitialization(project.createProviders, domain) });
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { retryable: true } });
     expect(await current.initialization.retry()).toEqual({ status: "ready" });
     expect(await current.getCurrentSiteProject()).toMatchObject({ status: "ready" });
@@ -326,8 +314,8 @@ describe("SiteProject provider integration", () => {
   // seeded. (The composition, content and sitemap loaders read their raw stores
   // directly and never re-enter the lifecycle.)
   it("recovers a workspace summary through retry after the first initialization failed", async () => {
-    const backing = { composition: new FDBFactory(), content: new FDBFactory(), mapping: new FDBFactory(), sitemap: new FDBFactory() };
-    const current = integration({ ...backing, composition: failFirstOpen(backing.composition) });
+    const project = await host();
+    const current = createProductionProviderIntegration({ project: sample(), sourceRevision: revision(sample()), createProviders: failFirstInitialization(project.createProviders, "compositions") });
     const retry = vi.spyOn(current.initialization, "retry");
     const summary = createWorkspaceSummary(current);
 
@@ -345,7 +333,7 @@ describe("SiteProject provider integration", () => {
   });
 
   it.each(["composer", "content", "mapping", "sitemapper"] as const)("converges when %s boots first", async (first) => {
-    const current = integration();
+    const current = await integration();
     const outcome = first === "composer" ? await current.compositionProviders[0]!.initialization.initialize()
       : first === "content" ? await current.contentProvider.initialization.initialize()
         : first === "mapping" ? await current.mappingProvider.initialization.initialize()
@@ -355,7 +343,7 @@ describe("SiteProject provider integration", () => {
   });
 
   it("rejects in-place startFresh and creates a separately selected complete workspace on reset", async () => {
-    const current = integration(); await current.initialization.initialize();
+    const current = await integration(); await current.initialization.initialize();
     const [fresh, concurrent] = await Promise.all([current.initialization.startFresh(), current.initialization.initialize()]);
     expect(fresh).toMatchObject({ status: "error", error: { code: "reset-required" } }); expect(concurrent).toEqual({ status: "ready" });
     const next = await current.workspace.reset();
@@ -365,14 +353,14 @@ describe("SiteProject provider integration", () => {
   });
 
   it("returns a recoverable unavailable state for a null development source", async () => {
-    const current = createProductionProviderIntegration({ project: null, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
+    const current = createProductionProviderIntegration({ project: null, createProviders: (await host()).createProviders });
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: true } });
     expect(await current.compositionCatalog.listCompositions()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
-    expect(await current.compositionCatalog.resolveComposition({ providerId: "indexeddb", recordId: "home-page" })).toEqual({ status: "provider-unavailable" });
+    expect(await current.compositionCatalog.resolveComposition({ providerId: "files", recordId: "home-page" })).toEqual({ status: "provider-unavailable" });
     expect(await current.contentCatalog.listModels()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
-    expect(await current.contentCatalog.resolveModel({ providerId: "content-indexeddb", recordId: "articles" })).toMatchObject({ status: "provider-error", reason: expect.stringContaining("No development SiteProject") });
+    expect(await current.contentCatalog.resolveModel({ providerId: "content-filesystem", recordId: "articles" })).toMatchObject({ status: "provider-error", reason: expect.stringContaining("No development SiteProject") });
     expect(await current.mappingCompositionCatalog.list()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
-    expect(await current.mappingCompositionCatalog.resolve({ providerId: "indexeddb", recordId: "home-page" })).toMatchObject({ status: "provider-error", reason: expect.stringContaining("No development SiteProject") });
+    expect(await current.mappingCompositionCatalog.resolve({ providerId: "files", recordId: "home-page" })).toMatchObject({ status: "provider-error", reason: expect.stringContaining("No development SiteProject") });
     expect(await current.mappingCatalog.list()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
     expect(await current.sitemapperMappingCatalog.list()).toMatchObject({ entries: [], failures: [expect.objectContaining({ reason: expect.stringContaining("No development SiteProject") })] });
   });
@@ -380,26 +368,26 @@ describe("SiteProject provider integration", () => {
   it("never reaches ready when a Single model seed contains multiple Entries", async () => {
     const invalid = sample(); const content = invalid.providers.content[0]!; const entry = content.entries.find(({ modelId }) => modelId === "about-content")!;
     content.entries.push({ ...structuredClone(entry), id: "about-entry-duplicate" });
-    const current = createProductionProviderIntegration({ project: invalid, sourceRevision: revision(invalid), compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
+    const current = createProductionProviderIntegration({ project: invalid, sourceRevision: revision(invalid), createProviders: (await host()).createProviders });
     expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "source", retryable: false, message: expect.stringContaining("at most one Entry") } });
   });
 
-  it("preflights static Composition refs before seeding a fresh Sitemap store", async () => {
-    const project = sample(); const compositionFactory = new FDBFactory(); const sitemapFactory = new FDBFactory();
-    const projectRevision = revision(project);
-    const prior = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: compositionFactory, contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
+  it("refuses a snapshot whose Sitemap references a Composition an author deleted", async () => {
+    const host_ = await host();
+    const project = sample(); const projectRevision = revision(project);
+    const prior = createProductionProviderIntegration({ project, sourceRevision: projectRevision, createProviders: host_.createProviders });
     expect(await prior.compositionProviders[0]!.initialization.initialize()).toMatchObject({ status: "ready" });
     expect(await prior.compositionProviders[0]!.store.delete("services-page")).toBe(true);
 
-    const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: compositionFactory, contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
+    const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, createProviders: host_.createProviders });
     expect(await current.getCurrentSiteProject()).toMatchObject({ status: "error" });
-    expect(await current.sitemapProvider.store.list()).toEqual([]);
   });
 
-  it("preflights provider-qualified Mapping refs in an existing live Sitemap", async () => {
-    const project = sample(); const sitemapFactory = new FDBFactory();
+  it("refuses a snapshot whose live Sitemap references a Mapping that is not there", async () => {
+    const host_ = await host();
+    const project = sample();
     const projectRevision = revision(project);
-    const prior = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
+    const prior = createProductionProviderIntegration({ project, sourceRevision: projectRevision, createProviders: host_.createProviders });
     expect(await prior.sitemapProvider.initialization.initialize()).toMatchObject({ status: "ready" });
     const loaded = await prior.sitemapProvider.store.get("sample-studio-sitemap");
     if (loaded.status !== "loaded") throw new Error("missing live Sitemap");
@@ -408,35 +396,33 @@ describe("SiteProject provider integration", () => {
     if (about.source.kind !== "mapping") throw new Error("expected Mapping source");
     about.source.ref.recordId = "missing-mapping";
     await prior.sitemapProvider.store.put(live);
-    const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: sitemapFactory });
-    expect(await current.initialization.initialize()).toMatchObject({ status: "error", error: { phase: "snapshot", message: expect.stringContaining("missing-mapping") } });
+    const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, createProviders: host_.createProviders });
+    expect(await current.getCurrentSiteProject()).toMatchObject({ status: "error", error: { phase: "snapshot", message: expect.stringContaining("missing-mapping") } });
   });
 
   it("exposes and snapshots exactly the declared Composition provider set", async () => {
-    const availableUndeclared = fileProvider([]);
-    const ordinaryProject = sample();
-    const ordinary = createProductionProviderIntegration({ project: ordinaryProject, sourceRevision: revision(ordinaryProject), fileCompositionProvider: availableUndeclared, compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
-    expect(ordinary.compositionProviders.map(({ descriptor }) => descriptor.id)).toEqual(["indexeddb"]);
-
-    const declared = sample();
-    const fileRecord = structuredClone(declared.providers.compositions[0]!.records.find(({ id }) => id === "services-page")!);
-    fileRecord.id = "file-page"; fileRecord.document.id = "file-page"; delete fileRecord.document.binding;
-    declared.providers.compositions.push({ id: "files", records: [fileRecord] });
-    declared.providers.sitemaps[0]!.records[0]!.document.root[0]!.children.push({ id: "file-page-node", title: "File page", slug: "file", source: { kind: "composition", ref: { providerId: "files", recordId: "file-page" } }, children: [] });
-    const current = createProductionProviderIntegration({ project: declared, sourceRevision: revision(declared), fileCompositionProvider: fileProvider([fileRecord]), compositionIdbFactory: new FDBFactory(), contentIdbFactory: new FDBFactory(), mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
-    expect(current.compositionProviders.map(({ descriptor }) => descriptor.id).sort()).toEqual(declared.providers.compositions.map(({ id }) => id).sort());
+    const current = await integration();
+    expect(current.compositionProviders.map(({ descriptor }) => descriptor.id)).toEqual(["files"]);
     const snapshot = await current.getCurrentSiteProject();
     expect(snapshot.status).toBe("ready");
     if (snapshot.status !== "ready") return;
-    expect(snapshot.project.providers.compositions.map(({ id }) => id).sort()).toEqual(declared.providers.compositions.map(({ id }) => id).sort());
-    expect(snapshot.project.providers.compositions.find(({ id }) => id === "files")!.records.map(({ id }) => id)).toEqual(["file-page"]);
+    expect(snapshot.project.providers.compositions.map(({ id }) => id)).toEqual(["files"]);
   });
 
-  it("preserves non-retryable Content version failures through initialize and retry wrappers", async () => {
-    const project = sample();
-    const projectRevision = revision(project);
-    const contentFactory = new FDBFactory(); const newer = await request(contentFactory.open(workspaceDatabaseName(CONTENT_DATABASE_NAME, "initial"), CONTENT_DATABASE_VERSION + 1)); newer.close();
-    const current = createProductionProviderIntegration({ project, sourceRevision: projectRevision, compositionIdbFactory: new FDBFactory(), contentIdbFactory: contentFactory, mappingIdbFactory: new FDBFactory(), sitemapIdbFactory: new FDBFactory() });
+  it("preserves a non-retryable Content failure through both the initialize and retry wrappers", async () => {
+    const project = await host();
+    const refuse = async () => ({
+      status: "error" as const,
+      error: new ContentPersistenceError("initialize", "unsupported-version", "Content storage is newer than this build.", false),
+    });
+    const current = createProductionProviderIntegration({
+      project: sample(),
+      sourceRevision: revision(sample()),
+      createProviders: (workspace) => {
+        const set = project.createProviders(workspace);
+        return { ...set, content: { ...set.content, initialization: { ...set.content.initialization, initialize: refuse, retry: refuse } } };
+      },
+    });
     expect(await current.contentProvider.initialization.initialize()).toMatchObject({ status: "error", error: { retryable: false, message: expect.stringContaining("newer") } });
     expect(await current.contentProvider.initialization.retry()).toMatchObject({ status: "error", error: { retryable: false, message: expect.stringContaining("newer") } });
   });

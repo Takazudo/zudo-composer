@@ -53,7 +53,7 @@ describe("provider-qualified media impact", () => {
     props.cards = [{ src: "/uploaded-media/asset-asset" }]; props.title = "ordinary text /uploaded-media/asset-asset";
     const result = resolveSiteProjectMedia(value, catalog, { lock });
     expect(result.index.references).toHaveLength(4); expect(result.index.complete).toBe(false);
-    expect(result.index.references).toContainEqual(expect.objectContaining({ location: expect.objectContaining({ domain: "content", providerId: "content-indexeddb", recordId: "one", fieldId: "hero", valuePath: ["asset"] }) }));
+    expect(result.index.references).toContainEqual(expect.objectContaining({ location: expect.objectContaining({ domain: "content", providerId: "content-filesystem", recordId: "one", fieldId: "hero", valuePath: ["asset"] }) }));
     const output = result.project.providers.compositions[0]!.records[0]!.document.root[0]!.props;
     expect(output.href).toBe(lock.pins[0]!.url); expect(output.title).toBe(props.title); expect(output.body).toContain("https://example.com/external");
     expect(props.href).toBe("/uploaded-media/asset-asset");
@@ -68,7 +68,7 @@ describe("provider-qualified media impact", () => {
     const index = resolveSiteProjectMedia(value, catalog, { providerId: "media-files", snapshot: { schemaVersion: 2, mutationToken: "b".repeat(64), folders: [], records: [media] }, routes: result.build.routes }).index;
     expect(index.references.some(({ location }) => location.domain === "materialization" && location.pathname === "/")).toBe(true);
     const rendered = result.build.routes[0]!;
-    rendered.materializationSources = [{ renderedNodeId: rendered.composition.document.root[0]!.id, providerId: "indexeddb", recordId: "card-source", nodeId: "original-link", attachmentId: "cards", entries: [{ providerId: "content-indexeddb", modelId: "articles", recordId: "one" }] }];
+    rendered.materializationSources = [{ renderedNodeId: rendered.composition.document.root[0]!.id, providerId: "files", recordId: "card-source", nodeId: "original-link", attachmentId: "cards", entries: [{ providerId: "content-filesystem", modelId: "articles", recordId: "one" }] }];
     const mapped = resolveSiteProjectMedia(value, catalog, { lock, routes: [rendered] }).index.references.find(({ location }) => location.domain === "materialization")!;
     expect(mapped.location).toMatchObject({ recordId: "card-source", nodeId: "original-link", attachmentId: "cards", entries: [{ recordId: "one" }] });
   });

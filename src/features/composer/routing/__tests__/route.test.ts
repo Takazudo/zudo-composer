@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatComposerRoute, parseComposerRoute } from "../route";
-const config = { isKnownProvider: (id: string) => ["indexeddb", "files"].includes(id) };
+const config = { isKnownProvider: (id: string) => ["files"].includes(id) };
 describe("Composer query routes", () => {
   it("uses strict provider-qualified query URLs", () => {
     expect(formatComposerRoute({ kind: "index" })).toBe("/composer");

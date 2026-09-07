@@ -18,6 +18,7 @@ import {
 } from "../../library";
 import type { ComponentCatalog } from "../../model/types";
 import { planLinkedJsxModules } from "../../source/plan-linked-jsx";
+import { COMPOSITION_FILE_PROVIDER_CHANNEL } from "./types";
 import type {
   ComposerFileProviderDerivedOutputPlan,
   ComposerFileProviderDerivedOutputRequest,
@@ -144,7 +145,40 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
     private readonly config: ComposerFileProviderConfig,
     private readonly manifest: ComponentCatalog,
     private readonly fetchImpl: typeof fetch,
+    private readonly workspace: () => string,
   ) {}
+
+  /**
+   * The whole canonical record set. `snapshot` already reads it coherently —
+   * twice, until two reads agree — so there is nothing else to do here.
+   */
+  async readAll(): Promise<readonly CompositionRecord[]> {
+    return (await this.snapshot()).records;
+  }
+
+  /**
+   * Replace the provider's contents with a seed set.
+   *
+   * Unlike the record-store domains this is not one atomic commit: every
+   * composition carries a generated JSX sibling, and generation is a browser
+   * round the Node core interrupts a write to ask for. So the seed is a
+   * sequence of deletes and puts, and a failure part-way leaves a partly
+   * populated directory. That is safe only because seeding runs against a
+   * workspace still in `seeding` status: a failure removes the whole workspace
+   * directory rather than leaving these files reachable.
+   *
+   * Order is not incidental. The provider refuses to remove a global template
+   * that still has a consumer, so dependents are deleted first; and a
+   * composition that fills a template outlet plans a blocked output if its
+   * template is not canonical yet, so templates are written first.
+   */
+  async seed(records: readonly CompositionRecord[]): Promise<void> {
+    const isTemplate = (record: CompositionRecord) => record.document.publication?.kind === "global-template";
+    const dependentsFirst = [...await this.readAll()].sort((a, b) => Number(isTemplate(a)) - Number(isTemplate(b)));
+    for (const record of dependentsFirst) await this.delete(record.id);
+    const templatesFirst = [...records].sort((a, b) => Number(isTemplate(b)) - Number(isTemplate(a)));
+    for (const record of templatesFirst) await this.put(record);
+  }
 
   async list(): Promise<readonly CompositionSummary[]> {
     return this.requestWithOutputPlan<readonly CompositionSummary[]>("list");
@@ -203,7 +237,7 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
       const response = await this.fetchJson<T>(operation, { ...fields, outputsById });
       if (response.ok) {
         const result = decodeResult(response.result);
-        if (operation !== "list" && operation !== "get") notifyPersistenceChange("compositions:files");
+        if (operation !== "list" && operation !== "get") notifyPersistenceChange(COMPOSITION_FILE_PROVIDER_CHANNEL);
         return result;
       }
       if (response.error.code !== "output-required") {
@@ -282,7 +316,7 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
       const lifecycleDeleted = operation === "delete-with-dependency-check"
         && typeof response.result === "object" && response.result !== null
         && "status" in response.result && response.result.status === "deleted";
-      if (operation === "clear" || deleted || lifecycleDeleted) notifyPersistenceChange("compositions:files");
+      if (operation === "clear" || deleted || lifecycleDeleted) notifyPersistenceChange(COMPOSITION_FILE_PROVIDER_CHANNEL);
       return response.result;
     }
     throw this.fromServerError(persistenceOperation(operation), response.error);
@@ -299,6 +333,7 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
         headers: {
           "content-type": "application/json",
           [this.config.capabilityHeader]: this.config.capability,
+          [this.config.workspaceHeader]: this.workspace(),
         },
         body: JSON.stringify({ operation, ...fields }),
         cache: "no-store",
@@ -361,20 +396,26 @@ export interface CreateFileProviderCompositionStoreOptions {
   catalog: ComponentCatalog;
   /** Test seam; production callers use globalThis.fetch. */
   fetch?: typeof fetch;
+  /** The open workspace whose composition directory this store addresses. */
+  workspace: () => string;
+  /** Test seam; production callers use the dev server's injected configuration. */
+  config?: ComposerFileProviderConfig;
 }
 
 /**
- * Returns the file store only when the dev virtual capability exists.
- * Production builds resolve the virtual module to `undefined`, leaving
- * IndexedDB as the only available provider.
+ * Returns the file store only when the dev virtual capability exists. A
+ * production build resolves the virtual module to `undefined`, and a caller
+ * that gets `undefined` has no composition provider at all.
  */
 export function createFileProviderCompositionStore(
   options: CreateFileProviderCompositionStoreOptions,
 ): CompositionLifecycleStore | undefined {
-  if (fileProviderConfig === undefined) return undefined;
+  const config = options.config ?? fileProviderConfig;
+  if (config === undefined) return undefined;
   return new BrowserFileProviderCompositionStore(
-    fileProviderConfig,
+    config,
     options.catalog,
     options.fetch ?? globalThis.fetch.bind(globalThis),
+    options.workspace,
   );
 }

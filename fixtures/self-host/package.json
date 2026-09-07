@@ -1,0 +1,10 @@
+{
+  "name": "self-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The second admitted pack shape: components the host owns, reached through the host package's own self-reference.",
+  "exports": {
+    "./components": "./components/pack.ts"
+  }
+}

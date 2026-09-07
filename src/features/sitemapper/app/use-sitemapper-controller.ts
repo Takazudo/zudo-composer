@@ -12,7 +12,7 @@ import {
 } from "../../../shared/persistence";
 import type { SitemapPagePropsPatch } from "../../../sitemapper/commands";
 import type { SitemapNavigationItem } from "../../../sitemapper/model";
-import type { SitemapRecord, SitemapStore } from "../../../sitemapper/library";
+import { SITEMAP_PROVIDERS, type SitemapRecord, type SitemapStore } from "../../../sitemapper/library";
 import type { SitemapDocument } from "../../../sitemapper/model";
 import {
   applySitemapperAction,
@@ -84,7 +84,7 @@ export function useSitemapperController(options: UseSitemapperControllerOptions)
       const write = options.write
         ?? (options.store ? (snapshot: SaveQueueSnapshot<SitemapRecord>) => options.store!.put(snapshot.record) : null);
       if (!write) throw new Error("useSitemapperController requires saveQueue, write, or store.");
-      const ref: SaveQueueRef = { providerId: options.providerId ?? "indexeddb", recordId: options.record.id };
+      const ref: SaveQueueRef = { providerId: options.providerId ?? SITEMAP_PROVIDERS.filesystem.id, recordId: options.record.id };
       queueRef.current = createSaveQueue<SitemapRecord>({
         ref,
         initialRecord: options.record,

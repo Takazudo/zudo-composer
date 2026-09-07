@@ -1,23 +1,30 @@
 # zudo-composer
 
-`zudo-composer` is the permanent standalone home of five Preact authoring
-products:
+`zudo-composer` is an installable Preact authoring **tool**, not an application
+with its own content. A host project installs it, points it at its own
+components and a `zudo-composer.config.ts`, and gets five authoring products
+over a shared filesystem storage engine:
 
-- Composer owns its document model, source generation, reuse rules, storage,
-  chrome, preview renderer, and same-origin iframe protocol.
-- Content owns its model, Entry library, browser storage, and authoring UI.
-- Mapping owns its binding model, resolver, browser storage, preview handoff,
-  and authoring UI.
-- Sitemapper owns its page-tree model, storage, library, authoring UI, and the
-  catalog integration that resolves saved Composer records.
+- Composer owns its document model, source generation, reuse rules, chrome,
+  preview renderer, and same-origin iframe protocol.
+- Content owns its model, Entry library, and authoring UI.
+- Mapping owns its binding model, resolver, preview handoff, and authoring UI.
+- Sitemapper owns its page-tree model, library, authoring UI, and the catalog
+  integration that resolves saved Composer records.
 - Media owns its metadata model, library route, and upload/delivery boundaries.
 
-The products do not depend on zudo-doc, a zfb application runtime/configuration,
-or a styleguide registry. `zudo-sg` has a narrower permanent role: its installed
-`@zudo-sg/ui` package supplies typed component sidecars, the runtime component
-pack, and canonical Composer CSS. That provider transitively owns the focused
-`@takazudo/zfb-md-wasm` renderer used by `ProseMd`; this is not a zfb application
-dependency.
+All five persist to the host's own project files — the four JSON domains plus
+media, under paths the host's `zudo-composer.config.ts` controls (see
+[Settings and host directory layout](#settings-and-host-directory-layout)
+below). The tool does not depend on zudo-doc, a zfb
+application runtime/configuration, or a styleguide registry. `zudo-sg` has a
+narrower permanent role in this repository: its installed `@zudo-sg/ui`
+package is this repo's own dogfood component pack, supplying typed component
+sidecars, the runtime component pack, and canonical Composer CSS. That
+provider transitively owns the focused `@takazudo/zfb-md-wasm` renderer used
+by `ProseMd`; this is not a zfb application dependency. A host is free to
+install a different themeset instead — see
+[Component packs and themesets](#component-packs-and-themesets).
 
 ## Routes and assets
 
@@ -35,21 +42,200 @@ The Vite application has base `/` and these exact SPA routes:
 - `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
   `/site/journal/start-with-the-question` — compiler-emitted Entry routes
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
-- `/uploaded-media/` — committed images and PDFs copied from `media-store/public`
+- `/uploaded-media/` — committed images and PDFs from the host's `publicMediaDir`
 
 The preview route is an implementation boundary, not an independent public
-product. Cloudflare serves route fallbacks from the same immutable `dist` tree;
-build-emitted assets remain rooted at `/assets/`, while committed media is
-delivered from `/uploaded-media/`. Upload authoring is available only in local
-development, but committed media delivery is part of the production artifact.
+product. Build-emitted assets remain rooted at `/assets/`, while committed media
+is delivered from `/uploaded-media/`. Upload authoring is available only in local
+development.
 
 The provider-scoped SiteProject graph, whole-project apply rule, active identity,
 JSON-stdin API, CAS revisions, immutable builds, diagnostics, local editing
 flow, and guarded browser acceptance commands are documented in
 [`docs/site-project.md`](./docs/site-project.md). Production
 uses the bundled sample; local project state is disposable and ignored.
-Cloudflare persistence, hosted API, and authentication are future adapter work;
-the assets-only Worker makes no such claim.
+Hosted persistence, a hosted API, and authentication are future adapter work;
+nothing in this repository claims them.
+
+## Installing into a host project
+
+`zudo-composer` is installed by the project it authors. There is no registry
+release; hosts resolve it from an exact Git commit, alongside the component
+contract, which the package declares as a **peer dependency** so the host's own
+`defineComponent` sidecars type against a single instance:
+
+```sh
+pnpm add -D \
+  "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
+  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#b66d52bb273a10010485efb2d06f80cee8001bd6"
+```
+
+The host also declares the package its `pack` comes from. A pack is resolved
+from the HOST root, and a release attests the dependency spec the host used, so
+a host that names `@acme/themeset/composer-pack` depends on `@acme/themeset`
+itself; only the self-reference shape below is exempt.
+
+The host then declares `zudo-composer.config.ts` at its own root and runs the
+bin. `pack` is the only setting without a default:
+
+```ts
+import { defineComposerConfig } from "zudo-composer/config";
+
+export default defineComposerConfig({
+  pack: "@zudo-sg/ui/composer-pack",
+});
+```
+
+```jsonc
+// package.json
+{ "scripts": { "dev": "zudo-composer dev" } }
+```
+
+### Settings and host directory layout
+
+Every setting except `pack` has a default and is resolved host-root-relative;
+`dataDir` re-bases the five settings below it, so moving all CMS data is one
+edit. `publicMediaDir` and `styles` are not CMS data and are never re-based.
+
+| Setting | Default | What it is |
+| --- | --- | --- |
+| `dataDir` | `cms` | Root for the four JSON domains plus media |
+| `compositionsDir` | `cms/compositions` | Composition JSON, including global templates |
+| `contentDir` | `cms/content` | Content-domain JSON |
+| `mappingsDir` | `cms/mappings` | Mapping-domain JSON |
+| `sitemapsDir` | `cms/sitemaps` | Sitemapper-domain JSON |
+| `mediaDir` | `cms/media` | Media content-addressed store |
+| `publicMediaDir` | `public/uploaded-media` | Published media bytes the host commits and serves |
+| `styles` | `styles/base.css` | The host's base CSS entry — see [Styles ownership](#styles-ownership) |
+| `pack` | *(required, no default)* | Component-pack module specifier — see below |
+
+A minimal host that keeps every default and supplies its components as a
+self-reference looks like this:
+
+```text
+my-site/
+├── package.json                 # name: "my-site", exports: { "./components": … }
+├── pnpm-workspace.yaml           # onlyBuiltDependencies: [component-contract]
+├── zudo-composer.config.ts       # pack: "my-site/components"
+├── components/
+│   └── pack.ts                   # the component pack `exports` resolves to
+├── styles/
+│   └── base.css                  # imported pack CSS + Tailwind @source
+├── public/
+│   └── uploaded-media/           # publicMediaDir — committed, served bytes
+└── cms/                          # dataDir — everything the tool authors
+    ├── compositions/
+    ├── content/
+    ├── mappings/
+    ├── sitemaps/
+    └── media/
+```
+
+Every setting can also be overridden per-environment as
+`ZUDO_COMPOSER_<SETTING_NAME>` (for example `ZUDO_COMPOSER_DATA_DIR`), with
+precedence explicit config > environment > default.
+
+### Component packs and themesets
+
+A component pack is always addressed as a **package**, never as a path — the
+contract's `parseSource` admits only public bare-package imports and rejects any
+`src` path segment. Two shapes follow from that, and both are proven by fixtures
+in this repository:
+
+| Shape | `pack` | Every `source.module` | Fixture |
+| --- | --- | --- | --- |
+| Installed themeset | `"@acme/themeset/composer-pack"` | `"@acme/themeset"` | `fixtures/themeset-host` |
+| Host self-reference | `"my-site/components"` | `"my-site/components"` | `fixtures/self-host` |
+
+The self-reference needs nothing installed: the host's `package.json` declares
+its own `name` plus `"exports": { "./components": "./components/pack.ts" }`, and
+both Node and Vite resolve a package's reference to itself whenever `exports` is
+present. Its name must be a valid lowercase npm name, and no exported subpath
+segment may be `src`.
+
+Either shape's entry module must export `componentPack` built with
+`defineComponentPack`/`defineComponent` from `@zudo-composer/component-contract`
+— a plain object is rejected. A minimal self-reference pack:
+
+```tsx
+// components/pack.ts, exported as "./components" in package.json
+import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
+import { Banner, type BannerProps } from "./banner";
+
+const banner = defineComponent<BannerProps>()(Banner, {
+  id: "site.banner",
+  schemaVersion: 1,
+  title: "Banner",
+  category: "Content",
+  description: "The host's own headline component.",
+  source: { module: "my-site/components", exportKind: "named", exportName: "Banner" },
+  defaults: { headline: "Banner" },
+  fields: [{ prop: "headline", label: "Headline", schema: { type: "string" }, editor: { kind: "text" } }],
+});
+
+export const componentPack = defineComponentPack({ packId: "my-site", packVersion: "1.0.0", components: [banner] });
+export { Banner };
+```
+
+Swapping a themeset is two edits and no tool change: the `pack` value above, and
+the `@import` in the host's `styles` entry. zudo-composer never falls back to a
+bundled pack — an unresolvable specifier is a startup error naming the specifier
+and the `package.json` it was resolved from.
+
+**Packaging rule for a themeset.** The pack is resolved with `createRequire`,
+so the `exports` targets for the pack entry and for every `source.module` must
+be a plain string or an object carrying a `default` key. An `exports` entry with
+only `import`/`types` conditions cannot be resolved.
+
+### Styles ownership
+
+zudo-composer's own CSS never imports a pack's. The host's `styles` file
+(`styles/base.css` by default) is the sole importer of the pack's stylesheet and
+the host's Tailwind `@source` declaration point:
+
+```css
+@import "@acme/themeset/styles/themeset.css";
+
+@source "../node_modules/@acme/themeset/src";
+```
+
+The tool reaches it through `virtual:zudo-composer-host-styles`, which resolves
+to the real file so its relative `@import`/`@source` bases stay the host's. A
+missing file is a loud config error. Every custom property the editor chrome
+consumes is declared in the tool's own `src/styles/app-tokens.css`, so a themeset
+that ships none of them still leaves a working editor.
+
+The package publishes five entry points. Everything else is internal:
+
+| Specifier | What it is |
+| --- | --- |
+| `zudo-composer` | `startComposerDevServer` / `resolveComposerDevConfig` |
+| `zudo-composer/config` | `defineComposerConfig` and the config types |
+| `zudo-composer/vite` | the composer Vite plugins, for a host-authored config |
+| `zudo-composer/styles` | the canonical Composer stylesheet |
+| `zudo-composer/package.json` | the manifest |
+
+Vite and its Preact/Tailwind plugins are runtime `dependencies` rather than
+`devDependencies`: they are dev-only for *this* repository but are loaded by the
+installed launcher, so a host must receive them. The published archive ships the
+TypeScript sources under `src/`, `server/`, and `plugins/` — not a built
+`dist/` — because the launcher evaluates them through Vite. It also retains
+`contract-handoff.json` and the contract's own sources, which the SiteProject
+toolchain reads to compute release identity; those sources are named one file at
+a time in `files`, because the nested `package.json` under `packages/` stops the
+root allowlist's exclusions from applying to that subtree.
+
+pnpm 10 and later refuse to prepare a Git-hosted dependency that runs build
+scripts unless the host allows it, so the contract needs an entry in the host's
+`pnpm-workspace.yaml`:
+
+```yaml
+onlyBuiltDependencies:
+  - "@zudo-composer/component-contract"
+```
+
+`fixtures/host/` is the in-repo dogfood host: the smallest project that installs
+the package and runs its bin.
 
 ## Development and validation
 
@@ -60,38 +246,55 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm dev
 ```
 
-The main repository gate includes lint, typecheck, headless/deployment/handoff
-boundaries, the class-name gate, unit tests, one production build, the provider
-artifact boundary, and an unauthenticated Wrangler dry-run:
+`pnpm check` is the bounded offline gate: lint, typecheck, the headless, handoff
+and class-name boundaries, the provider identity boundary, unit tests, one
+production build, and the built-artifact boundary.
 
 ```sh
 corepack pnpm check
 ```
 
-CI additionally verifies the component-contract handoff, writes and rechecks
-the deployment manifest, runs local Worker smoke, and serves that same built
-`dist` directory to Chromium:
+The provider boundary is split in two. `provider:boundary` checks the manifest
+spec, the lockfile resolution and the parity between the installed pack's
+generated component list and its sidecars — none of which needs a build, so it
+runs on a bare checkout. `dist:boundary` checks what `vite build` emitted and
+requires `pnpm build` first.
+
+CI additionally verifies the component-contract handoff and runs the three
+browser lanes:
 
 ```sh
 corepack pnpm contract:conformance
 corepack pnpm contract:negative-scan
 corepack pnpm contract:external-install -- --exact
-corepack pnpm deployment:manifest
-corepack pnpm deployment:manifest:check
-corepack pnpm smoke:local
-corepack pnpm test:browser:dist
+corepack pnpm test:browser:host
 corepack pnpm test:browser:dev
 corepack pnpm test:browser:site-project
-corepack pnpm test:browser:site-project:dist
 ```
 
-`test:browser` is the convenience command when no build exists; it builds and
-then delegates to `test:browser:dist`. The Media dev lane exercises upload
-transport without changing the production artifact. The SiteProject helper adds
-an isolated CLI-activated dev lane and a local-Wrangler production lane that
-reuses the one build. CI deliberately builds exactly once.
+Each lane owns one port and one server, so none of them may run concurrently:
 
-Both `test:browser:dist` and `test:browser:dev` route specs to a viewport by
+| Lane | Server | Port | Specs |
+| --- | --- | --- | --- |
+| `test:browser:host` | `zudo-composer dev`, rooted at a disposable host project | 4173 | `tests/browser`, minus the SiteProject spec |
+| `test:browser:dev` | this repository's own `pnpm dev` | 5173 | `tests/browser-dev` |
+| `test:browser:site-project` | this repository's own Vite, with a CLI-activated release | 4174 | `tests/browser/site-project-acceptance.pw.ts` |
+
+The host lane is the one that runs the package the way a host does — through its
+`bin`, against a project it has never seen. It activates the sample SiteProject
+into that project first, because a library with no activated project has no rows
+to look at.
+
+`smoke:host-install` goes further and is the only proof that involves a real
+install: it packs the package, installs it into a bare project outside this
+repository, boots it with no sample activation, authors through the browser,
+restarts, and finally removes the tool to confirm the host keeps its data.
+
+```sh
+corepack pnpm smoke:host-install
+```
+
+Both `test:browser:host` and `test:browser:dev` route specs to a viewport by
 filename: `*.coarse.pw.ts` runs only on a 390x844 touch project, and
 `*.responsive.pw.ts` runs on both. The rules those specs check are switched off
 on a fine pointer, so a coarse spec that reaches the desktop project passes
@@ -120,10 +323,10 @@ To update the provider:
    `path:`, copied provider source, or a pnpm Git subdirectory selector.
 3. Regenerate `pnpm-lock.yaml`, then prove a clean
    `corepack pnpm install --frozen-lockfile` resolves the same codeload SHA.
-4. Run `corepack pnpm check`, all three contract commands above,
-   `corepack pnpm deployment:manifest`, `corepack pnpm smoke:local`, and
-   `corepack pnpm test:browser:dist`. The provider boundary must still prove
-   the exact 12 IDs/runtime exports, canonical CSS, and one focused WASM/glue.
+4. Run `corepack pnpm check`, all three contract commands above, and
+   `corepack pnpm test:browser:host`. The provider and dist boundaries must
+   still prove the exact 12 IDs/runtime exports, canonical CSS, and one focused
+   WASM/glue.
 
 Do not copy provider components into this repository or add a fallback registry.
 
@@ -139,52 +342,28 @@ consumers use the package-only commit recorded by
 - exact external Git spec:
   `git+https://github.com/Takazudo/zudo-composer.git#b66d52bb273a10010485efb2d06f80cee8001bd6`
 
-The monorepo itself intentionally resolves this contract with `workspace:*`.
-That local workspace relationship must not be confused with, or used in place
-of, the immutable external UI-provider Git dependency.
+The monorepo itself intentionally resolves this contract with `workspace:*`, as
+a dev dependency; the published manifest declares it as a peer dependency so a
+host installs exactly one instance. Neither relationship may be confused with,
+or used in place of, the immutable external UI-provider Git dependency.
 
-## Deployment and credential handoff
+## No deployment target
 
-The configured target is Worker `zudo-composer` with the Custom Domain
-`zudo-composer.zudolab.dev` (`custom_domain: true`). `workers.dev` and
-preview URLs are disabled. This identity, domain, and its credentials are
-project-specific and must never be copied from or shared with zudo-sg.
+This repository is a locally run tool. It has no deployment target, no hosting
+provider, no deployed hostname, and no deployment credentials. Hosting is
+deliberately deferred to a future adapter and is out of scope here.
 
-Build and prove the exact artifact without deployment credentials:
+Prove the exact artifact locally:
 
 ```sh
 corepack pnpm install --frozen-lockfile
-corepack pnpm build
-corepack pnpm provider:boundary
-corepack pnpm deployment:manifest
-corepack pnpm deploy:dry-run
-corepack pnpm smoke:local
-corepack pnpm test:browser:dist
-corepack pnpm deployment:manifest:check
+corepack pnpm check
+corepack pnpm smoke:host-install
 ```
 
-For a local authenticated deployment, the integration owner runs:
-
-```sh
-corepack pnpm exec wrangler login
-corepack pnpm exec wrangler whoami
-corepack pnpm deployment:manifest:check
-corepack pnpm deploy
-corepack pnpm smoke:live
-```
-
-The local flow uses Wrangler OAuth. Never copy OAuth files/tokens into GitHub.
-Automated deployment instead requires both `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID` as GitHub Actions secrets. The token must come from
-Cloudflare's **Edit Cloudflare Workers** template and be least-privilege scoped
-to the intended account and active `zudolab.dev` zone. One secret
-without the other is a hard configuration error; when both are absent, CI
-prints the exact credential-only handoff and leaves all noncredential gates
-enabled.
-
-The hostname above is the configured target, not a claim that this branch is
-deployed. Permanent `main` SHA, root-PR CI, post-merge CI, deployment success,
-and live all-route/all-asset smoke evidence are recorded only after merge.
+Nothing in CI publishes, uploads, or authenticates against a hosting account.
+If hosting is ever added, it arrives as a new adapter with its own gates — not
+as a revival of a removed one.
 
 ## Destructive current-only policy
 
@@ -195,18 +374,17 @@ migrations, redirects, aliases, legacy fallbacks, compatibility shims, or
 compatibility fixtures.
 
 This authorization is limited to this project's current application state. It
-does not authorize deleting or replacing unrelated repositories, Cloudflare
+does not authorize deleting or replacing unrelated repositories, hosting
 resources, domains, credentials, user files, or other infrastructure.
 
 ## Provenance and final evidence
 
 The initial implementation was ported with provenance from
 `Takazudo/zudo-sg@f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2`, without grafting
-history or inheriting zudo-sg deployment identity. That frozen source reference
-is provenance only; zudo-sg no longer owns these applications.
+history or inheriting any zudo-sg infrastructure identity. That frozen source
+reference is provenance only; zudo-sg no longer owns these applications.
 
 After the Phase 3 root reaches `main`, the integration owner records one
 canonical evidence block on both Phase 3 and Phase 4 epics: root PR URL; full
-permanent `main` SHA; provider Git spec/SHA/tree and all version domains; green
-root-PR and post-merge CI URLs; and either the deployed URL with successful
-all-route/all-asset smoke or the exact credential-only handoff.
+permanent `main` SHA; provider Git spec/SHA/tree and all version domains; and
+green root-PR and post-merge CI URLs.

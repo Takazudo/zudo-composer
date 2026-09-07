@@ -2,8 +2,9 @@ import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import releaseApiPlugin, { RELEASE_LIMITS, trustedReleaseRequest } from "../../../plugins/release-api-plugin";
-import { fixture, stageFor, catalog, call, toolchain, PNG, review } from "./release-fixture";
+import { fixture, stageFor, catalog, call, pack, toolchain, PNG, review } from "./release-fixture";
 import { createLocalSiteProjectApiService } from "../service";
+import { readActivatedSiteRelease } from "../dev-reader";
 import { readFile } from "node:fs/promises";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
 import { compileSiteProject } from "../../../src/site-project/compiler";
@@ -11,9 +12,6 @@ import { createSiteProjectApiService } from "../../../src/site-project/api/servi
 import type { SiteProjectApiDependencies, SiteProjectApiService } from "../../../src/site-project/api/types";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-
-// Keep this headless transport/storage regression independent of provider JSX rendering.
-vi.mock("@zudo-sg/ui/composer-pack", async () => ({ componentPack: { manifest: (await import("./release-fixture")).catalog.pack } }));
 
 function harness(concurrentChecks = false, makeService?: (callbacks: Pick<SiteProjectApiDependencies, "isWorkingCurrent" | "reconcilePublication">) => SiteProjectApiService, mediaStoreRoot?: string) {
   const plugin = releaseApiPlugin({ mediaStoreRoot });
@@ -46,7 +44,7 @@ describe("local release capability bridge", () => {
     const asset = await context.media!.upload({ fileName: "isolated.png", declaredMediaType: "image/png", bytes: PNG });
     const value = project();
     value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${asset.id}`;
-    const service = createLocalSiteProjectApiService({ testRoot: context.testRoot, mediaStoreRoot: context.mediaRoot,
+    const service = createLocalSiteProjectApiService({ pack, testRoot: context.testRoot, mediaStoreRoot: context.mediaRoot,
       toolchain: { ...toolchain, componentPack: value.componentPack } });
     const plan = await review(service, value, { selection: value.providers.content.flatMap((provider) => provider.entries.map((entry) => ({
       ref: { providerId: provider.id, modelId: entry.modelId, recordId: entry.id }, action: "publish",
@@ -55,6 +53,21 @@ describe("local release capability bridge", () => {
     const applied = await call<{ buildId: string }>(service, "apply", { plan });
     await call(service, "build", { projectId: value.id, buildId: applied.buildId });
     expect(await readFile(join(context.testRoot, "builds", applied.buildId, `media-${plan.mediaLock!.pins[0]!.url.split("/").at(-1)}`))).toEqual(Buffer.from(PNG));
+  });
+  it("refuses an activated release whose toolchain is not the installed one", async () => {
+    const context = await fixture(), value = project();
+    const service = createLocalSiteProjectApiService({ pack, testRoot: context.testRoot, mediaStoreRoot: context.mediaRoot,
+      toolchain: { ...toolchain, componentPack: value.componentPack } });
+    const plan = await review(service, value);
+    const applied = await call<{ buildId: string }>(service, "apply", { plan });
+    const completed = await call<{ identity: { projectId: string; revision: string; buildId: string } }>(service, "build", { projectId: value.id, buildId: applied.buildId });
+    await call(service, "activate", { ...completed.identity, expectedActive: null });
+    const stamped = { ...toolchain, componentPack: value.componentPack };
+    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: stamped })).resolves.toMatchObject({ release: { identity: completed.identity } });
+    // A pack swap leaves the activated release unavailable rather than served
+    // against components it was never built with.
+    await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: { ...stamped, installedPackDigest: "f".repeat(64) } }))
+      .rejects.toThrow("Activated release toolchain does not match the current installed runtime.");
   });
   it("passes the isolated Media root to the release service without exposing a client path", async () => {
     const mediaStoreRoot = "/tmp/release-bridge-isolated/media";

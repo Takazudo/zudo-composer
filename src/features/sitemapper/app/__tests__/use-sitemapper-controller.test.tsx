@@ -39,7 +39,7 @@ describe("useSitemapperController", () => {
   it("registers the real pending property debounce with the workspace save barrier", async () => {
     const sessions = createWorkspaceSaveRegistry(); const write = vi.fn(async () => undefined);
     const integration = { sessions, workspace: { id: "workspace" } } as unknown as ProductionProviderIntegration;
-    const { result, unmount } = renderHook(() => useSitemapperController({ record: record(), providerId: "sitemap-indexeddb", write }), {
+    const { result, unmount } = renderHook(() => useSitemapperController({ record: record(), providerId: "sitemap-filesystem", write }), {
       wrapper: ({ children }) => <WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}>{children}</WorkspaceContext.Provider>,
     });
     act(() => result.current.updatePropsDebounced("home", { title: "Pending title" }));
@@ -99,7 +99,7 @@ describe("useSitemapperController", () => {
     const integration = { sessions, workspace: { id: "workspace" } } as unknown as ProductionProviderIntegration;
     const value = record();
     value.document.navigation.primary = [{ id: "home-link", label: "Home", visible: true, destination: { kind: "route", nodeId: "home" } }];
-    const { result, unmount } = renderHook(() => useSitemapperController({ record: value, providerId: "sitemap-indexeddb", write }), {
+    const { result, unmount } = renderHook(() => useSitemapperController({ record: value, providerId: "sitemap-filesystem", write }), {
       wrapper: ({ children }) => <WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}>{children}</WorkspaceContext.Provider>,
     });
     act(() => result.current.updateNavigationDebounced("primary", "home-link", { label: "Start" }));

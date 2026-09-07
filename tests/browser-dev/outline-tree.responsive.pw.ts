@@ -94,7 +94,7 @@ async function openSitemapper(page: Page, name: string): Promise<void> {
   await dialog.getByRole("button", { name: "Create sitemap" }).click();
   // Creating navigates to the record's own URL, so the editor is reached the
   // same way a deep link reaches it.
-  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-indexeddb&sitemap=/);
+  await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
   await expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue(name);
 }
 
@@ -178,6 +178,18 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
     .poll(() => page.evaluate(() => window.matchMedia("(pointer: coarse)").matches))
     .toBe(coarseLane);
 
+  // `outline-tree.css` reveals the insertion tile from `@media (hover: hover)`,
+  // so that query — not the pointer type — is what the hover half of this test
+  // actually depends on. A desktop project running on a browser that reports no
+  // hovering pointer cannot reveal the tile at all, and would otherwise fail
+  // several steps later as an unexplained invisible element. Assert the
+  // capability where it can still be read as a lane fact.
+  await expect
+    .poll(() => page.evaluate(() => window.matchMedia("(hover: hover)").matches), {
+      message: "The desktop project must report a hovering pointer; the tile is revealed from @media (hover: hover).",
+    })
+    .toBe(!coarseLane);
+
   const gap = await ensureSiblingGap(page);
   const hit = gap.locator(".cms-tree-insert__hit");
   const tile = gap.locator(".cms-tree-insert__btn");
@@ -205,14 +217,19 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
   await test.step("hovering the gap reveals the tile and moves nothing", async () => {
     // On a coarse pointer the line and tile stay visible at 0.55 instead of
     // waiting for a hover that will never arrive.
-    if (coarseLane) expect(await opacityOf(tile)).toBeGreaterThan(0);
-    else expect(await opacityOf(tile)).toBe(0);
+    //
+    // Polled rather than sampled once, the way the closing assertion of this
+    // test already reads the same value: the fixture above closes an inline
+    // editor, and the resting opacity is what this step means — not whatever
+    // the style engine happens to report in the frame after that.
+    if (coarseLane) await expect.poll(() => opacityOf(tile)).toBeGreaterThan(0);
+    else await expect.poll(() => opacityOf(tile)).toBe(0);
 
     // Exercise the expanded hover strip away from the semantic tile at center.
     // No forced action: Playwright must resolve the real hit target. Its
     // actionability scroll is intentionally filtered by tree-relative geometry.
     await hit.hover({ position: { x: 4, y: 4 } });
-    expect(await opacityOf(tile)).toBeGreaterThan(0);
+    await expect.poll(() => opacityOf(tile)).toBeGreaterThan(0);
     expect(await readGeometry(page)).toEqual(baseline);
   });
 

@@ -19,8 +19,8 @@ import {
   expectNoHorizontalOverflow,
   gotoRoute,
   ROUTES,
-  watchRuntimeFailures,
 } from "./foundations-probe";
+import { watchRuntimeFailures } from "../runtime-failures";
 
 // The record this audit walks is built through the UI: the dev lane activates
 // no SiteProject, so its libraries never list, but creating and editing a

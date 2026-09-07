@@ -354,6 +354,11 @@ export class MappingEditorController {
   }
 
   async selectEntry(id: string): Promise<void> {
+    // A binding edit's resolution is in flight for as long as a provider round
+    // trip takes. Bumping the revision here would cancel it and then evaluate
+    // against the very definition it was about to replace — the edited binding
+    // would be missing from the preview until something else re-resolved.
+    await this.resolving;
     const entry = this.current.entries.find((item) => item.id === id) ?? await this.loadEntry(id);
     const revision = ++this.refreshRevision;
     this.set({ ...this.current, entry, evaluation: null, previewStatus: "loading", message: "Testing sample Entry…" });
@@ -503,7 +508,21 @@ export class MappingEditorController {
     this.set({ ...this.current, mapping: updated, saveStatus: "dirty", message: "Unsaved Mapping changes." });
   }
 
-  private async refreshResolution(): Promise<void> {
+  /**
+   * The resolution currently in flight, so a selection can wait for it instead
+   * of cancelling it. Resolution is a provider round trip since the stores
+   * moved onto the filesystem, and `selectEntry` bumps the same revision the
+   * resolution checks before committing.
+   */
+  private resolving: Promise<void> = Promise.resolve();
+
+  private refreshResolution(): Promise<void> {
+    const run = this.resolveAndEvaluate();
+    this.resolving = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  private async resolveAndEvaluate(): Promise<void> {
     const mapping = this.requireMapping(); const revision = ++this.refreshRevision;
     this.set({ ...this.current, previewStatus: "loading", message: "Checking Mapping readiness…" });
     const definition = await resolveMappingDefinition(mapping, this.catalogs, this.manifest);

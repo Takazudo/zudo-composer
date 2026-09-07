@@ -1,5 +1,5 @@
 import { activeSiteProjectValidationContext } from "../app/site-project-manifest";
-import { loadSampleSiteProject } from "../site-project/sample";
+import { loadSampleSiteProject } from "./site-project-fixture";
 
 export const siteProject = loadSampleSiteProject(activeSiteProjectValidationContext);
 /** Stable isolated namespace for Vitest's virtual-source alias. */

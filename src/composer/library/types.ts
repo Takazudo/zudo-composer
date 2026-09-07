@@ -98,7 +98,6 @@ export type CompositionUnpublishOutcome =
   | { status: "blocked"; dependents: readonly CompositionDependent[] };
 
 export const COMPOSITION_PROVIDER_IDS = {
-  indexeddb: "indexeddb",
   files: "files",
 } as const;
 
@@ -113,11 +112,6 @@ export interface CompositionProviderDescriptor {
 }
 
 export const COMPOSITION_PROVIDERS = {
-  indexeddb: {
-    id: COMPOSITION_PROVIDER_IDS.indexeddb,
-    label: "Browser storage",
-    storageLabel: "IndexedDB: zudo-composer",
-  },
   files: {
     id: COMPOSITION_PROVIDER_IDS.files,
     label: "Local files",

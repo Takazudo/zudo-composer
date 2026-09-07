@@ -162,14 +162,15 @@ readers or migrations.
 ## Workspace lifetime and capture
 
 `ProductionProviderIntegration.workspace` owns mutable identity independently
-from active source revision/build. The registry is `zudo-composer-workspaces-v1`;
-provider databases are `<provider-database>-workspace-v1-<workspaceId>`. No old
-revision database is read, migrated or deleted. The default first open reserves
+from active source revision/build. Durable workspace metadata lives in the
+host project's files, in one filesystem registry under `<dataDir>/workspaces`
+(see [Workspace scoping on the filesystem](#workspace-scoping-on-the-filesystem)
+below for its exact shape and locking). The default first open reserves
 `initial` once; the fixed seed manifest is persisted before any provider boot.
-Browser Web Locks serialize initial multi-database seeding across tabs. A failed
-seed retains its original manifest for retry; ready workspaces never seed again.
-Missing selected workspaces, provider databases or malformed metadata require
-explicit recovery, never silent reconstruction from activated source.
+A failed seed retains its original manifest for retry; ready workspaces never
+seed again. Missing selected workspaces, domain directories or malformed
+metadata require explicit recovery, never silent reconstruction from activated
+source.
 
 `workspace.open(id)` returns an initialized integration for that existing
 workspace. `create(project, baselineRevision, options?)` and `loadExample(...)`
@@ -179,15 +180,13 @@ initialization and atomic registry selection succeed. The shell swaps integratio
 then; an old integration continues to address its old drafts. Failed provisional
 seeds are cleaned up under the workspace initialization lock. Blocked/uncertain
 deletion retains one cleanup-pending attempt and retries finish deletion before
-reseeding; ready or selected workspaces are never deleted. The optional catalog
-example has one stable attempt ID and rebinds the current validated project only
-after cleanup. Its persisted before-complete guard cannot be bypassed by an
-ordinary open after a crash. See [the example walkthrough](./catalog-editorial-example.md).
+reseeding; ready or selected workspaces are never deleted. A persisted
+before-complete guard cannot be bypassed by an ordinary open after a crash.
 The
 `initialization.startFresh()` entry point fails with `code: "reset-required"`
 without writes; recovery UI uses `workspace.reset()` and handles its returned
 integration. An unavailable source can still open the selected existing workspace;
-to reset it, supply a valid project to `loadExample`.
+to reset it, supply a valid project to `workspace.create`.
 
 `workspace.metadata()` returns authored project metadata and its durable token.
 `updateMetadata(expectedToken, {name?, activeSitemap?})` persists changes with a
@@ -225,8 +224,8 @@ Replacement integrations share the same registry, so outstanding old-workspace
 handles and failures remain reachable after a workspace switch too.
 
 Composition, Mapping and Sitemap stores implement optional `snapshot()` and
-`mutationToken()` capabilities. IndexedDB snapshots contain `{records,
-mutationToken}` from one transaction; every committed record mutation, including
+`mutationToken()` capabilities. A snapshot contains `{records, mutationToken}`
+from one transaction; every committed record mutation, including
 seed/delete/clear, advances the token in the same transaction. Abort preserves
 both, clear never resets it, and safe-integer exhaustion fails closed. Content's
 `readAll()` and Media's `snapshot()` supply their existing durable tokens.
@@ -255,6 +254,66 @@ BroadcastChannel messages are refresh hints. Delayed/dropped messages cannot
 bypass persisted-token checks. Direct external filesystem changes are caught on
 the next capture/read; external processes do not promise browser wakeups.
 Sidebar/theme/pin preferences never enter metadata or capture tokens.
+
+## Workspace scoping on the filesystem
+
+The registry is one `TransactionalRecordStore` under the host's CMS root
+(`<dataDir>/workspaces`): `meta` carries the layout marker, `selection` carries
+the active pointer, and each workspace is one document holding the same
+`WorkspaceRecord` — schema, per-record `mutationToken` precondition and refusals
+all live in `workspace-record.ts`, independent of where the bytes go.
+Because the store commits the whole record set behind one pointer swap, a
+workspace record and the selection pointer can never disagree after a crash.
+
+Scoping is a *directory* prefix: each of the four authoring domain roots gains one
+`workspace-v1-<id>/` subdirectory. Scoping per domain root rather than
+re-rooting the CMS tree is what keeps a host's independently configured
+`compositionsDir`/`contentDir`/`mappingsDir`/`sitemapsDir` meaningful. Media is
+not scoped: no workspace owns its bytes. Workspace ids are filenames, so they
+are held to the record-id rule — lower-case and case-stable — which keeps two
+workspaces from colliding on a case-insensitive filesystem.
+
+Web Locks cannot reach across two dev-server processes, so once-only seeding is
+serialized by the shared kernel `O_EXCL` mutation lock instead, one lock
+directory per workspace beneath the registry root. The lock is never stolen: a
+holder that dies leaves the file behind and every later seed of that workspace
+fails closed until a human verifies no writer is running. Capture is unchanged
+— token → read → token, three attempts — because `WorkspaceToken` already
+admits the filesystem's generation values.
+
+## Browser-local preferences (exempt from the filesystem rule)
+
+Every authored record, workspace snapshot, precondition and digest lives in
+project files behind the file-provider protocol. `localStorage` is the one
+exception, and only for per-browser ergonomics that satisfy all four invariants:
+
+1. the value never enters authored/CMS data, a workspace snapshot, a
+   precondition, or a digest;
+2. the application behaves identically when the value is absent or cleared;
+3. every read and write is wrapped in `try`/`catch` (privacy modes, sandboxed
+   documents);
+4. keys are prefixed `zudo-composer`.
+
+The complete permitted inventory:
+
+| Preference | Owner |
+| --- | --- |
+| Theme | `src/theme/theme.ts` |
+| Content navigation pins | `src/app/navigation-preferences.ts` |
+| Rail widths and collapse | `src/app/rail.tsx`, `src/components/editor-chrome/resizer-contract.ts` |
+| Outline slug/count preferences | `src/components/outline-tree/prefs.ts` |
+| Composer canvas viewport | `src/features/composer/app/viewport.ts` |
+| Composer provider preference | `src/features/composer/routing/provider-preference.ts` (adapter in `src/features/composer/app/production-composer-app.tsx`; the coordinator guards both read and write) |
+| Media grid/list view | `src/features/media/media-app.tsx` |
+
+Anything not listed here is a violation. `scripts/check-headless-boundary.mjs`
+enforces the boundary directly: no `localStorage`, `sessionStorage` or IndexedDB
+global may appear anywhere under the domain storage trees, `src/site-project`,
+`src/features/release`, `src/shared`, `server`, `plugins`, or in the workspace
+storage/seeding/snapshot and provider-integration modules of `src/app`.
+
+The `BroadcastChannel` refresh-hint bus in `src/shared/persistence-generation.ts`
+is not storage and is unaffected.
 
 ## Generic workspace shell
 

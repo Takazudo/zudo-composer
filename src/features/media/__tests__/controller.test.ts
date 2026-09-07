@@ -8,7 +8,7 @@ describe("versioned Media controller", () => {
   it("blocks trash for injected Composition impacts even without structured Content uses", async () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
-    const contentServices = completeServices({ scan: async () => ({ status: "complete", locations: [], tokens: {}, message: "Composition uses remain", additionalLocations: [{ location: { domain: "compositions", providerId: "indexeddb", recordId: "page", nodeId: "image", property: "src", valuePath: ["src"] } }] }) });
+    const contentServices = completeServices({ scan: async () => ({ status: "complete", locations: [], tokens: {}, message: "Composition uses remain", additionalLocations: [{ location: { domain: "compositions", providerId: "files", recordId: "page", nodeId: "image", property: "src", valuePath: ["src"] } }] }) });
     const controller = createMediaLibraryController(provider, { contentServices }); await controller.initialize();
     await expect(controller.trash(controller.state.records)).rejects.toThrow("project uses");
     expect((await filesystem.list())[0]!.state).toBe("active");

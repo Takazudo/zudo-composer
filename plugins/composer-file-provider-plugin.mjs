@@ -9,13 +9,29 @@
 
 import { constants } from "node:fs";
 import * as fsPromises from "node:fs/promises";
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { resolve, posix, isAbsolute, dirname, basename } from "node:path";
+import { resolve, posix, dirname, basename } from "node:path";
+import { appModuleId, readRootEnvironment, resolveWorkspaceRoot, validateRootOverride } from "./roots.mjs";
+import {
+  FILE_PROVIDER_CAPABILITY_HEADER,
+  FILE_PROVIDER_MAX_BODY_BYTES,
+  FILE_PROVIDER_WORKSPACE_HEADER,
+  isSafeWorkspaceHeader,
+  bodyBytes,
+  connectRequestHead,
+  createDevCapability,
+  errorResponse,
+  hasExactKeys,
+  isDeadResponse,
+  isPlainObject,
+  json,
+  readBody,
+  sendConnectResponse,
+  validateRequestHead,
+} from "./file-provider-http.mjs";
 
 /** @param {string | undefined} root */
 export function validateMediaStoreRoot(root) {
-  if (root !== undefined && (!isAbsolute(root) || resolve(root) !== root)) throw new Error("Media store root must be an absolute resolved path.");
-  return root;
+  return validateRootOverride(root, "Media store root");
 }
 
 /** @typedef {import("../src/composer/library/types.ts").CompositionRecord} CompositionRecord */
@@ -23,17 +39,34 @@ export function validateMediaStoreRoot(root) {
 /** @typedef {{status: number, headers: Record<string, string>, body: string, bodyEncoding: "utf8"}} DevResponse */
 
 export const COMPOSER_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_file_provider";
-export const COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER = "x-zudo-composer-capability";
+export const COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER = FILE_PROVIDER_CAPABILITY_HEADER;
+export const COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER = FILE_PROVIDER_WORKSPACE_HEADER;
 /** UTF-8 bytes. Large enough for a substantial document plus generated JSX. */
-export const COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES = 2 * 1024 * 1024;
+export const COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES = FILE_PROVIDER_MAX_BODY_BYTES;
 export const COMPOSER_FILE_PROVIDER_ROOT = "compositions";
+export const COMPOSITIONS_ROOT_ENV = "ZUDO_COMPOSITIONS_ROOT";
 export const MEDIA_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_media_file_provider";
 export const MEDIA_FILE_PROVIDER_OPERATION_HEADER = "x-zudo-composer-media-operation";
 export const MEDIA_FILE_PROVIDER_FILE_NAME_HEADER = "x-zudo-composer-media-file-name";
 export const MEDIA_FILE_PROVIDER_RECORD_ID_HEADER = "x-zudo-composer-media-record-id";
 export const MEDIA_FILE_PROVIDER_METADATA_HEADER = "x-zudo-composer-media-metadata";
 export const MEDIA_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
-export const MEDIA_FILE_PROVIDER_ROOT = "media-store";
+// Mirrors `DEFAULT_SETTINGS.mediaDir` in `server/config/settings.ts`. A plugin
+// never reads the host config itself — every lane passes `mediaStoreRoot`
+// explicitly — so this is only the fallback for a direct caller.
+export const MEDIA_FILE_PROVIDER_ROOT = "cms/media";
+// A URL naming the conventional store directory is refused even when the store
+// was configured elsewhere: the catalog and the private version bytes are never
+// source files, so Vite must not reach them through `/@fs` or a source URL.
+const MEDIA_STORE_PATH = new RegExp(`(?:^|/)${MEDIA_FILE_PROVIDER_ROOT}(?:/|$)`);
+
+/** Explicit option, then the environment override, then the workspace default. */
+export function resolveCompositionsRoot(workspaceRoot, configured) {
+  return validateRootOverride(configured, "Compositions root")
+    ?? readRootEnvironment(process.env[COMPOSITIONS_ROOT_ENV], "Compositions root")
+    ?? resolve(workspaceRoot, COMPOSER_FILE_PROVIDER_ROOT);
+}
+
 const MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/octet-stream"]);
 const MEDIA_FILE_PROVIDER_BYTES_DIRECTORY = "versions";
 const MEDIA_FILE_PROVIDER_BYTE_PATTERN = /^\/uploaded-media\/(sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/;
@@ -48,58 +81,6 @@ const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
 // A valid 255-code-point display name can expand to 3,060 characters when
 // encodeURIComponent represents astral Unicode as four percent-encoded bytes.
 const MEDIA_ENCODED_FILE_NAME_MAX_LENGTH = 4096;
-
-const JSON_HEADERS = Object.freeze({
-  "cache-control": "no-store",
-  "content-type": "application/json; charset=utf-8",
-  "x-content-type-options": "nosniff",
-});
-
-/**
- * @param {number} status
- * @param {unknown} payload
- * @param {Record<string, string>} [headers]
- * @returns {DevResponse}
- */
-function json(status, payload, headers = {}) {
-  return {
-    status,
-    headers: { ...JSON_HEADERS, ...headers },
-    body: JSON.stringify(payload),
-    bodyEncoding: "utf8",
-  };
-}
-
-/**
- * @param {number} status
- * @param {string} code
- * @param {string} message
- * @param {string | undefined} [operation]
- * @param {Record<string, string>} [headers]
- */
-function errorResponse(status, code, message, operation, headers) {
-  return json(status, {
-    ok: false,
-    error: { code, message, ...(operation === undefined ? {} : { operation }) },
-  }, headers);
-}
-
-/** @param {unknown} value @returns {value is Record<string, unknown>} */
-function isPlainObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * @param {unknown} value
- * @param {string[]} required
- * @param {string[]} [optional]
- */
-function hasExactKeys(value, required, optional = []) {
-  if (!isPlainObject(value)) return false;
-  const keys = Object.keys(value).sort();
-  const allowed = new Set([...required, ...optional]);
-  return required.every((key) => key in value) && keys.every((key) => allowed.has(key));
-}
 
 /** @param {unknown} value @returns {value is string} */
 function isSafeId(value) {
@@ -124,53 +105,6 @@ function parseOutputsById(value) {
     return undefined;
   }
   return result;
-}
-
-/** @param {string | undefined} body */
-function bodyBytes(body) {
-  return Buffer.byteLength(body ?? "", "utf8");
-}
-
-/** @param {DevRequest} req */
-function isSameOriginDevRequest(req) {
-  if (req.headers["sec-fetch-site"] !== "same-origin") return false;
-  const host = req.headers.host;
-  const origin = req.headers.origin;
-  if (!host || !origin || /[\s,]/.test(host)) return false;
-  try {
-    const expected = new URL(`${req.protocol ?? "http"}://${host}`).origin;
-    return new URL(origin).origin === expected && origin === expected;
-  } catch {
-    return false;
-  }
-}
-
-function validateRequestHead(
-  req,
-  endpoint,
-  capability,
-  acceptedMediaTypes = new Set(["application/json"]),
-  unsupportedMediaTypeMessage = "Content-Type must be application/json.",
-) {
-  if (req.url !== endpoint) return errorResponse(404, "not-found", "File-provider route not found.");
-  if (req.method !== "POST") {
-    return errorResponse(405, "method-not-allowed", "Only POST is allowed.", undefined, { allow: "POST" });
-  }
-  if (!isSameOriginDevRequest(req)) {
-    return errorResponse(403, "origin-rejected", "A same-origin development request is required.");
-  }
-  if (!hasCapability(req, capability)) {
-    return errorResponse(401, "invalid-capability", "The development file capability is missing or invalid.");
-  }
-  const mediaType = req.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
-  if (mediaType === undefined || !acceptedMediaTypes.has(mediaType)) {
-    return errorResponse(415, "unsupported-media-type", unsupportedMediaTypeMessage);
-  }
-  return undefined;
-}
-
-function isDeadResponse(req, res) {
-  return req.aborted === true || req.socket?.destroyed === true || res.destroyed === true || res.writableEnded === true;
 }
 
 function mediaOperationError(value, operation) {
@@ -223,10 +157,10 @@ function sendMediaFileError(res) {
 /**
  * Serve an uploaded media byte file directly from the development store.
  *
- * @param {{projectRoot: string, mediaStoreRoot?: string, createStore?: () => Promise<any>, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open, realpath?: typeof fsPromises.realpath}}} options
+ * @param {{workspaceRoot: string, mediaStoreRoot?: string, createStore?: () => Promise<any>, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open, realpath?: typeof fsPromises.realpath}}} options
  */
 export function createMediaFileMiddleware(options) {
-  const configuredRoot = validateMediaStoreRoot(options.mediaStoreRoot) ?? resolve(options.projectRoot, MEDIA_FILE_PROVIDER_ROOT);
+  const configuredRoot = validateMediaStoreRoot(options.mediaStoreRoot) ?? resolve(options.workspaceRoot, MEDIA_FILE_PROVIDER_ROOT);
   const lstatFile = options.operations?.lstat ?? fsPromises.lstat;
   const openFile = options.operations?.open ?? fsPromises.open;
   const realpathFile = options.operations?.realpath ?? fsPromises.realpath;
@@ -238,8 +172,8 @@ export function createMediaFileMiddleware(options) {
     // ordinary source-file URLs, even when they are outside publicDir.
     try {
       const decoded = typeof pathname === "string" ? posix.normalize(decodeURIComponent(pathname)) : "";
-      const sourcePath = decoded.startsWith("/@fs/") ? decoded.slice(4) : resolve(options.projectRoot, `.${decoded}`);
-      if (/(?:^|\/)media-store(?:\/|$)/.test(decoded) || sourcePath === configuredRoot || sourcePath.startsWith(`${configuredRoot}/`)) {
+      const sourcePath = decoded.startsWith("/@fs/") ? decoded.slice(4) : resolve(options.workspaceRoot, `.${decoded}`);
+      if (MEDIA_STORE_PATH.test(decoded) || sourcePath === configuredRoot || sourcePath.startsWith(`${configuredRoot}/`)) {
         res.statusCode = 404; res.setHeader("cache-control", "no-store"); res.end(); return;
       }
     } catch { res.statusCode = 400; res.end(); return; }
@@ -494,15 +428,6 @@ export function createMediaUploadMiddleware(options) {
   };
 }
 
-/** @param {DevRequest} req @param {string} expected */
-function hasCapability(req, expected) {
-  const supplied = req.headers[COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER];
-  if (typeof supplied !== "string") return false;
-  const a = Buffer.from(supplied);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 class OutputRequiredError extends Error {
   /** @param {unknown} request */
   constructor(request) {
@@ -650,7 +575,7 @@ function validateEnvelope(payload) {
  *   capability: string,
  *   maxBodyBytes?: number,
  *   validateRecord: (value: unknown) => {ok: true, record: CompositionRecord} | {ok: false, issue: {message: string}},
- *   createStore: (options: {provideJsx: (record: CompositionRecord, request: unknown) => string | {status: "generated", code: string} | {status: "blocked", reason: string}}) => Promise<{
+ *   createStore: (options: {workspaceId: string, provideJsx: (record: CompositionRecord, request: unknown) => string | {status: "generated", code: string} | {status: "blocked", reason: string}}) => Promise<{
  *     list(): Promise<unknown>, get(id: string): Promise<unknown>, snapshot(): Promise<unknown>,
  *     put(record: CompositionRecord, jsx?: string): Promise<unknown>,
  *     delete(id: string): Promise<boolean>, clear(): Promise<void>,
@@ -671,6 +596,13 @@ export function createComposerFileProviderMiddleware(options) {
     // even when the handler is embedded outside the Vite/Connect adapter.
     const headError = validateRequestHead(req, endpoint, options.capability);
     if (headError !== undefined) return headError;
+    // Compositions are one of the four workspace-scoped authoring domains, so
+    // an unnamed workspace is refused rather than written to the shared root
+    // every workspace directory sits beside.
+    const workspaceId = req.headers[FILE_PROVIDER_WORKSPACE_HEADER];
+    if (!isSafeWorkspaceHeader(workspaceId)) {
+      return errorResponse(400, "invalid-request", "A valid composition workspace header is required.");
+    }
     if (bodyBytes(req.body) > maxBodyBytes) {
       return errorResponse(413, "body-too-large", `Request body exceeds the ${maxBodyBytes}-byte limit.`);
     }
@@ -689,6 +621,7 @@ export function createComposerFileProviderMiddleware(options) {
     const outputsById = "outputsById" in envelope ? envelope.outputsById : Object.create(null);
     try {
       const store = await options.createStore({
+        workspaceId,
         provideJsx(record, request) {
           const output = outputsById[record.id];
           if (output === undefined) throw new OutputRequiredError(request);
@@ -751,75 +684,22 @@ export function createComposerFileProviderMiddleware(options) {
 const VIRTUAL_CONFIG_ID = "virtual:composer-file-provider-config";
 const RESOLVED_VIRTUAL_CONFIG_ID = `\0${VIRTUAL_CONFIG_ID}`;
 
-/** Read a Connect request without ever buffering more than the public limit. */
-function readBody(req, maxBodyBytes) {
-  return new Promise((resolveBody, rejectBody) => {
-    const chunks = [];
-    let size = 0;
-    let settled = false;
-    let ended = false;
-    const cleanup = () => {
-      req.off("data", onData);
-      req.off("end", onEnd);
-      req.off("error", onError);
-      req.off("aborted", onAborted);
-      req.off("close", onClose);
-    };
-    const rejectOnce = (error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      rejectBody(error);
-    };
-    const onData = (chunk) => {
-      size += chunk.length;
-      if (size > maxBodyBytes) {
-        rejectOnce(Object.assign(new Error("body-too-large"), { code: "BODY_TOO_LARGE" }));
-        req.resume();
-        return;
-      }
-      chunks.push(chunk);
-    };
-    const onEnd = () => {
-      if (settled) return;
-      ended = true;
-      settled = true;
-      cleanup();
-      resolveBody(Buffer.concat(chunks).toString("utf8"));
-    };
-    const onError = (error) => rejectOnce(error);
-    const onAborted = () => rejectOnce(Object.assign(new Error("request-aborted"), { code: "REQUEST_ABORTED" }));
-    const onClose = () => {
-      if (!ended) rejectOnce(Object.assign(new Error("request-closed"), { code: "REQUEST_ABORTED" }));
-    };
-    req.on("data", onData);
-    req.on("end", onEnd);
-    req.on("error", onError);
-    req.on("aborted", onAborted);
-    req.on("close", onClose);
-  });
-}
-
-function sendConnectResponse(res, response) {
-  res.statusCode = response.status;
-  for (const [name, value] of Object.entries(response.headers)) res.setHeader(name, value);
-  res.end(response.body);
-}
-
 /** Vite plugin. Each dev server closure receives an independent capability.
- * @param {{mediaStoreRoot?: string}} options
+ * @param {{mediaStoreRoot?: string, compositionsRoot?: string, workspaceRoot?: string}} options
  */
 export default function composerFileProviderPlugin(options = {}) {
   const explicitMediaRoot = validateMediaStoreRoot(options.mediaStoreRoot);
+  // Authored data lives in the host project, package entries live in the
+  // package; `config.root` is neither once the tool runs from node_modules.
+  const workspaceRoot = resolveWorkspaceRoot(options.workspaceRoot);
+  const compositionsRoot = resolveCompositionsRoot(workspaceRoot, options.compositionsRoot);
   let command = "build";
   let capability;
-  let projectRoot;
   return {
     name: "composer-file-provider",
     configResolved(config) {
       command = config.command;
-      projectRoot = config.root;
-      capability = command === "serve" ? randomBytes(32).toString("base64url") : undefined;
+      capability = command === "serve" ? createDevCapability() : undefined;
     },
     resolveId(id) {
       return id === VIRTUAL_CONFIG_ID ? RESOLVED_VIRTUAL_CONFIG_ID : undefined;
@@ -834,6 +714,7 @@ export default function composerFileProviderPlugin(options = {}) {
         mediaEndpoint: MEDIA_FILE_PROVIDER_ENDPOINT,
         capability,
         capabilityHeader: COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER,
+        workspaceHeader: COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER,
         maxBodyBytes: COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES,
         mediaMaxBodyBytes: MEDIA_UPLOAD_MAX_BYTES,
         mediaOperationHeader: MEDIA_FILE_PROVIDER_OPERATION_HEADER,
@@ -844,21 +725,22 @@ export default function composerFileProviderPlugin(options = {}) {
     },
     async configureServer(server) {
       const activeCapability = capability;
-      if (activeCapability === undefined || projectRoot === undefined) return;
+      if (activeCapability === undefined) return;
       const {
-        createFilesystemCompositionStore,
+        createWorkspaceScopedCompositionStore,
         validateCompositionRecord,
-      } = await server.ssrLoadModule("/src/composer/storage/file-provider/dev-server-entry.ts");
+      } = await server.ssrLoadModule(appModuleId("src/composer/storage/file-provider/dev-server-entry.ts"));
       const handler = createComposerFileProviderMiddleware({
         capability: activeCapability,
         validateRecord: validateCompositionRecord,
-        createStore: ({ provideJsx }) => createFilesystemCompositionStore({
-          compositionsRoot: resolve(projectRoot, COMPOSER_FILE_PROVIDER_ROOT),
-          provideJsx,
-        }),
+        createStore: ({ workspaceId, provideJsx }) => createWorkspaceScopedCompositionStore(
+          compositionsRoot,
+          workspaceId,
+          { provideJsx },
+        ),
       });
-      const { createFilesystemMediaStore } = await server.ssrLoadModule("/src/media/storage/file-provider/dev-server-entry.ts");
-      const mediaStoreRoot = explicitMediaRoot ?? resolve(projectRoot, MEDIA_FILE_PROVIDER_ROOT);
+      const { createFilesystemMediaStore } = await server.ssrLoadModule(appModuleId("src/media/storage/file-provider/dev-server-entry.ts"));
+      const mediaStoreRoot = explicitMediaRoot ?? resolve(workspaceRoot, MEDIA_FILE_PROVIDER_ROOT);
       const mediaHandler = createMediaUploadMiddleware({
         capability: activeCapability,
         createStore: () => createFilesystemMediaStore({ mediaStoreRoot }),
@@ -869,15 +751,8 @@ export default function composerFileProviderPlugin(options = {}) {
       });
       server.middlewares.use(async (req, res, next) => {
         if (req.url !== COMPOSER_FILE_PROVIDER_ENDPOINT) return next();
-        const headers = Object.fromEntries(
-          Object.entries(req.headers).map(([name, value]) => [name, Array.isArray(value) ? undefined : value]),
-        );
-        const requestHead = {
-          url: req.url,
-          method: req.method,
-          headers,
-          protocol: req.socket?.encrypted === true ? "https" : "http",
-        };
+        const requestHead = connectRequestHead(req);
+        const headers = requestHead.headers;
         const headError = validateRequestHead(requestHead, COMPOSER_FILE_PROVIDER_ENDPOINT, activeCapability);
         if (headError !== undefined) {
           sendConnectResponse(res, headError);
@@ -912,7 +787,7 @@ export default function composerFileProviderPlugin(options = {}) {
         sendConnectResponse(res, await handler({ ...requestHead, body }));
       });
       // Vite's public-dir middleware serves only files in its startup-scanned publicFiles Set (updated by chokidar), so a file uploaded during the session otherwise gets the SPA shell until the watcher catches up (#180).
-      server.middlewares.use(createMediaFileMiddleware({ projectRoot, mediaStoreRoot, createStore: () => createFilesystemMediaStore({ mediaStoreRoot }) }));
+      server.middlewares.use(createMediaFileMiddleware({ workspaceRoot, mediaStoreRoot, createStore: () => createFilesystemMediaStore({ mediaStoreRoot }) }));
     },
   };
 }

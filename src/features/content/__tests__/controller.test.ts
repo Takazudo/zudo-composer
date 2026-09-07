@@ -198,8 +198,8 @@ describe("ContentAuthoringController", () => {
 
   it("does not let an earlier A graph read overwrite an A→B→A selection", async () => {
     const people = createContentModelRecord({ name: "People", kind: "collection", fields: [] }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
-    const owners = createContentModelRecord({ name: "Owners", kind: "collection", fields: [{ id: "person", key: "person", label: "Person", required: false, kind: "reference", target: { providerId: "content-indexeddb", recordId: "people" } }] }, { id: "owners", timestamp: "2026-01-01T00:00:00.000Z" });
-    const a = createContentEntryRecord("people", {}, { id: "a", timestamp: "2026-01-01T00:00:00.000Z" }), b = createContentEntryRecord("people", {}, { id: "b", timestamp: "2026-01-01T00:00:00.000Z" }), owner = createContentEntryRecord("owners", { person: { providerId: "content-indexeddb", modelId: "people", recordId: "a" } }, { id: "owner", timestamp: "2026-01-01T00:00:00.000Z" });
+    const owners = createContentModelRecord({ name: "Owners", kind: "collection", fields: [{ id: "person", key: "person", label: "Person", required: false, kind: "reference", target: { providerId: "content-filesystem", recordId: "people" } }] }, { id: "owners", timestamp: "2026-01-01T00:00:00.000Z" });
+    const a = createContentEntryRecord("people", {}, { id: "a", timestamp: "2026-01-01T00:00:00.000Z" }), b = createContentEntryRecord("people", {}, { id: "b", timestamp: "2026-01-01T00:00:00.000Z" }), owner = createContentEntryRecord("owners", { person: { providerId: "content-filesystem", modelId: "people", recordId: "a" } }, { id: "owner", timestamp: "2026-01-01T00:00:00.000Z" });
     const provider = createMemoryContentProvider({ models: [people, owners], entries: [a, b, owner] }); const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("people");
     const readAll = provider.store.readAll, stale = deferred<Awaited<ReturnType<typeof readAll>>>(); let first = true;
     vi.spyOn(provider.store, "readAll").mockImplementation(() => { if (first) { first = false; return stale.promise; } return readAll(); });
@@ -256,8 +256,8 @@ describe("ContentAuthoringController", () => {
   it("refuses deletion when more than one registered provider cannot share an atomic transaction", async () => {
     const people = createContentModelRecord({ name: "People", kind: "collection", fields: [] }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
     const person = createContentEntryRecord("people", {}, { id: "person", timestamp: "2026-01-01T00:00:00.000Z" });
-    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "author", key: "author", label: "Author", required: false, kind: "reference", target: { providerId: "content-indexeddb", recordId: "people" } }] }, { id: "articles", timestamp: "2026-01-01T00:00:00.000Z" });
-    const article = createContentEntryRecord("articles", { author: { providerId: "content-indexeddb", modelId: "people", recordId: "person" } }, { id: "article", timestamp: "2026-01-01T00:00:00.000Z" });
+    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "author", key: "author", label: "Author", required: false, kind: "reference", target: { providerId: "content-filesystem", recordId: "people" } }] }, { id: "articles", timestamp: "2026-01-01T00:00:00.000Z" });
+    const article = createContentEntryRecord("articles", { author: { providerId: "content-filesystem", modelId: "people", recordId: "person" } }, { id: "article", timestamp: "2026-01-01T00:00:00.000Z" });
     const primary = createMemoryContentProvider({ models: [people], entries: [person] });
     const secondary = createMemoryContentProvider({ models: [articles], entries: [article], providerId: "editorial", providerLabel: "Editorial" });
     const controller = createContentAuthoringController(primary, { providers: [primary, secondary] }); await controller.initialize(); await controller.openModel("people"); await controller.openEntry("person");
@@ -266,15 +266,15 @@ describe("ContentAuthoringController", () => {
   });
 
   it("atomically binds single-provider model/field blockers and rejects every deletion on a dangling graph", async () => {
-    const people = createContentModelRecord({ name: "People", kind: "collection", fields: [], presentation: { groups: [], views: [], inverses: [{ id: "articles", label: "Articles", source: { providerId: "content-indexeddb", recordId: "articles" }, fieldId: "author" }] } }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
-    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "author", key: "author", label: "Author", required: false, kind: "reference", target: { providerId: "content-indexeddb", recordId: "people" } }] }, { id: "articles", timestamp: "2026-01-01T00:00:00.000Z" });
+    const people = createContentModelRecord({ name: "People", kind: "collection", fields: [], presentation: { groups: [], views: [], inverses: [{ id: "articles", label: "Articles", source: { providerId: "content-filesystem", recordId: "articles" }, fieldId: "author" }] } }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
+    const articles = createContentModelRecord({ name: "Articles", kind: "collection", fields: [{ id: "author", key: "author", label: "Author", required: false, kind: "reference", target: { providerId: "content-filesystem", recordId: "people" } }] }, { id: "articles", timestamp: "2026-01-01T00:00:00.000Z" });
     const primary = createMemoryContentProvider({ models: [people, articles], entries: [] });
     const controller = createContentAuthoringController(primary); await controller.initialize(); await controller.openModel("people");
     await expect(controller.deleteModel("people")).rejects.toThrow(/targets this model.*not attempted/i);
     await controller.openModel("articles");
     await expect(controller.removeField("author")).rejects.toThrow(/Inverse articles.*depends on this field.*not attempted/i);
 
-    const dangling = createContentEntryRecord("articles", { author: { providerId: "content-indexeddb", modelId: "people", recordId: "missing" } }, { id: "dangling", timestamp: "2026-01-01T00:00:00.000Z" });
+    const dangling = createContentEntryRecord("articles", { author: { providerId: "content-filesystem", modelId: "people", recordId: "missing" } }, { id: "dangling", timestamp: "2026-01-01T00:00:00.000Z" });
     await primary.store.putEntry(dangling); await controller.reloadEntries(); await controller.openEntry("dangling");
     await expect(controller.deleteEntry("dangling")).rejects.toThrow(/unresolved providers or records.*not attempted/i);
   });
@@ -311,8 +311,8 @@ describe("ContentAuthoringController", () => {
   });
 
   it("three-way merges unambiguous stable-reference additions without dropping either side", async () => {
-    const target = { providerId: "content-indexeddb", modelId: "people", recordId: "a" } as const;
-    const model = createContentModelRecord({ name: "People", kind: "collection", fields: [{ id: "friends", key: "friends", label: "Friends", required: false, kind: "reference-list", target: { providerId: "content-indexeddb", recordId: "people" }, ordered: true }] }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
+    const target = { providerId: "content-filesystem", modelId: "people", recordId: "a" } as const;
+    const model = createContentModelRecord({ name: "People", kind: "collection", fields: [{ id: "friends", key: "friends", label: "Friends", required: false, kind: "reference-list", target: { providerId: "content-filesystem", recordId: "people" }, ordered: true }] }, { id: "people", timestamp: "2026-01-01T00:00:00.000Z" });
     const owner = createContentEntryRecord("people", { friends: [target] }, { id: "owner", timestamp: "2026-01-01T00:00:00.000Z" });
     const targets = ["a", "b", "c"].map((id) => createContentEntryRecord("people", {}, { id, timestamp: "2026-01-01T00:00:00.000Z" }));
     const provider = createMemoryContentProvider({ models: [model], entries: [owner, ...targets] }); const controller = createContentAuthoringController(provider); await controller.initialize(); await controller.openModel("people"); await controller.openEntry("owner");

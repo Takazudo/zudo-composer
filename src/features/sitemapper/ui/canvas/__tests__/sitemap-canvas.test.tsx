@@ -51,13 +51,35 @@ function props(document = doc(), sources: ReadonlyMap<string, PageSourceLabel> =
 
 describe("SitemapCanvas", () => {
   it("offers Add child page for a Mapping-sourced canvas node", async () => {
-    const value = doc(); value.root[0]!.source = { kind: "mapping", ref: { providerId: "mapping-indexeddb", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug" } };
+    const value = doc(); value.root[0]!.source = { kind: "mapping", ref: { providerId: "mapping-filesystem", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug" } };
     const callbacks = props(value); render(<SitemapCanvas {...callbacks} />);
     fireEvent.click(screen.getByRole("button", { name: "Actions for Home" }));
     const add = await screen.findByRole("menuitem", { name: "Add child page" });
     expect(add).not.toHaveAttribute("aria-disabled", "true"); fireEvent.click(add);
     expect(callbacks.onAddChild).toHaveBeenCalledWith("Home");
   });
+  it("reveals a selection once, not again on every later layout", async () => {
+    // A layout recomputation is a measurement settling, not a request to
+    // scroll. Re-asserting the reveal on each one scrolled the selected node's
+    // ancestors repeatedly, which pulls the page back under whoever is working
+    // in it and moves every other row on the route while it happens.
+    const reveal = vi.mocked(Element.prototype.scrollIntoView);
+    reveal.mockClear();
+    const callbacks = { ...props(), selectedId: "Home" };
+    const { rerender } = render(<SitemapCanvas {...callbacks} />);
+    await waitFor(() => expect(reveal).toHaveBeenCalledTimes(1));
+
+    // A re-render that changes the measured geometry, and so the layout, but
+    // not the selection.
+    rerender(<SitemapCanvas {...callbacks} zoom={1.5} />);
+    rerender(<SitemapCanvas {...callbacks} zoom={2} />);
+    await waitFor(() => expect(reveal).toHaveBeenCalledTimes(1));
+
+    // Choosing a different node is a request, and is honoured.
+    rerender(<SitemapCanvas {...callbacks} selectedId="Child" />);
+    await waitFor(() => expect(reveal).toHaveBeenCalledTimes(2));
+  });
+
   it("follows the page media seam while measuring geometry from the canvas", async () => {
     const listeners = new Set<EventListenerOrEventListenerObject>();
     const media = {

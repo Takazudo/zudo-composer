@@ -1,19 +1,11 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Dashboard } from "./app/dashboard";
-import { CatalogEditorialExampleLoader } from "./app/catalog-example-panel";
-import { createCatalogEditorialExample } from "./site-project/sample/example-loader";
-import { activeSiteProjectValidationContext } from "./app/site-project-manifest";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "./app/provider-integration";
 import { WorkspaceContext } from "./app/workspace-context";
 import { parseIntent, formatIntent } from "./app/route-intents";
 import { Button } from "./components/ui";
-import { workspaceDatabaseName } from "./app/workspace-storage";
-import { CONTENT_DATABASE_NAME } from "./content";
-import { COMPOSER_DATABASE_NAME } from "./composer/storage/indexeddb/types";
-import { MAPPING_DATABASE_NAME } from "./mapping/storage/indexeddb/types";
-import { SITEMAPPER_DATABASE_NAME } from "./sitemapper/storage/indexeddb/types";
-import { WORKSPACE_DATABASE_NAME } from "./app/workspace-storage";
+import { isAuthoringPersistenceChannel } from "./app/persistence-channels";
 import { createProjectMediaUsageInspection } from "./site-project/media/usage";
 import { subscribePersistenceChanges } from "./shared/persistence-generation";
 import { Shell } from "./app/shell";
@@ -40,10 +32,6 @@ export interface AppProps {
 
 export function App({ themeController, integration }: AppProps = {}) {
   const operationGate = useMemo(createApplicationOperationGate, []);
-  const [exampleGateBusy, setExampleGateBusy] = useState(operationGate.busy);
-  const [examplePreviousWorkspaceId, setExamplePreviousWorkspaceId] = useState<string>();
-  const [exampleCreationNotice, setExampleCreationNotice] = useState<string>();
-  useEffect(() => operationGate.subscribe(() => setExampleGateBusy(operationGate.busy)), [operationGate]);
   const swapCommitted = useRef<(() => void) | null>(null);
   const ownedThemeController = useMemo(
     () => (themeController ? null : createThemeController(bootstrapTheme())),
@@ -193,10 +181,7 @@ export function App({ themeController, integration }: AppProps = {}) {
   const mediaContentServices = useMemo(() => createMediaContentServices(
     providers.contentProviders,
     () => providers.sessions.flush(),
-    (listener) => subscribePersistenceChanges((database) => {
-      const workspaceId = providers.workspace.id;
-      if (database === WORKSPACE_DATABASE_NAME || database === "compositions:files" || (workspaceId && [CONTENT_DATABASE_NAME, COMPOSER_DATABASE_NAME, MAPPING_DATABASE_NAME, SITEMAPPER_DATABASE_NAME].some((name) => database === workspaceDatabaseName(name, workspaceId)))) listener();
-    }),
+    (listener) => subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel)) listener(); }),
     createProjectMediaUsageInspection({
       readProject: async () => { const result = await providers.getCurrentSiteProject({ flushSessions: false }); if (result.status !== "ready") throw new Error(result.error.message); return result.project; },
       catalog: providers.componentProvider.catalog,
@@ -226,21 +211,7 @@ export function App({ themeController, integration }: AppProps = {}) {
   else if (path === "/mapping") content = <MappingRouteContent provider={target?.route === "mapping" ? providers.mappingProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} attachmentCallbacks={mappingAttachmentService} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
   else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} contentServices={mediaContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;
-  else if (path === "/") content = <><Dashboard summary={workspaceSummary} /><CatalogEditorialExampleLoader
-    context={activeSiteProjectValidationContext} available={!!providers.mediaProvider} busy={busy || exampleGateBusy}
-    creationNotice={exampleCreationNotice}
-    previousWorkspace={examplePreviousWorkspaceId && examplePreviousWorkspaceId !== providers.workspace.id ? { id: examplePreviousWorkspaceId, open: () => replaceWorkspace(() => providers.workspace.open(examplePreviousWorkspaceId)) } : undefined}
-    create={async () => {
-      const previousId = providers.workspace.id;
-      const opened = await replaceWorkspace(async () => {
-        const result = (await createCatalogEditorialExample({ confirmed: true, context: activeSiteProjectValidationContext, media: providers.mediaProvider, loadExample: (project, revision, commit) => providers.workspace.loadExample(project, revision, commit) }))!;
-        setExampleCreationNotice(result.message);
-        return result.value;
-      });
-      if (opened) setExamplePreviousWorkspaceId(previousId);
-      return opened;
-    }}
-  /></>;
+  else if (path === "/") content = <Dashboard summary={workspaceSummary} />;
   else if (path === "/review") content = <ReleaseRoute controller={release} href={(item) => {
     if (!("domain" in item)) return item.path.includes("media") ? "/media" : item.path.includes("sitemap") ? "/sitemapper" : item.path.includes("mapping") ? "/mapping" : item.path.includes("content") ? "/content" : null;
     if (item.domain === "content-entry") { const entry = release.getSnapshot().working?.providers.content.find(({ id }) => id === item.providerId)?.entries.find(({ id }) => id === item.recordId); return entry ? formatIntent({ route: "content", providerId: item.providerId, modelId: entry.modelId, entryId: entry.id }) : "/content"; }

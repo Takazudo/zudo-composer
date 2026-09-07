@@ -5,7 +5,7 @@
  * a row menu really escapes the table's scroll clipping, and that focus really
  * comes back to what opened a menu or a dialog.
  *
- * They live on the **dist** lane rather than beside the rest of #166 in
+ * They live on the **host** lane rather than beside the rest of #166 in
  * `tests/browser-dev/`, and the reason is worth writing down because it is not
  * obvious and it cost an iteration to find:
  *
@@ -20,31 +20,19 @@
  *   the dev lane cannot produce.
  *
  * Neither proof below needs `pnpm dev` for anything else: both want a desktop
- * viewport and a populated library, which is exactly what the dist lane serves
- * from the bundled SiteProject sample. Activating a project for the dev lane is
- * a real option and a better long-term answer — see the note in
+ * viewport and a populated library, which is exactly what the host lane gives
+ * them — `scripts/run-host-browser.mjs` activates the sample SiteProject into
+ * the disposable host project before the dev server starts. Activating a
+ * project for the dev lane too is a real option — see the note in
  * `tests/browser-dev/foundations-probe.ts` — but it changes what that lane
- * means and is not this sub-issue's call to make.
+ * means.
  */
 
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
+import { watchRuntimeFailures } from "../runtime-failures";
 
 const SAMPLE_SITEMAP = "Sample Studio sitemap";
-
-function watchRuntimeFailures(page: Page) {
-  const failures: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
-  });
-  page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
-  page.on("requestfailed", (request) => {
-    const errorText = request.failure()?.errorText;
-    if (errorText === "net::ERR_ABORTED") return;
-    failures.push(`request: ${request.url()} (${errorText})`);
-  });
-  return failures;
-}
 
 function sitemapRow(page: Page, name: string): Locator {
   return page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });

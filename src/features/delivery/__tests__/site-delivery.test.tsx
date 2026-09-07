@@ -1,48 +1,68 @@
 import { createHash } from "node:crypto";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
-import { IDBFactory } from "fake-indexeddb";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../../test/workspace-providers";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "../../../app/provider-integration";
 import { activeComponentProvider } from "../../composer/active-pack";
-import { loadSampleSiteProject } from "../../../site-project/sample";
+import { loadSampleSiteProject } from "../../../test/site-project-fixture";
 import { serializeSiteProject } from "../../../site-project/model/canonical";
 import { SiteDelivery, loadWorkingPreviewSnapshot } from "../site-delivery";
-import bundledRelease from "../../../../artifacts/site-release/bundled-release.json";
-import type { ActivatedDeliverySource, DeliverySourceContract } from "../source";
+import { compileSiteProject } from "../../../site-project/compiler";
+import type { ActivatedDeliveryArtifact, ActivatedDeliverySource, DeliverySourceContract } from "../source";
 import { validateActivatedDeliveryArtifact } from "../source";
 import { providerFixture, PNG } from "../../media/__tests__/versioned-fixture";
 
 afterEach(cleanup);
+const hosts: TemporaryWorkspaceProviders[] = [];
+afterEach(async () => { await Promise.all(hosts.splice(0).map((value) => value.dispose())); });
+async function host(): Promise<TemporaryWorkspaceProviders> {
+  const value = await createTemporaryWorkspaceProviders();
+  hosts.push(value);
+  return value;
+}
 const sample = () => loadSampleSiteProject({ componentPack: activeComponentProvider.manifest });
 const revision = (project: ReturnType<typeof sample>) => createHash("sha256").update(serializeSiteProject(project), "utf8").digest("hex");
 function fixture(project = sample()): ProductionProviderIntegration {
   return { componentProvider: activeComponentProvider, getCurrentSiteProject: vi.fn(async () => ({ status: "ready" as const, project: structuredClone(project) })) } as unknown as ProductionProviderIntegration;
 }
 const working = (providers: ProductionProviderIntegration): DeliverySourceContract => ({ kind: "working-preview", providers });
-const bundled = bundledRelease as unknown as ActivatedDeliverySource;
-const activated = (value: ActivatedDeliverySource = bundled): DeliverySourceContract => ({ kind: "activated", componentProvider: activeComponentProvider, read: () => value });
+
+/** Compile the checked-in fixture into the exact activated artifact shape delivery consumes. */
+async function activatedArtifact(project = sample()): Promise<ActivatedDeliveryArtifact> {
+  const compilation = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog });
+  if (compilation.status !== "ready") throw new Error(`fixture compilation blocked: ${compilation.diagnostics.map(({ message }) => message).join(" ")}`);
+  const sha = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
+  const files: Record<string, string> = { "build.json": sha(JSON.stringify(compilation.build)), "stage.json": sha("stage") };
+  compilation.build.modules.forEach((module, index) => { files[`module-${String(index).padStart(4, "0")}.mjs`] = sha(module.code); });
+  const { packId, packVersion, contractVersion } = activeComponentProvider.manifest;
+  return {
+    kind: "activated-local",
+    identity: { projectId: project.id, revision: revision(project), buildId: sha(`build:${project.id}`) },
+    project, build: compilation.build, completionDigest: sha(`complete:${project.id}`), files, mediaPins: [],
+    toolchain: { compiler: "compiler/2", componentPack: { packId, packVersion, contractVersion }, packSpecifier: "@fixture/pack/composer-pack", packSource: "workspace:*", installedPackDigest: "c".repeat(64), contractDigest: "d".repeat(64) },
+  };
+}
+let artifact: ActivatedDeliveryArtifact;
+beforeAll(async () => { artifact = await activatedArtifact(); });
+const ready = (): ActivatedDeliverySource => ({ status: "ready", artifact });
+const activated = (value: ActivatedDeliverySource = ready()): DeliverySourceContract => ({ kind: "activated", componentProvider: activeComponentProvider, read: () => value });
 
 describe("SiteDelivery", () => {
-  it("ships one explicit self-contained completed sample with all seven deterministic visitor routes", () => {
-    expect(bundled.status).toBe("ready");
-    if (bundled.status !== "ready") throw new Error("Bundled fixture missing");
-    expect(validateActivatedDeliveryArtifact(bundled.artifact)).toBeUndefined();
-    expect(bundled.artifact.kind).toBe("bundled-static");
-    expect(bundled.artifact.identity.revision).toBe(revision(sample()));
-    expect(bundled.artifact.build.routes.map(({ pathname }) => pathname)).toEqual([
+  it("compiles the fixture into one self-contained artifact with all seven deterministic visitor routes", () => {
+    expect(validateActivatedDeliveryArtifact(artifact, activeComponentProvider.manifest)).toBeUndefined();
+    expect(artifact.build.routes.map(({ pathname }) => pathname)).toEqual([
       "/", "/about", "/journal", "/journal/map-the-moving-parts", "/journal/review-in-small-loops", "/journal/start-with-the-question", "/services",
     ]);
-    expect(bundled.artifact.build.navigation.primary.map(({ href }) => href)).toEqual(["/", "/about", "/services", "/journal"]);
-    expect(bundled.artifact.build.routes.find(({ pathname }) => pathname === "/journal/start-with-the-question")?.ancestors.map(({ pathname }) => pathname)).toEqual(["/", "/journal"]);
-    expect(Object.keys(bundled.artifact.files).filter((name) => name.startsWith("module-"))).toHaveLength(8);
+    expect(artifact.build.navigation.primary.map(({ href }) => href)).toEqual(["/", "/about", "/services", "/journal"]);
+    expect(artifact.build.routes.find(({ pathname }) => pathname === "/journal/start-with-the-question")?.ancestors.map(({ pathname }) => pathname)).toEqual(["/", "/journal"]);
+    expect(Object.keys(artifact.files).filter((name) => name.startsWith("module-"))).toHaveLength(artifact.build.modules.length);
   });
   it("captures exact managed Media for visitor output and blocks missing provider or corrupt bytes", async () => {
     const { provider, filesystem } = await providerFixture();
     const asset = await filesystem.upload({ fileName: "download.png", declaredMediaType: "image/png", bytes: PNG });
     const project = sample();
     project.providers.compositions[0]!.records.find(({ id }) => id === "home-page")!.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-media/asset-${asset.id}`, children: "Download" }, slots: {} });
-    const idb = new IDBFactory();
-    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, compositionIdbFactory: idb, contentIdbFactory: idb, mappingIdbFactory: idb, sitemapIdbFactory: idb });
+    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, createProviders: (await host()).createProviders });
     const providers = { ...base, captureWorkspace: vi.fn(() => base.captureWorkspace()), getCurrentSiteProject: vi.fn(() => { throw new Error("Must use aggregate project"); }) };
     const result = await loadWorkingPreviewSnapshot(providers);
     expect(result.status).toBe("ready");
@@ -56,8 +76,8 @@ describe("SiteDelivery", () => {
   });
   it.each(["media", "project"])("rejects a changed %s aggregate token rather than recapturing latest", async (domain) => {
     const { provider, filesystem } = await providerFixture();
-    const project = sample(), idb = new IDBFactory();
-    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, compositionIdbFactory: idb, contentIdbFactory: idb, mappingIdbFactory: idb, sitemapIdbFactory: idb });
+    const project = sample();
+    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, createProviders: (await host()).createProviders });
     const capture = vi.fn(() => base.captureWorkspace());
     let checks = 0;
     const providers = { ...base, captureWorkspace: capture, isCaptureCurrent: async (value: Parameters<typeof base.isCaptureCurrent>[0]) => {
@@ -81,7 +101,7 @@ describe("SiteDelivery", () => {
     render(<SiteDelivery source={activated()} pathname={pathname} />);
     expect(screen.getByRole("heading", { name: "Loading site" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
-    expect(screen.getByText("Bundled static sample")).toBeInTheDocument();
+    expect(screen.getByText("Activated local release — not deployed")).toBeInTheDocument();
   });
 
   it("renders Sitemap navigation, collection breadcrumbs, footer, and not-found", async () => {
@@ -114,17 +134,17 @@ describe("SiteDelivery", () => {
     await waitFor(() => expect(document.title).toBe("Site unavailable — Site delivery"));
     expect(screen.queryByText("Clear ideas, carefully shaped")).not.toBeInTheDocument();
     cleanup();
-    const invalid = structuredClone((bundled as Extract<ActivatedDeliverySource, { status: "ready" }>).artifact); invalid.project.componentPack.packVersion = "wrong";
+    const invalid = structuredClone(artifact); invalid.project.componentPack.packVersion = "wrong";
     render(<SiteDelivery source={activated({ status: "ready", artifact: invalid })} pathname="/site" />);
     expect(await screen.findByRole("heading", { name: "Site data blocked" })).toBeInTheDocument();
     await waitFor(() => expect(document.title).toBe("Site data blocked — Site delivery"));
     cleanup();
-    const blocked = structuredClone((bundled as Extract<ActivatedDeliverySource, { status: "ready" }>).artifact); blocked.build.projectId = "wrong";
+    const blocked = structuredClone(artifact); blocked.build.projectId = "wrong";
     render(<SiteDelivery source={activated({ status: "ready", artifact: blocked })} pathname="/site" />);
     expect(await screen.findByRole("heading", { name: "Site build blocked" })).toBeInTheDocument();
     await waitFor(() => expect(document.title).toBe("Site build blocked — Site delivery"));
     cleanup();
-    const staleRuntime = structuredClone((bundled as Extract<ActivatedDeliverySource, { status: "ready" }>).artifact); staleRuntime.toolchain.componentPack.packVersion = "stale";
+    const staleRuntime = structuredClone(artifact); staleRuntime.toolchain.componentPack.packVersion = "stale";
     render(<SiteDelivery source={activated({ status: "ready", artifact: staleRuntime })} pathname="/site" />);
     expect(await screen.findByText(/does not match the installed component pack/)).toBeInTheDocument();
   });
@@ -135,7 +155,7 @@ describe("SiteDelivery", () => {
     source.read = () => selected;
     render(<SiteDelivery source={source} pathname="/site" />);
     const retryButton = await screen.findByRole("button", { name: "Retry loading site" });
-    selected = bundled; fireEvent.click(retryButton);
+    selected = ready(); fireEvent.click(retryButton);
     expect(await screen.findByRole("heading", { name: "Clear ideas, carefully shaped" })).toBeInTheDocument();
     await waitFor(() => expect(document.activeElement).toBe(document.getElementById("main-content")));
   });
@@ -149,9 +169,10 @@ describe("SiteDelivery", () => {
   });
 
   it("reads a new provider snapshot after remount and shows a persisted Content edit", async () => {
-    const idb = new IDBFactory();
     const project = sample();
-    const providers = createProductionProviderIntegration({ project, sourceRevision: revision(project), compositionIdbFactory: idb, contentIdbFactory: idb, mappingIdbFactory: idb, sitemapIdbFactory: idb });
+    const providers = createProductionProviderIntegration({ project, sourceRevision: revision(project), createProviders: (await host()).createProviders });
+    // Seeding writes real files; readiness is a precondition here, not the assertion.
+    await providers.initialization.initialize();
     render(<SiteDelivery source={working(providers)} pathname="/website-preview/about" />);
     expect(await screen.findByRole("heading", { name: "A studio built around useful clarity" })).toBeInTheDocument();
     expect(screen.getByText("Live working preview — not activated")).toBeInTheDocument();

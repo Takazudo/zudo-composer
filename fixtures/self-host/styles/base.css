@@ -1,0 +1,8 @@
+/* A host that owns its components owns their CSS and their Tailwind scan point
+   too; there is no package stylesheet to import. */
+@import "tailwindcss/preflight";
+@import "tailwindcss/utilities";
+
+@source "../components";
+
+.self-host-banner { margin: 0; }

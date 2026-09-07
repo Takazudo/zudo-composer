@@ -49,24 +49,42 @@ export type SitemapRecordLoadOutcome =
   | { status: "invalid"; issue: SitemapRecordValidationIssue; raw: unknown }
   | { status: "future-schema"; foundSchemaVersion: number; raw: unknown };
 
-export type SitemapPersistenceOperation =
-  | "initialize"
-  | "list"
-  | "get"
-  | "put"
-  | "delete"
-  | "clear";
+// Runtime tables, not bare unions: a provider that rebuilds an error from a
+// wire payload has to decide whether a received operation/code is one of ours,
+// and a union alone cannot answer that at runtime.
+export const SITEMAP_PERSISTENCE_OPERATIONS = [
+  "initialize",
+  "list",
+  "get",
+  "put",
+  "delete",
+  "clear",
+  "transact",
+] as const;
+export type SitemapPersistenceOperation = (typeof SITEMAP_PERSISTENCE_OPERATIONS)[number];
 
-export type SitemapPersistenceErrorCode =
-  | "unavailable"
-  | "blocked"
-  | "versionchange"
-  | "unsupported-version"
-  | "validation"
-  | "read-failed"
-  | "write-failed"
-  | "transaction-failed"
-  | "unknown";
+export const SITEMAP_PERSISTENCE_ERROR_CODES = [
+  "unavailable",
+  "blocked",
+  "versionchange",
+  "unsupported-version",
+  "validation",
+  "conflict",
+  "read-failed",
+  "write-failed",
+  "transaction-failed",
+  "commit-uncertain",
+  "unknown",
+] as const;
+export type SitemapPersistenceErrorCode = (typeof SITEMAP_PERSISTENCE_ERROR_CODES)[number];
+
+export function isSitemapPersistenceOperation(value: unknown): value is SitemapPersistenceOperation {
+  return (SITEMAP_PERSISTENCE_OPERATIONS as readonly unknown[]).includes(value);
+}
+
+export function isSitemapPersistenceErrorCode(value: unknown): value is SitemapPersistenceErrorCode {
+  return (SITEMAP_PERSISTENCE_ERROR_CODES as readonly unknown[]).includes(value);
+}
 
 /** Operational provider failure. Decode and record validation use outcomes. */
 export class SitemapPersistenceError extends Error {
@@ -81,6 +99,13 @@ export class SitemapPersistenceError extends Error {
   ) {
     super(message, options);
   }
+
+  /**
+   * Structured context the shared file-provider transport forwards verbatim.
+   * `retryable` is not derivable from the code alone, so it has to cross the
+   * wire rather than be re-guessed browser-side.
+   */
+  get details(): { retryable: boolean } { return { retryable: this.retryable }; }
 }
 
 export interface SitemapStore {
@@ -104,8 +129,9 @@ export function isSitemapCollectionStore(store: SitemapStore): store is SitemapC
 }
 
 export const SITEMAP_PROVIDERS = {
-  indexeddb: { id: "sitemap-indexeddb", label: "Browser storage", storageLabel: "IndexedDB: zudo-composer-sitemapper" },
+  filesystem: { id: "sitemap-filesystem", label: "Project files" },
 } as const;
+export type SitemapProviderDescriptor = (typeof SITEMAP_PROVIDERS)[keyof typeof SITEMAP_PROVIDERS];
 
 export type SitemapLibraryRecoveryReason = "invalid" | "future-schema";
 
@@ -134,7 +160,7 @@ export interface SitemapProviderInitializer {
 }
 
 export interface SitemapProvider {
-  descriptor?: typeof SITEMAP_PROVIDERS.indexeddb;
+  descriptor?: SitemapProviderDescriptor;
   store: SitemapStore;
   initialization: SitemapProviderInitializer;
 }
