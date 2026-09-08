@@ -12,6 +12,23 @@ describe("Button", () => {
     expect(button.className).toBe("cms-btn");
   });
 
+  it.each([false, true])("composes busy with caller disabled=%s across transitions", (disabled) => {
+    const onClick = vi.fn();
+    const { rerender } = render(<Button busy disabled={disabled} onClick={onClick}>Retry</Button>);
+    const button = screen.getByRole("button", { name: "Retry" }) as HTMLButtonElement;
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button.querySelector(".cms-btn__spinner svg")).toHaveAttribute("aria-hidden", "true");
+    button.click();
+    expect(onClick).not.toHaveBeenCalled();
+    rerender(<Button busy={false} disabled={disabled} onClick={onClick}>Retry</Button>);
+    expect(button.disabled).toBe(disabled);
+    expect(button).not.toHaveAttribute("aria-busy");
+    expect(button.querySelector(".cms-btn__spinner")).toBeNull();
+    button.click();
+    expect(onClick).toHaveBeenCalledTimes(disabled ? 0 : 1);
+  });
+
   it("applies one class per variant", () => {
     const { container } = render(
       <>
