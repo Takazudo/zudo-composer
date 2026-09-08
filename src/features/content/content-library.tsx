@@ -97,7 +97,8 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
 
   const openChildCount = openModelId === null ? 0 : nodes.find((node) => node.id === openModelId)?.children?.length ?? 0;
   // A Single holds exactly one Entry, so its add row withdraws once it has one.
-  const canAddEntry = openModel !== null && !(openModel.document.kind === "single" && state.entries.length > 0);
+  const entryActionPending = state.modelSelectionPending || state.entryCreationPending;
+  const canAddEntry = !entryActionPending && openModel !== null && !(openModel.document.kind === "single" && state.entries.length > 0);
 
   // Entries carry no authored order: they are listed newest first by
   // `createdAt` and creation prepends, so a position between two of them cannot
@@ -164,7 +165,7 @@ export function ContentNavigator({ state, controller, run, onAddModel, onDeleteM
               <ContentRowMenu
                 node={node}
                 kind={model === null ? "entry" : "model"}
-                canHoldAnotherEntry={rowCanAdd}
+                canHoldAnotherEntry={!entryActionPending && rowCanAdd}
                 onOpen={() => { selectRow(node.id); setActivePane("main"); }}
                 onAddEntry={() => run(async () => {
                   await controller.openModel(node.id);
