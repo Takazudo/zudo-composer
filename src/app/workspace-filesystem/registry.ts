@@ -31,7 +31,7 @@ import {
   type WorkspaceRecord,
 } from "../workspace-record";
 import type { WorkspaceSnapshotSource } from "../workspace-snapshot";
-import { assertWorkspaceDirectoryId, isSafeWorkspaceId } from "../../shared/workspace-scope";
+import { isSafeWorkspaceId } from "../../shared/workspace-scope";
 import {
   WORKSPACE_META_RECORD_ID,
   WORKSPACE_REGISTRY_LAYOUT,
@@ -53,6 +53,11 @@ const RESERVED_RECORD_IDS: readonly string[] = [WORKSPACE_META_RECORD_ID, WORKSP
 function registryError(operation: Operation, code: WorkspaceRegistryErrorCode, message: string, cause?: unknown): WorkspaceRegistryError {
   const retryable = code === "read-failed" || code === "write-failed" || code === "conflict";
   return new WorkspaceRegistryError(operation, code, message, retryable, cause === undefined ? undefined : { cause });
+}
+
+/** Keep browser-supplied identities typed before any filesystem work. */
+export function assertRegistryWorkspaceId(id: unknown, operation: Operation): asserts id is string {
+  if (!isSafeWorkspaceId(id)) throw registryError(operation, "validation", "Invalid workspace identity; a workspace id must be a stable path-safe id.");
 }
 
 const errorPolicy: SafeRootErrorPolicy<Operation, DurableExtraErrorCode> = {
@@ -242,6 +247,7 @@ export class FilesystemWorkspaceRegistry {
 
   /** Without an id, the selected workspace; `undefined` when none is selected. */
   async open(id?: string): Promise<WorkspaceRecord | undefined> {
+    if (id !== undefined) assertRegistryWorkspaceId(id, "read");
     const registry = await this.read("read");
     const selected = id ?? registry.active;
     if (selected === null || selected === undefined) return undefined;
@@ -283,7 +289,7 @@ export class FilesystemWorkspaceRegistry {
   // --------------------------------------------------------------- mutations
 
   async create(project: SiteProject, baselineRevision: string, id: string = this.newWorkspaceId(), requiresBeforeComplete = false): Promise<WorkspaceRecord> {
-    assertWorkspaceDirectoryId(id);
+    assertRegistryWorkspaceId(id, "create");
     if (RESERVED_RECORD_IDS.includes(id)) throw registryError("create", "validation", `Workspace id "${id}" is reserved for registry metadata.`);
     return this.mutate("create", (before) => {
       const existing = before.workspaces.find((candidate) => candidate.id === id);
@@ -309,6 +315,7 @@ export class FilesystemWorkspaceRegistry {
 
   /** Caller holds the workspace initialization lock throughout directory cleanup. */
   async markSeedCleanup(id: string, revision: string): Promise<void> {
+    assertRegistryWorkspaceId(id, "discard");
     await this.mutate("discard", (before) => {
       const record = this.owned(before, id, "discard");
       if (record.status !== "seeding" || record.baselineRevision !== revision || before.active === id) {
@@ -321,6 +328,7 @@ export class FilesystemWorkspaceRegistry {
 
   /** Remove the exact attempt only after every workspace directory was removed. */
   async discardSeeding(id: string, revision: string): Promise<void> {
+    assertRegistryWorkspaceId(id, "discard");
     await this.mutate("discard", (before) => {
       const record = this.owned(before, id, "discard");
       if (record.status !== "seeding" || !record.seedCleanupPending || record.baselineRevision !== revision || before.active === id) {
@@ -331,6 +339,7 @@ export class FilesystemWorkspaceRegistry {
   }
 
   async complete(id: string, creationValidated = false): Promise<WorkspaceRecord> {
+    assertRegistryWorkspaceId(id, "complete");
     return this.mutate("complete", (before) => {
       const record = this.owned(before, id, "complete");
       if (record.seedCleanupPending) throw registryError("complete", "conflict", "Workspace seed cleanup must finish before completion.");
@@ -346,6 +355,7 @@ export class FilesystemWorkspaceRegistry {
   }
 
   async update(id: string, expectedToken: number, patch: WorkspaceMetadataPatch): Promise<WorkspaceRecord> {
+    assertRegistryWorkspaceId(id, "update");
     return this.mutate("update", (before) => {
       const record = this.owned(before, id, "update");
       if (record.status !== "ready" || record.mutationToken !== expectedToken) throw registryError("update", "conflict", "Workspace metadata changed; reload before applying this update.");

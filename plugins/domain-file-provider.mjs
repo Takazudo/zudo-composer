@@ -68,7 +68,8 @@ export function serializeDomainError(domain, cause, fallbackOperation, isDomainE
     : `The local ${domain} provider failed unexpectedly. Retry or restart the development server.`;
   const details = recognized ? /** @type {any} */ (cause).details : undefined;
   return {
-    status: STATUS_BY_CODE[code] ?? 500,
+    // Registry payload validation uses 400, like invalid workspace headers.
+    status: domain === "workspace" && code === "validation" ? 400 : (STATUS_BY_CODE[code] ?? 500),
     error: { domain, operation, code, message, ...(details === undefined ? {} : { details }) },
   };
 }
