@@ -1,10 +1,14 @@
+// @ts-check
+
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./routes.mjs";
 
 const root = resolve(import.meta.dirname, "..");
+/** @param {string} path */
 const read = (path) => readFileSync(join(root, path), "utf8");
+/** @param {string} path */
 const readJson = (path) => JSON.parse(read(path));
 const packageJson = readJson("package.json");
 const vite = read("vite.config.ts");
@@ -107,6 +111,7 @@ const forbiddenProductionMarkers = [
   "atomicActivate",
   "atomicDiscard",
 ];
+/** @param {string} directory @returns {string[]} */
 function filesUnder(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
