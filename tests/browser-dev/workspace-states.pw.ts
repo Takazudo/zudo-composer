@@ -15,7 +15,7 @@ test("an unavailable workspace source stays explicit, not synthetic editable dat
   await expect(page.getByRole("heading", { name: "Open workspace" })).toBeVisible();
   await expect(page.getByRole("alert").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry opening", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Create catalog & editorial example" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create fresh workspace", exact: true })).toBeVisible();
 });
 
 test("Media loading, unavailable and no-match states retain actionable truth", async ({ page }) => {
