@@ -129,20 +129,16 @@ async function startHostServer(hostRoot) {
 async function authorOneSitemap(page) {
   try {
     await page.goto(`${ORIGIN}/sitemapper`);
-    // A freshly installed host has no activated SiteProject and therefore no
-    // workspace, which is the state this proof wants: the library offers to
-    // create one, and that offer is the documented way in. Whichever of the two
-    // buttons appears first decides whether that step is needed at all.
-    const create = page.getByRole("button", { name: "Create fresh workspace" });
-    const newSitemap = page.getByRole("button", { name: "New sitemap" });
-    await Promise.race([
-      create.waitFor({ state: "visible", timeout: 90_000 }),
-      newSitemap.waitFor({ state: "visible", timeout: 90_000 }),
-    ]);
-    if (await create.isVisible()) {
-      await create.click();
-      await create.waitFor({ state: "hidden", timeout: 90_000 });
-    }
+    // This host is fresh: require the first-project path rather than accepting
+    // an already-open workspace that would skip the bootstrap proof.
+    const create = page.getByRole("button", { name: "Create project", exact: true });
+    await create.click({ timeout: 90_000 });
+    const projectDialog = page.getByRole("dialog", { name: "Create project", exact: true });
+    await projectDialog.getByRole("textbox", { name: "Project name", exact: true }).fill("Install smoke project");
+    await projectDialog.getByRole("button", { name: "Create project", exact: true }).click();
+    await projectDialog.waitFor({ state: "hidden", timeout: 90_000 });
+    await page.getByRole("heading", { name: "Sitemaps", exact: true }).waitFor({ timeout: 90_000 });
+    const newSitemap = page.getByRole("button", { name: "New sitemap", exact: true });
     await newSitemap.click({ timeout: 90_000 });
     const dialog = page.getByRole("dialog", { name: "Create sitemap" });
     await dialog.getByRole("textbox", { name: "Sitemap name" }).fill(SITEMAP_NAME);
