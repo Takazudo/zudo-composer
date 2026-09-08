@@ -1,4 +1,5 @@
 import type { JSX, Ref } from "preact";
+import { LoadingIcon } from "../icons";
 import { cx } from "./class-names";
 import type { WithPlainClass } from "./class-names";
 
@@ -9,6 +10,8 @@ type NativeButtonProps = WithPlainClass<Omit<JSX.IntrinsicElements["button"], "s
 
 interface ButtonBaseProps extends NativeButtonProps {
   variant?: ButtonVariant;
+  /** Shows a decorative spinner and prevents activation while work is running. */
+  busy?: boolean;
   /** `md` 30px (default), `sm` 26px, `xs` 22px — the chrome control ladder. */
   size?: ButtonSize;
   /**
@@ -31,7 +34,7 @@ export type ButtonProps =
   | (ButtonBaseProps & { iconOnly?: false });
 
 export function Button(props: ButtonProps) {
-  const { variant = "default", size = "md", iconOnly = false, class: className, type = "button", elementRef, ...rest } = props;
+  const { variant = "default", size = "md", iconOnly = false, class: className, type = "button", elementRef, busy = false, disabled, children, ...rest } = props;
   return (
     <button
       ref={elementRef}
@@ -44,6 +47,11 @@ export function Button(props: ButtonProps) {
         className,
       )}
       {...rest}
-    />
+      disabled={busy || disabled}
+      aria-busy={busy ? true : rest["aria-busy"]}
+    >
+      {busy ? <LoadingIcon size="sm" class="cms-btn__spinner" /> : null}
+      {children}
+    </button>
   );
 }

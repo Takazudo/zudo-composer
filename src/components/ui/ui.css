@@ -375,6 +375,7 @@
 .cms-status--ok { color: var(--color-success); }
 .cms-status--warn { color: var(--color-warning-fg); }
 .cms-status--err { color: var(--color-danger); }
+.cms-btn__spinner,
 .cms-status__spinner { animation: cms-spin 1s linear infinite; }
 
 @keyframes cms-spin { to { rotate: 360deg; } }
@@ -708,6 +709,7 @@
 @media (prefers-reduced-motion: reduce) {
   .cms-switch__track,
   .cms-switch__track::after { transition-duration: .01ms; }
+  .cms-btn__spinner,
   .cms-status__spinner { animation-duration: .01ms; animation-iteration-count: 1; }
 }
 .cms-disclosure { border-radius: 0; }
