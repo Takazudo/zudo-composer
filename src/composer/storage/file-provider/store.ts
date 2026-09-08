@@ -46,11 +46,17 @@ type SuccessResponse<T> = { ok: true; result: T };
 type ErrorResponse = {
   ok: false;
   error: ComposerFileProviderErrorPayload;
-  request?: unknown;
 };
 
-function isProtocolResponse<T>(value: unknown): value is SuccessResponse<T> | ErrorResponse {
+type OutputRequiredResponse = {
+  ok: "needs-output";
+  request: ComposerFileProviderDerivedOutputRequest;
+};
+type ProtocolResponse<T> = SuccessResponse<T> | ErrorResponse | OutputRequiredResponse;
+
+function isProtocolResponse<T>(value: unknown): value is ProtocolResponse<T> {
   if (typeof value !== "object" || value === null || !("ok" in value)) return false;
+  if (value.ok === "needs-output") return "request" in value && isOutputRequest(value.request);
   if (value.ok === true) return "result" in value;
   if (value.ok !== false || !("error" in value)) return false;
   const error = value.error;
@@ -235,12 +241,12 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
     const outputsById: Record<string, ComposerFileProviderDerivedOutputPlan> = Object.create(null);
     for (let round = 0; round < MAX_OUTPUT_PLAN_ROUNDS; round += 1) {
       const response = await this.fetchJson<T>(operation, { ...fields, outputsById });
-      if (response.ok) {
+      if (response.ok === true) {
         const result = decodeResult(response.result);
         if (operation !== "list" && operation !== "get") notifyPersistenceChange(COMPOSITION_FILE_PROVIDER_CHANNEL);
         return result;
       }
-      if (response.error.code !== "output-required") {
+      if (response.ok !== "needs-output") {
         throw this.fromServerError(persistenceOperation(operation), response.error);
       }
       if (!isOutputRequest(response.request)) {
@@ -311,7 +317,7 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
 
   private async request<T>(operation: WireOperation, fields: Record<string, unknown> = {}): Promise<T> {
     const response = await this.fetchJson<T>(operation, fields);
-    if (response.ok) {
+    if (response.ok === true) {
       const deleted = operation === "delete" && response.result === true;
       const lifecycleDeleted = operation === "delete-with-dependency-check"
         && typeof response.result === "object" && response.result !== null
@@ -319,13 +325,21 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
       if (operation === "clear" || deleted || lifecycleDeleted) notifyPersistenceChange(COMPOSITION_FILE_PROVIDER_CHANNEL);
       return response.result;
     }
+    if (response.ok === "needs-output") {
+      throw persistenceError(
+        persistenceOperation(operation),
+        "validation",
+        `The file provider unexpectedly requested output planning for "${operation}".`,
+        false,
+      );
+    }
     throw this.fromServerError(persistenceOperation(operation), response.error);
   }
 
   private async fetchJson<T>(
     operation: WireOperation,
     fields: Record<string, unknown>,
-  ): Promise<SuccessResponse<T> | ErrorResponse> {
+  ): Promise<ProtocolResponse<T>> {
     let response: Response;
     try {
       response = await this.fetchImpl(this.config.endpoint, {
@@ -372,6 +386,16 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
       );
     }
     if (!isProtocolResponse<T>(payload)) {
+      // Preserve the planning-specific diagnostic even though malformed closures
+      // are rejected at the transport boundary.
+      if (typeof payload === "object" && payload !== null && "ok" in payload && payload.ok === "needs-output") {
+        throw persistenceError(
+          persistenceOperation(operation),
+          "validation",
+          "The file provider returned an invalid dependency closure for output planning.",
+          false,
+        );
+      }
       throw persistenceError(
         persistenceOperation(operation),
         "unknown",
