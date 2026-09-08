@@ -39,6 +39,21 @@ describe("StatusChip", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 
+  it("defaults retrying off and restores the same markup after retrying", () => {
+    const onRetry = vi.fn();
+    const { container, rerender } = render(<StatusChip state="failed" onRetry={onRetry} />);
+    const normal = container.innerHTML;
+    const button = screen.getByRole("button", { name: "Retry" });
+    expect(button).toBeEnabled();
+    expect(button).not.toHaveAttribute("aria-busy");
+    expect(button.querySelector(".cms-btn__spinner")).toBeNull();
+    rerender(<StatusChip state="failed" onRetry={onRetry} retrying />);
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
+    rerender(<StatusChip state="failed" onRetry={onRetry} retrying={false} />);
+    expect(container.innerHTML).toBe(normal);
+  });
+
   it("appends the storage detail after a middot", () => {
     render(<StatusChip state="saved" detail="Browser storage" />);
     expect(screen.getByRole("status")).toHaveTextContent("Saved · Browser storage");

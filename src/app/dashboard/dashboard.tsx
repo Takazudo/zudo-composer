@@ -86,7 +86,7 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
       </header>
 
       {error ? (
-        <Banner tone="err" title="This workspace could not be read." action={<Button size="sm" onClick={reload}>Retry</Button>}>
+        <Banner tone="err" title="This workspace could not be read." action={<Button size="sm" onClick={reload} busy={loading}>Retry</Button>}>
           {error}
         </Banner>
       ) : null}
@@ -98,7 +98,7 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
       ) : (
         <section class="cms-dash__stats" aria-label="Workspace status">
           {statCards(counts).map((card) => (
-            <StatCardView key={card.id} card={card} onRetry={reload} />
+            <StatCardView key={card.id} card={card} onRetry={reload} retrying={loading} />
           ))}
         </section>
       )}
@@ -116,6 +116,7 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
                       sources={recent.unavailable.map(({ source }) => source)}
                       sentence={(listed) => `Records from ${listed} are not in this list.`}
                       onRetry={reload}
+                      retrying={loading}
                     />
                   </div>
                 ) : null}
@@ -138,7 +139,7 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
         )}
 
         <div class="cms-dash__side">
-          {empty || !answered ? null : <AttentionCard attention={attention} onRetry={reload} />}
+          {empty || !answered ? null : <AttentionCard attention={attention} onRetry={reload} retrying={loading} />}
 
           <DashCard title="How the pieces connect" titleId="cms-dash-pipeline">
             <div class="cms-dash-pipeline">
@@ -228,7 +229,7 @@ function StatsSkeleton(): JSX.Element {
   );
 }
 
-function StatCardView({ card, onRetry }: { card: StatCard; onRetry: () => void }): JSX.Element {
+function StatCardView({ card, onRetry, retrying }: { card: StatCard; onRetry: () => void; retrying: boolean }): JSX.Element {
   const CardIcon = card.icon;
   const head = (
     <span class="cms-dash-stat__head">
@@ -241,7 +242,7 @@ function StatCardView({ card, onRetry }: { card: StatCard; onRetry: () => void }
     return (
       <div class="cms-dash-stat cms-dash-stat--unavailable">
         {head}
-        <StatusChip state="failed" label="Unavailable" detail={card.error} onRetry={onRetry} />
+        <StatusChip state="failed" label="Unavailable" detail={card.error} onRetry={onRetry} retrying={retrying} />
       </div>
     );
   }
@@ -290,7 +291,7 @@ function RecentRow({ record }: { record: WorkspaceRecord }): JSX.Element {
   );
 }
 
-function AttentionCard({ attention, onRetry }: { attention: WorkspaceAttention | null; onRetry: () => void }): JSX.Element {
+function AttentionCard({ attention, onRetry, retrying }: { attention: WorkspaceAttention | null; onRetry: () => void; retrying: boolean }): JSX.Element {
   const view = attention === null ? null : attentionView(attention);
   return (
     <DashCard title="Needs attention" titleId="cms-dash-attention" count={view?.total}>
@@ -304,6 +305,7 @@ function AttentionCard({ attention, onRetry }: { attention: WorkspaceAttention |
                 sources={view.unavailable.map(({ source }) => source)}
                 sentence={(listed) => `${listed} could not be checked.`}
                 onRetry={onRetry}
+                retrying={retrying}
               />
             ) : null}
             {view.rows.map((item) => (
@@ -344,16 +346,18 @@ function SourcesUnavailable({
   sources,
   sentence,
   onRetry,
+  retrying,
 }: {
   sources: readonly WorkspaceSourceName[];
   /** Receives the sources as one English list, e.g. "Mappings and Content". */
   sentence: (listed: string) => string;
   onRetry: () => void;
+  retrying: boolean;
 }): JSX.Element {
   const names = sources.map((source) => SOURCE_LABELS[source]);
   const listed = names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
   return (
-    <Banner tone="warn" action={<Button size="sm" onClick={onRetry}>Retry</Button>}>
+    <Banner tone="warn" action={<Button size="sm" onClick={onRetry} busy={retrying}>Retry</Button>}>
       {sentence(listed)}
     </Banner>
   );
