@@ -434,4 +434,3 @@ function recovery(failures: readonly MappingInitializationFailure[]): MappingRec
       : "Mapping storage contains malformed records. The source data was preserved.",
   };
 }
-

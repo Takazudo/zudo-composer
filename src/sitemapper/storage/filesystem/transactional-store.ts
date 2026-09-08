@@ -423,4 +423,3 @@ function recovery(failures: readonly SitemapInitializationFailure[]): SitemapRec
       : "Sitemap storage contains malformed records. The source data was preserved.",
   };
 }
-
