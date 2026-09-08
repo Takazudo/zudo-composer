@@ -36,6 +36,7 @@ export class MediaLibraryController {
   private request = 0;
   private pending: Promise<unknown> = Promise.resolve();
   private drafts = new Map<string, { record: MediaSummary; patch: MediaMetadataPatch }>();
+  private persistingDrafts = new Map<string, { record: MediaSummary; patch: MediaMetadataPatch }>();
   private draftSaves = new Map<string, Promise<void>>();
   private flushing: Promise<void> | undefined;
   readonly store: MediaFileProviderStore | undefined;
@@ -91,7 +92,18 @@ export class MediaLibraryController {
     return run;
   }
   draftMetadata(record: MediaSummary, patch: MediaMetadataPatch) {
-    this.drafts.set(record.id, { record, patch: { ...this.drafts.get(record.id)?.patch, ...patch } });
+    const previous = this.drafts.get(record.id);
+    const persisting = this.persistingDrafts.get(record.id);
+    // Only replace a prior patch when every field belongs to the active save.
+    // Uncommitted fields keep their original base so external changes still
+    // conflict; a stale inspector can never move an existing draft backwards.
+    const hasUncommitted = previous && (Object.keys(previous.patch) as (keyof MediaMetadataPatch)[])
+      .some((key) => !persisting || previous.patch[key] !== persisting.patch[key]);
+    const newerBase = previous && record.revision > previous.record.revision && !hasUncommitted;
+    this.drafts.set(record.id, {
+      record: previous && !newerBase ? previous.record : record,
+      patch: { ...(newerBase ? undefined : previous?.patch), ...patch },
+    });
     this.set({ generation: this.current.generation + 1 });
   }
   saveDraft(id: string): Promise<void> {
@@ -104,10 +116,30 @@ export class MediaLibraryController {
   }
   private async persistDraft(id: string) {
     const draft = this.drafts.get(id); if (!draft) return;
-    const saved = await this.updateMetadata(draft.record, draft.patch);
+    this.persistingDrafts.set(id, draft);
+    let saved: MediaRecord;
+    try { saved = await this.updateMetadata(draft.record, draft.patch); }
+    catch (error) {
+      // A newer input base is not proof that our write committed. Restore
+      // its pending fields and conflict base when the write/refresh fails.
+      const newer = this.drafts.get(id);
+      if (newer && newer !== draft) this.drafts.set(id, { record: draft.record, patch: { ...draft.patch, ...newer.patch } });
+      throw error;
+    }
+    finally { this.persistingDrafts.delete(id); }
     const newer = this.drafts.get(id);
-    if (newer && newer !== draft && newer.record.revision === draft.record.revision) this.drafts.set(id, { ...newer, record: summarizeMedia(saved) });
-    if (this.drafts.get(id) === draft) { this.drafts.delete(id); this.set({ generation: this.current.generation + 1 }); }
+    if (!newer) return;
+    if (newer === draft) this.drafts.delete(id);
+    else if (newer.record.revision <= saved.revision) {
+      // Concurrent edits survive our own commit, including an inspector that
+      // already advanced to the saved revision while the refresh was running.
+      this.drafts.set(id, { ...newer, record: summarizeMedia(saved) });
+    } else {
+      // This draft was authored against a later authoritative revision. Keep
+      // that base; moving it back to our result would create a false conflict.
+      this.drafts.set(id, newer);
+    }
+    this.set({ generation: this.current.generation + 1 });
   }
   hasDraft(id: string) { return this.drafts.has(id); }
   discardDraft(id: string) {
