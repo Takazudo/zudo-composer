@@ -1,8 +1,11 @@
+import { Socket } from "node:net";
 import { mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { PassThrough, Readable } from "node:stream";
+import { IncomingMessage, type ServerResponse } from "node:http";
+import type { ViteDevServer, ResolvedConfig } from "vite";
+import { hookHandler, strictFixture, httpRequest, httpResponse } from "./test-helpers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFilesystemCompositionStore } from "../../src/composer/storage/filesystem";
 import { createWorkspaceScopedCompositionStore } from "../../src/composer/storage/file-provider/dev-server-entry";
@@ -366,13 +369,10 @@ describe("file-provider core integration", () => {
     const handler = createComposerFileProviderMiddleware({
       capability: CAPABILITY,
       validateRecord: validateCompositionRecord,
-      createStore: async () => ({
-        list: vi.fn(),
-        get: vi.fn().mockRejectedValue(new CompositionPersistenceError(
-          "get", "write-failed", "Could not publish the repaired derived output.", true,
-        )),
-        put: vi.fn(), delete: vi.fn(), clear: vi.fn(),
-      }),
+      createStore: async () => {
+        vi.spyOn(initial, "get").mockRejectedValue(new CompositionPersistenceError("get", "write-failed", "Could not publish the repaired derived output.", true));
+        return initial;
+      },
     });
     const response = await handler(request({
       operation: "get", id: "alpha", outputsById: { alpha: generated("expected") },
@@ -384,8 +384,8 @@ describe("file-provider core integration", () => {
 });
 
 describe("media upload request boundary and core integration", () => {
-  function mediaRequest(chunks: readonly Uint8Array[], overrides: { headers?: Record<string, string>; url?: string; method?: string } = {}) {
-    const stream = Readable.from(chunks) as Readable & { url?: string; method?: string; headers: Record<string, string>; aborted?: boolean; destroyed?: boolean };
+  function mediaRequest(chunks: readonly Uint8Array[], overrides: { headers?: IncomingMessage["headers"]; url?: string; method?: string } = {}) {
+    const stream = httpRequest(chunks);
     stream.url = overrides.url ?? MEDIA_FILE_PROVIDER_ENDPOINT;
     stream.method = overrides.method ?? "POST";
     stream.headers = overrides.headers ?? {
@@ -396,7 +396,7 @@ describe("media upload request boundary and core integration", () => {
     return stream;
   }
   function connectResponse() {
-    return { statusCode: 0, destroyed: false, writableEnded: false, setHeader: vi.fn(), end: vi.fn(function (this: { writableEnded: boolean }) { this.writableEnded = true; }) };
+    return httpResponse();
   }
 
   it("streams exact bytes into the media store and returns frozen JSON headers", async () => {
@@ -493,8 +493,9 @@ describe("media upload request boundary and core integration", () => {
 
   it("accepts a maximally long encoded Unicode display filename", async () => {
     const fileName = "界".repeat(255);
-    const upload = vi.fn().mockResolvedValue({ id: "unicode-name" });
-    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: async () => ({ upload }) });
+    const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT) });
+    const upload = vi.spyOn(store, "upload").mockResolvedValue(createMediaRecord({ fileName, mediaType: "image/png", byteLength: 1, checksum: "a".repeat(64) }, { id: "unicode-name" }));
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: async () => store });
     const req = mediaRequest([], { headers: { ...mediaRequest([]).headers, [MEDIA_FILE_PROVIDER_FILE_NAME_HEADER]: encodeURIComponent(fileName) } });
     const res = connectResponse();
     await handler(req, res);
@@ -504,11 +505,15 @@ describe("media upload request boundary and core integration", () => {
 
   it("lets the sink drain chunked overflow and sends one 413", async () => {
     let chunks = 0;
-    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, maxBodyBytes: 4, createStore: async () => ({ upload: async ({ bytes }: { bytes: AsyncIterable<Uint8Array> }) => {
+    const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT) });
+    vi.spyOn(store, "upload").mockImplementation(async ({ bytes }) => {
+      if (!(Symbol.asyncIterator in bytes)) throw new Error("Expected streaming body");
       let size = 0;
       for await (const chunk of bytes) { chunks += 1; size += chunk.byteLength; }
       if (size > 4) throw Object.assign(new Error("too large"), { code: "BYTE_CAP_EXCEEDED" });
-    } }) });
+      throw new Error("Expected oversized body");
+    });
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, maxBodyBytes: 4, createStore: async () => store });
     const res = connectResponse();
     await handler(mediaRequest([Uint8Array.of(1, 2, 3), Uint8Array.of(4, 5), Uint8Array.of(6)]), res);
     expect(chunks).toBe(3);
@@ -521,13 +526,15 @@ describe("media upload request boundary and core integration", () => {
     const iterator = vi.spyOn(req, "iterator");
     let release!: () => void;
     const aborted = new Promise<void>((resolve) => { release = resolve; });
-    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: async () => ({
-      upload: async ({ signal }: { signal: AbortSignal }) => {
-        signal.addEventListener("abort", release, { once: true });
-        await aborted;
-        signal.throwIfAborted();
-      },
-    }) });
+    const store = await createFilesystemMediaStore({ mediaStoreRoot: join(sandbox, MEDIA_FILE_PROVIDER_ROOT) });
+    vi.spyOn(store, "upload").mockImplementation(async ({ signal }) => {
+      if (!signal) throw new Error("Expected abort signal");
+      signal.addEventListener("abort", release, { once: true });
+      await aborted;
+      signal.throwIfAborted();
+      throw new Error("Expected aborted upload");
+    });
+    const handler = createMediaUploadMiddleware({ capability: CAPABILITY, createStore: async () => store });
     const res = connectResponse();
     const pending = handler(req, res);
     await vi.waitFor(() => expect(req.listenerCount("aborted")).toBe(1));
@@ -541,22 +548,23 @@ describe("media upload request boundary and core integration", () => {
 });
 
 describe("dev/build registration boundary", () => {
-  type RegisteredMiddleware = (request: unknown, response: unknown, next: () => unknown) => unknown;
+  type RegisteredMiddleware = (request: IncomingMessage, response: ServerResponse, next: () => void) => unknown;
 
   function setupSource(command: "serve" | "build", mediaStoreRoot?: string, workspaceRoot = sandbox) {
     const instance = plugin({ mediaStoreRoot, workspaceRoot });
-    instance.configResolved({ command });
-    const resolved = instance.resolveId("virtual:composer-file-provider-config");
+    hookHandler(instance.configResolved).call(strictFixture({}), strictFixture<ResolvedConfig>({ command }));
+    const resolved = hookHandler(instance.resolveId).call(strictFixture({}), "virtual:composer-file-provider-config", undefined, { isEntry: false });
     expect(resolved).toBe("\0virtual:composer-file-provider-config");
-    const source = instance.load(resolved);
+    if (typeof resolved !== "string") throw new Error("Expected synchronous resolved id");
+    const source = hookHandler(instance.load).call(strictFixture({}), resolved);
     if (typeof source !== "string") throw new Error("expected synchronous virtual module");
     return { instance, source };
   }
 
   async function invokeRegistered(
     middlewares: readonly RegisteredMiddleware[],
-    requestStream: unknown,
-    response: unknown,
+    requestStream: IncomingMessage,
+    response: ServerResponse,
     finalNext: () => unknown = () => undefined,
   ) {
     let index = 0;
@@ -579,39 +587,27 @@ describe("dev/build registration boundary", () => {
       createFilesystemMediaStore,
       validateCompositionRecord,
     });
-    await instance.configureServer?.({
-      middlewares: { use(value: RegisteredMiddleware) { middlewares.push(value); } },
+    await hookHandler(instance.configureServer).call(strictFixture({}), strictFixture<ViteDevServer>({
+      middlewares: strictFixture<ViteDevServer["middlewares"]>({ use: vi.fn().mockImplementation((value: RegisteredMiddleware) => { middlewares.push(value); }) }),
       ssrLoadModule,
-    } as never);
+    }));
     expect(middlewares).toHaveLength(3);
     return { instance, source, middlewares, ssrLoadModule };
   }
 
   function mediaRequest(method: string, url: string) {
-    const requestStream = Readable.from([]) as Readable & { method?: string; url?: string; headers: Record<string, string> };
+    const requestStream = httpRequest();
     requestStream.method = method;
     requestStream.url = url;
     requestStream.headers = {};
     return requestStream;
   }
 
-  function mediaResponse() {
-    const response = new PassThrough() as PassThrough & {
-      statusCode: number;
-      headers: Record<string, string>;
-      headersSent: boolean;
-      setHeader(name: string, value: string): void;
-    };
-    response.statusCode = 0;
-    response.headers = {};
-    response.headersSent = false;
-    response.setHeader = (name, value) => { response.headers[name] = String(value); };
-    return response;
-  }
+  function mediaResponse() { return httpResponse(); }
 
-  async function responseBytes(response: PassThrough) {
+  async function responseBytes(response: ReturnType<typeof httpResponse>) {
     const chunks: Buffer[] = [];
-    for await (const chunk of response) chunks.push(Buffer.from(chunk));
+    for await (const chunk of response.body) chunks.push(Buffer.from(chunk));
     return Buffer.concat(chunks);
   }
 
@@ -636,7 +632,7 @@ describe("dev/build registration boundary", () => {
       expect(source).not.toContain(mediaStoreRoot);
       const config = JSON.parse(source.match(/= (.*);/)![1]!);
       const bytes = Buffer.from("%PDF-1.7\nisolated upload");
-      const request = Object.assign(Readable.from([bytes]), { method: "POST", url: MEDIA_FILE_PROVIDER_ENDPOINT, headers: {
+      const request = Object.assign(httpRequest([bytes]), { method: "POST", url: MEDIA_FILE_PROVIDER_ENDPOINT, headers: {
         host: "localhost:4321", origin: "http://localhost:4321", "sec-fetch-site": "same-origin", "content-type": "application/pdf",
         [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: config.capability,
         [MEDIA_FILE_PROVIDER_OPERATION_HEADER]: "upload", [MEDIA_FILE_PROVIDER_FILE_NAME_HEADER]: "isolated.pdf",
@@ -759,7 +755,7 @@ describe("dev/build registration boundary", () => {
       expect(next).not.toHaveBeenCalled();
       expect(response.statusCode).toBe(404);
       expect(response.headers).toEqual({ "cache-control": "no-store" });
-      expect(response.readableLength).toBe(0);
+      expect(response.body.readableLength).toBe(0);
     });
 
     it("rejects unsafe names before touching the filesystem", async () => {
@@ -877,11 +873,11 @@ describe("dev/build registration boundary", () => {
     const config = JSON.parse(source.match(/= (.*);/)?.[1] ?? "null");
     expect(ssrLoadModule).toHaveBeenCalledWith(appModuleId("src/composer/storage/file-provider/dev-server-entry.ts"));
 
-    const requestStream = Readable.from([
+    const requestStream = httpRequest([
       Buffer.alloc(config.maxBodyBytes, 97),
       Buffer.from("overflow"),
       Buffer.from("repeat"),
-    ]) as Readable & { url?: string; method?: string; headers: Record<string, string> };
+    ]);
     requestStream.url = COMPOSER_FILE_PROVIDER_ENDPOINT;
     requestStream.method = "POST";
     requestStream.headers = {
@@ -891,11 +887,7 @@ describe("dev/build registration boundary", () => {
       "content-type": "application/json",
       [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: config.capability,
     };
-    const response = {
-      statusCode: 0,
-      setHeader: vi.fn(),
-      end: vi.fn(),
-    };
+    const response = httpResponse();
     await invokeRegistered(middlewares, requestStream, response);
     expect(response.statusCode).toBe(413);
     expect(response.end).toHaveBeenCalledTimes(1);
@@ -904,13 +896,11 @@ describe("dev/build registration boundary", () => {
 
   it("rejects unauthenticated Connect requests before attaching body readers", async () => {
     const { middlewares } = await setupServeServer();
-    const requestStream = Readable.from([Buffer.alloc(3 * 1024 * 1024)]) as Readable & {
-      url?: string; method?: string; headers: Record<string, string>;
-    };
+    const requestStream = httpRequest([Buffer.alloc(3 * 1024 * 1024)]);
     requestStream.url = COMPOSER_FILE_PROVIDER_ENDPOINT;
     requestStream.method = "POST";
     requestStream.headers = {};
-    const response = { statusCode: 0, setHeader: vi.fn(), end: vi.fn() };
+    const response = httpResponse();
     await invokeRegistered(middlewares, requestStream, response);
     expect(response.statusCode).toBe(403);
     expect(requestStream.listenerCount("data")).toBe(0);
@@ -920,15 +910,14 @@ describe("dev/build registration boundary", () => {
     const { source, middlewares } = await setupServeServer();
     const config = JSON.parse(source.match(/= (.*);/)?.[1] ?? "null");
     let emitted = false;
-    const requestStream = new Readable({
-      read() {
-        if (emitted) return;
-        emitted = true;
-        this.push("{partial");
-        this.emit("aborted");
-        this.push(null);
-      },
-    }) as Readable & { url?: string; method?: string; headers: Record<string, string> };
+    const requestStream = new IncomingMessage(new Socket());
+    requestStream._read = function () {
+      if (emitted) return;
+      emitted = true;
+      this.push("{partial");
+      this.emit("aborted");
+      this.push(null);
+    };
     requestStream.url = COMPOSER_FILE_PROVIDER_ENDPOINT;
     requestStream.method = "POST";
     requestStream.headers = {
@@ -938,7 +927,7 @@ describe("dev/build registration boundary", () => {
       "content-type": "application/json",
       [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: config.capability,
     };
-    const response = { statusCode: 0, destroyed: false, setHeader: vi.fn(), end: vi.fn() };
+    const response = httpResponse();
     await invokeRegistered(middlewares, requestStream, response);
     expect(response.statusCode).toBe(400);
     expect(response.end).toHaveBeenCalledTimes(1);
@@ -948,7 +937,7 @@ describe("dev/build registration boundary", () => {
     const { instance } = setupSource("build");
     const ssrLoadModule = vi.fn();
     const use = vi.fn();
-    await instance.configureServer?.({ ssrLoadModule, middlewares: { use } } as never);
+    await hookHandler(instance.configureServer).call(strictFixture({}), strictFixture<ViteDevServer>({ ssrLoadModule, middlewares: strictFixture<ViteDevServer["middlewares"]>({ use }) }));
     expect(ssrLoadModule).not.toHaveBeenCalled();
     expect(use).not.toHaveBeenCalled();
   });
@@ -958,7 +947,7 @@ describe("dev/build registration boundary", () => {
     const { source, middlewares, ssrLoadModule } = await setupServeServer(undefined, workspaceRoot);
     const config = JSON.parse(source.match(/= (.*);/)![1]!);
     const body = JSON.stringify({ operation: "put", record: record(), outputsById: { alpha: generated("export const exact = 1;\n") } });
-    const requestStream = Object.assign(Readable.from([Buffer.from(body)]), {
+    const requestStream = Object.assign(httpRequest([Buffer.from(body)]), {
       method: "POST", url: COMPOSER_FILE_PROVIDER_ENDPOINT,
       headers: {
         host: "localhost:4321", origin: "http://localhost:4321", "sec-fetch-site": "same-origin", "content-type": "application/json",
@@ -966,7 +955,7 @@ describe("dev/build registration boundary", () => {
         [COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER]: WORKSPACE,
       },
     });
-    const response = { statusCode: 0, setHeader: vi.fn(), end: vi.fn() };
+    const response = httpResponse();
     await invokeRegistered(middlewares, requestStream, response);
     expect(response.statusCode).toBe(200);
     const stored = JSON.parse(await readFile(join(workspaceScopedRoot(join(workspaceRoot, "compositions"), WORKSPACE), "composition-alpha.composition.json"), "utf8"));

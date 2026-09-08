@@ -1,5 +1,11 @@
 {
   "extends": "../../tsconfig.app.json",
-  "compilerOptions": { "incremental": false },
-  "include": ["./**/*.ts", "../browser-dev/**/*.ts", "../*.ts"]
+  "compilerOptions": {
+    "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.browser-tests.tsbuildinfo"
+  },
+  "include": [
+    "./**/*.ts",
+    "../browser-dev/**/*.ts",
+    "../*.ts"
+  ]
 }

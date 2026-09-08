@@ -1,3 +1,5 @@
+import { hookHandler, strictFixture } from "./test-helpers";
+import type { ViteDevServer } from "vite";
 // The pack seam, proven against two real packs neither of which is the
 // provider: an installed themeset package and a host self-reference.
 //
@@ -66,9 +68,9 @@ describe("virtual:zudo-composer-pack", () => {
   it.each([undefined, null, "invalid", { components: [] }])("rejects an invalid pack export at dev-server startup: %j", async (componentPack) => {
     const plugin = componentPackPlugin({ workspaceRoot: selfHost, pack: "self-host/components" });
     const ssrLoadModule = vi.fn().mockResolvedValue({ componentPack });
-    const configureServer = plugin.configureServer as (server: { ssrLoadModule: typeof ssrLoadModule }) => Promise<void>;
+    const configureServer = hookHandler(plugin.configureServer);
 
-    await expect(configureServer({ ssrLoadModule })).rejects.toThrow(
+    await expect(configureServer.call(strictFixture({}), strictFixture<ViteDevServer>({ ssrLoadModule }))).rejects.toThrow(
       `Component pack "self-host/components" (${plugin.identity.entryPath}) must export \`componentPack\` built with \`defineComponentPack\`.`,
     );
     expect(ssrLoadModule).toHaveBeenCalledWith(COMPONENT_PACK_ID);
@@ -77,16 +79,16 @@ describe("virtual:zudo-composer-pack", () => {
   it("accepts a valid pack at dev-server startup and still validates its sources", async () => {
     const plugin = componentPackPlugin({ workspaceRoot: selfHost, pack: "self-host/components" });
     const ssrLoadModule = vi.fn().mockResolvedValue({ componentPack: selfPack });
-    const configureServer = plugin.configureServer as (server: { ssrLoadModule: typeof ssrLoadModule }) => Promise<void>;
+    const configureServer = hookHandler(plugin.configureServer);
 
-    await expect(configureServer({ ssrLoadModule })).resolves.toBeUndefined();
+    await expect(configureServer.call(strictFixture({}), strictFixture<ViteDevServer>({ ssrLoadModule }))).resolves.toBeUndefined();
     expect(ssrLoadModule).toHaveBeenCalledWith(COMPONENT_PACK_ID);
 
     ssrLoadModule.mockResolvedValue({ componentPack: {
       ...selfPack,
       manifest: { ...selfPack.manifest, components: [{ id: "broken", source: { module: "not-installed" } }] },
     } });
-    await expect(configureServer({ ssrLoadModule })).rejects.toThrow('declares source.module "not-installed"');
+    await expect(configureServer.call(strictFixture({}), strictFixture<ViteDevServer>({ ssrLoadModule }))).rejects.toThrow('declares source.module "not-installed"');
   });
 
   it("re-exports the resolved entry through /@fs so a pack outside the host root loads", () => {

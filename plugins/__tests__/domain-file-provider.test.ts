@@ -24,7 +24,7 @@ function request(operation: string, body?: unknown, overrides: Record<string, un
   return {
     url: ENDPOINT,
     method: "POST",
-    protocol: "http",
+    protocol: "http" as const,
     headers: {
       host: "localhost:5173",
       origin: "http://localhost:5173",
