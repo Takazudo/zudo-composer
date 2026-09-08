@@ -129,25 +129,24 @@ async function startHostServer(hostRoot) {
 async function authorOneSitemap(page) {
   try {
     await page.goto(`${ORIGIN}/sitemapper`);
-    // A freshly installed host has no activated SiteProject and therefore no
-    // workspace, which is the state this proof wants: the library offers to
-    // create one, and that offer is the documented way in. Whichever of the two
-    // buttons appears first decides whether that step is needed at all.
-    const create = page.getByRole("button", { name: "Create fresh workspace" });
-    const newSitemap = page.getByRole("button", { name: "New sitemap" });
-    await Promise.race([
-      create.waitFor({ state: "visible", timeout: 90_000 }),
-      newSitemap.waitFor({ state: "visible", timeout: 90_000 }),
-    ]);
-    if (await create.isVisible()) {
-      await create.click();
-      await create.waitFor({ state: "hidden", timeout: 90_000 });
-    }
+    // This host is fresh: require the first-project path rather than accepting
+    // an already-open workspace that would skip the bootstrap proof.
+    const create = page.getByRole("button", { name: "Create project", exact: true });
+    await create.click({ timeout: 90_000 });
+    const projectDialog = page.getByRole("dialog", { name: "Create project", exact: true });
+    await projectDialog.getByRole("textbox", { name: "Project name", exact: true }).fill("Install smoke project");
+    await projectDialog.getByRole("button", { name: "Create project", exact: true }).click();
+    await projectDialog.waitFor({ state: "hidden", timeout: 90_000 });
+    await page.getByRole("heading", { name: "Sitemaps", exact: true }).waitFor({ timeout: 90_000 });
+    const newSitemap = page.getByRole("button", { name: "New sitemap", exact: true });
     await newSitemap.click({ timeout: 90_000 });
     const dialog = page.getByRole("dialog", { name: "Create sitemap" });
     await dialog.getByRole("textbox", { name: "Sitemap name" }).fill(SITEMAP_NAME);
     await dialog.getByRole("button", { name: "Create sitemap" }).click();
-    await page.getByRole("textbox", { name: "Sitemap name" }).waitFor({ timeout: 60_000 });
+    // The dialog closes only after store.put resolves. Its textbox has the same
+    // name as the editor field, so waiting on that field alone can race the save.
+    await dialog.waitFor({ state: "hidden", timeout: 60_000 });
+    await page.getByRole("textbox", { name: "Sitemap name", exact: true }).waitFor({ timeout: 60_000 });
   } catch (cause) {
     const text = await page.locator("body").innerText().catch(() => "<no body>");
     throw new Error(`Authoring failed on the installed host. The page was showing:\n${text}`, { cause });
@@ -157,6 +156,7 @@ async function authorOneSitemap(page) {
 const workspace = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-install-smoke-")));
 const hostRoot = join(workspace, "host");
 let server;
+let browser;
 try {
   step("packing the package and the contract it declares as a peer");
   const packDirectory = join(workspace, "tarballs");
@@ -169,6 +169,7 @@ try {
   }
 
   step("writing a bare host project that has never seen this repository");
+  const toolPackage = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   for (const directory of ["styles", "components", "public/uploaded-media",
     "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/media"]) {
     await mkdir(join(hostRoot, directory), { recursive: true });
@@ -183,6 +184,7 @@ try {
   await writeFile(join(hostRoot, "zudo-composer.config.ts"), `import { defineComposerConfig } from "zudo-composer/config";\n\nexport default defineComposerConfig({ pack: "${HOST_NAME}/components" });\n`);
   await writeFile(join(hostRoot, "package.json"), `${JSON.stringify({
     name: HOST_NAME,
+    packageManager: toolPackage.packageManager,
     version: "0.0.0",
     private: true,
     type: "module",
@@ -195,12 +197,13 @@ try {
       "@zudo-composer/component-contract": `file:${tarballs["@zudo-composer/component-contract"]}`,
     },
   }, null, 2)}\n`);
-  // pnpm 10 and later refuse to prepare a dependency that runs build scripts
-  // unless the host allows it by name. This is the entry the README documents.
-  await writeFile(join(hostRoot, "pnpm-workspace.yaml"), 'onlyBuiltDependencies:\n  - "@zudo-composer/component-contract"\n');
+  // This disposable host explicitly accepts the tool's SHA-pinned Git provider.
+  // pnpm 11 blocks Git subdependencies by default; keep this host-local, never
+  // change the user's global settings. Build permissions stay package-specific.
+  await writeFile(join(hostRoot, "pnpm-workspace.yaml"), 'blockExoticSubdeps: false\nallowBuilds:\n  "@zudo-composer/component-contract": true\n  esbuild: true\n');
 
   step("installing");
-  await run(pnpm, ["install", "--ignore-workspace"], hostRoot);
+  await run(pnpm, ["install"], hostRoot);
   const installedTree = await tree(hostRoot);
 
   step("booting, with no sample activation of any kind");
@@ -214,7 +217,7 @@ try {
   }
 
   step("authoring one record through the browser");
-  const browser = await chromium.launch();
+  browser = await chromium.launch();
   const authoring = await browser.newContext();
   await authorOneSitemap(await authoring.newPage());
   await authoring.close();
@@ -241,6 +244,7 @@ try {
   await page.getByRole("link", { name: SITEMAP_NAME, exact: true }).waitFor({ timeout: 60_000 });
   await reopened.close();
   await browser.close();
+  browser = undefined;
 
   step("removing the tool and confirming the host keeps its data");
   await server.stop();
@@ -260,6 +264,7 @@ try {
 
   step(`passed: ${ROUTES.length} routes, ${authored.length} authored record file(s), all writes confined to ${WRITABLE.join("/")}, data survived removal.`);
 } finally {
+  await browser?.close();
   await server?.stop();
   await rm(workspace, { recursive: true, force: true });
 }
