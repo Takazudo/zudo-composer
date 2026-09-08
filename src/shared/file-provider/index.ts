@@ -13,6 +13,7 @@ export {
   type FileProviderResponse,
   type FileProviderTransactionRequest,
   type FileProviderTransactionStep,
+  type FileProviderTransportOperation,
   type FileProviderWireError,
 } from "./protocol";
 export {

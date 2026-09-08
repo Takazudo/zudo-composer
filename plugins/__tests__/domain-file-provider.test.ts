@@ -62,6 +62,14 @@ function middleware(store: TestStore, extra: Record<string, unknown> = {}) {
 }
 
 describe("domain file provider endpoint", () => {
+  it("returns 400 for registry validation while retaining other domains' 422", () => {
+    const error = new ContentPersistenceError("create", "validation", "Invalid identity");
+    expect(serializeDomainError("workspace", error, "create", isDomainError).status).toBe(400);
+    for (const domain of ["content", "mapping", "sitemapper"]) {
+      expect(serializeDomainError(domain, error, "create", isDomainError).status).toBe(422);
+    }
+  });
+
   it("names one endpoint per domain and rejects unusable domain names", () => {
     expect(domainFileProviderEndpoint("content")).toBe("/__zudo_composer_content_provider");
     expect(domainFileProviderEndpoint("sitemapper")).toBe("/__zudo_composer_sitemapper_provider");
