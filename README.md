@@ -373,23 +373,43 @@ a dev dependency; the published manifest declares it as a peer dependency so a
 host installs exactly one instance. Neither relationship may be confused with,
 or used in place of, the immutable external UI-provider Git dependency.
 
-## No deployment target
+## Scoped hosted demo exception
 
-This repository is a locally run tool. It has no deployment target, no hosting
-provider, no deployed hostname, and no deployment credentials. Hosting is
-deliberately deferred to a future adapter and is out of scope here.
+The installed tool and ordinary local workflow remain local-first. Issue 414
+adds one disposable static sample at `https://zudo-composer.zudolab.dev`; it
+does not add hosted persistence, an API, authentication, arbitrary host-project
+access or a deployment target for installed applications. The target is the
+Worker named `zudo-composer` and the existing custom-domain binding in
+[`wrangler.jsonc`](./wrangler.jsonc) remains in place.
 
-Prove the exact artifact locally:
+`pnpm build:hosted-demo` emits `dist-hosted-demo`, and `pnpm hosted-demo:verify`
+checks the final files, manifest identities, checksums, MIME types and the
+ordinary artifact boundary. CI then runs the hosted browser lane against that
+same directory and uploads an artifact named for the exact 40-character commit
+SHA. Production can consume only a successful `main` CI run from this
+repository, downloads that exact run/SHA artifact, verifies it again, runs a
+Wrangler dry run, captures the currently active single-version deployment, and
+uploads the same directory with Wrangler 4.130.0 before activating its returned
+version ID.
+
+The production workflow is serialized and refuses a stale `main` head, missing
+or partial Cloudflare credentials, a missing rollback target, a split-traffic
+deployment, or an artifact/source mismatch. It checks the live manifest, every
+route and every asset with bounded HTTPS requests. If smoke verification fails,
+it rolls back only when the active version is still the version this run
+uploaded; the workflow remains failed even after a verified rollback. A manual
+rollback uses the captured version ID with `wrangler rollback`; never copy local
+OAuth tokens into repository or workflow secrets.
+
+Prove the exact local artifact with:
 
 ```sh
 corepack pnpm install --frozen-lockfile
 corepack pnpm check
 corepack pnpm smoke:host-install
+corepack pnpm build:hosted-demo
+corepack pnpm hosted-demo:verify
 ```
-
-Nothing in CI publishes, uploads, or authenticates against a hosting account.
-If hosting is ever added, it arrives as a new adapter with its own gates — not
-as a revival of a removed one.
 
 ## Destructive current-only policy
 

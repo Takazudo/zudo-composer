@@ -101,13 +101,32 @@ relationship for the external UI-provider dependency.
 Do not weaken frozen install, negative dependency scans, exact provider pin, or
 the 12-component runtime/CSS/WASM proof to make a gate pass.
 
-## No deployment target
+## Scoped hosted demo exception
 
-This project is a locally run tool. It has no deployment target, no hosting
-provider, no deployed hostname, and no deployment credentials. Hosting is
-deliberately deferred to a future adapter: do not add a deploy script, a hosting
-config file, a credential check, or a live smoke lane. If hosting is ever added,
-it arrives as a new adapter with its own gates.
+The installed tool and ordinary local workflow remain local-first. Issue 414
+adds one disposable static sample at `https://zudo-composer.zudolab.dev`; it
+does not add hosted persistence, a hosted API, authentication, arbitrary host
+project access or deployment support for installed applications. The
+`zudo-composer` Worker and its existing custom-domain binding are configured in
+[`wrangler.jsonc`](./wrangler.jsonc).
+
+The dedicated `dist-hosted-demo` artifact is built, checked against the ordinary
+filesystem/server/test boundary, browser-tested, and uploaded by CI under the
+exact source SHA. The independent production workflow accepts only a successful
+same-repository `main` CI run, verifies its run/SHA/artifact, performs a
+Wrangler dry run, captures the active single-version deployment, uploads the
+verified directory with Wrangler 4.130.0, and activates only the version ID
+returned by that upload. It has no pull-request artifact path. Pull-request
+validation has no Cloudflare secrets, and production uses only the existing
+deployment secrets after its trusted-run gates. Missing credentials, stale
+`main`, missing rollback state, split
+traffic or a source mismatch fail before mutation.
+
+Live checks cover the manifest, every emitted asset and all authoring/sample
+routes with bounded HTTPS requests. Automatic rollback is allowed only while
+the exact uploaded version remains active, and a rollback that succeeds still
+leaves the deployment workflow red. Local OAuth credentials are never copied to
+repository or workflow secrets.
 
 Do not claim a permanent target `main` SHA or a final CI URL before the Phase 3
 root merges and post-merge evidence exists. The integration owner records that

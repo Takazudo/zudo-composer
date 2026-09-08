@@ -16,7 +16,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
@@ -48,6 +48,17 @@ jobs:
           CI: true
       - run: pnpm test:browser:site-project
       - run: pnpm smoke:host-install
+      - run: pnpm build:hosted-demo
+      - run: pnpm hosted-demo:verify dist-hosted-demo "${{ github.sha }}"
+      # This lane consumes the already-built artifact; it must stay after the
+      # build/manifest checks and before the artifact is handed to production.
+      - run: pnpm test:browser:hosted-demo
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hosted-demo-${{ github.sha }}
+          path: dist-hosted-demo
+          if-no-files-found: error
+          retention-days: 7
       # A browser failure that only happens on a runner is undiagnosable from the log
       # alone: Playwright writes the page snapshot, trace and video to disk, and the
       # log prints only their paths. Without this, reproducing such a failure locally

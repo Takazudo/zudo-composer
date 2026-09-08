@@ -1,0 +1,122 @@
+name: Hosted demo production deploy
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Successful main CI workflow run ID whose artifact should be deployed"
+        required: true
+        type: string
+      sha:
+        description: "Full main commit SHA built by that CI run"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: hosted-demo-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # A workflow_run can be emitted for a PR or a fork even when the workflow
+    # file is present on main. Keep the Cloudflare-secret job unreachable for
+    # those events; workflow-guard repeats the checks before artifact access.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          # The guard must come from the current main tree. Manual-dispatch
+          # inputs select a CI artifact only after the trusted-run check.
+          ref: main
+          path: trusted-main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+
+      - name: Verify trusted main CI run and fresh main head
+        id: trust
+        working-directory: trusted-main
+        run: node scripts/hosted-demo/workflow-guard.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          HOSTED_DEMO_WORKFLOW_EVENT: ${{ github.event.workflow_run.event }}
+          HOSTED_DEMO_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HOSTED_DEMO_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          HOSTED_DEMO_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          HOSTED_DEMO_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HOSTED_DEMO_RUN_ID: ${{ github.event.workflow_run.id }}
+          HOSTED_DEMO_DISPATCH_SHA: ${{ inputs.sha }}
+          HOSTED_DEMO_DISPATCH_RUN_ID: ${{ inputs.run_id }}
+
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          # This checkout is reached only after the guard has verified the
+          # selected successful main CI run and exact current main SHA.
+          ref: ${{ steps.trust.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Download exact hosted-demo artifact from trusted CI run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: hosted-demo-${{ steps.trust.outputs.sha }}
+          path: dist-hosted-demo
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.trust.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify downloaded artifact bytes and source identity
+        run: pnpm hosted-demo:verify dist-hosted-demo "${EXPECTED_SHA}"
+        env:
+          EXPECTED_SHA: ${{ steps.trust.outputs.sha }}
+
+      - name: Deploy and verify hosted demo
+        run: pnpm hosted-demo:deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          HOSTED_DEMO_EXPECTED_SHA: ${{ steps.trust.outputs.sha }}
+          HOSTED_DEMO_RUN_ID: ${{ steps.trust.outputs.run_id }}
