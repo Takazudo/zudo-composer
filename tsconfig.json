@@ -7,6 +7,8 @@
     { "path": "./tsconfig.host-config.json" },
     { "path": "./tsconfig.cli.json" },
     { "path": "./packages/component-contract" },
-    { "path": "./tsconfig.plugins-tests.json" }
+    { "path": "./tsconfig.plugins-tests.json" },
+    { "path": "./tests/browser/tsconfig.json" },
+    { "path": "./tsconfig.plugin-declarations.json" }
   ]
 }

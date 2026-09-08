@@ -1,5 +1,5 @@
 declare module "virtual:composer-domain-providers" {
-  import type { FileProviderConfig } from "../shared/file-provider";
+  type FileProviderConfig = import("../shared/file-provider").FileProviderConfig;
 
   /**
    * Emitted only by a development server. A production build emits `undefined`,

@@ -1,6 +1,6 @@
 declare module "virtual:site-project-source" {
-  import type { SiteProject } from "../site-project/model/types";
-  import type { ActivatedDeliverySource } from "../features/delivery/source";
+  type SiteProject = import("../site-project/model/types").SiteProject;
+  type ActivatedDeliverySource = import("../features/delivery/source").ActivatedDeliverySource;
   export const siteProject: SiteProject | null;
   export const siteProjectRevision: string | null;
   export const deliverySource: ActivatedDeliverySource;
