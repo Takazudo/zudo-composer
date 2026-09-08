@@ -1,3 +1,5 @@
+// @ts-check
+
 // The built-artifact boundary: what `vite build` may and may not emit.
 //
 // Split out of `check-provider-boundary.mjs` because every assertion here needs
@@ -12,6 +14,7 @@ const root = resolve(import.meta.dirname, "..");
 const dist = join(root, "dist");
 const assetsDir = join(dist, "assets");
 
+/** @param {string} directory @returns {string[]} */
 function filesUnder(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -19,6 +22,7 @@ function filesUnder(directory) {
   });
 }
 
+/** @param {string} haystack @param {string} needle @returns {number} */
 function count(haystack, needle) {
   return haystack.split(needle).length - 1;
 }
@@ -95,7 +99,9 @@ for (const forbidden of [
 
 const previewJs = jsFiles.filter((path) => basename(path).startsWith("preview-entry-"));
 assert.equal(previewJs.length, 1, "exactly one preview entry chunk must be emitted");
+/** @type {Set<string>} */
 const previewGraph = new Set();
+/** @param {string} path @returns {void} */
 function collectJsGraph(path) {
   if (previewGraph.has(path)) return;
   previewGraph.add(path);
