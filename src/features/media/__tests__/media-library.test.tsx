@@ -107,7 +107,7 @@ describe("Media workspace", () => {
   });
   it("shows truthful unavailability with no fabricated assets", () => {
     render(<MediaApp />);
-    expect(screen.getByText(/provider is unavailable/)).toBeTruthy();
+    expect(screen.getByText(/The Media library and upload authoring are available only/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Upload" })).toHaveProperty("disabled", true);
     expect(screen.queryByRole("img")).toBeNull();
   });

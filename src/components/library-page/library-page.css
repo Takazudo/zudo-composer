@@ -17,6 +17,7 @@
   display: grid;
   gap: var(--sp-b2);
   align-content: start;
+  padding: var(--page-inset);
   min-width: 0;
 }
 
@@ -209,6 +210,7 @@ a.cms-library-name__label:hover { text-decoration: underline; }
  * only the chrome around it reflows.
  * -------------------------------------------------------------------------- */
 @media (max-width: 64rem) {
+  .cms-library { padding: var(--page-inset-narrow); }
   .cms-library__header { flex-wrap: wrap; }
   .cms-library__actions { flex-basis: 100%; flex-wrap: wrap; margin-inline-start: 0; }
   .cms-library-toolbar__search { width: 100%; }

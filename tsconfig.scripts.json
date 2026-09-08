@@ -25,6 +25,7 @@
     "scripts/check-site-project-boundary.mjs",
     "scripts/check-standalone-handoff.mjs",
     "scripts/routes.mjs",
+    "scripts/seed-demo-media.ts",
     "scripts/run-dev-browser.mjs",
     "scripts/run-host-browser.mjs",
     "scripts/run-site-project-browser.mjs",

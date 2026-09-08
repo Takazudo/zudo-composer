@@ -57,6 +57,23 @@ uses the bundled sample; local project state is disposable and ignored.
 Hosted persistence, a hosted API, and authentication are future adapter work;
 nothing in this repository claims them.
 
+## Demo media in this repository
+
+This repository is its own dogfood host and includes four demo images in the
+tracked `cms/media/` store. Ordinary Media edits under `pnpm dev` will dirty
+`cms/media/catalog.json`; this is intended. Other runtime `cms/` directories
+are ignored. Run `pnpm media:seed-demo` to seed missing demos from the committed
+source PNGs in `scripts/demo-media/`; rerunning skips matching filenames and
+checksums, including trashed assets and historical versions, and preserves
+existing records. The demo store is not included in the installed package or
+published by a static build.
+
+From a fresh checkout, run `corepack pnpm install --frozen-lockfile`, then
+`pnpm dev` and open the local URL it prints. On **Open workspace**, click
+**Create project**, enter a **Project name**, and click **Create project** in
+the dialog. Open **Media** in the navigation (`/media`), select **Grid** if
+needed, click a demo thumbnail to inspect it, then click **Preview**.
+
 ## Installing into a host project
 
 `zudo-composer` is installed by the project it authors. There is no registry
