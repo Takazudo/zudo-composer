@@ -22,8 +22,6 @@
   background: var(--color-bg);
 }
 
-.cms-mapping-library { align-content: start; padding: var(--sp-3); }
-
 /* --------------------------------------------------------------------------
  * Toolbar: the source/target pair
  * -------------------------------------------------------------------------- */

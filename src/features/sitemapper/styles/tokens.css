@@ -20,9 +20,6 @@
 
 .sg-sitemapper-root * { box-sizing: border-box; }
 
-/* The record editor owns the shell's whole viewport; the library scrolls. */
-.sg-sitemapper-library { align-content: start; padding: var(--sp-3); }
-
 .sg-sitemapper-mono {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   font-size: .75rem;
