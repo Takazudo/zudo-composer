@@ -14,9 +14,6 @@
  * `--text-*` is the provider's namespace.
  * ========================================================================== */
 
-/* The record editors own the shell's viewport; this library scrolls inside it. */
-.sg-media-route { align-content: start; padding: var(--sp-3); }
-
 /* Versioned workspace: each region owns its scroll; chrome stays in view. */
 .sg-media-route { display: flex; flex-direction: column; block-size: 100%; min-block-size: 0; overflow: hidden; }
 .sg-media-workspace { display: grid; grid-template-columns: 13rem minmax(0, 1fr) 18rem; flex: 1; min-block-size: 0; min-inline-size: 0; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); overflow: hidden; }
@@ -70,7 +67,7 @@
   .sg-media-content { min-block-size: 25rem; }
 }
 @media (max-width: 44rem) {
-  .sg-media-route { block-size: auto; min-block-size: 100%; overflow: visible; padding: var(--sp-2); }
+  .sg-media-route { block-size: auto; min-block-size: 100%; overflow: visible; }
   .sg-media-workspace { grid-template-columns: minmax(0, 1fr); }
   .sg-media-folders { display: block; max-block-size: 18rem; border-inline-end: 0; border-block-end: 1px solid var(--color-border); }
   .sg-media-folders > .cms-btn { display: inline-flex; margin-inline-end: var(--sp-1); }
