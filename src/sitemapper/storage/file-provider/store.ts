@@ -26,7 +26,7 @@ import type {
 } from "../../library";
 import { isPlainObject, isSafeRecordId } from "../../../shared";
 import { DomainFileProviderClient, readDomainFileProviderConfig } from "../../../shared/file-provider";
-import { sitemapFileProviderErrorAdapter } from "./wire-error";
+import { sitemapFileProviderErrorAdapter } from "./error-adapter";
 import { SITEMAP_FILE_PROVIDER_DOMAIN } from "./types";
 import type {
   SitemapFileProvider,
