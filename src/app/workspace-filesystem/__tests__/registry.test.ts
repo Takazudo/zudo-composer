@@ -39,6 +39,28 @@ afterEach(async () => {
 });
 
 describe("filesystem workspace registry", () => {
+  it("rejects malformed identities before mutation and the complete no-op", async () => {
+    const registry = await open(await registryRoot());
+    await registry.create(sample(), revision, "alpha");
+    await registry.complete("alpha");
+    const generation = await registry.generation();
+    for (const id of ["../escape", "Alpha", ""]) {
+      for (const [operation, invoke] of [
+        ["read", () => registry.open(id)],
+        ["create", () => registry.create(sample(), revision, id)],
+        ["discard", () => registry.markSeedCleanup(id, revision)],
+        ["discard", () => registry.discardSeeding(id, revision)],
+        ["complete", () => registry.complete(id)],
+        ["update", () => registry.update(id, 1, { name: "Changed" })],
+      ] as const) {
+        await expect(invoke()).rejects.toBeInstanceOf(WorkspaceRegistryError);
+        await expect(invoke()).rejects.toMatchObject({ operation, code: "validation", retryable: false, message: expect.stringContaining("path-safe") });
+      }
+    }
+    expect(await registry.generation()).toBe(generation);
+    expect(await registry.selection()).toBe("alpha");
+  });
+
   it("stamps its layout and starts with no workspace selected", async () => {
     const root = await registryRoot();
     const registry = await open(root);
@@ -81,6 +103,41 @@ describe("filesystem workspace registry", () => {
     expect(await fifth.selection()).toBe("alpha");
   });
 
+  it("does not write a new generation when completing the ready, active workspace", async () => {
+    const root = await registryRoot();
+    const registry = await open(root);
+    await registry.create(sample(), revision, "alpha");
+    const ready = await registry.complete("alpha");
+    const generation = await registry.generation();
+    const before = await snapshotTree(registry.root);
+
+    expect(await registry.complete("alpha")).toEqual(ready);
+
+    expect(await registry.generation()).toBe(generation);
+    expect(await snapshotTree(registry.root)).toEqual(before);
+    const reopened = await open(root);
+    expect(await reopened.selection()).toBe("alpha");
+    expect(await reopened.open()).toEqual(ready);
+  });
+
+  it("selects a ready, inactive workspace in a new durable generation", async () => {
+    const root = await registryRoot();
+    const registry = await open(root);
+    await registry.create(sample(), revision, "alpha");
+    const alpha = await registry.complete("alpha");
+    await registry.create(sample(), other, "beta");
+    await registry.complete("beta");
+    expect(await registry.selection()).toBe("beta");
+    const generation = await registry.generation();
+
+    expect(await registry.complete("alpha")).toEqual(alpha);
+
+    expect(await registry.generation()).toBe(generation + 1);
+    const reopened = await open(root);
+    expect(await reopened.selection()).toBe("alpha");
+    expect(await reopened.open()).toEqual(alpha);
+  });
+
   it("refuses a stale metadata update and keeps the stored record unchanged", async () => {
     const root = await registryRoot();
     const registry = await open(root);
@@ -96,8 +153,8 @@ describe("filesystem workspace registry", () => {
     const registry = await open(root);
     await expect(registry.create(sample(), revision, WORKSPACE_SELECTION_RECORD_ID)).rejects.toBeInstanceOf(WorkspaceRegistryError);
     await expect(registry.create(sample(), revision, WORKSPACE_META_RECORD_ID)).rejects.toBeInstanceOf(WorkspaceRegistryError);
-    await expect(registry.create(sample(), revision, "../escape")).rejects.toThrow(/path-safe/);
-    await expect(registry.create(sample(), revision, "Alpha")).rejects.toThrow(/path-safe/);
+    await expect(registry.create(sample(), revision, "../escape")).rejects.toMatchObject({ name: "WorkspaceRegistryError", operation: "create", code: "validation", message: expect.stringMatching(/path-safe/) });
+    await expect(registry.create(sample(), revision, "Alpha")).rejects.toMatchObject({ name: "WorkspaceRegistryError", operation: "create", code: "validation", message: expect.stringMatching(/path-safe/) });
     expect(await registry.list()).toEqual([]);
   });
 

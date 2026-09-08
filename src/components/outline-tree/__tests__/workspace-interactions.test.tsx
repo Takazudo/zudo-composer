@@ -8,6 +8,39 @@ import type { OutlineInsertSession, OutlineNode } from "../types";
 const leaf = (id: string): OutlineNode => ({ id, title: id, kind: "leaf" });
 
 describe("workspace tree transactions", () => {
+  it("rests after a visible inline insert while persistence is still pending or later fails", async () => {
+    let rejectSave!: (error: Error) => void;
+    const save = new Promise<void>((_resolve, reject) => { rejectSave = reject; });
+    function Host() {
+      const [nodes, setNodes] = useState<OutlineNode[]>([leaf("First")]);
+      const [status, setStatus] = useState("idle");
+      return <>
+        <output aria-label="Persistence">{status}</output>
+        <OutlineTree nodes={nodes} onAdd={({ title, index }) => {
+          setNodes((before) => [...before.slice(0, index), leaf(title), ...before.slice(index)]);
+          setStatus("pending");
+          void save.then(() => setStatus("saved"), () => setStatus("failed"));
+        }} />
+      </>;
+    }
+    const { container } = render(<Host />);
+    fireEvent.click(screen.getByRole("button", { name: "Insert before First" }));
+    expect(container.querySelector(".cms-tree-insert.is-active")).not.toBeNull();
+    const input = screen.getByRole("textbox");
+    fireEvent.input(input, { target: { value: "Inserted" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(screen.getByRole("treeitem", { name: "Inserted" })).toHaveFocus();
+    expect(screen.getByLabelText("Persistence")).toHaveTextContent("pending");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(container.querySelector(".is-active")).toBeNull();
+
+    await act(async () => { rejectSave(new Error("Disk unavailable")); await save.catch(() => undefined); });
+    expect(screen.getByLabelText("Persistence")).toHaveTextContent("failed");
+    expect(screen.getByRole("treeitem", { name: "Inserted" })).toBeInTheDocument();
+    expect(container.querySelector(".is-active")).toBeNull();
+  });
+
   it.each([
     ["root", "Escape"], ["root", "Cancel"], ["child", "Escape"], ["child", "Cancel"],
   ])("restores the remounted terminal %s control after %s", (kind, action) => {

@@ -1,3 +1,5 @@
+import { hookHandler, strictFixture } from "./test-helpers";
+import type { ViteDevServer } from "vite";
 // The pack seam, proven against two real packs neither of which is the
 // provider: an installed themeset package and a host self-reference.
 //
@@ -7,7 +9,7 @@
 
 import { lstatSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { componentPackManifestSchema } from "@zudo-composer/component-contract";
 import { assertPackSourcesResolvable, resolveComponentPack } from "../component-pack.mjs";
 import { COMPONENT_PACK_ID, RESOLVED_COMPONENT_PACK_ID, componentPackPlugin } from "../component-pack-plugin.mjs";
@@ -63,6 +65,32 @@ describe("component pack resolution", () => {
 });
 
 describe("virtual:zudo-composer-pack", () => {
+  it.each([undefined, null, "invalid", { components: [] }])("rejects an invalid pack export at dev-server startup: %j", async (componentPack) => {
+    const plugin = componentPackPlugin({ workspaceRoot: selfHost, pack: "self-host/components" });
+    const ssrLoadModule = vi.fn().mockResolvedValue({ componentPack });
+    const configureServer = hookHandler(plugin.configureServer);
+
+    await expect(configureServer.call(strictFixture({}), strictFixture<ViteDevServer>({ ssrLoadModule }))).rejects.toThrow(
+      `Component pack "self-host/components" (${plugin.identity.entryPath}) must export \`componentPack\` built with \`defineComponentPack\`.`,
+    );
+    expect(ssrLoadModule).toHaveBeenCalledWith(COMPONENT_PACK_ID);
+  });
+
+  it("accepts a valid pack at dev-server startup and still validates its sources", async () => {
+    const plugin = componentPackPlugin({ workspaceRoot: selfHost, pack: "self-host/components" });
+    const ssrLoadModule = vi.fn().mockResolvedValue({ componentPack: selfPack });
+    const configureServer = hookHandler(plugin.configureServer);
+
+    await expect(configureServer.call(strictFixture({}), strictFixture<ViteDevServer>({ ssrLoadModule }))).resolves.toBeUndefined();
+    expect(ssrLoadModule).toHaveBeenCalledWith(COMPONENT_PACK_ID);
+
+    ssrLoadModule.mockResolvedValue({ componentPack: {
+      ...selfPack,
+      manifest: { ...selfPack.manifest, components: [{ id: "broken", source: { module: "not-installed" } }] },
+    } });
+    await expect(configureServer.call(strictFixture({}), strictFixture<ViteDevServer>({ ssrLoadModule }))).rejects.toThrow('declares source.module "not-installed"');
+  });
+
   it("re-exports the resolved entry through /@fs so a pack outside the host root loads", () => {
     const plugin = componentPackPlugin({ workspaceRoot: themesetHost, pack: "@zudo-composer/fixture-themeset/composer-pack" });
     expect((plugin.resolveId as (id: string) => string)(COMPONENT_PACK_ID)).toBe(RESOLVED_COMPONENT_PACK_ID);

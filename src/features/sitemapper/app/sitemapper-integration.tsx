@@ -143,7 +143,7 @@ export function SitemapperIntegration({
       });
     };
     readMetadata();
-    const unsubscribe = workspaceIntegration.subscribeChanges(readMetadata);
+    const unsubscribe = workspaceIntegration.subscribeChanges(readMetadata, ["workspace"]);
     return () => { live = false; unsubscribe(); };
   }, [workspaceIntegration]);
 

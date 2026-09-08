@@ -7,7 +7,7 @@ export {
   type SitemapFileProviderStore,
   type SitemapWireOperation,
 } from "./types";
-export { sitemapFileProviderErrorAdapter } from "./wire-error";
+export { sitemapFileProviderErrorAdapter } from "./error-adapter";
 export {
   FileProviderSitemapStore,
   createFileProviderSitemapProvider,

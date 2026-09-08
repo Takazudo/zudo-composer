@@ -23,7 +23,7 @@
 
 import { domainProviderConfig } from "virtual:composer-domain-providers";
 import { DomainFileProviderClient, readDomainFileProviderConfig } from "../shared/file-provider";
-import type { FileProviderConfig, FileProviderErrorAdapter, FileProviderWireError } from "../shared/file-provider";
+import type { FileProviderConfig, FileProviderErrorAdapter, FileProviderTransportOperation, FileProviderWireError } from "../shared/file-provider";
 import { isSafeRecordId } from "../shared";
 import type { SiteProject, SiteProjectCollectionAttachment } from "../site-project/model";
 import { validateWorkspaceRecord, type WorkspaceRecord } from "./workspace-record";
@@ -98,7 +98,7 @@ function registryOperation(value: string, fallback: WorkspaceRegistryOperation):
 }
 
 /** A wire operation named for the browser maps onto the registry's own vocabulary. */
-function registryOperationOf(operation: WorkspaceWireOperation): WorkspaceRegistryOperation {
+function registryOperationOf(operation: FileProviderTransportOperation<WorkspaceWireOperation>): WorkspaceRegistryOperation {
   switch (operation) {
     case "create": return "create";
     case "complete": return "complete";

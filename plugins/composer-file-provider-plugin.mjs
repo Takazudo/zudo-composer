@@ -10,6 +10,7 @@
 import { constants } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { resolve, posix, dirname, basename } from "node:path";
+import { serializeDomainError } from "./domain-file-provider.mjs";
 import { appModuleId, readRootEnvironment, resolveWorkspaceRoot, validateRootOverride } from "./roots.mjs";
 import {
   FILE_PROVIDER_CAPABILITY_HEADER,
@@ -460,53 +461,6 @@ function isPersistenceError(value) {
     && typeof value.code === "string";
 }
 
-/** @param {unknown} value @param {string} fallbackOperation */
-function sanitizedPersistenceError(value, fallbackOperation) {
-  const operation = isPersistenceError(value) ? value.operation : fallbackOperation;
-  const code = isPersistenceError(value) ? value.code : "unknown";
-  switch (code) {
-    case "validation":
-    case "unsupported-version":
-      return errorResponse(
-        422,
-        code,
-        "Stored composition data is invalid or unsupported. Inspect its canonical JSON and retry.",
-        operation,
-      );
-    case "blocked":
-    case "conflict":
-      return errorResponse(
-        409,
-        code,
-        "A filesystem safety check blocked the operation. Inspect the compositions directory and retry.",
-        operation,
-      );
-    case "unavailable":
-    case "read-failed":
-      return errorResponse(
-        503,
-        code,
-        "Local composition files could not be read. Check directory permissions and retry.",
-        operation,
-      );
-    case "write-failed":
-    case "transaction-failed":
-      return errorResponse(
-        500,
-        code,
-        "Local composition files could not be updated. Check permissions and free space, then retry.",
-        operation,
-      );
-    default:
-      return errorResponse(
-        500,
-        "unknown",
-        "The local file provider failed unexpectedly. Retry or restart the development server.",
-        operation,
-      );
-  }
-}
-
 /** @param {unknown} payload @returns {any} */
 function validateEnvelope(payload) {
   if (!isPlainObject(payload) || typeof payload.operation !== "string") {
@@ -676,7 +630,8 @@ export function createComposerFileProviderMiddleware(options) {
           request: outputRequired.request,
         });
       }
-      return sanitizedPersistenceError(cause, envelope.operation);
+      const { status, error } = serializeDomainError("compositions", cause, envelope.operation, isPersistenceError);
+      return json(status, { ok: false, error });
     }
   };
 }

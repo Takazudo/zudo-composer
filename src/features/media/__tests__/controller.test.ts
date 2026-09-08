@@ -38,6 +38,105 @@ describe("versioned Media controller", () => {
     expect(update).toHaveBeenCalledTimes(2); expect(controller.hasDraft(record.id)).toBe(false);
     expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { note: "Newer" } } });
   });
+  it.each([false, true])("handles a newer draft with a different base revision (external commit: %s)", async (external) => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const original = filesystem.updateMetadata.bind(filesystem);
+    const update = vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => {
+      const saved = await original(...args);
+      const newer = external ? await original(record.id, { fileName: "other-tab.png" }, { expectedRevision: saved.revision }) : saved;
+      // Directly exercise the mismatch branch: this draft's base is newer than
+      // the in-flight draft's base before persistDraft receives its result.
+      controller.draftMetadata(summarizeMedia(newer), { note: "Concurrent edit" });
+      return saved;
+    });
+    controller.draftMetadata(summarizeMedia(record), { fileName: "saved.png", note: "First" });
+    await controller.saveDraft(record.id);
+    expect(controller.hasDraft(record.id)).toBe(true);
+    await controller.flush();
+    expect(update.mock.calls[1]![2]).toEqual({ expectedRevision: external ? 3 : 2 });
+    expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { fileName: external ? "other-tab.png" : "saved.png", note: "Concurrent edit" } } });
+    expect(controller.hasDraft(record.id)).toBe(false);
+  });
+
+  it("preserves unrelated pending fields and their conflict base when newer records arrive", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    controller.draftMetadata(summarizeMedia(record), { note: "Unsaved note" });
+    const newer = await filesystem.updateMetadata(record.id, { note: "External note" }, { expectedRevision: record.revision });
+    controller.draftMetadata(summarizeMedia(newer), { fileName: "Local name.png" });
+    const update = vi.spyOn(filesystem, "updateMetadata");
+    await expect(controller.flush()).rejects.toMatchObject({ code: "conflict" });
+    expect(update).toHaveBeenCalledWith(record.id, { note: "Unsaved note", fileName: "Local name.png" }, { expectedRevision: 1 });
+    expect(controller.hasDraft(record.id)).toBe(true);
+  });
+
+  it("retains pending fields if a newer input arrives before the active save conflicts", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const original = filesystem.updateMetadata.bind(filesystem);
+    const update = vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => {
+      const external = await original(record.id, { note: "External note" }, { expectedRevision: 1 });
+      controller.draftMetadata(summarizeMedia(external), { fileName: "Local name.png" });
+      return original(...args);
+    });
+    controller.draftMetadata(summarizeMedia(record), { note: "Unsaved note" });
+    await expect(controller.saveDraft(record.id)).rejects.toMatchObject({ code: "conflict" });
+    await controller.reload();
+    await expect(controller.flush()).rejects.toMatchObject({ code: "conflict" });
+    expect(update.mock.calls[1]).toEqual([record.id, { note: "Unsaved note", fileName: "Local name.png" }, { expectedRevision: 1 }]);
+    expect(controller.hasDraft(record.id)).toBe(true);
+  });
+
+  it("preserves unrelated concurrent fields when an incoming patch uses the saved base", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const original = filesystem.updateMetadata.bind(filesystem);
+    vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => {
+      const saved = await original(...args);
+      controller.draftMetadata(summarizeMedia(record), { note: "Concurrent note" });
+      controller.draftMetadata(summarizeMedia(saved), { fileName: "Concurrent name.png" });
+      return saved;
+    });
+    controller.draftMetadata(summarizeMedia(record), { note: "First" });
+    await controller.saveDraft(record.id); await controller.flush();
+    expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { note: "Concurrent note", fileName: "Concurrent name.png" } } });
+  });
+
+  it("does not regress a rebased concurrent draft when an inspector supplies its old base", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const original = filesystem.updateMetadata.bind(filesystem);
+    const update = vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => {
+      controller.draftMetadata(summarizeMedia(record), { note: "While saving" });
+      return original(...args);
+    });
+    controller.draftMetadata(summarizeMedia(record), { note: "First" });
+    await controller.saveDraft(record.id);
+    controller.draftMetadata(summarizeMedia(record), { note: "Latest keystroke" });
+    await controller.flush();
+    expect(update.mock.calls[1]![2]).toEqual({ expectedRevision: 2 });
+    expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { note: "Latest keystroke" } } });
+  });
+
+  it("refuses external changes after a successful save without losing the unsaved draft", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider); await controller.initialize();
+    controller.draftMetadata(summarizeMedia(record), { note: "Saved" }); await controller.saveDraft(record.id);
+    const base = controller.state.records[0]!;
+    controller.draftMetadata(base, { note: "Local unsaved" });
+    await filesystem.updateMetadata(record.id, { note: "Other tab" }, { expectedRevision: base.revision });
+    await expect(controller.flush()).rejects.toMatchObject({ code: "conflict" });
+    expect(controller.hasDraft(record.id)).toBe(true);
+    expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { note: "Other tab" } } });
+  });
+
   it("deduplicates an explicit draft save racing the workspace save barrier", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });

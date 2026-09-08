@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { lstat, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
@@ -246,15 +246,38 @@ describe("immutable local release storage", () => {
     try { expect(createLocalSiteProjectStore().root).toBe(testRoot); } finally { if (prior === undefined) delete process.env[SITE_PROJECT_LOCAL_ROOT_ENV]; else process.env[SITE_PROJECT_LOCAL_ROOT_ENV] = prior; }
   });
   it("roots disposable release state under the host project, never the package directory", async () => {
-    const { parent } = await fixture(); const prior = process.env[SITE_PROJECT_LOCAL_ROOT_ENV]; delete process.env[SITE_PROJECT_LOCAL_ROOT_ENV];
+    const { parent } = await fixture();
+    async function snapshot(path: string): Promise<unknown> {
+      const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      if (!stat) return null;
+      // Ignore access time: reading the snapshot itself may update it. Keep
+      // write metadata as well as bytes so even same-content writes are caught.
+      const metadata = { mode: stat.mode, ino: stat.ino, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs };
+      if (stat.isSymbolicLink()) return { ...metadata, target: await readlink(path) };
+      if (stat.isDirectory()) {
+        // Existing releases can contain many files; avoid opening them all at once.
+        const entries: [string, unknown][] = [];
+        for (const name of (await readdir(path)).sort()) entries.push([name, await snapshot(join(path, name))]);
+        return { ...metadata, entries };
+      }
+      if (stat.isFile()) return { ...metadata, digest: sha((await readFile(path)).toString("base64")) };
+      return metadata;
+    }
+    const foreignRoots = [...new Set([APP_ROOT, process.cwd()])].map((root) => join(root, SITE_PROJECT_LOCAL_ROOT_NAME));
+    const before = await Promise.all(foreignRoots.map(snapshot));
+    const prior = process.env[SITE_PROJECT_LOCAL_ROOT_ENV]; delete process.env[SITE_PROJECT_LOCAL_ROOT_ENV];
     try {
       const store = createLocalSiteProjectStore({ workspaceRoot: parent, componentPack: catalog.pack });
       expect(store.root).toBe(join(parent, SITE_PROJECT_LOCAL_ROOT_NAME));
       expect(await store.apply(applyInput())).toMatchObject({ status: "ok" });
       expect(await readdir(join(parent, SITE_PROJECT_LOCAL_ROOT_NAME))).toContain("heads.json");
       // The installed package directory and the working directory are not the
-      // host: neither may collect release state.
-      for (const foreign of [APP_ROOT, process.cwd()]) await expect(lstat(join(foreign, SITE_PROJECT_LOCAL_ROOT_NAME))).rejects.toMatchObject({ code: "ENOENT" });
+      // host: existing release state must remain untouched, and absent state
+      // must stay absent. Never remove a user's state to prepare this assertion.
+      expect(await Promise.all(foreignRoots.map(snapshot))).toEqual(before);
     } finally { if (prior === undefined) delete process.env[SITE_PROJECT_LOCAL_ROOT_ENV]; else process.env[SITE_PROJECT_LOCAL_ROOT_ENV] = prior; }
   });
 });

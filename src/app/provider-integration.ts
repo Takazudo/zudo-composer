@@ -1,4 +1,4 @@
-import injectedSiteProject, { siteProjectRevision as injectedSiteProjectRevision } from "virtual:site-project-source";
+import injectedSiteProject, { deliverySource as injectedDeliverySource, siteProjectRevision as injectedSiteProjectRevision } from "virtual:site-project-source";
 import { COMPOSITION_PROVIDERS, COMPOSITION_SCHEMA_VERSION, CompositionPersistenceError, createFileProviderCompositionStore, diagnoseDocument, isCompositionCollectionStore, type CompositionDocument, type CompositionInitializationOutcome, type CompositionProvider, type CompositionStore } from "../composer/browser";
 import { createContentCatalog, type ContentCatalog } from "../content/catalog";
 import { CONTENT_PROVIDERS, ContentPersistenceError, type ContentInitializationOutcome, type ContentProvider } from "../content/library";
@@ -17,7 +17,7 @@ import type { MappingAssignmentCatalog } from "../sitemapper/routes";
 import { createFileProviderSitemapProvider, readSitemapFileProviderConfig } from "../sitemapper/storage/file-provider";
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
 import { createFileProviderWorkspaceStorage, withWorkspaceInitializationLock, type WorkspaceStorage } from "./workspace-storage";
-import { isAuthoringPersistenceChannel, MEDIA_PERSISTENCE_CHANNEL } from "./persistence-channels";
+import { AUTHORING_PERSISTENCE_CHANNELS, isAuthoringPersistenceChannel, MEDIA_PERSISTENCE_CHANNEL, PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./persistence-channels";
 import { projectFromWorkspace, type WorkspaceRecord } from "./workspace-record";
 import { createWorkspaceSaveRegistry, type WorkspaceSaveRegistry } from "./workspace-sessions";
 import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture, type WorkspaceCaptureOutcome, type WorkspaceSnapshotSource, type WorkspaceToken } from "./workspace-snapshot";
@@ -100,7 +100,12 @@ interface MappingSnapshotStore { readAll(): Promise<readonly MappingRecord[]> }
 export interface ProductionProviderIntegration {
   workspace: WorkspaceLifecycle;
   sessions: WorkspaceSaveRegistry;
-  subscribeChanges(listener: () => void): () => void;
+  /**
+   * Without a filter, observes every persisted input and editor-session changes.
+   * A domain filter observes committed writes only; workspace hints always pass.
+   * The optional callback argument keeps older broad subscription fakes usable.
+   */
+  subscribeChanges(listener: (channel?: string) => void, channels?: readonly string[]): () => void;
   captureWorkspace(): Promise<WorkspaceProjectCaptureOutcome>;
   isCaptureCurrent(capture: WorkspaceCapture): Promise<boolean>;
   componentProvider: typeof activeComponentProvider;
@@ -222,7 +227,9 @@ export function createFileProviderWorkspaceProviders(workspace: () => string): W
 export function createProductionProviderIntegration(options: ProductionProviderIntegrationOptions = {}): ProductionProviderIntegration {
   const mediaProvider = options.mediaProvider === undefined ? createFileProviderMediaProvider() : options.mediaProvider ?? undefined;
   const usesInjectedSource = options.project === undefined;
-  const activated = activate(usesInjectedSource ? injectedSiteProject : options.project);
+  const activated: ReturnType<typeof activate> = usesInjectedSource && injectedDeliverySource.status === "error"
+    ? { error: new ProviderIntegrationError("source", injectedDeliverySource.message) }
+    : activate(usesInjectedSource ? injectedSiteProject : options.project);
   let project = activated.project;
   const revisionInput = usesInjectedSource ? injectedSiteProjectRevision : options.sourceRevision;
   let sourceRevision: string | undefined;
@@ -579,7 +586,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   };
   /**
    * Capturing the workspace is a provider round trip since the stores moved onto
-   * the filesystem, and every authoring write hints every domain, so a write
+   * the filesystem, and project captures depend on every authoring domain, so a write
    * landing inside the capture window is ordinary rather than exceptional. The
    * capture reports that as `changed`, which is a read asking to be repeated —
    * and no caller repeats it, so a Media usage scan or a release preview that
@@ -595,10 +602,10 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     try { return { status: "ready", project: await snapshotNow(value.capture, true) }; }
     catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Snapshot validation failed.") }; }
   };
-  const subscribeChanges = (listener: () => void) => {
-    const stopStorage = subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel) || channel === MEDIA_PERSISTENCE_CHANNEL) listener(); });
+  const subscribeChanges = (listener: (channel?: string) => void, channels?: readonly string[]) => {
+    const stopStorage = subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel, channels ?? AUTHORING_PERSISTENCE_CHANNELS) || (channels === undefined && channel === MEDIA_PERSISTENCE_CHANNEL)) listener(channel); });
     let sessionGeneration = sessions.generation;
-    const stopSessions = sessions.subscribe(() => { if (sessionGeneration !== sessions.generation) { sessionGeneration = sessions.generation; listener(); } });
+    const stopSessions = sessions.subscribe(() => { if (sessionGeneration !== sessions.generation) { sessionGeneration = sessions.generation; if (channels === undefined) listener("sessions"); } });
     return () => { stopStorage(); stopSessions(); };
   };
   const mappingAttachmentService = createMappingAttachmentService({
@@ -606,7 +613,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     getCurrentSiteProject,
     workspace,
     componentCatalog: activeComponentProvider.catalog,
-    subscribe: (listener) => subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel)) listener(); }),
+    subscribe: (listener) => subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, listener),
   });
   return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, mediaProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, mappingAttachmentService, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle, workspace, sessions,
     subscribeChanges,

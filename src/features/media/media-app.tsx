@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useWorkspace } from "../../app/workspace-context";
 import { parseIntent, type RouteIntentParseOutcome } from "../../app/route-intents";
 import { OutlineTree, type OutlineNode, type OutlineInsertSession } from "../../components/outline-tree";
@@ -164,7 +164,8 @@ function MediaInspector({ record, controller, dimensions, usageHref, onClose, on
 }) {
   const [name, setName] = useState(record?.fileName ?? ""); const [note, setNote] = useState(record?.note ?? "");
   const [draftBase, setDraftBase] = useState(record);
-  useEffect(() => { if (record && !controller.hasDraft(record.id)) { setName(record.fileName); setNote(record.note); setDraftBase(record); } }, [record?.revision, controller.state.generation, controller]);
+  // Advance the committed base before another input event can author a draft.
+  useLayoutEffect(() => { if (record && !controller.hasDraft(record.id)) { setName(record.fileName); setNote(record.note); setDraftBase(record); } }, [record?.revision, controller.state.generation, controller]);
   const [scan, setScan] = useState<MediaUsageScan | null>(null);
   const [contentGeneration, setContentGeneration] = useState(0);
   const scanEpoch = useRef(0);

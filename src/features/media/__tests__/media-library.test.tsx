@@ -1,3 +1,6 @@
+import { createWorkspaceSaveRegistry } from "../../../app/workspace-sessions";
+import { AUTHORING_PERSISTENCE_CHANNELS, PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "../../../app/persistence-channels";
+import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MediaApp } from "../media-app";
@@ -7,6 +10,28 @@ import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 describe("Media workspace", () => {
+  it("refreshes both inspector and trash usage scans for every project dependency", async () => {
+    const { provider, filesystem } = await providerFixture();
+    await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const services = completeServices({ subscribeChanges: (listener) => subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, listener) });
+    const scan = vi.spyOn(services, "scan");
+    render(<MediaApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
+    await waitFor(() => expect(scan).toHaveBeenCalled());
+    for (const channel of AUTHORING_PERSISTENCE_CHANNELS) {
+      scan.mockClear(); notifyPersistenceChange(channel);
+      await waitFor(() => expect(scan).toHaveBeenCalledTimes(1));
+    }
+    fireEvent.click(within(screen.getByRole("complementary", { name: "Asset details" })).getByRole("button", { name: "Trash…", exact: true }));
+    await screen.findByRole("dialog", { name: "Move assets to trash?" });
+    await waitFor(() => expect(scan.mock.calls.length).toBeGreaterThan(1));
+    for (const channel of AUTHORING_PERSISTENCE_CHANNELS) {
+      scan.mockClear(); notifyPersistenceChange(channel);
+      // Inspector and open trash confirmation each invalidate their own scan.
+      await waitFor(() => expect(scan).toHaveBeenCalledTimes(2));
+    }
+  });
+
   it("shows actionable additional project uses inside the blocked trash dialog", async () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
@@ -86,6 +111,26 @@ describe("Media workspace", () => {
     expect(screen.getByRole("button", { name: "Upload" })).toHaveProperty("disabled", true);
     expect(screen.queryByRole("img")).toBeNull();
   });
+  it("saves inspector details, accepts another edit, and flushes against the committed revision", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const controller = createMediaLibraryController(provider, { contentServices: completeServices() });
+    const sessions = createWorkspaceSaveRegistry();
+    const session = sessions.register({ feature: "Media metadata", providerId: provider.descriptor.id, recordId: record.id }, { flush: () => controller.flush() });
+    const update = vi.spyOn(filesystem, "updateMetadata");
+    render(<MediaApp provider={provider} controller={controller} intent={{ status: "none" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
+    const inspector = screen.getByRole("complementary", { name: "Asset details" });
+    fireEvent.input(within(inspector).getByLabelText("Internal note"), { target: { value: "First save" } });
+    fireEvent.click(within(inspector).getByRole("button", { name: "Save details" }));
+    await waitFor(() => expect(controller.hasDraft(record.id)).toBe(false));
+    fireEvent.input(within(inspector).getByLabelText("Internal note"), { target: { value: "Second edit" } });
+    expect(await sessions.flush()).toMatchObject({ status: "ready" });
+    expect(update.mock.calls.map((call) => call[2]?.expectedRevision)).toEqual([1, 2]);
+    expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { note: "Second edit" } } });
+    expect(controller.hasDraft(record.id)).toBe(false); session.detach();
+  });
+
   it("filters grid/list and saves inspector metadata with the stable identity", async () => {
     const { provider, filesystem } = await providerFixture();
     const image = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });

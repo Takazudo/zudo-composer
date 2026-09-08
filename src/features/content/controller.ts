@@ -46,6 +46,8 @@ export interface ContentAuthoringState {
    * unknown model shows none rather than an invented "complete".
    */
   incompleteCounts: Readonly<Record<string, number>>;
+  modelSelectionPending: boolean;
+  entryCreationPending: boolean;
   model: ContentModelRecord | null;
   entries: readonly ContentEntryRecord[];
   usedFieldIds: readonly string[];
@@ -65,7 +67,7 @@ export interface ContentAuthoringState {
 
 const initialState: ContentAuthoringState = {
   viewId: null,
-  phase: "idle", models: [], providerId: "", providerLabel: "", modelDescriptions: {}, entryCounts: {}, incompleteCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
+  phase: "idle", modelSelectionPending: false, entryCreationPending: false, models: [], providerId: "", providerLabel: "", modelDescriptions: {}, entryCounts: {}, incompleteCounts: {}, model: null, entries: [], usedFieldIds: [], entry: null,
   workMode: "entries", saveStatus: "pristine", message: "", recoveryMessage: null, graphStatus: "idle", graphMessage: "", snapshots: [], incoming: [], publicationState: "draft", conflictRecovery: null,
 };
 
@@ -90,6 +92,7 @@ export class ContentAuthoringController {
   private readonly queueStates: Record<"model" | "entry", { active: boolean; status: Exclude<ContentSaveStatus, "pristine">; error: Error | null }> = {
     model: { active: false, status: "saved", error: null }, entry: { active: false, status: "saved", error: null },
   };
+  private entryCreation: Promise<void> | null = null;
   private modelRequestId = 0;
   private entryRequestId = 0;
   private listRequestId = 0;
@@ -118,36 +121,54 @@ export class ContentAuthoringController {
   async createModel(name: string, kind: ContentModelKind): Promise<void> {
     const trimmed = name.trim();
     if (!trimmed) throw new Error("Model name is required.");
-    await this.flushSessions();
-    const record = createContentModelRecord({ name: trimmed, kind }, { idFactory: this.idFactory, now: this.now });
-    await this.provider.store.putModel(record);
-    await this.refreshModels();
-    await this.openModel(record.id);
+    const requestId = ++this.modelRequestId;
+    this.entryRequestId++;
+    this.set({ ...this.current, modelSelectionPending: true });
+    try {
+      await this.flushEditSessions();
+      if (requestId !== this.modelRequestId) throw new Error("Model selection changed. Model creation was not started.");
+      const record = createContentModelRecord({ name: trimmed, kind }, { idFactory: this.idFactory, now: this.now });
+      await this.provider.store.putModel(record);
+      if (requestId !== this.modelRequestId) {
+        await this.refreshModels();
+        throw new Error(`Model "${trimmed}" was created. Open it from Content; your newer selection was kept.`);
+      }
+      // Publish its navigator row only after the selected model is ready.
+      await this.openModel(record.id);
+      await this.refreshModels();
+    } finally {
+      if (requestId === this.modelRequestId) this.set({ ...this.current, modelSelectionPending: false });
+    }
   }
 
   async openModel(id: string): Promise<void> {
     const requestId = ++this.modelRequestId;
     const listRequestId = ++this.listRequestId;
     this.entryRequestId++;
-    if (this.current.model?.id === id) { this.ensureCurrentQueues(); if (this.current.entry) { void this.refreshGraph(this.current.entry, this.entryRequestId); void this.refreshPublication(this.current.entry, this.entryRequestId); } return; }
-    await this.flushSessions();
-    if (requestId !== this.modelRequestId || listRequestId !== this.listRequestId) return;
-    const outcome = await this.provider.store.getModel(id);
-    if (requestId !== this.modelRequestId || listRequestId !== this.listRequestId) return;
-    if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Content model was not found." : "This model is unreadable and has been preserved.");
-    const [page, snapshot] = await Promise.all([
-      this.provider.store.pageEntries(id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
-      this.provider.store.scanEntries(id),
-    ]);
-    if (requestId !== this.modelRequestId || listRequestId !== this.listRequestId) return;
-    await this.closeQueues();
-    if (requestId !== this.modelRequestId) return;
-    this.installModelQueue(outcome.record);
-    this.set({ ...this.current, phase: "ready", viewId: null, model: outcome.record, entries: page.entries, entry: null,
-      usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, workMode: "entries", saveStatus: "pristine", message: "Model loaded.",
-      entryCounts: { ...this.current.entryCounts, [id]: snapshot.count },
-      incompleteCounts: { ...this.current.incompleteCounts, [id]: incompleteEntryCount(outcome.record, snapshot.entries) } });
-    if (outcome.record.document.kind === "single" && page.entries[0]) await this.openEntry(page.entries[0].id);
+    this.set({ ...this.current, modelSelectionPending: true });
+    try {
+      if (this.current.model?.id === id) { this.ensureCurrentQueues(); if (this.current.entry) { void this.refreshGraph(this.current.entry, this.entryRequestId); void this.refreshPublication(this.current.entry, this.entryRequestId); } return; }
+      await this.flushEditSessions();
+      if (requestId !== this.modelRequestId || listRequestId !== this.listRequestId) return;
+      const outcome = await this.provider.store.getModel(id);
+      if (requestId !== this.modelRequestId || listRequestId !== this.listRequestId) return;
+      if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Content model was not found." : "This model is unreadable and has been preserved.");
+      const [page, snapshot] = await Promise.all([
+        this.provider.store.pageEntries(id, { limit: CONTENT_ENTRY_PAGE_SIZE }),
+        this.provider.store.scanEntries(id),
+      ]);
+      if (requestId !== this.modelRequestId || listRequestId !== this.listRequestId) return;
+      await this.closeQueues();
+      if (requestId !== this.modelRequestId) return;
+      this.installModelQueue(outcome.record);
+      this.set({ ...this.current, phase: "ready", viewId: null, model: outcome.record, entries: page.entries, entry: null,
+        usedFieldIds: usedFields(snapshot.entries), nextCursor: page.nextCursor, workMode: "entries", saveStatus: "pristine", message: "Model loaded.",
+        entryCounts: { ...this.current.entryCounts, [id]: snapshot.count },
+        incompleteCounts: { ...this.current.incompleteCounts, [id]: incompleteEntryCount(outcome.record, snapshot.entries) } });
+      if (outcome.record.document.kind === "single" && page.entries[0]) await this.openEntry(page.entries[0].id);
+    } finally {
+      if (requestId === this.modelRequestId) this.set({ ...this.current, modelSelectionPending: false });
+    }
   }
 
   async loadMoreEntries(): Promise<void> {
@@ -165,7 +186,7 @@ export class ContentAuthoringController {
     const modelRequestId = this.modelRequestId;
     const listRequestId = ++this.listRequestId;
     const entryRequestId = ++this.entryRequestId;
-    await this.flushSessions();
+    await this.flushEditSessions();
     if (modelRequestId !== this.modelRequestId || listRequestId !== this.listRequestId || this.current.model?.id !== model.id) return;
     if (this.entryQueue) {
       const queue = this.entryQueue;
@@ -224,7 +245,7 @@ export class ContentAuthoringController {
 
   async removeField(fieldId: string): Promise<void> {
     const model = this.requireModel();
-    await this.flushSessions();
+    await this.flushEditSessions();
     const deletionSnapshot = await this.assertDeletionAllowed({ kind: "field", ref: { providerId: this.provider.descriptor.id, recordId: model.id }, fieldId });
     await this.commitDeletion(deletionSnapshot, [{ kind: "remove-field", modelId: model.id, fieldId }]);
     try {
@@ -237,31 +258,59 @@ export class ContentAuthoringController {
   }
 
   async createEntry(): Promise<void> {
-    const model = this.requireModel();
-    if (model.document.kind === "single" && this.current.entries.length > 0) throw new Error("A Single model has exactly one Entry workspace.");
-    await this.flushSessions();
-    const entry = createContentEntryRecord(model.id, {}, { idFactory: this.idFactory, now: this.now });
-    await this.provider.store.putEntry(entry);
-    this.listRequestId++;
-    this.admitEntry(model, entry);
-    await this.openEntry(entry.id);
+    return this.startEntryCreation();
   }
 
-  /**
-   * A Collection Entry copied whole, minus its identity. Creation prepends, so
-   * the copy lands at the head of the list beside the Entry it came from.
-   */
+  /** A Collection Entry copied whole, minus its identity. */
   async duplicateEntry(id: string): Promise<void> {
+    return this.startEntryCreation(id);
+  }
+
+  private startEntryCreation(sourceId?: string): Promise<void> {
+    if (this.entryCreation) return Promise.reject(new Error("Wait for the pending Entry creation to finish."));
+    const operation = this.createOrDuplicateEntry(sourceId);
+    this.entryCreation = operation;
+    void operation.finally(() => {
+      if (this.entryCreation !== operation) return;
+      this.entryCreation = null;
+      this.set({ ...this.current, entryCreationPending: false });
+    }).catch(() => undefined);
+    return operation;
+  }
+
+  private async createOrDuplicateEntry(sourceId?: string): Promise<void> {
+    if (this.current.modelSelectionPending) throw new Error("Wait for Content model selection to finish before adding an Entry.");
     const model = this.requireModel();
-    if (model.document.kind === "single") throw new Error("A Single model has exactly one Entry workspace.");
-    await this.flushSessions();
-    const outcome = await this.provider.store.getEntry(id);
-    if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Entry was not found." : "This Entry is unreadable and has been preserved.");
-    const copy = createContentEntryRecord(model.id, structuredClone(outcome.record.values), { idFactory: this.idFactory, now: this.now });
-    await this.provider.store.putEntry(copy);
+    const modelRequestId = this.modelRequestId;
+    const entryRequestId = this.entryRequestId;
+    const selectionMatches = () => modelRequestId === this.modelRequestId && entryRequestId === this.entryRequestId && this.current.model?.id === model.id;
+    if (model.document.kind === "single" && (sourceId || this.current.entries.length > 0)) throw new Error("A Single model has exactly one Entry workspace.");
+    this.set({ ...this.current, entryCreationPending: true });
+    await this.flushEditSessions();
+    let values: ContentEntryRecord["values"] = {};
+    if (sourceId) {
+      const outcome = await this.provider.store.getEntry(sourceId);
+      if (outcome.status !== "loaded") throw new Error(outcome.status === "not-found" ? "Entry was not found." : "This Entry is unreadable and has been preserved.");
+      if (outcome.record.modelId !== model.id) throw new Error("Entry does not belong to the open Content model.");
+      values = structuredClone(outcome.record.values);
+    }
+    if (!selectionMatches()) throw new Error("Content selection changed. Entry creation was not started.");
+    const entry = createContentEntryRecord(model.id, values, { idFactory: this.idFactory, now: this.now });
+    await this.provider.store.putEntry(entry);
+    const savedElsewhere = () => new Error(`Entry "${entry.id}" was saved in model "${model.document.name}". Open that model to find it; your newer selection was kept.`);
+    if (!selectionMatches()) {
+      // Do not increment a count that a newer navigation may have already
+      // refreshed, or install this record into that navigation's entry list.
+      const counts = this.current.entryCounts;
+      const count = await this.provider.store.countEntries(model.id).catch(() => undefined);
+      if (count !== undefined && counts === this.current.entryCounts) this.set({ ...this.current, entryCounts: { ...counts, [model.id]: count } });
+      throw savedElsewhere();
+    }
     this.listRequestId++;
-    this.admitEntry(model, copy);
-    await this.openEntry(copy.id);
+    this.admitEntry(model, entry);
+    try { await this.openEntry(entry.id); }
+    catch (cause) { throw new Error(`Entry "${entry.id}" was saved in model "${model.document.name}", but could not be opened: ${errorMessage(cause)} Open that model to find it.`, { cause }); }
+    if (this.current.model?.id !== model.id || this.current.entry?.id !== entry.id) throw savedElsewhere();
   }
 
   async openEntry(id: string): Promise<void> {
@@ -310,7 +359,7 @@ export class ContentAuthoringController {
 
   async inspectRelationships(): Promise<void> {
     const entryRequestId = this.entryRequestId, modelRequestId = this.modelRequestId, modelId = this.current.model?.id;
-    await this.flushSessions();
+    await this.flushEditSessions();
     if (this.current.entry) await this.refreshGraph(this.current.entry, this.entryRequestId);
     if (entryRequestId !== this.entryRequestId || modelRequestId !== this.modelRequestId || modelId !== this.current.model?.id) return;
     this.set({ ...this.current, workMode: "relationships", message: "Relationships ready." });
@@ -393,7 +442,7 @@ export class ContentAuthoringController {
     const entryRequestId = this.entryRequestId;
     const inverse = model.document.presentation?.inverses.find((item) => item.id === inverseId);
     if (!inverse) throw new Error("Inverse relationship is unavailable.");
-    await this.flushSessions();
+    await this.flushEditSessions();
     const read = await readContentGraph(this.providers.map((provider) => provider.store));
     if (entryRequestId !== this.entryRequestId || this.current.entry?.id !== target.id || this.current.entry.modelId !== target.modelId) throw new Error("The selected Entry changed before the inverse edit could be applied.");
     if (read.status !== "ready") throw new Error(read.message);
@@ -422,7 +471,7 @@ export class ContentAuthoringController {
     const entry = this.current.entry;
     if (!entry) throw new Error("No Entry is open.");
     if (entry.lifecycle === "draft") return;
-    await this.flushSessions();
+    await this.flushEditSessions();
     const snapshot = await this.provider.store.readAll();
     await this.provider.store.transact({ expectedMutationToken: snapshot.mutationToken, operations: [{ kind: "unpublish-entry", id: entry.id }] });
     await this.reloadEntries();
@@ -430,7 +479,7 @@ export class ContentAuthoringController {
   }
 
   async deleteEntry(id: string): Promise<void> {
-    await this.flushSessions();
+    await this.flushEditSessions();
     const stored = this.current.entry?.id === id ? { status: "loaded" as const, record: this.current.entry } : await this.provider.store.getEntry(id);
     const modelId = stored.status === "loaded" ? stored.record.modelId : this.requireModel().id;
     const deletionSnapshot = await this.assertDeletionAllowed({ kind: "entry", ref: { providerId: this.provider.descriptor.id, modelId, recordId: id } });
@@ -448,7 +497,7 @@ export class ContentAuthoringController {
   }
 
   async deleteModel(id: string): Promise<void> {
-    await this.flushSessions();
+    await this.flushEditSessions();
     const snapshot = await this.assertDeletionAllowed({ kind: "model", ref: { providerId: this.provider.descriptor.id, recordId: id } });
     await this.commitDeletion(snapshot, [{ kind: "delete-model", id }]);
     try {
@@ -466,7 +515,14 @@ export class ContentAuthoringController {
     if (this.queueStates.entry.status === "error") this.entryQueue?.retry();
     if (this.queueStates.model.status === "error") this.modelQueue?.retry();
   }
+  /** Workspace navigation waits for new records as well as queued edits. */
   async flushSessions(): Promise<void> {
+    do {
+      if (this.entryCreation) await this.entryCreation;
+      await this.flushEditSessions();
+    } while (this.entryCreation);
+  }
+  private async flushEditSessions(): Promise<void> {
     if (this.conflictDraft) throw new Error(this.current.conflictRecovery?.message ?? "Resolve the Content conflict before leaving this workspace.");
     const outcomes = await Promise.allSettled([this.entryQueue?.flush(), this.modelQueue?.flush()].filter((value): value is Promise<void> => value !== undefined));
     const failures = outcomes.flatMap((outcome) => outcome.status === "rejected" ? [outcome.reason instanceof Error ? outcome.reason.message : "Save failed."] : []);
@@ -536,6 +592,7 @@ export class ContentAuthoringController {
   }
 
   private async runInitialization(load: () => Promise<ContentInitializationOutcome>): Promise<void> {
+    this.modelRequestId++; this.entryRequestId++; this.listRequestId++;
     this.conflictDraft = null;
     this.scanGeneration += 1;
     this.set({ ...this.current, phase: "loading", message: "Loading Content library…" });
@@ -544,13 +601,13 @@ export class ContentAuthoringController {
       if (outcome.status === "ready") {
         const counts = await Promise.all(outcome.models.map(async (model) => [model.id, await this.provider.store.countEntries(model.id)] as const));
         const descriptions = await this.loadModelDescriptions(outcome.models);
-        this.set({ ...initialState, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "ready", models: outcome.models, modelDescriptions: descriptions, entryCounts: Object.fromEntries(counts), message: "Content library ready." });
+        this.set({ ...initialState, entryCreationPending: this.entryCreation !== null, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "ready", models: outcome.models, modelDescriptions: descriptions, entryCounts: Object.fromEntries(counts), message: "Content library ready." });
         void this.sweepIncompleteCounts(outcome.models);
       }
-      else if (outcome.status === "recovery-required") this.set({ ...initialState, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "recovery", models: outcome.models, recoveryMessage: outcome.recovery.message, message: "Recovery required. Source data was preserved." });
-      else this.set({ ...initialState, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "error", message: outcome.error.message });
+      else if (outcome.status === "recovery-required") this.set({ ...initialState, entryCreationPending: this.entryCreation !== null, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "recovery", models: outcome.models, recoveryMessage: outcome.recovery.message, message: "Recovery required. Source data was preserved." });
+      else this.set({ ...initialState, entryCreationPending: this.entryCreation !== null, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "error", message: outcome.error.message });
     } catch (reason) {
-      this.set({ ...initialState, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "error", message: reason instanceof Error ? reason.message : "Content library initialization failed." });
+      this.set({ ...initialState, entryCreationPending: this.entryCreation !== null, providerId: this.provider.descriptor.id, providerLabel: this.provider.descriptor.label, phase: "error", message: reason instanceof Error ? reason.message : "Content library initialization failed." });
     }
   }
   private installModelQueue(record: ContentModelRecord): void {

@@ -1,3 +1,4 @@
+import { AUTHORING_PERSISTENCE_CHANNELS, subscribeAuthoringPersistenceChanges, PROJECT_USAGE_CHANNELS } from "../persistence-channels";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createWorkspaceSaveRegistry } from "../workspace-sessions";
 import { captureWorkspaceSnapshot, type WorkspaceSnapshotSource } from "../workspace-snapshot";
@@ -116,13 +117,32 @@ describe("durable mutable workspace", () => {
     expect(await reload.contentProvider.store.getEntry("about-entry")).toMatchObject({ status: "not-found" });
   });
 
+  it("dispatches project subscribers across domains and narrows metadata subscribers", async () => {
+    const current = createProductionProviderIntegration(options(await host()));
+    const all = vi.fn(), metadata = vi.fn(), attachments = vi.fn(), mediaUsage = vi.fn();
+    const stops = [current.subscribeChanges(all), current.subscribeChanges(metadata, ["workspace"]), current.mappingAttachmentService.subscribe!(attachments), subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, mediaUsage)];
+    try {
+      for (const channel of [...AUTHORING_PERSISTENCE_CHANNELS, "media"]) {
+        all.mockClear(); metadata.mockClear(); attachments.mockClear(); mediaUsage.mockClear();
+        notifyPersistenceChange(channel);
+        expect(all).toHaveBeenCalledWith(channel);
+        expect(metadata).toHaveBeenCalledTimes(channel === "workspace" ? 1 : 0);
+        expect(attachments).toHaveBeenCalledTimes(channel === "media" ? 0 : 1);
+        expect(mediaUsage).toHaveBeenCalledTimes(channel === "media" ? 0 : 1);
+      }
+      all.mockClear(); notifyPersistenceChange("unrelated"); expect(all).not.toHaveBeenCalled();
+    } finally { stops.forEach((stop) => stop()); }
+  });
+
   it("refreshes summary from committed provider writes across integrations and does not emit on failed writes", async () => {
     const opts = options(await host()); const first = createProductionProviderIntegration(opts); const other = createProductionProviderIntegration(opts);
     await first.initialization.initialize(); await other.initialization.initialize();
     const summary = createWorkspaceSummary(first);
     expect(await summary.counts()).toMatchObject({ content: { value: { entries: 4 } } });
+    const listCompositions = vi.spyOn(first.compositionProviders[0]!.store, "list");
     await other.contentProvider.store.deleteEntry("about-entry");
     expect(await summary.counts()).toMatchObject({ content: { value: { entries: 3 } } });
+    expect(listCompositions).not.toHaveBeenCalled();
     const changed = vi.fn(); const stop = first.subscribeChanges(changed);
     await expect(other.mappingProvider.store.put({} as never)).rejects.toThrow();
     expect(changed).not.toHaveBeenCalled();

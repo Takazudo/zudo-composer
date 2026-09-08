@@ -1,4 +1,4 @@
-import type { FileProviderConfig } from "../../../shared/file-provider";
+import type { FileProviderConfig, FileProviderTransportOperation } from "../../../shared/file-provider";
 import type { MappingInitializationOutcome, MappingPersistenceOperation, MappingProvider, MappingStore } from "../../model";
 
 /** One endpoint per domain; the spelling is pinned by the shared protocol. */
@@ -17,10 +17,11 @@ export const MAPPING_FILE_PROVIDER_OPERATIONS = [
   "list", "read-all", "snapshot", "get", "put", "delete", "seed", "clear", "initialize", "start-fresh",
 ] as const;
 
-export type MappingWireOperation = (typeof MAPPING_FILE_PROVIDER_OPERATIONS)[number];
+export type MappingWireOperation = FileProviderTransportOperation<(typeof MAPPING_FILE_PROVIDER_OPERATIONS)[number]>;
 
 /** `start-fresh` is an initialization entry point, not a store operation. */
 export function mappingPersistenceOperationOf(operation: MappingWireOperation): MappingPersistenceOperation {
+  if (operation === "transaction") return "transact";
   if (operation === "start-fresh") return "clear";
   // Reading the whole record set is a `list` as far as Mapping's own error
   // vocabulary is concerned; only the transport distinguishes them.
