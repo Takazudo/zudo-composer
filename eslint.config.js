@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist',
+      'dist-hosted-demo',
       '**/dist',
       'coverage',
       'worktrees/**',

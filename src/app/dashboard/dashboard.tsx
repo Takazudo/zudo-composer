@@ -43,6 +43,7 @@ import "./dashboard.css";
 type MediaStorageStatus = WorkspaceCounts["media"]["status"];
 
 export interface DashboardProps {
+  hostedDemo?: boolean;
   /**
    * The chrome's single read model. Omitted only where no provider graph is
    * mounted, which leaves the page as its hero and quick actions.
@@ -62,7 +63,7 @@ const NEW_COMPOSITION_HREF = formatIntent({ route: "composer", action: "new" });
  * independently, so a provider that could not be read degrades its own card to
  * `Unavailable · Retry` while the rest of the page keeps working.
  */
-export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
+export function Dashboard({ summary, now, hostedDemo = false }: DashboardProps): JSX.Element {
   const view = useWorkspaceView(summary);
   const { counts, recent, attention, loading, error, reload } = view;
   const mediaReady = counts?.media.status === "ok";
@@ -166,7 +167,7 @@ export function Dashboard({ summary, now }: DashboardProps): JSX.Element {
             </div>
           </DashCard>
 
-          <StorageCard mediaStatus={mediaStatus} recentLastWrite={recent === null ? null : lastWrite(recent)} />
+          <StorageCard hostedDemo={hostedDemo} mediaStatus={mediaStatus} recentLastWrite={recent === null ? null : lastWrite(recent)} />
         </div>
       </div>
     </main>
@@ -371,9 +372,11 @@ const MEDIA_STORAGE_LABEL: Record<MediaStorageStatus, string> = {
 };
 
 function StorageCard({
+  hostedDemo,
   mediaStatus,
   recentLastWrite,
 }: {
+  hostedDemo: boolean;
   mediaStatus: MediaStorageStatus;
   recentLastWrite: LastWrite | null;
 }): JSX.Element {
@@ -381,10 +384,10 @@ function StorageCard({
     <DashCard title="Storage" titleId="cms-dash-storage">
       <div class="cms-dash-card__pad cms-dash-storage">
         <StorageRow icon={LibraryIcon} label="Project files">
-          <span class="cms-dash-storage__value">Local filesystem · zudo-composer</span>
+          <span class="cms-dash-storage__value">{hostedDemo ? "This tab’s memory · resets on reload" : "Local filesystem · zudo-composer"}</span>
         </StorageRow>
         <StorageRow icon={FolderIcon} label="Media files">
-          <Chip tone="plain">{MEDIA_STORAGE_LABEL[mediaStatus]}</Chip>
+          <Chip tone="plain">{hostedDemo && mediaStatus === "ok" ? "This tab only" : MEDIA_STORAGE_LABEL[mediaStatus]}</Chip>
         </StorageRow>
         <StorageRow icon={SavedIcon} label="Last write">
           {recentLastWrite === null || recentLastWrite.status === "unknown" ? (

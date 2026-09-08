@@ -11,7 +11,7 @@ export const CONTENT_PROVIDERS = {
   filesystem: { id: "content-filesystem", label: "Project files" },
 } as const;
 
-export type ContentProviderDescriptor = (typeof CONTENT_PROVIDERS)[keyof typeof CONTENT_PROVIDERS];
+export type ContentProviderDescriptor = Omit<(typeof CONTENT_PROVIDERS)[keyof typeof CONTENT_PROVIDERS], "label"> & { readonly label: string };
 
 export interface ContentModelSummary {
   id: RecordId;

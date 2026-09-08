@@ -16,3 +16,5 @@ coverage/
 /cms/media/.mutation.lock
 /cms/media/.upload-*.stage
 /cms/media/.*.tmp
+
+/dist-hosted-demo/

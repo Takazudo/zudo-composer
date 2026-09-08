@@ -14,7 +14,7 @@ function ReleaseCard({ title, children }: { title: string; children: ComponentCh
   return <section class="cms-release__card"><h2 class="cms-release__card-title">{title}</h2>{children}</section>;
 }
 
-export function ReleaseRoute({ controller, href }: { controller: ReleaseController; href(change: ReleaseChange | ReleaseCheck): string | null }) {
+export function ReleaseRoute({ controller, href, hostedDemo = false }: { hostedDemo?: boolean; controller: ReleaseController; href(change: ReleaseChange | ReleaseCheck): string | null }) {
   const [state, setState] = useState(controller.getSnapshot);
   useEffect(() => { setState(controller.getSnapshot()); return controller.subscribe(() => setState(controller.getSnapshot())); }, [controller]);
   useEffect(() => { if (!controller.getSnapshot().working) void controller.inspect(); }, [controller]);
@@ -23,13 +23,13 @@ export function ReleaseRoute({ controller, href }: { controller: ReleaseControll
   const exportWorking = () => { const source = controller.exportProject(); if (!source) return; const url = URL.createObjectURL(new Blob([source], { type: "application/json" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "working-site-project.json"; anchor.click(); URL.revokeObjectURL(url); };
   // Highlight the phase's step even while blocked; styling never enables an action.
   const primaryStep = { inspect: "review", reviewed: "approve", approved: "apply", staged: "build", built: "activate", activated: "newReview", uncertain: "newReview" }[state.phase];
-  return <LibraryPage class="cms-release-route" icon={PageIcon} title="Review & release" purpose="Inspect, stage, build and activate a local release."><div class="cms-release__body">
+  return <LibraryPage class="cms-release-route" icon={PageIcon} title="Review & release" purpose={hostedDemo ? "Inspect and export the disposable working project." : "Inspect, stage, build and activate a local release."}><div class="cms-release__body">
     <div class="cms-release__notices">
-      <p>Local release only — activation is not hosted deployment.</p>
+      <p>{hostedDemo ? "This hosted demo has no release server. Working changes stay in this tab." : "Local release only — activation is not hosted deployment."}</p>
       <Banner tone="info">{state.message} Current step: {state.phase}.</Banner>
       {state.error && <Banner tone="err">{state.error}</Banner>}
       {state.changed && <Banner tone="warn">Working or release state changed. An unstaged approval is invalid; an exact staged build remains separate from newer drafts.</Banner>}
-      {!controller.available && <Banner tone="info">Static read-only mode. Inspect or export the working project; review, staging and activation require a direct loopback connection to the local development server.</Banner>}
+      {!controller.available && <Banner tone="info">{hostedDemo ? "Local release server unavailable." : "Static read-only mode."} Inspect or export the working project; review, staging and activation require a direct loopback connection to the local development server.</Banner>}
       {state.gateBlocked && !state.busy && <Banner tone="warn">Workspace replacement is in progress. Release operations are unavailable until it finishes.</Banner>}
     </div>
     <ReleaseCard title="Current state">
@@ -37,14 +37,14 @@ export function ReleaseRoute({ controller, href }: { controller: ReleaseControll
         <div><dt>Activated local build:</dt><dd><Identity value={state.active?.buildId ?? "None inspected"} /></dd></div>
         <div><dt>Exact staged build:</dt><dd><Identity value={state.staged?.buildId ?? "None"} /></dd></div>
       </dl>
-      <nav class="cms-release__links" aria-label="Release destinations"><a href="/website-preview">Live working preview</a><a href="/site">Activated local website (not deployed)</a></nav>
+      <nav class="cms-release__links" aria-label="Release destinations"><a href="/website-preview">Live working preview</a><a href="/site">{hostedDemo ? "Demo website preview" : "Activated local website (not deployed)"}</a></nav>
       <div class="cms-release__tools">
       <Button disabled={blocked} onClick={() => void controller.inspect()}>Inspect current state</Button>
       <Button disabled={!state.working || blocked} onClick={exportWorking}>Export working JSON</Button>
       </div>
     </ReleaseCard>
     <ReleaseCard title="Retained server stages">
-      <p>These records come from the local release catalog, including stages created in another tab or through the CLI. Selecting one never replaces working drafts.</p>
+      <p>{hostedDemo ? "No release server is connected to this demo; there are no retained server stages." : "These records come from the local release catalog, including stages created in another tab or through the CLI. Selecting one never replaces working drafts."}</p>
       <ul class="cms-release__stages">{state.retainedStages.map((stage) => <li key={`${stage.projectId}:${stage.buildId}:${stage.stageGeneration}`}><span class="cms-release__stage-identity"><Identity value={`${stage.projectId} / ${stage.buildId}`} /> · incarnation {stage.stageGeneration}</span> <Button disabled={writeDisabled} onClick={() => void controller.selectStage(stage)}>Inspect stage {stage.buildId.slice(0, 8)}</Button></li>)}</ul>
     </ReleaseCard>
     <ReleaseCard title="Select Content changes">
