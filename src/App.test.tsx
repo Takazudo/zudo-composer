@@ -1,5 +1,7 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/preact';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from './test/workspace-providers';
+import { webcrypto } from 'node:crypto';
+import { createEmptySiteProject, computeSiteProjectRevision } from './app/empty-site-project';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -33,6 +35,101 @@ describe('App', () => {
     window.localStorage.removeItem('zudo-composer-theme');
     window.localStorage.removeItem('zudo-composer-rail');
     vi.unstubAllGlobals();
+  });
+
+  async function emptyHost() {
+    const host = await createTemporaryWorkspaceProviders();
+    hosts.push(host);
+    vi.stubGlobal('crypto', webcrypto);
+    const integration = createProductionProviderIntegration({ project: null, createProviders: host.createProviders, mediaProvider: null });
+    return { host, integration };
+  }
+
+  it('creates the first named workspace on an empty host and persists a writable sitemap', async () => {
+    const { host, integration } = await emptyHost();
+    window.history.replaceState(null, '', '/sitemapper');
+    render(<App integration={integration} />);
+    await screen.findByText(/No SiteProject is activated/);
+    fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    const dialog = screen.getByRole('dialog', { name: 'Create project' });
+    fireEvent.input(within(dialog).getByLabelText('Project name'), { target: { value: '  First site  ' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
+    await screen.findByRole('heading', { name: 'Sitemaps' });
+    const reopened = createProductionProviderIntegration({ project: null, createProviders: host.createProviders, mediaProvider: null });
+    const snapshot = await reopened.getCurrentSiteProject();
+    expect(snapshot).toMatchObject({ status: 'ready', project: { name: 'First site' } });
+    if (snapshot.status !== 'ready') throw snapshot.error;
+    const sitemap = snapshot.project.providers.sitemaps[0]!.records[0]!;
+    sitemap.document.name = 'Edited sitemap';
+    await reopened.sitemapProvider.store.put(sitemap);
+    expect(await reopened.getCurrentSiteProject()).toMatchObject({ status: 'ready', project: { providers: { sitemaps: [{ records: [{ document: { name: 'Edited sitemap' } }] }] } } });
+  });
+
+  it('validates the name and cancels without creating or mutating a workspace', async () => {
+    const { host, integration } = await emptyHost();
+    const create = vi.fn(integration.workspace.create);
+    render(<App integration={{ ...integration, workspace: { ...integration.workspace, create } }} />);
+    await screen.findByText(/No SiteProject is activated/);
+    fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.input(within(dialog).getByLabelText('Project name'), { target: { value: '   ' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
+    expect(within(dialog).getByText('Enter a project name.')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(create).not.toHaveBeenCalled();
+    expect(await host.storage.list()).toEqual([]);
+  });
+
+  it('keeps failed creation in the dialog with its real message and blocks concurrent submits', async () => {
+    const { integration } = await emptyHost();
+    let reject!: (error: Error) => void;
+    const create = vi.fn(() => new Promise<never>((_resolve, rejectPromise) => { reject = rejectPromise; }));
+    render(<App integration={{ ...integration, workspace: { ...integration.workspace, create } }} />);
+    await screen.findByText(/No SiteProject is activated/);
+    fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.input(within(dialog).getByLabelText('Project name'), { target: { value: 'First site' } });
+    const submit = within(dialog).getByRole('button', { name: 'Create project' });
+    fireEvent.click(submit);
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(submit);
+    fireEvent.keyDown(within(dialog).getByLabelText('Project name'), { key: 'Enter' });
+    expect(create).toHaveBeenCalledTimes(1);
+    reject(new Error('Disk quota exhausted'));
+    await within(dialog).findByText('Disk quota exhausted');
+    expect(within(dialog).getByLabelText('Project name')).toHaveValue('First site');
+    expect(submit).not.toBeDisabled();
+  });
+
+  it('distinguishes invalid source from storage failures and offers creation only for absent source', async () => {
+    const { host } = await emptyHost();
+    const invalid = createEmptySiteProject('Invalid');
+    invalid.activeSitemap.recordId = 'missing';
+    render(<App integration={createProductionProviderIntegration({ project: invalid, sourceRevision: '0'.repeat(64), createProviders: host.createProviders, mediaProvider: null })} />);
+    await screen.findByText('The activated SiteProject is invalid. Fix the configured source, then retry opening.');
+    expect(screen.queryByRole('button', { name: 'Create project' })).not.toBeInTheDocument();
+    cleanup();
+    const { integration } = await emptyHost();
+    const retry = vi.fn(integration.initialization.retry);
+    render(<App integration={{ ...integration, initialization: { ...integration.initialization, initialize: async () => { throw new Error('Disk read denied'); }, retry } }} />);
+    await screen.findByText(/The workspace could not be read or opened/);
+    expect(screen.queryByRole('button', { name: 'Create project' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry opening' }));
+    await screen.findByText(/No SiteProject is activated/);
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an explicitly activated source on the existing workspace path', async () => {
+    const { host } = await emptyHost();
+    const project = createEmptySiteProject('Activated');
+    const integration = createProductionProviderIntegration({ project, sourceRevision: await computeSiteProjectRevision(project), createProviders: host.createProviders, mediaProvider: null });
+    render(<App integration={integration} />);
+    await screen.findByRole('heading', { name: GREETING });
+    expect(screen.queryByRole('button', { name: 'Create project' })).not.toBeInTheDocument();
+    expect(await integration.getCurrentSiteProject()).toMatchObject({ status: 'ready', project: { name: 'Activated' } });
   });
 
   // Content is an editor rather than a library page since issue #169, so each

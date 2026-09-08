@@ -1,3 +1,5 @@
+// @ts-check
+
 /**
  * Class-name gate: every class a spec reaches for must still exist, and no
  * source file may write a utility this project's Tailwind theme cannot generate.
@@ -26,13 +28,16 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+/** @param {string} path @returns {string} */
 const read = (path) => readFileSync(join(root, path), "utf8");
 
+/** @param {string} dir @param {...string} args @returns {string[]} */
 function find(dir, ...args) {
   const output = execFileSync("find", [dir, ...args], { cwd: root, encoding: "utf8" }).trim();
   return output === "" ? [] : output.split("\n");
 }
 
+/** @param {string} path @returns {boolean} */
 const isTest = (path) => /(?:^|\/)(?:__tests__|tests)\//.test(path) || /\.(?:test|pw)\.tsx?$/.test(path);
 
 /**
@@ -40,6 +45,7 @@ const isTest = (path) => /(?:^|\/)(?:__tests__|tests)\//.test(path) || /\.(?:tes
  * "`min-w-48` generates nothing", "the retired `.sg-mapping-binding__flow`" —
  * is exactly what a module explaining one of these rules has to write down.
  */
+/** @param {string} line @returns {string} */
 function code(line) {
   const trimmed = line.trim();
   if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return "";
@@ -62,6 +68,7 @@ const CLASS_SHAPE = new RegExp(`^${CLASS}$`);
  * The universe of real class names
  * -------------------------------------------------------------------------- */
 
+/** @type {Set<string>} */
 const known = new Set();
 for (const path of styleSheets) {
   for (const line of read(path).split("\n")) {
@@ -93,6 +100,7 @@ for (const match of read("node_modules/@codemirror/view/dist/index.js").matchAll
 }
 
 /** True when `name` is a live class, or the leading segments of one. */
+/** @param {string} name @returns {boolean} */
 function isKnown(name) {
   if (known.has(name)) return true;
   for (const candidate of known) {
@@ -113,6 +121,7 @@ const FILE_LITERAL = /["'`][^"'`\n]*\.(?:json|tmp|ts|tsx|js|mjs|css|html|md|png|
 // A spec may name a class precisely because it asserts the class is gone.
 const ABSENCE = /\bnot\.(?:toMatch|toContain|toBeInTheDocument|toBeVisible)|toBeNull\(\)|toHaveCount\(0\)/;
 
+/** @type {string[]} */
 const stale = [];
 for (const path of testFiles) {
   const body = read(path);
@@ -156,6 +165,7 @@ const SPACING =
 // asserts is emitted.
 const NUMERIC_SPACING = new RegExp(`^(?:${SPACING})-(?:[1-9][0-9]*(?:\\.[0-9]+)?|0\\.[0-9]+)$`);
 
+/** @type {string[]} */
 const ungenerated = [];
 for (const path of sourceFiles) {
   read(path).split("\n").forEach((raw, index) => {

@@ -458,8 +458,21 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // Newly authored Entries are drafts in the current lifecycle contract. This
   // journey intentionally exercises their route diagnostics, so opt in rather
   // than assuming every saved Entry is published.
-  await page.getByRole("combobox", { name: "Published inclusion policy" }).selectOption({ label: "Include drafts" });
-  await expect(page.getByText("Effective records").locator("..")).toContainText("26");
+  const mappingMode = page.getByRole("combobox", { name: "Mapping mode", exact: true });
+  const publicationPolicy = page.getByRole("combobox", { name: "Published inclusion policy" });
+  const expectCollectionQuery = async () => {
+    await expect(mappingMode).toHaveValue("collection");
+    await expect(publicationPolicy).toHaveValue("include-drafts");
+    await expect(page.getByRole("spinbutton", { name: "Result limit" })).toHaveValue("100");
+    await expect(page.getByText("No filters. The query includes eligible records.", { exact: true })).toBeVisible();
+    await expect(page.getByText("No pinned Entries.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: /^Sort \d+ field$/ })).toHaveCount(1);
+    await expect(page.getByRole("combobox", { name: "Sort 1 field", exact: true })).toHaveValue("article-date-field");
+    await expect(page.getByRole("combobox", { name: "Sort 1 direction", exact: true })).toHaveValue("desc");
+    await expect(page.getByText("Effective records", { exact: true }).locator("..").getByText("26", { exact: true })).toBeVisible();
+  };
+  await publicationPolicy.selectOption({ label: "Include drafts" });
+  await expectCollectionQuery();
 
   // Issue #171 made a binding one table row instead of three stacked cards, so
   // "the three region headings are not clipped" became "the fixed-layout table
@@ -488,6 +501,12 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expectTestReports(page, /No diagnostics/);
   await expect(page.getByRole("dialog", { name: "Mapping test" })).toHaveCount(0);
 
+  // These diagnostics belong to the selected Entry. Collection mode evaluates
+  // the whole query, whose first result may have different optional values.
+  await mappingMode.selectOption({ label: "Single Entry" });
+  await expect(mappingMode).toHaveValue("single");
+  await expect(saveStatus(page)).toContainText("Saved");
+
   // The seeded date binding is addressable by its source directly now; it used
   // to be found by scanning every binding's source `<select>` for a match.
   await expect(bindingRow(page, "Published on")).toHaveCount(1);
@@ -506,6 +525,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(mappingFrame.getByText("Feb 28, 2026", { exact: true })).toBeVisible();
   await selectEntry(page, /Map the moving parts.*article-moving-parts/);
   await expect(mappingFrame.getByRole("heading", { name: "Map the moving parts", exact: true })).toBeVisible();
+  await expect(mappingFrame.getByRole("heading", { name: "Start with the question", exact: true })).toHaveCount(0);
   await expectTestReports(page, /Optional source field "Review date" has no value/);
   // "Ready" was the modal's own word for it; the tab says it by carrying no
   // blocking diagnostic beside the nonblocking one.
@@ -521,7 +541,22 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await bindingRow(page, "Published on").getByRole("combobox", { name: /^Transform for / })
     .selectOption({ label: "Format date" });
   await expectTestReports(page, /No diagnostics/);
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+
+  // Switching back creates a default query. Restore the complete collection
+  // configuration before saving it for the later Sitemapper route proof.
+  await mappingMode.selectOption({ label: "Collection" });
+  await expect(mappingMode).toHaveValue("collection");
+  await expect(saveStatus(page)).toContainText("Saved");
+  await publicationPolicy.selectOption({ label: "Include drafts" });
+  await page.getByRole("button", { name: "Add sort", exact: true }).click();
+  await page.getByRole("combobox", { name: "Sort 1 field", exact: true }).selectOption({ label: "Published on" });
+  await page.getByRole("combobox", { name: "Sort 1 direction", exact: true }).selectOption({ label: "Descending" });
+  await expectCollectionQuery();
+  const saveMapping = page.getByRole("button", { name: "Save", exact: true });
+  await expect(saveMapping).toBeVisible();
+  // Workspace refresh may already have saved the query. Native click respects
+  // disabled state atomically, avoiding a race with a separate enabled check.
+  await saveMapping.evaluate((button: HTMLButtonElement) => button.click());
   // The route publishes its save state through `useEditorStatus` now, so the
   // shell draws it — the editor has no status line of its own.
   await expect(saveStatus(page)).toContainText("Saved");
@@ -530,6 +565,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // rather than on the library.
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(COLLECTION_MAPPING);
+  await expectCollectionQuery();
 
   await page.getByRole("link", { name: "Back to Mappings" }).click();
   await page.getByRole("button", { name: "New mapping" }).click();

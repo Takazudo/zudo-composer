@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceAttention, WorkspaceCounts, WorkspaceRecent, WorkspaceSummary } from "../../workspace-summary";
 import { Dashboard } from "../dashboard";
@@ -143,6 +143,64 @@ function statsRegion(): HTMLElement {
 }
 
 describe("Dashboard", () => {
+  it.each(["summary rejection", "unavailable sources"])("keeps every Retry busy through a deferred %s retry and permits another attempt after failure", async (failure) => {
+    const degraded = ready({
+      counts: readyCounts({ sitemaps: { status: "unavailable", error: "Read failed." } }),
+      recent: readyRecent({ unavailable: [{ source: "media", error: "Read failed." }] }),
+      attention: readyAttention({ content: { status: "unavailable", error: "Read failed." } }),
+    });
+    function deferred() {
+      let resolve!: (payload: Payload) => void;
+      let reject!: (error: Error) => void;
+      const promise = new Promise<Payload>((yes, no) => { resolve = yes; reject = no; });
+      return { promise, resolve, reject };
+    }
+    let pending = deferred();
+    const refresh = vi.fn(() => { pending = deferred(); });
+    const counts = vi.fn(() => pending.promise.then((payload) => payload.counts));
+    const summary: WorkspaceSummary = {
+      counts,
+      recent: () => pending.promise.then((payload) => payload.recent),
+      attention: () => pending.promise.then((payload) => payload.attention),
+      refresh,
+    };
+    render(<Dashboard summary={summary} />);
+    await waitFor(() => expect(counts).toHaveBeenCalledTimes(1));
+    async function fail() {
+      await act(async () => {
+        if (failure === "summary rejection") pending.reject(new Error("Read failed."));
+        else pending.resolve(degraded);
+      });
+    }
+    await fail();
+    const expectedButtons = failure === "summary rejection" ? 1 : 3;
+    for (let attempt = 1; attempt <= expectedButtons + 1; attempt++) {
+      const buttons = await screen.findAllByRole("button", { name: "Retry" });
+      expect(buttons).toHaveLength(expectedButtons);
+      buttons.forEach((button) => {
+        expect(button).toBeEnabled();
+        expect(button).not.toHaveAttribute("aria-busy", "true");
+      });
+      // Exercise each render site as the initiating control, then retry a failed retry.
+      act(() => { (buttons[(attempt - 1) % expectedButtons] as HTMLButtonElement).click(); });
+      await waitFor(() => expect(counts).toHaveBeenCalledTimes(attempt + 1));
+      expect(refresh).toHaveBeenCalledTimes(attempt);
+      for (const button of screen.getAllByRole("button", { name: "Retry" })) {
+        expect(button).toBeDisabled();
+        expect(button).toHaveAttribute("aria-busy", "true");
+        expect(button.querySelector(".cms-btn__spinner svg")).toHaveAttribute("aria-hidden", "true");
+        // Native click models disabled activation; fireEvent bypasses that browser guard.
+        act(() => { (button as HTMLButtonElement).click(); });
+      }
+      expect(refresh).toHaveBeenCalledTimes(attempt);
+      expect(counts).toHaveBeenCalledTimes(attempt + 1);
+      if (attempt <= expectedButtons) await fail();
+      else await act(async () => { pending.resolve(ready()); });
+    }
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument());
+    expect(within(statsRegion()).getAllByRole("link")).toHaveLength(5);
+  });
+
   it("renders every count the read model reported and links each card to its route", async () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
 

@@ -12,7 +12,10 @@ import { notifyPersistenceChange } from "../../shared/persistence-generation";
 import { AUTHORING_PERSISTENCE_CHANNELS } from "../persistence-channels";
 import * as releaseFeature from "../../features/release";
 
-vi.mock("../provider-integration", () => ({ createProductionProviderIntegration: () => { throw new Error("Inject the test workspace."); } }));
+vi.mock("../provider-integration", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../provider-integration")>(),
+  createProductionProviderIntegration: () => { throw new Error("Inject the test workspace."); },
+}));
 vi.mock("../dashboard", async () => {
   const { useWorkspace } = await import("../workspace-context");
   return { Dashboard: () => { const workspace = useWorkspace()!; return <main><h1>Workspace {workspace.integration.workspace.id}</h1><input aria-label="Draft" defaultValue="draft" /><button onClick={() => void workspace.reset()}>Reset workspace</button></main>; } };

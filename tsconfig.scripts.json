@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.scripts.tsbuildinfo",
+    "allowJs": true,
+    "checkJs": true,
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "files": [
+    "scripts/boundary-source.mjs",
+    "scripts/check-class-names.mjs",
+    "scripts/check-contract-boundary.mjs",
+    "scripts/check-dist-artifact.mjs",
+    "scripts/check-headless-boundary.mjs",
+    "scripts/check-package-conformance.mjs",
+    "scripts/check-provider-boundary.mjs",
+    "scripts/check-site-project-boundary.mjs",
+    "scripts/check-standalone-handoff.mjs",
+    "scripts/routes.mjs",
+    "scripts/run-dev-browser.mjs",
+    "scripts/run-host-browser.mjs",
+    "scripts/run-site-project-browser.mjs",
+    "scripts/smoke-host-install.mjs",
+    "scripts/verify-contract-install.mjs",
+    "scripts/boundary-source.d.mts"
+  ],
+  "include": ["scripts/__tests__/**/*.ts"]
+}

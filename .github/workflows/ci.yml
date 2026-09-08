@@ -47,6 +47,7 @@ jobs:
         env:
           CI: true
       - run: pnpm test:browser:site-project
+      - run: pnpm smoke:host-install
       # A browser failure that only happens on a runner is undiagnosable from the log
       # alone: Playwright writes the page snapshot, trace and video to disk, and the
       # log prints only their paths. Without this, reproducing such a failure locally

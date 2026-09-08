@@ -85,9 +85,9 @@ interface ClosureEntry {
 }
 
 /**
- * A same-provider snapshot read before entering the root queue. The snapshot
- * is checked again under that queue before any mutation, so a browser planning
- * round can never make us write against a different canonical dependency.
+ * A same-provider snapshot captured under the root queue. The snapshot
+ * is checked again under that queue after planning and before mutation, so a
+ * browser planning round cannot write against a different canonical dependency.
  */
 interface DependencyClosure {
   entries: readonly ClosureEntry[];
@@ -183,7 +183,7 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
       if (target === undefined) {
         // The closure intentionally skips symlinks; a direct get must still
         // report a hostile canonical path rather than pretending it is absent.
-        await this.readCanonical("get", id);
+        await this.run("get", () => this.readCanonical("get", id));
         return { status: "not-found", id };
       }
       if (target.status !== "loaded") return target;
@@ -429,12 +429,19 @@ export class FilesystemCompositionStore implements CompositionLifecycleStore {
   }
 
   /**
-   * Read every same-provider canonical record before acquiring the root queue.
-   * This deliberately performs no migration or derived write: browser planning
-   * can take a network round trip, and holding the queue across that boundary
-   * would deadlock if a caller tried to re-enter list/get for a dependency.
+   * Capture canonical records under the same root queue as atomic writes, so
+   * managed saves cannot replace an inode between a snapshot's lstat and open.
+   * Release the queue before derived-output planning: the provider may re-enter
+   * list/get for a dependency, and holding the queue would deadlock that read.
    */
   private async loadDependencyClosure(
+    operation: CompositionPersistenceOperation,
+    replacing?: CompositionRecord,
+  ): Promise<DependencyClosure> {
+    return this.run(operation, () => this.readDependencyClosure(operation, replacing));
+  }
+
+  private async readDependencyClosure(
     operation: CompositionPersistenceOperation,
     replacing?: CompositionRecord,
   ): Promise<DependencyClosure> {

@@ -620,13 +620,8 @@ export function createComposerFileProviderMiddleware(options) {
       // chain to recover only our private handshake sentinel.
       const outputRequired = findOutputRequiredError(cause);
       if (outputRequired !== undefined) {
-        return json(409, {
-          ok: false,
-          error: {
-            code: "output-required",
-            operation: envelope.operation,
-            message: "A derived-output batch is required to verify generated files.",
-          },
+        return json(200, {
+          ok: "needs-output",
           request: outputRequired.request,
         });
       }

@@ -29,6 +29,7 @@ interface StatusChipBaseProps {
   /** Renders the Retry action; only the `failed` state shows one. */
   onRetry?: () => void;
   retryLabel?: string;
+  retrying?: boolean;
   class?: string;
 }
 
@@ -36,7 +37,7 @@ export type StatusChipProps = StatusChipBaseProps &
   ({ state: Exclude<StatusChipState, "custom">; label?: string } | { state: "custom"; label: string });
 
 export function StatusChip(props: StatusChipProps) {
-  const { state, label, detail, icon, tone, onRetry, retryLabel = "Retry", class: className } = props;
+  const { state, label, detail, icon, tone, onRetry, retryLabel = "Retry", retrying = false, class: className } = props;
   const preset = state === "custom" ? undefined : PRESETS[state];
   const Icon = icon ?? preset?.icon;
   const resolvedTone = tone ?? preset?.tone ?? "neutral";
@@ -51,7 +52,7 @@ export function StatusChip(props: StatusChipProps) {
       {Icon ? <Icon size="sm" class={cx("cms-status__icon", preset?.spin && "cms-status__spinner")} /> : null}
       <span class="cms-status__label">{detail ? `${text} · ${detail}` : text}</span>
       {state === "failed" && onRetry ? (
-        <Button size="xs" onClick={onRetry}>
+        <Button size="xs" onClick={onRetry} busy={retrying}>
           {retryLabel}
         </Button>
       ) : null}

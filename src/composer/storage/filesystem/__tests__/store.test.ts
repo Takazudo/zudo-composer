@@ -472,6 +472,110 @@ describe("filesystem composition store recovery", () => {
 });
 
 describe("filesystem composition store serialization and conservative CRUD", () => {
+  it.each(["get", "list", "snapshot", "put"] as const)(
+    "%s waits for another store's atomic save before reading the dependency snapshot",
+    async (operation) => {
+      const initial = await createStore();
+      const source = record("source");
+      source.document.publication = {
+        kind: "global-template",
+        outlet: { id: "outlet-main", label: "Main", target: { parentId: "split-1", slotId: "left" } },
+      };
+      const consumer = record("consumer");
+      consumer.document.binding = { sourceRecordId: "source", outletId: "outlet-main" };
+      await initial.put(source);
+      await initial.put(consumer);
+
+      let releaseRename!: () => void;
+      const mayRename = new Promise<void>((resolve) => { releaseRename = resolve; });
+      let markRenameStarted!: () => void;
+      const renameStarted = new Promise<void>((resolve) => { markRenameStarted = resolve; });
+      const events: string[] = [];
+      const writer = await createStore({
+        operations: {
+          rename: async (from, to) => {
+            if (to === jsonPath("consumer")) {
+              markRenameStarted();
+              await mayRename;
+            }
+            await rename(from, to);
+            if (to === jsonPath("consumer")) events.push("canonical saved");
+          },
+        },
+      });
+      let firstSnapshot = true;
+      const reader = await createStore({
+        operations: {
+          readdir: async (path, options) => {
+            if (firstSnapshot) {
+              firstSnapshot = false;
+              events.push("snapshot started");
+            }
+            return readdir(path, options);
+          },
+        },
+      });
+
+      const edited = { ...consumer, updatedAt: T2 };
+      const saving = writer.put(edited, `jsx:consumer:${T2}`);
+      await renameStarted;
+      // On the old path, readdir starts immediately while the rename is held.
+      // A queued snapshot instead begins only after the save releases the root.
+      const reading = operation === "get" ? reader.get("source")
+        : operation === "put" ? reader.put(record("extra"))
+        : reader[operation]();
+      releaseRename();
+      await Promise.all([saving, reading]);
+
+      expect(events).toEqual(["canonical saved", "snapshot started"]);
+      expect(JSON.parse(await readFile(jsonPath("consumer"), "utf8"))).toEqual(edited);
+      expect(await readFile(jsxPath("consumer"), "utf8")).toBe(`jsx:consumer:${T2}`);
+      if (operation === "get") await expect(reading).resolves.toMatchObject({ status: "loaded", record: source });
+    },
+  );
+
+  it("releases the snapshot queue before JSX planning re-enters a same-root read", async () => {
+    const dependencyStore = await createStore();
+    const source = record("source");
+    source.document.publication = {
+      kind: "global-template",
+      outlet: { id: "outlet-main", label: "Main", target: { parentId: "split-1", slotId: "left" } },
+    };
+    const consumer = record("consumer");
+    consumer.document.binding = { sourceRecordId: "source", outletId: "outlet-main" };
+    await dependencyStore.put(source);
+    await dependencyStore.put(consumer);
+    const provideJsx = vi.fn(async (value: CompositionRecord) => {
+      await expect(dependencyStore.get("source")).resolves.toMatchObject({ status: "loaded", record: source });
+      return `jsx:${value.id}:${value.updatedAt}`;
+    });
+    const store = await createStore({ provideJsx });
+
+    await expect(store.get("consumer")).resolves.toMatchObject({ status: "loaded", record: consumer });
+    expect(provideJsx.mock.calls.map(([value]) => value.id)).toEqual(["source", "consumer"]);
+  });
+
+  it.each(["get", "list"] as const)("%s re-plans when a save lands after the queued snapshot", async (operation) => {
+    const writer = await createStore();
+    await writer.put(record("a", T1));
+    let savedDuringPlanning = false;
+    const provideJsx = vi.fn(async (value: CompositionRecord) => {
+      if (!savedDuringPlanning) {
+        savedDuringPlanning = true;
+        await writer.put(record("a", T2), `jsx:a:${T2}`);
+      }
+      return `jsx:${value.id}:${value.updatedAt}`;
+    });
+    const reader = await createStore({ provideJsx });
+
+    const result = operation === "get" ? await reader.get("a") : await reader.list();
+    expect(provideJsx.mock.calls.map(([value]) => value.updatedAt)).toEqual([T1, T2]);
+    expect(result).toMatchObject(operation === "get"
+      ? { status: "loaded", record: { updatedAt: T2 } }
+      : [{ id: "a", updatedAt: T2 }]);
+    expect(await readFile(jsxPath("a"), "utf8")).toBe(`jsx:a:${T2}`);
+  });
+
   it("serializes concurrent puts so canonical and derived artifacts cannot interleave", async () => {
     let releaseFirst!: () => void;
     const firstMayFinish = new Promise<void>((resolve) => {
