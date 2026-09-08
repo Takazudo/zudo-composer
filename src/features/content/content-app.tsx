@@ -160,6 +160,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
   const fields = state.model?.document.fields ?? [];
   const entryName = state.entry ? contentEntryLabel(state.entry, fields) : "";
   const titleField = contentEntryTitleField(fields);
+  const entryTitle = titleField && state.entry ? state.entry.values[titleField.id] : undefined;
   const schemaMode = state.workMode === "model-fields";
   const relationshipsMode = state.workMode === "relationships";
   // Completeness is a claim about the open Entry, so it belongs beside the
@@ -255,7 +256,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
       back={{ href: CONTENT_ROUTE, label: "Back to Content" }}
       title={
         <RecordTitle
-          value={schemaMode ? (state.model?.document.name ?? "") : entryName}
+          value={schemaMode ? (state.model?.document.name ?? "") : typeof entryTitle === "string" ? entryTitle : ""}
           label={schemaMode ? "Model name" : "Entry title"}
           placeholder={schemaMode ? "Model name" : "Untitled Entry"}
           disabled={schemaMode ? state.model === null : state.entry === null || titleField === null}
@@ -310,7 +311,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
             <MenuSeparator />
             <MenuItem
               icon={DuplicateIcon}
-              disabled={state.entry === null || state.model?.document.kind === "single"}
+              disabled={state.entryCreationPending || state.modelSelectionPending || state.entry === null || state.model?.document.kind === "single"}
               onSelect={() => { if (state.entry) run(() => controller.duplicateEntry(state.entry!.id)); }}
             >
               Duplicate entry
