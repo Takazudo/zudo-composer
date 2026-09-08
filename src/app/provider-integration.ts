@@ -1,4 +1,4 @@
-import injectedSiteProject, { siteProjectRevision as injectedSiteProjectRevision } from "virtual:site-project-source";
+import injectedSiteProject, { deliverySource as injectedDeliverySource, siteProjectRevision as injectedSiteProjectRevision } from "virtual:site-project-source";
 import { COMPOSITION_PROVIDERS, COMPOSITION_SCHEMA_VERSION, CompositionPersistenceError, createFileProviderCompositionStore, diagnoseDocument, isCompositionCollectionStore, type CompositionDocument, type CompositionInitializationOutcome, type CompositionProvider, type CompositionStore } from "../composer/browser";
 import { createContentCatalog, type ContentCatalog } from "../content/catalog";
 import { CONTENT_PROVIDERS, ContentPersistenceError, type ContentInitializationOutcome, type ContentProvider } from "../content/library";
@@ -222,7 +222,9 @@ export function createFileProviderWorkspaceProviders(workspace: () => string): W
 export function createProductionProviderIntegration(options: ProductionProviderIntegrationOptions = {}): ProductionProviderIntegration {
   const mediaProvider = options.mediaProvider === undefined ? createFileProviderMediaProvider() : options.mediaProvider ?? undefined;
   const usesInjectedSource = options.project === undefined;
-  const activated = activate(usesInjectedSource ? injectedSiteProject : options.project);
+  const activated: ReturnType<typeof activate> = usesInjectedSource && injectedDeliverySource.status === "error"
+    ? { error: new ProviderIntegrationError("source", injectedDeliverySource.message) }
+    : activate(usesInjectedSource ? injectedSiteProject : options.project);
   let project = activated.project;
   const revisionInput = usesInjectedSource ? injectedSiteProjectRevision : options.sourceRevision;
   let sourceRevision: string | undefined;
