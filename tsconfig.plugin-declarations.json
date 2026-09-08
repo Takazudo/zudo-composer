@@ -1,0 +1,12 @@
+{
+  // Declaration files must be checked, not merely included in a program whose
+  // skipLibCheck hides invalid signatures and unresolved ambient imports.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.plugin-declarations.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "skipLibCheck": false
+  },
+  "include": ["plugins/*.d.mts", "src/**/*.d.ts"]
+}
