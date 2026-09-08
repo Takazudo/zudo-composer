@@ -225,9 +225,9 @@ describe("file-provider core integration", () => {
     await unlink(join(root, "composition-alpha.tsx"));
 
     const needsJsx = await handler(request({ operation: "get", id: "alpha", outputsById: {} }));
-    expect(needsJsx.status).toBe(409);
+    expect(needsJsx.status).toBe(200);
     expect(payload(needsJsx)).toMatchObject({
-      error: { code: "output-required", operation: "get" },
+      ok: "needs-output",
       request: { targetIds: ["alpha"] },
     });
     expect(payload(needsJsx).request).not.toHaveProperty("path");
@@ -272,9 +272,9 @@ describe("file-provider core integration", () => {
     expect((await handler(request({ operation: "delete", id: consumer.id }))).status).toBe(200);
 
     const needsOutput = await handler(request({ operation: "unpublish-with-dependency-check", id: source.id, outputsById: {} }));
-    expect(needsOutput.status).toBe(409);
+    expect(needsOutput.status).toBe(200);
     expect(payload(needsOutput)).toMatchObject({
-      error: { code: "output-required", operation: "unpublish-with-dependency-check" },
+      ok: "needs-output",
       request: { targetIds: [source.id] },
     });
     const unpublished = await handler(request({
