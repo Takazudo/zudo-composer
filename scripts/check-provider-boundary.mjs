@@ -1,3 +1,5 @@
+// @ts-check
+
 // The provider IDENTITY boundary: the manifest spec, the lockfile resolution,
 // and the parity between the installed pack's generated component list and its
 // sidecars. None of it needs a build, so it runs on a bare checkout — the
@@ -16,10 +18,12 @@ const packSource = readFileSync(join(root, "node_modules/@zudo-sg/ui/src/compose
 const providerSha = "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf";
 const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}`;
 
+/** @param {string} haystack @param {string} needle @returns {number} */
 function count(haystack, needle) {
   return haystack.split(needle).length - 1;
 }
 
+/** @param {string} source @param {string} heading @param {string} [nextHeading] @returns {string} */
 function section(source, heading, nextHeading) {
   const start = source.indexOf(`${heading}:\n`);
   assert.notEqual(start, -1, `missing lockfile section: ${heading}`);
@@ -27,6 +31,7 @@ function section(source, heading, nextHeading) {
   return source.slice(start, end < 0 ? source.length : end);
 }
 
+/** @param {string} source @param {string} key @param {number} indent @returns {string} */
 function indentedBlock(source, key, indent) {
   const prefix = `${" ".repeat(indent)}${key}:\n`;
   const start = source.indexOf(prefix);

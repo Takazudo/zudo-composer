@@ -1,3 +1,5 @@
+// @ts-check
+
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -5,12 +7,15 @@ import { fileURLToPath } from 'node:url';
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
 const packageRoot = path.join(repositoryRoot, 'packages', 'component-contract');
 const textExtensions = new Set(['.json', '.md', '.mjs', '.ts', '.tsx', '.yaml', '.yml', '.npmrc']);
+/** @type {string[]} */
 const violations = [];
 
+/** @param {string} file @param {string} rule @param {string} detail */
 function record(file, rule, detail) {
   violations.push(`${path.relative(repositoryRoot, file)}: ${rule} (${detail})`);
 }
 
+/** @param {string} directory @returns {Promise<void>} */
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
@@ -27,7 +32,9 @@ async function walk(directory) {
   }
 }
 
+/** @param {string} file @param {string} content */
 function scan(file, content) {
+  /** @type {Array<readonly [string, RegExp]>} */
   const forbiddenHandoff = [
     ['workspace protocol', /workspace:/i],
     ['file protocol', /file:/i],
