@@ -1,9 +1,17 @@
+// @ts-check
+
 import { execFile as execFileCallback } from 'node:child_process';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+
+/** @typedef {Error & {stdout?: string, stderr?: string, code?: number | string}} ExecFailure */
+/** @typedef {{packageName: string, sourcePath: string, packageBranch: string, packageCommit: string, rootGitSpec: string}} ContractHandoff */
+/** @typedef {{status: "unavailable" | "mismatch" | "reachable", reason: string}} BranchStatus */
+/** @typedef {[string, RegExp]} ProtocolRule */
+/** @typedef {{dependencies?: Record<string, string>}} FixtureManifest */
 
 const execFile = promisify(execFileCallback);
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -17,24 +25,43 @@ const forceExact = process.argv.slice(2).includes('--exact');
 const forceLocal = process.argv.slice(2).includes('--local');
 const isCi = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
 
+/** @param {string} message @returns {never} */
 function fail(message) {
   throw new Error(`[contract install] ${message}`);
 }
 
+/**
+ * @param {unknown} condition
+ * @param {string} message
+ */
 function assert(condition, message) {
   if (!condition) fail(message);
 }
 
+/**
+ * @param {string} content
+ * @param {string} description
+ */
 function assertNoDependencyProtocols(content, description) {
-  for (const [label, pattern] of [
+  for (const [label, pattern] of /** @type {ProtocolRule[]} */ ([
     ['workspace:', /(?:^|[^A-Za-z0-9_-])workspace:/u],
     ['file:', /(?:^|[^A-Za-z0-9_-])file:/u],
     ['link:', /(?:^|[^A-Za-z0-9_-])link:/u],
-  ]) {
+  ])) {
     assert(!pattern.test(content), `${description} must not contain ${label}`);
   }
 }
 
+/** @param {unknown} value @returns {value is ExecFailure} */
+function isExecFailure(value) {
+  if (!(value instanceof Error)) return false;
+  if ("stdout" in value && typeof value.stdout !== "string") return false;
+  if ("stderr" in value && typeof value.stderr !== "string") return false;
+  if ("code" in value && typeof value.code !== "number" && typeof value.code !== "string") return false;
+  return true;
+}
+
+/** @type {ContractHandoff} */
 const handoff = JSON.parse(await readFile(handoffPath, 'utf8'));
 assert(handoff.packageName === packageName, 'contract handoff package name changed');
 assert(handoff.sourcePath === 'packages/component-contract', 'contract handoff source path changed');
@@ -42,15 +69,24 @@ assert(typeof handoff.packageBranch === 'string' && handoff.packageBranch.length
 assert(/^[0-9a-f]{40}$/u.test(handoff.packageCommit), 'contract handoff must contain a full 40-character lowercase package commit');
 assert(handoff.rootGitSpec === `git+${repositoryUrl}#${handoff.packageCommit}`, 'contract handoff root Git spec must exactly identify the package commit');
 
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {string} cwd
+ * @param {{allowFailure?: boolean}} [options]
+ * @returns {Promise<{stdout: string, stderr: string, exitCode: number}>}
+ */
 async function run(command, args, cwd, { allowFailure = false } = {}) {
   try {
     const result = await execFile(command, args, {
       cwd,
       env: process.env,
       maxBuffer: 16 * 1024 * 1024,
+      encoding: 'utf8',
     });
     return { ...result, exitCode: 0 };
   } catch (error) {
+    if (!isExecFailure(error)) throw error;
     if (allowFailure) {
       return {
         stdout: error.stdout ?? '',
@@ -63,6 +99,7 @@ async function run(command, args, cwd, { allowFailure = false } = {}) {
   }
 }
 
+/** @returns {Promise<BranchStatus>} */
 async function packageBranchStatus() {
   const ref = `refs/heads/${handoff.packageBranch}`;
   const result = await run('git', ['ls-remote', '--exit-code', repositoryUrl, ref], repositoryRoot, { allowFailure: true });
@@ -90,6 +127,10 @@ async function assertPackageTree() {
   }
 }
 
+/**
+ * @param {string} directory
+ * @param {string} gitSpec
+ */
 async function writeFixture(directory, gitSpec) {
   await writeFile(path.join(directory, 'package.json'), `${JSON.stringify({
     name: 'zudo-composer-contract-install-fixture',
@@ -104,6 +145,7 @@ async function writeFixture(directory, gitSpec) {
   await writeFile(path.join(directory, 'pnpm-workspace.yaml'), `packages: []\nallowBuilds:\n  '${packageName}': true\n`);
 }
 
+/** @param {string} directory */
 async function assertInstalledModule(directory) {
   const probe = [
     `const contract = await import(${JSON.stringify(packageName)});`,
@@ -114,8 +156,13 @@ async function assertInstalledModule(directory) {
   await run('node', ['--input-type=module', '--eval', probe], directory);
 }
 
+/**
+ * @param {string} directory
+ * @param {string} sha
+ * @param {string} gitSpec
+ */
 async function assertExactLock(directory, sha, gitSpec) {
-  const manifest = JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'));
+  const manifest = /** @type {FixtureManifest} */ (JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8')));
   assert(manifest.dependencies?.[packageName] === gitSpec, 'fixture package.json must retain the quoted exact root Git spec');
   assert(!gitSpec.includes('&path:'), 'fixture dependency must not use a Git subdirectory selector');
   assertNoDependencyProtocols(gitSpec, 'fixture dependency spec');
@@ -130,6 +177,7 @@ async function assertExactLock(directory, sha, gitSpec) {
   assertNoDependencyProtocols(lock, 'fixture lockfile');
 }
 
+/** @param {string} sha */
 async function runExactInstall(sha) {
   const gitSpec = handoff.rootGitSpec;
   assert(sha === handoff.packageCommit, 'exact install SHA must match the committed package handoff');

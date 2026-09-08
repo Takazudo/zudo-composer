@@ -1,3 +1,5 @@
+// @ts-check
+
 // The install proof: a real host project, outside this repository, that
 // installs the packed package and runs it.
 //
@@ -29,6 +31,11 @@ import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
 
+/** @typedef {import("node:child_process").ExecFileOptionsWithStringEncoding} ExecFileOptions */
+/** @typedef {import("@playwright/test").Page} Page */
+/** @typedef {{packageManager: string}} ToolPackage */
+/** @typedef {{devDependencies: Record<string, string>}} HostManifest */
+
 const execFile = promisify(execFileCallback);
 const root = resolve(import.meta.dirname, "..");
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -48,16 +55,29 @@ const ROUTES = ["/", "/composer", "/content", "/mapping", "/sitemapper", "/media
  */
 const WRITABLE = ["node_modules", "cms", "public", ".zudo-site-project"];
 
+/** @param {string} message */
 function step(message) {
   process.stdout.write(`[host-install] ${message}\n`);
 }
 
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {string} cwd
+ * @param {ExecFileOptions} [options]
+ * @returns {Promise<{stdout: string, stderr: string}>}
+ */
 async function run(command, args, cwd, options = {}) {
-  const { stdout, stderr } = await execFile(command, args, { cwd, env: process.env, maxBuffer: 64 * 1024 * 1024, ...options });
+  const { stdout, stderr } = await execFile(command, args, { cwd, env: process.env, maxBuffer: 64 * 1024 * 1024, encoding: "utf8", ...options });
   return { stdout, stderr };
 }
 
-/** Every path beneath `directory`, relative and sorted, excluding `node_modules`. */
+/**
+ * Every path beneath `directory`, relative and sorted, excluding `node_modules`.
+ * @param {string} directory
+ * @param {string} [prefix]
+ * @returns {Promise<string[]>}
+ */
 async function tree(directory, prefix = "") {
   const entries = await readdir(join(directory, prefix), { withFileTypes: true });
   const paths = [];
@@ -86,6 +106,7 @@ async function waitForServer() {
 /**
  * Start the host's own installed bin and resolve once it is serving. The child
  * gets its own process group so the whole Vite tree can be signalled at once.
+ * @param {string} hostRoot
  */
 async function startHostServer(hostRoot) {
   const child = spawn(pnpm, ["exec", "zudo-composer", "dev", "--host", "127.0.0.1", "--port", String(PORT), "--strict-port"], {
@@ -113,7 +134,8 @@ async function startHostServer(hostRoot) {
     async stop() {
       if (child.exitCode !== null || child.signalCode !== null) return;
       const stopped = new Promise((settle) => child.once("exit", settle).once("error", settle));
-      try { process.kill(-child.pid, "SIGTERM"); } catch { return; }
+      const pid = /** @type {number} */ (child.pid);
+      try { process.kill(-pid, "SIGTERM"); } catch { return; }
       await stopped;
     },
   };
@@ -125,6 +147,7 @@ async function startHostServer(hostRoot) {
  * A failure here reports what the page was actually showing: this runs against
  * a host nobody can open afterwards, so a bare locator timeout would leave
  * nothing to diagnose from.
+ * @param {Page} page
  */
 async function authorOneSitemap(page) {
   try {
@@ -161,15 +184,15 @@ try {
   step("packing the package and the contract it declares as a peer");
   const packDirectory = join(workspace, "tarballs");
   await mkdir(packDirectory, { recursive: true });
-  const tarballs = {};
+  const tarballs = /** @type {Record<string, string>} */ ({});
   for (const [name, directory] of [["zudo-composer", root], ["@zudo-composer/component-contract", join(root, "packages/component-contract")]]) {
     const { stdout } = await run(pnpm, ["pack", "--pack-destination", packDirectory], directory);
-    tarballs[name] = stdout.trim().split("\n").at(-1);
+    tarballs[name] = /** @type {string} */ (stdout.trim().split("\n").at(-1));
     if (!tarballs[name]?.endsWith(".tgz")) throw new Error(`pnpm pack did not name a tarball for ${name}: ${stdout}`);
   }
 
   step("writing a bare host project that has never seen this repository");
-  const toolPackage = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+  const toolPackage = /** @type {ToolPackage} */ (JSON.parse(await readFile(join(root, "package.json"), "utf8")));
   for (const directory of ["styles", "components", "public/uploaded-media",
     "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/media"]) {
     await mkdir(join(hostRoot, directory), { recursive: true });
@@ -249,7 +272,7 @@ try {
   step("removing the tool and confirming the host keeps its data");
   await server.stop();
   server = undefined;
-  const manifest = JSON.parse(await readFile(join(hostRoot, "package.json"), "utf8"));
+  const manifest = /** @type {HostManifest} */ (JSON.parse(await readFile(join(hostRoot, "package.json"), "utf8")));
   delete manifest.devDependencies["zudo-composer"];
   await writeFile(join(hostRoot, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await rm(join(hostRoot, "node_modules"), { recursive: true, force: true });
