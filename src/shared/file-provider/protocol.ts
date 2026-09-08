@@ -81,6 +81,9 @@ export interface FileProviderTransactionStep {
 /** `transaction` is reserved on every domain endpoint. */
 export const FILE_PROVIDER_TRANSACTION_OPERATION = "transaction";
 
+/** Transport fallbacks include the shared batch request, beyond domain methods. */
+export type FileProviderTransportOperation<Operation extends string> = Operation | typeof FILE_PROVIDER_TRANSACTION_OPERATION;
+
 /**
  * Default HTTP status for a domain error code. The workspace registry overrides
  * validation to 400 for its request payloads; other domains use these defaults.
@@ -137,7 +140,7 @@ export interface FileProviderErrorAdapter<Operation extends string, DomainError 
   readonly persistenceChannel: string;
   isDomainError(value: unknown): value is DomainError;
   toWire(error: DomainError): FileProviderWireError;
-  fromWire(error: FileProviderWireError, fallbackOperation: Operation): DomainError;
+  fromWire(error: FileProviderWireError, fallbackOperation: FileProviderTransportOperation<Operation>): DomainError;
   /** Rebuilt for a transport failure that never reached the domain at all. */
-  transportError(operation: Operation, message: string, cause?: unknown): DomainError;
+  transportError(operation: FileProviderTransportOperation<Operation>, message: string, cause?: unknown): DomainError;
 }

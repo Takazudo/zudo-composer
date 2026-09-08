@@ -1,4 +1,4 @@
-import type { FileProviderConfig } from "../../../shared/file-provider";
+import type { FileProviderConfig, FileProviderTransportOperation } from "../../../shared/file-provider";
 import type { SitemapInitializationOutcome, SitemapPersistenceOperation, SitemapCollectionStore, SitemapProvider, SitemapProviderDescriptor } from "../../library";
 
 /** One endpoint per domain; the spelling is pinned by the shared protocol. */
@@ -17,7 +17,7 @@ export const SITEMAP_FILE_PROVIDER_OPERATIONS = [
   "list", "read-all", "snapshot", "get", "put", "delete", "seed", "clear", "initialize", "start-fresh",
 ] as const;
 
-export type SitemapWireOperation = (typeof SITEMAP_FILE_PROVIDER_OPERATIONS)[number];
+export type SitemapWireOperation = FileProviderTransportOperation<(typeof SITEMAP_FILE_PROVIDER_OPERATIONS)[number]>;
 
 /**
  * `start-fresh` is an initialization entry point, not a store operation;
@@ -25,6 +25,7 @@ export type SitemapWireOperation = (typeof SITEMAP_FILE_PROVIDER_OPERATIONS)[num
  * `put` respectively.
  */
 export function sitemapPersistenceOperationOf(operation: SitemapWireOperation): SitemapPersistenceOperation {
+  if (operation === "transaction") return "transact";
   if (operation === "start-fresh") return "clear";
   if (operation === "seed") return "put";
   if (operation === "read-all" || operation === "snapshot") return "list";

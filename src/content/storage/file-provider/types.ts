@@ -1,4 +1,4 @@
-import type { FileProviderConfig } from "../../../shared/file-provider";
+import type { FileProviderConfig, FileProviderTransportOperation } from "../../../shared/file-provider";
 import type { ContentInitializationOutcome, ContentPersistenceOperation, ContentProvider, ContentStore } from "../../library";
 
 /** One endpoint per domain; the spelling is pinned by the shared protocol. */
@@ -21,10 +21,11 @@ export const CONTENT_FILE_PROVIDER_OPERATIONS = [
   "initialize", "start-fresh",
 ] as const;
 
-export type ContentWireOperation = (typeof CONTENT_FILE_PROVIDER_OPERATIONS)[number];
+export type ContentWireOperation = FileProviderTransportOperation<(typeof CONTENT_FILE_PROVIDER_OPERATIONS)[number]>;
 
 /** `start-fresh` is an initialization entry point, not a store operation. */
 export function contentPersistenceOperationOf(operation: ContentWireOperation): ContentPersistenceOperation {
+  if (operation === "transaction") return "transact";
   return operation === "start-fresh" ? "clear" : operation;
 }
 
