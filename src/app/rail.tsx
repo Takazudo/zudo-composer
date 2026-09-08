@@ -144,6 +144,7 @@ export function currentRailItem(path: string): RailItem | null {
 }
 
 export interface RailProps {
+  hostedDemo?: boolean;
   path: string;
   collapsed: boolean;
   onToggleCollapsed: () => void;
@@ -156,7 +157,7 @@ export interface RailProps {
   onNavigate?: (href: string) => void;
   hideToggle?: boolean;
 }
-export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models = [], modelError, pins = [], onPinsChange, onBrowse, onNavigate, hideToggle }: RailProps): JSX.Element {
+export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models = [], modelError, pins = [], onPinsChange, onBrowse, onNavigate, hideToggle, hostedDemo = false }: RailProps): JSX.Element {
   const current = currentRailItem(path);
   const navId = `cms-rail-nav-${useId()}`;
   const [contentOpen, setContentOpen] = useState(true);
@@ -236,8 +237,8 @@ export function Rail({ path, collapsed, onToggleCollapsed, counts = {}, models =
       </nav>
       <div class="cms-rail__foot">
         <div class="cms-rail__status">
-          <strong>Project files</strong>
-          <span>Local filesystem · zudo-composer</span>
+          <strong>{hostedDemo ? "Disposable demo" : "Project files"}</strong>
+          <span>{hostedDemo ? "This tab · resets on reload" : "Local filesystem · zudo-composer"}</span>
         </div>
       </div>
       <Dialog open={rename !== null} title="Rename pin" onClose={() => setRename(null)}><form onSubmit={(event) => { event.preventDefault(); if (!label.trim()) return; onPinsChange?.(pins.map((pin) => pin === rename ? { ...pin, label: label.trim() } : pin)); setRename(null); }}><label>Pin label<input value={label} maxLength={120} required onInput={(event) => setLabel(event.currentTarget.value)} /></label><Button type="submit">Save label</Button></form></Dialog>
