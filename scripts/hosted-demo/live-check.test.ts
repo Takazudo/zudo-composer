@@ -5,10 +5,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { HOSTED_DEMO_LIVE_ROUTES, verifyLiveDeployment, verifyLiveWithRetries } from "./live-check.mjs";
+import { HOSTED_DEMO_LIVE_ROUTES, verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
 
 const SOURCE_REVISION = "c".repeat(40);
 const PROJECT_REVISION = "d".repeat(64);
+const BEACON = `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"${"a".repeat(32)}","r":1,"spa":2}' crossorigin="anonymous"></script>\n`;
 
 async function writeArtifact() {
   const root = await mkdtemp(join(tmpdir(), "hosted-live-check-"));
@@ -33,7 +34,7 @@ function response(body: string | Buffer, mime: string, status = 200) {
   return new Response(body, { status, headers: { "content-type": mime } });
 }
 
-function mockFetch(fixture: Awaited<ReturnType<typeof writeArtifact>>, options: { corruptPath?: string; staleManifest?: boolean } = {}) {
+function mockFetch(fixture: Awaited<ReturnType<typeof writeArtifact>>, options: { corruptPath?: string; staleManifest?: boolean; injectAnalytics?: boolean } = {}) {
   const requests: Array<{ url: URL; path: string; init: RequestInit | undefined }> = [];
   const fetchImpl = async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(input.toString());
@@ -43,7 +44,11 @@ function mockFetch(fixture: Awaited<ReturnType<typeof writeArtifact>>, options: 
       const manifest = options.staleManifest ? { ...fixture.manifest, sourceRevision: "e".repeat(40) } : fixture.manifest;
       return response(JSON.stringify(manifest), "application/json");
     }
-    if (HOSTED_DEMO_LIVE_ROUTES.includes(path)) return response(fixture.files.get("index.html")!, "text/html");
+    if (HOSTED_DEMO_LIVE_ROUTES.includes(path)) {
+      const navigation = new Headers(init?.headers).get("sec-fetch-mode") === "navigate";
+      const html = fixture.files.get("index.html")!.toString();
+      return response(options.injectAnalytics && navigation ? html.replace("</body>", `${BEACON}</body>`) : html, "text/html");
+    }
     const relative = path.slice(1);
     const bytes = fixture.files.get(relative);
     if (!bytes) return response("missing", "text/plain", 404);
@@ -70,12 +75,34 @@ describe("hosted demo live verification", () => {
       fetchImpl: mock.fetchImpl,
     });
     expect(proof.routes.map(({ path }) => path)).toEqual(HOSTED_DEMO_LIVE_ROUTES);
-    expect(proof.assets).toHaveLength(6);
+    expect(proof.assets).toHaveLength(7);
     const routeRequest = mock.requests.find(({ path }) => path === "/composer");
     expect(routeRequest?.init?.headers).toEqual({ accept: "text/html", "sec-fetch-mode": "navigate" });
     const assetRequest = mock.requests.find(({ path }) => path.startsWith("/uploaded-media/"));
     expect(assetRequest?.init?.headers).toEqual({});
     expect(mock.requests.every(({ url }) => url.searchParams.get("hosted-demo-revision") === SOURCE_REVISION)).toBe(true);
+  });
+
+  it("permits Cloudflare navigation analytics while checking the original HTML bytes separately", async () => {
+    const fixture = await writeArtifact();
+    fixtures.push(fixture.root);
+    const mock = mockFetch(fixture, { injectAnalytics: true });
+    const proof = await verifyLiveDeployment({ baseUrl: "https://demo.example.test", artifactDirectory: fixture.root, fetchImpl: mock.fetchImpl });
+    expect(proof.routes.every((route) => route.cloudflareAnalyticsInjected)).toBe(true);
+    expect(proof.assets.find((asset) => asset.path === "index.html")?.sha256).toBe(fixture.manifest.assets["index.html"]);
+    expect(mock.requests.filter(({ path }) => path === "/").map(({ init }) => new Headers(init?.headers).get("sec-fetch-mode"))).toEqual(["navigate", null]);
+  });
+
+  it("rejects changed application HTML, arbitrary scripts and duplicate analytics injections", () => {
+    const html = "<html><body>tested application</body></html>";
+    const checksum = createHash("sha256").update(html).digest("hex");
+    const inject = (script: string, content = html) => Buffer.from(content.replace("</body>", `${script}</body>`));
+    expect(verifyNavigationHtml(Buffer.from(html), checksum).cloudflareAnalyticsInjected).toBe(false);
+    expect(() => verifyNavigationHtml(inject(BEACON, html.replace("tested", "modified")), checksum)).toThrow(/changes beyond/);
+    expect(() => verifyNavigationHtml(inject("<script>unexpected()</script>\n"), checksum)).toThrow(/recognized Cloudflare/);
+    expect(() => verifyNavigationHtml(inject(BEACON.replace("static.cloudflareinsights.com", "untrusted.example")), checksum)).toThrow(/recognized Cloudflare/);
+    expect(() => verifyNavigationHtml(inject(BEACON + BEACON), checksum)).toThrow();
+    expect(() => verifyNavigationHtml(inject(BEACON.replace('"version":"2024.11.0"', '"version":null')), checksum)).toThrow(/unexpected configuration/);
   });
 
   it("rejects stale manifests and changed asset bytes", async () => {

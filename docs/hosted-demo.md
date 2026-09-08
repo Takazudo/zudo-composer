@@ -84,7 +84,13 @@ After activation, the live checker fetches the manifest, every emitted asset,
 and every authoring/sample route over bounded HTTPS requests. Navigation route
 requests send `Accept: text/html` and `Sec-Fetch-Mode: navigate`; asset requests
 do not receive navigation headers. Responses must match the downloaded
-manifest's bytes, checksums and MIME types. On any live failure, automatic
+manifest's bytes, checksums and MIME types. Cloudflare Web Analytics can inject
+its RUM script into navigation HTML. The checker permits only the recognized
+empty Cloudflare beacon script immediately before the closing body, then
+requires every remaining HTML byte to match. It also fetches the canonical
+entry URL without navigation headers and checks the original HTML checksum;
+arbitrary scripts or other HTML changes still fail verification. Analytics
+remains enabled. On any live failure, automatic
 rollback is permitted only if the active version is still this run's known
 uploaded version. It restores the exact version captured before the rollout,
 verifies that version is active, and leaves the workflow failed so the incident
