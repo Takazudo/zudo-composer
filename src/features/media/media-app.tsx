@@ -33,7 +33,7 @@ function mediaFolderPath(folders: readonly MediaFolder[], id: string | null): re
 }
 
 export function MediaApp(props: MediaRouteContentProps): JSX.Element {
-  if (!props.provider) return <LibraryPage class="sg-media-route" title="Media" icon={FolderIcon} purpose="Organize reusable images and files."><Banner tone="info">The Media provider is unavailable in this build. Authoring requires the local development transport. Committed static files remain available; no library assets can be listed or changed here.</Banner><Button disabled>Upload</Button><Button disabled>New folder</Button></LibraryPage>;
+  if (!props.provider) return <LibraryPage class="sg-media-route" title="Media" icon={FolderIcon} purpose="Organize reusable images and files."><Banner tone="info">The Media library and upload authoring are available only under the local development server (<code>pnpm dev</code>). Committed files under <code>publicMediaDir</code> are still served from <code>/uploaded-media/</code>.</Banner><Button disabled>Upload</Button><Button disabled>New folder</Button></LibraryPage>;
   return <ConnectedMedia {...props} provider={props.provider} />;
 }
 function ConnectedMedia({ provider, controller: supplied, controllerOptions, contentServices, usageHref, intent }: MediaRouteContentProps & { provider: MediaProvider }): JSX.Element {
