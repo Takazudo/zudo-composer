@@ -143,7 +143,10 @@ async function authorOneSitemap(page) {
     const dialog = page.getByRole("dialog", { name: "Create sitemap" });
     await dialog.getByRole("textbox", { name: "Sitemap name" }).fill(SITEMAP_NAME);
     await dialog.getByRole("button", { name: "Create sitemap" }).click();
-    await page.getByRole("textbox", { name: "Sitemap name" }).waitFor({ timeout: 60_000 });
+    // The dialog closes only after store.put resolves. Its textbox has the same
+    // name as the editor field, so waiting on that field alone can race the save.
+    await dialog.waitFor({ state: "hidden", timeout: 60_000 });
+    await page.getByRole("textbox", { name: "Sitemap name", exact: true }).waitFor({ timeout: 60_000 });
   } catch (cause) {
     const text = await page.locator("body").innerText().catch(() => "<no body>");
     throw new Error(`Authoring failed on the installed host. The page was showing:\n${text}`, { cause });
@@ -153,6 +156,7 @@ async function authorOneSitemap(page) {
 const workspace = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-install-smoke-")));
 const hostRoot = join(workspace, "host");
 let server;
+let browser;
 try {
   step("packing the package and the contract it declares as a peer");
   const packDirectory = join(workspace, "tarballs");
@@ -210,7 +214,7 @@ try {
   }
 
   step("authoring one record through the browser");
-  const browser = await chromium.launch();
+  browser = await chromium.launch();
   const authoring = await browser.newContext();
   await authorOneSitemap(await authoring.newPage());
   await authoring.close();
@@ -237,6 +241,7 @@ try {
   await page.getByRole("link", { name: SITEMAP_NAME, exact: true }).waitFor({ timeout: 60_000 });
   await reopened.close();
   await browser.close();
+  browser = undefined;
 
   step("removing the tool and confirming the host keeps its data");
   await server.stop();
@@ -256,6 +261,7 @@ try {
 
   step(`passed: ${ROUTES.length} routes, ${authored.length} authored record file(s), all writes confined to ${WRITABLE.join("/")}, data survived removal.`);
 } finally {
+  await browser?.close();
   await server?.stop();
   await rm(workspace, { recursive: true, force: true });
 }
