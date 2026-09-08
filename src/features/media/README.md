@@ -19,11 +19,12 @@ nested structured uses. Trash requires a complete scan without typed uses and
 rechecks Content tokens immediately before each asset write. Content and Media
 are separate stores, so these checks are not a cross-domain atomic transaction.
 Raw URL/Markdown references remain advisory and never establish non-use.
-The injected `subscribeChanges` shares one Content-only persistence event
-subscription across active inspector and trash-dialog usage surfaces. No asset
-selected means no inspector subscription; the last subscriber releases the
-source, filtered by the canonical Content database name and exact workspace
-database identity. Media/session events never trigger Content scans. Events
+The injected `subscribeChanges` shares project-usage persistence hints across
+active inspector and trash-dialog surfaces. Those scans read Content,
+Compositions, Mappings, Sitemaps, and workspace metadata, so each authoring
+domain invalidates them. No asset selected means no inspector subscription;
+the last subscriber releases the source. Hints remain wide across workspaces
+because they carry only a domain. Media/session events do not trigger these scans. Events
 invalidate scans without polling or reading the graph. Active surfaces share
 one cached scan per asset/event, including its in-flight promise; guarded trash
 execution forces a fresh authoritative scan and rechecks mutation tokens.

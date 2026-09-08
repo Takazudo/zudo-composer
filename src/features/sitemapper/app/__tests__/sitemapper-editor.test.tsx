@@ -1,3 +1,4 @@
+import { subscribeAuthoringPersistenceChanges } from "../../../../app/persistence-channels";
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 
@@ -223,12 +224,16 @@ describe("Sitemapper editor chrome", () => {
     const mapping: MappingRecord = { id: "mapped", createdAt: draft.createdAt, updatedAt: draft.updatedAt, document: { schemaVersion: 2, id: "mapped", name: "Mapped", contentModel: { providerId: "content", recordId: model.id }, composition: { providerId: "files", recordId: "page" }, mode: { kind: "collection", query: { publication: "include-drafts", conditions: [], sort: [], pins: [], limit: 10 } }, bindings: [] } };
     const mappingCatalog = { list: async () => ({ status: "listed" as const, entries: [], failures: [] }), routes: { list: async () => ({ status: "listed" as const, entries: [], failures: [] }), resolveMapping: async () => ({ status: "resolved" as const, record: mapping }), resolveDefinitionReadiness: async () => ({ status: "ready" as const }), resolveContentSnapshot: async () => ({ status: "resolved" as const, model, snapshot: { model, entries: [draft], count: 1, diagnostics: [] } }) } };
     const sessions = createWorkspaceSaveRegistry();
-    const integration = { sessions, workspace: { id: "workspace", metadata: async () => ({ metadata: { activeSitemap: { providerId: "sitemap-filesystem", recordId: "other" } } }) }, subscribeChanges: () => () => undefined } as unknown as ProductionProviderIntegration;
+    const integration = { sessions, workspace: { id: "workspace", metadata: vi.fn(async () => ({ metadata: { activeSitemap: { providerId: "sitemap-filesystem", recordId: "other" } } })) }, subscribeChanges: (listener: () => void, channels: readonly string[]) => subscribeAuthoringPersistenceChanges(channels, listener) } as unknown as ProductionProviderIntegration;
     const expand = vi.spyOn(routeServices, "expandSitemapRoutes");
     render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><ChromeContext.Provider value={createChromeStore()}><SitemapperIntegration providerId="sitemap-filesystem" record={value} store={fakeStore()} catalog={catalog} mappingCatalog={mappingCatalog} /></ChromeContext.Provider></WorkspaceContext.Provider>);
     await waitFor(() => expect(expand).toHaveBeenCalledTimes(1));
+    expect(integration.workspace.metadata).toHaveBeenCalledTimes(1);
     notifyPersistenceChange(CONTENT_FILE_PROVIDER_DOMAIN);
     await waitFor(() => expect(expand).toHaveBeenCalledTimes(2));
+    expect(integration.workspace.metadata).toHaveBeenCalledTimes(1);
+    notifyPersistenceChange("workspace");
+    await waitFor(() => expect(integration.workspace.metadata).toHaveBeenCalledTimes(2));
     expand.mockRestore();
   });
 

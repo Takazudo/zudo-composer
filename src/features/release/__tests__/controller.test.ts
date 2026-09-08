@@ -1,3 +1,5 @@
+import { AUTHORING_PERSISTENCE_CHANNELS } from "../../../app/persistence-channels";
+import { notifyPersistenceChange, subscribePersistenceChanges } from "../../../shared/persistence-generation";
 import { describe, expect, it, vi } from "vitest";
 import type { ProductionProviderIntegration } from "../../../app/provider-integration";
 import { createWorkspaceSaveRegistry } from "../../../app/workspace-sessions";
@@ -17,7 +19,7 @@ function harness() {
     captureWorkspace: vi.fn(async () => ({ status: "ready", project: structuredClone(working), capture: { workspaceId: "release-test", sessionGeneration: generation, tokens: { workspace: generation }, values: {} } })),
     getCurrentSiteProject: async () => ({ status: "ready", project: working }),
     isCaptureCurrent: async (capture: { sessionGeneration: number }) => capture.sessionGeneration === generation,
-    subscribeChanges: (next: () => void) => { listener = next; return () => {}; },
+    subscribeChanges: (next: () => void) => { listener = next; return subscribePersistenceChanges(next); },
   } as unknown as ProductionProviderIntegration;
   let guard!: (payload: unknown) => Promise<unknown>;
   const transport: ReleaseTransport = { available: true, dispose: vi.fn(), subscribe(next) { releaseListener = next; return () => {}; }, async request(request, verify) {
@@ -41,6 +43,12 @@ function harness() {
   return { controller, integration, transport, gate, requests, ready, edit, guard: (payload: unknown) => guard(payload), releaseChanged: () => releaseListener(), fail(operation: string | null, unknown = false) { fail = operation; uncertain = unknown; }, working: () => working };
 }
 describe("review and release state machine", () => {
+  it.each([...AUTHORING_PERSISTENCE_CHANNELS, "media"])("invalidates an approved release on %s writes", async (channel) => {
+    const h = harness(); await h.ready(); notifyPersistenceChange(channel);
+    await h.controller.apply();
+    expect(h.requests.some(({ operation }) => operation === "apply")).toBe(false);
+    expect(h.controller.getSnapshot().phase).toBe("inspect"); h.controller.dispose();
+  });
   it("keeps the exact staged identity visible when an acknowledgement is lost", async () => { const h = harness(); await h.ready(); const approved = h.controller.getSnapshot().plan!; h.fail("apply", true); await h.controller.apply(); expect(h.controller.getSnapshot().phase).toBe("uncertain"); expect(h.controller.getSnapshot().staged).toMatchObject({ projectId: approved.candidate.id, revision: approved.projectRevision, buildId: approved.buildId, planDigest: approved.planDigest }); h.controller.dispose(); });
   it("resolves a lost acknowledgement through the idempotent server stage", async () => { const h = harness(); await h.ready(); const request = h.transport.request; let dropped = false; h.transport.request = async (value, verify) => { const result = await request(value, verify); if (value.operation === "apply" && !dropped) { dropped = true; return { ok: false, error: { code: "commit-uncertain", message: "acknowledgement lost" } }; } return result; }; await h.controller.apply(); const staged = h.controller.getSnapshot().staged!; expect(h.controller.getSnapshot().phase).toBe("uncertain"); await h.controller.inspect(); expect(h.controller.getSnapshot()).toMatchObject({ phase: "staged", staged }); h.controller.dispose(); });
   it.each([["new", "publish"], ["changed", "publish"], ["deleted", "delete"], ["unpublish", "unpublish"]] as const)("sends explicit %s selection as %s without changing working lifecycle", async (kind, action) => { const h = harness(); await h.controller.inspect(); const before = structuredClone(h.working()); const ref = { providerId: "content-filesystem", modelId: "articles", recordId: "entry" }; h.controller.select({ ref, kind }, true); await h.controller.review(); expect(h.requests.find(({ operation }) => operation === "plan")).toMatchObject({ selection: [{ ref, action }] }); expect(h.working()).toEqual(before); h.controller.dispose(); });

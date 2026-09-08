@@ -188,6 +188,48 @@ function createFakeIntegration(options: FakeOptions = {}) {
 }
 
 describe("createWorkspaceSummary — contract", () => {
+  it.each([
+    ["compositions:files", ["compositions", "mappings"]],
+    ["content", ["content", "mappings"]],
+    ["mapping", ["mappings"]], ["sitemapper", ["sitemaps"]], ["media", ["media"]],
+    ["workspace", ["compositions", "mappings", "sitemaps", "content", "media"]],
+    ["sessions", []],
+  ] as const)("invalidates only dependent summary reads after %s", async (channel, affected) => {
+    const { integration } = createFakeIntegration({ media: [] });
+    let changed!: (channel?: string) => void;
+    integration.subscribeChanges = (listener) => { changed = listener; return () => {}; };
+    const reads = {
+      compositions: vi.spyOn(integration.compositionProviders[0]!.store, "list"),
+      mappings: vi.spyOn(integration.mappingCatalog, "list"),
+      sitemaps: vi.spyOn(integration.sitemapProvider.store, "readAll"),
+      content: vi.spyOn(integration.contentProvider.store, "listModels"),
+      media: vi.spyOn(integration.mediaProvider!.store, "list"),
+    };
+    const summary = createWorkspaceSummary(integration);
+    await summary.counts();
+    for (const read of Object.values(reads)) read.mockClear();
+    changed(channel); await summary.counts();
+    for (const [domain, read] of Object.entries(reads)) expect(read, domain).toHaveBeenCalledTimes((affected as readonly string[]).includes(domain) ? 1 : 0);
+    summary.dispose?.();
+  });
+
+  it("does not restore an obsolete pending source after a domain hint", async () => {
+    const { integration } = createFakeIntegration({ media: [] });
+    let changed!: (channel?: string) => void;
+    integration.subscribeChanges = (listener) => { changed = listener; return () => {}; };
+    let finish!: (value: readonly MediaSummary[]) => void;
+    const list = vi.spyOn(integration.mediaProvider!.store, "list")
+      .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+      .mockResolvedValue([mediaSummary("current", AT(1), "image/png", 10)]);
+    const summary = createWorkspaceSummary(integration);
+    const old = summary.counts();
+    changed("media");
+    expect(await summary.counts()).toMatchObject({ media: { value: { assets: 1 } } });
+    finish([]); await old;
+    expect(await summary.counts()).toMatchObject({ media: { value: { assets: 1 } } });
+    expect(list).toHaveBeenCalledTimes(2); summary.dispose?.();
+  });
+
   it("accepts the production provider integration", () => {
     const accept = (integration: ProductionProviderIntegration): WorkspaceSummaryIntegration => integration;
     expect(accept).toBeTypeOf("function");
