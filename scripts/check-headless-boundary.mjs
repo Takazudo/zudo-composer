@@ -1,3 +1,5 @@
+// @ts-check
+
 import { boundarySource } from './boundary-source.mjs';
 import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
@@ -6,9 +8,16 @@ import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
 const roots = ['src/shared', 'src/composer', 'src/content', 'src/media', 'src/mapping', 'src/site-project', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
+/** @type {string[]} */
 const files = [];
+/** @type {string[]} */
 const violations = [];
 
+/**
+ * @param {string} directory
+ * @param {string[]} [collected]
+ * @returns {Promise<void>}
+ */
 async function walk(directory, collected = files) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (entry.name === '__tests__' || entry.name === 'test' || entry.name === 'tests') continue;
@@ -21,6 +30,7 @@ async function walk(directory, collected = files) {
 for (const root of roots) await walk(root);
 files.push(path.join(repositoryRoot, 'package.json'), path.join(repositoryRoot, 'vite.config.ts'));
 
+/** @type {Array<[string, RegExp]>} */
 const forbidden = [
   ['provider application coupling', /@zudo-sg\/ui|zudo-doc|@takazudo\/zfb|\bzfb\b/i],
   ['application alias', /(?:from|import\()\s*["']@\//],
@@ -58,6 +68,7 @@ const persistenceRoots = [
 const persistenceFiles = [
   'src/app/workspace-storage.ts', 'src/app/workspace-seeding.ts', 'src/app/workspace-snapshot.ts', 'src/app/provider-integration.ts',
 ];
+/** @type {string[]} */
 const persistenceScanned = [];
 for (const root of persistenceRoots) {
   const target = path.join(repositoryRoot, root);

@@ -1,7 +1,12 @@
+// @ts-check
+
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+
+/** @typedef {import("node:child_process").SpawnOptions} SpawnOptions */
+/** @typedef {{status: number | null, signal: NodeJS.Signals | null}} RunResult */
 
 const root = resolve(import.meta.dirname, "..");
 // Extra arguments pass straight through to Playwright, so a single spec can be
@@ -9,6 +14,12 @@ const root = resolve(import.meta.dirname, "..");
 // the only reproduction available.
 const playwrightArgs = process.argv.slice(2).filter((argument) => argument !== "--");
 
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {SpawnOptions} options
+ * @returns {Promise<RunResult>}
+ */
 function run(command, args, options) {
   return new Promise((resolveRun, reject) => {
     const child = spawn(command, args, { cwd: root, stdio: "inherit", ...options });

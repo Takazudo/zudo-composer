@@ -1,5 +1,8 @@
+// @ts-check
+
 import ts from 'typescript';
 
+/** @param {string} text @returns {string} */
 const blank = (text) => text.replace(/[^\r\n]/g, ' ');
 
 /**
@@ -19,8 +22,10 @@ export function boundarySource(source, { fileName = 'source.tsx', strings = true
   }
 
   const tree = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  /** @type {string[]} */
   const pieces = [];
   let offset = 0;
+  /** @param {import('typescript').Node} node */
   function visit(node) {
     if (ts.isJSDoc(node)) return;
     const children = node.getChildren(tree);

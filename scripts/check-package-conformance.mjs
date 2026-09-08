@@ -1,3 +1,5 @@
+// @ts-check
+
 import { execFile as execFileCallback } from 'node:child_process';
 import { access, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
@@ -9,14 +11,19 @@ const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
 const packageRoot = path.join(repositoryRoot, 'packages', 'component-contract');
 const packageJsonPath = path.join(packageRoot, 'package.json');
 
+/** @typedef {{files?: Array<{path: string}>}} PackMetadata */
+
+/** @param {string} message @returns {never} */
 function fail(message) {
   throw new Error(`[package conformance] ${message}`);
 }
 
+/** @param {unknown} condition @param {string} message @returns {asserts condition} */
 function assert(condition, message) {
   if (!condition) fail(message);
 }
 
+/** @param {string} relativePath @returns {Promise<void>} */
 async function assertFile(relativePath) {
   try {
     await access(path.join(packageRoot, relativePath));
@@ -25,6 +32,7 @@ async function assertFile(relativePath) {
   }
 }
 
+/** @param {string} stdout @returns {PackMetadata} */
 function parsePackJson(stdout) {
   const start = stdout.lastIndexOf('\n{');
   const json = (start === -1 ? stdout : stdout.slice(start + 1)).trim();
@@ -59,6 +67,7 @@ for (const output of [
 }
 
 const pnpmExecutable = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+/** @type {PackMetadata | undefined} */
 let packedMetadata;
 try {
   const result = await execFile(pnpmExecutable, ['pack', '--dry-run', '--json'], { cwd: packageRoot, maxBuffer: 4 * 1024 * 1024 });
@@ -121,6 +130,7 @@ const expectedRootExports = {
 };
 assert(JSON.stringify(rootPackageJson.exports) === JSON.stringify(expectedRootExports), 'the root package exports map changed');
 
+/** @type {PackMetadata | undefined} */
 let rootPackedMetadata;
 try {
   const result = await execFile(pnpmExecutable, ['pack', '--dry-run', '--json'], { cwd: repositoryRoot, maxBuffer: 32 * 1024 * 1024 });
