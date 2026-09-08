@@ -5,6 +5,7 @@ import {
   type FileProviderConfig,
   type FileProviderErrorAdapter,
   type FileProviderTransactionStep,
+  type FileProviderTransportOperation,
 } from "./protocol";
 
 const encoder = new TextEncoder();
@@ -57,13 +58,13 @@ export class DomainFileProviderClient<Operation extends string, DomainError exte
     options: FileProviderCallOptions & { expectedMutationToken?: string } = {},
   ): Promise<T> {
     return this.send<T>(
-      FILE_PROVIDER_TRANSACTION_OPERATION as Operation,
+      FILE_PROVIDER_TRANSACTION_OPERATION,
       JSON.stringify({ expectedMutationToken: options.expectedMutationToken, steps }),
       { ...options, mutates: options.mutates ?? true },
     );
   }
 
-  private async send<T>(operation: Operation, body: string, options: FileProviderCallOptions): Promise<T> {
+  private async send<T>(operation: FileProviderTransportOperation<Operation>, body: string, options: FileProviderCallOptions): Promise<T> {
     if (encoder.encode(body).byteLength > this.config.maxBodyBytes) {
       throw this.adapter.transportError(
         operation,

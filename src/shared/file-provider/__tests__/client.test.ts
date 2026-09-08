@@ -8,7 +8,7 @@ import {
   type FileProviderWireError,
 } from "../protocol";
 
-type ContentOperation = "snapshot" | "put" | "transaction";
+type ContentOperation = "snapshot" | "put" | "transact";
 
 class ContentPersistenceError extends Error {
   readonly name = "ContentPersistenceError";
@@ -36,13 +36,14 @@ const adapter: FileProviderErrorAdapter<ContentOperation, ContentPersistenceErro
   }),
   fromWire: (error, fallbackOperation) =>
     new ContentPersistenceError(
-      (error.operation as ContentOperation) || fallbackOperation,
+      error.operation === "snapshot" || error.operation === "put" || error.operation === "transact"
+        ? error.operation : fallbackOperation === "transaction" ? "transact" : fallbackOperation,
       error.code,
       error.message,
       error.details,
     ),
   transportError: (operation, message, cause) =>
-    new ContentPersistenceError(operation, "unavailable", message, undefined, { cause }),
+    new ContentPersistenceError(operation === "transaction" ? "transact" : operation, "unavailable", message, undefined, { cause }),
 };
 
 const config: FileProviderConfig = {
