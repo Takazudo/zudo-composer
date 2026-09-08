@@ -23,6 +23,7 @@ describe("LibraryPage", () => {
     expect(screen.getByText(/Reusable page structures/)).toBeInTheDocument();
     expect(screen.getByText("Table goes here")).toBeInTheDocument();
 
+    expect(container.firstElementChild).toHaveClass("cms-library");
     const actions = container.querySelector(".cms-library__actions")!;
     expect(actions.textContent).toBe("Browser storageNew composition");
     // Decorative: the heading already names the page.

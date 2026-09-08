@@ -1,0 +1,23 @@
+/* LibraryPage owns the page inset. Release cards own only their inner spacing. */
+.cms-release-route { align-content: start; }
+.cms-release__body { display: grid; gap: var(--sp-b3); min-inline-size: 0; }
+.cms-release__notices, .cms-release__card, .cms-release__choices { display: grid; gap: var(--sp-b2); min-inline-size: 0; }
+.cms-release__card { padding: var(--sp-3); border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); }
+.cms-release__card-title { margin: 0; color: var(--color-muted); font-size: .6875rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.cms-release__body p, .cms-release__facts, .cms-release__facts dd { margin: 0; }
+.cms-release__body { line-height: 1.6; overflow-wrap: anywhere; }
+.cms-release__facts { display: grid; gap: var(--sp-b2); }
+.cms-release__facts > div { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr); gap: var(--sp-2); }
+.cms-release__facts dt { color: var(--color-muted); }
+.cms-release__card ul { display: grid; gap: var(--sp-b2); margin: 0; padding-inline-start: var(--sp-3); }
+.cms-release__card .cms-release__stages { list-style: none; padding: 0; }
+.cms-release__stages > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.cms-release__stage-identity { flex: 1 1 20rem; min-inline-size: 0; }
+.cms-release__stages > li + li { border-block-start: 1px solid var(--color-border); padding-block-start: var(--sp-b2); }
+.cms-release__links, .cms-release__tools, .cms-release__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.cms-release__links { column-gap: var(--sp-3); }
+.cms-release__digest { color: var(--color-muted); }
+.cms-release__actions { border-block-start: 1px solid var(--color-border); padding-block-start: var(--sp-b3); }
+@media (max-width: 40rem) {
+  .cms-release__facts > div { grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+}

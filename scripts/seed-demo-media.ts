@@ -1,0 +1,40 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createFilesystemMediaStore } from "../src/media/storage/filesystem/store";
+
+// Committed source bytes keep checksums stable across machines and reruns.
+export const demoFileNames = [
+  "demo-sunrise.png", "demo-lagoon.png", "demo-orchard.png", "demo-twilight.png",
+] as const;
+const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
+
+/** Seed this repository's dogfood store, preserving existing records and history. */
+export async function seedDemoMedia(mediaStoreRoot = resolve(repositoryRoot, "cms/media")) {
+  const store = await createFilesystemMediaStore({ mediaStoreRoot });
+  let added = 0;
+  for (const fileName of demoFileNames) {
+    const bytes = await readFile(new URL(`./demo-media/${fileName}`, import.meta.url));
+    const checksum = createHash("sha256").update(bytes).digest("hex");
+    const snapshot = await store.snapshot();
+    // Include trash and historical versions: seeding must not undo an author's edits.
+    if (snapshot.records.some(({ document }) => document.fileName === fileName
+      && document.versions.some((version) => version.checksum === checksum))) continue;
+    await store.upload({ fileName, bytes, declaredMediaType: "image/png",
+      note: "Demo illustration supplied by zudo-composer.",
+      // A simultaneous writer fails safely; rerun after that writer finishes.
+      expectedMutationToken: snapshot.mutationToken });
+    added++;
+  }
+  return { added, skipped: demoFileNames.length - added };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  seedDemoMedia().then(({ added, skipped }) => {
+    console.log(`Demo media: added ${added}, already present ${skipped}.`);
+  }).catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

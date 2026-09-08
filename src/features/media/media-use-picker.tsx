@@ -40,7 +40,7 @@ export function MediaFieldPicker({ provider, kind, onSelect, onClose }: { provid
   useEffect(() => { let live = true; if (provider) void provider.store.list().then((value) => { if (live) setRecords(value.filter((record) => record.state === "active" && (kind !== "image" || record.mediaType.startsWith("image/")))); }).catch((error) => { if (live) setError(error.message); }); return () => { live = false; }; }, [provider, kind]);
   const record = records.find(({ id }) => id === selected);
   return <Dialog open title="Choose Media asset" onClose={onClose} dismissOnBackdrop={false}>
-    {!provider ? <Banner tone="info">Media is unavailable in this build. No assets can be selected.</Banner> : null}
+    {!provider ? <Banner tone="info">The Media library and upload authoring are available only under the local development server (<code>pnpm dev</code>). Committed files under <code>publicMediaDir</code> are still served from <code>/uploaded-media/</code>.</Banner> : null}
     {error ? <Banner tone="err">{error}</Banner> : null}
     <Field label="Media asset"><Select value={selected} onChange={(event) => setSelected(event.currentTarget.value)}><option value="">Choose an asset</option>{records.map((item) => <option key={item.id} value={item.id}>{item.fileName}</option>)}</Select></Field>
     {record && provider ? <MediaUseForm key={record.id} record={record} providerId={provider.descriptor.id} kind={kind} onClose={onClose} onSubmit={async (value) => {

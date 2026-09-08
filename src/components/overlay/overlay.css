@@ -36,10 +36,11 @@
   position: fixed;
   z-index: var(--z-index-popover);
   display: grid;
+  /* 1px is the menu's hairline row separation; no --sp rung is within 1px. */
   gap: 1px;
   min-width: 11.25rem;
-  max-width: min(24rem, calc(100vw - 1rem));
-  padding: 4px;
+  max-width: min(24rem, calc(100vw - var(--sp-3)));
+  padding: var(--sp-1);
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--color-border);
@@ -56,11 +57,13 @@
 
 .cms-menu__section {
   display: grid;
+  /* Keep the 1px hairline separation; no --sp rung is within 1px. */
   gap: 1px;
 }
 
 .cms-menu__title {
-  padding: 6px 8px 2px;
+  /* The 2px title trim is off the spacing ladders by more than 1px. */
+  padding: var(--sp-b1) var(--sp-2) 2px;
   color: var(--color-muted);
   font-size: var(--text-xs);
   font-weight: var(--font-weight-bold);
@@ -72,9 +75,9 @@
   display: grid;
   grid-template-columns: 1rem minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.5rem;
-  min-height: 1.875rem;
-  padding-inline: 0.5rem;
+  min-height: var(--control-h);
+  gap: var(--sp-2);
+  padding-inline: var(--sp-2);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -140,6 +143,7 @@
 }
 
 .cms-menu__separator {
+  /* Keep 3px on both sides: mapping each margin to 4px would add 2px overall. */
   margin: 3px 0;
   border: 0;
   border-top: 1px solid var(--color-border);
@@ -148,7 +152,7 @@
 /* --- Dialog -------------------------------------------------------------- */
 
 .cms-dialog {
-  width: min(35rem, calc(100vw - 2rem));
+  width: min(35rem, calc(100vw - var(--sp-4)));
   /* Restore native modal centering after the global margin reset. */
   margin: auto;
   padding: 0;
@@ -168,7 +172,7 @@
 }
 
 .cms-dialog--wide {
-  width: min(57.5rem, calc(100vw - 2rem));
+  width: min(57.5rem, calc(100vw - var(--sp-4)));
 }
 
 .cms-dialog::backdrop {
@@ -186,14 +190,14 @@
 .cms-dialog__panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  max-height: min(80vh, calc(100vh - 2rem));
+  max-height: min(80vh, calc(100vh - var(--sp-4)));
 }
 
 .cms-dialog__header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  gap: var(--sp-2);
+  padding: var(--sp-b2) var(--sp-3);
   border-block-end: 1px solid var(--color-border);
 }
 
@@ -207,6 +211,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* 26px is deliberate close-button geometry; no --sp rung is within 1px. */
   width: 1.625rem;
   height: 1.625rem;
   margin-inline-start: auto;
@@ -223,7 +228,7 @@
 }
 
 .cms-dialog__body {
-  padding: 1rem;
+  padding: var(--sp-3);
   overflow: auto;
 }
 
@@ -236,8 +241,8 @@
 .cms-dialog__footer {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  gap: var(--sp-2);
+  padding: var(--sp-b2) var(--sp-3);
   border-block-start: 1px solid var(--color-border);
   background: var(--color-surface-2);
 }
@@ -256,8 +261,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 1.875rem;
-  padding-inline: 0.75rem;
+  min-height: var(--control-h);
+  padding-inline: var(--sp-b2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
@@ -324,6 +329,7 @@
 /* --- Coarse pointers ----------------------------------------------------- */
 
 @media (pointer: coarse) {
+  /* 44px is the touch-target floor; it intentionally has no nearby --sp rung. */
   .cms-menu__item {
     min-height: 2.75rem;
   }

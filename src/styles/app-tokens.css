@@ -27,6 +27,10 @@
   --sp-b3: 24px;
   --sp-b4: 48px;
 
+  /* Inset between the shell rail/edge and a route's content. One role, one value. */
+  --page-inset: var(--sp-3);
+  --page-inset-narrow: var(--sp-2);
+
   /* Toolbars, tree rows and table rows all sit on one row height. */
   --row-chrome: 32px;
   /* Picker and entry-list rows are one step taller. */
