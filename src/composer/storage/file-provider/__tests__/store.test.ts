@@ -84,10 +84,9 @@ describe("browser file-provider adapter", () => {
     const value = record();
     fetchMock
       .mockResolvedValueOnce(jsonResponse({
-        ok: false,
-        error: { code: "output-required", operation: "put", message: "plan" },
+        ok: "needs-output",
         request: outputRequest([value]),
-      }, 409))
+      }))
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: {
         canonical: { status: "saved" }, derived: { status: "repaired", records: [{ recordId: value.id, status: "repaired" }] },
       } }));
@@ -115,10 +114,9 @@ describe("browser file-provider adapter", () => {
     };
     fetchMock
       .mockResolvedValueOnce(jsonResponse({
-        ok: false,
-        error: { code: "output-required", operation: "list", message: "repair" },
+        ok: "needs-output",
         request: outputRequest([value]),
-      }, 409))
+      }))
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: [summary] }));
     const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" });
 
@@ -137,10 +135,9 @@ describe("browser file-provider adapter", () => {
 
     fetchMock
       .mockResolvedValueOnce(jsonResponse({
-        ok: false,
-        error: { code: "output-required", operation: "put", message: "plan" },
+        ok: "needs-output",
         request: outputRequest([value]),
-      }, 409))
+      }))
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: {
         canonical: { status: "saved" },
         derived: { status: "blocked", records: [{ recordId: value.id, status: "blocked", reason: "unsupported node" }] },
@@ -178,6 +175,60 @@ describe("browser file-provider adapter", () => {
     });
   });
 
+  it.each([
+    { ok: "needs-output" },
+    { ok: "needs-output", request: null },
+    { ok: "needs-output", request: { records: [{}], sourceOutcomes: [], targetIds: [] } },
+    { ok: "needs-output", request: { records: [], sourceOutcomes: [{}], targetIds: [] } },
+    { ok: "needs-output", request: { records: [], sourceOutcomes: [], targetIds: [1] } },
+  ])("rejects malformed output closures with the planning diagnostic: %j", async (payload) => {
+    fetchMock.mockResolvedValue(jsonResponse(payload));
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" })!;
+    await expect(store.list()).rejects.toMatchObject({
+      code: "validation", retryable: false,
+      message: "The file provider returned an invalid dependency closure for output planning.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([{ ok: true }, { ok: false }, { ok: "other", result: [] }, { ok: false, error: { code: 1, message: "bad" } }])("rejects malformed result and error envelopes: %j", async (payload) => {
+    fetchMock.mockResolvedValue(jsonResponse(payload));
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" })!;
+    await expect(store.list()).rejects.toMatchObject({ code: "unknown" });
+  });
+
+  it("stops non-converging output planning after eight rounds", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: "needs-output", request: outputRequest([record()]) }));
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" })!;
+    await expect(store.put(record())).rejects.toMatchObject({
+      code: "conflict", retryable: true,
+      message: "File-provider output planning did not converge. Retry the save or reload the Composition.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+  });
+
+  it("rejects unexpected output planning on plain requests without notifying a mutation", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: "needs-output", request: outputRequest([record()]) }));
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" })!;
+    const changed = vi.fn();
+    const stop = subscribePersistenceChanges(changed);
+    try {
+      await expect(store.clear()).rejects.toMatchObject({
+        operation: "clear", code: "validation", retryable: false,
+        message: 'The file provider unexpectedly requested output planning for "clear".',
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(changed).not.toHaveBeenCalled();
+    } finally { stop(); }
+  });
+
+  it("surfaces real planning-operation errors without decoding or retrying", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ok: false, error: { code: "conflict", message: "Concurrent writer." } }, 409));
+    const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" })!;
+    await expect(store.get("alpha")).rejects.toMatchObject({ code: "conflict", message: "Concurrent writer." });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("returns the shared get/delete/clear result shapes", async () => {
     const value = record();
     fetchMock
@@ -204,10 +255,9 @@ describe("browser file-provider adapter", () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: { status: "blocked", dependents: [] } }))
       .mockResolvedValueOnce(jsonResponse({
-        ok: false,
-        error: { code: "output-required", operation: "unpublish-with-dependency-check", message: "plan" },
+        ok: "needs-output",
         request: outputRequest([unpublished]),
-      }, 409))
+      }))
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: { status: "unpublished" } }))
       .mockResolvedValueOnce(jsonResponse({ ok: true, result: null }));
     const store = createFileProviderCompositionStore({ catalog: fixtureManifest, fetch: fetchMock, workspace: () => "test-workspace" });

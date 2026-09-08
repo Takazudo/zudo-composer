@@ -22,7 +22,7 @@ export interface ComposerFileProviderConfig {
 }
 
 export interface ComposerFileProviderErrorPayload {
-  code: CompositionPersistenceErrorCode | "output-required" | string;
+  code: CompositionPersistenceErrorCode | string;
   message: string;
   operation?: string;
 }
