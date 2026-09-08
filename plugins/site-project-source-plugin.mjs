@@ -65,7 +65,8 @@ export function siteProjectSourcePlugin(options = {}) {
         const buildRoot = resolve(localRoot, "builds", buildId);
         return new Set([localRoot, active, resolve(localRoot, "projects", projectId, `${revision}.json`), resolve(buildRoot, "stage.json"), resolve(buildRoot, "build.json"), resolve(buildRoot, "complete.json"), ...Object.keys(loaded.release.files).map((name) => resolve(buildRoot, name))]);
       };
-      const refresh = async () => {
+      /** @type {Promise<void> | undefined} */ let inFlightRefresh;
+      const performRefresh = async () => {
         if (closed || refreshing) return; refreshing = true;
         try { while (!closed && applied < requested) {
           const generation = requested;
@@ -88,13 +89,30 @@ export function siteProjectSourcePlugin(options = {}) {
           }
         } } finally { refreshing = false; if (!closed && applied < requested && !retryTimer) globalThis.queueMicrotask(() => { void refresh(); }); }
       };
+      const refresh = () => {
+        if (closed || refreshing) return inFlightRefresh;
+        inFlightRefresh = performRefresh();
+        return inFlightRefresh;
+      };
       const scheduleRetry = () => { if (retryTimer || closed) return; const delay = retryDelay; retryDelay = Math.min(250, retryDelay * 2); retryTimer = globalThis.setTimeout(() => { retryTimer = undefined; if (!closed) void refresh(); }, delay); };
       const requestRefresh = (notify) => { if (closed) return; requested++; notifyPending ||= notify; globalThis.queueMicrotask(() => { void refresh(); }); };
       const changed = (path) => {
         if (watched.has(path)) requestRefresh(true);
       };
       viteServer.watcher.on("add", changed); viteServer.watcher.on("change", changed); viteServer.watcher.on("unlink", changed);
-      viteServer.httpServer?.once("close", () => { closed = true; if (retryTimer) globalThis.clearTimeout(retryTimer); retryTimer = undefined; });
+      const stopRefresh = () => { closed = true; if (retryTimer) globalThis.clearTimeout(retryTimer); retryTimer = undefined; };
+      viteServer.httpServer?.once("close", stopRefresh);
+      // Vite tears down SSR transports concurrently with plugin close hooks.
+      // Drain our current load before entering that teardown, including in
+      // middleware mode where there is no HTTP server close event.
+      if (viteServer.close) {
+        const close = viteServer.close.bind(viteServer);
+        viteServer.close = async () => {
+          stopRefresh();
+          await inFlightRefresh;
+          return close();
+        };
+      }
       requestRefresh(false);
       viteServer.middlewares?.use(async (req, res, next) => {
         let pathname; try { pathname = new URL(req.url ?? "", "http://localhost").pathname; } catch { return next(); }
