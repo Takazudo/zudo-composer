@@ -1,15 +1,11 @@
-// The refresh-hint channels the authoring application listens on.
-//
-// A hint carries its domain rather than a store identity, because the
-// workspace is a request header the browser sends rather than part of the
-// store's name.
-//
-// The practical consequence is that two windows open on *different* workspaces
-// now hint each other. That is harmless: a hint only asks a listener to re-read,
-// and every correctness decision — capture coherence, optimistic concurrency —
-// still rests on persisted mutation tokens, which are per workspace. Widening a
-// refresh is a redundant read; narrowing one would be a stale screen.
+// Refresh hints are narrow by domain: each consumer lists the persisted inputs
+// it reads, including cross-domain inputs such as Mapping's Content schema.
+// Workspace changes invalidate every domain selection. Hints deliberately stay
+// wide across workspaces because the channel carries no workspace identity:
+// another window may ask us to re-read, but persisted per-workspace tokens still
+// decide capture coherence and optimistic concurrency.
 
+import { subscribePersistenceChanges } from "../shared/persistence-generation";
 import { COMPOSITION_FILE_PROVIDER_CHANNEL } from "../composer/storage/file-provider";
 import { CONTENT_FILE_PROVIDER_DOMAIN } from "../content/storage/file-provider";
 import { MAPPING_FILE_PROVIDER_DOMAIN } from "../mapping/storage/file-provider";
@@ -28,6 +24,13 @@ export const AUTHORING_PERSISTENCE_CHANNELS: readonly string[] = Object.freeze([
   SITEMAP_FILE_PROVIDER_DOMAIN,
 ]);
 
-export function isAuthoringPersistenceChannel(channel: string): boolean {
-  return AUTHORING_PERSISTENCE_CHANNELS.includes(channel);
+export function isAuthoringPersistenceChannel(channel: string, dependencies: readonly string[]): boolean {
+  return channel === WORKSPACE_FILE_PROVIDER_DOMAIN || dependencies.includes(channel);
+}
+
+/** Whole-project inspectors read every authoring domain, including project metadata. */
+export const PROJECT_USAGE_CHANNELS = AUTHORING_PERSISTENCE_CHANNELS;
+
+export function subscribeAuthoringPersistenceChanges(dependencies: readonly string[], listener: () => void): () => void {
+  return subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel, dependencies)) listener(); });
 }

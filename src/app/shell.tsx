@@ -1,3 +1,4 @@
+import { CONTENT_FILE_PROVIDER_DOMAIN } from "../content/storage/file-provider";
 import type { ComponentChildren, JSX } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Dialog } from "../components/overlay";
@@ -108,6 +109,7 @@ export function Shell({ children, path, themeController, themeSnapshot, summary 
   const [mobile, setMobile] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(max-width: 760px)").matches);
   const [temporary, setTemporary] = useState(false);
   const [generation, setGeneration] = useState(0);
+  const [modelGeneration, setModelGeneration] = useState(0);
   const frameRef = useRef<HTMLDivElement>(null);
   const temporaryRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -117,7 +119,7 @@ export function Shell({ children, path, themeController, themeSnapshot, summary 
   const close = (restore = true) => { restoreFocusRef.current = restore; setTemporary(false); };
   const open = () => { restoreFocusRef.current = false; triggerRef.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null; setTemporary(true); };
 
-  useEffect(() => integration?.subscribeChanges(() => setGeneration((value) => value + 1)), [integration]);
+  useEffect(() => integration?.subscribeChanges(() => setModelGeneration((value) => value + 1), [CONTENT_FILE_PROVIDER_DOMAIN]), [integration]);
   useEffect(() => summary?.subscribe?.(() => setGeneration((value) => value + 1)), [summary]);
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
@@ -189,7 +191,7 @@ export function Shell({ children, path, themeController, themeSnapshot, summary 
       }
     })().catch((cause: unknown) => { if (live) { setModels([]); setModelError(cause instanceof Error ? cause.message : "Content models unavailable."); } });
     return () => { live = false; };
-  }, [integration, generation]);
+  }, [integration, modelGeneration]);
 
   useEffect(() => {
     if (!summary) return undefined;

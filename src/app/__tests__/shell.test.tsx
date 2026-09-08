@@ -1,3 +1,7 @@
+import { WorkspaceContext } from "../workspace-context";
+import type { ProductionProviderIntegration } from "../provider-integration";
+import { subscribeAuthoringPersistenceChanges } from "../persistence-channels";
+import { notifyPersistenceChange } from "../../shared/persistence-generation";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import "../../components/overlay/__tests__/overlay-test-environment";
 import type { JSX } from "preact";
@@ -17,6 +21,24 @@ afterEach(() => {
   window.localStorage.removeItem(RAIL_STORAGE_KEY);
   window.localStorage.removeItem(THEME_STORAGE_KEY);
   vi.unstubAllGlobals();
+});
+
+it("refreshes rail models only for Content/workspace while summary hints update counts", async () => {
+  const listModels = vi.fn(async () => ({ entries: [], failures: [] }));
+  const integration = { initialization: { initialize: async () => ({ status: "ready" }) }, contentCatalog: { listModels }, subscribeChanges: (listener: () => void, channels: readonly string[]) => subscribeAuthoringPersistenceChanges(channels, listener) } as unknown as ProductionProviderIntegration;
+  let hint!: () => void;
+  const summary = { ...fakeSummary(readyCounts()), subscribe: (listener: () => void) => { hint = listener; return () => {}; } };
+  const counts = vi.spyOn(summary, "counts");
+  render(<WorkspaceContext.Provider value={{ integration, navigate: async () => true, reset: async () => true, open: async () => true, busy: false, error: null }}><ShellHarness summary={summary} /></WorkspaceContext.Provider>);
+  await waitFor(() => expect(listModels).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(counts).toHaveBeenCalledTimes(1));
+  await act(async () => { notifyPersistenceChange("mapping"); hint(); });
+  await waitFor(() => expect(counts).toHaveBeenCalledTimes(2));
+  expect(listModels).toHaveBeenCalledTimes(1);
+  for (const channel of ["content", "workspace"]) {
+    listModels.mockClear(); await act(async () => notifyPersistenceChange(channel));
+    await waitFor(() => expect(listModels).toHaveBeenCalledTimes(1));
+  }
 });
 
 it("gives percentage-height editors a definite route slot without clipping long pages", () => {
