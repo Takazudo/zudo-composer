@@ -74,7 +74,10 @@
     "test:browser:dev": "node scripts/run-dev-browser.mjs",
     "test:browser:site-project": "node scripts/run-site-project-browser.mjs",
     "build:hosted-demo": "vite build --config vite.hosted-demo.config.ts && node scripts/check-hosted-demo.mjs",
-    "hosted-demo:verify": "node scripts/check-hosted-demo.mjs"
+    "hosted-demo:verify": "node scripts/check-hosted-demo.mjs",
+    "hosted-demo:live-check": "node scripts/hosted-demo/live-check.mjs",
+    "hosted-demo:workflow-guard": "node scripts/hosted-demo/workflow-guard.mjs",
+    "hosted-demo:deploy": "node scripts/hosted-demo/deploy.mjs"
   },
   "peerDependencies": {
     "@zudo-composer/component-contract": "1.0.0"
@@ -109,6 +112,7 @@
     "tsx": "^4.20.5",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.68.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "wrangler": "4.130.0"
   }
 }

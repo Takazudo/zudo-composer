@@ -270,6 +270,8 @@ unavailable and never falls back to a working draft. In contrast,
 `/website-preview` flushes and compiles the current live authoring snapshot. A release
 is stamped with the toolchain that built it, so after a component-pack swap an already
 activated release no longer matches the installed runtime and becomes unavailable
-rather than being served against different components. Local activation is not deployment;
-hosted persistence, authentication, hosted APIs and deployment remain future work
-and are not a claim of this repository.
+rather than being served against different components. Local activation is not deployment.
+Hosted persistence, authentication, hosted APIs and deployment of host-owned
+releases remain future work and are not a claim of this repository. The
+disposable static sample described in [`hosted-demo.md`](./hosted-demo.md) is a
+separate, explicitly allowlisted artifact adapter.
