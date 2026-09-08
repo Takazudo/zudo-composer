@@ -1,3 +1,5 @@
+import { AUTHORING_PERSISTENCE_CHANNELS, PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "../../../app/persistence-channels";
+import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MediaApp } from "../media-app";
@@ -7,6 +9,28 @@ import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 describe("Media workspace", () => {
+  it("refreshes both inspector and trash usage scans for every project dependency", async () => {
+    const { provider, filesystem } = await providerFixture();
+    await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const services = completeServices({ subscribeChanges: (listener) => subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, listener) });
+    const scan = vi.spyOn(services, "scan");
+    render(<MediaApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
+    await waitFor(() => expect(scan).toHaveBeenCalled());
+    for (const channel of AUTHORING_PERSISTENCE_CHANNELS) {
+      scan.mockClear(); notifyPersistenceChange(channel);
+      await waitFor(() => expect(scan).toHaveBeenCalledTimes(1));
+    }
+    fireEvent.click(within(screen.getByRole("complementary", { name: "Asset details" })).getByRole("button", { name: "Trash…", exact: true }));
+    await screen.findByRole("dialog", { name: "Move assets to trash?" });
+    await waitFor(() => expect(scan.mock.calls.length).toBeGreaterThan(1));
+    for (const channel of AUTHORING_PERSISTENCE_CHANNELS) {
+      scan.mockClear(); notifyPersistenceChange(channel);
+      // Inspector and open trash confirmation each invalidate their own scan.
+      await waitFor(() => expect(scan).toHaveBeenCalledTimes(2));
+    }
+  });
+
   it("shows actionable additional project uses inside the blocked trash dialog", async () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });

@@ -19,6 +19,11 @@
 // SiteProject delivery routes (`/site*`) are deliberately absent: they render
 // outside the CMS chrome and are not authoring records.
 
+import { COMPOSITION_FILE_PROVIDER_CHANNEL } from "../composer/storage/file-provider";
+import { CONTENT_FILE_PROVIDER_DOMAIN } from "../content/storage/file-provider";
+import { MAPPING_FILE_PROVIDER_DOMAIN } from "../mapping/storage/file-provider";
+import { SITEMAP_FILE_PROVIDER_DOMAIN } from "../sitemapper/storage/file-provider";
+import { MEDIA_PERSISTENCE_CHANNEL } from "./persistence-channels";
 import type { CompositionSummary } from "../composer/browser";
 import type { ContentCatalog } from "../content/catalog";
 import type { ContentEntryRecord, ContentModelRecord } from "../content/model";
@@ -144,7 +149,7 @@ export type WorkspaceInitializationOutcome = { status: "ready" } | { status: "er
  * integration free to grow.
  */
 export interface WorkspaceSummaryIntegration {
-  subscribeChanges?(listener: () => void): () => void;
+  subscribeChanges?(listener: (channel?: string) => void): () => void;
   readonly initialization: { initialize(): Promise<WorkspaceInitializationOutcome>; retry(): Promise<WorkspaceInitializationOutcome> };
   readonly componentProvider: { readonly catalog: ComponentCatalog };
   readonly compositionProviders: readonly {
@@ -462,23 +467,34 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     }
   };
 
-  let pending: Promise<WorkspaceData> | undefined;
-  const read = (): Promise<WorkspaceData> => (pending ??= (async () => {
+  // Cache each read model independently; Mapping diagnostics also read Content
+  // schemas and Compositions, while the other summaries own just their domain.
+  let cached: Partial<{ -readonly [K in keyof WorkspaceData]: Promise<WorkspaceData[K]> }> = {};
+  const read = async (): Promise<WorkspaceData> => {
     const [compositions, mappings, sitemaps, content, media] = await Promise.all([
-      guard("Compositions could not be read.", loadCompositions),
-      guard("Mappings could not be read.", loadMappings),
-      guard("Sitemaps could not be read.", loadSitemaps),
-      guard("Content could not be read.", loadContent),
-      readMedia(),
+      cached.compositions ??= guard("Compositions could not be read.", loadCompositions),
+      cached.mappings ??= guard("Mappings could not be read.", loadMappings),
+      cached.sitemaps ??= guard("Sitemaps could not be read.", loadSitemaps),
+      cached.content ??= guard("Content could not be read.", loadContent),
+      cached.media ??= readMedia(),
     ]);
     return { compositions, mappings, sitemaps, content, media };
-  })());
+  };
 
   const listeners = new Set<() => void>();
-  const stopChanges = integration.subscribeChanges?.(() => { pending = undefined; for (const listener of listeners) listener(); });
+  const stopChanges = integration.subscribeChanges?.((channel) => {
+    if (channel === "sessions") return; // Pending edits are not persisted counts.
+    if (channel === COMPOSITION_FILE_PROVIDER_CHANNEL) { delete cached.compositions; delete cached.mappings; }
+    else if (channel === CONTENT_FILE_PROVIDER_DOMAIN) { delete cached.content; delete cached.mappings; }
+    else if (channel === MAPPING_FILE_PROVIDER_DOMAIN) delete cached.mappings;
+    else if (channel === SITEMAP_FILE_PROVIDER_DOMAIN) delete cached.sitemaps;
+    else if (channel === MEDIA_PERSISTENCE_CHANNEL) delete cached.media;
+    else cached = {}; // Workspace selection and legacy broad hints.
+    for (const listener of listeners) listener();
+  });
   return {
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    dispose() { stopChanges?.(); pending = undefined; listeners.clear(); },
+    dispose() { stopChanges?.(); cached = {}; listeners.clear(); },
     async counts() {
       const data = await read();
       return {
@@ -513,7 +529,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
       };
     },
     refresh() {
-      pending = undefined;
+      cached = {};
       for (const listener of listeners) listener();
       if (state !== "failed") return;
       state = "idle";

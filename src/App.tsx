@@ -5,9 +5,8 @@ import { createProductionProviderIntegration, type ProductionProviderIntegration
 import { WorkspaceContext } from "./app/workspace-context";
 import { parseIntent, formatIntent } from "./app/route-intents";
 import { Button } from "./components/ui";
-import { isAuthoringPersistenceChannel } from "./app/persistence-channels";
+import { PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./app/persistence-channels";
 import { createProjectMediaUsageInspection } from "./site-project/media/usage";
-import { subscribePersistenceChanges } from "./shared/persistence-generation";
 import { Shell } from "./app/shell";
 import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
@@ -181,7 +180,7 @@ export function App({ themeController, integration }: AppProps = {}) {
   const mediaContentServices = useMemo(() => createMediaContentServices(
     providers.contentProviders,
     () => providers.sessions.flush(),
-    (listener) => subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel)) listener(); }),
+    (listener) => subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, listener),
     createProjectMediaUsageInspection({
       readProject: async () => { const result = await providers.getCurrentSiteProject({ flushSessions: false }); if (result.status !== "ready") throw new Error(result.error.message); return result.project; },
       catalog: providers.componentProvider.catalog,
