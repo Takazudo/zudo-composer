@@ -5,6 +5,7 @@
   },
   "include": [
     "./**/*.ts",
+    "../browser-hosted/**/*.ts",
     "../browser-dev/**/*.ts",
     "../*.ts"
   ]
