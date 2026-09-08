@@ -7,7 +7,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
-/** @typedef {Error & {stdout?: string, stderr?: string, code?: number | string}} ExecFailure */
+/** @typedef {Error & {stdout?: string, stderr?: string, code?: number | string | null}} ExecFailure */
 /** @typedef {{packageName: string, sourcePath: string, packageBranch: string, packageCommit: string, rootGitSpec: string}} ContractHandoff */
 /** @typedef {{status: "unavailable" | "mismatch" | "reachable", reason: string}} BranchStatus */
 /** @typedef {[string, RegExp]} ProtocolRule */
@@ -55,9 +55,9 @@ function assertNoDependencyProtocols(content, description) {
 /** @param {unknown} value @returns {value is ExecFailure} */
 function isExecFailure(value) {
   if (!(value instanceof Error)) return false;
-  if ("stdout" in value && typeof value.stdout !== "string") return false;
-  if ("stderr" in value && typeof value.stderr !== "string") return false;
-  if ("code" in value && typeof value.code !== "number" && typeof value.code !== "string") return false;
+  if ("stdout" in value && value.stdout !== undefined && typeof value.stdout !== "string") return false;
+  if ("stderr" in value && value.stderr !== undefined && typeof value.stderr !== "string") return false;
+  if ("code" in value && value.code !== undefined && value.code !== null && typeof value.code !== "number" && typeof value.code !== "string") return false;
   return true;
 }
 
