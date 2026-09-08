@@ -50,6 +50,27 @@ function cacheBusted(url, sourceRevision) {
 }
 
 /**
+ * Cloudflare injects its documented RUM beacon into navigation HTML. Permit
+ * only that exact empty external script immediately before the closing body;
+ * every other byte must still match the tested index. The untransformed
+ * index.html is verified separately with the other artifact files.
+ * @param {Buffer} bytes
+ * @param {string} expectedSha256
+ */
+export function verifyNavigationHtml(bytes, expectedSha256) {
+  const responseSha256 = sha256(bytes);
+  if (responseSha256 === expectedSha256) return { responseSha256, cloudflareAnalyticsInjected: false };
+  const beacon = /<script type="module" src="https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js\/v[0-9a-f]+" integrity="sha512-[A-Za-z0-9+/=]+" data-cf-beacon='([^'<>\r\n]+)' crossorigin="anonymous"><\/script>\n(?=<\/body>)/gu;
+  const html = bytes.toString("utf8");
+  const matches = [...html.matchAll(beacon)];
+  assert.equal(matches.length, 1, "Navigation HTML differs from index.html without exactly one recognized Cloudflare analytics injection");
+  const config = JSON.parse(matches[0][1]);
+  assert.ok(config && typeof config === "object" && typeof config.version === "string" && /^[a-f0-9]{32}$/.test(config.token), "Cloudflare analytics injection has an unexpected configuration");
+  assert.equal(sha256(Buffer.from(html.replace(beacon, ""))), expectedSha256, "Navigation HTML contains changes beyond Cloudflare analytics injection");
+  return { responseSha256, cloudflareAnalyticsInjected: true };
+}
+
+/**
  * @param {{ baseUrl: string, artifactDirectory: string, expectedSourceRevision?: string, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response>, requestTimeoutMs?: number, overallTimeoutMs?: number }} options
  */
 export async function verifyLiveDeployment({
@@ -83,13 +104,16 @@ export async function verifyLiveDeployment({
     }, deadlineAt);
     assert.ok(response.ok, `${route}: expected HTTP 2xx, received ${response.status}`);
     const bytes = Buffer.from(await response.arrayBuffer());
-    assert.equal(sha256(bytes), index.sha256, `${route}: response does not match index.html SHA-256`);
+    const navigationProof = verifyNavigationHtml(bytes, index.sha256);
     assert.equal(responseMime(response), index.mime, `${route}: expected ${index.mime}, received ${responseMime(response) || "no Content-Type"}`);
-    return { path: route, sha256: index.sha256, mime: index.mime };
+    return { path: route, sha256: index.sha256, mime: index.mime, ...navigationProof };
   }));
 
-  const assetResults = await Promise.all(artifact.files.filter((file) => file.path !== "index.html").map(async (file) => {
-    const response = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(`/${file.path}`, origin), sourceRevision), requestTimeoutMs, {}, deadlineAt);
+  const assetResults = await Promise.all(artifact.files.map(async (file) => {
+    // Static Assets canonicalizes /index.html to /. A non-navigation request
+    // to that canonical URL returns the original file without RUM injection.
+    const assetPath = file.path === "index.html" ? "/" : `/${file.path}`;
+    const response = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(assetPath, origin), sourceRevision), requestTimeoutMs, {}, deadlineAt);
     assert.ok(response.ok, `/${file.path}: expected HTTP 2xx, received ${response.status}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.equal(sha256(bytes), file.sha256, `/${file.path}: response SHA-256 does not match the built artifact`);
