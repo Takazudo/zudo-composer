@@ -1,3 +1,4 @@
+import { boundarySource } from './boundary-source.mjs';
 import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -30,7 +31,9 @@ const forbidden = [
 ];
 
 for (const file of files) {
-  const content = await readFile(file, 'utf8');
+  const source = await readFile(file, 'utf8');
+  const content = boundarySource(source, { fileName: file });
+  const code = boundarySource(source, { fileName: file, strings: false });
   for (const [rule, pattern] of forbidden) {
     const isRootConfig = file === path.join(repositoryRoot, 'package.json') || file === path.join(repositoryRoot, 'vite.config.ts');
     const applicablePattern = rule === 'provider application coupling' && isRootConfig
@@ -38,7 +41,7 @@ for (const file of files) {
       // headless isolation is enforced against the production-domain roots above.
       ? /zudo-doc|@takazudo\/zfb(?!-md-wasm)|\bzfb\b(?!-md-wasm)/i
       : pattern;
-    if (applicablePattern.test(content)) violations.push(`${path.relative(repositoryRoot, file)}: ${rule}`);
+    if (applicablePattern.test(['removed source adapter', 'removed schema compatibility'].includes(rule) ? code : content)) violations.push(`${path.relative(repositoryRoot, file)}: ${rule}`);
   }
 }
 
@@ -67,7 +70,7 @@ for (const file of persistenceFiles) {
   if (existsSync(target)) persistenceScanned.push(target);
 }
 for (const file of persistenceScanned) {
-  if (BROWSER_STORAGE.test(await readFile(file, 'utf8'))) {
+  if (BROWSER_STORAGE.test(boundarySource(await readFile(file, 'utf8'), { fileName: file, strings: false }))) {
     violations.push(`${path.relative(repositoryRoot, file)}: browser storage in a persistence layer`);
   }
 }
@@ -77,15 +80,17 @@ for (const file of persistenceScanned) {
 const mappingImports = files.filter((file) => file.includes(`${path.sep}src${path.sep}mapping${path.sep}`));
 const contentAndMapping = files.filter((file) => file.includes(`${path.sep}src${path.sep}content${path.sep}`) || file.includes(`${path.sep}src${path.sep}mapping${path.sep}`) || file.includes(`${path.sep}src${path.sep}site-project${path.sep}`));
 for (const file of contentAndMapping) {
-  const content = await readFile(file, 'utf8');
-  if (/\b(?:window|localStorage)\b|globalThis\.document|\bHTMLElement\b/.test(content)) violations.push(`${path.relative(repositoryRoot, file)}: headless DOM dependency`);
-  if (/\b(?:legacy|migration|migrate|compatibility shim|fallback registry)\b/i.test(content)) violations.push(`${path.relative(repositoryRoot, file)}: legacy or migration compatibility`);
+  const source = await readFile(file, 'utf8');
+  const content = boundarySource(source, { fileName: file });
+  const code = boundarySource(source, { fileName: file, strings: false });
+  if (/\b(?:window|localStorage)\b|globalThis\.document|\bHTMLElement\b/.test(code)) violations.push(`${path.relative(repositoryRoot, file)}: headless DOM dependency`);
+  if (/\b(?:legacy|migration|migrate|compatibility shim|fallback registry)\b/i.test(code)) violations.push(`${path.relative(repositoryRoot, file)}: legacy or migration compatibility`);
   if (file.includes(`${path.sep}src${path.sep}site-project${path.sep}`) && /(?:from|import\()\s*["'](?:node:)?(?:fs|path|os|url|child_process)["']/.test(content)) {
     violations.push(`${path.relative(repositoryRoot, file)}: headless Node dependency`);
   }
 }
 for (const file of mappingImports) {
-  const content = await readFile(file, 'utf8');
+  const content = boundarySource(await readFile(file, 'utf8'), { fileName: file });
   for (const match of content.matchAll(/from\s+["'](\.\.\/\.\.\/(?:content|composer)\/[^"']+)["']/g)) {
     if (!/(?:content\/(?:catalog|model)|composer\/(?:library|model))/.test(match[1])) violations.push(`${path.relative(repositoryRoot, file)}: undocumented cross-domain seam ${match[1]}`);
   }

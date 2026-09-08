@@ -20,7 +20,7 @@ import {
   domainFileProviderEndpoint,
 } from "../../../../shared/file-provider";
 import { createWorkspaceScopedSitemapStore } from "../dev-server-entry";
-import { sitemapFileProviderErrorAdapter } from "../wire-error";
+import { sitemapFileProviderErrorAdapter } from "../error-adapter";
 import { FileProviderSitemapStore, createFileProviderSitemapProvider } from "../store";
 import { SITEMAP_FILE_PROVIDER_DOMAIN, SITEMAP_FILE_PROVIDER_OPERATIONS } from "../types";
 
