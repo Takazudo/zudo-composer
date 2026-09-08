@@ -5,6 +5,7 @@ packages:
 
 allowBuilds:
   esbuild: true
+  workerd: true
 
 minimumReleaseAgeExclude:
   - '@cloudflare/workerd-darwin-64@1.20260908.1'
