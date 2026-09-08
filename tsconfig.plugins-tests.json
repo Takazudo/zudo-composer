@@ -1,0 +1,11 @@
+{
+  // Plugin specs import browser stores and JSX pack fixtures. Reuse the app's
+  // JSX settings and include ambient virtual-module declarations explicitly.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.plugins-tests.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  "include": ["plugins/__tests__/**/*.ts", "src/**/*.d.ts"]
+}

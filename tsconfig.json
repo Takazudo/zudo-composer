@@ -6,6 +6,7 @@
     { "path": "./tsconfig.site-project-local.json" },
     { "path": "./tsconfig.host-config.json" },
     { "path": "./tsconfig.cli.json" },
-    { "path": "./packages/component-contract" }
+    { "path": "./packages/component-contract" },
+    { "path": "./tsconfig.plugins-tests.json" }
   ]
 }
