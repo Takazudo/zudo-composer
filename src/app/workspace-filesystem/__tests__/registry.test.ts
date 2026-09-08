@@ -81,6 +81,41 @@ describe("filesystem workspace registry", () => {
     expect(await fifth.selection()).toBe("alpha");
   });
 
+  it("does not write a new generation when completing the ready, active workspace", async () => {
+    const root = await registryRoot();
+    const registry = await open(root);
+    await registry.create(sample(), revision, "alpha");
+    const ready = await registry.complete("alpha");
+    const generation = await registry.generation();
+    const before = await snapshotTree(registry.root);
+
+    expect(await registry.complete("alpha")).toEqual(ready);
+
+    expect(await registry.generation()).toBe(generation);
+    expect(await snapshotTree(registry.root)).toEqual(before);
+    const reopened = await open(root);
+    expect(await reopened.selection()).toBe("alpha");
+    expect(await reopened.open()).toEqual(ready);
+  });
+
+  it("selects a ready, inactive workspace in a new durable generation", async () => {
+    const root = await registryRoot();
+    const registry = await open(root);
+    await registry.create(sample(), revision, "alpha");
+    const alpha = await registry.complete("alpha");
+    await registry.create(sample(), other, "beta");
+    await registry.complete("beta");
+    expect(await registry.selection()).toBe("beta");
+    const generation = await registry.generation();
+
+    expect(await registry.complete("alpha")).toEqual(alpha);
+
+    expect(await registry.generation()).toBe(generation + 1);
+    const reopened = await open(root);
+    expect(await reopened.selection()).toBe("alpha");
+    expect(await reopened.open()).toEqual(alpha);
+  });
+
   it("refuses a stale metadata update and keeps the stored record unchanged", async () => {
     const root = await registryRoot();
     const registry = await open(root);
