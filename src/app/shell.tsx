@@ -81,6 +81,7 @@ export const APP_ROUTES: readonly AppRoute[] = [
 ] as const;
 
 export interface ShellProps {
+  hostedDemo?: boolean;
   children: ComponentChildren;
   path: string;
   themeController: ThemeController;
@@ -97,7 +98,7 @@ export interface ShellProps {
  * SiteDelivery before the Shell mounts — which is why the rail's Site entry is
  * an external link that can never be the current route.
  */
-export function Shell({ children, path, themeController, themeSnapshot, summary }: ShellProps): JSX.Element {
+export function Shell({ children, path, themeController, themeSnapshot, summary, hostedDemo = false }: ShellProps): JSX.Element {
   const workspace = useWorkspace();
   const integration = workspace?.integration;
   const store = useMemo(createChromeStore, []);
@@ -213,7 +214,7 @@ export function Shell({ children, path, themeController, themeSnapshot, summary 
   };
 
   const rail: RailCounts = useMemo(() => railCounts(counts), [counts]);
-  const railProps = {
+  const railProps = { hostedDemo,
     path, counts: rail, models, modelError, pins,
     onPinsChange: (value: typeof pins) => { setPins(value); writePins(value); },
     onToggleCollapsed: toggleRail,

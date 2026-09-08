@@ -1,3 +1,5 @@
+import { sniffMedia } from "../../model/sniff";
+export { sniffMedia } from "../../model/sniff";
 import { createHash, randomBytes } from "node:crypto";
 import { constants, type Stats } from "node:fs";
 import { link } from "node:fs/promises";
@@ -81,19 +83,6 @@ function asAsyncBytes(source: MediaByteSource): AsyncIterable<Uint8Array> {
     })();
   }
   return source;
-}
-
-function startsWith(bytes: Uint8Array, signature: readonly number[]): boolean {
-  return signature.every((value, index) => bytes[index] === value);
-}
-
-export function sniffMedia(bytes: Uint8Array): SniffedMedia | undefined {
-  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return { mediaType: "image/png", extension: "png" };
-  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return { mediaType: "image/jpeg", extension: "jpg" };
-  if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) || startsWith(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61])) return { mediaType: "image/gif", extension: "gif" };
-  if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50])) return { mediaType: "image/webp", extension: "webp" };
-  if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return { mediaType: "application/pdf", extension: "pdf" };
-  return undefined;
 }
 
 async function nextWithAbort<T>(iterator: AsyncIterator<T>, signal: AbortSignal | undefined): Promise<IteratorResult<T>> {

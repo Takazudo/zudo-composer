@@ -131,7 +131,7 @@ export function isSitemapCollectionStore(store: SitemapStore): store is SitemapC
 export const SITEMAP_PROVIDERS = {
   filesystem: { id: "sitemap-filesystem", label: "Project files" },
 } as const;
-export type SitemapProviderDescriptor = (typeof SITEMAP_PROVIDERS)[keyof typeof SITEMAP_PROVIDERS];
+export type SitemapProviderDescriptor = Omit<(typeof SITEMAP_PROVIDERS)[keyof typeof SITEMAP_PROVIDERS], "label"> & { readonly label: string };
 
 export type SitemapLibraryRecoveryReason = "invalid" | "future-schema";
 

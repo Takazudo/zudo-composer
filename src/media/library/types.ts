@@ -145,6 +145,8 @@ export type MediaInitializationOutcome =
   | { status: "error"; error: MediaPersistenceError };
 
 export interface MediaProvider {
+  /** Optional realm-local display URL for embedded previews; records keep canonical URLs. */
+  previewUrl?(versionUrl: string): string;
   readonly descriptor: MediaProviderDescriptor;
   readonly store: MediaStore;
   readonly initialization: {

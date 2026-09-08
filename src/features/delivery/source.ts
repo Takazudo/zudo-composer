@@ -23,7 +23,7 @@ export type ActivatedDeliverySource =
 
 export type DeliverySourceContract =
   | { kind: "activated"; componentProvider: typeof import("../composer/active-pack").activeComponentProvider; read(): ActivatedDeliverySource; subscribe?(listener: () => void): () => void }
-  | { kind: "working-preview"; providers: import("../../app/provider-integration").ProductionProviderIntegration };
+  | { kind: "working-preview"; basePath?: "/site" | "/website-preview"; providers: import("../../app/provider-integration").ProductionProviderIntegration };
 
 export function parseActivatedDeliverySource(value: unknown): ActivatedDeliverySource | undefined {
   if (!value || typeof value !== "object" || !("status" in value)) return undefined;

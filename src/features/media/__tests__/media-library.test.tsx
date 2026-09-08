@@ -10,6 +10,22 @@ import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 describe("Media workspace", () => {
+  it("uses provider display URLs for version links without changing canonical records", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "temporary.png", declaredMediaType: "image/png", bytes: PNG });
+    const version = record.document.versions[0]!;
+    const previewUrl = vi.fn((url: string) => `blob:https://example.test/${url.split("/").at(-1)}`);
+    render(<MediaApp provider={{ ...provider, previewUrl }} contentServices={completeServices()} intent={{ status: "none" }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect temporary.png" }));
+    const inspector = screen.getByRole("complementary", { name: "Asset details" });
+    expect(await within(inspector).findByRole("link", { name: version.id.slice(0, 12) })).toHaveAttribute("href", previewUrl(version.url));
+    fireEvent.click(within(inspector).getByRole("button", { name: "Preview", exact: true }));
+    const dialog = await screen.findByRole("dialog", { name: "temporary.png" });
+    expect(within(dialog).getByRole("link", { name: "Open exact immutable version" })).toHaveAttribute("href", previewUrl(version.url));
+    const stored = await filesystem.get(record.id);
+    expect(stored.status === "loaded" && stored.record.document.versions[0]!.url).toBe(version.url);
+  });
+
   it("refreshes both inspector and trash usage scans for every project dependency", async () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
