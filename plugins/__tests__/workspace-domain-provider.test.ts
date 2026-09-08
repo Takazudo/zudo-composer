@@ -1,7 +1,7 @@
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 import { createDomainFileProviderMiddleware, domainFileProviderEndpoint } from "../domain-file-provider.mjs";
 import workspaceDomainProvider from "../workspace-domain-provider.mjs";
 import * as entry from "../../src/app/workspace-filesystem/dev-server-entry";
@@ -18,7 +18,9 @@ describe("workspace registry endpoint identity validation", () => {
     const service = await entry.createWorkspaceRegistryService({ registryRoot, domainRoots: { compositions: join(root, "compositions"), content: join(root, "content"), mappings: join(root, "mappings"), sitemaps: join(root, "sitemaps") } });
     const before = await readdir(root, { recursive: true });
     const generation = await service.generation();
-    const handler = createDomainFileProviderMiddleware({ domain: provider.domain, workspaceScoped: false, capability: "test-capability", ...provider.bind(entry, registryRoot) });
+    const binding = provider.bind(entry, registryRoot);
+    expectTypeOf<Awaited<ReturnType<typeof binding.createStore>>>().toEqualTypeOf<entry.WorkspaceRegistryService>();
+    const handler = createDomainFileProviderMiddleware({ domain: provider.domain, workspaceScoped: false, capability: "test-capability", ...binding });
     for (const operation of ["open", "create", "mark-seed-cleanup", "discard-seeding", "complete", "update", "delete-directories", "missing-directories"]) {
       const response = await handler({
         url: domainFileProviderEndpoint("workspace"), method: "POST", protocol: "http",
