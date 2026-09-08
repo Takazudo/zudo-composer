@@ -24,11 +24,11 @@
 import { lstat } from "node:fs/promises";
 import { errorCode } from "../../shared/node-fs";
 import type { SiteProject } from "../../site-project/model";
-import { createFilesystemWorkspaceRegistry, type WorkspaceMetadataPatch } from "./registry";
+import { assertRegistryWorkspaceId, createFilesystemWorkspaceRegistry, type WorkspaceMetadataPatch } from "./registry";
 import { deleteWorkspaceDirectories } from "./seed-cleanup";
 import { withWorkspaceSeedLock } from "./seed-lock";
 import { workspaceDomainRoots, type WorkspaceDomainRoots } from "../../shared/workspace-scope";
-import { WorkspaceRegistryError } from "./types";
+import { WorkspaceRegistryError, type WorkspaceRegistryOperation } from "./types";
 
 export function isWorkspaceRegistryError(value: unknown): boolean {
   return value instanceof WorkspaceRegistryError;
@@ -47,8 +47,10 @@ export interface WorkspaceRegistryServiceOptions {
  */
 export async function createWorkspaceRegistryService(options: WorkspaceRegistryServiceOptions) {
   const registry = await createFilesystemWorkspaceRegistry({ registryRoot: options.registryRoot });
-  const locked = <T>(id: string, action: () => Promise<T>): Promise<T> =>
-    withWorkspaceSeedLock(id, { registryRoot: options.registryRoot }, action);
+  const locked = async <T>(id: string, operation: WorkspaceRegistryOperation, action: () => Promise<T>): Promise<T> => {
+    assertRegistryWorkspaceId(id, operation);
+    return withWorkspaceSeedLock(id, { registryRoot: options.registryRoot }, action);
+  };
 
   return {
     list: () => registry.list(),
@@ -62,13 +64,13 @@ export async function createWorkspaceRegistryService(options: WorkspaceRegistryS
     create: (project: SiteProject, baselineRevision: string, id: string | undefined, requiresBeforeComplete: boolean) =>
       id === undefined
         ? registry.create(project, baselineRevision, undefined, requiresBeforeComplete)
-        : locked(id, () => registry.create(project, baselineRevision, id, requiresBeforeComplete)),
-    markSeedCleanup: (id: string, revision: string) => locked(id, () => registry.markSeedCleanup(id, revision)),
-    discardSeeding: (id: string, revision: string) => locked(id, () => registry.discardSeeding(id, revision)),
-    complete: (id: string, creationValidated: boolean) => locked(id, () => registry.complete(id, creationValidated)),
+        : locked(id, "create", () => registry.create(project, baselineRevision, id, requiresBeforeComplete)),
+    markSeedCleanup: (id: string, revision: string) => locked(id, "discard", () => registry.markSeedCleanup(id, revision)),
+    discardSeeding: (id: string, revision: string) => locked(id, "discard", () => registry.discardSeeding(id, revision)),
+    complete: (id: string, creationValidated: boolean) => locked(id, "complete", () => registry.complete(id, creationValidated)),
     update: (id: string, expectedToken: number, patch: WorkspaceMetadataPatch) => registry.update(id, expectedToken, patch),
 
-    deleteDirectories: (id: string) => locked(id, () => deleteWorkspaceDirectories(options.domainRoots, id)),
+    deleteDirectories: (id: string) => locked(id, "discard", () => deleteWorkspaceDirectories(options.domainRoots, id)),
 
     /**
      * Which of the workspace's four authoring directories are absent. A ready
@@ -76,6 +78,7 @@ export async function createWorkspaceRegistryService(options: WorkspaceRegistryS
      * claims, and the app refuses to open it rather than silently re-seeding.
      */
     missingDirectories: async (id: string): Promise<readonly string[]> => {
+      assertRegistryWorkspaceId(id, "read");
       const scoped = workspaceDomainRoots(options.domainRoots, id);
       const missing: string[] = [];
       for (const [domain, path] of Object.entries(scoped)) {

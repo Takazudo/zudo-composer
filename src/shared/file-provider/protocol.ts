@@ -82,9 +82,9 @@ export interface FileProviderTransactionStep {
 export const FILE_PROVIDER_TRANSACTION_OPERATION = "transaction";
 
 /**
- * Default HTTP status for a domain error code. Domains share this map so a
- * browser client can react to the status alone when a response is too damaged
- * to carry an envelope.
+ * Default HTTP status for a domain error code. The workspace registry overrides
+ * validation to 400 for its request payloads; other domains use these defaults.
+ * A valid error envelope carries the authoritative domain error identity.
  */
 export const FILE_PROVIDER_STATUS_BY_CODE: Readonly<Record<string, number>> = Object.freeze({
   validation: 422,
