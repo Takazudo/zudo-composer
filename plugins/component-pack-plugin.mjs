@@ -9,7 +9,7 @@
 // a package outside the host root and a root-absolute id would not find it.
 
 import { fsModuleId } from "./roots.mjs";
-import { assertPackSourcesResolvable, resolveComponentPack } from "./component-pack.mjs";
+import { loadComponentPack, resolveComponentPack } from "./component-pack.mjs";
 
 export const COMPONENT_PACK_ID = "virtual:zudo-composer-pack";
 export const RESOLVED_COMPONENT_PACK_ID = `\0${COMPONENT_PACK_ID}`;
@@ -33,8 +33,7 @@ export function componentPackPlugin(options) {
       };
     },
     async configureServer(server) {
-      const module = await server.ssrLoadModule(COMPONENT_PACK_ID);
-      assertPackSourcesResolvable(options.workspaceRoot, module.componentPack.manifest, identity.specifier);
+      await loadComponentPack(options.workspaceRoot, identity.specifier, () => server.ssrLoadModule(COMPONENT_PACK_ID));
     },
     resolveId(id) {
       if (id === COMPONENT_PACK_ID) return RESOLVED_COMPONENT_PACK_ID;
