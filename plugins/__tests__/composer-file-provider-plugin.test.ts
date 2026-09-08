@@ -13,7 +13,8 @@ import {
   validateCompositionRecord,
   type CompositionRecord,
 } from "../../src/composer/library";
-import { createFixtureDocument } from "../../src/composer/__tests__/fixtures";
+import { createFileProviderCompositionStore } from "../../src/composer/storage/file-provider/store";
+import { createFixtureDocument, fixtureManifest } from "../../src/composer/__tests__/fixtures";
 import { APP_ROOT, appModuleId } from "../roots.mjs";
 import { workspaceScopedRoot } from "../../src/shared/workspace-scope";
 import plugin, {
@@ -281,25 +282,77 @@ describe("file-provider core integration", () => {
     expect(payload(unpublished).result).toEqual({ status: "unpublished" });
   });
 
-  it("maps core failures to actionable errors without leaking host paths", async () => {
+  it.each([
+    ["validation", 422], ["unsupported-version", 422],
+    ["blocked", 409], ["conflict", 409],
+    ["unavailable", 503], ["read-failed", 503],
+    ["write-failed", 500], ["transaction-failed", 500],
+    ["versionchange", 500], ["unknown", 500],
+  ] as const)("preserves the domain error with the shared HTTP status for %s", async (code, status) => {
+    const cause = Object.assign(new CompositionPersistenceError("initialize", code, `Specific ${code} reason.`, true), {
+      details: { recordId: "alpha", retryable: true },
+    });
+    const handler = createComposerFileProviderMiddleware({
+      capability: CAPABILITY,
+      validateRecord: validateCompositionRecord,
+      createStore: async () => { throw cause; },
+    });
+    const response = await handler(request({ operation: "clear" }));
+    expect(response.status).toBe(status);
+    expect(payload(response)).toEqual({ ok: false, error: {
+      domain: "compositions", operation: "initialize", code, message: cause.message, details: cause.details,
+    } });
+  });
+
+  it("delivers distinct closure-conflict and filesystem-blocked errors to the browser", async () => {
+    const errors = [
+      new CompositionPersistenceError("get", "conflict", "Canonical composition changed while derived output was being planned: alpha. Retry the operation.", false),
+      new CompositionPersistenceError("get", "blocked", "A symbolic link replaced the compositions directory. Inspect it before retrying.", false),
+    ];
+    const messages: string[] = [];
+    for (const cause of errors) {
+      const handler = createComposerFileProviderMiddleware({
+        capability: CAPABILITY,
+        validateRecord: validateCompositionRecord,
+        createStore: async () => { throw cause; },
+      });
+      const store = createFileProviderCompositionStore({
+        catalog: fixtureManifest,
+        workspace: () => WORKSPACE,
+        config: {
+          endpoint: COMPOSER_FILE_PROVIDER_ENDPOINT, capability: CAPABILITY,
+          capabilityHeader: COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER,
+          workspaceHeader: COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER, maxBodyBytes: 2_097_152,
+        },
+        fetch: async (_url, init) => {
+          const response = await handler(request(JSON.parse(String(init?.body))));
+          expect(response.status).toBe(409);
+          return new Response(response.body, { status: response.status, headers: response.headers });
+        },
+      })!;
+      const error = await store.get("alpha").catch((value: unknown) => value);
+      expect(error).toBeInstanceOf(CompositionPersistenceError);
+      expect(error).toMatchObject({ code: cause.code });
+      expect((error as CompositionPersistenceError).message).toBe(cause.message);
+      messages.push((error as CompositionPersistenceError).message);
+    }
+    expect(messages[0]).not.toBe(messages[1]);
+  });
+
+  it("sanitizes unexpected failures without exposing host paths or internal details", async () => {
     const secretPath = join(sandbox, "private-host-path");
     const handler = createComposerFileProviderMiddleware({
       capability: CAPABILITY,
       validateRecord: validateCompositionRecord,
-      createStore: async () => {
-        throw new CompositionPersistenceError(
-          "initialize",
-          "read-failed",
-          `Could not initialize ${secretPath}`,
-          true,
-        );
-      },
+      createStore: async () => { throw Object.assign(new Error(`Could not read ${secretPath}`), { code: "EACCES", details: { path: secretPath } }); },
     });
     const response = await handler(request({ operation: "clear" }));
-    expect(response.status).toBe(503);
-    expect(payload(response).error).toMatchObject({ code: "read-failed", operation: "initialize" });
+    expect(response.status).toBe(500);
+    expect(payload(response)).toEqual({ ok: false, error: {
+      domain: "compositions", operation: "clear", code: "unknown",
+      message: "The local compositions provider failed unexpectedly. Retry or restart the development server.",
+    } });
     expect(response.body).not.toContain(secretPath);
-    expect(response.body).toContain("permissions");
   });
 
   it("never reports a failed derived repair as a successful read", async () => {
@@ -316,7 +369,7 @@ describe("file-provider core integration", () => {
       createStore: async () => ({
         list: vi.fn(),
         get: vi.fn().mockRejectedValue(new CompositionPersistenceError(
-          "get", "write-failed", `failed at ${root}`, true,
+          "get", "write-failed", "Could not publish the repaired derived output.", true,
         )),
         put: vi.fn(), delete: vi.fn(), clear: vi.fn(),
       }),
@@ -326,7 +379,7 @@ describe("file-provider core integration", () => {
     }));
     expect(response.status).toBe(500);
     expect(payload(response).ok).toBe(false);
-    expect(response.body).not.toContain(root);
+    expect(payload(response).error).toMatchObject({ code: "write-failed", message: "Could not publish the repaired derived output." });
   });
 });
 
