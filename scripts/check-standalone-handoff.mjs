@@ -1,10 +1,14 @@
+// @ts-check
+
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
 import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./routes.mjs";
 
 const root = resolve(import.meta.dirname, "..");
+/** @param {string} path */
 const read = (path) => readFileSync(join(root, path), "utf8");
+/** @param {string} path */
 const readJson = (path) => JSON.parse(read(path));
 const readme = read("README.md");
 const guidance = read("CLAUDE.md");
@@ -126,6 +130,7 @@ assert.deepEqual(provisionalHashes, [], "README/CLAUDE must not publish abbrevia
 // Multi-word phrases below tolerate a line wrap between words: reflowed prose
 // puts a newline anywhere a space could go, so a literal-space regex is one
 // re-wrap away from a false failure.
+/** @param {string} phrase @returns {RegExp} */
 function phraseMatcher(phrase) {
   const words = phrase.split(" ").map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   return new RegExp(words.join("\\s+"), "i");
@@ -153,6 +158,7 @@ for (const document of [readme, guidance]) {
   assert.match(document, /(?:never|do not)[\s\S]{0,120}cop(?:y|ied)[\s\S]{0,80}provider|copied provider source/i);
 }
 
+/** @param {string} directory @returns {string[]} */
 function files(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -164,6 +170,7 @@ function files(directory) {
   }).filter((path) => [".ts", ".tsx", ".mts", ".mjs", ".css"].includes(extname(path)) && !/\.(?:test|spec)\./.test(path));
 }
 
+/** @param {string} directory @returns {string[]} */
 function markdownFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -217,7 +224,8 @@ for (const path of productionFiles) {
 // The Composer's own toolbar bar, mode toggle, status indicator, rail resizers,
 // bespoke tree and movable tool-dialog geometry were retired when the editor
 // adopted the shared chrome (epic #156), so their entries are gone with them.
-for (const [path, stale] of [
+/** @type {Array<[string, RegExp]>} */
+const staleChecks = [
   ["src/composer/index.ts", /Downstream waves/],
   ["src/composer/model/commands.ts", /reparenting and drag-and-drop are deferred/],
   ["src/features/composer/ui/toolbar/toolbar-actions.tsx", /Reset\/Export/],
@@ -228,7 +236,8 @@ for (const [path, stale] of [
   ["src/features/composer/ui/chooser/composer-chooser.tsx", /canvas insert points \(a later wave\)|movable tool shell/],
   ["src/features/composer/ui/export/export-dialog.tsx", /later wave|own explicit JS/],
   ["src/features/sitemapper/app/sitemapper-integration.tsx", /later Sitemapper wave|once the Sitemapper controller is assembled|once the authoring controller is assembled|placeholder pane/],
-]) assert.doesNotMatch(read(path), stale, `${path} retained a provisional copied/wave claim`);
+];
+for (const [path, stale] of staleChecks) assert.doesNotMatch(read(path), stale, `${path} retained a provisional copied/wave claim`);
 
 for (const path of [
   "src/components/icons/index.ts",
