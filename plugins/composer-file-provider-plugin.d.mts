@@ -8,6 +8,7 @@ import type * as fs from "node:fs/promises";
 
 export const COMPOSER_FILE_PROVIDER_ENDPOINT: string;
 export const COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER: string;
+export const COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER: string;
 export const COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES: number;
 export const COMPOSER_FILE_PROVIDER_ROOT: string;
 export const COMPOSITIONS_ROOT_ENV: string;

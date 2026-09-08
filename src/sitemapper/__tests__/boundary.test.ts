@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { boundarySource } from "../../../scripts/boundary-source.mjs";
 import { SitemapperRouteContent } from "../../features/sitemapper";
 
 const repositoryRoot = resolve(process.cwd());
@@ -19,12 +20,14 @@ describe("standalone Sitemapper boundary", () => {
     const violations: string[] = [];
     for (const file of roots.flatMap(files)) {
       if (file.endsWith("boundary.test.ts")) continue;
-      const source = readFileSync(file, "utf8");
+      const raw = readFileSync(file, "utf8");
+      const source = boundarySource(raw, { fileName: file });
+      const code = boundarySource(raw, { fileName: file, strings: false });
       const name = relative(repositoryRoot, file);
       if (/@\/|@takazudo\/zudo-doc|\bzfb\b|@zudo-sg\/ui|styleguide/i.test(source)) {
         violations.push(`${name}: forbidden host dependency`);
       }
-      if (/\b(?:legacy|migrat(?:e|ion)|compatibility|alias|adapter|SITEMAP_SCHEMA_V0|ready-with-recovery)\b/i.test(source)) {
+      if (/\b(?:legacy|migrat(?:e|ion)|compatibility|alias|adapter|SITEMAP_SCHEMA_V0|ready-with-recovery)\b/i.test(code)) {
         violations.push(`${name}: compatibility branch`);
       }
       if (composerDomainImport.test(source)
@@ -42,7 +45,7 @@ describe("standalone Sitemapper boundary", () => {
   });
 
   it("requires host catalog and provider injection", () => {
-    const app = readFileSync(resolve(repositoryRoot, "src/features/sitemapper/app/production-sitemapper-app.tsx"), "utf8");
+    const app = boundarySource(readFileSync(resolve(repositoryRoot, "src/features/sitemapper/app/production-sitemapper-app.tsx"), "utf8"), { strings: false });
     expect(app).toContain("catalog: CompositionCatalog");
     expect(app).not.toContain("createCompositionCatalog(");
     // The Sitemap provider is owned by the host integration; the route may not build a second one.

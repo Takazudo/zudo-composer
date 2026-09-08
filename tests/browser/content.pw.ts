@@ -423,6 +423,7 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(contentTree(page).getByRole("treeitem", { name: /Untitled/ })).toHaveCount(0);
   await contentNav(page).getByRole("button", { name: "Add entry" }).click();
   // A Single holds exactly one Entry, so its add row withdraws once it has one.
+  await expect(page.getByText("Browser Site settings · single", { exact: true }), "Browser Site settings must remain open after Add entry; a closed model also hides the add row").toBeVisible();
   await expect(contentNav(page).getByRole("button", { name: "Add entry" })).toHaveCount(0);
   await expect(siteSettingsRow).toContainText("(1)");
 

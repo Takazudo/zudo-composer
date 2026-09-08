@@ -335,6 +335,7 @@ export class FilesystemWorkspaceRegistry {
       const record = this.owned(before, id, "complete");
       if (record.seedCleanupPending) throw registryError("complete", "conflict", "Workspace seed cleanup must finish before completion.");
       if (record.requiresBeforeComplete && !creationValidated) throw registryError("complete", "conflict", "Workspace creation must repeat its before-complete validation before selection.");
+      if (record.status === "ready" && before.active === id) throw new UnchangedRegistry(record);
       if (record.status === "ready") return { workspaces: before.workspaces, active: id, value: record };
       const next: WorkspaceRecord = { ...record, status: "ready" };
       delete next.seed;
