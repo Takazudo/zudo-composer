@@ -9,6 +9,7 @@
     { "path": "./packages/component-contract" },
     { "path": "./tsconfig.plugins-tests.json" },
     { "path": "./tests/browser/tsconfig.json" },
-    { "path": "./tsconfig.plugin-declarations.json" }
+    { "path": "./tsconfig.plugin-declarations.json" },
+    { "path": "./tsconfig.scripts.json" }
   ]
 }
