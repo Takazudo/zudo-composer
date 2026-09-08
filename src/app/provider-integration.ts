@@ -27,7 +27,8 @@ import { discardWorkspaceSeed } from "./workspace-seeding";
 
 export class ProviderIntegrationError extends Error {
   readonly name = "ProviderIntegrationError";
-  constructor(readonly phase: "source" | "composition" | "content" | "mapping" | "sitemap" | "snapshot", message: string, readonly retryable = true, options?: { cause?: unknown }) { super(message, options); }
+  constructor(readonly phase: "source" | "composition" | "content" | "mapping" | "sitemap" | "snapshot", message: string, readonly retryable = true, options?: { cause?: unknown; sourceReason?: "absent" | "invalid" }) { super(message, options); this.sourceReason = options?.sourceReason; }
+  readonly sourceReason?: "absent" | "invalid";
 }
 export class WorkspaceResetRequiredError extends ProviderIntegrationError {
   readonly code = "reset-required";
@@ -43,15 +44,15 @@ function providerFromStore(store: CompositionStore): CompositionProvider {
 }
 
 function activate(value: unknown): { project?: SiteProject; error?: ProviderIntegrationError } {
-  if (value === null) return { error: new ProviderIntegrationError("source", "No development SiteProject is activated. Activate one, then retry or start fresh.") };
+  if (value === null) return { error: new ProviderIntegrationError("source", "No development SiteProject is activated. Create a project, or activate a source and retry opening.", true, { sourceReason: "absent" }) };
   const result = validateSiteProject(structuredClone(value), activeSiteProjectValidationContext);
-  if (!result.ok) return { error: new ProviderIntegrationError("source", `The active SiteProject is invalid: ${result.diagnostics.map((item) => `${item.path}: ${item.message}`).join("; ")}`, false) };
+  if (!result.ok) return { error: new ProviderIntegrationError("source", `The active SiteProject is invalid: ${result.diagnostics.map((item) => `${item.path}: ${item.message}`).join("; ")}`, false, { sourceReason: "invalid" }) };
   for (const provider of result.project.providers.content) for (const model of provider.models) {
-    if (model.document.kind === "single" && provider.entries.filter((entry) => entry.modelId === model.id).length > 1) return { error: new ProviderIntegrationError("source", `Single Content model "${model.id}" has more than one seed Entry.`, false) };
+    if (model.document.kind === "single" && provider.entries.filter((entry) => entry.modelId === model.id).length > 1) return { error: new ProviderIntegrationError("source", `Single Content model "${model.id}" has more than one seed Entry.`, false, { sourceReason: "invalid" }) };
   }
   for (const provider of result.project.providers.compositions) for (const record of provider.records) {
     const diagnostics = diagnoseDocument(record.document, activeComponentProvider.catalog, { containingRecordId: record.id });
-    if (!diagnostics.canExport) return { error: new ProviderIntegrationError("source", `Composition "${record.id}" is incompatible with the active runtime component pack.`, false) };
+    if (!diagnostics.canExport) return { error: new ProviderIntegrationError("source", `Composition "${record.id}" is incompatible with the active runtime component pack.`, false, { sourceReason: "invalid" }) };
   }
   return { project: canonicalizeSiteProject(result.project) };
 }
@@ -228,7 +229,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   const mediaProvider = options.mediaProvider === undefined ? createFileProviderMediaProvider() : options.mediaProvider ?? undefined;
   const usesInjectedSource = options.project === undefined;
   const activated: ReturnType<typeof activate> = usesInjectedSource && injectedDeliverySource.status === "error"
-    ? { error: new ProviderIntegrationError("source", injectedDeliverySource.message) }
+    ? { error: new ProviderIntegrationError("source", injectedDeliverySource.message, true, { sourceReason: "invalid" }) }
     : activate(usesInjectedSource ? injectedSiteProject : options.project);
   let project = activated.project;
   const revisionInput = usesInjectedSource ? injectedSiteProjectRevision : options.sourceRevision;
@@ -236,11 +237,11 @@ export function createProductionProviderIntegration(options: ProductionProviderI
   if (project && revisionInput !== undefined && revisionInput !== null) {
     if (!SOURCE_REVISION.test(revisionInput)) {
       project = undefined;
-      activated.error = new ProviderIntegrationError("source", "The active SiteProject revision is not a canonical SHA-256 value.", false);
+      activated.error = new ProviderIntegrationError("source", "The active SiteProject revision is not a canonical SHA-256 value.", false, { sourceReason: "invalid" });
     } else sourceRevision = revisionInput;
   } else if (project) {
     project = undefined;
-    activated.error = new ProviderIntegrationError("source", "The active SiteProject source is missing its canonical revision.", false);
+    activated.error = new ProviderIntegrationError("source", "The active SiteProject source is missing its canonical revision.", false, { sourceReason: "invalid" });
   }
   const initialProject = project;
   const initialRevision = sourceRevision;

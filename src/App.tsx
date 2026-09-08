@@ -1,7 +1,9 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Dashboard } from "./app/dashboard";
-import { createProductionProviderIntegration, type ProductionProviderIntegration } from "./app/provider-integration";
+import { createProductionProviderIntegration, ProviderIntegrationError, type ProductionProviderIntegration } from "./app/provider-integration";
+import { NewProjectDialog } from "./app/new-project-dialog";
+import { createEmptySiteProject, computeSiteProjectRevision } from "./app/empty-site-project";
 import { WorkspaceContext } from "./app/workspace-context";
 import { parseIntent, formatIntent } from "./app/route-intents";
 import { Button } from "./components/ui";
@@ -55,6 +57,12 @@ export function App({ themeController, integration }: AppProps = {}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [openingReason, setOpeningReason] = useState<"absent" | "invalid" | "storage" | null>(null);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const openingFailed = (cause: unknown) => {
+    setOpeningReason(cause instanceof ProviderIntegrationError ? cause.sourceReason ?? "storage" : "storage");
+    setError(cause instanceof Error ? cause.message : "Workspace initialization failed.");
+  };
   const navigationTicket = useRef(0);
   const replacing = useRef(false);
   const historyIndex = useRef<number>(Number.isInteger(window.history.state?.workspaceIndex) ? window.history.state.workspaceIndex : 0);
@@ -99,7 +107,7 @@ export function App({ themeController, integration }: AppProps = {}) {
   const retry = async () => {
     setBusy(true); setError(null);
     try { const result = await providers.initialization.retry(); if (result.status !== "ready") throw result.error; setReady(true); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Workspace initialization failed."); }
+    catch (cause) { openingFailed(cause); }
     finally { setBusy(false); }
   };
   useEffect(() => {
@@ -108,8 +116,8 @@ export function App({ themeController, integration }: AppProps = {}) {
     void providers.initialization.initialize().then((result) => {
       if (!live) return;
       if (result.status === "ready") { setReady(true); setError(null); }
-      else setError(result.error.message);
-    }).catch((cause: unknown) => { if (live) setError(cause instanceof Error ? cause.message : "Workspace initialization failed."); });
+      else openingFailed(result.error);
+    }).catch((cause: unknown) => { if (live) openingFailed(cause); });
     return () => { live = false; };
   }, [providers]);
   useEffect(() => {
@@ -203,7 +211,18 @@ export function App({ themeController, integration }: AppProps = {}) {
   const intent = parseIntent(location);
   const target = intent.status === "matched" ? intent.intent : null;
   const providerKnown = !target || !("providerId" in target) || (target.route === "content" ? providers.contentProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "composer" ? providers.compositionProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "mapping" ? providers.mappingProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "media" ? providers.mediaProvider?.descriptor.id === target.providerId : providers.sitemapProvider.descriptor?.id === target.providerId);
-  if (!ready) content = <main class="route-placeholder"><h1>Open workspace</h1><p>{error ? "The workspace is unavailable. Retry opening it, or create a new workspace from the configured source. Existing drafts remain stored." : "Opening the selected workspace…"}</p><Button disabled={busy} onClick={() => void retry()}>Retry opening</Button><Button disabled={busy} onClick={() => void replaceWorkspace(() => providers.workspace.reset())}>Create fresh workspace</Button></main>;
+  if (!ready) content = <main class="route-placeholder"><h1>Open workspace</h1>
+    <p>{openingReason === "absent" ? "No SiteProject is activated. Create a project to start your first workspace, or activate a source and retry opening." : openingReason === "invalid" ? "The activated SiteProject is invalid. Fix the configured source, then retry opening." : openingReason === "storage" ? "The workspace could not be read or opened. Retry opening after resolving the storage error. Existing drafts remain stored." : "Opening the selected workspace…"}</p>
+    <Button disabled={busy} onClick={() => void retry()}>Retry opening</Button>
+    <Button disabled={busy || openingReason === "absent" || openingReason === "invalid"} onClick={() => void replaceWorkspace(() => providers.workspace.reset())}>Create fresh workspace</Button>
+    {openingReason === "absent" && <Button disabled={busy} onClick={() => { setError(null); setCreatingProject(true); }}>Create project</Button>}
+    {creatingProject && <NewProjectDialog busy={busy} error={error} onClose={() => setCreatingProject(false)} onSubmit={(name) => {
+      void replaceWorkspace(async () => {
+        const project = createEmptySiteProject(name);
+        return providers.workspace.create(project, await computeSiteProjectRevision(project));
+      }).then((created) => { if (created) setCreatingProject(false); });
+    }} />}
+  </main>;
   else if (intent.status === "invalid" || !providerKnown) content = <main class="route-placeholder"><h1>Invalid workspace link</h1><p role="alert">{intent.status === "invalid" ? intent.message : "The requested provider is unavailable. No other record was selected."}</p></main>;
   else if (path === "/composer") content = <ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} />;
   else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} renderMediaPicker={(request) => <MediaFieldPicker provider={providers.mediaProvider} {...request} />} />;
