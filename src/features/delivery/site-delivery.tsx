@@ -136,7 +136,7 @@ export function SiteDelivery({ source, pathname = window.location.pathname, onCo
     return () => { request.current += 1; };
   }, [source]);
   useEffect(() => source.kind === "activated" && source.subscribe ? source.subscribe(() => { const current = ++request.current; setState({ status: "loading" }); void loadDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); }); }) : undefined, [source]);
-  const basePath = source.kind === "activated" ? "/site" : "/website-preview";
+  const basePath = source.kind === "activated" ? "/site" : source.basePath ?? "/website-preview";
   const route = state.status === "ready" ? matchDeliveryRoute(state.build.routes, pathname, basePath) : undefined;
   const routeTitle = route?.displayTitle;
   const pageTitle = state.status === "ready"

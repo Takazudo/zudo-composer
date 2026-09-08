@@ -250,7 +250,7 @@ export interface MappingProvider { descriptor: MappingProviderDescriptor; store:
 export const MAPPING_PROVIDERS = {
   filesystem: { id: "mapping-filesystem", label: "Project files" },
 } as const;
-export type MappingProviderDescriptor = (typeof MAPPING_PROVIDERS)[keyof typeof MAPPING_PROVIDERS];
+export type MappingProviderDescriptor = Omit<(typeof MAPPING_PROVIDERS)[keyof typeof MAPPING_PROVIDERS], "label"> & { readonly label: string };
 
 export interface MappingSeedOptions {
   id: RecordId;

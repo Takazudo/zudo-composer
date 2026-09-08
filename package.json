@@ -43,7 +43,8 @@
     "!**/__tests__",
     "!**/type-tests",
     "!**/*.test.*",
-    "!src/test"
+    "!src/test",
+    "!src/hosted-demo"
   ],
   "engines": {
     "node": "^22.13.0 || >=24.0.0"
@@ -71,7 +72,9 @@
     "smoke:host-install": "node scripts/smoke-host-install.mjs",
     "test:browser:host": "node scripts/run-host-browser.mjs",
     "test:browser:dev": "node scripts/run-dev-browser.mjs",
-    "test:browser:site-project": "node scripts/run-site-project-browser.mjs"
+    "test:browser:site-project": "node scripts/run-site-project-browser.mjs",
+    "build:hosted-demo": "vite build --config vite.hosted-demo.config.ts && node scripts/check-hosted-demo.mjs",
+    "hosted-demo:verify": "node scripts/check-hosted-demo.mjs"
   },
   "peerDependencies": {
     "@zudo-composer/component-contract": "1.0.0"
