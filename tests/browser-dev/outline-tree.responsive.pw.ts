@@ -215,6 +215,10 @@ test("no outline row moves when a gap is hovered or its inline editor is open", 
   expect(baseline.rows.length).toBeGreaterThan(1);
 
   await test.step("hovering the gap reveals the tile and moves nothing", async () => {
+    // Fixture setup retains the Create sitemap pointer position while layout
+    // and scrolling can put a gap under it. Move outside the gap for rest;
+    // leave focus and insertion state intact so either can still fail the poll.
+    await page.mouse.move(0, 0);
     // On a coarse pointer the line and tile stay visible at 0.55 instead of
     // waiting for a hover that will never arrive.
     //
