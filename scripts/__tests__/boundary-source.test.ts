@@ -4,6 +4,14 @@ import { boundarySource } from '../boundary-source.mjs';
 const forbiddenSymbol = /\b(?:window|localStorage|adapter|legacy)\b/;
 
 describe('boundary source filtering', () => {
+  it('removes JSDoc prose and tags while retaining the documented code', () => {
+    for (const comment of ['/** window adapter legacy */', '/** @deprecated window adapter legacy */']) {
+      const filtered = boundarySource(`${comment}\nexport const value = 1;`, { strings: false });
+      expect(forbiddenSymbol.test(filtered)).toBe(false);
+      expect(filtered).toContain('export const value = 1;');
+    }
+  });
+
   it('removes line and block comments without joining identifiers', () => {
     const source = '// window adapter legacy\nconst local/* localStorage */Storage = 1;';
     const filtered = boundarySource(source);

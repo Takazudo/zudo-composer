@@ -22,6 +22,7 @@ export function boundarySource(source, { fileName = 'source.tsx', strings = true
   const pieces = [];
   let offset = 0;
   function visit(node) {
+    if (ts.isJSDoc(node)) return;
     const children = node.getChildren(tree);
     if (children.length) {
       children.forEach(visit);
