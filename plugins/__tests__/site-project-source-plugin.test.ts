@@ -117,6 +117,36 @@ describe("siteProjectSourcePlugin", () => {
     expect(readDevRelease).not.toHaveBeenCalled(); expect(watcher.add).not.toHaveBeenCalled(); expect(watcher.unwatch).not.toHaveBeenCalled(); expect(send).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])("drains an in-flight SSR refresh before closing its transport in middleware mode (reader fails: %s)", async (fails) => {
+    const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
+    const send = vi.fn();
+    let resolveReader!: (module: { readActivatedSiteRelease: ReturnType<typeof vi.fn> }) => void;
+    const reader = new Promise<{ readActivatedSiteRelease: ReturnType<typeof vi.fn> }>((resolve) => { resolveReader = resolve; });
+    const readActivatedSiteRelease = fails ? vi.fn().mockRejectedValue(new Error("reader unavailable")) : vi.fn().mockResolvedValue(null);
+    const close = vi.fn().mockResolvedValue(undefined);
+    const ssrLoadModule = vi.fn().mockReturnValueOnce(reader).mockResolvedValue({ componentPack: {} });
+    const server = { watcher, close, ssrLoadModule, moduleGraph: { getModuleById: vi.fn() }, ws: { send } };
+    const plugin = siteProjectSourcePlugin({ workspaceRoot: "/repo" });
+    (plugin.configureServer as (server: unknown) => void)(server);
+    await vi.waitFor(() => expect(ssrLoadModule).toHaveBeenCalledTimes(1));
+    watcher.emit("change", "/repo/.zudo-site-project/active.json");
+    watcher.add.mockClear();
+    const closing = server.close();
+    expect(close).not.toHaveBeenCalled();
+    resolveReader({ readActivatedSiteRelease });
+    await closing;
+    expect(ssrLoadModule).toHaveBeenCalledTimes(2);
+    expect(readActivatedSiteRelease).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(close.mock.invocationCallOrder[0]).toBeGreaterThan(readActivatedSiteRelease.mock.invocationCallOrder[0]!);
+    watcher.emit("change", "/repo/.zudo-site-project/active.json");
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+    expect(ssrLoadModule).toHaveBeenCalledTimes(2);
+    expect(watcher.add).not.toHaveBeenCalled();
+    expect(watcher.unwatch).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("coalesces refresh races without losing dirty events or publishing stale watched identities", async () => {
     type Loaded = { project: { id: string }; release: { identity: { projectId: string; revision: string; buildId: string }; files: Record<string, string>; stage: { mediaLock: null; toolchain: typeof toolchain } } };
     const deferred: { resolve(value: Loaded): void; promise: Promise<Loaded> }[] = [];
