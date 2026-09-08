@@ -153,6 +153,8 @@
 
 .cms-dialog {
   width: min(35rem, calc(100vw - var(--sp-4)));
+  /* Restore native modal centering after the global margin reset. */
+  margin: auto;
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--color-border);
@@ -183,7 +185,6 @@
   position: fixed;
   inset: 0;
   z-index: var(--z-index-modal);
-  margin: auto;
 }
 
 .cms-dialog__panel {
