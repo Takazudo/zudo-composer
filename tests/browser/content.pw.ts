@@ -552,7 +552,11 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await page.getByRole("combobox", { name: "Sort 1 field", exact: true }).selectOption({ label: "Published on" });
   await page.getByRole("combobox", { name: "Sort 1 direction", exact: true }).selectOption({ label: "Descending" });
   await expectCollectionQuery();
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const saveMapping = page.getByRole("button", { name: "Save", exact: true });
+  await expect(saveMapping).toBeVisible();
+  // Workspace refresh may already have saved the query. Native click respects
+  // disabled state atomically, avoiding a race with a separate enabled check.
+  await saveMapping.evaluate((button: HTMLButtonElement) => button.click());
   // The route publishes its save state through `useEditorStatus` now, so the
   // shell draws it — the editor has no status line of its own.
   await expect(saveStatus(page)).toContainText("Saved");
