@@ -169,6 +169,7 @@ try {
   }
 
   step("writing a bare host project that has never seen this repository");
+  const toolPackage = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   for (const directory of ["styles", "components", "public/uploaded-media",
     "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/media"]) {
     await mkdir(join(hostRoot, directory), { recursive: true });
@@ -183,6 +184,7 @@ try {
   await writeFile(join(hostRoot, "zudo-composer.config.ts"), `import { defineComposerConfig } from "zudo-composer/config";\n\nexport default defineComposerConfig({ pack: "${HOST_NAME}/components" });\n`);
   await writeFile(join(hostRoot, "package.json"), `${JSON.stringify({
     name: HOST_NAME,
+    packageManager: toolPackage.packageManager,
     version: "0.0.0",
     private: true,
     type: "module",
@@ -195,12 +197,13 @@ try {
       "@zudo-composer/component-contract": `file:${tarballs["@zudo-composer/component-contract"]}`,
     },
   }, null, 2)}\n`);
-  // pnpm 10 and later refuse to prepare a dependency that runs build scripts
-  // unless the host allows it by name. This is the entry the README documents.
-  await writeFile(join(hostRoot, "pnpm-workspace.yaml"), 'onlyBuiltDependencies:\n  - "@zudo-composer/component-contract"\n');
+  // This disposable host explicitly accepts the tool's SHA-pinned Git provider.
+  // pnpm 11 blocks Git subdependencies by default; keep this host-local, never
+  // change the user's global settings. Build permissions stay package-specific.
+  await writeFile(join(hostRoot, "pnpm-workspace.yaml"), 'blockExoticSubdeps: false\nallowBuilds:\n  "@zudo-composer/component-contract": true\n  esbuild: true\n');
 
   step("installing");
-  await run(pnpm, ["install", "--ignore-workspace"], hostRoot);
+  await run(pnpm, ["install"], hostRoot);
   const installedTree = await tree(hostRoot);
 
   step("booting, with no sample activation of any kind");

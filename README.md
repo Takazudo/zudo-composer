@@ -115,7 +115,7 @@ self-reference looks like this:
 ```text
 my-site/
 ├── package.json                 # name: "my-site", exports: { "./components": … }
-├── pnpm-workspace.yaml           # onlyBuiltDependencies: [component-contract]
+├── pnpm-workspace.yaml           # explicit Git-source and build permissions
 ├── zudo-composer.config.ts       # pack: "my-site/components"
 ├── components/
 │   └── pack.ts                   # the component pack `exports` resolves to
@@ -225,14 +225,23 @@ toolchain reads to compute release identity; those sources are named one file at
 a time in `files`, because the nested `package.json` under `packages/` stops the
 root allowlist's exclusions from applying to that subtree.
 
-pnpm 10 and later refuse to prepare a Git-hosted dependency that runs build
-scripts unless the host allows it, so the contract needs an entry in the host's
-`pnpm-workspace.yaml`:
+With pnpm 11.5.2, the host must explicitly accept the tool's Git-hosted
+`@zudo-sg/ui` dependency, which is pinned to a full commit SHA. pnpm blocks
+transitive Git sources by default and this version has no per-package exception.
+Use the following in the **host project's** `pnpm-workspace.yaml`; do not change
+global pnpm settings. `blockExoticSubdeps: false` permits transitive Git sources
+for this host, so review other dependencies before adopting it. Build permission
+remains limited to the named packages:
 
 ```yaml
-onlyBuiltDependencies:
-  - "@zudo-composer/component-contract"
+blockExoticSubdeps: false
+allowBuilds:
+  "@zudo-composer/component-contract": true
+  esbuild: true
 ```
+
+Pin the host's `packageManager` to `pnpm@11.5.2` as well, so installs inside and
+outside this repository use the same package-manager behavior.
 
 `fixtures/host/` is the in-repo dogfood host: the smallest project that installs
 the package and runs its bin.
