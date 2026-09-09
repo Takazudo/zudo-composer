@@ -78,7 +78,7 @@ export function useEditorState(props: ImageEditorProps) {
       void service.renderPreview(renderDoc).then(result => {
         if (alive.current && gen === generation.current) { setPreview(result); setRendering(false); }
       }).catch(reason => {
-        if (alive.current && gen === generation.current) { setError(String(reason)); setRendering(false); }
+        if (alive.current && gen === generation.current) { setError(previous => previous || String(reason)); setRendering(false); }
       });
     }, 120);
   }
@@ -119,7 +119,7 @@ export function useEditorState(props: ImageEditorProps) {
     } catch (reason) {
       if (alive.current && gen === generation.current) setError(`${String(reason)}. Edits are preserved; try smaller dimensions if the output is too large.`);
     } finally {
-      if (alive.current && gen === generation.current) { savingRef.current = false; setSaving(false); props.onSavingChange?.(false); }
+      if (alive.current && gen === generation.current) { savingRef.current = false; setSaving(false); props.onSavingChange?.(false); schedule(current.current); }
     }
   }
   useLayoutEffect(() => {

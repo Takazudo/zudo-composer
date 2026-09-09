@@ -205,6 +205,31 @@ describe('image editor UI contract', () => {
     expect(Object.keys(native)).toEqual([]);
     expect(close).not.toHaveBeenCalled();
   });
+  it.each(['resolve', 'reject'] as const)('restores a cancelled preview when save %s before the preview debounce', async outcome => {
+    let complete!: () => void, fail!: (reason: Error) => void;
+    const pending = new Promise<void>((resolve, reject) => { complete = resolve; fail = reject; });
+    const { client } = await mount({ onSave: () => pending });
+    click('Tone'); fireEvent.change(screen.getByLabelText('brightness value'), { target: { value: '20' } });
+    const canvas = screen.getByLabelText('Edited image') as HTMLCanvasElement;
+    expect(canvas.width).toBe(0);
+    const before = client.renderPreview.mock.calls.length;
+    click('Save'); await flush(); expect(client.renderPreview).toHaveBeenCalledTimes(before);
+    await act(async () => { if (outcome === 'resolve') complete(); else fail(new Error('write failed')); });
+    expect(screen.getByText('Rendering preview…')).toHaveAttribute('role', 'status');
+    await flush(120);
+    expect(client.renderPreview).toHaveBeenCalledTimes(before + 1);
+    expect(client.renderPreview.mock.calls.at(-1)![0].tone.brightness).toBe(20);
+    expect(canvas.width).toBe(400);
+    if (outcome === 'reject') expect(screen.getByRole('alert')).toHaveTextContent('write failed');
+  });
+  it('restores preview after an immediate encode rejection without losing its error', async () => {
+    const { client } = await mount(); click('Tone');
+    mocks.encode.mockRejectedValueOnce(new Error('encode failed'));
+    click('Save'); await flush(); await flush(120);
+    expect(client.renderPreview.mock.calls.at(-1)![0].crop).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+    expect((screen.getByLabelText('Edited image') as HTMLCanvasElement).width).toBe(400);
+    expect(screen.getByRole('alert')).toHaveTextContent('encode failed');
+  });
   it('guards the working set for otherwise legal output sizes', () => {
     const doc: EditDoc = { crop: { x: 0, y: 0, width: 1, height: 1 }, rotate: 0, flipH: false, flipV: false, resize: { width: 6000, height: 6000 }, tone: { brightness: 0, contrast: 0, saturation: 0, hue: 0 } };
     expect(documentError(doc, { width: 4000, height: 3000 })).toContain('memory-limit');
