@@ -1,3 +1,5 @@
+import { assetDownloadBlocks, assetDownloadMarkdown, downloadMarkdownProperty } from "../../assets/integration/download";
+import { assetDownloadFileName } from "../../assets/model";
 import { compareUnicodeCodePoints } from "../model/canonical";
 import type { JsonValue, ValueDefinition } from "@zudo-composer/component-contract";
 import type { ComponentCatalog, CompositionDocument, CompositionNode } from "../../composer/model/types";
@@ -34,16 +36,39 @@ function collector(options: AssetImpactOptions = {}) {
     return value;
   };
   const markdown = (value: string, location: AssetImpactLocation): string => {
+    // Download blocks are an explicit structured Markdown extension. Their
+    // reference remains present even after URL and display metadata are pinned.
+    const downloads = assetDownloadBlocks(value);
+    for (const item of downloads) {
+      if (!item.block) { advisory(location, "Malformed managed download block.", value.slice(item.from, item.to), true); continue; }
+      if (options.preservePinnedUrls && item.block.resolved) continue;
+      const ref = item.block.use.asset;
+      index.references.push({ ref, location: { ...location, markdown: { from: item.from, to: item.to, useFrom: item.from, useTo: item.to } } });
+      if (options.lock) {
+        const pin = resolvePinnedAsset(ref, options.lock);
+        const metadata = options.lock.pins.find((candidate) => candidate.providerId === pin?.providerId && candidate.assetId === pin?.assetId && candidate.versionId === pin?.versionId);
+        if (!pin || !metadata?.fileName) advisory(location, "Download display metadata is absent from the captured Assets lock.", value.slice(item.from, item.to), true);
+      }
+    }
+
     const destinations = markdownAssetDestinations(value);
     for (const destination of destinations) url(destination.value, { ...location, markdown: { from: destination.from, to: destination.to, useFrom: destination.useFrom, useTo: destination.useTo } });
-    const covered = new Set(destinations.map(({ from, to }) => `${from}:${to}`));
     let offset = value.indexOf("/uploaded-assets/");
     while (offset >= 0) {
       if (!destinations.some(({ from, to }) => offset >= from && offset < to)) advisory(location, "Managed-looking text outside a parsed Markdown destination is advisory only.", value.slice(offset, offset + 120), true);
       offset = value.indexOf("/uploaded-assets/", offset + 1);
     }
+    if (options.lock && downloads.length) {
+      for (const item of [...downloads].reverse()) {
+        if (!item.block) continue;
+        const pin = resolvePinnedAsset(item.block.use.asset, options.lock);
+        const metadata = options.lock.pins.find((candidate) => candidate.providerId === pin?.providerId && candidate.assetId === pin?.assetId && candidate.versionId === pin?.versionId);
+        if (!pin || !metadata?.fileName) continue;
+        const resolved = { url: pin.url, fileName: assetDownloadFileName(metadata.fileName, pin.mimeType), mimeType: pin.mimeType, byteLength: pin.byteLength };
+        value = value.slice(0, item.from) + assetDownloadMarkdown(item.block.use, resolved) + value.slice(item.to);
+      }
+    }
     return options.lock ? rewriteMarkdownDestinations(value, (destination) => {
-      if (!covered.has(`${destination.from}:${destination.to}`)) return undefined;
       const ref = parseManagedAssetUrl(destination.value, options.providerId ?? options.lock!.providerId);
       return ref ? resolvePinnedAsset(ref, options.lock!)?.url : undefined;
     }) : value;
@@ -86,6 +111,7 @@ function collector(options: AssetImpactOptions = {}) {
       for (const [key, value] of Object.entries(node.props)) {
         const at = { ...location, nodeId: node.id, property: key, valuePath: [key] };
         const field = component?.fields.find((field) => field.prop === key);
+        if (field && typeof value === "string" && field.editor.kind === "text" && field.editor.mode === "markdown-source" && assetDownloadBlocks(value).length && downloadMarkdownProperty(component!, node.props) !== key) advisory(at, "Download blocks require a component with one Markdown field and no slots.", value, true);
         if (field) node.props[key] = property(field, value, at, key)!; else arbitrary(value, at);
       }
       for (const children of Object.values(node.slots)) walk(children);

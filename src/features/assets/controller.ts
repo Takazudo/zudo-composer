@@ -1,3 +1,5 @@
+import { assetDownloadMarkdown } from "../../assets/integration/download";
+import { assetKindForMime } from "../../assets/model";
 import { summarizeAsset, type AssetProvider, type AssetSummary, type AssetSnapshot, type AssetRecord, type AssetMetadataPatch, type AssetFolderPatch } from "../../assets";
 import type { AssetFileProviderStore } from "../../assets/storage/file-provider";
 import type { AssetContentServices, AssetUsageScan, AssetInsertionTarget, AssetUse } from "../../assets/integration/content";
@@ -26,7 +28,8 @@ export function versionedAssetStore(provider: AssetProvider): AssetFileProviderS
 }
 export function assetPublicFileName(record: Pick<AssetSummary, "url">): string { return record.url.split("/").at(-1)!; }
 export function assetUrl(record: Pick<AssetSummary, "authoringUrl">): string { return record.authoringUrl; }
-export function assetMarkdown(record: Pick<AssetSummary, "authoringUrl" | "fileName" | "mimeType">): string {
+export function assetMarkdown(record: Pick<AssetSummary, "id" | "authoringUrl" | "fileName" | "mimeType">, providerId = "asset-files"): string {
+  if (assetKindForMime(record.mimeType)?.inline === false) return `\n\n${assetDownloadMarkdown({ kind: "download", asset: { providerId, assetId: record.id }, label: record.fileName, showSize: true, showType: true })}\n\n`;
   const label = record.fileName.replace(/\.[^.]+$/, "").replace(/([\\[\]])/g, "\\$1");
   return `${record.mimeType.startsWith("image/") ? "!" : ""}[${label}](${record.authoringUrl})`;
 }
@@ -274,7 +277,7 @@ export class AssetLibraryController {
     });
   }
   async copyUrl(record: AssetSummary) { await this.copy(record.authoringUrl); }
-  async copyMarkdown(record: AssetSummary) { await this.copy(assetMarkdown(record)); }
+  async copyMarkdown(record: AssetSummary) { await this.copy(assetMarkdown(record, this.provider.descriptor.id)); }
   async copy(text: string) { await (this.options.writeClipboard ?? ((value) => navigator.clipboard.writeText(value)))(text); this.set({ notice: { tone: "info", text: "Copied." } }); }
   dispose() { this.request++; this.listeners.clear(); }
 }

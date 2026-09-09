@@ -32,7 +32,7 @@ export function normalizedClipboardFiles(transfer: FileTransfer, now: UploadNow 
   return files.map((file) => {
     if (file.name) return file;
     const extension = extensionByMime[file.type.toLowerCase()] ?? "bin";
-    return new File([file], `pasted-image-${timestamp}.${extension}`, {
+    return new File([file], `pasted-${file.type.startsWith("image/") ? "image" : "file"}-${timestamp}.${extension}`, {
       type: file.type || "application/octet-stream",
       lastModified: file.lastModified,
     });

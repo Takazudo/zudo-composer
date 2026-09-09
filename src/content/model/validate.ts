@@ -158,6 +158,7 @@ export function isContentAssetUse(value: unknown): value is ContentAssetUse {
     || !isSafeRecordId(value.asset.providerId) || !isSafeRecordId(value.asset.assetId)) return false;
   switch (value.kind) {
     case "image": return exactKeys(value, ["kind", "asset", "alt", "decorative", "caption"]) && typeof value.alt === "string" && typeof value.decorative === "boolean" && typeof value.caption === "string" && (!value.decorative || value.alt === "");
+    case "download": return exactKeys(value, ["kind", "asset", "label", "showSize", "showType"]) && typeof value.label === "string" && typeof value.showSize === "boolean" && typeof value.showType === "boolean";
     case "link": return exactKeys(value, ["kind", "asset", "label"]) && typeof value.label === "string";
     case "card": return exactKeys(value, ["kind", "asset", "title", "description"]) && typeof value.title === "string" && typeof value.description === "string";
     default: return false;
@@ -173,7 +174,7 @@ function validateSchema(value: Record<string, unknown>, extra: string[] = [], de
     case "reference-list": return exactKeys(value, [...keys, "target", "ordered"]) && isRef(value.target) && typeof value.ordered === "boolean";
     case "object": return exactKeys(value, [...keys, "fields"]) && Array.isArray(value.fields) && value.fields.every((field, index) => validateField(field, index, depth + 1).ok) && new Set(value.fields.map((field) => field.id)).size === value.fields.length && new Set(value.fields.map((field) => field.key)).size === value.fields.length;
     case "list": return exactKeys(value, [...keys, "item"]) && isPlainObject(value.item) && validateSchema(value.item, [], depth + 1);
-    case "asset-use": return exactKeys(value, [...keys, "use"]) && ["image", "link", "card"].includes(value.use as string);
+    case "asset-use": return exactKeys(value, [...keys, "use"]) && ["image", "link", "card", "download"].includes(value.use as string);
     default: return exactKeys(value, keys) && typeof value.kind === "string" && (CONTENT_FIELD_KINDS as readonly string[]).includes(value.kind);
   }
 }

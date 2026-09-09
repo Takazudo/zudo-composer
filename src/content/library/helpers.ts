@@ -56,7 +56,7 @@ export function diagnoseContentEntryCompleteness(model: ContentModelRecord, entr
     if (schema.kind === "list" && Array.isArray(value)) value.forEach((item, index) => visit(schema.item, item, field, [...path, index], true));
     if (schema.kind === "asset-use" && value && typeof value === "object") {
       const use = value as Record<string, unknown>;
-      if ((use.kind === "image" && !use.decorative && empty(use.alt)) || (use.kind === "link" && empty(use.label)) || (use.kind === "card" && empty(use.title))) add("semantic-value-incomplete", `Asset use in "${field.label}" needs its per-use accessible text.`);
+      if ((use.kind === "image" && !use.decorative && empty(use.alt)) || ((use.kind === "link" || use.kind === "download") && empty(use.label)) || (use.kind === "card" && empty(use.title))) add("semantic-value-incomplete", `Asset use in "${field.label}" needs its per-use accessible text.`);
     }
   }
   for (const field of model.document.fields) visit(field, entry.values[field.id], field, [field.id], field.required);

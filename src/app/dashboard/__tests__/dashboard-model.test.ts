@@ -41,7 +41,7 @@ describe("statCards", () => {
 
     const [content, asset, compositions, mappings, sitemaps] = cards;
     expect(content).toMatchObject({ status: "ok", value: 78, unit: "entries", detail: ["2 models"], alert: "3 incomplete" });
-    expect(asset).toMatchObject({ status: "ok", value: 14, unit: "assets", detail: ["11 images", "3 PDFs", "8.2 MB"] });
+    expect(asset).toMatchObject({ status: "ok", value: 14, unit: "assets", detail: ["11 images", "3 documents", "8.2 MB"] });
     expect(compositions).toMatchObject({ status: "ok", value: 6, detail: ["2 patterns", "1 global template"] });
     expect(mappings).toMatchObject({ status: "ok", value: 3, alert: "1 blocked" });
     expect(sitemaps).toMatchObject({ status: "ok", value: 2, detail: ["19 pages"], alert: "4 unassigned" });
@@ -82,16 +82,17 @@ describe("statCards", () => {
       }),
     );
     expect(cards[0]).toMatchObject({ unit: "entry", detail: ["1 model"] });
-    expect(cards[1]).toMatchObject({ unit: "asset", detail: ["1 PDF", "512 B"] });
+    expect(cards[1]).toMatchObject({ unit: "asset", detail: ["1 document", "512 B"] });
   });
 });
 
 describe("assetTypeSummary", () => {
-  it("folds raw asset types into the three groups an author recognises", () => {
-    expect(assetTypeSummary({ "image/png": 8, "image/jpeg": 3, "application/pdf": 3, "text/plain": 1 })).toEqual([
+  it("folds raw MIME types into author-facing kinds", () => {
+    expect(assetTypeSummary({ "image/png": 8, "image/jpeg": 3, "application/pdf": 3, "application/zip": 2, "text/plain": 1 })).toEqual([
       "11 images",
-      "3 PDFs",
-      "1 other file",
+      "3 documents",
+      "2 archives",
+      "1 text file",
     ]);
   });
 

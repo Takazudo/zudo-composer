@@ -5,6 +5,7 @@ import type { ProjectAssetUsageInspection } from "../../site-project/assets/usag
 import type { AssetImpactLocation } from "../../site-project/assets/types";
 
 export type AssetUse = ContentAssetUse;
+export { assetDownloadMarkdown } from "./download";
 export interface AssetContentLocation { providerId: string; modelId: string; entryId: string; fieldId: string; valuePath: readonly (string | number)[] }
 export interface AssetUsageLocation extends AssetContentLocation { modelName: string; entryTitle: string; fieldLabel: string; use: AssetUse }
 export interface AssetUsageScan {

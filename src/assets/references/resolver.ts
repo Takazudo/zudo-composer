@@ -1,10 +1,10 @@
-import { ASSET_CHECKSUM_URL_PATTERN, assetAuthoringUrl, assetPinKey, assetVersionUrl, validateAssetAssetRef, validateAssetVersionRef, validateAssetVersionPin, validateAssetSnapshot, isValidAssetChecksum, type AssetAssetRef, type AssetVersionRef, type AssetVersionPin, type AssetSnapshot } from "../model";
+import { ASSET_CHECKSUM_URL_PATTERN, assetAuthoringUrl, assetPinKey, assetVersionUrl, isValidAssetFileName, validateAssetAssetRef, validateAssetVersionRef, validateAssetVersionPin, validateAssetSnapshot, isValidAssetChecksum, type AssetAssetRef, type AssetVersionRef, type AssetVersionPin, type AssetSnapshot } from "../model";
 import type { VersionedAssetStore } from "../library";
 import { subscribePersistenceChanges } from "../../shared/persistence-generation";
 
 export type ManagedAssetReference = AssetAssetRef | AssetVersionRef;
 export type AssetReferenceDiagnostic = { code: "unavailable" | "missing" | "trashed" | "corrupt" | "changed" | "unrecognized"; message: string; ref?: ManagedAssetReference };
-export interface LockedAssetPin extends AssetVersionPin { metadataRevision: number; headVersionId: string }
+export interface LockedAssetPin extends AssetVersionPin { fileName?: string; metadataRevision: number; headVersionId: string }
 export interface AssetReferenceLock { schemaVersion: 1; providerId: string; mutationToken: string; pins: LockedAssetPin[] }
 export type AssetLockOutcome = { status: "ready"; lock: AssetReferenceLock } | { status: "blocked"; diagnostics: AssetReferenceDiagnostic[] };
 function pinValue(pin: AssetVersionPin): AssetVersionPin { return { providerId: pin.providerId, assetId: pin.assetId, versionId: pin.versionId, checksum: pin.checksum, mimeType: pin.mimeType, byteLength: pin.byteLength, url: pin.url }; }
@@ -21,8 +21,9 @@ export function validateAssetReferenceLock(value: unknown): value is AssetRefere
   if (lock.schemaVersion !== 1 || !validateAssetAssetRef({ providerId: lock.providerId, assetId: "check" }) || !isValidAssetChecksum(lock.mutationToken) || !Array.isArray(lock.pins)) return false;
   const heads = new Map<string, { revision: number; version: string }>();
   return lock.pins.every((entry, index) => {
-    if (!entry || Object.keys(entry).sort().join(",") !== "assetId,byteLength,checksum,headVersionId,metadataRevision,mimeType,providerId,url,versionId") return false;
-    const { metadataRevision, headVersionId, ...pin } = entry;
+    if (!entry || !["assetId,byteLength,checksum,headVersionId,metadataRevision,mimeType,providerId,url,versionId", "assetId,byteLength,checksum,fileName,headVersionId,metadataRevision,mimeType,providerId,url,versionId"].includes(Object.keys(entry).sort().join(","))) return false;
+    const { metadataRevision, headVersionId, fileName, ...pin } = entry;
+    if (Object.hasOwn(entry, "fileName") && !isValidAssetFileName(fileName)) return false;
     const prior = heads.get(entry.assetId);
     if (prior && (prior.revision !== metadataRevision || prior.version !== headVersionId)) return false;
     heads.set(entry.assetId, { revision: metadataRevision, version: headVersionId });
@@ -54,7 +55,7 @@ export async function createAssetReferenceLock(store: VersionedAssetStore | unde
       try {
         const pin = await store.resolveVersion(exact);
         if (!validateAssetVersionPin(pin, exact) || pin.checksum !== version.checksum || pin.mimeType !== version.mimeType || pin.byteLength !== version.byteLength || pin.url !== assetVersionUrl(versionId, version.mimeType)) throw new Error("Immutable Assets metadata disagrees with the captured snapshot.");
-        pins.set(assetPinKey(pin), { ...pin, metadataRevision: record.revision, headVersionId: record.document.currentVersionId });
+        pins.set(assetPinKey(pin), { ...pin, fileName: record.document.fileName, metadataRevision: record.revision, headVersionId: record.document.currentVersionId });
       } catch (error) { diagnostics.push({ code: "corrupt", ref, message: error instanceof Error ? error.message : "Assets bytes could not be verified." }); }
     }
     if (await store.mutationToken() !== snapshot.mutationToken) diagnostics.push({ code: "changed", message: "Assets metadata changed while exact versions were being captured." });
@@ -65,7 +66,7 @@ export async function checkAssetLockPreconditions(lock: AssetReferenceLock, stor
   if (!validateAssetReferenceLock(lock) || store.provider.id !== lock.providerId) return false;
   try {
     const snapshot = await store.snapshot();
-    return validateAssetSnapshot(snapshot) && snapshot.mutationToken === lock.mutationToken && lock.pins.every((pin) => snapshot.records.some((record) => record.id === pin.assetId && record.revision === pin.metadataRevision && record.document.state === "active" && record.document.currentVersionId === pin.headVersionId && record.document.versions.some((version) => version.id === pin.versionId && version.mimeType === pin.mimeType && version.byteLength === pin.byteLength && version.url === pin.url)));
+    return validateAssetSnapshot(snapshot) && snapshot.mutationToken === lock.mutationToken && lock.pins.every((pin) => snapshot.records.some((record) => record.id === pin.assetId && record.revision === pin.metadataRevision && (pin.fileName === undefined || record.document.fileName === pin.fileName) && record.document.state === "active" && record.document.currentVersionId === pin.headVersionId && record.document.versions.some((version) => version.id === pin.versionId && version.mimeType === pin.mimeType && version.byteLength === pin.byteLength && version.url === pin.url)));
   } catch { return false; }
 }
 export function serializeAssetReferenceLock(lock: AssetReferenceLock): string {

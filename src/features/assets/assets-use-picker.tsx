@@ -1,8 +1,9 @@
+import { downloadAsset } from "../../browser/asset-download.mjs";
 import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { Dialog } from "../../components/overlay";
 import { Banner, Button, Checkbox, Field, Input, Select, SegmentedControl, Textarea } from "../../components/ui";
-import { summarizeAsset, type AssetProvider, type AssetSummary } from "../../assets";
+import { summarizeAsset, ASSET_MAX_BYTE_LENGTH, assetDownloadFileName, assetTypeLabel, assetByteLabel, type AssetProvider, type AssetSummary } from "../../assets";
 import type { AssetInsertionTarget, AssetUse } from "../../assets/integration/content";
 import type { AssetLibraryController } from "./controller";
 
@@ -10,7 +11,7 @@ const targetKey = (target: AssetInsertionTarget) => JSON.stringify([target.provi
 export function AssetUsePicker({ record, controller, onClose }: { record: AssetSummary; controller: AssetLibraryController; onClose(): void }) {
   const [targets, setTargets] = useState<readonly AssetInsertionTarget[]>([]);
   const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
-  const [kind, setKind] = useState<AssetUse["kind"]>(record.mimeType.startsWith("image/") ? "image" : "link");
+  const [kind, setKind] = useState<AssetUse["kind"]>(record.mimeType.startsWith("image/") ? "image" : record.mimeType === "application/pdf" ? "link" : "download");
   const [selected, setSelected] = useState("");
   useEffect(() => {
     let live = true;
@@ -58,16 +59,18 @@ function AssetUseForm({ record, providerId, kind, onKindChange, onSubmit, onClos
 }) {
   const [text, setText] = useState(""); const [label, setLabel] = useState(record.fileName); const [decorative, setDecorative] = useState(false);
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
+  const [showSize, setShowSize] = useState(true); const [showType, setShowType] = useState(true);
   const asset = { providerId, assetId: record.id };
   const value: AssetUse = kind === "image" ? { kind, asset, alt: decorative ? "" : text, decorative, caption: label }
-    : kind === "link" ? { kind, asset, label } : { kind, asset, title: label, description: text };
+    : kind === "download" ? { kind, asset, label, showSize, showType } : kind === "link" ? { kind, asset, label } : { kind, asset, title: label, description: text };
   const valid = kind === "image" ? decorative || text.trim().length > 0 : label.trim().length > 0;
   return <fieldset class="sg-assets-use-form" disabled={busy}>
-    {onKindChange ? <SegmentedControl label="Asset presentation" value={kind} onChange={onKindChange} options={[{ value: "image", label: "Image", disabled: !record.mimeType.startsWith("image/") }, { value: "link", label: "Link" }, { value: "card", label: "Card" }]} /> : null}
-    <div class="sg-assets-use-preview">{kind === "image" ? <img src={record.url} alt={decorative ? "" : text} /> : kind === "link" ? <a href={record.url} target="_blank" rel="noreferrer">{label}</a> : <article><strong>{label}</strong><p>{text}</p></article>}</div>
-    {kind !== "link" ? <Field label={kind === "image" ? "Alternative text for this usage" : "Card description"} help="Saved on this Content usage, independently of the asset's internal note."><Textarea value={text} disabled={busy || (kind === "image" && decorative)} onInput={(event) => setText(event.currentTarget.value)} /></Field> : null}
+    {onKindChange ? <SegmentedControl label="Asset presentation" value={kind} onChange={onKindChange} options={[{ value: "image", label: "Image", disabled: !record.mimeType.startsWith("image/") }, { value: "link", label: "Link" }, { value: "card", label: "Card" }, { value: "download", label: "Download" }]} /> : null}
+    <div class="sg-assets-use-preview">{kind === "image" ? <img src={record.url} alt={decorative ? "" : text} /> : kind === "download" ? <a aria-label={[label, showType ? assetTypeLabel(record.mimeType) : "", showSize ? assetByteLabel(record.byteLength) : ""].filter(Boolean).join(" · ")} href={record.url} download={assetDownloadFileName(record.fileName, record.mimeType)} onClick={(event) => { void downloadAsset(event, ASSET_MAX_BYTE_LENGTH); }}>{label}{showType ? ` · ${assetTypeLabel(record.mimeType)}` : ""}{showSize ? ` · ${assetByteLabel(record.byteLength)}` : ""}</a> : kind === "link" ? <a href={record.url} target="_blank" rel="noreferrer">{label}</a> : <article><strong>{label}</strong><p>{text}</p></article>}</div>
+    {(kind === "image" || kind === "card") ? <Field label={kind === "image" ? "Alternative text for this usage" : "Card description"} help="Saved on this Content usage, independently of the asset's internal note."><Textarea value={text} disabled={busy || (kind === "image" && decorative)} onInput={(event) => setText(event.currentTarget.value)} /></Field> : null}
     {kind === "image" ? <label class="sg-assets-actions"><Checkbox aria-label="Decorative image" checked={decorative} disabled={busy} onCheckedChange={setDecorative} /> Decorative image</label> : null}
-    <Field label={kind === "image" ? "Caption" : kind === "link" ? "Link label" : "Card title"}><Input value={label} disabled={busy} onInput={(event) => setLabel(event.currentTarget.value)} /></Field>
+    <Field label={kind === "image" ? "Caption" : kind === "download" ? "Download label" : kind === "link" ? "Link label" : "Card title"}><Input value={label} disabled={busy} onInput={(event) => setLabel(event.currentTarget.value)} /></Field>
+    {kind === "download" ? <><label><Checkbox aria-label="Show file size" checked={showSize} onCheckedChange={setShowSize} /> Show file size</label><label><Checkbox aria-label="Show file type" checked={showType} onCheckedChange={setShowType} /> Show file type</label></> : null}
     {children}
     {error ? <Banner tone="err">{error}</Banner> : null}
     <div class="sg-assets-actions"><Button disabled={busy} onClick={onClose}>Cancel</Button><Button variant="primary" disabled={disabled || busy || !valid} onClick={() => { setBusy(true); setError(null); void onSubmit(value).catch((error) => setError(error.message)).finally(() => setBusy(false)); }}>{busy ? "Saving usage…" : "Use in content"}</Button></div>

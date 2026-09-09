@@ -18,6 +18,7 @@ describe("Rich Content schema", () => {
     [{ kind: "object", fields: [field({ kind: "boolean" }, "flag")] }, { flag: false }],
     [{ kind: "list", item: { kind: "number" } }, [0, 1]],
     [{ kind: "asset-use", use: "image" }, { kind: "image", asset: { providerId: "asset-files", assetId: "asset" }, alt: "A diagram", decorative: false, caption: "Caption" }],
+    [{ kind: "asset-use", use: "download" }, { kind: "download", asset: { providerId: "asset-files", assetId: "asset" }, label: "Download archive", showSize: true, showType: false }],
     [{ kind: "asset-use", use: "link" }, { kind: "link", asset: { providerId: "asset-files", assetId: "asset" }, label: "Read the PDF" }],
     [{ kind: "asset-use", use: "card" }, { kind: "card", asset: { providerId: "asset-files", assetId: "asset" }, title: "Card title", description: "Card details" }],
   ] as const)("round trips %j", (schema, value) => {

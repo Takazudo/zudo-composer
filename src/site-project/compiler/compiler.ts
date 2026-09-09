@@ -569,6 +569,7 @@ export async function compileSiteProject(
 
     const resolutions = resolution ? new Map([[routeRecordId, resolution]]) : undefined;
     const batch = planLinkedJsxModules({
+      allowUnresolvedAssetDownloads: options.policy === "authoring-preview",
       manifest: options.componentCatalog,
       records: [...dependencies, routeRecord],
       ...(resolutions ? { resolutions } : {}),

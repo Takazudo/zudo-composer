@@ -121,3 +121,51 @@ that a live lock is stale. A malformed/unsupported catalog reports recovery and
 preserves the source and every version; automatic `clear`/`startFresh` is blocked.
 The inherited `delete` operation means soft trash and rejects missing revision
 preconditions; feature callers must use the explicit current trash contract.
+
+
+## Download uses in Content and Markdown
+
+A Content `asset-use` field can use the `download` presentation:
+`{ kind: "download", asset: { providerId, assetId }, label, showSize, showType }`.
+The label and visibility flags belong to that Content usage. ZIP and text assets
+start with this presentation in the Assets picker; PDF keeps its Link default.
+
+Map a Download field using **Download block** (`asset-download`) to the stock
+ProseMd component's Markdown field. **Copy Markdown** on non-previewable assets
+also produces a standalone managed download block, surrounded by blank lines for
+pasting. Images and PDF retain their existing Markdown references.
+
+The canonical block is `<!--zudo-asset-download:<URI-encoded JSON>-->`, where JSON
+contains `use` with the exact download shape above. Use `assetDownloadMarkdown`
+from `assets/integration/content` to construct it rather than hand-authoring it.
+Only standalone top-level comment blocks are interpreted; code fences and inline
+comments remain ordinary Markdown. Separate consecutive blocks with blank lines.
+
+Capture resolves the explicit reference and adds a validated `resolved` object
+with `url`, `fileName`, `mimeType`, and `byteLength`. The lock records display
+filenames with the metadata revision; release always rewrites resolved fields
+from that lock, so pasted metadata cannot override the captured asset. Renaming
+or replacing an asset later leaves an earlier captured release unchanged. Legacy
+locks without filenames still work for old image/link uses; downloads require a
+new capture. Filename extensions come from the MIME allowlist, avoiding repeated
+or stale known extensions while retaining meaningful dots in display names.
+
+Composer preview, site delivery, and generated JSX render these blocks as native
+`<a href="/uploaded-assets/sha256-…zip" download="display-name.zip">` elements.
+Normal clicks fetch at most the Assets byte limit and download a temporary Blob
+URL so the browser honors the human filename despite checksum-named server
+attachment headers. The same self-contained handler is embedded in generated
+JSX; it needs no private imports. Modified clicks retain native link behavior.
+Failures are visible inside the link and can be retried; fetches time out, abort
+on every exit, and temporary Blob URLs are revoked. Labels and attributes are
+escaped by the normal JSX/DOM renderer. Other Markdown
+chunks still go through the trusted pack's renderer and sanitizer. The supported
+component seam has exactly one declared Markdown-source field and no slots (as
+stock ProseMd does), so splitting never duplicates other fields or children. No
+component is added to the stock chooser. Unsupported component shapes, malformed
+blocks, and missing capture metadata block release instead of dropping downloads.
+
+Direct JSX export of an unresolved authoring block is blocked with an actionable
+Assets-resolution diagnostic. Captured site export contains exact links and
+needs no asset provider at runtime. Only the compiler's internal authoring
+inspection can temporarily generate unavailable placeholders before capture.
