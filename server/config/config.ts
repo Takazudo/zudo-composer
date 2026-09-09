@@ -73,8 +73,8 @@ export interface ComposerPaths {
   content: string;
   mappings: string;
   sitemaps: string;
-  media: string;
-  publicMedia: string;
+  assets: string;
+  publicAssets: string;
   styles: string;
 }
 
@@ -192,8 +192,8 @@ export function composer(user: ComposerConfigInput = {}, runtime: ComposerRuntim
     contentDir: assertHostRelativePath("contentDir", merged.contentDir, configPath),
     mappingsDir: assertHostRelativePath("mappingsDir", merged.mappingsDir, configPath),
     sitemapsDir: assertHostRelativePath("sitemapsDir", merged.sitemapsDir, configPath),
-    mediaDir: assertHostRelativePath("mediaDir", merged.mediaDir, configPath),
-    publicMediaDir: assertHostRelativePath("publicMediaDir", merged.publicMediaDir, configPath),
+    assetsDir: assertHostRelativePath("assetsDir", merged.assetsDir, configPath),
+    publicAssetsDir: assertHostRelativePath("publicAssetsDir", merged.publicAssetsDir, configPath),
     styles: assertHostRelativePath("styles", merged.styles, configPath),
     pack: assertPack(merged.pack, configPath),
   };
@@ -209,8 +209,8 @@ export function composer(user: ComposerConfigInput = {}, runtime: ComposerRuntim
       content: resolve(workspaceRoot, settings.contentDir),
       mappings: resolve(workspaceRoot, settings.mappingsDir),
       sitemaps: resolve(workspaceRoot, settings.sitemapsDir),
-      media: resolve(workspaceRoot, settings.mediaDir),
-      publicMedia: resolve(workspaceRoot, settings.publicMediaDir),
+      assets: resolve(workspaceRoot, settings.assetsDir),
+      publicAssets: resolve(workspaceRoot, settings.publicAssetsDir),
       styles: resolve(workspaceRoot, settings.styles),
     },
   };

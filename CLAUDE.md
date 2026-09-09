@@ -8,7 +8,7 @@ Composer document model, source generation, reuse rules, chrome, preview
 renderer and same-origin iframe protocol; the Content model, Entry library and
 authoring UI; the Mapping binding model, resolver and authoring UI; the
 Sitemapper page-tree model, library, authoring UI and Composer-catalog
-integration; the Media metadata model, library route and upload/delivery
+integration; the Assets metadata model, library route and upload/delivery
 boundaries; and the shared filesystem storage engine
 (`TransactionalRecordStore`) all five domains persist through.
 
@@ -19,7 +19,7 @@ own root, and owns everything the tool authors into that host: its
 **templates** (data, not code — a Composition whose `publication.kind` is
 `"global-template"`, stored under `compositionsDir` like any other composition;
 there is no templates directory or template file format), and its **CMS data**
-(the four JSON domains plus media, rooted at `dataDir`/`mediaDir`). See the
+(the four JSON domains plus media, rooted at `dataDir`/`assetsDir`). See the
 settings table in [`README.md`](./README.md) for the full default layout.
 
 zudo-sg owns only the installed `@zudo-sg/ui` provider: typed component
@@ -36,7 +36,7 @@ Exact routes are `/`, `/composer`, same-origin `/composer/preview`, `/content`,
 `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
 and `/site/journal/start-with-the-question`; emitted files live under
 `/assets/`, while committed images and PDFs from this repository's own
-`publicMediaDir` are delivered under `/uploaded-media/`. Upload authoring
+`publicAssetsDir` are delivered under `/uploaded-assets/`. Upload authoring
 remains dev-only. Keep Vite base `/` and the preview graph isolated from a
 consuming host project and its file-provider plumbing.
 

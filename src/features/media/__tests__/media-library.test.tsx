@@ -12,7 +12,7 @@ afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 describe("Media workspace", () => {
   it("uses provider display URLs for version links without changing canonical records", async () => {
     const { provider, filesystem } = await providerFixture();
-    const record = await filesystem.upload({ fileName: "temporary.png", declaredMediaType: "image/png", bytes: PNG });
+    const record = await filesystem.upload({ fileName: "temporary.png", declaredMimeType: "image/png", bytes: PNG });
     const version = record.document.versions[0]!;
     const previewUrl = vi.fn((url: string) => `blob:https://example.test/${url.split("/").at(-1)}`);
     render(<MediaApp provider={{ ...provider, previewUrl }} contentServices={completeServices()} intent={{ status: "none" }} />);
@@ -28,7 +28,7 @@ describe("Media workspace", () => {
 
   it("refreshes both inspector and trash usage scans for every project dependency", async () => {
     const { provider, filesystem } = await providerFixture();
-    await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     const services = completeServices({ subscribeChanges: (listener) => subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, listener) });
     const scan = vi.spyOn(services, "scan");
     render(<MediaApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
@@ -50,7 +50,7 @@ describe("Media workspace", () => {
 
   it("shows actionable additional project uses inside the blocked trash dialog", async () => {
     const { provider, filesystem } = await providerFixture();
-    await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     const services = completeServices({ scan: async () => ({ status: "complete", locations: [], tokens: {}, message: "Complete project scan", additionalLocations: [{ href: "/composer?record=page", location: { domain: "materialization", providerId: "files", recordId: "page", nodeId: "hero", property: "markdown", valuePath: ["markdown"], pathname: "/about", markdown: { from: 4, to: 32, useFrom: 0, useTo: 33 } } }] }) });
     render(<MediaApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
@@ -62,7 +62,7 @@ describe("Media workspace", () => {
   });
   it("subscribes to usage changes only while an inspector asset is active", async () => {
     const { provider, filesystem } = await providerFixture();
-    await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     const stop = vi.fn(), subscribe = vi.fn(() => stop);
     render(<MediaApp provider={provider} contentServices={completeServices({ subscribeChanges: subscribe })} intent={{ status: "none" }} />);
     const inspect = await screen.findByRole("button", { name: "Inspect hero.png" });
@@ -73,7 +73,7 @@ describe("Media workspace", () => {
   });
   it("keeps missing asset links handled until an explicit link retry", async () => {
     const { provider, filesystem } = await providerFixture();
-    const asset = await filesystem.upload({ fileName: "late.png", declaredMediaType: "image/png", bytes: PNG });
+    const asset = await filesystem.upload({ fileName: "late.png", declaredMimeType: "image/png", bytes: PNG });
     const snapshot = await filesystem.snapshot();
     const read = vi.spyOn(filesystem, "snapshot").mockResolvedValue({ ...snapshot, records: [] });
     const controller = createMediaLibraryController(provider);
@@ -93,7 +93,7 @@ describe("Media workspace", () => {
   });
   it("invalidates displayed usage claims when the injected Content generation changes", async () => {
     const { provider, filesystem } = await providerFixture();
-    await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     let invalidate!: () => void;
     const services = completeServices({ subscribeChanges: (listener) => { invalidate = listener; return () => undefined; } });
     const scan = vi.spyOn(services, "scan").mockResolvedValue({ status: "complete", locations: [], tokens: {}, message: "Old complete snapshot" });
@@ -129,7 +129,7 @@ describe("Media workspace", () => {
   });
   it("saves inspector details, accepts another edit, and flushes against the committed revision", async () => {
     const { provider, filesystem } = await providerFixture();
-    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     const controller = createMediaLibraryController(provider, { contentServices: completeServices() });
     const sessions = createWorkspaceSaveRegistry();
     const session = sessions.register({ feature: "Media metadata", providerId: provider.descriptor.id, recordId: record.id }, { flush: () => controller.flush() });
@@ -149,8 +149,8 @@ describe("Media workspace", () => {
 
   it("filters grid/list and saves inspector metadata with the stable identity", async () => {
     const { provider, filesystem } = await providerFixture();
-    const image = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
-    await filesystem.upload({ fileName: "guide.pdf", declaredMediaType: "application/pdf", bytes: PDF });
+    const image = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
+    await filesystem.upload({ fileName: "guide.pdf", declaredMimeType: "application/pdf", bytes: PDF });
     render(<MediaApp provider={provider} contentServices={completeServices()} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
     const inspector = screen.getByRole("complementary", { name: "Asset details" });
@@ -165,7 +165,7 @@ describe("Media workspace", () => {
   });
   it("guards trash with complete structured usages and restores retained records", async () => {
     const { provider, filesystem } = await providerFixture();
-    const asset = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG });
+    const asset = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     render(<MediaApp provider={provider} contentServices={completeServices()} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select hero.png" }));
     fireEvent.click(screen.getByRole("button", { name: "Trash…", exact: true }));
@@ -180,7 +180,7 @@ describe("Media workspace", () => {
   });
   it("returns typed field values with per-use accessible text separate from notes", async () => {
     const { provider, filesystem } = await providerFixture();
-    const record = await filesystem.upload({ fileName: "hero.png", declaredMediaType: "image/png", bytes: PNG, note: "Asset note" });
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG, note: "Asset note" });
     const choose = vi.fn(); const close = vi.fn();
     render(<MediaFieldPicker provider={provider} kind="image" onSelect={choose} onClose={close} />);
     await screen.findByRole("option", { name: "hero.png" });

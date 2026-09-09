@@ -5,7 +5,7 @@ import { CONTENT_PROVIDERS, ContentPersistenceError, type ContentInitializationO
 import { createFileProviderContentProvider, readContentFileProviderConfig } from "../content/storage/file-provider";
 import { activeComponentProvider } from "../features/composer/active-pack";
 import { createContentPreviewSource, type ContentPreviewSource } from "../features/content/preview-source";
-import { createFileProviderMediaProvider, type MediaFileProvider } from "../media";
+import { createFileProviderAssetProvider, type AssetFileProvider } from "../assets";
 import type { MappingContentEntryCatalog } from "../features/mapping";
 import type { MappingAttachmentCallbacks } from "../features/mapping/attachments";
 import { MAPPING_PROVIDERS, createCompositionCatalog as createMappingCompositionCatalog, createMappingCatalog, MappingPersistenceError, resolveMappingDefinition, type CompositionCatalog as MappingCompositionCatalog, type MappingCatalog, type MappingInitializationOutcome, type MappingProvider, type MappingRecord } from "../mapping";
@@ -17,7 +17,7 @@ import type { MappingAssignmentCatalog } from "../sitemapper/routes";
 import { createFileProviderSitemapProvider, readSitemapFileProviderConfig } from "../sitemapper/storage/file-provider";
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
 import { createFileProviderWorkspaceStorage, withWorkspaceInitializationLock, type WorkspaceStorage } from "./workspace-storage";
-import { AUTHORING_PERSISTENCE_CHANNELS, isAuthoringPersistenceChannel, MEDIA_PERSISTENCE_CHANNEL, PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./persistence-channels";
+import { AUTHORING_PERSISTENCE_CHANNELS, isAuthoringPersistenceChannel, ASSET_PERSISTENCE_CHANNEL, PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./persistence-channels";
 import { projectFromWorkspace, type WorkspaceRecord } from "./workspace-record";
 import { createWorkspaceSaveRegistry, type WorkspaceSaveRegistry } from "./workspace-sessions";
 import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture, type WorkspaceCaptureOutcome, type WorkspaceSnapshotSource, type WorkspaceToken } from "./workspace-snapshot";
@@ -112,7 +112,7 @@ export interface ProductionProviderIntegration {
   componentProvider: typeof activeComponentProvider;
   compositionProviders: readonly CompositionProvider[]; compositionCatalog: CompositionCatalog; mappingCompositionCatalog: MappingCompositionCatalog;
   contentProviders: readonly ContentProvider[]; contentProvider: ContentProvider; contentCatalog: ContentCatalog;
-  mediaProvider: MediaFileProvider | undefined;
+  assetProvider: AssetFileProvider | undefined;
   createContentPreviewSource(): ContentPreviewSource;
   mappingContentEntries: MappingContentEntryCatalog; mappingProviders: readonly MappingProvider[]; mappingProvider: MappingProvider; mappingCatalog: MappingCatalog;
   mappingAttachmentService: MappingAttachmentCallbacks;
@@ -150,7 +150,7 @@ interface ProductionProviderIntegrationCommonOptions {
   workspaceId?: string;
   creation?: WorkspaceCreateOptions;
   saveRegistry?: WorkspaceSaveRegistry;
-  mediaProvider?: MediaFileProvider | null;
+  assetProvider?: AssetFileProvider | null;
   /**
    * Replaces the whole filesystem transport, registry included. It is a factory
    * rather than a value because each integration resolves its own open
@@ -226,7 +226,7 @@ export function createFileProviderWorkspaceProviders(workspace: () => string): W
 }
 
 export function createProductionProviderIntegration(options: ProductionProviderIntegrationOptions = {}): ProductionProviderIntegration {
-  const mediaProvider = options.mediaProvider === undefined ? createFileProviderMediaProvider() : options.mediaProvider ?? undefined;
+  const assetProvider = options.assetProvider === undefined ? createFileProviderAssetProvider() : options.assetProvider ?? undefined;
   const usesInjectedSource = options.project === undefined;
   const activated: ReturnType<typeof activate> = usesInjectedSource && injectedDeliverySource.status === "error"
     ? { error: new ProviderIntegrationError("source", injectedDeliverySource.message, true, { sourceReason: "invalid" }) }
@@ -509,8 +509,8 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       result.push({ id: `content:${declared.id}`, token: async () => (await store.readAll()).mutationToken, read: async () => { const value = await store.readAll(); return { mutationToken: value.mutationToken, value }; } });
     }
     if (includeMedia) {
-      if (!mediaProvider) throw new ProviderIntegrationError("snapshot", "Media is unavailable; a release capture cannot claim a complete media snapshot.", false);
-      result.push({ id: `media:${mediaProvider.descriptor.id}`, token: () => mediaProvider.store.mutationToken(), read: async () => { const value = await mediaProvider.store.snapshot(); return { mutationToken: value.mutationToken, value }; } });
+      if (!assetProvider) throw new ProviderIntegrationError("snapshot", "Media is unavailable; a release capture cannot claim a complete media snapshot.", false);
+      result.push({ id: `media:${assetProvider.descriptor.id}`, token: () => assetProvider.store.mutationToken(), read: async () => { const value = await assetProvider.store.snapshot(); return { mutationToken: value.mutationToken, value }; } });
     }
     return result;
   };
@@ -604,19 +604,19 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Snapshot validation failed.") }; }
   };
   const subscribeChanges = (listener: (channel?: string) => void, channels?: readonly string[]) => {
-    const stopStorage = subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel, channels ?? AUTHORING_PERSISTENCE_CHANNELS) || (channels === undefined && channel === MEDIA_PERSISTENCE_CHANNEL)) listener(channel); });
+    const stopStorage = subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel, channels ?? AUTHORING_PERSISTENCE_CHANNELS) || (channels === undefined && channel === ASSET_PERSISTENCE_CHANNEL)) listener(channel); });
     let sessionGeneration = sessions.generation;
     const stopSessions = sessions.subscribe(() => { if (sessionGeneration !== sessions.generation) { sessionGeneration = sessions.generation; if (channels === undefined) listener("sessions"); } });
     return () => { stopStorage(); stopSessions(); };
   };
   const mappingAttachmentService = createMappingAttachmentService({
-    mediaStore: mediaProvider?.store,
+    assetStore: assetProvider?.store,
     getCurrentSiteProject,
     workspace,
     componentCatalog: activeComponentProvider.catalog,
     subscribe: (listener) => subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, listener),
   });
-  return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, mediaProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, mappingAttachmentService, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle, workspace, sessions,
+  return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, assetProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, mappingAttachmentService, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle, workspace, sessions,
     subscribeChanges,
     captureWorkspace: async (): Promise<WorkspaceProjectCaptureOutcome> => {
       const outcome = await capture(true);

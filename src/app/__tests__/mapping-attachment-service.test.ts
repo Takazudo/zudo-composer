@@ -21,12 +21,12 @@ async function host(): Promise<TemporaryWorkspaceProviders> {
 describe("mapping attachment aggregate service", () => {
   it("attaches an unpersisted candidate with the real production Media store and metadata CAS", async () => {
     const { provider, filesystem } = await providerFixture();
-    const asset = await filesystem.upload({ fileName: "link.png", declaredMediaType: "image/png", bytes: PNG });
+    const asset = await filesystem.upload({ fileName: "link.png", declaredMimeType: "image/png", bytes: PNG });
     const project = loadSampleSiteProject(activeSiteProjectValidationContext);
     const source = project.providers.compositions[0]!.records.find(({ id }) => id === "journal-entry-page")!;
     delete source.document.binding;
-    source.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-media/asset-${asset.id}`, children: "Download" }, slots: {} });
-    const integration = createProductionProviderIntegration({ project, sourceRevision: createHash("sha256").update(serializeSiteProject(project)).digest("hex"), mediaProvider: provider, createProviders: (await host()).createProviders });
+    source.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-assets/asset-${asset.id}`, children: "Download" }, slots: {} });
+    const integration = createProductionProviderIntegration({ project, sourceRevision: createHash("sha256").update(serializeSiteProject(project)).digest("hex"), assetProvider: provider, createProviders: (await host()).createProviders });
     expect((await integration.initialization.initialize()).status).toBe("ready");
     const before = await integration.workspace.metadata();
     await integration.mappingAttachmentService.attach({ composition: { providerId: "files", recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-filesystem", recordId: "journal-entry-mapping" } });
@@ -36,19 +36,19 @@ describe("mapping attachment aggregate service", () => {
   });
   it("pins managed Media in attachment previews and reports missing provider as blocking", async () => {
     const { provider, filesystem } = await providerFixture();
-    const asset = await filesystem.upload({ fileName: "link.png", declaredMediaType: "image/png", bytes: PNG });
+    const asset = await filesystem.upload({ fileName: "link.png", declaredMimeType: "image/png", bytes: PNG });
     const project = loadSampleSiteProject(activeSiteProjectValidationContext);
     const source = project.providers.compositions[0]!.records.find(({ id }) => id === "journal-entry-page")!;
     delete source.document.binding;
-    source.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-media/asset-${asset.id}`, children: "Download" }, slots: {} });
+    source.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-assets/asset-${asset.id}`, children: "Download" }, slots: {} });
     const attachment = { id: "cards", order: 0, composition: { providerId: "files", recordId: "home-page" }, target: { nodeId: "home-copy-stack", slotId: "content" }, mapping: { providerId: "mapping-filesystem", recordId: "journal-entry-mapping" } } as const;
     project.collectionAttachments.push(attachment);
     const metadata = { id: "workspace", mutationToken: 0 } as WorkspaceRecord;
     const options = { getCurrentSiteProject: async () => ({ status: "ready" as const, project }), workspace: { metadata: async () => metadata, updateMetadata: async () => metadata }, componentCatalog: activeComponentProvider.catalog, subscribe: () => () => undefined };
-    const preview = await createMappingAttachmentService({ ...options, mediaStore: provider.store }).preview(attachment);
+    const preview = await createMappingAttachmentService({ ...options, assetStore: provider.store }).preview(attachment);
     expect(preview.status).toBe("ready"); expect(JSON.stringify(preview.document)).toContain(asset.document.versions[0]!.url);
     const missing = await createMappingAttachmentService(options).preview(attachment);
-    expect(missing.status).toBe("blocked"); expect(missing.diagnostics.some(({ code }) => code === "media-capture-blocked")).toBe(true);
+    expect(missing.status).toBe("blocked"); expect(missing.diagnostics.some(({ code }) => code === "asset-capture-blocked")).toBe(true);
   });
   it("flushes its own serialized mutation queue without a workspace save-session callback", async () => {
     const project = loadSampleSiteProject(activeSiteProjectValidationContext);

@@ -7,7 +7,7 @@ import { createComponentCatalog } from "../../../src/composer/model/types";
 import { componentCatalog } from "../../../src/site-project/compiler/__tests__/fixtures";
 import { createLocalSiteProjectStore, type LocalSiteProjectStoreOptions } from "../store";
 import { createSiteProjectApiService } from "../../../src/site-project/api/service";
-import { createFilesystemMediaStore } from "../../../src/media/storage/filesystem";
+import { createFilesystemAssetStore } from "../../../src/assets/storage/filesystem";
 import type { TrustedComponentPack } from "@zudo-composer/component-contract";
 import type { ReleasePlan, SiteProjectApiDependencies, SiteProjectApiService, StagedRelease } from "../../../src/site-project/api/types";
 import { releaseJson } from "../../../src/site-project/api/review";
@@ -23,17 +23,17 @@ export const toolchain = { compiler: "fixture/2", componentPack: { packId: catal
  * rendering — so the runtime half is deliberately absent. */
 export const pack = { manifest: catalog.pack } as unknown as TrustedComponentPack;
 export const PNG = Uint8Array.from([137,80,78,71,13,10,26,10,1,2,3,4]);
-export async function fixture(options: LocalSiteProjectStoreOptions & { media?: boolean } = {}) {
+export async function fixture(options: LocalSiteProjectStoreOptions & { assets?: boolean } = {}) {
   // Resolved, because the host root a store is given is resolved too and macOS
   // `tmpdir()` is a symlink (`/var` -> `/private/var`).
   const parent = await realpath(await mkdtemp(join(tmpdir(), "release-v2-"))); roots.push(parent);
-  const testRoot = join(parent, "release"), mediaRoot = join(parent, "media");
-  const media = options.media ? await createFilesystemMediaStore({ mediaStoreRoot: mediaRoot }) : undefined;
-  const store = createLocalSiteProjectStore({ ...options, testRoot, componentPack: catalog.pack, readMedia: async (pin) => (async function* () { yield new Uint8Array(await readFile(join(mediaRoot, "versions", pin.url.split("/").at(-1)!))); })() });
-  const dependencies: SiteProjectApiDependencies = { componentCatalog: catalog, projectStore: store, buildStore: store, hash: async (text) => sha(text), toolchain, mediaStore: media };
+  const testRoot = join(parent, "release"), assetRoot = join(parent, "assets");
+  const assets = options.assets ? await createFilesystemAssetStore({ assetsStoreRoot: assetRoot }) : undefined;
+  const store = createLocalSiteProjectStore({ ...options, testRoot, componentPack: catalog.pack, readAsset: async (pin) => (async function* () { yield new Uint8Array(await readFile(join(assetRoot, "versions", pin.url.split("/").at(-1)!))); })() });
+  const dependencies: SiteProjectApiDependencies = { componentCatalog: catalog, projectStore: store, buildStore: store, hash: async (text) => sha(text), toolchain, assetStore: assets };
   const service = createSiteProjectApiService(dependencies);
-  return { parent, testRoot, mediaRoot, media, store, dependencies, service };
+  return { parent, testRoot, assetRoot, assets, store, dependencies, service };
 }
 export async function call<T>(service: SiteProjectApiService, operation: string, fields: object = {}): Promise<T> { const result = await service.handle({ protocolVersion: 2, operation, ...fields }); if (!result.ok) throw new Error(releaseJson(result)); return result.result as T; }
 export const review = (service: SiteProjectApiService, project: SiteProject, fields: object = {}) => call<ReleasePlan>(service, "plan", { project, workingPrecondition: null, selection: [], expectedRevision: null, expectedActive: null, ...fields });
-export function stageFor(project: SiteProject): StagedRelease { const revision = sha(serializeSiteProject(project)); const mediaLock = null; return { schemaVersion: 2, projectId: project.id, revision, buildId: sha(releaseJson({ projectRevision: revision, mediaLock, toolchain })), mediaLock, toolchain, planDigest: sha("approval:" + revision), publication: [] }; }
+export function stageFor(project: SiteProject): StagedRelease { const revision = sha(serializeSiteProject(project)); const assetLock = null; return { schemaVersion: 2, projectId: project.id, revision, buildId: sha(releaseJson({ projectRevision: revision, assetLock, toolchain })), assetLock, toolchain, planDigest: sha("approval:" + revision), publication: [] }; }

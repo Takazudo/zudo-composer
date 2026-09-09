@@ -18,11 +18,11 @@ export interface ContentEntryRef extends ContentRecordRef { modelId: RecordId }
  *
  * Content deliberately does not persist a versionId: the current Media head
  * may change while a draft is being edited. The provider-qualified shape is
- * shared structurally with MediaAssetRef so release can add an exact version
+ * shared structurally with AssetAssetRef so release can add an exact version
  * without losing which Media provider owns the asset.
  */
 export type ContentAssetRef = { providerId: string; assetId: string };
-export type ContentMediaUse =
+export type ContentAssetUse =
   | { kind: "image"; asset: ContentAssetRef; alt: string; decorative: boolean; caption: string }
   | { kind: "link"; asset: ContentAssetRef; label: string }
   | { kind: "card"; asset: ContentAssetRef; title: string; description: string };
@@ -34,7 +34,7 @@ export type ContentValueSchema =
   | { kind: "reference-list"; target: ContentRecordRef; ordered: boolean }
   | { kind: "object"; fields: ContentFieldDefinition[] }
   | { kind: "list"; item: ContentValueSchema }
-  | { kind: "media-use"; use: ContentMediaUse["kind"] };
+  | { kind: "media-use"; use: ContentAssetUse["kind"] };
 
 export type ContentFieldDefinition = {
   id: RecordId;

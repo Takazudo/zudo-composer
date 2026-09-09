@@ -7,8 +7,8 @@ import { createSiteProjectApiService } from "../../src/site-project/api/service"
 import type { TrustedComponentPack } from "@zudo-composer/component-contract";
 import type { ResolvedComponentPack } from "../../plugins/component-pack.d.mts";
 import type { SiteProjectApiService, ReleaseToolchain, SiteProjectApiDependencies } from "../../src/site-project/api/types";
-import { createFilesystemMediaStore } from "../../src/media/storage/filesystem";
-import type { VersionedMediaStore } from "../../src/media/library";
+import { createFilesystemAssetStore } from "../../src/assets/storage/filesystem";
+import type { VersionedAssetStore } from "../../src/assets/library";
 import { createLocalSiteProjectStore, type LocalSiteProjectStoreOptions } from "./store";
 import { DEFAULT_SETTINGS } from "../config/settings";
 import { resolveWorkspaceRoot } from "../../plugins/roots.mjs";
@@ -22,35 +22,35 @@ export { resolveLocalReleaseToolchain } from "./toolchain-config";
  * browser cannot render. `packIdentity` is what the release is stamped with,
  * so it is required unless the caller supplies a `toolchain` outright.
  */
-export interface LocalSiteProjectServiceOptions extends LocalSiteProjectStoreOptions { pack: TrustedComponentPack; packIdentity?: ResolvedComponentPack; workspaceRoot?: string; mediaStoreRoot?: string; mediaStore?: VersionedMediaStore; toolchain?: ReleaseToolchain; isWorkingCurrent?: SiteProjectApiDependencies["isWorkingCurrent"]; reconcilePublication?: SiteProjectApiDependencies["reconcilePublication"] }
+export interface LocalSiteProjectServiceOptions extends LocalSiteProjectStoreOptions { pack: TrustedComponentPack; packIdentity?: ResolvedComponentPack; workspaceRoot?: string; assetsStoreRoot?: string; assetStore?: VersionedAssetStore; toolchain?: ReleaseToolchain; isWorkingCurrent?: SiteProjectApiDependencies["isWorkingCurrent"]; reconcilePublication?: SiteProjectApiDependencies["reconcilePublication"] }
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 export function createLocalSiteProjectApiService(options: LocalSiteProjectServiceOptions): SiteProjectApiService {
-  // The host's configured `mediaDir`. Every lane resolves it from the config
+  // The host's configured `assetsDir`. Every lane resolves it from the config
   // and passes it; the default only covers a caller that supplies neither.
-  const mediaRoot = resolve(options.mediaStoreRoot ?? resolve(resolveWorkspaceRoot(options.workspaceRoot), DEFAULT_SETTINGS.mediaDir));
+  const assetRoot = resolve(options.assetsStoreRoot ?? resolve(resolveWorkspaceRoot(options.workspaceRoot), DEFAULT_SETTINGS.assetsDir));
   const catalog = createComponentCatalog(options.pack.manifest);
-  const store = createLocalSiteProjectStore({ ...options, componentPack: catalog.pack, readMedia: options.readMedia ?? (async (pin) => {
-    for (const path of [mediaRoot, join(mediaRoot, "versions")]) { const info = await lstat(path); if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Unsafe pinned Media source directory."); }
-    const root = await realpath(mediaRoot), versions = await realpath(join(mediaRoot, "versions")); if (versions !== join(root, "versions")) throw new Error("Pinned source escaped Media root.");
+  const store = createLocalSiteProjectStore({ ...options, componentPack: catalog.pack, readAsset: options.readAsset ?? (async (pin) => {
+    for (const path of [assetRoot, join(assetRoot, "versions")]) { const info = await lstat(path); if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Unsafe pinned Assets source directory."); }
+    const root = await realpath(assetRoot), versions = await realpath(join(assetRoot, "versions")); if (versions !== join(root, "versions")) throw new Error("Pinned source escaped Assets root.");
     const handle = await open(join(versions, basename(pin.url)), constants.O_RDONLY | constants.O_NOFOLLOW);
-    const stat = await handle.stat(); if (!stat.isFile() || stat.size !== pin.byteLength) { await handle.close(); throw new Error("Pinned Media source is unavailable."); }
+    const stat = await handle.stat(); if (!stat.isFile() || stat.size !== pin.byteLength) { await handle.close(); throw new Error("Pinned Assets source is unavailable."); }
     return (async function* () { try { for await (const chunk of handle.createReadStream({ autoClose: false })) yield new Uint8Array(chunk); } finally { await handle.close(); } })();
   }) });
   const create = async () => {
     const toolchain = await resolveLocalReleaseToolchain(options);
-    let mediaStore = options.mediaStore;
-    if (!mediaStore) { try { await lstat(join(mediaRoot, "catalog.json")); mediaStore = await createFilesystemMediaStore({ mediaStoreRoot: mediaRoot }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } }
-    return createSiteProjectApiService({ componentCatalog: catalog, projectStore: store, buildStore: store, hash: async (text) => sha(text), toolchain, mediaStore, isWorkingCurrent: options.isWorkingCurrent, reconcilePublication: options.reconcilePublication });
+    let assetStore = options.assetStore;
+    if (!assetStore) { try { await lstat(join(assetRoot, "catalog.json")); assetStore = await createFilesystemAssetStore({ assetsStoreRoot: assetRoot }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } }
+    return createSiteProjectApiService({ componentCatalog: catalog, projectStore: store, buildStore: store, hash: async (text) => sha(text), toolchain, assetStore, isWorkingCurrent: options.isWorkingCurrent, reconcilePublication: options.reconcilePublication });
   };
   // The reason is carried, not swallowed. Every failure here used to reach the
   // Review route as one unactionable sentence, so a host wired without its pack
-  // and a host whose Media directory is unreadable were indistinguishable — and
+  // and a host whose Assets directory is unreadable were indistinguishable — and
   // the route reports the message verbatim to whoever has to fix it.
   const handle: SiteProjectApiService["handle"] = async (request) => {
     try { return await (await create()).handle(request); }
     catch (cause) {
       const reason = cause instanceof Error ? cause.message : String(cause);
-      return { ok: false, error: { code: "unavailable", message: `Release toolchain or Media capability is unavailable. ${reason}` } };
+      return { ok: false, error: { code: "unavailable", message: `Release toolchain or Assets capability is unavailable. ${reason}` } };
     }
   };
   return { handle, serialize: async (request) => releaseJson(await handle(request)) };

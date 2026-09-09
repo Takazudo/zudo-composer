@@ -14,8 +14,8 @@ import type { SitemapNode } from "../../sitemapper/model/types";
 import { authoredPath, expandSitemapRoutes } from "../../sitemapper/routes/expand";
 import type { DerivedSitemapRoute, SitemapRouteDiagnostic } from "../../sitemapper/routes/types";
 import { resolveSitemapNavigation, sameSitemapEntry } from "../../sitemapper/routes/navigation";
-import { resolveSiteProjectMedia, resolveCompositionMedia } from "../media/impact";
-import { validateMediaReferenceLock, resolvePinnedMedia, isImmutableMediaUrl } from "../../media/references";
+import { resolveSiteProjectAsset, resolveCompositionAsset } from "../assets/impact";
+import { validateAssetReferenceLock, resolvePinnedAsset, isImmutableAssetUrl } from "../../assets/references";
 import { compareUnicodeCodePoints } from "../model/canonical";
 import { createInMemorySiteProjectAdapters } from "../model/memory";
 import type { SiteProject, SiteProjectRecordRef } from "../model/types";
@@ -239,13 +239,13 @@ export async function compileSiteProject(
   project: SiteProject,
   options: CompileSiteProjectOptions,
 ): Promise<SiteProjectCompilation> {
-  if (options.mediaLock && !validateMediaReferenceLock(options.mediaLock)) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-lock-invalid", message: "The exact-version Media lock is invalid.", path: "$.mediaLock" }] };
-  const media = resolveSiteProjectMedia(project, options.componentCatalog, { lock: options.mediaLock });
-  const mediaMissing = media.index.references.filter(({ ref }) => !options.mediaLock || !resolvePinnedMedia(ref, options.mediaLock));
-  if ((options.policy ?? "release") === "release" && !media.index.complete) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-impact-incomplete", message: "Managed Media inspection is incomplete. " + media.index.advisory.map(({ reason }) => reason).join(" "), path: "$.mediaLock" }] };
-  if ((options.policy ?? "release") === "release" && media.index.advisory.some(({ value }) => value && isImmutableMediaUrl(value))) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "media-lock-required", message: "An immutable Media URL has no verified lock association.", path: "$.mediaLock" }] };
-  if ((options.policy ?? "release") === "release" && mediaMissing.length) return { status: "blocked", routes: [], diagnostics: mediaMissing.map(({ location }) => ({ severity: "blocking", code: "media-lock-required", message: "Required managed Media must be captured in an exact-version lock before release compilation.", path: JSON.stringify(location) })) };
-  project = media.project;
+  if (options.assetLock && !validateAssetReferenceLock(options.assetLock)) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "asset-lock-invalid", message: "The exact-version Assets lock is invalid.", path: "$.assetLock" }] };
+  const assets = resolveSiteProjectAsset(project, options.componentCatalog, { lock: options.assetLock });
+  const assetMissing = assets.index.references.filter(({ ref }) => !options.assetLock || !resolvePinnedAsset(ref, options.assetLock));
+  if ((options.policy ?? "release") === "release" && !assets.index.complete) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "asset-impact-incomplete", message: "Managed Assets inspection is incomplete. " + assets.index.advisory.map(({ reason }) => reason).join(" "), path: "$.assetLock" }] };
+  if ((options.policy ?? "release") === "release" && assets.index.advisory.some(({ value }) => value && isImmutableAssetUrl(value))) return { status: "blocked", routes: [], diagnostics: [{ severity: "blocking", code: "asset-lock-required", message: "An immutable Assets URL has no verified lock association.", path: "$.assetLock" }] };
+  if ((options.policy ?? "release") === "release" && assetMissing.length) return { status: "blocked", routes: [], diagnostics: assetMissing.map(({ location }) => ({ severity: "blocking", code: "asset-lock-required", message: "Required managed Assets must be captured in an exact-version lock before release compilation.", path: JSON.stringify(location) })) };
+  project = assets.project;
   const adapters = createInMemorySiteProjectAdapters(project);
   const snapshot = adapters.project;
   const active = snapshot.activeSitemap;
@@ -508,10 +508,10 @@ export async function compileSiteProject(
     if (!localRecord || !localDocument) continue;
     localDocument = await materializeCollectionAttachments(localRef!, localDocument, { pathname: expanded.pathname, nodeId: node.id });
     if (!localDocument) continue;
-    const resolvedMedia = resolveCompositionMedia(localDocument, options.componentCatalog, { lock: options.mediaLock });
-    const unresolvedMedia = resolvedMedia.index.references.filter(({ ref }) => !options.mediaLock || !resolvePinnedMedia(ref, options.mediaLock));
-    if ((options.policy ?? "release") === "release" && (!resolvedMedia.index.complete || unresolvedMedia.length || resolvedMedia.index.advisory.some(({ value }) => value && isImmutableMediaUrl(value)))) { diagnostics.push({ severity: "blocking", code: "media-lock-required", message: "Materialized Media is incomplete or absent from the exact-version lock.", path: indexed.path, pathname: expanded.pathname, nodeId: node.id }); continue; }
-    localDocument = resolvedMedia.document;
+    const resolvedAsset = resolveCompositionAsset(localDocument, options.componentCatalog, { lock: options.assetLock });
+    const unresolvedAsset = resolvedAsset.index.references.filter(({ ref }) => !options.assetLock || !resolvePinnedAsset(ref, options.assetLock));
+    if ((options.policy ?? "release") === "release" && (!resolvedAsset.index.complete || unresolvedAsset.length || resolvedAsset.index.advisory.some(({ value }) => value && isImmutableAssetUrl(value)))) { diagnostics.push({ severity: "blocking", code: "asset-lock-required", message: "Materialized Assets is incomplete or absent from the exact-version lock.", path: indexed.path, pathname: expanded.pathname, nodeId: node.id }); continue; }
+    localDocument = resolvedAsset.document;
     const providerId = localRef!.providerId;
     const cycle = bindingCycle(providerId, localRef!.recordId, { ...localRecord, document: localDocument }, (ref) => adapters.compositions.catalog.resolve(ref));
     if (cycle) {

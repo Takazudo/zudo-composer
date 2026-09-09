@@ -1,12 +1,12 @@
 import type { JSX } from "preact";
 import { useState } from "preact/hooks";
-import type { MediaSummary } from "../../media";
+import type { AssetSummary } from "../../assets";
 import { FileIcon } from "../../components/icons";
 import type { MediaDimensionStore } from "./media-dimensions";
 import { isMediaImage } from "./media-format";
 
 export interface MediaThumbProps {
-  record: MediaSummary;
+  record: AssetSummary;
   dimensions: MediaDimensionStore;
   /** The larger preview in the detail panel. */
   detail?: boolean;

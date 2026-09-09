@@ -1,11 +1,11 @@
 import type { Plugin } from "vite";
 import type { SiteProject } from "../src/site-project/model/types";
 import type { CompletedRelease } from "../src/site-project/api/types";
-import type { MediaType } from "../src/media/model";
+import type { AssetType } from "../src/assets/model";
 
 export interface SiteProjectSourcePluginOptions {
   readDevRelease?: () => Promise<{ project: SiteProject; release: CompletedRelease } | null>;
-  readDevMedia?: (pathname: string) => Promise<{ bytes: Uint8Array; mediaType: MediaType; identity: CompletedRelease["identity"] } | null>;
+  readDevAsset?: (pathname: string) => Promise<{ bytes: Uint8Array; mimeType: AssetType; identity: CompletedRelease["identity"] } | null>;
   workspaceRoot?: string;
   packIdentity?: import("./component-pack.d.mts").ResolvedComponentPack;
 }

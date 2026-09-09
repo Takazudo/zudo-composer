@@ -38,7 +38,7 @@ async function activatedArtifact(project = sample()): Promise<ActivatedDeliveryA
   return {
     kind: "activated-local",
     identity: { projectId: project.id, revision: revision(project), buildId: sha(`build:${project.id}`) },
-    project, build: compilation.build, completionDigest: sha(`complete:${project.id}`), files, mediaPins: [],
+    project, build: compilation.build, completionDigest: sha(`complete:${project.id}`), files, assetPins: [],
     toolchain: { compiler: "compiler/2", componentPack: { packId, packVersion, contractVersion }, packSpecifier: "@fixture/pack/composer-pack", packSource: "workspace:*", installedPackDigest: "c".repeat(64), contractDigest: "d".repeat(64) },
   };
 }
@@ -59,10 +59,10 @@ describe("SiteDelivery", () => {
   });
   it("captures exact managed Media for visitor output and blocks missing provider or corrupt bytes", async () => {
     const { provider, filesystem } = await providerFixture();
-    const asset = await filesystem.upload({ fileName: "download.png", declaredMediaType: "image/png", bytes: PNG });
+    const asset = await filesystem.upload({ fileName: "download.png", declaredMimeType: "image/png", bytes: PNG });
     const project = sample();
-    project.providers.compositions[0]!.records.find(({ id }) => id === "home-page")!.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-media/asset-${asset.id}`, children: "Download" }, slots: {} });
-    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, createProviders: (await host()).createProviders });
+    project.providers.compositions[0]!.records.find(({ id }) => id === "home-page")!.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-assets/asset-${asset.id}`, children: "Download" }, slots: {} });
+    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), assetProvider: provider, createProviders: (await host()).createProviders });
     const providers = { ...base, captureWorkspace: vi.fn(() => base.captureWorkspace()), getCurrentSiteProject: vi.fn(() => { throw new Error("Must use aggregate project"); }) };
     const result = await loadWorkingPreviewSnapshot(providers);
     expect(result.status).toBe("ready");
@@ -77,12 +77,12 @@ describe("SiteDelivery", () => {
   it.each(["media", "project"])("rejects a changed %s aggregate token rather than recapturing latest", async (domain) => {
     const { provider, filesystem } = await providerFixture();
     const project = sample();
-    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), mediaProvider: provider, createProviders: (await host()).createProviders });
+    const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), assetProvider: provider, createProviders: (await host()).createProviders });
     const capture = vi.fn(() => base.captureWorkspace());
     let checks = 0;
     const providers = { ...base, captureWorkspace: capture, isCaptureCurrent: async (value: Parameters<typeof base.isCaptureCurrent>[0]) => {
       if (++checks === 2) {
-        if (domain === "media") await filesystem.upload({ fileName: "changed.png", declaredMediaType: "image/png", bytes: PNG });
+        if (domain === "media") await filesystem.upload({ fileName: "changed.png", declaredMimeType: "image/png", bytes: PNG });
         else await base.workspace.updateMetadata((await base.workspace.metadata()).mutationToken, { name: "Changed project" });
       }
       return base.isCaptureCurrent(value);

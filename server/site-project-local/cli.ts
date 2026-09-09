@@ -2,7 +2,7 @@
 import { pathToFileURL } from "node:url";
 import { runSiteProjectCli } from "./cli-runner";
 import { createLocalSiteProjectApiService } from "./service";
-import { validateMediaStoreRoot } from "../../plugins/composer-file-provider-plugin.mjs";
+import { validateAssetStoreRoot } from "../../plugins/composer-file-provider-plugin.mjs";
 import { loadComponentPack } from "../../plugins/component-pack.mjs";
 import { loadComposerConfig } from "../config";
 
@@ -18,7 +18,7 @@ try {
     pack,
     packIdentity: identity,
     workspaceRoot: config.workspaceRoot,
-    mediaStoreRoot: validateMediaStoreRoot(process.env.ZUDO_MEDIA_STORE_ROOT) ?? config.paths.media,
+    assetsStoreRoot: validateAssetStoreRoot(process.env.ZUDO_ASSETS_STORE_ROOT) ?? config.paths.assets,
   }), {
     stdin: process.stdin,
     stdout: process.stdout,

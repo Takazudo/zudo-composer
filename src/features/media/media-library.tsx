@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import type { MediaSummary } from "../../media";
+import type { AssetSummary } from "../../assets";
 import { CopyIcon, MarkdownIcon, PreviewIcon, TrashIcon } from "../../components/icons";
 import {
   LibraryNoMatch,
@@ -18,16 +18,16 @@ import {
   type RowMenuProps,
 } from "../../components/library-page";
 import { Button, Checkbox, SegmentedControl, type DataTableColumn } from "../../components/ui";
-import { compareMediaSummariesNewestFirst } from "../../media";
+import { compareAssetSummariesNewestFirst } from "../../assets";
 import type { MediaDimensionStore } from "./media-dimensions";
 import { formatBytes, isMediaImage, mediaCaption, mediaTypeLabel } from "./media-format";
 import { MediaThumb } from "./media-thumb";
 
 export type MediaTypeFilter = "all" | "images" | "pdfs";
 
-export const MEDIA_SORTS: readonly LibrarySort<MediaSummary>[] = [
-  { id: "newest", label: "Newest", compare: compareMediaSummariesNewestFirst },
-  { id: "oldest", label: "Oldest", compare: (a, b) => compareMediaSummariesNewestFirst(b, a) },
+export const MEDIA_SORTS: readonly LibrarySort<AssetSummary>[] = [
+  { id: "newest", label: "Newest", compare: compareAssetSummariesNewestFirst },
+  { id: "oldest", label: "Oldest", compare: (a, b) => compareAssetSummariesNewestFirst(b, a) },
   { id: "name", label: "Name", compare: (a, b) => a.fileName.localeCompare(b.fileName) },
   { id: "size", label: "Size", compare: (a, b) => b.byteLength - a.byteLength },
 ];
@@ -42,7 +42,7 @@ export const MEDIA_SORTS: readonly LibrarySort<MediaSummary>[] = [
  */
 const MEDIA_TYPE_FILTER_ID = "type";
 
-export const MEDIA_TYPE_FACET: LibraryFacet<MediaSummary> = {
+export const MEDIA_TYPE_FACET: LibraryFacet<AssetSummary> = {
   id: MEDIA_TYPE_FILTER_ID,
   label: "Type",
   options: [
@@ -54,25 +54,25 @@ export const MEDIA_TYPE_FACET: LibraryFacet<MediaSummary> = {
 
 export interface MediaLibraryProps {
   /** Every asset in the library, for the filter counts and the pager total. */
-  records: readonly MediaSummary[];
-  query: LibraryQueryController<MediaSummary>;
-  selection: LibrarySelectionController<MediaSummary>;
+  records: readonly AssetSummary[];
+  query: LibraryQueryController<AssetSummary>;
+  selection: LibrarySelectionController<AssetSummary>;
   dimensions: MediaDimensionStore;
   view: LibraryView;
   onViewChange(view: LibraryView): void;
   /** The asset the detail panel is showing. */
   activeId: string | null;
-  onActivate(record: MediaSummary): void;
-  onCopyUrl(record: MediaSummary): void;
-  onCopyMarkdown(record: MediaSummary): void;
-  onDelete(records: readonly MediaSummary[]): void;
+  onActivate(record: AssetSummary): void;
+  onCopyUrl(record: AssetSummary): void;
+  onCopyMarkdown(record: AssetSummary): void;
+  onDelete(records: readonly AssetSummary[]): void;
   /** The bulk bar, supplied by the route so both views show the same one. */
   bulkBar?: JSX.Element | null;
   /** The compact drop strip and its queue, placed under the toolbar. */
   uploadPanel?: JSX.Element | null;
 }
 
-const CONTRACT: LibraryRowContract<MediaSummary> = {
+const CONTRACT: LibraryRowContract<AssetSummary> = {
   id: (row) => row.id,
   name: (row) => row.fileName,
   // No `kind` accessor: the media type is a column of its own here rather than
@@ -103,12 +103,12 @@ export function MediaLibrary({
   const filter = query.facetValue(MEDIA_TYPE_FILTER_ID) as MediaTypeFilter;
   const totalBytes = records.reduce((sum, record) => sum + record.byteLength, 0);
 
-  const columns: readonly DataTableColumn<MediaSummary>[] = [
-    { key: "type", header: "Type", variant: "muted", cell: (row) => mediaTypeLabel(row.mediaType) },
+  const columns: readonly DataTableColumn<AssetSummary>[] = [
+    { key: "type", header: "Type", variant: "muted", cell: (row) => mediaTypeLabel(row.mimeType) },
     { key: "size", header: "Size", variant: "num", cell: (row) => formatBytes(row.byteLength) },
   ];
 
-  const rowMenu = (row: MediaSummary) => ({
+  const rowMenu = (row: AssetSummary) => ({
     label: row.fileName,
     open: { id: "details", label: "Show details", icon: PreviewIcon, onSelect: () => onActivate(row) },
     actions: [
@@ -185,7 +185,7 @@ export function MediaLibrary({
       )}
 
       <LibraryPagination
-        summary={`${query.rows.length} of ${records.length} assets · ${formatBytes(totalBytes)} · /uploaded-media/`}
+        summary={`${query.rows.length} of ${records.length} assets · ${formatBytes(totalBytes)} · /uploaded-assets/`}
       />
     </div>
   );
@@ -201,7 +201,7 @@ function TypeSegment({ label, count }: { label: string; count: number }): JSX.El
 }
 
 interface MediaTileProps {
-  record: MediaSummary;
+  record: AssetSummary;
   dimensions: MediaDimensionStore;
   active: boolean;
   selected: boolean;

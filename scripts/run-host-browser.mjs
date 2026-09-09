@@ -66,8 +66,8 @@ function run(command, args, { input, ...options } = {}) {
 /** @param {string} parent */
 function createHostFixture(parent) {
   const hostRoot = join(parent, "host");
-  for (const directory of ["node_modules", "styles", "public/uploaded-media",
-    "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/media"]) {
+  for (const directory of ["node_modules", "styles", "public/uploaded-assets",
+    "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/assets"]) {
     mkdirSync(join(hostRoot, directory), { recursive: true });
   }
   symlinkSync(root, join(hostRoot, "node_modules/zudo-composer"), "dir");

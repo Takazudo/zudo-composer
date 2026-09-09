@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "mutationToken": "325dd9c33d6a053378207157ad2ef1e531b6539f0d4e8575efc2fa644ac21e0b",
+  "records": [
+    {
+      "id": "assets-b9033527-b1cc-42ad-9f58-5b7075acc23b",
+      "revision": 1,
+      "createdAt": "2026-09-09T17:30:17.409Z",
+      "updatedAt": "2026-09-09T17:30:17.409Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-b9033527-b1cc-42ad-9f58-5b7075acc23b",
+        "fileName": "demo-sunrise.png",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "c62b425177a0c01dba4bd49fec9b57efe0bce6632eeb5963d3cf1a66c60a62c6",
+        "versions": [
+          {
+            "id": "c62b425177a0c01dba4bd49fec9b57efe0bce6632eeb5963d3cf1a66c60a62c6",
+            "checksum": "c62b425177a0c01dba4bd49fec9b57efe0bce6632eeb5963d3cf1a66c60a62c6",
+            "mimeType": "image/png",
+            "byteLength": 5353,
+            "url": "/uploaded-assets/sha256-c62b425177a0c01dba4bd49fec9b57efe0bce6632eeb5963d3cf1a66c60a62c6.png",
+            "createdAt": "2026-09-09T17:30:17.409Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-6e4bc8d0-4f77-4aa1-8029-567f0f4fa258",
+      "revision": 1,
+      "createdAt": "2026-09-09T17:30:17.450Z",
+      "updatedAt": "2026-09-09T17:30:17.450Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-6e4bc8d0-4f77-4aa1-8029-567f0f4fa258",
+        "fileName": "demo-lagoon.png",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "f4f1c312c4eb572a0963f70fad3252160fd9307a0837ddcaf7eecde8b152c6e8",
+        "versions": [
+          {
+            "id": "f4f1c312c4eb572a0963f70fad3252160fd9307a0837ddcaf7eecde8b152c6e8",
+            "checksum": "f4f1c312c4eb572a0963f70fad3252160fd9307a0837ddcaf7eecde8b152c6e8",
+            "mimeType": "image/png",
+            "byteLength": 4424,
+            "url": "/uploaded-assets/sha256-f4f1c312c4eb572a0963f70fad3252160fd9307a0837ddcaf7eecde8b152c6e8.png",
+            "createdAt": "2026-09-09T17:30:17.450Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-cd976eb2-8870-488f-ad85-fee4ef5c3e06",
+      "revision": 1,
+      "createdAt": "2026-09-09T17:30:17.491Z",
+      "updatedAt": "2026-09-09T17:30:17.491Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-cd976eb2-8870-488f-ad85-fee4ef5c3e06",
+        "fileName": "demo-orchard.png",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "f66cc2af6c35ef2970a9e1f7e7980b7ed7fc7eea30afdcefc797420edd44f8d8",
+        "versions": [
+          {
+            "id": "f66cc2af6c35ef2970a9e1f7e7980b7ed7fc7eea30afdcefc797420edd44f8d8",
+            "checksum": "f66cc2af6c35ef2970a9e1f7e7980b7ed7fc7eea30afdcefc797420edd44f8d8",
+            "mimeType": "image/png",
+            "byteLength": 6333,
+            "url": "/uploaded-assets/sha256-f66cc2af6c35ef2970a9e1f7e7980b7ed7fc7eea30afdcefc797420edd44f8d8.png",
+            "createdAt": "2026-09-09T17:30:17.491Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-8c852f06-0fef-4d2d-8757-dec57ed42057",
+      "revision": 1,
+      "createdAt": "2026-09-09T17:30:17.537Z",
+      "updatedAt": "2026-09-09T17:30:17.537Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-8c852f06-0fef-4d2d-8757-dec57ed42057",
+        "fileName": "demo-twilight.png",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "849da52a0b7f631df48cacfeb1417e7067993aea5deffda87b5c2dd67c6aabda",
+        "versions": [
+          {
+            "id": "849da52a0b7f631df48cacfeb1417e7067993aea5deffda87b5c2dd67c6aabda",
+            "checksum": "849da52a0b7f631df48cacfeb1417e7067993aea5deffda87b5c2dd67c6aabda",
+            "mimeType": "image/png",
+            "byteLength": 5380,
+            "url": "/uploaded-assets/sha256-849da52a0b7f631df48cacfeb1417e7067993aea5deffda87b5c2dd67c6aabda.png",
+            "createdAt": "2026-09-09T17:30:17.537Z"
+          }
+        ]
+      }
+    }
+  ],
+  "folders": []
+}

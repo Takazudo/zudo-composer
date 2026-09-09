@@ -1,8 +1,8 @@
 import type { JsonValue } from "@zudo-composer/component-contract";
 import type { ComponentCatalog } from "../../composer/model/types";
 import type { ContentPublicationSelection, ContentPublicationReconciliation } from "../../content";
-import type { VersionedMediaStore } from "../../media/library";
-import type { MediaReferenceLock } from "../../media/references";
+import type { VersionedAssetStore } from "../../assets/library";
+import type { AssetReferenceLock } from "../../assets/references";
 import type { SiteBuildPlan, SiteProjectCompiler } from "../compiler/types";
 import type { SiteProject } from "../model/types";
 
@@ -27,14 +27,14 @@ export interface ReleaseToolchain {
 }
 export interface ReleaseChange { domain: string; providerId: string; recordId: string; kind: "added" | "changed" | "removed" }
 export interface ReleaseCheck { severity: "blocking" | "info"; code: string; message: string; path: string }
-export interface ReleaseAffected { kind: "route" | "record" | "media"; identity: string; reason: string }
+export interface ReleaseAffected { kind: "route" | "record" | "assets"; identity: string; reason: string }
 export interface ReleasePlan {
   schemaVersion: 2; workingProject: SiteProject; workingPrecondition: JsonValue; candidate: SiteProject;
   selection: ContentPublicationSelection[]; expectedRevision: string | null; expectedActive: SiteProjectActiveSelection | null; storeGeneration: number;
-  projectRevision: string; buildId: string; mediaLock: MediaReferenceLock | null; toolchain: ReleaseToolchain;
+  projectRevision: string; buildId: string; assetLock: AssetReferenceLock | null; toolchain: ReleaseToolchain;
   changes: ReleaseChange[]; checks: ReleaseCheck[]; affected: ReleaseAffected[]; publication: ContentPublicationReconciliation[]; planDigest: string;
 }
-export interface StagedRelease { schemaVersion: 2; projectId: string; revision: string; buildId: string; mediaLock: MediaReferenceLock | null; toolchain: ReleaseToolchain; planDigest: string; publication: ContentPublicationReconciliation[] }
+export interface StagedRelease { schemaVersion: 2; projectId: string; revision: string; buildId: string; assetLock: AssetReferenceLock | null; toolchain: ReleaseToolchain; planDigest: string; publication: ContentPublicationReconciliation[] }
 export interface StoredSiteProject { project: SiteProject; revision: string }
 export interface CompletedRelease { identity: SiteProjectActiveSelection; completionDigest: string; files: Record<string, string>; build: SiteBuildPlan; stage: StagedRelease }
 export interface SiteProjectListEntry { projectId: string; name: string; revisions: readonly string[]; head: string; stages: readonly string[] }
@@ -56,7 +56,7 @@ export interface SiteProjectBuildAdapter {
 export interface SiteProjectApiDependencies {
   componentCatalog: ComponentCatalog; projectStore: SiteProjectStoreAdapter; buildStore: SiteProjectBuildAdapter;
   toolchain: ReleaseToolchain; hash(text: string): Promise<string>;
-  mediaStore?: VersionedMediaStore; compiler?: SiteProjectCompiler;
+  assetStore?: VersionedAssetStore; compiler?: SiteProjectCompiler;
   /** Browser workspace adapter verifies its coherent captured generation before staging. */
   isWorkingCurrent?(project: SiteProject, precondition: JsonValue): Promise<boolean>;
   /** Owning adapter matches working generation AND digest, never overwriting newer edits. */

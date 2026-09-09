@@ -1,4 +1,4 @@
-import type { MediaSummary } from "../../media";
+import type { AssetSummary } from "../../assets";
 
 /** Byte sizes read as the file manager writes them: B, then one KB/MB step. */
 export function formatBytes(bytes: number): string {
@@ -8,12 +8,12 @@ export function formatBytes(bytes: number): string {
 }
 
 /** `image/jpeg` reads as JPEG; the one non-image type reads as PDF. */
-export function mediaTypeLabel(mediaType: string): string {
-  return mediaType === "application/pdf" ? "PDF" : mediaType.slice(mediaType.indexOf("/") + 1).toUpperCase();
+export function mediaTypeLabel(mimeType: string): string {
+  return mimeType === "application/pdf" ? "PDF" : mimeType.slice(mimeType.indexOf("/") + 1).toUpperCase();
 }
 
-export function isMediaImage(record: Pick<MediaSummary, "mediaType">): boolean {
-  return record.mediaType.startsWith("image/");
+export function isMediaImage(record: Pick<AssetSummary, "mimeType">): boolean {
+  return record.mimeType.startsWith("image/");
 }
 
 /** Pixel dimensions, present only for an image whose bytes the browser decoded. */
@@ -31,7 +31,7 @@ export function formatPixelSize(size: MediaPixelSize): string {
  * then the stored byte size. A PDF never reports dimensions, and an image that
  * has not finished decoding shows its size alone rather than a placeholder.
  */
-export function mediaCaption(record: MediaSummary, size: MediaPixelSize | undefined): string {
+export function mediaCaption(record: AssetSummary, size: MediaPixelSize | undefined): string {
   const bytes = formatBytes(record.byteLength);
   return size ? `${formatPixelSize(size)} · ${bytes}` : bytes;
 }

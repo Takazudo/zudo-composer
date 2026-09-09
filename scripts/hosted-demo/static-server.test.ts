@@ -28,7 +28,7 @@ it("serves artifact MIME types and SPA routes while keeping missing uploads 404"
       expect(Buffer.from(await image.arrayBuffer())).toEqual(await readFile(join(root, "assets/pixel.png")));
 
       expect((await fetch(`${hosted.url}/missing.js`, { headers: { accept: "text/html" } })).status).toBe(404);
-      expect((await fetch(`${hosted.url}/uploaded-media/missing.png`, { headers: { accept: "text/html" } })).status).toBe(404);
+      expect((await fetch(`${hosted.url}/uploaded-assets/missing.png`, { headers: { accept: "text/html" } })).status).toBe(404);
       expect((await fetch(`${hosted.url}/composer`, { method: "HEAD", headers: { accept: "text/html" } })).status).toBe(200);
       expect((await fetch(`${hosted.url}/composer`, { method: "POST" })).status).toBe(405);
     } finally {

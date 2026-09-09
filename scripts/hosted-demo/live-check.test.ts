@@ -14,14 +14,14 @@ const BEACON = `<script type="module" src="https://static.cloudflareinsights.com
 async function writeArtifact() {
   const root = await mkdtemp(join(tmpdir(), "hosted-live-check-"));
   await mkdir(join(root, "assets"), { recursive: true });
-  await mkdir(join(root, "uploaded-media"), { recursive: true });
+  await mkdir(join(root, "uploaded-assets"), { recursive: true });
   const files = new Map<string, Buffer>([
     ["index.html", Buffer.from("<!doctype html><html><body>live</body></html>\n")],
-    ["hosted-demo-media-worker.js", Buffer.from("export default {};\n")],
+    ["hosted-demo-assets-worker.js", Buffer.from("export default {};\n")],
     ["assets/preview-entry-test.js", Buffer.from("export const preview = true;\n")],
   ]);
   for (const content of [Buffer.from("one"), Buffer.from("two"), Buffer.from("three"), Buffer.from("four")]) {
-    files.set(`uploaded-media/sha256-${createHash("sha256").update(content).digest("hex")}.png`, content);
+    files.set(`uploaded-assets/sha256-${createHash("sha256").update(content).digest("hex")}.png`, content);
   }
   const assets = Object.fromEntries([...files].map(([path, content]) => [path, createHash("sha256").update(content).digest("hex")]));
   await Promise.all([...files].map(([path, content]) => writeFile(join(root, path), content)));
@@ -78,7 +78,7 @@ describe("hosted demo live verification", () => {
     expect(proof.assets).toHaveLength(7);
     const routeRequest = mock.requests.find(({ path }) => path === "/composer");
     expect(routeRequest?.init?.headers).toEqual({ accept: "text/html", "sec-fetch-mode": "navigate" });
-    const assetRequest = mock.requests.find(({ path }) => path.startsWith("/uploaded-media/"));
+    const assetRequest = mock.requests.find(({ path }) => path.startsWith("/uploaded-assets/"));
     expect(assetRequest?.init?.headers).toEqual({});
     expect(mock.requests.every(({ url }) => url.searchParams.get("hosted-demo-revision") === SOURCE_REVISION)).toBe(true);
   });
@@ -114,7 +114,7 @@ describe("hosted demo live verification", () => {
       expectedSourceRevision: SOURCE_REVISION,
       fetchImpl: mockFetch(fixture, { staleManifest: true }).fetchImpl,
     })).rejects.toThrow(/manifest does not match/);
-    const assetPath = [...fixture.files.keys()].find((path) => path.startsWith("uploaded-media/"))!;
+    const assetPath = [...fixture.files.keys()].find((path) => path.startsWith("uploaded-assets/"))!;
     await expect(verifyLiveDeployment({
       baseUrl: "https://demo.example.test",
       artifactDirectory: fixture.root,

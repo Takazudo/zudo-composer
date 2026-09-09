@@ -8,14 +8,14 @@ import { validateSiteProject } from "../../site-project";
 import { activeSiteProjectValidationContext } from "../../app/site-project-manifest";
 import sample from "../sample-project.json";
 import { createDemoWorkspaceProviders } from "../workspaces";
-import { createDemoMedia } from "../media";
-import { prepareDemoMedia } from "../../../scripts/hosted-demo/prepare";
+import { createDemoAsset } from "../assets";
+import { prepareDemoAsset } from "../../../scripts/hosted-demo/prepare";
 Object.defineProperty(globalThis, "crypto", { value: webcrypto, configurable: true });
 const validated = validateSiteProject(sample, activeSiteProjectValidationContext);
 if (!validated.ok) throw new Error("Demo sample invalid");
 const project = validated.project;
-async function media() { const seed = await prepareDemoMedia(resolve("cms/media")); return createDemoMedia({ snapshot: seed.snapshot, bytes: Object.fromEntries(seed.files.map((f) => [f.fileName.match(/sha256-([a-f0-9]+)/)![1]!, f.source])) }); }
-async function integration() { return createProductionProviderIntegration({ project, sourceRevision: await computeSiteProjectRevision(project), createProviders: createDemoWorkspaceProviders(), mediaProvider: (await media()).provider }); }
+async function assets() { const seed = await prepareDemoAsset(resolve("cms/assets")); return createDemoAsset({ snapshot: seed.snapshot, bytes: Object.fromEntries(seed.files.map((f) => [f.fileName.match(/sha256-([a-f0-9]+)/)![1]!, f.source])) }); }
+async function integration() { return createProductionProviderIntegration({ project, sourceRevision: await computeSiteProjectRevision(project), createProviders: createDemoWorkspaceProviders(), assetProvider: (await assets()).provider }); }
 describe("disposable hosted runtime", () => {
   it("initializes all real domain contracts, captures coherently and isolates/reset realms", async () => {
     const a = await integration(); const b = await integration();
@@ -33,30 +33,30 @@ describe("disposable hosted runtime", () => {
     await expect(a.contentProvider.store.transact({ expectedMutationToken: content.mutationToken, operations: [] })).rejects.toMatchObject({ code: "conflict" });
     expect((await a.captureWorkspace()).status).toBe("ready");
   });
-  it("serves exact bytes and validates media CAS, cloning, folders, replacement history and handoff", async () => {
-    const a = await media(); const before = await a.provider.store.snapshot(); expect(before.records).toHaveLength(4);
+  it("serves exact bytes and validates assets CAS, cloning, folders, replacement history and handoff", async () => {
+    const a = await assets(); const before = await a.provider.store.snapshot(); expect(before.records).toHaveLength(4);
     const first = before.records[0]!; const version = first.document.versions[0]!;
-    expect(a.readUrl(version.url)?.bytes).toEqual(new Uint8Array(await readFile(resolve("cms/media/versions", version.url.split("/").at(-1)!))));
+    expect(a.readUrl(version.url)?.bytes).toEqual(new Uint8Array(await readFile(resolve("cms/assets/versions", version.url.split("/").at(-1)!))));
     const changed = await a.provider.store.updateMetadata(first.id, { note: "Edited" }, { expectedRevision: first.revision });
     await expect(a.provider.store.trash(first.id, { expectedRevision: first.revision })).rejects.toMatchObject({ code: "conflict" });
-    const trash = await a.provider.store.trash(first.id, { expectedRevision: changed.revision }); expect(a.readUrl(`/uploaded-media/asset-${first.id}`)).toBeNull(); expect(await a.provider.store.resolveVersion({ providerId: "media-files", assetId: first.id, versionId: version.id })).toMatchObject({ checksum: version.checksum });
+    const trash = await a.provider.store.trash(first.id, { expectedRevision: changed.revision }); expect(a.readUrl(`/uploaded-assets/asset-${first.id}`)).toBeNull(); expect(await a.provider.store.resolveVersion({ providerId: "asset-files", assetId: first.id, versionId: version.id })).toMatchObject({ checksum: version.checksum });
     await a.provider.store.restore(first.id, { expectedRevision: trash.revision });
     const snapshot = await a.provider.store.snapshot(); snapshot.records[0]!.document.note = "mutation leak"; expect((await a.provider.store.snapshot()).records[0]!.document.note).toBe("Edited");
-    const handoff = await createDemoMedia(a.exportSeed()); expect(await handoff.provider.store.snapshot()).toEqual(await a.provider.store.snapshot());
-    const b = await media(); expect((await b.provider.store.snapshot()).records[0]!.document.note).not.toBe("Edited");
+    const handoff = await createDemoAsset(a.exportSeed()); expect(await handoff.provider.store.snapshot()).toEqual(await a.provider.store.snapshot());
+    const b = await assets(); expect((await b.provider.store.snapshot()).records[0]!.document.note).not.toBe("Edited");
   });
   it("uses separate Git and canonical project revision domains", async () => { expect(await computeSiteProjectRevision(project)).toMatch(/^[a-f0-9]{64}$/); });
 });
 
 it("uploads new bytes, preserves old versions and enforces folder graph/CAS", async () => {
-  const a = await media(); const b = await media();
+  const a = await assets(); const b = await assets();
   const seed = a.exportSeed(); const original = Object.values(seed.bytes)[0]!;
   const bytes = new Uint8Array([...original, 1]);
   const file = { name: "new-demo.png", type: "image/png", arrayBuffer: async () => bytes.buffer } as unknown as Blob & { name: string };
   const uploaded = await a.provider.store.upload(file);
   const url = uploaded.document.versions[0]!.url;
   expect(a.readUrl(url)?.bytes).toEqual(bytes); expect(b.readUrl(url)).toBeNull();
-  const handoff = await createDemoMedia(a.exportSeed()); expect(handoff.readUrl(url)?.bytes).toEqual(bytes);
+  const handoff = await createDemoAsset(a.exportSeed()); expect(handoff.readUrl(url)?.bytes).toEqual(bytes);
   const folder = await a.provider.store.createFolder({ name: "Images", parentId: null }, await a.provider.store.mutationToken());
   const moved = await a.provider.store.updateMetadata(uploaded.id, { folderId: folder.id }, { expectedRevision: uploaded.revision });
   await expect(a.provider.store.trashFolder(folder.id, { expectedRevision: folder.revision })).rejects.toMatchObject({ code: "validation" });

@@ -25,6 +25,6 @@ export default defineConfig({
     url: "http://127.0.0.1:4174",
     reuseExistingServer: false,
     timeout: 30_000,
-    env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: localRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot, ZUDO_DATA_ROOT: dataRoot },
+    env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: localRoot, ZUDO_ASSETS_STORE_ROOT: mediaRoot, ZUDO_DATA_ROOT: dataRoot },
   },
 });

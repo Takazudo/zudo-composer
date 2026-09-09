@@ -1,5 +1,5 @@
 import type { JsonValue } from "@zudo-composer/component-contract";
-import type { ContentEntryRecord, ContentFieldDefinition, ContentFieldKind, ContentMediaUse, ContentModelRecord, ContentRecordRef, ContentValueSchema } from "./types";
+import type { ContentEntryRecord, ContentFieldDefinition, ContentFieldKind, ContentAssetUse, ContentModelRecord, ContentRecordRef, ContentValueSchema } from "./types";
 
 export interface ContentValueLocation {
   field: ContentFieldDefinition;
@@ -46,7 +46,7 @@ export function traverseContentSchema(fields: readonly ContentFieldDefinition[])
 }
 
 /** The resolver supplies an asset URL; no asset notes or mutable metadata become presentation. */
-export function projectContentMediaUse(use: ContentMediaUse, url: string): Record<string, JsonValue> {
+export function projectContentMediaUse(use: ContentAssetUse, url: string): Record<string, JsonValue> {
   switch (use.kind) {
     case "image": return { src: url, alt: use.decorative ? "" : use.alt, decorative: use.decorative, caption: use.caption };
     case "link": return { href: url, label: use.label };

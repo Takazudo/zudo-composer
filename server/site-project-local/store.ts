@@ -8,8 +8,8 @@ import { releaseJson, sameRelease } from "../../src/site-project/api/review";
 import { serializeSiteProject } from "../../src/site-project/model/canonical";
 import { validateSiteProject } from "../../src/site-project/model/validation";
 import { validateStagedRelease } from "../../src/site-project/api/validation";
-import { sniffMedia } from "../../src/media/storage/filesystem";
-import type { MediaVersionPin } from "../../src/media/model";
+import { sniffAsset } from "../../src/assets/storage/filesystem";
+import type { AssetVersionPin } from "../../src/assets/model";
 import type { SiteProject } from "../../src/site-project/model";
 import type { SiteBuildPlan } from "../../src/site-project/compiler";
 import { isSafeRecordId } from "../../src/shared/record-identity";
@@ -37,7 +37,7 @@ export interface LocalSiteProjectStoreOptions {
   workspaceRoot?: string;
   testRoot?: string; lockTimeoutMs?: number; fault?(point: string): void | Promise<void>;
   componentPack?: ComponentPackManifest;
-  readMedia?(pin: MediaVersionPin): Promise<AsyncIterable<Uint8Array>>;
+  readAsset?(pin: AssetVersionPin): Promise<AsyncIterable<Uint8Array>>;
 }
 function validActive(value: unknown): value is SiteProjectActiveSelection {
   const item = value as SiteProjectActiveSelection;
@@ -45,7 +45,7 @@ function validActive(value: unknown): value is SiteProjectActiveSelection {
 }
 function validStage(value: unknown): value is StagedRelease {
   const stage = value as StagedRelease;
-  return validateStagedRelease(stage) && stage.buildId === hash(releaseJson({ projectRevision: stage.revision, mediaLock: stage.mediaLock, toolchain: stage.toolchain }));
+  return validateStagedRelease(stage) && stage.buildId === hash(releaseJson({ projectRevision: stage.revision, assetLock: stage.assetLock, toolchain: stage.toolchain }));
 }
 
 /** Clean v2 layout: immutable revisions/stages/builds, one independently atomic active pointer. */
@@ -183,7 +183,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     for (const entry of await readdir(join(this.root, "stages"), { withFileTypes: true })) if (!entry.isFile() || entry.isSymbolicLink() || (!/^[a-f0-9]{64}\.json$/.test(entry.name) && !temporary(entry.name))) throw new Error("Unknown staged release file.");
     for (const domain of ["projects", "builds"]) for (const entry of await readdir(join(this.root, domain), { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.isSymbolicLink() || (domain === "projects" ? !isSafeRecordId(entry.name) : !SHA.test(entry.name))) throw new Error("Unknown immutable release directory.");
-      for (const file of await readdir(join(this.root, domain, entry.name), { withFileTypes: true })) if (!file.isFile() || file.isSymbolicLink() || (!temporary(file.name) && !(domain === "projects" ? /^[a-f0-9]{64}\.json$/ : /^(?:build\.json|stage\.json|complete\.json|module-\d{4,8}\.mjs|media-sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/).test(file.name))) throw new Error("Unknown immutable release file.");
+      for (const file of await readdir(join(this.root, domain, entry.name), { withFileTypes: true })) if (!file.isFile() || file.isSymbolicLink() || (!temporary(file.name) && !(domain === "projects" ? /^[a-f0-9]{64}\.json$/ : /^(?:build\.json|stage\.json|complete\.json|module-\d{4,8}\.mjs|asset-sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/).test(file.name))) throw new Error("Unknown immutable release file.");
     }
   }
   private async heads(): Promise<Heads> {
@@ -236,7 +236,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     const directory = join(this.root, "builds", buildId), marker = join(directory, "complete.json"); if (!await exists(marker)) return undefined;
     const complete = await this.json(marker) as { schemaVersion: number; identity: SiteProjectActiveSelection; files: Record<string, string>; completionDigest: string };
     if (!complete || Object.keys(complete).sort().join(",") !== "completionDigest,files,identity,schemaVersion" || complete.schemaVersion !== 2 || !sameRelease(complete.identity, { projectId, revision: stage.revision, buildId }) || complete.completionDigest !== hash(releaseJson({ identity: complete.identity, files: complete.files }))) throw new Error("Invalid completion marker.");
-    const expected = ["build.json", "stage.json", ...Object.keys(complete.files).filter((name) => /^(?:module-\d{4,8}\.mjs|media-sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/.test(name))].sort();
+    const expected = ["build.json", "stage.json", ...Object.keys(complete.files).filter((name) => /^(?:module-\d{4,8}\.mjs|asset-sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/.test(name))].sort();
     if (Object.keys(complete.files).sort().join() !== expected.join()) throw new Error("Invalid completed output manifest.");
     const entries = (await readdir(directory)).filter((name) => !name.startsWith(".release-tmp-")).sort();
     if (entries.join() !== [...expected, "complete.json"].sort().join()) throw new Error("Completed build is partial or has unknown files.");
@@ -244,7 +244,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     if (releaseJson(await this.json(join(directory, "stage.json"))) !== releaseJson(stage)) throw new Error("Completed stage identity differs.");
     const build = await this.json(join(directory, "build.json")) as SiteBuildPlan;
     if (build.projectId !== projectId) throw new Error("Completed build project differs.");
-    for (const pin of stage.mediaLock?.pins ?? []) if (complete.files[`media-${basename(pin.url)}`] !== pin.checksum) throw new Error("Completed build omits pinned Media bytes.");
+    for (const pin of stage.assetLock?.pins ?? []) if (complete.files[`asset-${basename(pin.url)}`] !== pin.checksum) throw new Error("Completed build omits pinned Assets bytes.");
     await syncDirectory(directory);
     return { ...complete, build, stage };
   }
@@ -294,19 +294,19 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       return { status: "ok" as const, value: { project: stored.project, release } };
     }); } catch (error) { return unavailable(error); }
   }
-  async readActiveMedia(pathname: string): Promise<SiteProjectAdapterReadResult<{ bytes: Uint8Array; mediaType: MediaVersionPin["mediaType"]; identity: SiteProjectActiveSelection }>> {
+  async readActiveAsset(pathname: string): Promise<SiteProjectAdapterReadResult<{ bytes: Uint8Array; mimeType: AssetVersionPin["mimeType"]; identity: SiteProjectActiveSelection }>> {
     try { return await this.lock(async () => {
-      if (!/^\/uploaded-media\/sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf)$/.test(pathname)) return { status: "not-found" as const };
+      if (!/^\/uploaded-assets\/sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf)$/.test(pathname)) return { status: "not-found" as const };
       const active = await this.active(); if (!active) return { status: "not-found" as const };
       const release = await this.completed(active.projectId, active.buildId);
       if (!release || !sameRelease(active, release.identity)) throw new Error("Active completed build is missing or inconsistent.");
-      const pins = release.stage.mediaLock?.pins.filter((candidate) => candidate.url === pathname) ?? [];
+      const pins = release.stage.assetLock?.pins.filter((candidate) => candidate.url === pathname) ?? [];
       if (pins.length !== 1) return { status: "not-found" as const };
-      const pin = pins[0]!, name = `media-${basename(pin.url)}`;
-      if (release.files[name] !== pin.checksum) throw new Error("Active pinned Media manifest is inconsistent.");
+      const pin = pins[0]!, name = `asset-${basename(pin.url)}`;
+      if (release.files[name] !== pin.checksum) throw new Error("Active pinned Assets manifest is inconsistent.");
       const bytes = await this.read(join(this.root, "builds", active.buildId, name));
-      if (bytes.byteLength !== pin.byteLength || hash(bytes) !== pin.checksum || sniffMedia(bytes.subarray(0, 16))?.mediaType !== pin.mediaType) throw new Error("Active pinned Media bytes failed integrity verification.");
-      return { status: "ok" as const, value: { bytes: new Uint8Array(bytes), mediaType: pin.mediaType, identity: { ...active } } };
+      if (bytes.byteLength !== pin.byteLength || hash(bytes) !== pin.checksum || sniffAsset(bytes.subarray(0, 16))?.mimeType !== pin.mimeType) throw new Error("Active pinned Assets bytes failed integrity verification.");
+      return { status: "ok" as const, value: { bytes: new Uint8Array(bytes), mimeType: pin.mimeType, identity: { ...active } } };
     }); } catch (error) { return unavailable(error); }
   }
   async apply(input: Parameters<SiteProjectStoreAdapter["apply"]>[0]): ReturnType<SiteProjectStoreAdapter["apply"]> {
@@ -385,20 +385,20 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       const outputs = new Map<string, string | Uint8Array>([["build.json", releaseJson(build)], ["stage.json", releaseJson(stage)]]);
       build.modules.forEach((module, index) => outputs.set(`module-${String(index).padStart(4, "0")}.mjs`, module.code));
       const fileDigests = new Map([...outputs].map(([name, bytes]) => [name, hash(bytes)]));
-      for (const pin of stage.mediaLock?.pins ?? []) {
-        const name = `media-${basename(pin.url)}`; if (fileDigests.has(name)) continue;
+      for (const pin of stage.assetLock?.pins ?? []) {
+        const name = `asset-${basename(pin.url)}`; if (fileDigests.has(name)) continue;
         const destination = join(directory, name);
         if (await exists(destination)) {
           await this.file(destination);
-          const info = await lstat(destination); if (info.size !== pin.byteLength || info.size > 25 * 1024 * 1024) throw new Error("Existing pinned Media size differs.");
+          const info = await lstat(destination); if (info.size !== pin.byteLength || info.size > 25 * 1024 * 1024) throw new Error("Existing pinned Assets size differs.");
           const bytes = await this.read(destination);
-          if (hash(bytes) !== pin.checksum || sniffMedia(bytes.subarray(0, 16))?.mediaType !== pin.mediaType) throw new Error("Existing pinned Media integrity differs.");
+          if (hash(bytes) !== pin.checksum || sniffAsset(bytes.subarray(0, 16))?.mimeType !== pin.mimeType) throw new Error("Existing pinned Assets integrity differs.");
           await syncDirectory(directory); fileDigests.set(name, pin.checksum); continue;
         }
-        if (!this.options.readMedia) throw new Error("Exact Media byte reader unavailable.");
+        if (!this.options.readAsset) throw new Error("Exact Assets byte reader unavailable.");
         const parts: Uint8Array[] = []; let length = 0; const checksum = createHash("sha256");
-        for await (const chunk of await this.options.readMedia(pin)) { length += chunk.byteLength; if (length > pin.byteLength || length > 25 * 1024 * 1024) throw new Error("Pinned Media byte size exceeded."); checksum.update(chunk); parts.push(chunk); }
-        const bytes = Buffer.concat(parts); if (length !== pin.byteLength || checksum.digest("hex") !== pin.checksum || sniffMedia(bytes.subarray(0, 16))?.mediaType !== pin.mediaType) throw new Error("Pinned Media integrity failure.");
+        for await (const chunk of await this.options.readAsset(pin)) { length += chunk.byteLength; if (length > pin.byteLength || length > 25 * 1024 * 1024) throw new Error("Pinned Assets byte size exceeded."); checksum.update(chunk); parts.push(chunk); }
+        const bytes = Buffer.concat(parts); if (length !== pin.byteLength || checksum.digest("hex") !== pin.checksum || sniffAsset(bytes.subarray(0, 16))?.mimeType !== pin.mimeType) throw new Error("Pinned Assets integrity failure.");
         await this.write(join(directory, name), bytes, true); fileDigests.set(name, pin.checksum);
       }
       const expected = [...fileDigests.keys(), "complete.json"].sort();

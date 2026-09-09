@@ -50,8 +50,8 @@ describe("generic structured Content authoring", () => {
     ] }, { id: "cards", timestamp: stamp });
     const entry = createContentEntryRecord("cards", {}, { id: "card", timestamp: stamp });
     const provider = createMemoryContentProvider({ models: [model], entries: [entry] });
-    const mediaProvider = { descriptor: { id: "media-files", label: "Files" }, store: { list: async () => [{ id: "hero-image", fileName: "hero.png", state: "active" as const }] } };
-    const controller = createContentAuthoringController(provider, { mediaProvider });
+    const assetProvider = { descriptor: { id: "asset-files", label: "Files" }, store: { list: async () => [{ id: "hero-image", fileName: "hero.png", state: "active" as const }] } };
+    const controller = createContentAuthoringController(provider, { assetProvider });
     await controller.initialize(); await controller.openModel("cards"); await controller.openEntry("card");
     render(<Harness controller={controller} />);
 
@@ -80,10 +80,10 @@ describe("generic structured Content authoring", () => {
     const entry = createContentEntryRecord("cards", {}, { id: "card", timestamp: stamp });
     const controller = createContentAuthoringController(createMemoryContentProvider({ models: [model], entries: [entry] }));
     await controller.initialize(); await controller.openModel("cards"); await controller.openEntry("card");
-    render(<ContentEntryAuthor state={controller.state} controller={controller} run={run} renderMediaPicker={({ onSelect }) => <div role="dialog" aria-label="Media picker"><button onClick={() => onSelect({ kind: "image", asset: { providerId: "media-files", assetId: "hero" }, alt: "", decorative: false, caption: "" })}>Choose hero</button></div>} />);
+    render(<ContentEntryAuthor state={controller.state} controller={controller} run={run} renderMediaPicker={({ onSelect }) => <div role="dialog" aria-label="Media picker"><button onClick={() => onSelect({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "", decorative: false, caption: "" })}>Choose hero</button></div>} />);
     fireEvent.click(screen.getByRole("button", { name: "Choose from Media" }));
     fireEvent.click(screen.getByRole("button", { name: "Choose hero" }));
-    expect(controller.state.entry?.values.hero).toMatchObject({ kind: "image", asset: { providerId: "media-files", assetId: "hero" } });
+    expect(controller.state.entry?.values.hero).toMatchObject({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" } });
   });
 
   it("edits ordered choice options structurally without a delimiter codec", async () => {

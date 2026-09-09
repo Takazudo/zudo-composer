@@ -38,7 +38,7 @@ function acceptsHtml(request) {
 function isSpaNavigation(pathname, request) {
   // Unknown immutable uploads must stay 404 even if a browser sends a broad
   // Accept header. Asset URLs with a suffix are also never HTML fallbacks.
-  return acceptsHtml(request) && !pathname.startsWith("/uploaded-media/") && !extname(pathname);
+  return acceptsHtml(request) && !pathname.startsWith("/uploaded-assets/") && !extname(pathname);
 }
 
 /**

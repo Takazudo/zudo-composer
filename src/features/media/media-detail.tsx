@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import type { MediaSummary } from "../../media";
+import type { AssetSummary } from "../../assets";
 import { FolderIcon, TrashIcon } from "../../components/icons";
 import { formatLibraryTimestamp, formatLibraryTimestampFull, toLibraryDate } from "../../components/library-page";
 import { Button, EmptyState, Field, Input, Pane, PaneBody, PaneHeader } from "../../components/ui";
@@ -9,11 +9,11 @@ import { formatBytes, formatPixelSize, isMediaImage, mediaTypeLabel } from "./me
 import { MediaThumb } from "./media-thumb";
 
 export interface MediaDetailPanelProps {
-  record: MediaSummary | null;
+  record: AssetSummary | null;
   dimensions: MediaDimensionStore;
-  onCopyUrl(record: MediaSummary): void;
-  onCopyMarkdown(record: MediaSummary): void;
-  onDelete(record: MediaSummary): void;
+  onCopyUrl(record: AssetSummary): void;
+  onCopyMarkdown(record: AssetSummary): void;
+  onDelete(record: AssetSummary): void;
 }
 
 /**
@@ -56,7 +56,7 @@ function MediaDetail({
   onCopyUrl,
   onCopyMarkdown,
   onDelete,
-}: MediaDetailPanelProps & { record: MediaSummary }): JSX.Element {
+}: MediaDetailPanelProps & { record: AssetSummary }): JSX.Element {
   const size = isMediaImage(record) ? dimensions.get(record.id) : undefined;
   const added = toLibraryDate(record.createdAt);
   const url = mediaUrl(record);
@@ -71,7 +71,7 @@ function MediaDetail({
       <dl class="sg-media-detail__facts">
         <div>
           <dt>Type</dt>
-          <dd>{mediaTypeLabel(record.mediaType)}</dd>
+          <dd>{mediaTypeLabel(record.mimeType)}</dd>
         </div>
         {size ? (
           <div>

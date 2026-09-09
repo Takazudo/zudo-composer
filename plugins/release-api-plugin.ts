@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isIP } from "node:net";
-import { validateMediaStoreRoot } from "./composer-file-provider-plugin.mjs";
+import { validateAssetStoreRoot } from "./composer-file-provider-plugin.mjs";
 import { appModuleId } from "./roots.mjs";
 import { COMPONENT_PACK_ID } from "./component-pack-plugin.mjs";
 import type { ResolvedComponentPack } from "./component-pack.d.mts";
@@ -25,8 +25,8 @@ export function trustedReleaseRequest(req: Pick<IncomingMessage, "headers" | "so
   try { const url = new URL(`${https ? "https" : "http"}://${host}`); return url.host === host && origin === url.origin && Number(url.port || (https ? 443 : 80)) === req.socket.localPort; } catch { return false; }
 }
 /** Serve-only loopback operator capability; no secret is emitted in build mode. */
-export default function releaseApiPlugin(options: { mediaStoreRoot?: string; workspaceRoot?: string; packIdentity?: ResolvedComponentPack } = {}): Plugin {
-  const mediaStoreRoot = validateMediaStoreRoot(options.mediaStoreRoot);
+export default function releaseApiPlugin(options: { assetsStoreRoot?: string; workspaceRoot?: string; packIdentity?: ResolvedComponentPack } = {}): Plugin {
+  const assetsStoreRoot = validateAssetStoreRoot(options.assetsStoreRoot);
   let serving = false;
   const capability = nonce();
   return {
@@ -48,7 +48,7 @@ export default function releaseApiPlugin(options: { mediaStoreRoot?: string; wor
         pack: packModule.componentPack,
         packIdentity: options.packIdentity,
         workspaceRoot: options.workspaceRoot,
-        mediaStoreRoot,
+        assetsStoreRoot,
         isWorkingCurrent: async (project: unknown, precondition: unknown) => (await contexts.getStore()?.ask({ kind: "current", project, precondition })) === true,
         reconcilePublication: async (active: unknown, changes: unknown, activationGeneration: number) => { const result = await contexts.getStore()?.ask({ kind: "reconcile", active, changes, activationGeneration }); return result === "applied" || result === "changed" ? result : "unavailable"; },
       }));

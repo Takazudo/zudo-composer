@@ -25,7 +25,7 @@ describe("server-side validation follows the configured pack", () => {
     const service = createLocalSiteProjectApiService({
       pack,
       testRoot: context.testRoot,
-      mediaStoreRoot: context.mediaRoot,
+      assetsStoreRoot: context.assetRoot,
       toolchain: { ...toolchain, componentPack: { packId: pack.manifest.packId, packVersion: pack.manifest.packVersion, contractVersion: pack.manifest.contractVersion } },
     });
     const mismatched = await service.handle({ protocolVersion: 2, operation: "plan", project: value, workingPrecondition: null, selection: [], expectedRevision: null, expectedActive: null });

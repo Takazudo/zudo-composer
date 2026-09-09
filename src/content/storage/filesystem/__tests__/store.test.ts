@@ -101,7 +101,7 @@ describe("Rich Content transactions on the filesystem", () => {
     await store.putModel(schema);
 
     const saved = entry("a");
-    saved.values.details = { choices: ["a", "a"], image: { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, alt: "A", decorative: false, caption: "B" } };
+    saved.values.details = { choices: ["a", "a"], image: { kind: "image", asset: { providerId: "asset-files", assetId: "asset" }, alt: "A", decorative: false, caption: "B" } };
     await store.putEntry(saved);
 
     const snapshot = await store.readAll();

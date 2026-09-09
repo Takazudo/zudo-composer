@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { encodeContentValuePath } from "../../app/route-intents";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, TrashIcon, WarningIcon } from "../../components/icons";
 import { Button, Checkbox, Field, Input, Select, Switch, Textarea } from "../../components/ui";
-import type { ContentEntryRef, ContentFieldDefinition, ContentMediaUse, ContentValueSchema } from "../../content";
+import type { ContentEntryRef, ContentFieldDefinition, ContentAssetUse, ContentValueSchema } from "../../content";
 import type { ContentAuthoringController } from "./controller";
 
 type ContentAuthorRun = (action: () => void | Promise<void>) => void;
-export type ContentMediaPickerRenderer = (request: { kind: "image" | "link" | "card"; onSelect(use: ContentMediaUse): void; onClose(): void }) => ComponentChildren;
+export type ContentMediaPickerRenderer = (request: { kind: "image" | "link" | "card"; onSelect(use: ContentAssetUse): void; onClose(): void }) => ComponentChildren;
 
 const text = (value: JsonValue | undefined) => typeof value === "string" || typeof value === "number" ? String(value) : "";
 
@@ -35,8 +35,8 @@ function MediaUseControl({ schema, value, controller, renderMediaPicker, commit 
   const [assets, setAssets] = useState<Awaited<ReturnType<ContentAuthoringController["mediaAssets"]>>>([]), [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   useEffect(() => { if (renderMediaPicker) return; let live = true; void controller.mediaAssets().then((items) => { if (live) setAssets(items); }, (cause: unknown) => { if (live) setError(cause instanceof Error ? cause.message : "Media unavailable."); }); return () => { live = false; }; }, [controller, renderMediaPicker]);
-  const use = value && typeof value === "object" && !Array.isArray(value) ? value as unknown as ContentMediaUse : null;
-  const make = (assetId: string): ContentMediaUse | undefined => { const asset = assets.find((item) => item.assetId === assetId); if (!asset) return undefined; const ref = { providerId: asset.providerId, assetId: asset.assetId }; return schema.use === "image" ? { kind: "image", asset: ref, alt: "", decorative: false, caption: "" } : schema.use === "link" ? { kind: "link", asset: ref, label: asset.label } : { kind: "card", asset: ref, title: asset.label, description: "" }; };
+  const use = value && typeof value === "object" && !Array.isArray(value) ? value as unknown as ContentAssetUse : null;
+  const make = (assetId: string): ContentAssetUse | undefined => { const asset = assets.find((item) => item.assetId === assetId); if (!asset) return undefined; const ref = { providerId: asset.providerId, assetId: asset.assetId }; return schema.use === "image" ? { kind: "image", asset: ref, alt: "", decorative: false, caption: "" } : schema.use === "link" ? { kind: "link", asset: ref, label: asset.label } : { kind: "card", asset: ref, title: asset.label, description: "" }; };
   const update = (patch: object) => use && commit({ ...use, ...patch } as unknown as JsonValue);
   return <div class="sg-content-media-use">{renderMediaPicker ? <Button onClick={() => setPickerOpen(true)}>{use ? "Replace from Media" : "Choose from Media"}</Button> : <Select aria-label="Media asset" value={use?.asset.assetId ?? ""} onChange={(event) => commit(make(event.currentTarget.value) as unknown as JsonValue)}><option value="">No asset selected</option>{assets.map((asset) => <option key={asset.assetId} value={asset.assetId}>{asset.label}</option>)}{use && !assets.some((asset) => asset.assetId === use.asset.assetId) ? <option value={use.asset.assetId}>Unavailable asset · {use.asset.assetId}</option> : null}</Select>}{pickerOpen && renderMediaPicker ? renderMediaPicker({ kind: schema.use, onSelect: (next) => { commit(next as unknown as JsonValue); setPickerOpen(false); }, onClose: () => setPickerOpen(false) }) : null}{error && !renderMediaPicker ? <p class="sg-content-field-error"><WarningIcon size="xs" />{error}</p> : null}{use?.kind === "image" ? <><Switch label="Decorative image" checked={use.decorative} onCheckedChange={(decorative) => update({ decorative, ...(decorative ? { alt: "" } : {}) })} /><Input aria-label="Alternative text" disabled={use.decorative} value={use.alt} onInput={(event) => update({ alt: event.currentTarget.value })} /><Input aria-label="Caption" value={use.caption} onInput={(event) => update({ caption: event.currentTarget.value })} /></> : use?.kind === "link" ? <Input aria-label="Link label" value={use.label} onInput={(event) => update({ label: event.currentTarget.value })} /> : use?.kind === "card" ? <><Input aria-label="Card title" value={use.title} onInput={(event) => update({ title: event.currentTarget.value })} /><Textarea aria-label="Card description" value={use.description} onInput={(event) => update({ description: event.currentTarget.value })} /></> : null}</div>;
 }

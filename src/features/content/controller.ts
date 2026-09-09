@@ -81,7 +81,7 @@ export class ContentAuthoringController {
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
   private readonly providers: readonly ContentProvider[];
-  private readonly mediaProvider?: ContentMediaCatalogSource;
+  private readonly assetProvider?: ContentMediaCatalogSource;
   private readonly loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]>;
   private baselineEntry: ContentEntryRecord | null = null;
   private baselineAvailable = false;
@@ -100,11 +100,11 @@ export class ContentAuthoringController {
   /** Invalidates an in-flight completeness sweep when the library reloads under it. */
   private scanGeneration = 0;
 
-  constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; mediaProvider?: ContentMediaCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> } = {}) {
+  constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; assetProvider?: ContentMediaCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> } = {}) {
     this.idFactory = options.idFactory ?? createUuidIdFactory();
     this.now = options.now ?? (() => new Date().toISOString());
     this.providers = [...new Map([provider, ...(options.providers ?? [])].map((candidate) => [candidate.store.provider.id, candidate])).values()];
-    this.mediaProvider = options.mediaProvider;
+    this.assetProvider = options.assetProvider;
     this.loadActivatedBaseline = options.loadActivatedBaseline;
     this.current = { ...initialState, providerId: provider.descriptor.id, providerLabel: provider.descriptor.label };
   }
@@ -431,9 +431,9 @@ export class ContentAuthoringController {
   }
 
   async mediaAssets(): Promise<{ providerId: string; assetId: string; label: string }[]> {
-    if (!this.mediaProvider) throw new Error("The Media provider is unavailable. Open Media after connecting a provider.");
-    const assets = await this.mediaProvider.store.list();
-    return assets.filter((asset) => asset.state === "active").map((asset) => ({ providerId: this.mediaProvider!.descriptor.id, assetId: asset.id, label: asset.fileName }));
+    if (!this.assetProvider) throw new Error("The Media provider is unavailable. Open Media after connecting a provider.");
+    const assets = await this.assetProvider.store.list();
+    return assets.filter((asset) => asset.state === "active").map((asset) => ({ providerId: this.assetProvider!.descriptor.id, assetId: asset.id, label: asset.fileName }));
   }
 
   async applyInverse(inverseId: string, selectedOwnerIds: readonly string[]): Promise<void> {
@@ -888,7 +888,7 @@ function shiftCount(counts: Readonly<Record<string, number>>, modelId: string, d
   return { ...counts, [modelId]: Math.max(0, (counts[modelId] ?? 0) + delta) };
 }
 
-export function createContentAuthoringController(provider: ContentProvider, options?: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; mediaProvider?: ContentMediaCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> }): ContentAuthoringController {
+export function createContentAuthoringController(provider: ContentProvider, options?: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; assetProvider?: ContentMediaCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> }): ContentAuthoringController {
   return new ContentAuthoringController(provider, options);
 }
 

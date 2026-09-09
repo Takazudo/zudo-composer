@@ -13,7 +13,7 @@ import { SITEMAP_FILE_PROVIDER_DOMAIN } from "../sitemapper/storage/file-provide
 import { WORKSPACE_FILE_PROVIDER_DOMAIN } from "./workspace-storage";
 
 /** Media is not workspace scoped, and not every listener wants it. */
-export const MEDIA_PERSISTENCE_CHANNEL = "media";
+export const ASSET_PERSISTENCE_CHANNEL = "assets";
 
 /** The workspace registry plus the four authoring domains. */
 export const AUTHORING_PERSISTENCE_CHANNELS: readonly string[] = Object.freeze([
