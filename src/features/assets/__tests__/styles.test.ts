@@ -51,4 +51,11 @@ describe("Asset styling contract", () => {
     expect(css.slice(css.indexOf("@media (pointer: coarse)"))).toContain("min-height: 44px");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
   });
+
+  it("gives the embedded image editor a full-width flex slot", () => {
+    const editorSlot = css.slice(css.indexOf(".sg-assets-image-editor-dialog > div > :nth-child(2) > :only-child"));
+    expect(editorSlot).toContain("flex: 1 1 auto");
+    expect(editorSlot).toContain("min-inline-size: 0");
+    expect(editorSlot).toContain("inline-size: 100%");
+  });
 });

@@ -15,6 +15,7 @@ import { useAssetDimensions, type AssetDimensionStore } from "./assets-dimension
 import { formatBytes, assetTypeLabel } from "./assets-format";
 import { AssetUploadPanel, useAssetUpload } from "./assets-upload";
 import { AssetUsePicker } from "./assets-use-picker";
+import { ImageEditorDialog } from "./image-editor-dialog";
 
 export interface AssetRouteContentProps {
   provider?: AssetProvider;
@@ -28,6 +29,8 @@ type Scope = "all" | "trash" | { folderId: string | null };
 type Action = { kind: "folder"; folder?: AssetFolder; parentId: string | null; index: number; token: string; session?: OutlineInsertSession }
   | { kind: "move" | "trash"; records: readonly AssetSummary[] }
   | { kind: "preview"; record: AssetSummary } | { kind: "use"; record: AssetSummary };
+const EDITABLE_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const isEditableImage = (record: Pick<AssetSummary, "mimeType">): boolean => EDITABLE_IMAGE_MIMES.has(record.mimeType);
 function assetFolderPath(folders: readonly AssetFolder[], id: string | null): readonly string[] {
   try { return resolveFolderPath(folders, id); } catch { return ["Folder unavailable"]; }
 }
@@ -46,6 +49,7 @@ function ConnectedAsset({ provider, controller: supplied, controllerOptions, con
   const [search, setSearch] = useState(""); const [type, setType] = useState("all"); const [sort, setSort] = useState("name");
   const [view, setView] = useState<"grid" | "list">(() => { try { return localStorage.getItem("zudo-composer.assets.view") === "list" ? "list" : "grid"; } catch { return "grid"; } });
   const [action, setAction] = useState<Action | null>(null);
+  const [editorRecord, setEditorRecord] = useState<AssetSummary | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const dimensions = useAssetDimensions();
   const replaceInput = useRef<HTMLInputElement>(null); const replaceTarget = useRef<AssetSummary | null>(null);
@@ -119,12 +123,29 @@ function ConnectedAsset({ provider, controller: supplied, controllerOptions, con
   const nodes = folderTree(null);
   const newFolder = () => { if (!state.snapshot) return; open({ kind: "folder", parentId: folderId, index: activeFolders.filter((folder) => folder.parentId === folderId).length, token: state.snapshot.mutationToken }); };
   const replace = (record: AssetSummary) => { replaceTarget.current = record; replaceInput.current?.click(); };
-  const recordMenu = (record: AssetSummary) => <RowMenu label={record.fileName} open={{ id: "inspect", label: "Inspect", onSelect: () => setActiveId(record.id) }} actions={record.state === "trash" ? [{ id: "restore", label: "Restore", disabled: !controller.capability("restore") || state.busy, onSelect: () => run(() => controller.restore([record])) }] : [
-    { id: "move", label: "Move to…", disabled: !writable || state.busy, onSelect: () => open({ kind: "move", records: [record] }) },
-    { id: "replace", label: "Replace file…", disabled: !controller.capability("replace") || state.busy, onSelect: () => replace(record) },
-    { id: "copy", label: "Copy authoring URL", onSelect: () => run(() => controller.copyUrl(record)) },
-    { id: "copy-markdown", label: "Copy Markdown", onSelect: () => run(() => controller.copyMarkdown(record)) },
-  ]} destructive={record.state === "active" ? [{ id: "trash", label: "Move to trash…", disabled: !controller.capability("trash") || state.busy, onSelect: () => open({ kind: "trash", records: [record] }) }] : []} />;
+  const openEditor = (record: AssetSummary) => {
+    if (record.state !== "active" || !isEditableImage(record) || !controller.capability("replace") || state.phase !== "ready" || state.uncertain || state.busy) return;
+    // AssetSummary is a detached, flat snapshot. Capture it at the opening
+    // gesture so a later refresh cannot silently move the editor to another
+    // immutable version or revision.
+    setEditorRecord({ ...record });
+  };
+  const recordMenu = (record: AssetSummary) => {
+    const imageAction = record.mimeType.startsWith("image/") ? {
+      id: "edit-image",
+      label: record.mimeType === "image/gif" ? "Edit image… (GIF editing is not supported yet)" : "Edit image…",
+      disabled: record.mimeType === "image/gif" || !isEditableImage(record) || !controller.capability("replace") || state.phase !== "ready" || state.uncertain || state.busy,
+      onSelect: () => openEditor(record),
+    } : null;
+    const actions = record.state === "trash" ? [{ id: "restore", label: "Restore", disabled: !controller.capability("restore") || state.busy, onSelect: () => run(() => controller.restore([record])) }] : [
+      { id: "move", label: "Move to…", disabled: !writable || state.busy, onSelect: () => open({ kind: "move", records: [record] }) },
+      { id: "replace", label: "Replace file…", disabled: !controller.capability("replace") || state.busy, onSelect: () => replace(record) },
+      ...(imageAction ? [imageAction] : []),
+      { id: "copy", label: "Copy authoring URL", onSelect: () => run(() => controller.copyUrl(record)) },
+      { id: "copy-markdown", label: "Copy Markdown", onSelect: () => run(() => controller.copyMarkdown(record)) },
+    ];
+    return <RowMenu label={record.fileName} open={{ id: "inspect", label: "Inspect", onSelect: () => setActiveId(record.id) }} actions={actions} destructive={record.state === "active" ? [{ id: "trash", label: "Move to trash…", disabled: !controller.capability("trash") || state.busy, onSelect: () => open({ kind: "trash", records: [record] }) }] : []} />;
+  };
   return <LibraryPage class="sg-assets-route" title="Assets" icon={FolderIcon} purpose="Organize reusable files, inspect their uses, and connect them to content." primaryAction={<Button variant="primary" disabled={!canUpload || state.busy || upload.state.busy} onClick={upload.openPicker}><UploadIcon size="sm" /> Upload</Button>} actions={<Button disabled={!writable || state.busy} onClick={newFolder}>New folder</Button>}>
     {!controller.store ? <Banner tone="info">This provider is read-only. Folder editing, uploads, replacement and trash are unavailable.</Banner> : null}
     {intentError ? <Banner tone="err" action={<Button disabled={state.busy} onClick={() => run(async () => { await controller.reload(); setIntentRetry((value) => value + 1); })}>Retry asset link</Button>}>{intentError}</Banner> : null}
@@ -151,16 +172,30 @@ function ConnectedAsset({ provider, controller: supplied, controllerOptions, con
           {state.phase === "loading" ? <p role="status">Loading assets…</p> : rows.length === 0 ? <p class="sg-assets-empty">{search || type !== "all" ? "No assets match these filters." : scope === "trash" ? "Trash is empty." : "No assets in this location. Upload a file to get started."}</p> : view === "grid" ? <div class="sg-assets-grid">{rows.map((record) => <article key={record.id} class={`sg-assets-tile${selected.has(record.id) ? " sg-assets-tile--selected" : ""}`}><div class="sg-assets-tile-tools"><Checkbox aria-label={`Select ${record.fileName}`} checked={selected.has(record.id)} onCheckedChange={(checked) => toggle(record.id, checked)} />{recordMenu(record)}</div><button class="sg-assets-tile-open" aria-label={`Inspect ${record.fileName}`} onClick={() => { setActiveId(record.id); setSelected(new Set([record.id])); }}><span class="sg-assets-tile-art"><AssetThumb record={record} dimensions={dimensions} /></span><strong>{record.fileName}</strong><small>{assetTypeLabel(record.mimeType)} · {formatBytes(record.byteLength)}</small><small>{assetFolderPath(folders, record.folderId).join(" / ") || "Unfiled"}</small></button></article>)}</div> : <DataTable<AssetSummary> caption="Assets" rows={rows} rowKey={(record) => record.id} columns={[{ key: "name", header: "Name", cell: (record) => <Button variant="ghost" onClick={() => setActiveId(record.id)}>{record.fileName}</Button> }, { key: "type", header: "Type", cell: (record) => assetTypeLabel(record.mimeType) }, { key: "size", header: "Size", cell: (record) => formatBytes(record.byteLength) }, { key: "actions", header: "Actions", cell: recordMenu }]} selection={{ selectedIds: selected, onToggleRow: toggle, onToggleAll: (checked) => setSelected(checked ? new Set(rows.map(({ id }) => id)) : new Set()), rowLabel: (record) => record.fileName }} />}
         </div><footer class="sg-assets-library-footer">{rows.length} visible · {state.records.length} in library <Button size="sm" disabled={state.busy} onClick={() => run(() => controller.reload())}>Refresh</Button></footer>
       </section>
-      <AssetInspector previewUrl={provider.previewUrl} key={active?.id ?? "empty"} record={active} controller={controller} dimensions={dimensions} usageHref={usageHref} onClose={() => setActiveId(null)} onPreview={(record) => open({ kind: "preview", record })} onUse={(record) => open({ kind: "use", record })} onMove={(record) => open({ kind: "move", records: [record] })} onReplace={replace} onTrash={(record) => open({ kind: "trash", records: [record] })} run={run} />
+      <AssetInspector previewUrl={provider.previewUrl} key={active?.id ?? "empty"} record={active} controller={controller} dimensions={dimensions} usageHref={usageHref} onClose={() => setActiveId(null)} onPreview={(record) => open({ kind: "preview", record })} onUse={(record) => open({ kind: "use", record })} onMove={(record) => open({ kind: "move", records: [record] })} onReplace={replace} onEdit={openEditor} onTrash={(record) => open({ kind: "trash", records: [record] })} run={run} />
     </div>
     <input ref={replaceInput} class="sg-assets-upload__input" aria-label="Replacement file" type="file" accept={ASSET_ACCEPT} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; const target = replaceTarget.current; if (file && target) run(() => controller.replace(target, file)); }} />
     {action ? <AssetActionDialog previewUrl={provider.previewUrl} action={action} controller={controller} folders={folders} error={dialogError} close={close} run={run} usageHref={usageHref} /> : null}
+    {editorRecord ? <ImageEditorDialog
+      key={`${editorRecord.id}:${editorRecord.revision}:${editorRecord.versionId}`}
+      record={editorRecord}
+      dimensions={dimensions}
+      previewUrl={provider.previewUrl}
+      canSaveCopy={controller.canSaveEditedImageCopy()}
+      onSave={(blob, mode) => controller.saveEditedImage(editorRecord, blob, { mode })}
+      onSaved={(saved) => {
+        const id = saved?.id ?? editorRecord.id;
+        setActiveId(id);
+        setSelected(new Set([id]));
+      }}
+      onClose={() => { setEditorRecord(null); setDialogError(null); }}
+    /> : null}
   </LibraryPage>;
 }
 
-function AssetInspector({ previewUrl, record, controller, dimensions, usageHref, onClose, onPreview, onUse, onMove, onReplace, onTrash, run }: {
+function AssetInspector({ previewUrl, record, controller, dimensions, usageHref, onClose, onPreview, onUse, onMove, onReplace, onEdit, onTrash, run }: {
   previewUrl?: (url: string) => string; record: AssetSummary | null; controller: AssetLibraryController; dimensions: AssetDimensionStore; usageHref?: (location: AssetContentLocation) => string;
-  onClose(): void; onPreview(record: AssetSummary): void; onUse(record: AssetSummary): void; onMove(record: AssetSummary): void; onReplace(record: AssetSummary): void; onTrash(record: AssetSummary): void; run(task: () => Promise<unknown>): void;
+  onClose(): void; onPreview(record: AssetSummary): void; onUse(record: AssetSummary): void; onMove(record: AssetSummary): void; onReplace(record: AssetSummary): void; onEdit(record: AssetSummary): void; onTrash(record: AssetSummary): void; run(task: () => Promise<unknown>): void;
 }) {
   const [name, setName] = useState(record?.fileName ?? ""); const [note, setNote] = useState(record?.note ?? "");
   const [draftBase, setDraftBase] = useState(record);
@@ -174,7 +209,45 @@ function AssetInspector({ previewUrl, record, controller, dimensions, usageHref,
   if (!record) return <aside class="sg-assets-inspector" aria-label="Asset details"><header><strong>Asset details</strong></header><p class="sg-assets-empty">Select an asset to inspect its file, metadata and Content uses.</p></aside>;
   const writable = controller.capability("metadata") && record.state === "active" && !controller.state.busy;
   const full = controller.state.snapshot?.records.find(({ id }) => id === record.id);
-  return <aside class="sg-assets-inspector" aria-label="Asset details"><header><strong>Asset details</strong><Button size="sm" onClick={onClose}>Close</Button></header><button class="sg-assets-inspector-preview" onClick={() => onPreview(record)} aria-label={`Preview ${record.fileName}`}><AssetThumb detail record={record} dimensions={dimensions} /></button><div class="sg-assets-inspector-body"><h2>{record.fileName}</h2><p>{assetTypeLabel(record.mimeType)} · {formatBytes(record.byteLength)} · Revision {record.revision}</p><div class="sg-assets-actions"><Button variant="primary" disabled={!controller.contentServices || controller.state.phase !== "ready" || controller.state.uncertain || controller.state.busy || record.state !== "active"} onClick={() => onUse(record)}>Use in content</Button><Button onClick={() => onPreview(record)}>Preview</Button></div><p class="sg-assets-kicker">Location & identity</p><code>{record.id}</code><p>{assetFolderPath(controller.state.snapshot?.folders ?? [], record.folderId).join(" / ") || "Unfiled"}</p><div class="sg-assets-actions"><Button size="sm" onClick={() => run(() => controller.copy(record.id))}>Copy ID</Button><Button size="sm" onClick={() => run(() => controller.copyUrl(record))}>Copy authoring URL</Button><Button size="sm" onClick={() => run(() => controller.copyMarkdown(record))}>Copy Markdown</Button><Button size="sm" disabled={!writable} onClick={() => onMove(record)}>Move</Button></div><Field label="Asset name"><Input value={name} disabled={!writable} onInput={(event) => { setName(event.currentTarget.value); controller.draftMetadata(draftBase ?? record, { fileName: event.currentTarget.value }); }} /></Field><Field label="Internal note" help="A library note, not alternative text for a Content usage."><Textarea value={note} disabled={!writable} onInput={(event) => { setNote(event.currentTarget.value); controller.draftMetadata(draftBase ?? record, { note: event.currentTarget.value }); }} /></Field><Button disabled={!writable} onClick={() => run(async () => { controller.draftMetadata(draftBase ?? record, { fileName: name, note }); await controller.saveDraft(record.id); })}>Save details</Button>{draftBase && draftBase.revision !== record.revision && controller.hasDraft(record.id) ? <Banner tone="warn">This asset changed since editing began. Your text is retained; discard it to load current details before reapplying.</Banner> : null}<Button size="sm" disabled={controller.state.busy || controller.state.uncertain || !controller.hasDraft(record.id)} onClick={() => { controller.discardDraft(record.id); setName(record.fileName); setNote(record.note); setDraftBase(record); }}>Discard unsaved details</Button><section><p class="sg-assets-kicker">Used by</p>{!scan ? <p role="status">Checking structured Content uses…</p> : <><p>{scan.message}</p>{scan.locations.map((location, index) => <div class="sg-assets-usage" key={index}>{usageHref ? <a href={usageHref(location)}>{location.entryTitle}</a> : <strong>{location.entryTitle}</strong>}<small>{location.modelName} · {location.fieldLabel} · {location.valuePath.join(" / ")}</small><small>{location.use.kind === "image" ? location.use.alt || "Decorative image" : location.use.kind === "link" ? location.use.label : location.use.title}</small></div>)}{scan.additionalLocations?.map(({ location, href }, i) => <div class="sg-assets-usage" key={`impact-${i}`}>{href ? <a href={href}>{location.domain} / {location.sourceRecordId ?? location.recordId}</a> : <strong>{location.recordId}</strong>}<small>{location.fieldId ?? location.nodeId} · {location.property} · {location.pathname}</small></div>)}</>}</section><section><p class="sg-assets-kicker">Immutable versions</p>{full?.document.versions.map((version) => <p key={version.id}><a href={previewUrl?.(version.url) ?? version.url} target="_blank" rel="noreferrer">{version.id.slice(0, 12)}</a> · {version.id === full.document.currentVersionId ? "Latest" : "Historical pin"} · {formatBytes(version.byteLength)}</p>)}</section><div class="sg-assets-actions">{record.state === "trash" ? <Button disabled={!controller.capability("restore") || controller.state.busy} onClick={() => run(() => controller.restore([record]))}>Restore asset</Button> : <><Button disabled={!controller.capability("replace") || controller.state.busy} onClick={() => onReplace(record)}>Replace file</Button><Button disabled={!controller.capability("trash") || controller.state.busy} onClick={() => onTrash(record)}>Trash…</Button></>}</div></div></aside>;
+  const editorDisabled = record.state !== "active" || !isEditableImage(record) || !controller.capability("replace") || controller.state.phase !== "ready" || controller.state.uncertain || controller.state.busy;
+  const gifHelpId = "sg-assets-gif-edit-help-" + record.id;
+  const editAction = record.mimeType.startsWith("image/") ? <>
+    <Button disabled={editorDisabled} title={record.mimeType === "image/gif" ? "GIF editing is not supported yet" : undefined} aria-describedby={record.mimeType === "image/gif" ? gifHelpId : undefined} onClick={() => onEdit(record)}>Edit image…</Button>
+    {record.mimeType === "image/gif" ? <span id={gifHelpId} class="sg-assets-visually-hidden">GIF editing is not supported yet</span> : null}
+  </> : null;
+  return <aside class="sg-assets-inspector" aria-label="Asset details">
+    <header><strong>Asset details</strong><Button size="sm" onClick={onClose}>Close</Button></header>
+    <button class="sg-assets-inspector-preview" onClick={() => onPreview(record)} aria-label={"Preview " + record.fileName}><AssetThumb detail record={record} dimensions={dimensions} /></button>
+    <div class="sg-assets-inspector-body">
+      <h2>{record.fileName}</h2>
+      <p>{assetTypeLabel(record.mimeType)} · {formatBytes(record.byteLength)} · Revision {record.revision}</p>
+      <div class="sg-assets-actions"><Button variant="primary" disabled={!controller.contentServices || controller.state.phase !== "ready" || controller.state.uncertain || controller.state.busy || record.state !== "active"} onClick={() => onUse(record)}>Use in content</Button><Button onClick={() => onPreview(record)}>Preview</Button></div>
+      <p class="sg-assets-kicker">Location & identity</p>
+      <code>{record.id}</code>
+      <p>{assetFolderPath(controller.state.snapshot?.folders ?? [], record.folderId).join(" / ") || "Unfiled"}</p>
+      <div class="sg-assets-actions"><Button size="sm" onClick={() => run(() => controller.copy(record.id))}>Copy ID</Button><Button size="sm" onClick={() => run(() => controller.copyUrl(record))}>Copy authoring URL</Button><Button size="sm" onClick={() => run(() => controller.copyMarkdown(record))}>Copy Markdown</Button><Button size="sm" disabled={!writable} onClick={() => onMove(record)}>Move</Button></div>
+      <Field label="Asset name"><Input value={name} disabled={!writable} onInput={(event) => { setName(event.currentTarget.value); controller.draftMetadata(draftBase ?? record, { fileName: event.currentTarget.value }); }} /></Field>
+      <Field label="Internal note" help="A library note, not alternative text for a Content usage."><Textarea value={note} disabled={!writable} onInput={(event) => { setNote(event.currentTarget.value); controller.draftMetadata(draftBase ?? record, { note: event.currentTarget.value }); }} /></Field>
+      <Button disabled={!writable} onClick={() => run(async () => { controller.draftMetadata(draftBase ?? record, { fileName: name, note }); await controller.saveDraft(record.id); })}>Save details</Button>
+      {draftBase && draftBase.revision !== record.revision && controller.hasDraft(record.id) ? <Banner tone="warn">This asset changed since editing began. Your text is retained; discard it to load current details before reapplying.</Banner> : null}
+      <Button size="sm" disabled={controller.state.busy || controller.state.uncertain || !controller.hasDraft(record.id)} onClick={() => { controller.discardDraft(record.id); setName(record.fileName); setNote(record.note); setDraftBase(record); }}>Discard unsaved details</Button>
+      <section>
+        <p class="sg-assets-kicker">Used by</p>
+        {!scan ? <p role="status">Checking structured Content uses…</p> : <><p>{scan.message}</p>{scan.locations.map((location, index) => <div class="sg-assets-usage" key={index}>{usageHref ? <a href={usageHref(location)}>{location.entryTitle}</a> : <strong>{location.entryTitle}</strong>}<small>{location.modelName} · {location.fieldLabel} · {location.valuePath.join(" / ")}</small><small>{location.use.kind === "image" ? location.use.alt || "Decorative image" : location.use.kind === "link" ? location.use.label : location.use.title}</small></div>)}{scan.additionalLocations?.map(({ location, href }, i) => <div class="sg-assets-usage" key={"impact-" + i}>{href ? <a href={href}>{location.domain} / {location.sourceRecordId ?? location.recordId}</a> : <strong>{location.recordId}</strong>}<small>{location.fieldId ?? location.nodeId} · {location.property} · {location.pathname}</small></div>)}</>}
+      </section>
+      <section>
+        <p class="sg-assets-kicker">Immutable versions</p>
+        {full?.document.versions.map((version) => <p key={version.id}><a href={previewUrl?.(version.url) ?? version.url} target="_blank" rel="noreferrer">{version.id.slice(0, 12)}</a> · {version.id === full.document.currentVersionId ? "Latest" : "Historical pin"} · {formatBytes(version.byteLength)}</p>)}
+      </section>
+      <div class="sg-assets-actions">
+        {record.state === "trash" ? <Button disabled={!controller.capability("restore") || controller.state.busy} onClick={() => run(() => controller.restore([record]))}>Restore asset</Button> : <>
+          {editAction}
+          <Button disabled={!controller.capability("replace") || controller.state.busy} onClick={() => onReplace(record)}>Replace file</Button>
+          <Button disabled={!controller.capability("trash") || controller.state.busy} onClick={() => onTrash(record)}>Trash…</Button>
+        </>}
+      </div>
+    </div>
+  </aside>;
 }
 
 function AssetActionDialog({ previewUrl, action, controller, folders, error, close, run, usageHref }: { previewUrl?: (url: string) => string; action: Action; controller: AssetLibraryController; folders: readonly AssetFolder[]; error: string | null; close(): void; run(task: () => Promise<unknown>): void; usageHref?: (location: AssetContentLocation) => string }) {

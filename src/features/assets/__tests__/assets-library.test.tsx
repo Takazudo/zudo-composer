@@ -8,6 +8,8 @@ import { AssetFieldPicker } from "../assets-use-picker";
 import { createAssetLibraryController } from "../controller";
 import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture";
 
+const GIF = Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 describe("Asset workspace", () => {
   it("uses provider display URLs for version links without changing canonical records", async () => {
@@ -162,6 +164,30 @@ describe("Asset workspace", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "Inspect renamed.png" })).toBeNull());
     fireEvent.click(screen.getByRole("radio", { name: "List" }));
     expect(await screen.findByRole("table", { name: "Assets" })).toBeTruthy();
+  });
+  it("limits image editing to supported image MIME types", async () => {
+    const { provider, filesystem } = await providerFixture();
+    await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
+    await filesystem.upload({ fileName: "animated.gif", declaredMimeType: "image/gif", bytes: GIF });
+    await filesystem.upload({ fileName: "guide.pdf", declaredMimeType: "application/pdf", bytes: PDF });
+    render(<AssetApp provider={provider} contentServices={completeServices()} intent={{ status: "none" }} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
+    let inspector = screen.getByRole("complementary", { name: "Asset details" });
+    expect(within(inspector).getByRole("button", { name: "Edit image…", exact: true })).toBeEnabled();
+    fireEvent.click(within(inspector).getByRole("button", { name: "Close", exact: true }));
+
+    fireEvent.input(screen.getByRole("searchbox", { name: "Search assets" }), { target: { value: "animated" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect animated.gif" }));
+    inspector = screen.getByRole("complementary", { name: "Asset details" });
+    expect(within(inspector).getByRole("button", { name: "Edit image…", exact: true })).toBeDisabled();
+    expect(within(inspector).getByText("GIF editing is not supported yet")).toBeTruthy();
+    fireEvent.click(within(inspector).getByRole("button", { name: "Close", exact: true }));
+
+    fireEvent.input(screen.getByRole("searchbox", { name: "Search assets" }), { target: { value: "guide" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect guide.pdf" }));
+    inspector = screen.getByRole("complementary", { name: "Asset details" });
+    expect(within(inspector).queryByRole("button", { name: "Edit image…", exact: true })).toBeNull();
   });
   it("guards trash with complete structured usages and restores retained records", async () => {
     const { provider, filesystem } = await providerFixture();

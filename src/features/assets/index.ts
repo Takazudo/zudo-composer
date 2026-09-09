@@ -10,5 +10,6 @@ export * from "./upload-input";
 export * from "./upload-reducer";
 export * from "./route-content";
 export * from "./assets-use-picker";
+export * from "./image-editor-dialog";
 export { createAssetContentServices } from "../../assets/integration/content";
 export type { AssetContentServices, AssetContentLocation, AssetUse } from "../../assets/integration/content";

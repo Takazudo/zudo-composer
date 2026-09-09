@@ -1,6 +1,8 @@
 import { summarizeAsset, type AssetProvider, type AssetSummary, type AssetSnapshot, type AssetRecord, type AssetMetadataPatch, type AssetFolderPatch } from "../../assets";
 import type { AssetFileProviderStore } from "../../assets/storage/file-provider";
 import type { AssetContentServices, AssetUsageScan, AssetInsertionTarget, AssetUse } from "../../assets/integration/content";
+import { ASSET_MAX_BYTE_LENGTH, ASSET_EXTENSION_BY_TYPE } from "../../assets/model";
+import type { EditableMime } from "@zudo-composer/image-editor";
 
 export interface AssetLibraryControllerOptions {
   writeClipboard?: (text: string) => void | Promise<void>;
@@ -29,6 +31,21 @@ export function assetMarkdown(record: Pick<AssetSummary, "authoringUrl" | "fileN
   return `${record.mimeType.startsWith("image/") ? "!" : ""}[${label}](${record.authoringUrl})`;
 }
 const message = (error: unknown) => error instanceof Error ? error.message : "Asset operation failed.";
+const EDITABLE_MIME_TYPES = new Set<EditableMime>(["image/png", "image/jpeg", "image/webp"]);
+
+function editableMime(value: string): value is EditableMime {
+  return EDITABLE_MIME_TYPES.has(value as EditableMime);
+}
+
+function fileNameWithExtension(fileName: string, extension: string): string {
+  const stem = fileName.replace(/\.[^.]*$/, "");
+  return `${stem}.${extension}`;
+}
+
+function editedCopyName(fileName: string, extension: string): string {
+  const stem = fileName.replace(/\.[^.]*$/, "");
+  return `${stem} (edited).${extension}`;
+}
 
 export class AssetLibraryController {
   private current: AssetLibraryState = { phase: "idle", records: [], snapshot: null, errorMessage: null, recoveryMessage: null, notice: null, busy: false, operation: null, generation: 0, uncertain: false };
@@ -220,6 +237,32 @@ export class AssetLibraryController {
   replace(record: AssetSummary, file: Blob) {
     const store = this.requireStore("replace");
     return this.mutate("Replacement", () => store.replace(record.id, file, { expectedRevision: record.revision }));
+  }
+  /** Whether this provider can offer the image editor's Save as copy action. */
+  canSaveEditedImageCopy(): boolean {
+    return this.capability("replace") && typeof this.store?.upload === "function";
+  }
+  /**
+   * Persist one editor export against the exact record revision captured when
+   * the editor opened. Replace retains the record identity; copy uses the
+   * record's captured folder and a normalized source extension.
+   */
+  saveEditedImage(record: AssetSummary, blob: Blob, options: { mode: "replace" | "copy" }): Promise<AssetRecord> {
+    if (!this.store) return Promise.reject(new Error("Asset replace is unavailable for this provider."));
+    if (this.current.busy) return Promise.reject(new Error("Wait for the current Asset operation to finish."));
+    if (this.current.phase !== "ready" || this.current.uncertain) return Promise.reject(new Error("Reload authoritative Asset state before making changes."));
+    if (this.store.capabilities.replace !== true) return Promise.reject(new Error("Asset replace is unavailable for this provider."));
+    const store = this.store;
+    if (!editableMime(record.mimeType)) return Promise.reject(new Error("Only PNG, JPEG and WebP assets can be edited."));
+    if (blob.type !== record.mimeType) return Promise.reject(new Error("Edited image MIME type must match the source image."));
+    if (blob.size > ASSET_MAX_BYTE_LENGTH) return Promise.reject(new Error("Edited image exceeds the 25 MiB limit. Choose smaller dimensions."));
+    if (options.mode === "copy" && typeof store.upload !== "function") return Promise.reject(new Error("Saving an edited copy is unavailable for this provider."));
+    const extension = ASSET_EXTENSION_BY_TYPE[record.mimeType];
+    const name = options.mode === "copy" ? editedCopyName(record.fileName, extension) : fileNameWithExtension(record.fileName, extension);
+    const file = new File([blob], name, { type: record.mimeType });
+    return this.mutate("Edit", () => options.mode === "replace"
+      ? store.replace(record.id, file, { expectedRevision: record.revision })
+      : store.upload!(file, { folderId: record.folderId, note: record.note }));
   }
   insert(target: AssetInsertionTarget, value: AssetUse) {
     if (!this.contentServices) return Promise.reject(new Error("Content insertion is unavailable."));
