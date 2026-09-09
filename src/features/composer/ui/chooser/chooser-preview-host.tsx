@@ -205,6 +205,10 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
   return (
     <div class="sg-composer-chooser-preview">
       <p class="sg-composer-chooser-preview-label">{label}</p>
+      {(entry || sourceDocument) && (
+        <h3 class="sg-composer-chooser-preview-title">{entry?.title ?? sourceDocument?.name}</h3>
+      )}
+      {entry && <p class="sg-composer-chooser-preview-description">{entry.description}</p>}
       <div class="sg-composer-chooser-preview-stage">
         {fatalError && (
           <p class="sg-composer-chooser-pattern-error" role="alert" data-composer-preview-fatal="pack-mismatch">

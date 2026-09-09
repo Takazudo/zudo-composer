@@ -12,7 +12,7 @@ import { XMarkIcon } from "../icons";
 const FOCUSABLE_SELECTOR =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
-export type DialogSize = "default" | "wide";
+export type DialogSize = "default" | "wide" | "full";
 
 export interface DialogProps {
   open: boolean;
@@ -22,7 +22,7 @@ export interface DialogProps {
   header?: ComponentChildren;
   children: ComponentChildren;
   footer?: ComponentChildren;
-  /** 560px by default, 920px for `wide`. Both stay inside the viewport on narrow screens. */
+  /** 560px by default, 920px for `wide`. `full` fills the viewport. Other sizes stay within it. */
   size?: DialogSize;
   role?: "dialog" | "alertdialog";
   /** Accessible name when there is no `title` — one of the two is required. */
@@ -140,7 +140,7 @@ export function Dialog({
     }
   }
 
-  const classes = ["cms-dialog", size === "wide" ? "cms-dialog--wide" : null, className].filter(Boolean).join(" ");
+  const classes = ["cms-dialog", size !== "default" ? `cms-dialog--${size}` : null, className].filter(Boolean).join(" ");
 
   return (
     <dialog

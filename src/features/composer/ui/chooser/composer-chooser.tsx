@@ -378,7 +378,7 @@ export function ComposerChooser({
     <>
       <Dialog
         open={open}
-        size="wide"
+        size="full"
         class="sg-composer-chooser"
         title={capturedTarget ? `Add to ${targetLabel}` : "Add component"}
         initialFocusRef={searchRef}
@@ -416,17 +416,21 @@ export function ComposerChooser({
                   ) : (
                     <>
                       <div class="sg-composer-chooser-controls">
-                        <Input
-                          elementRef={searchRef}
-                          type="search"
-                          icon={SearchIcon}
-                          class="sg-composer-chooser-search"
-                          aria-label="Search components"
-                          placeholder="Search components…"
-                          value={query}
-                          onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-                          onKeyDown={handleSearchKeyDown}
-                        />
+                        <div class="sg-composer-chooser-toolbar">
+                          <Input
+                            elementRef={searchRef}
+                            type="search"
+                            icon={SearchIcon}
+                            class="sg-composer-chooser-search"
+                            aria-label="Search components"
+                            placeholder="Search components…"
+                            value={query}
+                            onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+                            onKeyDown={handleSearchKeyDown}
+                          />
+                          {/* K3 mounts the catalog view toggle beside search. */}
+                          <div class="sg-composer-chooser-view-toggle" />
+                        </div>
 
                         <div class="sg-composer-chooser-categories" role="group" aria-label="Filter by category">
                           {categories.map((cat) => (
@@ -490,17 +494,19 @@ export function ComposerChooser({
               ) : (
                 <div class="sg-composer-chooser-catalog" aria-label="Patterns">
                   <div class="sg-composer-chooser-controls">
-                    <Input
-                      elementRef={searchRef}
-                      type="search"
-                      icon={SearchIcon}
-                      class="sg-composer-chooser-search"
-                      aria-label="Search Patterns"
-                      placeholder="Search Patterns…"
-                      value={query}
-                      onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-                      onKeyDown={handleSearchKeyDown}
-                    />
+                    <div class="sg-composer-chooser-toolbar">
+                      <Input
+                        elementRef={searchRef}
+                        type="search"
+                        icon={SearchIcon}
+                        class="sg-composer-chooser-search"
+                        aria-label="Search Patterns"
+                        placeholder="Search Patterns…"
+                        value={query}
+                        onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+                        onKeyDown={handleSearchKeyDown}
+                      />
+                    </div>
                   </div>
 
                   {patternCatalogLoading ? (
