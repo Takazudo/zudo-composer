@@ -2,10 +2,11 @@
 import { resolve } from "node:path";
 import { appModuleId, resolveSiteProjectLocalRoot, resolveWorkspaceRoot } from "./roots.mjs";
 import { COMPONENT_PACK_ID } from "./component-pack-plugin.mjs";
+import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../src/assets/model/asset-kinds.mjs";
 
 export const SITE_PROJECT_SOURCE_ID = "virtual:site-project-source";
 export const RESOLVED_SITE_PROJECT_SOURCE_ID = `\0${SITE_PROJECT_SOURCE_ID}`;
-const PINNED_ASSET = /^\/uploaded-assets\/sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf)$/;
+const PINNED_ASSET = ASSET_CHECKSUM_URL_PATTERN;
 
 /** @param {unknown} source */
 function serializedModule(source) {
@@ -115,12 +116,22 @@ export function siteProjectSourcePlugin(options = {}) {
       }
       requestRefresh(false);
       viteServer.middlewares?.use(async (req, res, next) => {
+        if (req.method !== undefined && req.method !== "GET" && req.method !== "HEAD") return next();
         let pathname; try { pathname = new URL(req.url ?? "", "http://localhost").pathname; } catch { return next(); }
         if (!PINNED_ASSET.test(pathname)) return next();
         try {
           const value = options.readDevAsset ? await options.readDevAsset(pathname) : await viteServer.ssrLoadModule(devReaderId).then(async (module) => module.readActivatedSiteAssets(pathname, await readerOptions()));
           if (!value) return next();
-          res.statusCode = 200; res.setHeader("Content-Type", value.mimeType); res.setHeader("Content-Length", String(value.bytes.byteLength)); res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); res.setHeader("ETag", `"sha256-${pathname.slice("/uploaded-assets/sha256-".length).split(".")[0]}"`); return res.end(Buffer.from(value.bytes));
+          const checksum = pathname.slice("/uploaded-assets/sha256-".length).split(".", 1)[0];
+          res.statusCode = 200;
+          res.setHeader("Content-Type", value.mimeType);
+          res.setHeader("Content-Length", String(value.bytes.byteLength));
+          res.setHeader("Cache-Control", ASSET_IMMUTABLE_CACHE_CONTROL);
+          res.setHeader("X-Content-Type-Options", ASSET_NOSNIFF);
+          res.setHeader("ETag", `"sha256-${checksum}"`);
+          const disposition = assetContentDisposition(value.mimeType, checksum);
+          if (disposition !== undefined) res.setHeader("Content-Disposition", disposition);
+          return req.method === "HEAD" ? res.end() : res.end(Buffer.from(value.bytes));
         } catch { res.statusCode = 503; res.setHeader("Cache-Control", "no-store"); return res.end("Activated Assets unavailable."); }
       });
     },

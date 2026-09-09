@@ -7,7 +7,7 @@ import { LibraryPage, RowMenu } from "../../components/library-page";
 import { Dialog } from "../../components/overlay";
 import { Banner, Button, Checkbox, DataTable, Field, Input, Select, SegmentedControl, Textarea } from "../../components/ui";
 import { FolderIcon, UploadIcon } from "../../components/icons";
-import { assetFolderPath as resolveFolderPath, type AssetProvider, type AssetSummary, type AssetFolder } from "../../assets";
+import { ASSET_ACCEPT, assetFolderPath as resolveFolderPath, type AssetProvider, type AssetSummary, type AssetFolder } from "../../assets";
 import type { AssetContentServices, AssetContentLocation, AssetUsageScan } from "../../assets/integration/content";
 import { createAssetLibraryController, type AssetLibraryController, type AssetLibraryControllerOptions } from "./controller";
 import { AssetThumb } from "./assets-thumb";
@@ -153,7 +153,7 @@ function ConnectedAsset({ provider, controller: supplied, controllerOptions, con
       </section>
       <AssetInspector previewUrl={provider.previewUrl} key={active?.id ?? "empty"} record={active} controller={controller} dimensions={dimensions} usageHref={usageHref} onClose={() => setActiveId(null)} onPreview={(record) => open({ kind: "preview", record })} onUse={(record) => open({ kind: "use", record })} onMove={(record) => open({ kind: "move", records: [record] })} onReplace={replace} onTrash={(record) => open({ kind: "trash", records: [record] })} run={run} />
     </div>
-    <input ref={replaceInput} class="sg-assets-upload__input" aria-label="Replacement file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf" onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; const target = replaceTarget.current; if (file && target) run(() => controller.replace(target, file)); }} />
+    <input ref={replaceInput} class="sg-assets-upload__input" aria-label="Replacement file" type="file" accept={ASSET_ACCEPT} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; const target = replaceTarget.current; if (file && target) run(() => controller.replace(target, file)); }} />
     {action ? <AssetActionDialog previewUrl={provider.previewUrl} action={action} controller={controller} folders={folders} error={dialogError} close={close} run={run} usageHref={usageHref} /> : null}
   </LibraryPage>;
 }

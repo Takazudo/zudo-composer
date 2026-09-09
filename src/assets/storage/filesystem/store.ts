@@ -10,7 +10,7 @@ import { AssetPersistenceError, compareAssetSummariesNewestFirst, createAssetRec
   type AssetMutationPrecondition, type AssetMetadataPatch, type AssetFolderPatch, type AssetListOptions,
 } from "../../library";
 import { ASSET_MAX_BYTE_LENGTH, ASSET_SCHEMA_VERSION, isValidAssetFileName, isAssetRevision,
-  validateAssetRecord, validateAssetSnapshot, assetVersionUrl, isValidAssetChecksum,
+  validateAssetRecord, validateAssetSnapshot, assetVersionUrl, isValidAssetChecksum, ASSET_CHECKSUM_URL_PATTERN,
   type AssetSnapshot, type AssetFolder, type AssetVersionRef, type AssetVersionPin, type AssetPinManifest,
 } from "../../model";
 import { isSafeRecordId, isPlainObject } from "../../../shared";
@@ -436,7 +436,7 @@ export class FilesystemAssetStore implements VersionedAssetStore {
   }
   private catalogPath(): string { return this.filesystem.ownedPath("catalog.json"); }
   private versionPath(url: string): string {
-    if (!/^\/uploaded-assets\/sha256-[a-f0-9]{64}\.(png|jpg|gif|webp|pdf)$/.test(url))
+    if (!ASSET_CHECKSUM_URL_PATTERN.test(url))
       throw operationError("get", "validation", "Invalid immutable Assets URL.");
     return this.filesystem.ownedPath(BYTES_DIRECTORY + "/" + url.slice("/uploaded-assets/".length));
   }
@@ -491,11 +491,11 @@ export class FilesystemAssetStore implements VersionedAssetStore {
   private syncDirectory(operation: AssetPersistenceOperation, path: string): Promise<void> {
     return syncDirectory(this.filesystem, operation, path, (phase) => this.assertDirectories(phase));
   }
-  private async stageBytes(input: AssetReplaceInput, expected?: StreamingAtomicWriteResult, expectedType?: string): Promise<StagedAsset> {
+  private async stageBytes(input: AssetReplaceInput & { declaredMimeType?: string }, expected?: StreamingAtomicWriteResult, expectedType?: string): Promise<StagedAsset> {
     await this.assertDirectories("put");
     input.signal?.throwIfAborted();
     const peeked = await peekBytes(input.bytes, input.signal);
-    const sniffed = sniffAsset(peeked.head);
+    const sniffed = sniffAsset(peeked.head, expectedType ?? input.declaredMimeType);
     if (!sniffed || (expectedType !== undefined && sniffed.mimeType !== expectedType)) {
       void peeked.cancel().catch(() => undefined);
       throw operationError("put", "validation", "Assets signature is not allowed or does not match its metadata.");

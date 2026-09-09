@@ -34,7 +34,7 @@ describe("disposable hosted runtime", () => {
     expect((await a.captureWorkspace()).status).toBe("ready");
   });
   it("serves exact bytes and validates assets CAS, cloning, folders, replacement history and handoff", async () => {
-    const a = await assets(); const before = await a.provider.store.snapshot(); expect(before.records).toHaveLength(4);
+    const a = await assets(); const before = await a.provider.store.snapshot(); expect(before.records).toHaveLength(6);
     const first = before.records[0]!; const version = first.document.versions[0]!;
     expect(a.readUrl(version.url)?.bytes).toEqual(new Uint8Array(await readFile(resolve("cms/assets/versions", version.url.split("/").at(-1)!))));
     const changed = await a.provider.store.updateMetadata(first.id, { note: "Edited" }, { expectedRevision: first.revision });
@@ -66,5 +66,6 @@ it("uploads new bytes, preserves old versions and enforces folder graph/CAS", as
   const snapshot = await a.provider.store.snapshot();
   await expect(a.provider.store.updateFolder(folder.id, { parentId: folder.id }, { expectedRevision: folder.revision })).rejects.toMatchObject({ code: "validation" });
   expect(await a.provider.store.snapshot()).toEqual(snapshot);
-  await expect(a.provider.store.upload({ ...file, type: "application/pdf" })).rejects.toMatchObject({ code: "validation" });
+  const unsupported = { name: "new-demo.html", type: "text/html", arrayBuffer: async () => new Uint8Array([1]).buffer } as unknown as Blob & { name: string };
+  await expect(a.provider.store.upload(unsupported)).rejects.toMatchObject({ code: "validation" });
 });

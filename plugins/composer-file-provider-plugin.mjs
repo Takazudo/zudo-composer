@@ -11,6 +11,15 @@ import { constants } from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import { resolve, posix, dirname, basename } from "node:path";
 import { serializeDomainError } from "./domain-file-provider.mjs";
+import {
+  ASSET_AUTHORING_URL_PATTERN,
+  ASSET_CHECKSUM_FILE_NAME_SOURCE,
+  ASSET_CONTENT_TYPE_BY_EXTENSION,
+  ASSET_IMMUTABLE_CACHE_CONTROL,
+  ASSET_NOSNIFF,
+  ASSET_TYPES as ASSET_TYPE_ALLOWLIST,
+  assetContentDisposition,
+} from "../src/assets/model/asset-kinds.mjs";
 import { appModuleId, readRootEnvironment, resolveWorkspaceRoot, validateRootOverride } from "./roots.mjs";
 import {
   FILE_PROVIDER_CAPABILITY_HEADER,
@@ -68,16 +77,9 @@ export function resolveCompositionsRoot(workspaceRoot, configured) {
     ?? resolve(workspaceRoot, COMPOSER_FILE_PROVIDER_ROOT);
 }
 
-const ASSET_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/octet-stream"]);
+const ASSET_TYPES = new Set(ASSET_TYPE_ALLOWLIST);
 const ASSET_FILE_PROVIDER_BYTES_DIRECTORY = "versions";
-const ASSET_FILE_PROVIDER_BYTE_PATTERN = /^\/uploaded-assets\/(sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/;
-const ASSET_CONTENT_TYPE_BY_EXTENSION = Object.freeze({
-  png: "image/png",
-  jpg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  pdf: "application/pdf",
-});
+const ASSET_FILE_PROVIDER_BYTE_PATTERN = new RegExp(`^/uploaded-assets/(${ASSET_CHECKSUM_FILE_NAME_SOURCE})$`);
 const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
 // A valid 255-code-point display name can expand to 3,060 characters when
 // encodeURIComponent represents astral Unicode as four percent-encoded bytes.
@@ -144,6 +146,19 @@ function isMissingAssetFileError(value) {
   return code === "ENOENT" || code === "ENOTDIR";
 }
 
+function assetChecksumFromFileName(fileName) {
+  return fileName.slice("sha256-".length, fileName.lastIndexOf("."));
+}
+
+function setAssetFileHeaders(res, contentType, byteLength, checksum) {
+  res.setHeader("content-type", contentType);
+  res.setHeader("content-length", String(byteLength));
+  res.setHeader("cache-control", ASSET_IMMUTABLE_CACHE_CONTROL);
+  res.setHeader("x-content-type-options", ASSET_NOSNIFF);
+  const disposition = assetContentDisposition(contentType, checksum);
+  if (disposition !== undefined) res.setHeader("content-disposition", disposition);
+}
+
 async function closeAssetFile(handle) {
   await Promise.resolve(handle?.close?.()).catch(() => undefined);
 }
@@ -178,12 +193,13 @@ export function createAssetFileMiddleware(options) {
         res.statusCode = 404; res.setHeader("cache-control", "no-store"); res.end(); return;
       }
     } catch { res.statusCode = 400; res.end(); return; }
-    const authoring = typeof pathname === "string" ? /^\/uploaded-assets\/asset-([a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?)$/.exec(pathname) : undefined;
-    if (authoring && options.createStore) {
+    const authoring = typeof pathname === "string" && ASSET_AUTHORING_URL_PATTERN.test(pathname)
+      ? pathname.slice("/uploaded-assets/asset-".length) : undefined;
+    if (authoring !== undefined && options.createStore) {
       res.setHeader("cache-control", "no-store");
       res.setHeader("x-content-type-options", "nosniff");
       try {
-        const result = await (await options.createStore()).get(authoring[1]);
+        const result = await (await options.createStore()).get(authoring);
         if (result.status !== "loaded" || result.record.document.state !== "active") { res.statusCode = 404; res.end(); return; }
         const version = result.record.document.versions.find((version) => version.id === result.record.document.currentVersionId);
         res.statusCode = 307;
@@ -267,10 +283,7 @@ export function createAssetFileMiddleware(options) {
     if (req.method === "HEAD") {
       await closeAssetFile(handle);
       res.statusCode = 200;
-      res.setHeader("content-type", contentType);
-      res.setHeader("content-length", String(opened.size));
-      res.setHeader("cache-control", "public, max-age=31536000, immutable");
-      res.setHeader("x-content-type-options", "nosniff");
+      setAssetFileHeaders(res, contentType, opened.size, assetChecksumFromFileName(fileName));
       res.end();
       return;
     }
@@ -306,10 +319,7 @@ export function createAssetFileMiddleware(options) {
 
     try {
       res.statusCode = 200;
-      res.setHeader("content-type", contentType);
-      res.setHeader("content-length", String(opened.size));
-      res.setHeader("cache-control", "public, max-age=31536000, immutable");
-      res.setHeader("x-content-type-options", "nosniff");
+      setAssetFileHeaders(res, contentType, opened.size, assetChecksumFromFileName(fileName));
       stream.pipe(res);
     } catch (cause) {
       onStreamError(cause);
@@ -326,7 +336,9 @@ export function createAssetFileMiddleware(options) {
 export function createAssetUploadMiddleware(options) {
   const maxBodyBytes = options.maxBodyBytes ?? ASSET_UPLOAD_MAX_BYTES;
   return async function assetUploadMiddleware(req, res) {
-    const acceptedAssetTypes = ["upload", "replace"].includes(req.headers[ASSET_FILE_PROVIDER_OPERATION_HEADER])
+    const operation = req.headers[ASSET_FILE_PROVIDER_OPERATION_HEADER];
+    const binary = operation === "upload" || operation === "replace";
+    const acceptedAssetTypes = binary
       ? ASSET_TYPES
       : new Set(["application/json"]);
     const headError = validateRequestHead(
@@ -334,13 +346,13 @@ export function createAssetUploadMiddleware(options) {
       ASSET_FILE_PROVIDER_ENDPOINT,
       options.capability,
       acceptedAssetTypes,
-      "Content-Type must be an allowed image or PDF type for uploads and application/json otherwise.",
+      "Content-Type must be a declared supported asset type for uploads and application/json otherwise.",
+      binary,
     );
     if (headError !== undefined) {
       if (!isDeadResponse(req, res)) sendConnectResponse(res, headError);
       return;
     }
-    const operation = req.headers[ASSET_FILE_PROVIDER_OPERATION_HEADER];
     if (!["initialize", "list", "get", "upload", "replace", "delete", "clear", "snapshot", "metadata", "trash", "restore", "create-folder", "update-folder", "trash-folder", "restore-folder", "resolve-version", "pin-manifest"].includes(operation)) {
       sendConnectResponse(res, errorResponse(400, "invalid-request", "A valid assets operation header is required."));
       return;
@@ -355,7 +367,6 @@ export function createAssetUploadMiddleware(options) {
     const onAborted = () => controller.abort(new Error("request-aborted"));
     req.once("aborted", onAborted);
     try {
-      const binary = operation === "upload" || operation === "replace";
       let data = {};
       if (binary) {
         const header = req.headers[ASSET_FILE_PROVIDER_METADATA_HEADER];
@@ -395,7 +406,7 @@ export function createAssetUploadMiddleware(options) {
         case "restore-folder": result = await store.restoreFolder(id, data.precondition); break;
         case "resolve-version": result = await store.resolveVersion(data.ref); break;
         case "pin-manifest": result = await store.pinManifest(data.refs); break;
-        case "replace": result = await store.replace(id, { bytes: req.iterator({ destroyOnReturn: false }), signal: controller.signal }, data.precondition); break;
+        case "replace": result = await store.replace(id, { bytes: req.iterator({ destroyOnReturn: false }), signal: controller.signal, declaredMimeType: req.headers["content-type"] ?? "" }, data.precondition); break;
         case "clear": await store.clear(); result = null; break;
         case "upload": {
           const fileName = decodeAssetFileName(req.headers[ASSET_FILE_PROVIDER_FILE_NAME_HEADER]);

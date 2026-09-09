@@ -5,6 +5,7 @@ export type {
   AssetRecord,
   AssetSchemaVersion,
   AssetType,
+  AssetExtension,
 } from "../model";
 export type {
   AssetBytesMissingReason,

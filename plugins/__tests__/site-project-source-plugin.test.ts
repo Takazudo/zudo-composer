@@ -185,17 +185,25 @@ describe("siteProjectSourcePlugin", () => {
 
   it("gives active pins precedence, delegates unpinned authoring bytes, and fails release-read errors closed", async () => {
     let mode: "one" | "two" | "missing" | "error" = "one";
-    const readDevAsset = vi.fn(async () => mode === "missing" ? null : mode === "error" ? Promise.reject(new Error("digest")) : ({ bytes: Uint8Array.from([mode === "one" ? 1 : 2]), mimeType: "image/png" as const, identity: { projectId: "demo", revision: "a".repeat(64), buildId: "b".repeat(64) } }));
+    const readDevAsset = vi.fn(async (path: string) => mode === "missing" ? null : mode === "error" ? Promise.reject(new Error("digest")) : path.endsWith(".zip") ? ({ bytes: Uint8Array.from([5]), mimeType: "application/zip" as const, identity: { projectId: "demo", revision: "a".repeat(64), buildId: "b".repeat(64) } }) : ({ bytes: Uint8Array.from([mode === "one" ? 1 : 2]), mimeType: "image/png" as const, identity: { projectId: "demo", revision: "a".repeat(64), buildId: "b".repeat(64) } }));
     const plugin = siteProjectSourcePlugin({ readDevRelease: async () => null, readDevAsset, workspaceRoot: "/repo" });
     let middleware!: (req: { url: string }, res: Record<string, unknown>, next: () => void) => Promise<void>;
     const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
     (plugin.configureServer as (server: unknown) => void)({ watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send: vi.fn() }, middlewares: { use: (value: typeof middleware) => { middleware = value; } } });
     const pathname = `/uploaded-assets/sha256-${"a".repeat(64)}.png`;
-    const call = async (live = true) => { const end = vi.fn(), setHeader = vi.fn(), res = { statusCode: 0, end, setHeader }; const next = vi.fn(() => { res.statusCode = live ? 200 : 404; end(live ? Uint8Array.from([9]) : "Assets not found."); }); await middleware({ url: pathname }, res, next); return { res, next, end, setHeader }; };
+    const call = async (live = true, method?: string, path = pathname) => { const end = vi.fn(), setHeader = vi.fn(), res = { statusCode: 0, end, setHeader }; const next = vi.fn(() => { res.statusCode = live ? 200 : 404; end(live ? Uint8Array.from([9]) : "Assets not found."); }); await middleware({ url: path, ...(method === undefined ? {} : { method }) }, res, next); return { res, next, end, setHeader }; };
     const active = await call(); expect(Array.from(active.end.mock.calls[0]![0])).toEqual([1]); expect(active.next).not.toHaveBeenCalled();
+    expect(active.setHeader).toHaveBeenCalledWith("X-Content-Type-Options", "nosniff");
     mode = "two"; const switched = await call(); expect(Array.from(switched.end.mock.calls[0]![0])).toEqual([2]); expect(switched.next).not.toHaveBeenCalled();
     mode = "missing"; const live = await call(); expect(live.res.statusCode).toBe(200); expect(Array.from(live.end.mock.calls[0]![0])).toEqual([9]); expect(live.next).toHaveBeenCalledTimes(1);
     const absent = await call(false); expect(absent.res.statusCode).toBe(404); expect(absent.next).toHaveBeenCalledTimes(1);
     mode = "error"; const error = await call(); expect(error.res.statusCode).toBe(503); expect(error.next).not.toHaveBeenCalled();
+    mode = "one";
+    const zipPath = `/uploaded-assets/sha256-${"c".repeat(64)}.zip`;
+    const zip = await call(true, "GET", zipPath);
+    expect(zip.setHeader).toHaveBeenCalledWith("Content-Disposition", `attachment; filename="${"c".repeat(64)}.zip"`);
+    const head = await call(true, "HEAD", zipPath);
+    expect(head.end).toHaveBeenCalledWith();
+    expect(head.setHeader.mock.calls).toEqual(zip.setHeader.mock.calls);
   });
 });

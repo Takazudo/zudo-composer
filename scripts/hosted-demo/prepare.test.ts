@@ -8,7 +8,7 @@ it("exports only explicit assets and refuses allowlist checksum or metadata drif
   try {
     await cp(resolve("cms/assets"), root, { recursive: true });
     await writeFile(join(root, "private.txt"), "MUST NOT SHIP");
-    expect((await prepareDemoAsset(root)).files).toHaveLength(4);
+    expect((await prepareDemoAsset(root)).files).toHaveLength(6);
     const path = join(root, "catalog.json"); const catalog = JSON.parse(await readFile(path, "utf8"));
     catalog.records[0].document.fileName = "private-name.png"; await writeFile(path, JSON.stringify(catalog));
     await expect(prepareDemoAsset(root)).rejects.toThrow("missing or ambiguous");

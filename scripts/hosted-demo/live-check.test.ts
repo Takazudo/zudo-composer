@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { HOSTED_DEMO_LIVE_ROUTES, verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
+import { expectedMime } from "./artifact.mjs";
+import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
 
 const SOURCE_REVISION = "c".repeat(40);
 const PROJECT_REVISION = "d".repeat(64);
@@ -20,8 +22,11 @@ async function writeArtifact() {
     ["hosted-demo-assets-worker.js", Buffer.from("export default {};\n")],
     ["assets/preview-entry-test.js", Buffer.from("export const preview = true;\n")],
   ]);
-  for (const content of [Buffer.from("one"), Buffer.from("two"), Buffer.from("three"), Buffer.from("four")]) {
-    files.set(`uploaded-assets/sha256-${createHash("sha256").update(content).digest("hex")}.png`, content);
+  for (const [content, extension] of [
+    [Buffer.from("one"), "png"], [Buffer.from("two"), "png"], [Buffer.from("three"), "png"], [Buffer.from("four"), "png"],
+    [Buffer.from("%PDF-1.7"), "pdf"], [Buffer.from([0x50, 0x4b, 0x03, 0x04]), "zip"],
+  ] as const) {
+    files.set(`uploaded-assets/sha256-${createHash("sha256").update(content).digest("hex")}.${extension}`, content);
   }
   const assets = Object.fromEntries([...files].map(([path, content]) => [path, createHash("sha256").update(content).digest("hex")]));
   await Promise.all([...files].map(([path, content]) => writeFile(join(root, path), content)));
@@ -30,8 +35,8 @@ async function writeArtifact() {
   return { root, manifest, files };
 }
 
-function response(body: string | Buffer, mime: string, status = 200) {
-  return new Response(body, { status, headers: { "content-type": mime } });
+function response(body: string | Buffer | null, mime: string, status = 200, headers: Record<string, string> = {}) {
+  return new Response(body, { status, headers: { "content-type": mime, ...headers } });
 }
 
 function mockFetch(fixture: Awaited<ReturnType<typeof writeArtifact>>, options: { corruptPath?: string; staleManifest?: boolean; injectAnalytics?: boolean } = {}) {
@@ -52,8 +57,16 @@ function mockFetch(fixture: Awaited<ReturnType<typeof writeArtifact>>, options: 
     const relative = path.slice(1);
     const bytes = fixture.files.get(relative);
     if (!bytes) return response("missing", "text/plain", 404);
-    if (relative === options.corruptPath) return response(Buffer.from("changed"), relative.endsWith(".png") ? "image/png" : "text/javascript");
-    return response(bytes, relative.endsWith(".png") ? "image/png" : "text/javascript");
+    const asset = ASSET_CHECKSUM_URL_PATTERN.test(`/${relative}`);
+    const mime = asset ? expectedMime(relative) : relative.endsWith(".png") ? "image/png" : "text/javascript";
+    const checksum = asset ? relative.slice("uploaded-assets/sha256-".length, relative.lastIndexOf(".")) : undefined;
+    const headers = asset ? {
+      "content-length": String((relative === options.corruptPath ? Buffer.from("changed") : bytes).byteLength),
+      "cache-control": ASSET_IMMUTABLE_CACHE_CONTROL,
+      "x-content-type-options": ASSET_NOSNIFF,
+      ...(checksum === undefined || assetContentDisposition(mime, checksum) === undefined ? {} : { "content-disposition": assetContentDisposition(mime, checksum)! }),
+    } : {};
+    return response(relative === options.corruptPath ? Buffer.from("changed") : bytes, mime, 200, headers);
   };
   return { fetchImpl, requests };
 }
@@ -75,7 +88,7 @@ describe("hosted demo live verification", () => {
       fetchImpl: mock.fetchImpl,
     });
     expect(proof.routes.map(({ path }) => path)).toEqual(HOSTED_DEMO_LIVE_ROUTES);
-    expect(proof.assets).toHaveLength(7);
+    expect(proof.assets).toHaveLength(9);
     const routeRequest = mock.requests.find(({ path }) => path === "/composer");
     expect(routeRequest?.init?.headers).toEqual({ accept: "text/html", "sec-fetch-mode": "navigate" });
     const assetRequest = mock.requests.find(({ path }) => path.startsWith("/uploaded-assets/"));

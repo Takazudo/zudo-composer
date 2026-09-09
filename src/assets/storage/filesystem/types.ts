@@ -1,7 +1,7 @@
 import type { IdFactory } from "../../../shared/id-factory";
 import type { SafeRootFilesystemOperations } from "../../../shared/node-fs";
 import type { link } from "node:fs/promises";
-import type { AssetByteSource, AssetType } from "../../library";
+import type { AssetByteSource, AssetExtension, AssetType } from "../../library";
 
 export interface FilesystemAssetStoreOperations extends SafeRootFilesystemOperations { link: typeof link }
 
@@ -20,7 +20,7 @@ export interface FilesystemAssetStoreOptions {
 
 export interface AssetUploadInput {
   fileName: string;
-  /** Advisory only. Persisted type and extension come from the byte signature. */
+  /** Binary signatures determine the persisted type; this is the explicit fallback for supported text kinds. */
   declaredMimeType: string;
   bytes: AssetByteSource;
   signal?: AbortSignal;
@@ -29,9 +29,9 @@ export interface AssetUploadInput {
   expectedMutationToken?: string;
 }
 
-export interface AssetReplaceInput { bytes: AssetByteSource; signal?: AbortSignal }
+export interface AssetReplaceInput { bytes: AssetByteSource; signal?: AbortSignal; declaredMimeType?: string }
 
 export interface SniffedAsset {
   mimeType: AssetType;
-  extension: "png" | "jpg" | "gif" | "webp" | "pdf";
+  extension: AssetExtension;
 }

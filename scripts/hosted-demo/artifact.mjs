@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, extname, join, normalize, resolve, sep } from "node:path";
+import { ASSET_CHECKSUM_URL_PATTERN, assetMimeTypeForExtension } from "../../src/assets/model/asset-kinds.mjs";
 
 export const HOSTED_DEMO_MANIFEST = "hosted-demo-manifest.json";
 
@@ -79,6 +80,11 @@ export function sha256(bytes) {
 
 /** @param {string} path @returns {string} */
 export function expectedMime(path) {
+  if (path.startsWith("uploaded-assets/")) {
+    const mime = ASSET_CHECKSUM_URL_PATTERN.test(`/${path}`) ? assetMimeTypeForExtension(path.slice(path.lastIndexOf(".") + 1)) : undefined;
+    assert.ok(mime, `No hosted demo asset MIME contract for ${path}`);
+    return mime;
+  }
   const mime = MIME_BY_EXTENSION.get(extname(path).toLowerCase());
   assert.ok(mime, `No hosted demo MIME contract for ${path}`);
   return mime;
@@ -162,8 +168,8 @@ export async function verifyHostedDemoArtifact({ directory, expectedSourceRevisi
   assert.ok(manifest.assets["index.html"], "Hosted artifact must include index.html");
   assert.ok(manifest.assets["hosted-demo-assets-worker.js"], "Hosted artifact must include hosted-demo-assets-worker.js");
   const assets = found.filter((path) => path.startsWith("uploaded-assets/"));
-  assert.equal(assets.length, 4, "Hosted artifact must include exactly four assets assets");
-  for (const path of assets) assert.match(path, /^uploaded-assets\/sha256-[a-f0-9]{64}\.png$/);
+  assert.equal(assets.length, 6, "Hosted artifact must include exactly six seeded assets");
+  for (const path of assets) assert.ok(ASSET_CHECKSUM_URL_PATTERN.test(`/${path}`), `Invalid hosted asset path: ${path}`);
 
   // Preserve the ordinary dist check's preview boundary. The full application
   // bundle may contain host-only labels, so inspect only the preview entry's

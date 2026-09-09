@@ -133,6 +133,7 @@ export function validateRequestHead(
   capability,
   acceptedAssetTypes = new Set(["application/json"]),
   unsupportedAssetTypeMessage = "Content-Type must be application/json.",
+  allowAnyAssetType = false,
 ) {
   if (req.url !== endpoint) return errorResponse(404, "not-found", "File-provider route not found.");
   if (req.method !== "POST") {
@@ -145,7 +146,7 @@ export function validateRequestHead(
     return errorResponse(401, "invalid-capability", "The development file capability is missing or invalid.");
   }
   const mimeType = req.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
-  if (mimeType === undefined || !acceptedAssetTypes.has(mimeType)) {
+  if (mimeType === undefined || (!allowAnyAssetType && !acceptedAssetTypes.has(mimeType))) {
     return errorResponse(415, "unsupported-media-type", unsupportedAssetTypeMessage);
   }
   return undefined;

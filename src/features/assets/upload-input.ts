@@ -1,15 +1,11 @@
+import { ASSET_EXTENSION_BY_TYPE } from "../../assets";
+
 export interface FileTransfer {
   readonly files?: ArrayLike<File> | null;
   readonly items?: ArrayLike<Pick<DataTransferItem, "kind" | "getAsFile">> | null;
 }
 
-const extensionByMime: Readonly<Record<string, string>> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/gif": "gif",
-  "image/webp": "webp",
-  "application/pdf": "pdf",
-};
+const extensionByMime: Readonly<Record<string, string>> = ASSET_EXTENSION_BY_TYPE;
 
 function filesFromItems(items: FileTransfer["items"]): File[] {
   if (!items) return [];

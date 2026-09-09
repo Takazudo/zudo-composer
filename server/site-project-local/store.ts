@@ -9,6 +9,7 @@ import { serializeSiteProject } from "../../src/site-project/model/canonical";
 import { validateSiteProject } from "../../src/site-project/model/validation";
 import { validateStagedRelease } from "../../src/site-project/api/validation";
 import { sniffAsset } from "../../src/assets/storage/filesystem";
+import { ASSET_CHECKSUM_URL_PATTERN, ASSET_PIN_FILE_NAME_PATTERN } from "../../src/assets/model";
 import type { AssetVersionPin } from "../../src/assets/model";
 import type { SiteProject } from "../../src/site-project/model";
 import type { SiteBuildPlan } from "../../src/site-project/compiler";
@@ -183,7 +184,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     for (const entry of await readdir(join(this.root, "stages"), { withFileTypes: true })) if (!entry.isFile() || entry.isSymbolicLink() || (!/^[a-f0-9]{64}\.json$/.test(entry.name) && !temporary(entry.name))) throw new Error("Unknown staged release file.");
     for (const domain of ["projects", "builds"]) for (const entry of await readdir(join(this.root, domain), { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.isSymbolicLink() || (domain === "projects" ? !isSafeRecordId(entry.name) : !SHA.test(entry.name))) throw new Error("Unknown immutable release directory.");
-      for (const file of await readdir(join(this.root, domain, entry.name), { withFileTypes: true })) if (!file.isFile() || file.isSymbolicLink() || (!temporary(file.name) && !(domain === "projects" ? /^[a-f0-9]{64}\.json$/ : /^(?:build\.json|stage\.json|complete\.json|module-\d{4,8}\.mjs|asset-sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/).test(file.name))) throw new Error("Unknown immutable release file.");
+      for (const file of await readdir(join(this.root, domain, entry.name), { withFileTypes: true })) if (!file.isFile() || file.isSymbolicLink() || (!temporary(file.name) && !(domain === "projects" ? /^[a-f0-9]{64}\.json$/ : /^(?:build\.json|stage\.json|complete\.json|module-\d{4,8}\.mjs)$/.test(file.name) || ASSET_PIN_FILE_NAME_PATTERN.test(file.name)))) throw new Error("Unknown immutable release file.");
     }
   }
   private async heads(): Promise<Heads> {
@@ -236,7 +237,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
     const directory = join(this.root, "builds", buildId), marker = join(directory, "complete.json"); if (!await exists(marker)) return undefined;
     const complete = await this.json(marker) as { schemaVersion: number; identity: SiteProjectActiveSelection; files: Record<string, string>; completionDigest: string };
     if (!complete || Object.keys(complete).sort().join(",") !== "completionDigest,files,identity,schemaVersion" || complete.schemaVersion !== 2 || !sameRelease(complete.identity, { projectId, revision: stage.revision, buildId }) || complete.completionDigest !== hash(releaseJson({ identity: complete.identity, files: complete.files }))) throw new Error("Invalid completion marker.");
-    const expected = ["build.json", "stage.json", ...Object.keys(complete.files).filter((name) => /^(?:module-\d{4,8}\.mjs|asset-sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/.test(name))].sort();
+    const expected = ["build.json", "stage.json", ...Object.keys(complete.files).filter((name) => /^module-\d{4,8}\.mjs$/.test(name) || ASSET_PIN_FILE_NAME_PATTERN.test(name))].sort();
     if (Object.keys(complete.files).sort().join() !== expected.join()) throw new Error("Invalid completed output manifest.");
     const entries = (await readdir(directory)).filter((name) => !name.startsWith(".release-tmp-")).sort();
     if (entries.join() !== [...expected, "complete.json"].sort().join()) throw new Error("Completed build is partial or has unknown files.");
@@ -296,7 +297,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
   }
   async readActiveAsset(pathname: string): Promise<SiteProjectAdapterReadResult<{ bytes: Uint8Array; mimeType: AssetVersionPin["mimeType"]; identity: SiteProjectActiveSelection }>> {
     try { return await this.lock(async () => {
-      if (!/^\/uploaded-assets\/sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf)$/.test(pathname)) return { status: "not-found" as const };
+      if (!ASSET_CHECKSUM_URL_PATTERN.test(pathname)) return { status: "not-found" as const };
       const active = await this.active(); if (!active) return { status: "not-found" as const };
       const release = await this.completed(active.projectId, active.buildId);
       if (!release || !sameRelease(active, release.identity)) throw new Error("Active completed build is missing or inconsistent.");
@@ -305,7 +306,7 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       const pin = pins[0]!, name = `asset-${basename(pin.url)}`;
       if (release.files[name] !== pin.checksum) throw new Error("Active pinned Assets manifest is inconsistent.");
       const bytes = await this.read(join(this.root, "builds", active.buildId, name));
-      if (bytes.byteLength !== pin.byteLength || hash(bytes) !== pin.checksum || sniffAsset(bytes.subarray(0, 16))?.mimeType !== pin.mimeType) throw new Error("Active pinned Assets bytes failed integrity verification.");
+      if (bytes.byteLength !== pin.byteLength || hash(bytes) !== pin.checksum || sniffAsset(bytes.subarray(0, 16), pin.mimeType)?.mimeType !== pin.mimeType) throw new Error("Active pinned Assets bytes failed integrity verification.");
       return { status: "ok" as const, value: { bytes: new Uint8Array(bytes), mimeType: pin.mimeType, identity: { ...active } } };
     }); } catch (error) { return unavailable(error); }
   }
@@ -392,13 +393,13 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
           await this.file(destination);
           const info = await lstat(destination); if (info.size !== pin.byteLength || info.size > 25 * 1024 * 1024) throw new Error("Existing pinned Assets size differs.");
           const bytes = await this.read(destination);
-          if (hash(bytes) !== pin.checksum || sniffAsset(bytes.subarray(0, 16))?.mimeType !== pin.mimeType) throw new Error("Existing pinned Assets integrity differs.");
+          if (hash(bytes) !== pin.checksum || sniffAsset(bytes.subarray(0, 16), pin.mimeType)?.mimeType !== pin.mimeType) throw new Error("Existing pinned Assets integrity differs.");
           await syncDirectory(directory); fileDigests.set(name, pin.checksum); continue;
         }
         if (!this.options.readAsset) throw new Error("Exact Assets byte reader unavailable.");
         const parts: Uint8Array[] = []; let length = 0; const checksum = createHash("sha256");
         for await (const chunk of await this.options.readAsset(pin)) { length += chunk.byteLength; if (length > pin.byteLength || length > 25 * 1024 * 1024) throw new Error("Pinned Assets byte size exceeded."); checksum.update(chunk); parts.push(chunk); }
-        const bytes = Buffer.concat(parts); if (length !== pin.byteLength || checksum.digest("hex") !== pin.checksum || sniffAsset(bytes.subarray(0, 16))?.mimeType !== pin.mimeType) throw new Error("Pinned Assets integrity failure.");
+        const bytes = Buffer.concat(parts); if (length !== pin.byteLength || checksum.digest("hex") !== pin.checksum || sniffAsset(bytes.subarray(0, 16), pin.mimeType)?.mimeType !== pin.mimeType) throw new Error("Pinned Assets integrity failure.");
         await this.write(join(directory, name), bytes, true); fileDigests.set(name, pin.checksum);
       }
       const expected = [...fileDigests.keys(), "complete.json"].sort();

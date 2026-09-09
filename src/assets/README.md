@@ -18,6 +18,24 @@ remain private and cannot enter Vite's public-directory copy. Production inputs
 remain the committed static public assets until release compilation explicitly
 selects a catalog-verified pin manifest and copies those exact private versions.
 
+## MIME and delivery contract
+
+`ASSET_KINDS` is the single allowlist. It currently contains PNG, JPEG, GIF, WebP,
+PDF, ZIP, plain text, CSV, and JSON. Its extension map, file-picker `accept` value,
+checksum URL patterns, and delivery policy are derived from the table. Signature
+sniffing identifies the five image/PDF signatures and ZIP's `PK\x03\x04` header.
+Plain text, CSV, and JSON have no byte signature, so they are accepted only when
+their normalized declared MIME is one of those three entries. Office documents are
+stored as `application/zip` in v1 when their container begins with the ZIP header;
+the container contents are not inspected.
+
+Every local, release, and hosted immutable URL sends its MIME type, byte length,
+`Cache-Control: public, max-age=31536000, immutable`, and
+`X-Content-Type-Options: nosniff`. Images and PDF are inline. ZIP and text kinds
+send `Content-Disposition: attachment; filename="<checksum>.<extension>"`, using
+the checksum already present in the URL. The mutable authoring URL redirects to
+the immutable URL, so its final response follows the same policy.
+
 ## Consumer contract
 
 - `snapshot()` reads the persisted `{schemaVersion, mutationToken, records,
@@ -34,7 +52,7 @@ selects a catalog-verified pin manifest and copies those exact private versions.
   `restoreFolder` use the folder's own revision.
 - The filesystem provider accepts `upload({fileName, declaredMimeType, bytes,
   folderId?, note?, expectedMutationToken?, signal?})` and
-  `replace(id, {bytes, signal?}, precondition)`. Bytes may be streamed. The browser
+  `replace(id, {bytes, signal?, declaredMimeType?}, precondition)`. Bytes may be streamed. The browser
   provider accepts `upload(File, options?)` and `replace(id, Blob, precondition)`;
   its request body contains only bytes, with small encoded metadata in headers.
   Upload header metadata has an 8 KiB encoded limit; longer notes can be saved
@@ -60,7 +78,7 @@ selects a catalog-verified pin manifest and copies those exact private versions.
 
 `assetAuthoringUrl(id)` produces `/uploaded-assets/asset-<id>`. Development delivery
 resolves it to the active head with a non-cacheable redirect. Immutable URLs use
-`/uploaded-assets/sha256-<checksum>.<signature-derived extension>`. Renames and moves
+`/uploaded-assets/sha256-<checksum>.<allowlisted extension>`. Renames and moves
 change neither URL. Trashed assets do not resolve through the authoring URL;
 retained exact-version URLs remain readable.
 
