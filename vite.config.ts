@@ -1,3 +1,4 @@
+import { resolveImageEditorAliases } from './plugins/image-editor-aliases.mjs';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
@@ -55,6 +56,7 @@ const assetsStoreRoot = readRootEnvironment(process.env.ZUDO_ASSETS_STORE_ROOT, 
   ?? domainRoot('assets');
 
 export default defineConfig({
+  resolve: { alias: resolveImageEditorAliases() },
   publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicAssets),
   // The configured pack and zfb-md-wasm import their glue/wasm files with
   // Vite's `?url` query. Keep both dependency packages in Vite's normal module

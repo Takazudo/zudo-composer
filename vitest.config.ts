@@ -16,7 +16,7 @@ export default defineConfig({
           // Must stay as wide as the app project's `server/**` exclusion, or a server spec
           // in any other supported extension would be claimed by neither project and silently
           // never run.
-          include: ['server/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
+          include: ['server/**/*.{test,spec}.?(c|m)[jt]s?(x)', 'packages/image-editor/src/__tests__/**/*.test.ts'],
           environment: 'node',
           // These specs spawn real Node processes (CLI framing, cross-process CAS) and
           // a 5s in-process default reads as a regression under full-suite load (#179).
@@ -59,7 +59,7 @@ export default defineConfig({
           // blow past 20s while passing in isolation. Same reason the server project raises
           // its own timeout; the cost here is real I/O, not a hung promise.
           testTimeout: 60_000,
-          exclude: [...configDefaults.exclude, '**/worktrees/**', 'server/**'],
+          exclude: [...configDefaults.exclude, '**/worktrees/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts'],
         },
       },
     ],

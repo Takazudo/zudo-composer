@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 import { APP_ROOT, resolvePublicDir } from "../../plugins/roots.mjs";
 import { APP_ENTRY_MODULE } from "../../plugins/composer-app-html.mjs";
 import { OPTIMIZE_DEPS_EXCLUDE, loadHostConfig, resolveComposerDevConfig, resolvePreactAliases } from "../dev-server.mjs";
+import { resolveImageEditorAliases } from "../../plugins/image-editor-aliases.mjs";
 import { resolveFsAllow } from "../../plugins/roots.mjs";
 import { resolveComponentPack } from "../../plugins/component-pack.mjs";
 
@@ -170,7 +171,7 @@ describe("resolveComposerDevConfig", () => {
     expect(inlineConfig.optimizeDeps?.entries).toEqual([resolve(APP_ROOT, APP_ENTRY_MODULE)]);
     // The pack's own directory is allowed too: it is outside the host root.
     expect(inlineConfig.server?.fs?.allow).toEqual([...resolveFsAllow(FIXTURE_HOST), pack.packageRoot]);
-    expect(inlineConfig.resolve?.alias).toEqual(resolvePreactAliases());
+    expect(inlineConfig.resolve?.alias).toEqual([...resolvePreactAliases(), ...resolveImageEditorAliases()]);
     const names = inlineConfig.plugins?.flat().map((plugin) => (plugin as { name?: string } | undefined)?.name);
     expect(names).toContain("zudo-composer-app-html");
     expect(names).toContain("zudo-component-pack");
