@@ -144,7 +144,7 @@ export function CompositionPreviewHost({
     {enlarged && <button ref={closeButtonRef} type="button" class="sg-composition-preview__close" aria-label={`Close full-screen ${title}`} onClick={() => setEnlarged(false)}><XMarkIcon size="sm" /><span>Close</span></button>}
     <div class="sg-composition-preview__stage" aria-busy={loading || media.loading}>
       {!effectiveSnapshot && <div class="sg-composition-preview__empty"><h3>{emptyTitle}</h3><p>{media.error ?? (media.loading ? "Resolving current Media versions…" : emptyMessage)}</p></div>}
-      <iframe ref={frameRef} hidden={!effectiveSnapshot} style={{ display: effectiveSnapshot ? undefined : "none" }} class="sg-composition-preview__frame" tabIndex={-1} aria-hidden={!effectiveSnapshot} {...frameProps} />
+      <iframe ref={frameRef} hidden={!effectiveSnapshot} style={{ display: effectiveSnapshot ? undefined : "none" }} onError={() => onErrorRef.current?.("Preview frame failed to load.")} class="sg-composition-preview__frame" tabIndex={-1} aria-hidden={!effectiveSnapshot} {...frameProps} />
     </div>
   </div>;
 }
