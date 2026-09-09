@@ -12,9 +12,9 @@
 
 .sg-composer-editor { min-width: 0; }
 
-/* The main region is one grid row for the canvas, plus an auto row that a
- * provider/navigation banner takes when there is one. `minmax(0, 1fr)` on the
- * canvas is what keeps the iframe from growing past the region. */
+/* The main region reserves an auto-sized row for a provider/navigation banner
+ * followed by a flexible canvas row. Explicit placement keeps an empty banner
+ * in the first row, while `minmax(0, 1fr)` keeps the iframe inside the region. */
 .sg-composer-main {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -22,8 +22,12 @@
   min-width: 0;
 }
 
-.sg-composer-main__banner:empty {
-  display: none;
+.sg-composer-main__banner {
+  grid-row: 1;
+}
+
+.sg-composer-main > :not(.sg-composer-main__banner) {
+  grid-row: 2;
 }
 
 /* The canvas menu has no host-side trigger to measure, so the menu is anchored
