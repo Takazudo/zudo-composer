@@ -49,7 +49,7 @@ The Media lock contains provider/asset/version/checksum/MIME/size/immutable URL,
 captured metadata revision/head, and the persisted catalog token. Builds copy and
 checksum/signature/size-verify exact retained versions; they do not copy all Media
 files or fetch latest. Each build's `media-sha256-…` file maps to its pin's
-`/uploaded-media/sha256-…` URL for a later explicit artifact exporter.
+`/uploaded-assets/sha256-…` URL for a later explicit artifact exporter.
 
 The local toolchain records the component pack as a package, because that is
 what it is: `packSpecifier` is the configured `pack` value, `packSource` is the

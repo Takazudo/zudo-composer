@@ -2,8 +2,8 @@ import { Component, type ComponentChildren, type JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { ProductionProviderIntegration } from "../../app/provider-integration";
 import { type SiteBuildPlan, type SiteCompiledRoute } from "../../site-project/compiler";
-import { compileWithCapturedMedia } from "../../site-project/media/compile";
-import { validateMediaSnapshot } from "../../media/model";
+import { compileWithCapturedAsset } from "../../site-project/assets/compile";
+import { validateAssetSnapshot } from "../../assets/model";
 import type { WorkspaceCapture } from "../../app/workspace-snapshot";
 import { validateSiteProject, type SiteProject } from "../../site-project";
 import type { SitemapDocument } from "../../sitemapper/model/types";
@@ -30,7 +30,7 @@ export async function loadWorkingPreviewSnapshot(providers: ProductionProviderIn
   try {
     let project: SiteProject;
     let capture: WorkspaceCapture | undefined;
-    if (providers.mediaProvider) {
+    if (providers.assetProvider) {
       const snapshot = await providers.captureWorkspace();
       if (snapshot.status !== "ready") return { status: "provider-error", message: snapshot.status === "unavailable" ? snapshot.error.message : `Workspace capture ${snapshot.status}; retry after completing pending edits.`, retryable: true };
       project = snapshot.project; capture = snapshot.capture;
@@ -43,10 +43,10 @@ export async function loadWorkingPreviewSnapshot(providers: ProductionProviderIn
     }
     const validated = validateSiteProject(project, { componentPack: providers.componentProvider.manifest });
     if (!validated.ok) return { status: "validation-error", message: validated.diagnostics.map(({ message }) => message).join(" ") };
-    const mediaSnapshot = capture?.values[`media:${providers.mediaProvider?.descriptor.id}`];
-    if (capture && !validateMediaSnapshot(mediaSnapshot)) return { status: "compiler-error", message: "Aggregate capture has no valid Media snapshot." };
-    const compilation = await compileWithCapturedMedia(validated.project, { catalog: providers.componentProvider.catalog, mediaStore: providers.mediaProvider?.store,
-      ...(capture ? { snapshot: mediaSnapshot as import("../../media/model").MediaSnapshot, isCaptureCurrent: () => providers.isCaptureCurrent(capture!) } : {}),
+    const assetSnapshot = capture?.values[`media:${providers.assetProvider?.descriptor.id}`];
+    if (capture && !validateAssetSnapshot(assetSnapshot)) return { status: "compiler-error", message: "Aggregate capture has no valid Media snapshot." };
+    const compilation = await compileWithCapturedAsset(validated.project, { catalog: providers.componentProvider.catalog, assetStore: providers.assetProvider?.store,
+      ...(capture ? { snapshot: assetSnapshot as import("../../assets/model").AssetSnapshot, isCaptureCurrent: () => providers.isCaptureCurrent(capture!) } : {}),
     });
     if (compilation.status === "blocked") return { status: "compiler-error", message: compilation.diagnostics.map(({ message }) => message).join(" ") };
     const sitemap = activeSitemap(validated.project);

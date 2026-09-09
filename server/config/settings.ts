@@ -15,7 +15,7 @@
 //               like every other composition. There is no templates directory
 //               and no template file format.
 //   data        the four JSON domains (compositions, content, mappings,
-//               sitemaps) plus media, all under `dataDir`.
+//               sitemaps) plus assets, all under `dataDir`.
 
 /**
  * Every setting a host may declare. Path settings are relative to the host
@@ -59,18 +59,18 @@ export interface ComposerSettings {
    */
   sitemapsDir: string;
   /**
-   * Media content-addressed store: `catalog.json` plus `versions/`.
+   * Assets content-addressed store: `catalog.json` plus `versions/`.
    *
-   * @default "cms/media"
+   * @default "cms/assets"
    */
-  mediaDir: string;
+  assetsDir: string;
   /**
-   * Published media bytes the host commits and serves. Not re-based by
+   * Published assets bytes the host commits and serves. Not re-based by
    * `dataDir` — it lives under the host's public directory, not its CMS data.
    *
-   * @default "public/uploaded-media"
+   * @default "public/uploaded-assets"
    */
-  publicMediaDir: string;
+  publicAssetsDir: string;
   /**
    * The host's base CSS entry. It is the sole importer of the component pack's
    * CSS and the host's Tailwind `@source` declaration point.
@@ -103,14 +103,14 @@ export const DEFAULT_SETTINGS: Readonly<ComposerSettingDefaults> = Object.freeze
   contentDir: "cms/content",
   mappingsDir: "cms/mappings",
   sitemapsDir: "cms/sitemaps",
-  mediaDir: "cms/media",
-  publicMediaDir: "public/uploaded-media",
+  assetsDir: "cms/assets",
+  publicAssetsDir: "public/uploaded-assets",
   styles: "styles/base.css",
 });
 
 /**
  * The domain directories that live beneath `dataDir`, and the segment each one
- * appends. `publicMediaDir` and `styles` are deliberately absent: they are not
+ * appends. `publicAssetsDir` and `styles` are deliberately absent: they are not
  * CMS data.
  */
 export const DATA_DOMAIN_SEGMENTS: Readonly<Record<keyof ComposerSettings & `${string}Dir`, string | undefined>> = Object.freeze({
@@ -119,8 +119,8 @@ export const DATA_DOMAIN_SEGMENTS: Readonly<Record<keyof ComposerSettings & `${s
   contentDir: "content",
   mappingsDir: "mappings",
   sitemapsDir: "sitemaps",
-  mediaDir: "media",
-  publicMediaDir: undefined,
+  assetsDir: "assets",
+  publicAssetsDir: undefined,
 });
 
 /**
@@ -132,7 +132,7 @@ export const DATA_DOMAIN_SEGMENTS: Readonly<Record<keyof ComposerSettings & `${s
  * the same rules as the settings themselves: host-root-relative paths, and a
  * module specifier for `pack`. These are distinct from the absolute-root
  * variables the Vite plugins read (`ZUDO_COMPOSITIONS_ROOT`,
- * `ZUDO_MEDIA_STORE_ROOT`), which address a different layer.
+ * `ZUDO_ASSETS_STORE_ROOT`), which address a different layer.
  */
 export const SETTING_ENVIRONMENT_KEYS: Readonly<Record<keyof ComposerSettings, string>> = Object.freeze({
   dataDir: "ZUDO_COMPOSER_DATA_DIR",
@@ -140,8 +140,8 @@ export const SETTING_ENVIRONMENT_KEYS: Readonly<Record<keyof ComposerSettings, s
   contentDir: "ZUDO_COMPOSER_CONTENT_DIR",
   mappingsDir: "ZUDO_COMPOSER_MAPPINGS_DIR",
   sitemapsDir: "ZUDO_COMPOSER_SITEMAPS_DIR",
-  mediaDir: "ZUDO_COMPOSER_MEDIA_DIR",
-  publicMediaDir: "ZUDO_COMPOSER_PUBLIC_MEDIA_DIR",
+  assetsDir: "ZUDO_COMPOSER_ASSETS_DIR",
+  publicAssetsDir: "ZUDO_COMPOSER_PUBLIC_ASSETS_DIR",
   styles: "ZUDO_COMPOSER_STYLES",
   pack: "ZUDO_COMPOSER_PACK",
 });

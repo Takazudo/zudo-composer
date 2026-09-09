@@ -1,7 +1,7 @@
 // @ts-check
 // Dev-only transport for domain filesystem stores.
 //
-// Composer and Media keep their own endpoints; this factory serves the domains
+// Composer and Assets keep their own endpoints; this factory serves the domains
 // that have no filesystem transport yet, one endpoint per domain, so a port is
 // a handler table plus an error adapter rather than a new server.
 //

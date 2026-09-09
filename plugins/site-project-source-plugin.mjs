@@ -5,7 +5,7 @@ import { COMPONENT_PACK_ID } from "./component-pack-plugin.mjs";
 
 export const SITE_PROJECT_SOURCE_ID = "virtual:site-project-source";
 export const RESOLVED_SITE_PROJECT_SOURCE_ID = `\0${SITE_PROJECT_SOURCE_ID}`;
-const PINNED_MEDIA = /^\/uploaded-media\/sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf)$/;
+const PINNED_ASSET = /^\/uploaded-assets\/sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf)$/;
 
 /** @param {unknown} source */
 function serializedModule(source) {
@@ -19,13 +19,13 @@ function serializedModule(source) {
 /** @param {any} loaded */
 function readySource(loaded) {
   const release = loaded.release;
-  return { status: "ready", artifact: { kind: "activated-local", identity: release.identity, project: loaded.project, build: release.build, completionDigest: release.completionDigest, files: release.files, mediaPins: release.stage.mediaLock?.pins ?? [], toolchain: release.stage.toolchain } };
+  return { status: "ready", artifact: { kind: "activated-local", identity: release.identity, project: loaded.project, build: release.build, completionDigest: release.completionDigest, files: release.files, assetPins: release.stage.assetLock?.pins ?? [], toolchain: release.stage.toolchain } };
 }
 
 /**
  * Read-only release source. It resolves only the single verified active release
  * pointer, in every command.
- * @param {{readDevRelease?: () => Promise<any>, readDevMedia?: (pathname: string) => Promise<any>, workspaceRoot?: string, packIdentity?: import("./component-pack.d.mts").ResolvedComponentPack}} [options]
+ * @param {{readDevRelease?: () => Promise<any>, readDevAsset?: (pathname: string) => Promise<any>, workspaceRoot?: string, packIdentity?: import("./component-pack.d.mts").ResolvedComponentPack}} [options]
  */
 export function siteProjectSourcePlugin(options = {}) {
   /** @type {any} */ let server;
@@ -116,12 +116,12 @@ export function siteProjectSourcePlugin(options = {}) {
       requestRefresh(false);
       viteServer.middlewares?.use(async (req, res, next) => {
         let pathname; try { pathname = new URL(req.url ?? "", "http://localhost").pathname; } catch { return next(); }
-        if (!PINNED_MEDIA.test(pathname)) return next();
+        if (!PINNED_ASSET.test(pathname)) return next();
         try {
-          const value = options.readDevMedia ? await options.readDevMedia(pathname) : await viteServer.ssrLoadModule(devReaderId).then(async (module) => module.readActivatedSiteMedia(pathname, await readerOptions()));
+          const value = options.readDevAsset ? await options.readDevAsset(pathname) : await viteServer.ssrLoadModule(devReaderId).then(async (module) => module.readActivatedSiteAssets(pathname, await readerOptions()));
           if (!value) return next();
-          res.statusCode = 200; res.setHeader("Content-Type", value.mediaType); res.setHeader("Content-Length", String(value.bytes.byteLength)); res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); res.setHeader("ETag", `"sha256-${pathname.slice("/uploaded-media/sha256-".length).split(".")[0]}"`); return res.end(Buffer.from(value.bytes));
-        } catch { res.statusCode = 503; res.setHeader("Cache-Control", "no-store"); return res.end("Activated Media unavailable."); }
+          res.statusCode = 200; res.setHeader("Content-Type", value.mimeType); res.setHeader("Content-Length", String(value.bytes.byteLength)); res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); res.setHeader("ETag", `"sha256-${pathname.slice("/uploaded-assets/sha256-".length).split(".")[0]}"`); return res.end(Buffer.from(value.bytes));
+        } catch { res.statusCode = 503; res.setHeader("Cache-Control", "no-store"); return res.end("Activated Assets unavailable."); }
       });
     },
     resolveId(id) { return id === SITE_PROJECT_SOURCE_ID ? RESOLVED_SITE_PROJECT_SOURCE_ID : undefined; },

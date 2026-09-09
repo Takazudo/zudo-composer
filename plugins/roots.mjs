@@ -44,7 +44,7 @@ export function validateRootOverride(root, label) {
 }
 
 /**
- * The host project directory. Authored data — compositions, media,
+ * The host project directory. Authored data — compositions, assets,
  * `.zudo-site-project` — resolves beneath it.
  * @param {string | undefined} configured
  */
@@ -130,18 +130,18 @@ export function resolveWatchIgnored(roots) {
 /**
  * Vite's static directory for a host.
  *
- * Committed media is served at `/<last segment of publicMediaDir>/`, so the
- * static root is that directory's parent. A single-segment `publicMediaDir`
+ * Committed assets is served at `/<last segment of publicAssetsDir>/`, so the
+ * static root is that directory's parent. A single-segment `publicAssetsDir`
  * would make the parent the host project root and expose the whole tree, so it
  * is refused rather than silently served.
  * @param {string} workspaceRoot
- * @param {string} publicMedia
+ * @param {string} publicAssets
  */
-export function resolvePublicDir(workspaceRoot, publicMedia) {
-  const publicDir = dirname(publicMedia);
+export function resolvePublicDir(workspaceRoot, publicAssets) {
+  const publicDir = dirname(publicAssets);
   if (publicDir === resolve(workspaceRoot)) {
     throw new Error(
-      `zudo-composer config: \`publicMediaDir\` must sit inside a static directory, not directly at the host project root — received "${publicMedia}". Use a nested path such as "public/uploaded-media".`,
+      `zudo-composer config: \`publicAssetsDir\` must sit inside a static directory, not directly at the host project root — received "${publicAssets}". Use a nested path such as "public/uploaded-assets".`,
     );
   }
   return publicDir;

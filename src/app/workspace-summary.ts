@@ -23,14 +23,14 @@ import { COMPOSITION_FILE_PROVIDER_CHANNEL } from "../composer/storage/file-prov
 import { CONTENT_FILE_PROVIDER_DOMAIN } from "../content/storage/file-provider";
 import { MAPPING_FILE_PROVIDER_DOMAIN } from "../mapping/storage/file-provider";
 import { SITEMAP_FILE_PROVIDER_DOMAIN } from "../sitemapper/storage/file-provider";
-import { MEDIA_PERSISTENCE_CHANNEL } from "./persistence-channels";
+import { ASSET_PERSISTENCE_CHANNEL } from "./persistence-channels";
 import type { CompositionSummary } from "../composer/browser";
 import type { ContentCatalog } from "../content/catalog";
 import type { ContentEntryRecord, ContentModelRecord } from "../content/model";
 import type { ContentStore } from "../content/library";
 import type { ComponentCatalog } from "../composer/model/types";
 import { mappingDeepLinkHref } from "../features/mapping/deep-link";
-import type { MediaStore } from "../media";
+import type { AssetStore } from "../assets";
 import { resolveMappingDefinition, type CompositionCatalog as MappingCompositionCatalog, type MappingCatalog } from "../mapping";
 import { isSafeRecordId, type RecordId } from "../shared";
 import type { SitemapRecord, SitemapStore } from "../sitemapper/library";
@@ -161,7 +161,7 @@ export interface WorkspaceSummaryIntegration {
   readonly mappingCatalog: MappingCatalog;
   readonly mappingCompositionCatalog: MappingCompositionCatalog;
   readonly sitemapProvider: { readonly descriptor?: { id: string }; readonly store: WorkspaceSitemapStore };
-  readonly mediaProvider: { readonly descriptor: { id: string }; readonly store: Pick<MediaStore, "list"> } | undefined;
+  readonly assetProvider: { readonly descriptor: { id: string }; readonly store: Pick<AssetStore, "list"> } | undefined;
 }
 
 export interface WorkspaceSummary {
@@ -433,15 +433,15 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
 
   // Media is a separate provider with its own lifecycle, so it deliberately does
   // not wait on — or fail with — the SiteProject integration.
-  const loadMedia = async (provider: NonNullable<WorkspaceSummaryIntegration["mediaProvider"]>): Promise<MediaData> => {
+  const loadMedia = async (provider: NonNullable<WorkspaceSummaryIntegration["assetProvider"]>): Promise<MediaData> => {
     const summaries = await provider.store.list();
     const byType: Record<string, number> = {};
     let bytes = 0;
     const records: WorkspaceRecord[] = [];
     for (const summary of summaries) {
       bytes += summary.byteLength;
-      byType[summary.mediaType] = (byType[summary.mediaType] ?? 0) + 1;
-      const intent: RouteIntent = { route: "media", providerId: integration.mediaProvider!.descriptor.id, assetId: summary.id };
+      byType[summary.mimeType] = (byType[summary.mimeType] ?? 0) + 1;
+      const intent: RouteIntent = { route: "media", providerId: integration.assetProvider!.descriptor.id, assetId: summary.id };
       records.push({ kind: "media", id: summary.id, label: summary.fileName, updatedAt: summary.updatedAt, href: formatIntent(intent), intent });
     }
     return { counts: { assets: summaries.length, bytes, byType }, records };
@@ -449,8 +449,8 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
 
   // Unlike `guard`, "no provider connected" is reported as `absent` rather than
   // caught as a failure — it is the ordinary dev answer, not a broken read.
-  const readMedia = async (): Promise<WorkspaceMediaSource<MediaData>> => {
-    const provider = integration.mediaProvider;
+  const readAsset = async (): Promise<WorkspaceMediaSource<MediaData>> => {
+    const provider = integration.assetProvider;
     if (!provider) return { status: "absent" };
     try {
       return { status: "ok", value: await loadMedia(provider) };
@@ -476,7 +476,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
       cached.mappings ??= guard("Mappings could not be read.", loadMappings),
       cached.sitemaps ??= guard("Sitemaps could not be read.", loadSitemaps),
       cached.content ??= guard("Content could not be read.", loadContent),
-      cached.media ??= readMedia(),
+      cached.media ??= readAsset(),
     ]);
     return { compositions, mappings, sitemaps, content, media };
   };
@@ -488,7 +488,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     else if (channel === CONTENT_FILE_PROVIDER_DOMAIN) { delete cached.content; delete cached.mappings; }
     else if (channel === MAPPING_FILE_PROVIDER_DOMAIN) delete cached.mappings;
     else if (channel === SITEMAP_FILE_PROVIDER_DOMAIN) delete cached.sitemaps;
-    else if (channel === MEDIA_PERSISTENCE_CHANNEL) delete cached.media;
+    else if (channel === ASSET_PERSISTENCE_CHANNEL) delete cached.media;
     else cached = {}; // Workspace selection and legacy broad hints.
     for (const listener of listeners) listener();
   });

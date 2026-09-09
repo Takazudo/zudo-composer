@@ -6,7 +6,7 @@ import type { ContentEntryRecord, ContentModelRecord } from "../../content/model
 import type { ContentModelSummary } from "../../content/library";
 import type { MappingCatalogEntry, MappingRecord } from "../../mapping";
 import { MAPPING_SCHEMA_VERSION } from "../../mapping";
-import type { MediaSummary } from "../../media";
+import type { AssetSummary } from "../../assets";
 import { SITEMAP_SCHEMA_VERSION, type SitemapNode } from "../../sitemapper/model";
 import type { SitemapRecord } from "../../sitemapper/library";
 import type { ProductionProviderIntegration } from "../provider-integration";
@@ -95,9 +95,9 @@ function sitemapRecord(id: string, updatedAt: string, root: SitemapNode[]): Site
   return { id, createdAt: AT(1), updatedAt, document: { schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] }, id, name: `Sitemap ${id}`, root } };
 }
 
-function mediaSummary(id: string, updatedAt: string, mediaType: MediaSummary["mediaType"], byteLength: number): MediaSummary {
-  return { id, fileName: `${id}.file`, mediaType, byteLength, checksum: "a".repeat(64), createdAt: AT(1), updatedAt,
-    revision: 1, folderId: null, note: "", state: "active", versionId: "a".repeat(64), url: "/uploaded-media/fixture", authoringUrl: `/uploaded-media/asset-${id}` };
+function mediaSummary(id: string, updatedAt: string, mimeType: AssetSummary["mimeType"], byteLength: number): AssetSummary {
+  return { id, fileName: `${id}.file`, mimeType, byteLength, checksum: "a".repeat(64), createdAt: AT(1), updatedAt,
+    revision: 1, folderId: null, note: "", state: "active", versionId: "a".repeat(64), url: "/uploaded-assets/fixture", authoringUrl: `/uploaded-assets/asset-${id}` };
 }
 
 const emptyCatalog: ComponentCatalog = {
@@ -118,7 +118,7 @@ interface FakeOptions {
   entries?: Readonly<Record<string, { count: number; entries: readonly ContentEntryRecord[]; diagnostics: readonly { entryId: string; message: string }[] }>>;
   sitemaps?: readonly SitemapRecord[] | Error;
   sitemapsWithoutReadAll?: boolean;
-  media?: readonly MediaSummary[] | Error | null;
+  media?: readonly AssetSummary[] | Error | null;
 }
 
 function settle<T>(source: T | Error): Promise<T> {
@@ -182,7 +182,7 @@ function createFakeIntegration(options: FakeOptions = {}) {
       resolve: async (ref) => (knownCompositions.has(ref.recordId) ? { status: "resolved", record: compositionRecord(ref.recordId) } : { status: "not-found" }),
     },
     sitemapProvider: { descriptor: { id: "sitemap-filesystem" }, store: sitemapStore },
-    mediaProvider: media === null ? undefined : { descriptor: { id: "media-files" }, store: { list: () => settle(media) } },
+    assetProvider: media === null ? undefined : { descriptor: { id: "asset-files" }, store: { list: () => settle(media) } },
   };
   return { integration, initialize, retry, scanEntries };
 }
@@ -191,7 +191,7 @@ describe("createWorkspaceSummary — contract", () => {
   it.each([
     ["compositions:files", ["compositions", "mappings"]],
     ["content", ["content", "mappings"]],
-    ["mapping", ["mappings"]], ["sitemapper", ["sitemaps"]], ["media", ["media"]],
+    ["mapping", ["mappings"]], ["sitemapper", ["sitemaps"]], ["assets", ["media"]],
     ["workspace", ["compositions", "mappings", "sitemaps", "content", "media"]],
     ["sessions", []],
   ] as const)("invalidates only dependent summary reads after %s", async (channel, affected) => {
@@ -203,7 +203,7 @@ describe("createWorkspaceSummary — contract", () => {
       mappings: vi.spyOn(integration.mappingCatalog, "list"),
       sitemaps: vi.spyOn(integration.sitemapProvider.store, "readAll"),
       content: vi.spyOn(integration.contentProvider.store, "listModels"),
-      media: vi.spyOn(integration.mediaProvider!.store, "list"),
+      media: vi.spyOn(integration.assetProvider!.store, "list"),
     };
     const summary = createWorkspaceSummary(integration);
     await summary.counts();
@@ -217,13 +217,13 @@ describe("createWorkspaceSummary — contract", () => {
     const { integration } = createFakeIntegration({ media: [] });
     let changed!: (channel?: string) => void;
     integration.subscribeChanges = (listener) => { changed = listener; return () => {}; };
-    let finish!: (value: readonly MediaSummary[]) => void;
-    const list = vi.spyOn(integration.mediaProvider!.store, "list")
+    let finish!: (value: readonly AssetSummary[]) => void;
+    const list = vi.spyOn(integration.assetProvider!.store, "list")
       .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
       .mockResolvedValue([mediaSummary("current", AT(1), "image/png", 10)]);
     const summary = createWorkspaceSummary(integration);
     const old = summary.counts();
-    changed("media");
+    changed("assets");
     expect(await summary.counts()).toMatchObject({ media: { value: { assets: 1 } } });
     finish([]); await old;
     expect(await summary.counts()).toMatchObject({ media: { value: { assets: 1 } } });
@@ -319,7 +319,7 @@ describe("createWorkspaceSummary — recent", () => {
     ]);
     expect(records.map(({ href }) => href)).toEqual([
       "/sitemapper?provider=sitemap-filesystem&sitemap=studio",
-      "/media?provider=media-files&asset=hero-image",
+      "/media?provider=asset-files&asset=hero-image",
       "/content?provider=content-filesystem&model=journal",
       "/mapping?provider=mapping-filesystem&mapping=journal",
       "/composer",

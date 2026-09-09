@@ -1,7 +1,7 @@
 import type { JSX, RefObject, TargetedEvent } from "preact";
 import { useCallback, useEffect, useReducer, useRef, useState } from "preact/hooks";
 import { useWorkspace } from "../../app/workspace-context";
-import { MEDIA_MAX_BYTE_LENGTH, type MediaRecord } from "../../media";
+import { ASSET_MAX_BYTE_LENGTH, type AssetRecord } from "../../assets";
 import { UploadIcon, XMarkIcon } from "../../components/icons";
 import { Button, Chip, type ChipTone } from "../../components/ui";
 import { formatBytes } from "./media-format";
@@ -20,7 +20,7 @@ export const MEDIA_UPLOAD_ACCEPT = "image/png,image/jpeg,image/gif,image/webp,ap
 export { MEDIA_UPLOAD_BUSY_REJECTION } from "./upload-reducer";
 
 export interface MediaUploadStore {
-  upload(file: Blob & { name: string }): Promise<MediaRecord>;
+  upload(file: Blob & { name: string }): Promise<AssetRecord>;
 }
 
 export interface UseMediaUploadOptions {
@@ -84,7 +84,7 @@ export function useMediaUpload({ store, refresh, now = Date.now }: UseMediaUploa
   const retryFiles = useRef(new Map<string, File>());
   useEffect(() => {
     if (!integration) return;
-    const session = integration.sessions.register({ feature: "Media upload", providerId: integration.mediaProvider?.descriptor.id ?? "media-unavailable", workspaceId: integration.workspace.id }, { flush: () => pending.current });
+    const session = integration.sessions.register({ feature: "Media upload", providerId: integration.assetProvider?.descriptor.id ?? "media-unavailable", workspaceId: integration.workspace.id }, { flush: () => pending.current });
     sessionRef.current = session;
     return () => { session.detach(); sessionRef.current = null; };
   }, [integration]);
@@ -217,7 +217,7 @@ export function MediaUploadPanel({ controller }: MediaUploadPanelProps): JSX.Ele
             Choose files
           </Button>
         </span>
-        <span class="sg-media-drop__hint">{`PNG, JPEG, GIF, WebP, PDF · up to ${formatBytes(MEDIA_MAX_BYTE_LENGTH)}`}</span>
+        <span class="sg-media-drop__hint">{`PNG, JPEG, GIF, WebP, PDF · up to ${formatBytes(ASSET_MAX_BYTE_LENGTH)}`}</span>
       </div>
       {state.rejection ? <p class="sg-media-upload__rejection" role="status">{state.rejection}</p> : null}
       <div aria-live="polite">

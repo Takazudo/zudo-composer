@@ -33,11 +33,11 @@ const FORBIDDEN_ARTIFACT_MARKERS = [
   "virtual:composer-file-provider",
   "createComposerFileProviderMiddleware",
   "COMPOSER_FILE_PROVIDER_ENDPOINT",
-  "MEDIA_FILE_PROVIDER_ENDPOINT",
-  "/__zudo_composer_media_file_provider",
+  "ASSET_FILE_PROVIDER_ENDPOINT",
+  "/__zudo_composer_asset_file_provider",
   "/__zudo_composer_file_provider",
-  "cms/media",
-  "src/media/storage/file-provider/dev-server-entry.ts",
+  "cms/assets",
+  "src/assets/storage/file-provider/dev-server-entry.ts",
   "x-zudo-composer-capability",
   "dev-server-entry",
   "storage/filesystem",
@@ -49,7 +49,7 @@ const FORBIDDEN_ARTIFACT_MARKERS = [
   "virtual:site-project-source",
   "readActivatedSiteProject",
   "readActivatedSiteRelease",
-  "readActivatedSiteMedia",
+  "readActivatedSiteAssets",
   "SiteProjectApiService",
   "SiteProjectStoreAdapter",
   "createLocalSiteProjectStore",
@@ -160,10 +160,10 @@ export async function verifyHostedDemoArtifact({ directory, expectedSourceRevisi
 
   assert.deepEqual([...found].sort(), Object.keys(manifest.assets).sort(), "Manifest must describe every final file exactly once");
   assert.ok(manifest.assets["index.html"], "Hosted artifact must include index.html");
-  assert.ok(manifest.assets["hosted-demo-media-worker.js"], "Hosted artifact must include hosted-demo-media-worker.js");
-  const media = found.filter((path) => path.startsWith("uploaded-media/"));
-  assert.equal(media.length, 4, "Hosted artifact must include exactly four media assets");
-  for (const path of media) assert.match(path, /^uploaded-media\/sha256-[a-f0-9]{64}\.png$/);
+  assert.ok(manifest.assets["hosted-demo-assets-worker.js"], "Hosted artifact must include hosted-demo-assets-worker.js");
+  const assets = found.filter((path) => path.startsWith("uploaded-assets/"));
+  assert.equal(assets.length, 4, "Hosted artifact must include exactly four assets assets");
+  for (const path of assets) assert.match(path, /^uploaded-assets\/sha256-[a-f0-9]{64}\.png$/);
 
   // Preserve the ordinary dist check's preview boundary. The full application
   // bundle may contain host-only labels, so inspect only the preview entry's

@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, resolve } from "node:path";
 /** Fail before server startup when a lane was not given the runner's disposable roots. */
 export function requireIsolatedRoots(environment: NodeJS.ProcessEnv) {
   const releaseRoot = environment.ZUDO_SITE_PROJECT_ROOT;
-  const mediaRoot = environment.ZUDO_MEDIA_STORE_ROOT;
+  const mediaRoot = environment.ZUDO_ASSETS_STORE_ROOT;
   const dataRoot = environment.ZUDO_DATA_ROOT;
   const fail = () => { throw new Error("Use run-site-project-browser: explicit disposable release, Media and data roots are required."); };
   if (!releaseRoot || !mediaRoot || !dataRoot) return fail();

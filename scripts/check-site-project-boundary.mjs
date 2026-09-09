@@ -47,15 +47,15 @@ assert.ok(browserConfig.includes("reuseExistingServer: false"), "isolated dev br
 assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must use one deterministic worker");
 
 // The committed-media static root moves with the host config: pinning a
-// literal here would re-hardcode the directory `publicMediaDir` exists to move.
+// literal here would re-hardcode the directory `publicAssetsDir` exists to move.
 assert.ok(
-  vite.includes("publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicMedia)"),
+  vite.includes("publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicAssets)"),
   "Vite dev server must expose the host's committed media root, resolved from the config",
 );
 // Media falls back to the host config through the same domain resolver every
 // other CMS root uses, so the fallback is asserted where it is defined.
 assert.ok(
-  vite.includes("?? domainRoot('media')") && vite.includes("dataRoot ? resolve(dataRoot, domain) : composerConfig.paths[domain]"),
+  vite.includes("?? domainRoot('assets')") && vite.includes("dataRoot ? resolve(dataRoot, domain) : composerConfig.paths[domain]"),
   "Vite must resolve the Media store root from the host config",
 );
 // The excluded pack name is DERIVED from the resolved config, never spelled
@@ -67,7 +67,7 @@ assert.ok(
 );
 assert.ok(vite.includes("componentPackPlugin({ workspaceRoot: composerConfig.workspaceRoot, pack: composerConfig.settings.pack })"), "Vite must resolve its component pack through the host config");
 assert.match(plugin, /readActivatedSiteRelease/);
-assert.match(plugin, /readActivatedSiteMedia/);
+assert.match(plugin, /readActivatedSiteAssets/);
 assert.match(plugin, /release:changed/);
 assert.match(plugin, /export const siteProjectRevision/);
 // One resolver, three consumers: the store, the source plugin's watcher and
@@ -92,7 +92,7 @@ const forbiddenProductionMarkers = [
   "virtual:site-project-source",
   "readActivatedSiteProject",
   "readActivatedSiteRelease",
-  "readActivatedSiteMedia",
+  "readActivatedSiteAssets",
   "SiteProjectApiService",
   "SiteProjectStoreAdapter",
   "createLocalSiteProjectStore",

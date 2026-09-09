@@ -8,7 +8,7 @@ import {
   type ContentEntryRecord,
   type ContentModelRecord,
 } from "../../../../content";
-import { createMediaRecord } from "../../../../media";
+import { createAssetRecord } from "../../../../assets";
 import { createCompositionCatalog, createMappingRecord, evaluateMapping } from "../../../../mapping";
 import { createMediaLibraryController } from "../../../media/controller";
 import { createMemoryMediaProvider } from "../../../media/fixtures";
@@ -21,22 +21,22 @@ const checksum = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb
 
 describe("Media Markdown consumption", () => {
   it("copies a root-relative image reference, maps it unchanged, and renders it in the real preview", async () => {
-    const media = createMediaRecord(
+    const media = createAssetRecord(
       {
         fileName: "hero image.png",
-        mediaType: "image/png",
+        mimeType: "image/png",
         byteLength: 3,
         checksum,
       },
       { id: "hero-image", timestamp: stamp },
     );
     const writeClipboard = vi.fn<(text: string) => void>();
-    const mediaProvider = createMemoryMediaProvider({ records: [media] });
+    const assetProvider = createMemoryMediaProvider({ records: [media] });
     const mediaController = createMediaLibraryController(
-      mediaProvider,
+      assetProvider,
       { writeClipboard },
     );
-    const library = render(<MediaApp provider={mediaProvider} controller={mediaController} intent={{ status: "none" }} />);
+    const library = render(<MediaApp provider={assetProvider} controller={mediaController} intent={{ status: "none" }} />);
     // The Markdown reference lives in the detail panel, so the asset has to be
     // the one the panel is showing before it can be copied.
     fireEvent.click(await screen.findByRole("button", { name: "Inspect hero image.png" }));
@@ -45,7 +45,7 @@ describe("Media Markdown consumption", () => {
     library.unmount();
 
     const markdown = writeClipboard.mock.calls[0]![0];
-    expect(markdown).toBe("![hero image](/uploaded-media/asset-hero-image)");
+    expect(markdown).toBe("![hero image](/uploaded-assets/asset-hero-image)");
 
     const model: ContentModelRecord = {
       id: "articles",
@@ -138,7 +138,7 @@ describe("Media Markdown consumption", () => {
     await waitFor(() => {
       const image = container.querySelector("img");
       expect(image).toHaveAttribute("alt", "hero image");
-      expect(image).toHaveAttribute("src", "/uploaded-media/asset-hero-image");
+      expect(image).toHaveAttribute("src", "/uploaded-assets/asset-hero-image");
     });
   });
 });

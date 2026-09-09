@@ -1,37 +1,37 @@
 import {
-  createMediaRecord,
-  currentMediaVersion,
-  loadMediaRecord,
-  MediaPersistenceError,
-  summarizeMedia,
-  validateMediaRecord,
-} from "../../media";
+  createAssetRecord,
+  currentAssetVersion,
+  loadAssetRecord,
+  AssetPersistenceError,
+  summarizeAsset,
+  validateAssetRecord,
+} from "../../assets";
 import type {
-  MediaByteSource,
-  MediaInitializationOutcome,
-  MediaLoadOutcome,
-  MediaProvider,
-  MediaRecord,
-  MediaSeed,
-  MediaStore,
-  MediaSummary,
-} from "../../media";
+  AssetByteSource,
+  AssetInitializationOutcome,
+  AssetLoadOutcome,
+  AssetProvider,
+  AssetRecord,
+  AssetSeed,
+  AssetStore,
+  AssetSummary,
+} from "../../assets";
 import { isSafeRecordId } from "../../shared";
 
 const FIXTURE_TIMESTAMP = "2026-01-01T00:00:00.000Z";
 const FIXTURE_CHECKSUM = "0000000000000000000000000000000000000000000000000000000000000000";
 
 export interface MemoryMediaProviderOptions {
-  initialization?: MediaInitializationOutcome;
+  initialization?: AssetInitializationOutcome;
   failWrites?: boolean;
-  records?: readonly MediaRecord[];
+  records?: readonly AssetRecord[];
   /** Optional bytes keyed by record id; supplying this enables byte checks. */
   bytes?: Readonly<Record<string, Uint8Array>>;
   /** Metadata ids whose bytes should deliberately read as absent. */
   missingBytes?: readonly string[];
 }
 
-function cloneRecord(record: MediaRecord): MediaRecord {
+function cloneRecord(record: AssetRecord): AssetRecord {
   return structuredClone(record);
 }
 
@@ -39,7 +39,7 @@ function cloneBytes(bytes: Uint8Array): Uint8Array {
   return new Uint8Array(bytes);
 }
 
-async function readByteSource(source: MediaByteSource): Promise<Uint8Array> {
+async function readByteSource(source: AssetByteSource): Promise<Uint8Array> {
   if (source instanceof Uint8Array) return cloneBytes(source);
   if (source instanceof ArrayBuffer) return new Uint8Array(source.slice(0));
   const chunks: Uint8Array[] = [];
@@ -76,8 +76,8 @@ async function checksum(bytes: Uint8Array): Promise<string | undefined> {
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-function readyOutcome(records: Iterable<MediaRecord>): MediaInitializationOutcome {
-  const summaries = [...records].map(summarizeMedia).sort((a, b) => {
+function readyOutcome(records: Iterable<AssetRecord>): AssetInitializationOutcome {
+  const summaries = [...records].map(summarizeAsset).sort((a, b) => {
     if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? -1 : 1;
     return a.id.localeCompare(b.id);
   });
@@ -88,14 +88,14 @@ function rawId(raw: unknown, fallback: string): string {
   return raw !== null && typeof raw === "object" && "id" in raw && typeof raw.id === "string" ? raw.id : fallback;
 }
 
-function scanInitialization(records: Iterable<unknown>): MediaInitializationOutcome {
-  const summaries: MediaSummary[] = [];
+function scanInitialization(records: Iterable<unknown>): AssetInitializationOutcome {
+  const summaries: AssetSummary[] = [];
   const failures: { id: string; status: "invalid" | "future-schema"; version?: number }[] = [];
   let index = 0;
   for (const raw of records) {
     index += 1;
-    const loaded = loadMediaRecord(raw);
-    if (loaded.status === "loaded") summaries.push(summarizeMedia(loaded.record));
+    const loaded = loadAssetRecord(raw);
+    if (loaded.status === "loaded") summaries.push(summarizeAsset(loaded.record));
     else if (loaded.status === "future-schema") failures.push({ id: rawId(raw, `media-unknown-${index}`), status: loaded.status, version: loaded.foundSchemaVersion });
     else if (loaded.status === "invalid") failures.push({ id: rawId(raw, `media-unknown-${index}`), status: loaded.status });
   }
@@ -118,7 +118,7 @@ function scanInitialization(records: Iterable<unknown>): MediaInitializationOutc
   };
 }
 
-function cloneInitialization(outcome: MediaInitializationOutcome): MediaInitializationOutcome {
+function cloneInitialization(outcome: AssetInitializationOutcome): AssetInitializationOutcome {
   if (outcome.status === "ready") return { status: "ready", summaries: outcome.summaries.map((summary) => ({ ...summary })) };
   if (outcome.status === "recovery-required") {
     return {
@@ -138,7 +138,7 @@ function cloneInitialization(outcome: MediaInitializationOutcome): MediaInitiali
  * store/provider shape as the production provider without touching browser or
  * filesystem APIs.
  */
-export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = {}): MediaProvider {
+export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = {}): AssetProvider {
   const records = new Map<string, unknown>();
   (options.records ?? []).forEach((record, index) => {
     const raw = record as unknown;
@@ -148,36 +148,36 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
   const missingBytes = new Set(options.missingBytes ?? []);
   const provider = { id: "media-memory", label: "In-memory Media" } as const;
 
-  const summaries = (): MediaSummary[] => [...records.values()].flatMap((raw) => {
-    const loaded = loadMediaRecord(raw);
-    return loaded.status === "loaded" ? [summarizeMedia(loaded.record)] : [];
+  const summaries = (): AssetSummary[] => [...records.values()].flatMap((raw) => {
+    const loaded = loadAssetRecord(raw);
+    return loaded.status === "loaded" ? [summarizeAsset(loaded.record)] : [];
   });
 
-  const initial = (): MediaInitializationOutcome => options.initialization === undefined
+  const initial = (): AssetInitializationOutcome => options.initialization === undefined
     ? scanInitialization(records.values())
     : cloneInitialization(options.initialization);
 
   const failWrite = (operation: "put" | "delete" | "seed" | "clear"): never => {
-    throw new MediaPersistenceError(operation, "write-failed", "Media fixture write failed.", true);
+    throw new AssetPersistenceError(operation, "write-failed", "Media fixture write failed.", true);
   };
 
-  const store: MediaStore = {
+  const store: AssetStore = {
     provider,
     list: async () => summaries().sort((a, b) => {
       if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? -1 : 1;
       return a.id.localeCompare(b.id);
     }),
-    get: async (id): Promise<MediaLoadOutcome> => {
+    get: async (id): Promise<AssetLoadOutcome> => {
       if (!isSafeRecordId(id)) return { status: "not-found", id };
       const raw = records.get(id);
       if (raw === undefined) return { status: "not-found", id };
-      const loaded = loadMediaRecord(raw);
+      const loaded = loadAssetRecord(raw);
       if (loaded.status !== "loaded") return loaded;
       if (missingBytes.has(id)) return { status: "bytes-missing", record: cloneRecord(loaded.record), reason: "missing" };
       const storedBytes = bytes.get(id);
       if (storedBytes === undefined) return { status: "loaded", record: cloneRecord(loaded.record) };
       const actualChecksum = await checksum(storedBytes);
-      const version = currentMediaVersion(loaded.record);
+      const version = currentAssetVersion(loaded.record);
       if (storedBytes.byteLength !== version.byteLength || (actualChecksum !== undefined && actualChecksum !== version.checksum)) {
         return { status: "bytes-missing", record: cloneRecord(loaded.record), reason: "checksum-mismatch" };
       }
@@ -185,8 +185,8 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
     },
     put: async (record, source) => {
       if (options.failWrites) failWrite("put");
-      const validation = validateMediaRecord(record);
-      if (!validation.ok) throw new MediaPersistenceError("put", "validation", validation.issue.message, false);
+      const validation = validateAssetRecord(record);
+      if (!validation.ok) throw new AssetPersistenceError("put", "validation", validation.issue.message, false);
       const storedBytes = await readByteSource(source);
       records.set(record.id, cloneRecord(validation.value));
       missingBytes.delete(record.id);
@@ -200,10 +200,10 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
       missingBytes.delete(id);
       return deleted;
     },
-    seed: async (seed: MediaSeed) => {
+    seed: async (seed: AssetSeed) => {
       if (options.failWrites) failWrite("seed");
       for (const record of seed.records) {
-        const source = seed.bytes?.[record.id] ?? new Uint8Array(currentMediaVersion(record).byteLength);
+        const source = seed.bytes?.[record.id] ?? new Uint8Array(currentAssetVersion(record).byteLength);
         await store.put(record, source);
       }
     },
@@ -215,7 +215,7 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
     },
   };
 
-  const initialize = async (): Promise<MediaInitializationOutcome> => initial();
+  const initialize = async (): Promise<AssetInitializationOutcome> => initial();
   return {
     descriptor: provider,
     store,
@@ -229,9 +229,9 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
         } catch (error) {
           return {
             status: "error",
-            error: error instanceof MediaPersistenceError
+            error: error instanceof AssetPersistenceError
               ? error
-              : new MediaPersistenceError("clear", "unknown", "Starting fresh Media storage failed.", true, { cause: error }),
+              : new AssetPersistenceError("clear", "unknown", "Starting fresh Media storage failed.", true, { cause: error }),
           };
         }
       },
@@ -239,12 +239,12 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
   };
 }
 
-const defaultRecord = createMediaRecord({ fileName: "sample.png", mediaType: "image/png", byteLength: 12, checksum: FIXTURE_CHECKSUM }, { id: "sample-image", timestamp: FIXTURE_TIMESTAMP });
+const defaultRecord = createAssetRecord({ fileName: "sample.png", mimeType: "image/png", byteLength: 12, checksum: FIXTURE_CHECKSUM }, { id: "sample-image", timestamp: FIXTURE_TIMESTAMP });
 
 export type MediaRenderFixtureName = "populated" | "empty" | "broken";
 
 /** Stable fixtures used by the Media route and its controller tests. */
-export const mediaRenderFixtures: Readonly<Record<MediaRenderFixtureName, () => { provider: MediaProvider }>> = Object.freeze({
+export const mediaRenderFixtures: Readonly<Record<MediaRenderFixtureName, () => { provider: AssetProvider }>> = Object.freeze({
   populated: () => ({ provider: createMemoryMediaProvider({ records: [defaultRecord] }) }),
   empty: () => ({ provider: createMemoryMediaProvider() }),
   broken: () => ({
@@ -266,6 +266,6 @@ export const mediaRenderFixtures: Readonly<Record<MediaRenderFixtureName, () => 
 });
 
 /** Default fixture factory used by route harnesses. */
-export function createDefaultMemoryMediaProvider(): MediaProvider {
+export function createDefaultMemoryMediaProvider(): AssetProvider {
   return createMemoryMediaProvider({ records: [defaultRecord] });
 }

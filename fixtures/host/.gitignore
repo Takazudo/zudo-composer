@@ -1,6 +1,6 @@
 # Authored fixture data is local scratch; the directories themselves are kept.
 cms/**/*.json
 cms/**/*.tsx
-public/uploaded-media/*
-!public/uploaded-media/.gitkeep
+public/uploaded-assets/*
+!public/uploaded-assets/.gitkeep
 .zudo-site-project/

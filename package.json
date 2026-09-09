@@ -51,7 +51,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "media:seed-demo": "tsx scripts/seed-demo-media.ts",
+    "assets:seed-demo": "tsx scripts/seed-demo-assets.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",

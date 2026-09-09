@@ -10,5 +10,5 @@ export * from "./upload-input";
 export * from "./upload-reducer";
 export * from "./route-content";
 export * from "./media-use-picker";
-export { createMediaContentServices } from "../../media/integration/content";
-export type { MediaContentServices, MediaContentLocation, MediaUse } from "../../media/integration/content";
+export { createAssetContentServices } from "../../assets/integration/content";
+export type { AssetContentServices, AssetContentLocation, AssetUse } from "../../assets/integration/content";

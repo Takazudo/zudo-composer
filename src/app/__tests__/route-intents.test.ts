@@ -11,7 +11,7 @@ describe("strict workspace intents", () => {
       { route: "content", providerId: "catalog", modelId: "people", entryId: "person", fieldId: "gallery", valuePath: [2, "caption"] },
       { route: "mapping", providerId: "mapping-filesystem", mappingId: "card" },
       { route: "sitemapper", providerId: "sitemap-filesystem", sitemapId: "site", pageId: "home" },
-      { route: "media", providerId: "media-files", assetId: "portrait" },
+      { route: "media", providerId: "asset-files", assetId: "portrait" },
       { route: "review" },
     ];
     for (const intent of intents) expect(parseIntent(formatIntent(intent))).toEqual({ status: "matched", intent });
@@ -37,7 +37,7 @@ describe("strict workspace intents", () => {
     ]) expect(parseIntent(href), href).toMatchObject({ status: "invalid" });
   });
   it("accepts locations and URLs, and refuses invalid typed builders at runtime", () => {
-    const url = new URL("https://example.test/media?provider=media-files&asset=hero");
+    const url = new URL("https://example.test/media?provider=asset-files&asset=hero");
     expect(parseIntent(url)).toEqual(parseIntent({ pathname: url.pathname, search: url.search }));
     expect(() => formatIntent({ route: "content", providerId: "one", modelId: "../wrong" })).toThrow();
   });

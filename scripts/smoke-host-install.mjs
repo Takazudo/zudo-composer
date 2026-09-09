@@ -193,8 +193,8 @@ try {
 
   step("writing a bare host project that has never seen this repository");
   const toolPackage = /** @type {ToolPackage} */ (JSON.parse(await readFile(join(root, "package.json"), "utf8")));
-  for (const directory of ["styles", "components", "public/uploaded-media",
-    "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/media"]) {
+  for (const directory of ["styles", "components", "public/uploaded-assets",
+    "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/assets"]) {
     await mkdir(join(hostRoot, directory), { recursive: true });
   }
   // `fixtures/self-host` is the reference shape; only its package name is

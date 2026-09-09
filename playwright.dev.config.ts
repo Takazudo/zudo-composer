@@ -40,6 +40,6 @@ export default defineConfig({
     url: "http://localhost:5173",
     reuseExistingServer: false,
     timeout: 30_000,
-    env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot, ZUDO_COMPOSITIONS_ROOT: compositionsRoot, ZUDO_DATA_ROOT: dataRoot },
+    env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_ASSETS_STORE_ROOT: mediaRoot, ZUDO_COMPOSITIONS_ROOT: compositionsRoot, ZUDO_DATA_ROOT: dataRoot },
   },
 });

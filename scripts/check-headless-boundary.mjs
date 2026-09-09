@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
-const roots = ['src/shared', 'src/composer', 'src/content', 'src/media', 'src/mapping', 'src/site-project', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
+const roots = ['src/shared', 'src/composer', 'src/content', 'src/assets', 'src/mapping', 'src/site-project', 'plugins'].map((entry) => path.join(repositoryRoot, entry));
 /** @type {string[]} */
 const files = [];
 /** @type {string[]} */
@@ -62,7 +62,7 @@ for (const file of files) {
 // paths. IndexedDB is gone entirely, so its globals are forbidden outright.
 const BROWSER_STORAGE = /\b(?:localStorage|sessionStorage|indexedDB|IDBDatabase|IDBFactory|IDBOpenDBRequest|IDBTransaction)\b/;
 const persistenceRoots = [
-  'src/composer/storage', 'src/content/storage', 'src/mapping/storage', 'src/sitemapper/storage', 'src/media/storage',
+  'src/composer/storage', 'src/content/storage', 'src/mapping/storage', 'src/sitemapper/storage', 'src/assets/storage',
   'src/site-project', 'src/features/release', 'src/shared', 'server', 'plugins',
 ];
 const persistenceFiles = [

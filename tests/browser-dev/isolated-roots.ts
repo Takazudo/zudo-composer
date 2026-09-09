@@ -10,7 +10,7 @@ import { basename, dirname, isAbsolute, resolve } from "node:path";
  * do not. */
 export function requireDevBrowserRoots(environment: NodeJS.ProcessEnv) {
   const releaseRoot = environment.ZUDO_SITE_PROJECT_ROOT;
-  const mediaRoot = environment.ZUDO_MEDIA_STORE_ROOT;
+  const mediaRoot = environment.ZUDO_ASSETS_STORE_ROOT;
   const compositionsRoot = environment.ZUDO_COMPOSITIONS_ROOT;
   const dataRoot = environment.ZUDO_DATA_ROOT;
   const fail = () => { throw new Error("Use test:browser:dev: explicit disposable release, Media, composition and data roots are required."); };

@@ -12,12 +12,12 @@ new independent tabs start from the sample. Export working JSON to retain edits.
 Review inspection/export works; local staging, build and activation remain disabled.
 
 Media export is explicit: `scripts/hosted-demo/prepare.ts` allowlists four exact
-committed `cms/media` PNG records and SHA-256 values. It verifies record shape,
+committed `cms/assets` PNG records and SHA-256 values. It verifies record shape,
 MIME signature, length, checksum and real file paths, and exports only those
 immutable versions. Committing media alone does not publish it: the hosted build
 must export and deploy the assets. No uploads are sent to a server.
 
-Media metadata retains the regular canonical `/uploaded-media/` URLs. The demo-only
+Media metadata retains the regular canonical `/uploaded-assets/` URLs. The demo-only
 service worker holds no data, cache or database. It requests bytes from the exact
 requesting client, with a four-second timeout. Unknown authoring URLs and unknown
 immutable uploads fail closed; the four immutable bundled assets remain public.

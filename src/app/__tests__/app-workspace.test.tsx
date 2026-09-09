@@ -5,7 +5,7 @@ import type { ProductionProviderIntegration } from "../provider-integration";
 import { createWorkspaceSaveRegistry } from "../workspace-sessions";
 import { harness, mappingRecord } from "../../features/mapping/__tests__/harness";
 import { activeComponentProvider } from "../../features/composer/active-pack";
-import { createMediaContentServices } from "../../features/media";
+import { createAssetContentServices } from "../../features/media";
 import { MediaFieldPicker, MediaRouteContent } from "../../features/media";
 import { ContentRouteContent } from "../../features/content";
 import { notifyPersistenceChange } from "../../shared/persistence-generation";
@@ -24,11 +24,11 @@ vi.mock("../workspace-summary", () => ({ createWorkspaceSummary: () => ({ counts
 vi.mock("../../features/composer/chrome/composer-app", () => ({ default: () => <h1>Composition editor</h1> }));
 vi.mock("../../features/content", () => ({ ContentRouteContent: vi.fn(() => <h1>Content editor</h1>) }));
 vi.mock("../../features/media", async () => {
-  const { createMediaContentServices } = await import("../../media/integration/content");
+  const { createAssetContentServices } = await import("../../assets/integration/content");
   return {
     MediaRouteContent: vi.fn(() => <h1>Media editor</h1>),
     MediaFieldPicker: vi.fn(() => <div>Media field picker</div>),
-    createMediaContentServices: vi.fn(createMediaContentServices),
+    createAssetContentServices: vi.fn(createAssetContentServices),
   };
 });
 vi.mock("../../features/sitemapper", () => ({ SitemapperRouteContent: () => <h1>Sitemap editor</h1> }));
@@ -49,7 +49,7 @@ afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(n
 describe("application workspace lifetime", () => {
   it("warns on closing throughout a workspace replacement and stops warning after the committed swap", async () => {
     let finish!: (value: ProductionProviderIntegration) => void;
-    const integration = { ...workspace(), mediaProvider: { descriptor: { id: "media-files" } } };
+    const integration = { ...workspace(), assetProvider: { descriptor: { id: "asset-files" } } };
     integration.workspace.reset.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     const warns = () => { const event = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; };
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
@@ -78,15 +78,15 @@ describe("application workspace lifetime", () => {
     } finally { spy.mockRestore(); }
   });
   it("adapts Content field picking and exact Media usage locations without feature globals", async () => {
-    const mediaProvider = { descriptor: { id: "media-files" } };
-    const integration = { ...workspace(), mediaProvider };
+    const assetProvider = { descriptor: { id: "asset-files" } };
+    const integration = { ...workspace(), assetProvider };
     window.history.replaceState(null, "", "/content?provider=content-filesystem&model=articles");
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     await screen.findByRole("heading", { name: "Content editor" });
     const contentProps = vi.mocked(ContentRouteContent).mock.lastCall![0];
     const picker = contentProps.renderMediaPicker!({ kind: "card", onSelect: vi.fn(), onClose: vi.fn() }) as { type: unknown; props: { provider?: unknown; kind: string } };
     expect(picker.type).toBe(MediaFieldPicker);
-    expect(picker.props).toMatchObject({ provider: mediaProvider, kind: "card" });
+    expect(picker.props).toMatchObject({ provider: assetProvider, kind: "card" });
 
     fireEvent.click(screen.getByRole("link", { name: "Media" }));
     await screen.findByRole("heading", { name: "Media editor" });
@@ -100,12 +100,12 @@ describe("application workspace lifetime", () => {
     const integration = workspace();
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     await screen.findByRole("heading", { name: "Workspace one" });
-    const subscribe = vi.mocked(createMediaContentServices).mock.lastCall![2]!;
+    const subscribe = vi.mocked(createAssetContentServices).mock.lastCall![2]!;
     const listener = vi.fn(); const stop = subscribe(listener);
     try {
-      notifyPersistenceChange("media");
+      notifyPersistenceChange("assets");
       notifyPersistenceChange("sidebar-preferences");
-      integration.sessions.register({ feature: "Media", providerId: "media-files" }, { flush: async () => undefined }).changed();
+      integration.sessions.register({ feature: "Media", providerId: "asset-files" }, { flush: async () => undefined }).changed();
       expect(listener).not.toHaveBeenCalled();
       for (const channel of AUTHORING_PERSISTENCE_CHANNELS) notifyPersistenceChange(channel);
       expect(listener).toHaveBeenCalledTimes(AUTHORING_PERSISTENCE_CHANNELS.length);
@@ -146,7 +146,7 @@ describe("application workspace lifetime", () => {
     render(<App integration={integration as unknown as ProductionProviderIntegration} />); await screen.findByRole("heading", { name: "Workspace one" });
     fireEvent.click(screen.getByRole("link", { name: "Media" })); await screen.findByRole("heading", { name: "Media editor" });
     let fail = true;
-    integration.sessions.register({ feature: "Media", providerId: "media-files" }, { flush: async () => { if (fail) throw new Error("pending upload failed"); } });
+    integration.sessions.register({ feature: "Media", providerId: "asset-files" }, { flush: async () => { if (fail) throw new Error("pending upload failed"); } });
     const length = history.length;
     act(() => history.back());
     expect(await screen.findByRole("alert")).toHaveTextContent("pending upload failed");

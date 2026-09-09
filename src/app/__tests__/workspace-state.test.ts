@@ -8,7 +8,7 @@ import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../test/workspace-providers";
 import { createSaveQueue } from "../../shared/persistence/save-queue";
-import type { MediaFileProvider } from "../../media";
+import type { AssetFileProvider } from "../../assets";
 import { notifyPersistenceChange } from "../../shared/persistence-generation";
 
 const revision = "a".repeat(64);
@@ -25,7 +25,7 @@ async function host(): Promise<TemporaryWorkspaceProviders> {
 }
 
 function options(current: TemporaryWorkspaceProviders) {
-  return { project: sample(), sourceRevision: revision, createProviders: current.createProviders, mediaProvider: null };
+  return { project: sample(), sourceRevision: revision, createProviders: current.createProviders, assetProvider: null };
 }
 
 function deferred() { let resolve!: () => void; const promise = new Promise<void>((yes) => { resolve = yes; }); return { promise, resolve }; }
@@ -85,8 +85,8 @@ describe("durable mutable workspace", () => {
 
   it("keeps B edits after captured A, source activation/reload, and rejected A reconciliation", async () => {
     const opts = options(await host());
-    const media = { descriptor: { id: "files" }, store: { mutationToken: async () => "media-token", snapshot: async () => ({ schemaVersion: 2, mutationToken: "media-token", records: [], folders: [] }) } } as unknown as MediaFileProvider;
-    const current = createProductionProviderIntegration({ ...opts, mediaProvider: media });
+    const media = { descriptor: { id: "files" }, store: { mutationToken: async () => "media-token", snapshot: async () => ({ schemaVersion: 1, mutationToken: "media-token", records: [], folders: [] }) } } as unknown as AssetFileProvider;
+    const current = createProductionProviderIntegration({ ...opts, assetProvider: media });
     const approved = await current.captureWorkspace();
     expect(approved.status).toBe("ready"); if (approved.status !== "ready") return;
     const loaded = await current.compositionProviders[0]!.store.get("services-page");
@@ -122,13 +122,13 @@ describe("durable mutable workspace", () => {
     const all = vi.fn(), metadata = vi.fn(), attachments = vi.fn(), mediaUsage = vi.fn();
     const stops = [current.subscribeChanges(all), current.subscribeChanges(metadata, ["workspace"]), current.mappingAttachmentService.subscribe!(attachments), subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, mediaUsage)];
     try {
-      for (const channel of [...AUTHORING_PERSISTENCE_CHANNELS, "media"]) {
+      for (const channel of [...AUTHORING_PERSISTENCE_CHANNELS, "assets"]) {
         all.mockClear(); metadata.mockClear(); attachments.mockClear(); mediaUsage.mockClear();
         notifyPersistenceChange(channel);
         expect(all).toHaveBeenCalledWith(channel);
         expect(metadata).toHaveBeenCalledTimes(channel === "workspace" ? 1 : 0);
-        expect(attachments).toHaveBeenCalledTimes(channel === "media" ? 0 : 1);
-        expect(mediaUsage).toHaveBeenCalledTimes(channel === "media" ? 0 : 1);
+        expect(attachments).toHaveBeenCalledTimes(channel === "assets" ? 0 : 1);
+        expect(mediaUsage).toHaveBeenCalledTimes(channel === "assets" ? 0 : 1);
       }
       all.mockClear(); notifyPersistenceChange("unrelated"); expect(all).not.toHaveBeenCalled();
     } finally { stops.forEach((stop) => stop()); }

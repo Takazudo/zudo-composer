@@ -66,7 +66,7 @@ for (const target of specTargets) {
     // The data root covers content, mappings, sitemaps and the workspace registry.
     // Isolating compositions alone left the registry in this repository, so the
     // NEXT run opened a workspace whose composition tree had been deleted.
-    const environment = { ...process.env, ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_MEDIA_STORE_ROOT: mediaRoot, ZUDO_COMPOSITIONS_ROOT: compositionsRoot, ZUDO_DATA_ROOT: dataRoot };
+    const environment = { ...process.env, ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_ASSETS_STORE_ROOT: mediaRoot, ZUDO_COMPOSITIONS_ROOT: compositionsRoot, ZUDO_DATA_ROOT: dataRoot };
     const playwright = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
     const result = await run(playwright, ["exec", "playwright", "test", "--config", "playwright.dev.config.ts", ...target], { env: environment });
     if (result.status !== 0) process.exitCode = result.status ?? 1;

@@ -31,8 +31,8 @@ import {
 } from "./file-provider-http.mjs";
 
 /** @param {string | undefined} root */
-export function validateMediaStoreRoot(root) {
-  return validateRootOverride(root, "Media store root");
+export function validateAssetStoreRoot(root) {
+  return validateRootOverride(root, "Assets store root");
 }
 
 /** @typedef {import("../src/composer/library/types.ts").CompositionRecord} CompositionRecord */
@@ -46,20 +46,20 @@ export const COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER = FILE_PROVIDER_WORKSPACE_H
 export const COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES = FILE_PROVIDER_MAX_BODY_BYTES;
 export const COMPOSER_FILE_PROVIDER_ROOT = "compositions";
 export const COMPOSITIONS_ROOT_ENV = "ZUDO_COMPOSITIONS_ROOT";
-export const MEDIA_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_media_file_provider";
-export const MEDIA_FILE_PROVIDER_OPERATION_HEADER = "x-zudo-composer-media-operation";
-export const MEDIA_FILE_PROVIDER_FILE_NAME_HEADER = "x-zudo-composer-media-file-name";
-export const MEDIA_FILE_PROVIDER_RECORD_ID_HEADER = "x-zudo-composer-media-record-id";
-export const MEDIA_FILE_PROVIDER_METADATA_HEADER = "x-zudo-composer-media-metadata";
-export const MEDIA_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
-// Mirrors `DEFAULT_SETTINGS.mediaDir` in `server/config/settings.ts`. A plugin
-// never reads the host config itself — every lane passes `mediaStoreRoot`
+export const ASSET_FILE_PROVIDER_ENDPOINT = "/__zudo_composer_asset_file_provider";
+export const ASSET_FILE_PROVIDER_OPERATION_HEADER = "x-zudo-composer-asset-operation";
+export const ASSET_FILE_PROVIDER_FILE_NAME_HEADER = "x-zudo-composer-asset-file-name";
+export const ASSET_FILE_PROVIDER_RECORD_ID_HEADER = "x-zudo-composer-asset-record-id";
+export const ASSET_FILE_PROVIDER_METADATA_HEADER = "x-zudo-composer-asset-metadata";
+export const ASSET_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
+// Mirrors `DEFAULT_SETTINGS.assetsDir` in `server/config/settings.ts`. A plugin
+// never reads the host config itself — every lane passes `assetsStoreRoot`
 // explicitly — so this is only the fallback for a direct caller.
-export const MEDIA_FILE_PROVIDER_ROOT = "cms/media";
+export const ASSET_FILE_PROVIDER_ROOT = "cms/assets";
 // A URL naming the conventional store directory is refused even when the store
 // was configured elsewhere: the catalog and the private version bytes are never
 // source files, so Vite must not reach them through `/@fs` or a source URL.
-const MEDIA_STORE_PATH = new RegExp(`(?:^|/)${MEDIA_FILE_PROVIDER_ROOT}(?:/|$)`);
+const ASSET_STORE_PATH = new RegExp(`(?:^|/)${ASSET_FILE_PROVIDER_ROOT}(?:/|$)`);
 
 /** Explicit option, then the environment override, then the workspace default. */
 export function resolveCompositionsRoot(workspaceRoot, configured) {
@@ -68,10 +68,10 @@ export function resolveCompositionsRoot(workspaceRoot, configured) {
     ?? resolve(workspaceRoot, COMPOSER_FILE_PROVIDER_ROOT);
 }
 
-const MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/octet-stream"]);
-const MEDIA_FILE_PROVIDER_BYTES_DIRECTORY = "versions";
-const MEDIA_FILE_PROVIDER_BYTE_PATTERN = /^\/uploaded-media\/(sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/;
-const MEDIA_CONTENT_TYPE_BY_EXTENSION = Object.freeze({
+const ASSET_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/octet-stream"]);
+const ASSET_FILE_PROVIDER_BYTES_DIRECTORY = "versions";
+const ASSET_FILE_PROVIDER_BYTE_PATTERN = /^\/uploaded-assets\/(sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf))$/;
+const ASSET_CONTENT_TYPE_BY_EXTENSION = Object.freeze({
   png: "image/png",
   jpg: "image/jpeg",
   gif: "image/gif",
@@ -81,7 +81,7 @@ const MEDIA_CONTENT_TYPE_BY_EXTENSION = Object.freeze({
 const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
 // A valid 255-code-point display name can expand to 3,060 characters when
 // encodeURIComponent represents astral Unicode as four percent-encoded bytes.
-const MEDIA_ENCODED_FILE_NAME_MAX_LENGTH = 4096;
+const ASSET_ENCODED_FILE_NAME_MAX_LENGTH = 4096;
 
 /** @param {unknown} value @returns {value is string} */
 function isSafeId(value) {
@@ -108,64 +108,64 @@ function parseOutputsById(value) {
   return result;
 }
 
-function mediaOperationError(value, operation) {
+function assetOperationError(value, operation) {
   if (value?.code === "BYTE_CAP_EXCEEDED") {
-    return errorResponse(413, "body-too-large", `Upload exceeds the ${MEDIA_UPLOAD_MAX_BYTES}-byte limit. Choose a file no larger than 25 MiB.`, operation);
+    return errorResponse(413, "body-too-large", `Upload exceeds the ${ASSET_UPLOAD_MAX_BYTES}-byte limit. Choose a file no larger than 25 MiB.`, operation);
   }
   const code = typeof value?.code === "string" ? value.code : "unknown";
-  if (code === "validation") return errorResponse(422, code, "Invalid Media request. Check metadata, revision preconditions, folder parents/names/trash state, and the allowed file signature and size.", operation);
-  if (code === "blocked") return errorResponse(409, code, "A filesystem safety check blocked the media operation.", operation);
-  if (code === "conflict") return errorResponse(409, code, "Media changed or another writer holds the mutation lock. Reload and retry. After a server crash, verify no writer is running before manual .mutation.lock recovery.", operation);
-  if (code === "not-found") return errorResponse(404, code, "The Media asset, folder or exact version does not exist.", operation);
-  if (code === "bytes-missing") return errorResponse(409, code, "Retained Media bytes are missing or corrupted.", operation);
-  if (code === "recovery-required") return errorResponse(409, code, "Media catalog requires manual recovery. Source and all versions are preserved; inspect catalog.json.", operation);
-  if (code === "commit-uncertain") return errorResponse(409, code, "Media catalog rename completed but durability is uncertain. Inspect its exact token/state and retained writer lock before recovery; do not retry blindly.", operation);
-  if (code === "read-failed") return errorResponse(503, code, "Local media files could not be read. Check directory permissions and retry.", operation);
-  if (code === "write-failed" || code === "transaction-failed") return errorResponse(500, code, "Local media files could not be updated. Check permissions and free space, then retry.", operation);
-  return errorResponse(500, "unknown", "The local media provider failed unexpectedly. Retry or restart the development server.", operation);
+  if (code === "validation") return errorResponse(422, code, "Invalid Assets request. Check metadata, revision preconditions, folder parents/names/trash state, and the allowed file signature and size.", operation);
+  if (code === "blocked") return errorResponse(409, code, "A filesystem safety check blocked the assets operation.", operation);
+  if (code === "conflict") return errorResponse(409, code, "Assets changed or another writer holds the mutation lock. Reload and retry. After a server crash, verify no writer is running before manual .mutation.lock recovery.", operation);
+  if (code === "not-found") return errorResponse(404, code, "The Assets asset, folder or exact version does not exist.", operation);
+  if (code === "bytes-missing") return errorResponse(409, code, "Retained Assets bytes are missing or corrupted.", operation);
+  if (code === "recovery-required") return errorResponse(409, code, "Assets catalog requires manual recovery. Source and all versions are preserved; inspect catalog.json.", operation);
+  if (code === "commit-uncertain") return errorResponse(409, code, "Assets catalog rename completed but durability is uncertain. Inspect its exact token/state and retained writer lock before recovery; do not retry blindly.", operation);
+  if (code === "read-failed") return errorResponse(503, code, "Local assets files could not be read. Check directory permissions and retry.", operation);
+  if (code === "write-failed" || code === "transaction-failed") return errorResponse(500, code, "Local assets files could not be updated. Check permissions and free space, then retry.", operation);
+  return errorResponse(500, "unknown", "The local assets provider failed unexpectedly. Retry or restart the development server.", operation);
 }
 
-function decodeMediaFileName(value) {
-  if (typeof value !== "string" || value.length === 0 || value.length > MEDIA_ENCODED_FILE_NAME_MAX_LENGTH) return undefined;
+function decodeAssetFileName(value) {
+  if (typeof value !== "string" || value.length === 0 || value.length > ASSET_ENCODED_FILE_NAME_MAX_LENGTH) return undefined;
   try { return decodeURIComponent(value); } catch { return undefined; }
 }
 
-function mediaErrorCode(value) {
+function assetErrorCode(value) {
   if (typeof value !== "object" || value === null || !("code" in value)) return undefined;
   return typeof value.code === "string" ? value.code : undefined;
 }
 
-function sameMediaFile(a, b) {
+function sameAssetFile(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
 
-function isMissingMediaFileError(value) {
-  const code = mediaErrorCode(value);
+function isMissingAssetFileError(value) {
+  const code = assetErrorCode(value);
   return code === "ENOENT" || code === "ENOTDIR";
 }
 
-async function closeMediaFile(handle) {
+async function closeAssetFile(handle) {
   await Promise.resolve(handle?.close?.()).catch(() => undefined);
 }
 
-function sendMediaFileError(res) {
+function sendAssetFileError(res) {
   if (res.headersSent === true || res.destroyed === true || res.writableEnded === true) return;
   res.statusCode = 500;
   res.setHeader("content-type", "text/plain");
-  res.end("Unable to read uploaded media file.");
+  res.end("Unable to read uploaded assets file.");
 }
 
 /**
- * Serve an uploaded media byte file directly from the development store.
+ * Serve an uploaded assets byte file directly from the development store.
  *
- * @param {{workspaceRoot: string, mediaStoreRoot?: string, createStore?: () => Promise<any>, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open, realpath?: typeof fsPromises.realpath}}} options
+ * @param {{workspaceRoot: string, assetsStoreRoot?: string, createStore?: () => Promise<any>, operations?: {lstat?: typeof fsPromises.lstat, open?: typeof fsPromises.open, realpath?: typeof fsPromises.realpath}}} options
  */
-export function createMediaFileMiddleware(options) {
-  const configuredRoot = validateMediaStoreRoot(options.mediaStoreRoot) ?? resolve(options.workspaceRoot, MEDIA_FILE_PROVIDER_ROOT);
+export function createAssetFileMiddleware(options) {
+  const configuredRoot = validateAssetStoreRoot(options.assetsStoreRoot) ?? resolve(options.workspaceRoot, ASSET_FILE_PROVIDER_ROOT);
   const lstatFile = options.operations?.lstat ?? fsPromises.lstat;
   const openFile = options.operations?.open ?? fsPromises.open;
   const realpathFile = options.operations?.realpath ?? fsPromises.realpath;
-  return async function mediaFileMiddleware(req, res, next) {
+  return async function assetFileMiddleware(req, res, next) {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
 
     const pathname = typeof req.url === "string" ? req.url.split("?", 1)[0] : undefined;
@@ -174,11 +174,11 @@ export function createMediaFileMiddleware(options) {
     try {
       const decoded = typeof pathname === "string" ? posix.normalize(decodeURIComponent(pathname)) : "";
       const sourcePath = decoded.startsWith("/@fs/") ? decoded.slice(4) : resolve(options.workspaceRoot, `.${decoded}`);
-      if (MEDIA_STORE_PATH.test(decoded) || sourcePath === configuredRoot || sourcePath.startsWith(`${configuredRoot}/`)) {
+      if (ASSET_STORE_PATH.test(decoded) || sourcePath === configuredRoot || sourcePath.startsWith(`${configuredRoot}/`)) {
         res.statusCode = 404; res.setHeader("cache-control", "no-store"); res.end(); return;
       }
     } catch { res.statusCode = 400; res.end(); return; }
-    const authoring = typeof pathname === "string" ? /^\/uploaded-media\/asset-([a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?)$/.exec(pathname) : undefined;
+    const authoring = typeof pathname === "string" ? /^\/uploaded-assets\/asset-([a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?)$/.exec(pathname) : undefined;
     if (authoring && options.createStore) {
       res.setHeader("cache-control", "no-store");
       res.setHeader("x-content-type-options", "nosniff");
@@ -189,15 +189,15 @@ export function createMediaFileMiddleware(options) {
         res.statusCode = 307;
         res.setHeader("location", version.url);
         res.end();
-      } catch { sendMediaFileError(res); }
+      } catch { sendAssetFileError(res); }
       return;
     }
-    const match = pathname === undefined ? undefined : MEDIA_FILE_PROVIDER_BYTE_PATTERN.exec(pathname);
+    const match = pathname === undefined ? undefined : ASSET_FILE_PROVIDER_BYTE_PATTERN.exec(pathname);
     const fileName = match?.[1];
     if (fileName === undefined) return next();
 
     const extension = fileName.slice(fileName.lastIndexOf(".") + 1);
-    const contentType = MEDIA_CONTENT_TYPE_BY_EXTENSION[extension];
+    const contentType = ASSET_CONTENT_TYPE_BY_EXTENSION[extension];
     if (contentType === undefined) return next();
     // Private version bytes are reachable only through retained catalog refs.
     // Never fall through to Vite for a managed but uncommitted checksum URL.
@@ -208,36 +208,36 @@ export function createMediaFileMiddleware(options) {
       const version = record?.document.versions.find((version) => version.url === pathname);
       if (!record || !version) { res.statusCode = 404; res.setHeader("cache-control", "no-store"); res.end(); return; }
       await store.resolveVersion({ providerId: store.provider.id, assetId: record.id, versionId: version.id });
-    } catch { sendMediaFileError(res); return; }
+    } catch { sendAssetFileError(res); return; }
     // Resolve the trusted parent (e.g. macOS /var -> /private/var),
-    // then reject links at the owned Media root and within its subtree.
-    let mediaRoot;
-    try { mediaRoot = resolve(await realpathFile(dirname(configuredRoot)), basename(configuredRoot)); }
+    // then reject links at the owned Assets root and within its subtree.
+    let assetRoot;
+    try { assetRoot = resolve(await realpathFile(dirname(configuredRoot)), basename(configuredRoot)); }
     catch (cause) {
-      if (isMissingMediaFileError(cause)) return next();
-      sendMediaFileError(res); return;
+      if (isMissingAssetFileError(cause)) return next();
+      sendAssetFileError(res); return;
     }
-    const filePath = resolve(mediaRoot, MEDIA_FILE_PROVIDER_BYTES_DIRECTORY, fileName);
+    const filePath = resolve(assetRoot, ASSET_FILE_PROVIDER_BYTES_DIRECTORY, fileName);
 
     // O_NOFOLLOW only protects the final component; reject symlinked parents too.
     const parents = [];
     try {
-      for (const path of [mediaRoot, resolve(mediaRoot, MEDIA_FILE_PROVIDER_BYTES_DIRECTORY)]) {
+      for (const path of [assetRoot, resolve(assetRoot, ASSET_FILE_PROVIDER_BYTES_DIRECTORY)]) {
         const directory = await lstatFile(path);
         if (directory.isSymbolicLink() || !directory.isDirectory() || await realpathFile(path) !== path) return next();
         parents.push({ path, stats: directory });
       }
     } catch (cause) {
-      if (isMissingMediaFileError(cause)) return next();
-      sendMediaFileError(res); return;
+      if (isMissingAssetFileError(cause)) return next();
+      sendAssetFileError(res); return;
     }
 
     let before;
     try {
       before = await lstatFile(filePath);
     } catch (cause) {
-      if (isMissingMediaFileError(cause) || mediaErrorCode(cause) === "ELOOP") return next();
-      sendMediaFileError(res);
+      if (isMissingAssetFileError(cause) || assetErrorCode(cause) === "ELOOP") return next();
+      sendAssetFileError(res);
       return;
     }
     if (before.isSymbolicLink() || !before.isFile()) return next();
@@ -249,23 +249,23 @@ export function createMediaFileMiddleware(options) {
       opened = await handle.stat();
       for (const parent of parents) {
         const current = await lstatFile(parent.path);
-        if (current.isSymbolicLink() || !current.isDirectory() || !sameMediaFile(current, parent.stats) || await realpathFile(parent.path) !== parent.path) {
-          await closeMediaFile(handle); return next();
+        if (current.isSymbolicLink() || !current.isDirectory() || !sameAssetFile(current, parent.stats) || await realpathFile(parent.path) !== parent.path) {
+          await closeAssetFile(handle); return next();
         }
       }
     } catch (cause) {
-      await closeMediaFile(handle);
-      if (isMissingMediaFileError(cause) || mediaErrorCode(cause) === "ELOOP") return next();
-      sendMediaFileError(res);
+      await closeAssetFile(handle);
+      if (isMissingAssetFileError(cause) || assetErrorCode(cause) === "ELOOP") return next();
+      sendAssetFileError(res);
       return;
     }
-    if (opened.isSymbolicLink() || !opened.isFile() || !sameMediaFile(before, opened)) {
-      await closeMediaFile(handle);
+    if (opened.isSymbolicLink() || !opened.isFile() || !sameAssetFile(before, opened)) {
+      await closeAssetFile(handle);
       return next();
     }
 
     if (req.method === "HEAD") {
-      await closeMediaFile(handle);
+      await closeAssetFile(handle);
       res.statusCode = 200;
       res.setHeader("content-type", contentType);
       res.setHeader("content-length", String(opened.size));
@@ -279,8 +279,8 @@ export function createMediaFileMiddleware(options) {
     try {
       stream = handle.createReadStream({ autoClose: true });
     } catch {
-      await closeMediaFile(handle);
-      sendMediaFileError(res);
+      await closeAssetFile(handle);
+      sendAssetFileError(res);
       return;
     }
 
@@ -293,7 +293,7 @@ export function createMediaFileMiddleware(options) {
         return;
       }
       if (typeof stream.destroy === "function") stream.destroy();
-      sendMediaFileError(res);
+      sendAssetFileError(res);
     };
     stream.once("error", onStreamError);
     if (typeof res.once === "function") {
@@ -318,31 +318,31 @@ export function createMediaFileMiddleware(options) {
 }
 
 /**
- * Raw-body media transport. The request async iterator is passed directly to
+ * Raw-body assets transport. The request async iterator is passed directly to
  * the filesystem sink, preserving backpressure and avoiding a second buffer.
  *
  * @param {{capability: string, maxBodyBytes?: number, createStore: () => Promise<any>}} options
  */
-export function createMediaUploadMiddleware(options) {
-  const maxBodyBytes = options.maxBodyBytes ?? MEDIA_UPLOAD_MAX_BYTES;
-  return async function mediaUploadMiddleware(req, res) {
-    const acceptedMediaTypes = ["upload", "replace"].includes(req.headers[MEDIA_FILE_PROVIDER_OPERATION_HEADER])
-      ? MEDIA_TYPES
+export function createAssetUploadMiddleware(options) {
+  const maxBodyBytes = options.maxBodyBytes ?? ASSET_UPLOAD_MAX_BYTES;
+  return async function assetUploadMiddleware(req, res) {
+    const acceptedAssetTypes = ["upload", "replace"].includes(req.headers[ASSET_FILE_PROVIDER_OPERATION_HEADER])
+      ? ASSET_TYPES
       : new Set(["application/json"]);
     const headError = validateRequestHead(
       req,
-      MEDIA_FILE_PROVIDER_ENDPOINT,
+      ASSET_FILE_PROVIDER_ENDPOINT,
       options.capability,
-      acceptedMediaTypes,
+      acceptedAssetTypes,
       "Content-Type must be an allowed image or PDF type for uploads and application/json otherwise.",
     );
     if (headError !== undefined) {
       if (!isDeadResponse(req, res)) sendConnectResponse(res, headError);
       return;
     }
-    const operation = req.headers[MEDIA_FILE_PROVIDER_OPERATION_HEADER];
+    const operation = req.headers[ASSET_FILE_PROVIDER_OPERATION_HEADER];
     if (!["initialize", "list", "get", "upload", "replace", "delete", "clear", "snapshot", "metadata", "trash", "restore", "create-folder", "update-folder", "trash-folder", "restore-folder", "resolve-version", "pin-manifest"].includes(operation)) {
-      sendConnectResponse(res, errorResponse(400, "invalid-request", "A valid media operation header is required."));
+      sendConnectResponse(res, errorResponse(400, "invalid-request", "A valid assets operation header is required."));
       return;
     }
     const contentLengthText = req.headers["content-length"];
@@ -358,16 +358,16 @@ export function createMediaUploadMiddleware(options) {
       const binary = operation === "upload" || operation === "replace";
       let data = {};
       if (binary) {
-        const header = req.headers[MEDIA_FILE_PROVIDER_METADATA_HEADER];
+        const header = req.headers[ASSET_FILE_PROVIDER_METADATA_HEADER];
         if (header !== undefined) {
-          if (typeof header !== "string" || header.length > 8192) throw Object.assign(new Error("Invalid Media metadata header"), { code: "validation" });
-          try { data = JSON.parse(decodeURIComponent(header)); } catch { throw Object.assign(new Error("Invalid Media metadata header"), { code: "validation" }); }
+          if (typeof header !== "string" || header.length > 8192) throw Object.assign(new Error("Invalid Assets metadata header"), { code: "validation" });
+          try { data = JSON.parse(decodeURIComponent(header)); } catch { throw Object.assign(new Error("Invalid Assets metadata header"), { code: "validation" }); }
         }
       } else {
         const body = await readBody(req, COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES);
-        try { data = body === "" ? {} : JSON.parse(body); } catch { throw Object.assign(new Error("Invalid Media JSON"), { code: "validation" }); }
+        try { data = body === "" ? {} : JSON.parse(body); } catch { throw Object.assign(new Error("Invalid Assets JSON"), { code: "validation" }); }
       }
-      if (!isPlainObject(data)) throw Object.assign(new Error("Invalid Media request"), { code: "validation" });
+      if (!isPlainObject(data)) throw Object.assign(new Error("Invalid Assets request"), { code: "validation" });
       const fields = {
         initialize: [], get: [], clear: [], snapshot: [],
         list: ["state", "folderId"], upload: ["folderId", "note", "expectedMutationToken"],
@@ -376,15 +376,15 @@ export function createMediaUploadMiddleware(options) {
         "update-folder": ["patch", "precondition"], "trash-folder": ["precondition"], "restore-folder": ["precondition"],
         "resolve-version": ["ref"], "pin-manifest": ["refs"],
       };
-      if (Object.keys(data).some((key) => !fields[operation].includes(key))) throw Object.assign(new Error("Unsupported Media request field"), { code: "validation" });
+      if (Object.keys(data).some((key) => !fields[operation].includes(key))) throw Object.assign(new Error("Unsupported Assets request field"), { code: "validation" });
       const store = await options.createStore();
-      const id = req.headers[MEDIA_FILE_PROVIDER_RECORD_ID_HEADER] ?? "";
+      const id = req.headers[ASSET_FILE_PROVIDER_RECORD_ID_HEADER] ?? "";
       let result;
       switch (operation) {
         case "initialize": result = await store.initialize(); break;
         case "list": result = await store.list(data); break;
         case "snapshot": result = await store.snapshot(); break;
-        case "get": result = await store.get(req.headers[MEDIA_FILE_PROVIDER_RECORD_ID_HEADER] ?? ""); break;
+        case "get": result = await store.get(req.headers[ASSET_FILE_PROVIDER_RECORD_ID_HEADER] ?? ""); break;
         case "delete": result = await store.delete(id, data.precondition); break;
         case "metadata": result = await store.updateMetadata(id, data.patch, data.precondition); break;
         case "trash": result = await store.trash(id, data.precondition); break;
@@ -398,14 +398,14 @@ export function createMediaUploadMiddleware(options) {
         case "replace": result = await store.replace(id, { bytes: req.iterator({ destroyOnReturn: false }), signal: controller.signal }, data.precondition); break;
         case "clear": await store.clear(); result = null; break;
         case "upload": {
-          const fileName = decodeMediaFileName(req.headers[MEDIA_FILE_PROVIDER_FILE_NAME_HEADER]);
+          const fileName = decodeAssetFileName(req.headers[ASSET_FILE_PROVIDER_FILE_NAME_HEADER]);
           if (fileName === undefined) {
-            if (!isDeadResponse(req, res)) sendConnectResponse(res, errorResponse(400, "invalid-request", "A valid encoded media filename header is required.", operation));
+            if (!isDeadResponse(req, res)) sendConnectResponse(res, errorResponse(400, "invalid-request", "A valid encoded assets filename header is required.", operation));
             return;
           }
           result = await store.upload({
             fileName,
-            declaredMediaType: req.headers["content-type"] ?? "",
+            declaredMimeType: req.headers["content-type"] ?? "",
             bytes: req.iterator({ destroyOnReturn: false }),
             signal: controller.signal,
             folderId: data.folderId,
@@ -420,7 +420,7 @@ export function createMediaUploadMiddleware(options) {
       if (!isDeadResponse(req, res) && !controller.signal.aborted) {
         const response = cause?.code === "BYTE_CAP_EXCEEDED" || cause?.code === "BODY_TOO_LARGE"
           ? errorResponse(413, "body-too-large", `Upload exceeds the ${maxBodyBytes}-byte limit. Choose a smaller file.`, operation)
-          : mediaOperationError(cause, operation);
+          : assetOperationError(cause, operation);
         sendConnectResponse(res, response);
       }
     } finally {
@@ -635,10 +635,10 @@ const VIRTUAL_CONFIG_ID = "virtual:composer-file-provider-config";
 const RESOLVED_VIRTUAL_CONFIG_ID = `\0${VIRTUAL_CONFIG_ID}`;
 
 /** Vite plugin. Each dev server closure receives an independent capability.
- * @param {{mediaStoreRoot?: string, compositionsRoot?: string, workspaceRoot?: string}} options
+ * @param {{assetsStoreRoot?: string, compositionsRoot?: string, workspaceRoot?: string}} options
  */
 export default function composerFileProviderPlugin(options = {}) {
-  const explicitMediaRoot = validateMediaStoreRoot(options.mediaStoreRoot);
+  const explicitAssetRoot = validateAssetStoreRoot(options.assetsStoreRoot);
   // Authored data lives in the host project, package entries live in the
   // package; `config.root` is neither once the tool runs from node_modules.
   const workspaceRoot = resolveWorkspaceRoot(options.workspaceRoot);
@@ -661,16 +661,16 @@ export default function composerFileProviderPlugin(options = {}) {
       }
       return `export const fileProviderConfig = ${JSON.stringify({
         endpoint: COMPOSER_FILE_PROVIDER_ENDPOINT,
-        mediaEndpoint: MEDIA_FILE_PROVIDER_ENDPOINT,
+        assetEndpoint: ASSET_FILE_PROVIDER_ENDPOINT,
         capability,
         capabilityHeader: COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER,
         workspaceHeader: COMPOSER_FILE_PROVIDER_WORKSPACE_HEADER,
         maxBodyBytes: COMPOSER_FILE_PROVIDER_MAX_BODY_BYTES,
-        mediaMaxBodyBytes: MEDIA_UPLOAD_MAX_BYTES,
-        mediaOperationHeader: MEDIA_FILE_PROVIDER_OPERATION_HEADER,
-        mediaFileNameHeader: MEDIA_FILE_PROVIDER_FILE_NAME_HEADER,
-        mediaRecordIdHeader: MEDIA_FILE_PROVIDER_RECORD_ID_HEADER,
-        mediaMetadataHeader: MEDIA_FILE_PROVIDER_METADATA_HEADER,
+        assetMaxBodyBytes: ASSET_UPLOAD_MAX_BYTES,
+        assetOperationHeader: ASSET_FILE_PROVIDER_OPERATION_HEADER,
+        assetFileNameHeader: ASSET_FILE_PROVIDER_FILE_NAME_HEADER,
+        assetRecordIdHeader: ASSET_FILE_PROVIDER_RECORD_ID_HEADER,
+        assetMetadataHeader: ASSET_FILE_PROVIDER_METADATA_HEADER,
       })};\n`;
     },
     async configureServer(server) {
@@ -689,15 +689,15 @@ export default function composerFileProviderPlugin(options = {}) {
           { provideJsx },
         ),
       });
-      const { createFilesystemMediaStore } = await server.ssrLoadModule(appModuleId("src/media/storage/file-provider/dev-server-entry.ts"));
-      const mediaStoreRoot = explicitMediaRoot ?? resolve(workspaceRoot, MEDIA_FILE_PROVIDER_ROOT);
-      const mediaHandler = createMediaUploadMiddleware({
+      const { createFilesystemAssetStore } = await server.ssrLoadModule(appModuleId("src/assets/storage/file-provider/dev-server-entry.ts"));
+      const assetsStoreRoot = explicitAssetRoot ?? resolve(workspaceRoot, ASSET_FILE_PROVIDER_ROOT);
+      const assetHandler = createAssetUploadMiddleware({
         capability: activeCapability,
-        createStore: () => createFilesystemMediaStore({ mediaStoreRoot }),
+        createStore: () => createFilesystemAssetStore({ assetsStoreRoot }),
       });
       server.middlewares.use(async (req, res, next) => {
-        if (req.url !== MEDIA_FILE_PROVIDER_ENDPOINT) return next();
-        await mediaHandler(req, res);
+        if (req.url !== ASSET_FILE_PROVIDER_ENDPOINT) return next();
+        await assetHandler(req, res);
       });
       server.middlewares.use(async (req, res, next) => {
         if (req.url !== COMPOSER_FILE_PROVIDER_ENDPOINT) return next();
@@ -737,7 +737,7 @@ export default function composerFileProviderPlugin(options = {}) {
         sendConnectResponse(res, await handler({ ...requestHead, body }));
       });
       // Vite's public-dir middleware serves only files in its startup-scanned publicFiles Set (updated by chokidar), so a file uploaded during the session otherwise gets the SPA shell until the watcher catches up (#180).
-      server.middlewares.use(createMediaFileMiddleware({ workspaceRoot, mediaStoreRoot, createStore: () => createFilesystemMediaStore({ mediaStoreRoot }) }));
+      server.middlewares.use(createAssetFileMiddleware({ workspaceRoot, assetsStoreRoot, createStore: () => createFilesystemAssetStore({ assetsStoreRoot }) }));
     },
   };
 }

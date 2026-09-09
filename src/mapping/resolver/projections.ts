@@ -1,5 +1,5 @@
 import type { JsonValue } from "@zudo-composer/component-contract";
-import type { ContentEntryRecord, ContentFieldDefinition, ContentFieldKind, ContentMediaUse } from "../../content/model";
+import type { ContentEntryRecord, ContentFieldDefinition, ContentFieldKind, ContentAssetUse } from "../../content/model";
 import { isValueValidForField } from "../../content/model";
 import type { MappingSourceProjection } from "../model";
 import { validateMappingSourceProjection } from "../model";
@@ -64,7 +64,7 @@ export function projectContentValue(options: {
   }
   if (projection.kind === "media-asset-ref" || projection.kind === "media-text") {
     if (options.field.kind !== "media-use" || value === null || Array.isArray(value) || typeof value !== "object") return { status: "invalid", message: "Media projection requires a media-use value." };
-    const media = value as unknown as ContentMediaUse;
+    const media = value as unknown as ContentAssetUse;
     if (projection.kind === "media-asset-ref") return { status: "projected", value: media.asset as unknown as JsonValue };
     const text = projection.field in media ? (media as unknown as Record<string, JsonValue>)[projection.field] : undefined;
     return typeof text === "string" ? { status: "projected", value: text } : { status: "invalid", message: `Media ${projection.field} is unavailable for this use.` };

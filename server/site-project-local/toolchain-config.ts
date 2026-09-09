@@ -53,7 +53,7 @@ async function compilerIdentity(): Promise<string> {
       else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) files.push([path, await readFile(join(root, path), "utf8")]);
     }
   };
-  for (const domain of ["site-project", "composer", "content", "mapping", "sitemapper", "media", "shared"]) await visit(domain);
+  for (const domain of ["site-project", "composer", "content", "mapping", "sitemapper", "assets", "shared"]) await visit(domain);
   files.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return `site-project-release/2:${sha(releaseJson(files))}`;
 }

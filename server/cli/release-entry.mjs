@@ -7,7 +7,7 @@
 // zudo-composer lives.
 
 import { resolve } from "node:path";
-import { validateMediaStoreRoot } from "../../plugins/composer-file-provider-plugin.mjs";
+import { validateAssetStoreRoot } from "../../plugins/composer-file-provider-plugin.mjs";
 import { APP_ROOT } from "../../plugins/roots.mjs";
 import { createModuleEvaluator } from "../module-evaluator.mjs";
 import { loadHostContext } from "../host-context.mjs";
@@ -25,7 +25,7 @@ try {
       pack,
       packIdentity,
       workspaceRoot: composerConfig.workspaceRoot,
-      mediaStoreRoot: validateMediaStoreRoot(process.env.ZUDO_MEDIA_STORE_ROOT) ?? composerConfig.paths.media,
+      assetsStoreRoot: validateAssetStoreRoot(process.env.ZUDO_ASSETS_STORE_ROOT) ?? composerConfig.paths.assets,
     }),
     { stdin: process.stdin, stdout: process.stdout, stderr: process.stderr },
   );

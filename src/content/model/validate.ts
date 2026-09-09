@@ -9,7 +9,7 @@ import type {
   ContentFieldDefinition,
   ContentModelRecord,
   ContentValueSchema,
-  ContentMediaUse,
+  ContentAssetUse,
 } from "./types";
 
 const MODEL_RECORD_KEYS = ["id", "createdAt", "updatedAt", "document"];
@@ -153,7 +153,7 @@ function isEntryRef(value: unknown): value is { providerId: string; modelId: str
   return isPlainObject(value) && exactKeys(value, ["providerId", "modelId", "recordId"]) && typeof value.providerId === "string" && value.providerId.trim().length > 0 && isSafeRecordId(value.recordId) && isSafeRecordId(value.modelId);
 }
 
-export function isContentMediaUse(value: unknown): value is ContentMediaUse {
+export function isContentMediaUse(value: unknown): value is ContentAssetUse {
   if (!isPlainObject(value) || !isPlainObject(value.asset) || !exactKeys(value.asset, ["providerId", "assetId"])
     || !isSafeRecordId(value.asset.providerId) || !isSafeRecordId(value.asset.assetId)) return false;
   switch (value.kind) {

@@ -6,7 +6,7 @@ import type { SitemapEntryRef } from "../../sitemapper/model";
 import type { SitemapPublicationPolicy, SitemapRouteAncestor, ResolvedSitemapNavigation } from "../../sitemapper/routes";
 
 export interface CompileSiteProjectOptions {
-  mediaLock?: import("../../media/references").MediaReferenceLock;
+  assetLock?: import("../../assets/references").AssetReferenceLock;
   policy?: SitemapPublicationPolicy;
   /** Manifest-only catalog used by Mapping, reuse, and JSX generation. */
   componentCatalog: ComponentCatalog;

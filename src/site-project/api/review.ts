@@ -1,6 +1,6 @@
 import type { JsonValue } from "@zudo-composer/component-contract";
 import { buildContentGraphIndex, contentEntryDigest, selectContentPublicationCandidate, type ContentSnapshot, type ContentPublicationSelection } from "../../content";
-import { captureSiteProjectMediaLock } from "../media/capture";
+import { captureSiteProjectAssetLock } from "../assets/capture";
 import { compileSiteProject } from "../compiler";
 import { canonicalizeSiteProject, canonicalStringifyJson, compareUnicodeCodePoints, serializeSiteProject } from "../model/canonical";
 import { validateSiteProject } from "../model/validation";
@@ -41,21 +41,21 @@ export async function createReleasePlan(input: { project: SiteProject; workingPr
   const checks: ReleasePlan["checks"] = validation.ok ? [] : validation.diagnostics.map(({ code, message, path }) => ({ severity: "blocking", code, message, path }));
   const graph = buildContentGraphIndex(contentSnapshots(candidate));
   checks.push(...graph.diagnostics.map(({ code, message, providerId, recordId, path }) => ({ severity: "blocking" as const, code: `content-${code}`, message, path: releaseJson([providerId, recordId, path ?? []]) })));
-  const media = validation.ok ? await captureSiteProjectMediaLock(candidate, dependencies.componentCatalog, dependencies.mediaStore) : undefined;
-  if (media?.status === "blocked") checks.push(...media.diagnostics.map(({ code, message }) => ({ severity: "blocking" as const, code: `media-${code}`, message, path: "$.mediaLock" })));
-  const mediaLock = media?.status === "ready" ? media.lock ?? null : null;
-  const compilation = validation.ok ? await (dependencies.compiler ?? compileSiteProject)(candidate, { componentCatalog: dependencies.componentCatalog, policy: "release", ...(mediaLock ? { mediaLock } : {}) }) : undefined;
+  const assets = validation.ok ? await captureSiteProjectAssetLock(candidate, dependencies.componentCatalog, dependencies.assetStore) : undefined;
+  if (assets?.status === "blocked") checks.push(...assets.diagnostics.map(({ code, message }) => ({ severity: "blocking" as const, code: `asset-${code}`, message, path: "$.assetLock" })));
+  const assetLock = assets?.status === "ready" ? assets.lock ?? null : null;
+  const compilation = validation.ok ? await (dependencies.compiler ?? compileSiteProject)(candidate, { componentCatalog: dependencies.componentCatalog, policy: "release", ...(assetLock ? { assetLock } : {}) }) : undefined;
   if (compilation?.status === "blocked") checks.push(...compilation.diagnostics.map(({ code, message, path }) => ({ severity: "blocking" as const, code, message, path })));
-  if (!checks.length) checks.push({ severity: "info", code: "ready", message: "Candidate graph, routes and exact Media inputs pass release checks.", path: "$" });
+  if (!checks.length) checks.push({ severity: "info", code: "ready", message: "Candidate graph, routes and exact Assets inputs pass release checks.", path: "$" });
   const projectRevision = await dependencies.hash(serializeSiteProject(candidate));
   const toolchain = structuredClone(dependencies.toolchain);
-  const buildId = await dependencies.hash(releaseJson({ projectRevision, mediaLock, toolchain }));
+  const buildId = await dependencies.hash(releaseJson({ projectRevision, assetLock, toolchain }));
   const changes = releaseRecordChanges(input.baseline, candidate);
-  const beforePins = new Map((input.baselineBuild?.stage.mediaLock?.pins ?? []).map((pin) => [releaseJson([pin.providerId, pin.assetId, pin.versionId]), pin]));
-  const afterPins = new Map((mediaLock?.pins ?? []).map((pin) => [releaseJson([pin.providerId, pin.assetId, pin.versionId]), pin]));
+  const beforePins = new Map((input.baselineBuild?.stage.assetLock?.pins ?? []).map((pin) => [releaseJson([pin.providerId, pin.assetId, pin.versionId]), pin]));
+  const afterPins = new Map((assetLock?.pins ?? []).map((pin) => [releaseJson([pin.providerId, pin.assetId, pin.versionId]), pin]));
   for (const key of [...new Set([...beforePins.keys(), ...afterPins.keys()])].sort(compareUnicodeCodePoints)) {
     const before = beforePins.get(key), after = afterPins.get(key); if (before && after && releaseJson(before) === releaseJson(after)) continue;
-    const pin = (after ?? before)!; changes.push({ domain: "media", providerId: pin.providerId, recordId: pin.assetId, kind: !before ? "added" : !after ? "removed" : "changed" });
+    const pin = (after ?? before)!; changes.push({ domain: "assets", providerId: pin.providerId, recordId: pin.assetId, kind: !before ? "added" : !after ? "removed" : "changed" });
   }
   if (releaseJson(input.baselineBuild?.stage.toolchain ?? null) !== releaseJson(toolchain)) changes.push({ domain: "toolchain", providerId: "compiler", recordId: toolchain.compiler, kind: input.baselineBuild ? "changed" : "added" });
   const publication: ReleasePlan["publication"] = selection.flatMap(({ ref, action }) => {
@@ -68,7 +68,7 @@ export async function createReleasePlan(input: { project: SiteProject; workingPr
     const after = new Map(compilation.build.routes.map((route) => [route.pathname, route]));
     for (const pathname of [...new Set([...before.keys(), ...after.keys()])].sort(compareUnicodeCodePoints)) if (releaseJson(before.get(pathname) ?? null) !== releaseJson(after.get(pathname) ?? null)) affected.push({ kind: "route", identity: pathname, reason: !before.has(pathname) ? "Added evaluated route." : !after.has(pathname) ? "Removed activated route." : "Evaluated route or dependency output changed." });
   }
-  for (const pin of mediaLock?.pins ?? []) affected.push({ kind: "media", identity: releaseJson([pin.providerId, pin.assetId, pin.versionId]), reason: "Exact immutable byte dependency." });
-  const body = { schemaVersion: 2 as const, workingProject, workingPrecondition: structuredClone(input.workingPrecondition), candidate, selection, expectedRevision: input.expectedRevision, expectedActive: input.expectedActive, storeGeneration: input.storeGeneration, projectRevision, buildId, mediaLock, toolchain, changes, checks, affected, publication };
+  for (const pin of assetLock?.pins ?? []) affected.push({ kind: "assets", identity: releaseJson([pin.providerId, pin.assetId, pin.versionId]), reason: "Exact immutable byte dependency." });
+  const body = { schemaVersion: 2 as const, workingProject, workingPrecondition: structuredClone(input.workingPrecondition), candidate, selection, expectedRevision: input.expectedRevision, expectedActive: input.expectedActive, storeGeneration: input.storeGeneration, projectRevision, buildId, assetLock, toolchain, changes, checks, affected, publication };
   return { ...body, planDigest: await dependencies.hash(releaseJson(body)) };
 }

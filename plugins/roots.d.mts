@@ -10,5 +10,5 @@ export function resolveSiteProjectLocalRoot(workspaceRoot: string, configured?: 
 export const APP_ENTRY: string;
 export function resolveAppWarmupFiles(): string[];
 export function resolveWatchIgnored(roots: readonly (string | undefined)[]): string[];
-export function resolvePublicDir(workspaceRoot: string, publicMedia: string): string;
+export function resolvePublicDir(workspaceRoot: string, publicAssets: string): string;
 export function resolveFsAllow(workspaceRoot: string): string[];

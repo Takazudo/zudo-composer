@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMediaRecord } from "../../../media";
+import { createAssetRecord } from "../../../assets";
 import { createMemoryMediaProvider } from "../fixtures";
 
 const timestamp = "2026-01-01T00:00:00.000Z";
@@ -7,7 +7,7 @@ const bytes = new Uint8Array([1, 2, 3]);
 const checksum = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
 
 function media(id: string, updatedAt = timestamp) {
-  return createMediaRecord({ fileName: `${id}.png`, mediaType: "image/png", byteLength: bytes.byteLength, checksum }, { id, timestamp: updatedAt });
+  return createAssetRecord({ fileName: `${id}.png`, mimeType: "image/png", byteLength: bytes.byteLength, checksum }, { id, timestamp: updatedAt });
 }
 
 describe("in-memory Media provider", () => {

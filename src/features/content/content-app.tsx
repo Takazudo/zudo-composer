@@ -75,7 +75,7 @@ function contentHref(providerId: string, modelId: string, entryId?: string, view
  */
 export function ContentApp({ provider, controller: supplied, componentProvider, createPreviewSource, renderMediaPicker, loadActivatedBaseline }: ContentRouteContentProps): JSX.Element {
   const integration = useWorkspace()?.integration;
-  const controller = useMemo(() => supplied ?? createContentAuthoringController(provider, { providers: integration?.contentProviders, mediaProvider: integration?.mediaProvider, loadActivatedBaseline }), [integration, loadActivatedBaseline, provider, supplied]);
+  const controller = useMemo(() => supplied ?? createContentAuthoringController(provider, { providers: integration?.contentProviders, assetProvider: integration?.assetProvider, loadActivatedBaseline }), [integration, loadActivatedBaseline, provider, supplied]);
   const [state, setState] = useState<ContentAuthoringState>(controller.state);
   const [actionError, setError] = useState<string | null>(null);
   const [intentError, setIntentError] = useState<string | null>(null);

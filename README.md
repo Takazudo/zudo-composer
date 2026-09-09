@@ -42,11 +42,11 @@ The Vite application has base `/` and these exact SPA routes:
 - `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
   `/site/journal/start-with-the-question` — compiler-emitted Entry routes
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
-- `/uploaded-media/` — committed images and PDFs from the host's `publicMediaDir`
+- `/uploaded-assets/` — committed images and PDFs from the host's `publicAssetsDir`
 
 The preview route is an implementation boundary, not an independent public
 product. Build-emitted assets remain rooted at `/assets/`, while committed media
-is delivered from `/uploaded-media/`. Upload authoring is available only in local
+is delivered from `/uploaded-assets/`. Upload authoring is available only in local
 development.
 
 The provider-scoped SiteProject graph, whole-project apply rule, active identity,
@@ -60,10 +60,10 @@ nothing in this repository claims them.
 ## Demo media in this repository
 
 This repository is its own dogfood host and includes four demo images in the
-tracked `cms/media/` store. Ordinary Media edits under `pnpm dev` will dirty
-`cms/media/catalog.json`; this is intended. Other runtime `cms/` directories
-are ignored. Run `pnpm media:seed-demo` to seed missing demos from the committed
-source PNGs in `scripts/demo-media/`; rerunning skips matching filenames and
+tracked `cms/assets/` store. Ordinary Media edits under `pnpm dev` will dirty
+`cms/assets/catalog.json`; this is intended. Other runtime `cms/` directories
+are ignored. Run `pnpm assets:seed-demo` to seed missing demos from the committed
+source PNGs in `scripts/demo-assets/`; rerunning skips matching filenames and
 checksums, including trashed assets and historical versions, and preserves
 existing records. The demo store is not included in the installed package or
 published by a static build.
@@ -112,7 +112,7 @@ export default defineComposerConfig({
 
 Every setting except `pack` has a default and is resolved host-root-relative;
 `dataDir` re-bases the five settings below it, so moving all CMS data is one
-edit. `publicMediaDir` and `styles` are not CMS data and are never re-based.
+edit. `publicAssetsDir` and `styles` are not CMS data and are never re-based.
 
 | Setting | Default | What it is |
 | --- | --- | --- |
@@ -121,8 +121,8 @@ edit. `publicMediaDir` and `styles` are not CMS data and are never re-based.
 | `contentDir` | `cms/content` | Content-domain JSON |
 | `mappingsDir` | `cms/mappings` | Mapping-domain JSON |
 | `sitemapsDir` | `cms/sitemaps` | Sitemapper-domain JSON |
-| `mediaDir` | `cms/media` | Media content-addressed store |
-| `publicMediaDir` | `public/uploaded-media` | Published media bytes the host commits and serves |
+| `assetsDir` | `cms/assets` | Asset content-addressed store |
+| `publicAssetsDir` | `public/uploaded-assets` | Published media bytes the host commits and serves |
 | `styles` | `styles/base.css` | The host's base CSS entry — see [Styles ownership](#styles-ownership) |
 | `pack` | *(required, no default)* | Component-pack module specifier — see below |
 
@@ -139,13 +139,13 @@ my-site/
 ├── styles/
 │   └── base.css                  # imported pack CSS + Tailwind @source
 ├── public/
-│   └── uploaded-media/           # publicMediaDir — committed, served bytes
+│   └── uploaded-assets/          # publicAssetsDir — committed, served bytes
 └── cms/                          # dataDir — everything the tool authors
     ├── compositions/
     ├── content/
     ├── mappings/
     ├── sitemaps/
-    └── media/
+    └── assets/
 ```
 
 Every setting can also be overridden per-environment as

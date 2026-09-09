@@ -1,7 +1,7 @@
 import type { JSX } from "preact";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMediaRecord, type MediaRecord } from "../../../media";
+import { createAssetRecord, type AssetRecord } from "../../../assets";
 import {
   MEDIA_UPLOAD_ACCEPT,
   MEDIA_UPLOAD_BUSY_REJECTION,
@@ -13,7 +13,7 @@ import {
 const checksum = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
 const bytes = new Uint8Array([1]);
 const file = (name: string, type = "image/png") => new File([bytes], name, { type });
-const record = (fileName: string, id = "uploaded-media"): MediaRecord => createMediaRecord({ fileName, mediaType: fileName.endsWith(".pdf") ? "application/pdf" : "image/png", byteLength: 1, checksum }, { id, timestamp: "2026-01-01T00:00:00.000Z" });
+const record = (fileName: string, id = "uploaded-assets"): AssetRecord => createAssetRecord({ fileName, mimeType: fileName.endsWith(".pdf") ? "application/pdf" : "image/png", byteLength: 1, checksum }, { id, timestamp: "2026-01-01T00:00:00.000Z" });
 const transfer = (files: File[], items: Array<{ kind: string; getAsFile(): File | null }> = []) => ({ files, items, types: ["Files"], dropEffect: "none" });
 const deferred = <T,>() => { let resolve!: (value: T) => void; let reject!: (reason: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
@@ -54,7 +54,7 @@ describe("Media upload", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Retry upload" })).toBeDisabled());
   });
   it("offers the explicit native picker, resets it before awaiting, and allows a same-file re-pick", async () => {
-    const first = deferred<MediaRecord>();
+    const first = deferred<AssetRecord>();
     const upload = vi.fn<MediaUploadStore["upload"]>().mockReturnValueOnce(first.promise).mockResolvedValue(record("same.png"));
     const { input } = setup(upload);
     expect(input).toHaveAttribute("multiple");
@@ -110,7 +110,7 @@ describe("Media upload", () => {
   });
 
   it("uses a synchronous busy guard so a second paste is unclaimed", async () => {
-    const pending = deferred<MediaRecord>();
+    const pending = deferred<AssetRecord>();
     const upload = vi.fn<MediaUploadStore["upload"]>().mockReturnValue(pending.promise);
     const { surface } = setup(upload);
     const clipboardData = transfer([file("first.png")]);
@@ -123,9 +123,9 @@ describe("Media upload", () => {
   });
 
   it("uploads sequentially, continues after errors, displays server-returned names, and refreshes once", async () => {
-    const first = deferred<MediaRecord>();
-    const second = deferred<MediaRecord>();
-    const third = deferred<MediaRecord>();
+    const first = deferred<AssetRecord>();
+    const second = deferred<AssetRecord>();
+    const third = deferred<AssetRecord>();
     const upload = vi.fn<MediaUploadStore["upload"]>().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise).mockReturnValueOnce(third.promise);
     const refresh = vi.fn().mockResolvedValue(undefined);
     const { input } = setup(upload, refresh);

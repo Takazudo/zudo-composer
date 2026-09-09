@@ -132,12 +132,12 @@ describe("resolvePreactAliases", () => {
 });
 
 describe("resolvePublicDir", () => {
-  it("is the parent of the published-media directory", () => {
-    expect(resolvePublicDir("/host", "/host/public/uploaded-media")).toBe("/host/public");
+  it("is the parent of the published-assets directory", () => {
+    expect(resolvePublicDir("/host", "/host/public/uploaded-assets")).toBe("/host/public");
   });
 
-  it("refuses a published-media directory sitting directly at the host root", () => {
-    expect(() => resolvePublicDir("/host", "/host/uploaded-media")).toThrow(/must sit inside a static directory/);
+  it("refuses a published-assets directory sitting directly at the host root", () => {
+    expect(() => resolvePublicDir("/host", "/host/uploaded-assets")).toThrow(/must sit inside a static directory/);
   });
 });
 

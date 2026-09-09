@@ -116,8 +116,8 @@ describe("Mapping model and resolver", () => {
     expect(projectContentValue({ field: richField, entry: richEntry, projection: { kind: "object-field", fieldIds: ["label"] }, providerId: "content" })).toEqual({ status: "projected", value: "Exact" });
     expect(projectContentValue({ field: richField, entry: richEntry, projection: { kind: "value" }, providerId: "content" })).toEqual({ status: "projected", value: { label: "Exact" } });
     const mediaField = { id: "image", key: "image", label: "Image", required: false, kind: "media-use" as const, use: "image" as const };
-    const mediaEntry = { ...entry({}), values: { image: { kind: "image", asset: { providerId: "media-files", assetId: "hero" }, alt: "Hero", decorative: false, caption: "Caption" } } };
-    expect(projectContentValue({ field: mediaField, entry: mediaEntry, projection: { kind: "media-asset-ref" }, providerId: "content" })).toEqual({ status: "projected", value: { providerId: "media-files", assetId: "hero" } });
+    const mediaEntry = { ...entry({}), values: { image: { kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "Hero", decorative: false, caption: "Caption" } } };
+    expect(projectContentValue({ field: mediaField, entry: mediaEntry, projection: { kind: "media-asset-ref" }, providerId: "content" })).toEqual({ status: "projected", value: { providerId: "asset-files", assetId: "hero" } });
     expect(projectContentValue({ field: mediaField, entry: mediaEntry, projection: { kind: "media-text", field: "alt" }, providerId: "content" })).toEqual({ status: "projected", value: "Hero" });
     const referenceField = { id: "related", key: "related", label: "Related", required: false, kind: "reference" as const, target: { providerId: "content", recordId: "articles" } };
     const referenceEntry = { ...entry({}), values: { related: { providerId: "content", modelId: "articles", recordId: "next" } } };
@@ -135,7 +135,7 @@ describe("Mapping model and resolver", () => {
       },
       {
         field: { id: "source", key: "source", label: "Source", required: true, kind: "media-use" as const, use: "image" as const },
-        projection: { kind: "media-text" as const, field: "alt" as const }, value: { kind: "image", asset: { providerId: "media-files", assetId: "hero" }, alt: "Media", decorative: false, caption: "" }, expected: "Media",
+        projection: { kind: "media-text" as const, field: "alt" as const }, value: { kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "Media", decorative: false, caption: "" }, expected: "Media",
       },
       {
         field: { id: "source", key: "source", label: "Source", required: true, kind: "reference" as const, target: { providerId: "content", recordId: "articles" } },

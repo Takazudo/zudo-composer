@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createMediaRecord, summarizeMedia, type MediaType } from "../../../media";
+import { createAssetRecord, summarizeAsset, type AssetType } from "../../../assets";
 import { formatBytes, formatPixelSize, isMediaImage, mediaCaption, mediaTypeLabel } from "../media-format";
 
 const CHECKSUM = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
 
-function summary(mediaType: MediaType, byteLength: number) {
-  const source = createMediaRecord({ fileName: "asset.bin", mediaType, byteLength, checksum: CHECKSUM }, { id: "asset", timestamp: "2026-01-01T00:00:00.000Z" });
-  return summarizeMedia(source);
+function summary(mimeType: AssetType, byteLength: number) {
+  const source = createAssetRecord({ fileName: "asset.bin", mimeType, byteLength, checksum: CHECKSUM }, { id: "asset", timestamp: "2026-01-01T00:00:00.000Z" });
+  return summarizeAsset(source);
 }
 
 describe("media formatting", () => {
@@ -26,8 +26,8 @@ describe("media formatting", () => {
     ["image/jpeg", "JPEG"],
     ["image/webp", "WEBP"],
     ["application/pdf", "PDF"],
-  ])("labels %s as %s", (mediaType, expected) => {
-    expect(mediaTypeLabel(mediaType)).toBe(expected);
+  ])("labels %s as %s", (mimeType, expected) => {
+    expect(mediaTypeLabel(mimeType)).toBe(expected);
   });
 
   it("separates images, which can report dimensions, from the one type that cannot", () => {

@@ -107,9 +107,9 @@ export async function resolveComposerDevConfig(options = {}) {
     inlineConfig: {
       configFile: /** @type {const} */ (false),
       root: workspaceRoot,
-      // Committed media only; the media store's own content-addressed bytes
+      // Committed assets only; the assets store's own content-addressed bytes
       // come from the file-provider middleware, not from here.
-      publicDir: resolvePublicDir(workspaceRoot, paths.publicMedia),
+      publicDir: resolvePublicDir(workspaceRoot, paths.publicAssets),
       // Vite's html middlewares would look for `<root>/index.html`, which a
       // host project does not have — the package owns the shell. The app-html
       // plugin serves it instead.
@@ -124,19 +124,19 @@ export async function resolveComposerDevConfig(options = {}) {
       resolve: { alias: resolvePreactAliases() },
       server: {
         fs: { allow: [...resolveFsAllow(workspaceRoot), componentPack.identity.packageRoot] },
-        watch: { ignored: resolveWatchIgnored([paths.data, paths.compositions, paths.content, paths.mappings, paths.sitemaps, paths.media, paths.publicMedia, resolveSiteProjectLocalRoot(workspaceRoot)]) },
+        watch: { ignored: resolveWatchIgnored([paths.data, paths.compositions, paths.content, paths.mappings, paths.sitemaps, paths.assets, paths.publicAssets, resolveSiteProjectLocalRoot(workspaceRoot)]) },
         warmup: { clientFiles: resolveAppWarmupFiles() },
       },
       // Every CMS root comes from the resolved config, passed explicitly, so
-      // the plugins' own `ZUDO_COMPOSITIONS_ROOT` / `ZUDO_MEDIA_STORE_ROOT`
+      // the plugins' own `ZUDO_COMPOSITIONS_ROOT` / `ZUDO_ASSETS_STORE_ROOT`
       // fallbacks do not apply in this lane. The SiteProject release root is
       // not a config setting and keeps its own `ZUDO_SITE_PROJECT_ROOT`.
       plugins: [
         componentPack,
         hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath: composerConfig.configPath }),
-        releaseApiPlugin({ mediaStoreRoot: paths.media, workspaceRoot, packIdentity: componentPack.identity }),
+        releaseApiPlugin({ assetsStoreRoot: paths.assets, workspaceRoot, packIdentity: componentPack.identity }),
         siteProjectSourcePlugin({ workspaceRoot, packIdentity: componentPack.identity }),
-        composerFileProviderPlugin({ workspaceRoot, compositionsRoot: paths.compositions, mediaStoreRoot: paths.media }),
+        composerFileProviderPlugin({ workspaceRoot, compositionsRoot: paths.compositions, assetsStoreRoot: paths.assets }),
         domainFileProviderPlugin({
           workspaceRoot,
           descriptors: [

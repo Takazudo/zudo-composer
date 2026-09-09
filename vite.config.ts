@@ -36,7 +36,7 @@ const componentPack = componentPackPlugin({ workspaceRoot: composerConfig.worksp
 // The two single-domain overrides still win over it, which is the precedence
 // the isolated dev lane and the SiteProject lane already rely on.
 const dataRoot = readRootEnvironment(process.env.ZUDO_DATA_ROOT, 'Data root');
-const domainRoot = (domain: 'compositions' | 'content' | 'mappings' | 'sitemaps' | 'media') =>
+const domainRoot = (domain: 'compositions' | 'content' | 'mappings' | 'sitemaps' | 'assets') =>
   dataRoot ? resolve(dataRoot, domain) : composerConfig.paths[domain];
 const compositionsRoot = readRootEnvironment(process.env.ZUDO_COMPOSITIONS_ROOT, 'Compositions root')
   ?? domainRoot('compositions');
@@ -48,14 +48,14 @@ const domainRoots = {
 };
 const workspaceRegistryRoot = resolveWorkspaceRegistryRoot(dataRoot ?? composerConfig.paths.data);
 
-// The content-addressed Media store, and the committed bytes the host's own
+// The content-addressed Assets store, and the committed bytes the host's own
 // static pipeline serves. Both come from the resolved config; the browser lanes
 // keep their absolute-root override so they can write into a temporary tree.
-const mediaStoreRoot = readRootEnvironment(process.env.ZUDO_MEDIA_STORE_ROOT, 'Media store root')
-  ?? domainRoot('media');
+const assetsStoreRoot = readRootEnvironment(process.env.ZUDO_ASSETS_STORE_ROOT, 'Assets store root')
+  ?? domainRoot('assets');
 
 export default defineConfig({
-  publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicMedia),
+  publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicAssets),
   // The configured pack and zfb-md-wasm import their glue/wasm files with
   // Vite's `?url` query. Keep both dependency packages in Vite's normal module
   // graph: Rolldown's dependency optimizer cannot resolve those resource
@@ -72,8 +72,8 @@ export default defineConfig({
       ignored: resolveWatchIgnored([
         composerConfig.paths.data,
         ...Object.values(domainRoots),
-        mediaStoreRoot,
-        composerConfig.paths.publicMedia,
+        assetsStoreRoot,
+        composerConfig.paths.publicAssets,
         workspaceRegistryRoot,
         resolveSiteProjectLocalRoot(composerConfig.workspaceRoot),
       ]),
@@ -91,14 +91,14 @@ export default defineConfig({
     // release toolchain cannot resolve — it never falls back to a bundled pack —
     // and every release request answers `unavailable`, which is how this
     // repository's own dev server had no working Review route at all.
-    releaseApiPlugin({ mediaStoreRoot, workspaceRoot: composerConfig.workspaceRoot, packIdentity: componentPack.identity }),
+    releaseApiPlugin({ assetsStoreRoot, workspaceRoot: composerConfig.workspaceRoot, packIdentity: componentPack.identity }),
     // The release reader re-derives the current toolchain to compare it with
     // the activated release's, so it needs the same pack the service stamped
     // with. `dev-server.mjs` passes both; without them here the reader throws
     // and every route reports that no SiteProject is activated.
     siteProjectSourcePlugin({ workspaceRoot: composerConfig.workspaceRoot, packIdentity: componentPack.identity }),
     composerFileProviderPlugin({
-      mediaStoreRoot,
+      assetsStoreRoot,
       compositionsRoot,
       workspaceRoot: composerConfig.workspaceRoot,
     }),
