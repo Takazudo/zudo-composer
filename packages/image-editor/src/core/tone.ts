@@ -26,7 +26,7 @@ export function* toneSteps(
 ): Generator<void, RgbaImage> {
   validateImage(image);
   const lut = createToneLut(tone);
-  const out = { ...image, data: image.data.slice() };
+  const out = { width: image.width, height: image.height, data: image.data.slice() };
   if (Object.values(tone).every((v) => v === 0)) return out;
   const angle = (tone.hue * Math.PI) / 180,
     cos = Math.cos(angle) * (1 + tone.saturation / 100),

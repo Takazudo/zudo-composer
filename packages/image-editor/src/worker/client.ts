@@ -212,7 +212,7 @@ export function createImageEditorClient(
       const response = await submit({
         ...identity(),
         kind: "register",
-        image: { ...image, data: image.data.slice() },
+        image: { width: image.width, height: image.height, data: image.data.slice() },
       });
       if (response.kind !== "registered")
         throw new ImageEditorError("worker-failed");

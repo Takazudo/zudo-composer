@@ -83,7 +83,7 @@ export function* resampleSteps(
   validateImage(source);
   validateSize({ width, height });
   if (width === source.width && height === source.height)
-    return { ...source, data: source.data.slice() };
+    return { width: source.width, height: source.height, data: source.data.slice() };
   let current = source;
   while (current.width > width * 2 || current.height > height * 2) {
     current = yield* pass(

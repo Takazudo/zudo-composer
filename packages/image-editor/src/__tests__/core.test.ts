@@ -246,3 +246,34 @@ it("reduces the shrinking axis before expanding the other axis", () => {
   };
   expect(resample(source, 1001, 1)).toMatchObject({ width: 1001, height: 1 });
 });
+
+it("preserves prototype-accessor dimensions across allocation, neutral tone, identity resize, and encoding", async () => {
+  const pixels = new Uint8ClampedArray(16).fill(127);
+  class NativeImageDataShape {
+    get width() { return 2; }
+    get height() { return 2; }
+    get data() { return pixels; }
+  }
+  const source = new NativeImageDataShape();
+  const { allocate } = await import('../index');
+  const neutral = createEditDoc(source).tone;
+  expect(allocate(source)).toEqual({ width: 2, height: 2, data: new Uint8ClampedArray(16) });
+  for (const result of [applyTone(source, neutral), resample(source, 2, 2)]) {
+    expect(result).toEqual({ width: 2, height: 2, data: pixels });
+    expect(result.data).not.toBe(pixels);
+  }
+  let encodedPixels: RgbaImage | undefined;
+  const blob = await encode(source, {
+    type: 'image/png',
+    imageDataFactory: image => { encodedPixels = image; return image as ImageData; },
+    canvasFactory: (width, height) => {
+      expect({ width, height }).toEqual({ width: 2, height: 2 });
+      return { getContext: () => ({ putImageData() {} }), convertToBlob: async () => new Blob(['png'], { type: 'image/png' }) };
+    },
+  });
+  expect(blob.type).toBe('image/png');
+  expect(encodedPixels).toEqual({ width: 2, height: 2, data: pixels });
+  expect(encodedPixels!.data).not.toBe(pixels);
+  expect(Object.keys(source)).toEqual([]);
+  expect([...pixels]).toEqual(Array(16).fill(127));
+});

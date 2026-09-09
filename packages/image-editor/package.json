@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./worker": "./src/worker/client.ts"
+    "./worker": "./src/worker/client.ts",
+    "./ui": "./src/ui/index.ts"
   }
 }
