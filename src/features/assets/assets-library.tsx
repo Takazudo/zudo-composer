@@ -1,5 +1,5 @@
 import type { JSX } from "preact";
-import type { AssetSummary } from "../../assets";
+import { assetKindForMime, ASSET_KIND_LABELS, type AssetKindName, type AssetSummary } from "../../assets";
 import { CopyIcon, MarkdownIcon, PreviewIcon, TrashIcon } from "../../components/icons";
 import {
   LibraryNoMatch,
@@ -20,10 +20,10 @@ import {
 import { Button, Checkbox, SegmentedControl, type DataTableColumn } from "../../components/ui";
 import { compareAssetSummariesNewestFirst } from "../../assets";
 import type { AssetDimensionStore } from "./assets-dimensions";
-import { formatBytes, isAssetImage, assetCaption, assetTypeLabel } from "./assets-format";
+import { formatBytes, assetCaption, assetTypeLabel } from "./assets-format";
 import { AssetThumb } from "./assets-thumb";
 
-export type AssetTypeFilter = "all" | "images" | "pdfs";
+export type AssetTypeFilter = "all" | AssetKindName;
 
 export const ASSET_SORTS: readonly LibrarySort<AssetSummary>[] = [
   { id: "newest", label: "Newest", compare: compareAssetSummariesNewestFirst },
@@ -47,8 +47,7 @@ export const ASSET_TYPE_FACET: LibraryFacet<AssetSummary> = {
   label: "Type",
   options: [
     { id: "all", label: "All" },
-    { id: "images", label: "Images", match: isAssetImage },
-    { id: "pdfs", label: "PDFs", match: (row) => !isAssetImage(row) },
+    ...Object.entries(ASSET_KIND_LABELS).map(([id, label]) => ({ id, label, match: (row: AssetSummary) => assetKindForMime(row.mimeType)?.kind === id })),
   ],
 };
 
@@ -99,7 +98,7 @@ export function AssetLibrary({
   bulkBar,
   uploadPanel,
 }: AssetLibraryProps): JSX.Element {
-  const imageCount = records.filter(isAssetImage).length;
+  const facets = ASSET_TYPE_FACET.options.filter((option) => option.id === "all" || option.id === query.facetValue(ASSET_TYPE_FILTER_ID) || records.some((record) => option.match?.(record)));
   const filter = query.facetValue(ASSET_TYPE_FILTER_ID) as AssetTypeFilter;
   const totalBytes = records.reduce((sum, record) => sum + record.byteLength, 0);
 
@@ -138,11 +137,7 @@ export function AssetLibrary({
           size="sm"
           value={filter}
           onChange={(next) => query.setFacetValue(ASSET_TYPE_FILTER_ID, next)}
-          options={[
-            { value: "all", label: <TypeSegment label="All" count={records.length} /> },
-            { value: "images", label: <TypeSegment label="Images" count={imageCount} /> },
-            { value: "pdfs", label: <TypeSegment label="PDFs" count={records.length - imageCount} /> },
-          ]}
+          options={facets.map((option) => ({ value: option.id as AssetTypeFilter, label: <TypeSegment label={option.label} count={option.match ? records.filter(option.match).length : records.length} /> }))}
         />
         <LibrarySortMenu sorts={ASSET_SORTS} value={query.sortId} onChange={query.setSortId} />
       </LibraryToolbar>

@@ -25,6 +25,7 @@ export type ContentAssetRef = { providerId: string; assetId: string };
 export type ContentAssetUse =
   | { kind: "image"; asset: ContentAssetRef; alt: string; decorative: boolean; caption: string }
   | { kind: "link"; asset: ContentAssetRef; label: string }
+  | { kind: "download"; asset: ContentAssetRef; label: string; showSize: boolean; showType: boolean }
   | { kind: "card"; asset: ContentAssetRef; title: string; description: string };
 
 export type ContentValueSchema =

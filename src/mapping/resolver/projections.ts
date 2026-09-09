@@ -1,3 +1,4 @@
+import { assetDownloadMarkdown } from "../../assets/integration/download";
 import type { JsonValue } from "@zudo-composer/component-contract";
 import type { ContentEntryRecord, ContentFieldDefinition, ContentFieldKind, ContentAssetUse } from "../../content/model";
 import { isValueValidForField } from "../../content/model";
@@ -28,9 +29,10 @@ export function resolveMappingProjectionDefinition(field: ContentFieldDefinition
     for (const fieldId of projection.fieldIds) current = current?.kind === "object" ? current.fields.find((candidate) => candidate.id === fieldId) : undefined;
     return current ? { status: "ready", kind: current.kind } : { status: "invalid", message: `Structured source projection ${JSON.stringify(projection.fieldIds)} is stale.` };
   }
+  if (projection.kind === "asset-download") return field.kind === "asset-use" && field.use === "download" ? { status: "ready", kind: "markdown" } : { status: "invalid", message: "asset-download requires a download use." };
   if (projection.kind === "asset-ref") return field.kind === "asset-use" ? { status: "ready", kind: "object" } : { status: "invalid", message: "asset-ref requires an asset-use field." };
   if (projection.kind === "asset-text") {
-    const supported = field.kind === "asset-use" && ({ image: ["alt", "caption"], link: ["label"], card: ["title", "description"] } as const)[field.use].includes(projection.field as never);
+    const supported = field.kind === "asset-use" && ({ image: ["alt", "caption"], link: ["label"], download: ["label"], card: ["title", "description"] } as const)[field.use].includes(projection.field as never);
     return supported ? { status: "ready", kind: "text" } : { status: "invalid", message: `asset-text ${projection.field} is unavailable for this field.` };
   }
   if (projection.kind === "reference-list-ids") return field.kind === "reference-list" ? { status: "ready", kind: "list" } : { status: "invalid", message: "reference-list-ids requires a reference-list field." };
@@ -51,6 +53,10 @@ export function projectContentValue(options: {
   if (value === undefined) return { status: "invalid", message: `Source field "${options.field.id}" has no value.` };
   if (!isValueValidForField(options.field, value)) return { status: "invalid", message: `Source field "${options.field.id}" has an invalid value.` };
   if (projection.kind === "value") return { status: "projected", value };
+  if (projection.kind === "asset-download") {
+    const use = value as unknown as ContentAssetUse;
+    return options.field.kind === "asset-use" && use.kind === "download" ? { status: "projected", value: assetDownloadMarkdown(use) } : { status: "invalid", message: "asset-download requires a download use." };
+  }
   if (projection.kind === "object-field") {
     let current: JsonValue = value;
     let fields = options.field.kind === "object" ? options.field.fields : undefined;

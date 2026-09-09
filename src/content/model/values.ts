@@ -49,6 +49,7 @@ export function traverseContentSchema(fields: readonly ContentFieldDefinition[])
 export function projectContentAssetUse(use: ContentAssetUse, url: string): Record<string, JsonValue> {
   switch (use.kind) {
     case "image": return { src: url, alt: use.decorative ? "" : use.alt, decorative: use.decorative, caption: use.caption };
+    case "download": return { href: url, label: use.label, showSize: use.showSize, showType: use.showType };
     case "link": return { href: url, label: use.label };
     case "card": return { href: url, title: use.title, description: use.description };
   }

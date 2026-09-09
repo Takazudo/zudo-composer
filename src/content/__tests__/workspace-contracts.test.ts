@@ -39,6 +39,7 @@ function field(id: string, schema: ContentValueSchema, required = false): Conten
 function assetUse(kind: ContentAssetUse["kind"], assetId: string): ContentAssetUse {
   const asset = { providerId: assetProviderId, assetId };
   if (kind === "image") return { kind, asset, alt: "Alt", decorative: false, caption: "Caption" };
+  if (kind === "download") return { kind, asset, label: "Download", showSize: true, showType: true };
   if (kind === "link") return { kind, asset, label: "Download" };
   return { kind, asset, title: "Card", description: "Description" };
 }

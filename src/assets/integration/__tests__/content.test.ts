@@ -15,6 +15,7 @@ afterEach(async () => {
 
 async function content(): Promise<ContentProvider> {
   const model = createContentModelRecord({ name: "Resources", kind: "collection", fields: [
+    { id: "download", key: "download", label: "Download", kind: "asset-use", use: "download", required: false },
     { id: "hero", key: "hero", label: "Hero", kind: "asset-use", use: "image", required: false },
     { id: "links", key: "links", label: "Links", kind: "list", item: { kind: "asset-use", use: "link" }, required: false },
     { id: "nested", key: "nested", label: "Nested", kind: "object", required: false, fields: [{ id: "card", key: "card", label: "Card", required: false, kind: "asset-use", use: "card" }] },
@@ -69,23 +70,23 @@ describe("injected complete Assets / Content integration", () => {
     const stopAgain = service.subscribeChanges(inspector); expect(subscribe).toHaveBeenCalledTimes(2);
     stopAgain(); expect(detach).toHaveBeenCalledTimes(2); expect(read).not.toHaveBeenCalled();
   });
-  it("persists image/link/card text through Content CAS without storing Assets notes", async () => {
+  it("persists image/link/card/download presentation through Content CAS without storing Assets notes", async () => {
     const provider = await content(); const service = createAssetContentServices([provider], async () => ({ status: "ready" }), undefined, completeImpact);
     const asset = { providerId: "asset-files", assetId: "hero" };
-    const values: AssetUse[] = [{ kind: "image", asset, alt: "Contextual image", decorative: false, caption: "A caption" }, { kind: "link", asset, label: "Download guide" }, { kind: "card", asset, title: "Resource card", description: "Per-use card description" }];
+    const values: AssetUse[] = [{ kind: "download", asset, label: "Get archive", showSize: true, showType: false }, { kind: "image", asset, alt: "Contextual image", decorative: false, caption: "A caption" }, { kind: "link", asset, label: "Download guide" }, { kind: "card", asset, title: "Resource card", description: "Per-use card description" }];
     for (const value of values) {
       const target = (await service.targets()).find((item) => item.entryId === "entry-39" && item.kind === value.kind)!;
       expect(target).toBeDefined(); await service.insert(target, value);
     }
     const scan = await service.scan(asset);
-    expect(scan.status).toBe("complete"); expect(scan.locations).toHaveLength(3);
+    expect(scan.status).toBe("complete"); expect(scan.locations).toHaveLength(4);
     expect(scan.locations.find((location) => location.use.kind === "card")).toMatchObject({ fieldId: "nested", valuePath: ["card"], entryId: "entry-39" });
     expect(scan.locations.find((location) => location.use.kind === "link")).toMatchObject({ fieldId: "links", valuePath: [0] });
     expect(await service.isCurrent(scan)).toBe(true);
     const target = (await service.targets()).find((item) => item.entryId === "entry-39" && item.kind === "image")!;
-    await service.insert(target, values[0]!);
+    await service.insert(target, values[1]!);
     expect(await service.isCurrent(scan)).toBe(false);
-    await expect(service.insert(target, values[0]!)).rejects.toThrow("Content changed");
+    await expect(service.insert(target, values[1]!)).rejects.toThrow("Content changed");
   });
   it("does not claim authoritative absence with missing providers or pending save failures", async () => {
     const asset = { providerId: "asset-files", assetId: "hero" };

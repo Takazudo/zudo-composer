@@ -22,6 +22,11 @@ describe("managed reference locking", () => {
     const { store, bytes, record, ref } = await setup();
     const locked = await createAssetReferenceLock(store, [ref, ref]); expect(locked.status).toBe("ready"); if (locked.status !== "ready") return;
     expect(locked.lock.pins).toHaveLength(1); const before = JSON.stringify(locked.lock);
+    expect(locked.lock.pins[0]!.fileName).toBe("image.png");
+    const legacy = structuredClone(locked.lock); delete legacy.pins[0]!.fileName;
+    expect(validateAssetReferenceLock(legacy)).toBe(true);
+    const malformed = structuredClone(locked.lock); malformed.pins[0]!.fileName = undefined;
+    expect(validateAssetReferenceLock(malformed)).toBe(false);
     expect(await checkAssetLockPreconditions(locked.lock, store)).toBe(true);
     await store.replace(record.id, { bytes: new Uint8Array([...bytes, 9]) }, { expectedRevision: record.revision });
     expect(await checkAssetLockPreconditions(locked.lock, store)).toBe(false);

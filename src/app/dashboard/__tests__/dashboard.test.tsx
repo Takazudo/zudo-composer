@@ -211,7 +211,7 @@ describe("Dashboard", () => {
     expect(within(cards[0]).getByText("entries")).toBeInTheDocument();
     expect(within(cards[0]).getByText("2 models")).toBeInTheDocument();
     expect(within(cards[0]).getByText("3 incomplete")).toBeInTheDocument();
-    expect(within(cards[1]).getByText("11 images · 3 PDFs · 8.2 MB")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("11 images · 3 documents · 8.2 MB")).toBeInTheDocument();
     expect(within(cards[2]).getByText("2 patterns · 1 global template")).toBeInTheDocument();
     expect(within(cards[3]).getByText("1 blocked")).toBeInTheDocument();
     expect(within(cards[4]).getByText("4 unassigned")).toBeInTheDocument();

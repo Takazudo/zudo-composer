@@ -1,7 +1,7 @@
 import type { JSX, RefObject, TargetedEvent } from "preact";
 import { useCallback, useEffect, useReducer, useRef, useState } from "preact/hooks";
 import { useWorkspace } from "../../app/workspace-context";
-import { ASSET_MAX_BYTE_LENGTH, type AssetRecord } from "../../assets";
+import { ASSET_MAX_BYTE_LENGTH, ASSET_ACCEPT, ASSET_UPLOAD_HINT, type AssetRecord } from "../../assets";
 import { UploadIcon, XMarkIcon } from "../../components/icons";
 import { Button, Chip, type ChipTone } from "../../components/ui";
 import { formatBytes } from "./assets-format";
@@ -16,7 +16,7 @@ import {
   type AssetUploadStatus,
 } from "./upload-reducer";
 
-export const ASSET_UPLOAD_ACCEPT = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
+export const ASSET_UPLOAD_ACCEPT = ASSET_ACCEPT;
 export { ASSET_UPLOAD_BUSY_REJECTION } from "./upload-reducer";
 
 export interface AssetUploadStore {
@@ -217,7 +217,7 @@ export function AssetUploadPanel({ controller }: AssetUploadPanelProps): JSX.Ele
             Choose files
           </Button>
         </span>
-        <span class="sg-assets-drop__hint">{`PNG, JPEG, GIF, WebP, PDF · up to ${formatBytes(ASSET_MAX_BYTE_LENGTH)}`}</span>
+        <span class="sg-assets-drop__hint">{`${ASSET_UPLOAD_HINT} · up to ${formatBytes(ASSET_MAX_BYTE_LENGTH)}`}</span>
       </div>
       {state.rejection ? <p class="sg-assets-upload__rejection" role="status">{state.rejection}</p> : null}
       <div aria-live="polite">

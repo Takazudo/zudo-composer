@@ -23,6 +23,9 @@
 // Export is REFUSED when any node is opaque/invalid: dropping preserved data
 // into a misleading export is worse than returning actionable diagnostics.
 
+import { downloadAsset } from "../../browser/asset-download.mjs";
+import { ASSET_MAX_BYTE_LENGTH } from "../../assets/model";
+import { assetDownloadBlocks, assetDownloadLabel, downloadMarkdownProperty, splitAssetDownloadMarkdown } from "../../assets/integration/download";
 import type { CompositionDocument, CompositionNode } from "../model/types";
 import type { ComponentCatalog } from "../model/types";
 import type { DocumentDiagnostics } from "../model/validate";
@@ -41,6 +44,8 @@ export interface ImportPlan {
 }
 
 export interface GenerateJsxOptions {
+  /** Internal authoring inspection only; export callers leave this false. */
+  allowUnresolvedAssetDownloads?: boolean;
   /** Exported component identifier. Defaults to `Composition`. */
   componentName?: string;
   /**
@@ -225,6 +230,21 @@ export function generateJsx(
   options: GenerateJsxOptions = {},
 ): JsxGenerationResult {
   const diagnostics = diagnoseDocument(document, manifest);
+  if (!diagnostics.canExport) return { ok: false, blocked: true, code: "", diagnostics, imports: [], emittedNodeOrder: [] };
+  const inspectDownloads = (nodes: readonly CompositionNode[]) => { for (const node of nodes) {
+    const definition = manifest.get(node.componentId);
+    const props = { ...definition?.defaults, ...node.props };
+    const property = definition && downloadMarkdownProperty(definition, props);
+    const invalidDownloads = definition?.fields.some((field) => field.editor.kind === "text" && field.editor.mode === "markdown-source" && typeof props[field.prop] === "string" && assetDownloadBlocks(String(props[field.prop])).some(({ block }) => property !== field.prop || !block || (!block.resolved && !options.allowUnresolvedAssetDownloads)));
+    if (invalidDownloads) {
+      const prior = diagnostics.byId.get(node.id);
+      diagnostics.byId.set(node.id, { nodeId: node.id, componentId: node.componentId, opaque: true, reasons: [...(prior?.reasons ?? []), { code: "invalid-prop", message: "Resolve Assets downloads to exact versions before exporting this Markdown field." }] });
+      if (!diagnostics.opaqueIds.includes(node.id)) diagnostics.opaqueIds.push(node.id);
+      diagnostics.hasOpaque = true; diagnostics.canExport = false;
+    }
+    Object.values(node.slots).forEach(inspectDownloads);
+  } };
+  inspectDownloads(document.root);
   const componentName = toIdentifier(options.componentName ?? document.name ?? "Composition", "Composition");
   const componentExport = options.componentExport ?? "named";
   const linkedOutlet = options.linkedOutlet;
@@ -250,6 +270,10 @@ export function generateJsx(
 
   const reserved = new Set([componentName, ...(options.reservedIdentifiers ?? [])]);
   if (linkedOutlet) reserved.add("CompositionOutlets");
+  let downloadHandlerName = "__zudoAssetDownload";
+  while (reserved.has(downloadHandlerName)) downloadHandlerName += "_";
+  reserved.add(downloadHandlerName);
+  let hasDownloads = false;
   const plan = planImports([...usedComponentIds], manifest, reserved);
   // De-duplicated by reference: two componentIds sharing the exact same export
   // (see `planImports`) point at the SAME ImportPlan object, so a Set collapses
@@ -257,10 +281,20 @@ export function generateJsx(
   const uniqueImportPlans = [...new Set(plan.values())];
   const tagOf = (componentId: string): string => plan.get(componentId)!.localName;
 
-  const renderNode = (node: CompositionNode): string[] => {
-    emittedNodeOrder.push(node.id);
+  const renderNode = (node: CompositionNode, chunk = false): string[] => {
+    if (!chunk) emittedNodeOrder.push(node.id);
     const entry = manifest.get(node.componentId)!;
     const tag = tagOf(node.componentId);
+    const markdownProp = downloadMarkdownProperty(entry, { ...entry.defaults, ...node.props });
+    if (!chunk && markdownProp) {
+      const parts = splitAssetDownloadMarkdown(String(node.props[markdownProp] ?? entry.defaults[markdownProp]));
+      if (parts.some((part) => "block" in part)) return ["<>", ...indentLines(parts.flatMap((part) => {
+        if ("markdown" in part) return part.markdown.trim() ? renderNode({ ...node, props: { ...node.props, [markdownProp]: part.markdown } }, true) : [];
+        if (!part.block.resolved) return ['<span role="status">Download unavailable</span>'];
+        hasDownloads = true;
+        return [`<a onClick={(event) => { void ${downloadHandlerName}(event, ${ASSET_MAX_BYTE_LENGTH}); }} ${renderScalarAttr("aria-label", assetDownloadLabel(part.block))} ${renderScalarAttr("href", part.block.resolved.url)} ${renderScalarAttr("download", part.block.resolved.fileName)}>{${JSON.stringify(assetDownloadLabel(part.block))}}</a>`];
+      }), 2), "</>"];
+    }
 
     const slotProps = new Set(entry.slots.map((s) => s.prop));
     const hasDefaultChildrenSlot = entry.slots.some((s) => s.prop === "children");
@@ -369,6 +403,7 @@ export function generateJsx(
   const exportPrefix = componentExport === "default" ? "export default " : componentExport === "named" ? "export " : "";
   const lines = [
     ...(importLines.length ? [...importLines, ""] : []),
+    ...(hasDownloads ? [`const ${downloadHandlerName}: (event: MouseEvent, maxBytes: number) => Promise<void> = ${downloadAsset.toString()};`, ""] : []),
     ...(linkedOutlet
       ? [
           "export type CompositionOutlets = {",

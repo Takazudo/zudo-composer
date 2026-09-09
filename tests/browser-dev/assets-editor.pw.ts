@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { AssetRecord } from "../../src/assets";
+import type { AssetRecord } from "../../src/assets/model/types";
 import { ensureDevWorkspace } from "./workspace-bootstrap";
 
 async function imageBytes(page: Page, type: string, width = 800, height = 600): Promise<Buffer> {
@@ -29,7 +29,7 @@ async function openEditor(page: Page) {
   await page.getByRole("complementary", { name: "Asset details" }).getByRole("button", { name: /Edit image/ }).click();
   const dialog = page.getByRole("dialog", { name: /^Edit image:/ });
   await expect(dialog.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
-  await expect.poll(() => dialog.locator(".zie-editor").evaluate((editor) => editor.getBoundingClientRect().width)).toBeGreaterThan(300);
+  await expect.poll(() => dialog.getByRole("region", { name: "Image editor", exact: true }).evaluate((editor) => editor.getBoundingClientRect().width)).toBeGreaterThan(300);
   return dialog;
 }
 

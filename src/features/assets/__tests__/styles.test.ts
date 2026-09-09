@@ -7,6 +7,11 @@ const css = readFileSync(resolve(process.cwd(), "src/features/assets/styles.css"
 const rules = css.replace(/\/\*[\s\S]*?\*\//g, "");
 
 describe("Asset styling contract", () => {
+  it("provides file badges and a wrapping download card", () => {
+    expect(css).toContain(".sg-assets-file__label");
+    expect(css).toContain(".sg-assets-download-card");
+    expect(css).toContain("overflow-wrap: anywhere");
+  });
   it("owns only what an asset library adds, and prefixes every class it declares", () => {
     // `src/base.css` already pulls the provider sheets in; a feature stylesheet
     // that imports them again ships the same tokens twice.

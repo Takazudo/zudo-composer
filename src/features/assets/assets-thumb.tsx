@@ -1,9 +1,9 @@
 import type { JSX } from "preact";
 import { useState } from "preact/hooks";
-import type { AssetSummary } from "../../assets";
-import { FileIcon } from "../../components/icons";
+import { assetKindForMime, type AssetSummary } from "../../assets";
+import { FileIcon, FolderIcon, TextIcon } from "../../components/icons";
 import type { AssetDimensionStore } from "./assets-dimensions";
-import { isAssetImage } from "./assets-format";
+import { assetTypeLabel, isAssetImage } from "./assets-format";
 
 export interface AssetThumbProps {
   record: AssetSummary;
@@ -13,7 +13,7 @@ export interface AssetThumbProps {
 }
 
 /**
- * The asset itself for an image, a page-shaped tile for a PDF.
+ * The asset itself for an image, a kind icon and extension badge for other files.
  *
  * The image is the public URL the rest of the app references, so a thumbnail
  * that renders is also proof the delivered bytes decode — and the decode is
@@ -23,10 +23,12 @@ export function AssetThumb({ record, dimensions, detail = false }: AssetThumbPro
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (failedUrl === record.url) return <span role="status">Image preview unavailable</span>;
   if (!isAssetImage(record)) {
+    const kind = assetKindForMime(record.mimeType)?.kind;
+    const Icon = kind === "archive" ? FolderIcon : kind === "text" ? TextIcon : FileIcon;
     return (
-      <span class={`sg-assets-pdf${detail ? " sg-assets-pdf--detail" : ""}`} aria-hidden="true">
-        <FileIcon size={detail ? "lg" : "md"} />
-        <span class="sg-assets-pdf__label">PDF</span>
+      <span class={`sg-assets-file${detail ? " sg-assets-file--detail" : ""}`} aria-hidden="true">
+        <Icon size={detail ? "lg" : "md"} />
+        <span class="sg-assets-file__label">{assetTypeLabel(record.mimeType)}</span>
       </span>
     );
   }

@@ -6,12 +6,59 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AssetApp } from "../assets-app";
 import { AssetFieldPicker } from "../assets-use-picker";
 import { createAssetLibraryController } from "../controller";
+import { ASSET_ACCEPT } from "../../../assets/model";
 import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture";
 
 const GIF = Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 describe("Asset workspace", () => {
+  it("isolates archives, previews a ZIP download and defaults insertion to download", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const archive = await filesystem.upload({ fileName: "bundle.zip", declaredMimeType: "application/zip", bytes: Uint8Array.from([0x50, 0x4b, 0x03, 0x04, ...Array(18).fill(0)]) });
+    await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
+    await filesystem.upload({ fileName: "guide.pdf", declaredMimeType: "application/pdf", bytes: PDF });
+    const insert = vi.fn(async () => undefined);
+    const services = completeServices({ insert, targets: async () => [{ providerId: "content-filesystem", modelId: "resources", entryId: "one", fieldId: "download", valuePath: [], modelName: "Resources", entryTitle: "One", fieldLabel: "Download", kind: "download", append: false, mutationToken: 0 }] });
+    render(<AssetApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
+    await screen.findByRole("button", { name: "Inspect bundle.zip" });
+    expect(screen.getByRole("option", { name: "Archives (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Documents (1)" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "Asset type" }), { target: { value: "archive" } });
+    expect(screen.queryByRole("button", { name: "Inspect hero.png" })).not.toBeInTheDocument();
+    expect(screen.getByText("ZIP")).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toHaveAttribute("accept", ASSET_ACCEPT);
+    fireEvent.click(screen.getByRole("button", { name: "Inspect bundle.zip" }));
+    const inspector = screen.getByRole("complementary", { name: "Asset details" });
+    fireEvent.click(within(inspector).getByRole("button", { name: "Preview", exact: true }));
+    const dialog = await screen.findByRole("dialog", { name: "bundle.zip" });
+    expect(within(dialog).getByRole("link", { name: "Download", exact: true })).toHaveAttribute("download", "bundle.zip");
+    expect(within(dialog).getByRole("link", { name: "Download", exact: true })).toHaveAttribute("href", archive.document.versions[0]!.url);
+    expect(dialog.querySelector("iframe")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    fireEvent.click(within(inspector).getByRole("button", { name: "Use in content" }));
+    const picker = await screen.findByRole("dialog", { name: "Use this asset" });
+    expect(within(picker).getByRole("radio", { name: "Image", exact: true })).toBeDisabled();
+    expect(within(picker).getByLabelText("Download label")).toHaveValue("bundle.zip");
+    fireEvent.click(within(picker).getByLabelText("Show file type"));
+    await waitFor(() => expect(within(picker).getByRole("button", { name: "Use in content" })).toBeEnabled());
+    fireEvent.click(within(picker).getByRole("button", { name: "Use in content" }));
+    await waitFor(() => expect(insert).toHaveBeenCalledWith(expect.objectContaining({ kind: "download" }), { kind: "download", asset: { providerId: provider.descriptor.id, assetId: archive.id }, label: "bundle.zip", showSize: true, showType: false }));
+  });
+
+  it("counts only the selected folder and search before applying the type facet", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const folder = await filesystem.createFolder({ name: "Pictures", parentId: null }, await filesystem.mutationToken());
+    await filesystem.upload({ fileName: "hero.png", folderId: folder.id, declaredMimeType: "image/png", bytes: PNG });
+    await filesystem.upload({ fileName: "outside.zip", declaredMimeType: "application/zip", bytes: Uint8Array.from([0x50, 0x4b, 0x03, 0x04]) });
+    render(<AssetApp provider={provider} contentServices={completeServices()} intent={{ status: "none" }} />);
+    await screen.findByRole("option", { name: "Archives (1)" });
+    fireEvent.click(screen.getByRole("treeitem", { name: /Pictures/ }));
+    expect(screen.queryByRole("option", { name: "Archives (1)" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Images (1)" })).toBeInTheDocument();
+    fireEvent.input(screen.getByRole("searchbox", { name: "Search assets" }), { target: { value: "missing" } });
+    expect(screen.getByRole("option", { name: "All types (0)" })).toBeInTheDocument();
+  });
   it("uses provider display URLs for version links without changing canonical records", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "temporary.png", declaredMimeType: "image/png", bytes: PNG });

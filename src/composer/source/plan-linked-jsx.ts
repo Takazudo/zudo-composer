@@ -80,6 +80,8 @@ export interface LinkedJsxModuleBatchPlan {
 }
 
 export interface PlanLinkedJsxModulesOptions {
+  /** Internal route inspection before exact Assets capture. */
+  allowUnresolvedAssetDownloads?: boolean;
   manifest: ComponentCatalog;
   /** An already-loaded, same-provider dependency closure. No provider is accepted here. */
   records: readonly CompositionRecord[];
@@ -202,10 +204,12 @@ function standaloneModule(
   record: CompositionRecord,
   manifest: ComponentCatalog,
   moduleSpecifier: string,
+  allowUnresolvedAssetDownloads = false,
 ): LinkedJsxModulePlan {
   const generation = generateJsx(record.document, manifest, {
     componentName: "Composition",
     componentExport: "default",
+    allowUnresolvedAssetDownloads,
   });
   if (!generation.ok) return localComponentBlock(record, "standalone", generation, moduleSpecifier);
   return {
@@ -222,13 +226,15 @@ function globalTemplateModule(
   record: CompositionRecord,
   manifest: ComponentCatalog,
   moduleSpecifier: string,
+  allowUnresolvedAssetDownloads = false,
 ): LinkedJsxModulePlan {
   const publication = record.document.publication;
-  if (publication?.kind !== "global-template") return standaloneModule(record, manifest, moduleSpecifier);
+  if (publication?.kind !== "global-template") return standaloneModule(record, manifest, moduleSpecifier, allowUnresolvedAssetDownloads);
 
   const generation = generateJsx(record.document, manifest, {
     componentName: "Composition",
     componentExport: "default",
+    allowUnresolvedAssetDownloads,
     linkedOutlet: publication.outlet,
   });
   if (!generation.ok) return localComponentBlock(record, "global-template", generation, moduleSpecifier);
@@ -262,6 +268,7 @@ function linkedConsumerModule(
   sourcePlans: ReadonlyMap<CompositionRecordId, LinkedJsxModulePlan>,
   resolutions: ReadonlyMap<CompositionRecordId, GlobalTemplateResolutionOutcome> | undefined,
   sourceOutcomes: ReadonlyMap<CompositionRecordId, CompositionLoadOutcome> | undefined,
+  allowUnresolvedAssetDownloads = false,
 ): LinkedJsxModulePlan {
   const binding = record.document.binding!;
   const resolution = resolutions?.get(record.id)
@@ -333,6 +340,7 @@ function linkedConsumerModule(
   }
 
   const localGeneration = generateJsx(record.document, manifest, {
+    allowUnresolvedAssetDownloads,
     componentName: "LocalCompositionContent",
     componentExport: "none",
     reservedIdentifiers: ["Composition", "LinkedTemplate", "LocalCompositionContent"],
@@ -419,7 +427,7 @@ export function planLinkedJsxModules(options: PlanLinkedJsxModulesOptions): Link
       continue;
     }
     if (record.document.binding) continue;
-    sourcePlans.set(record.id, globalTemplateModule(record, options.manifest, specifiers.get(record.id)!));
+    sourcePlans.set(record.id, globalTemplateModule(record, options.manifest, specifiers.get(record.id)!, options.allowUnresolvedAssetDownloads));
   }
 
   const plans = new Map<CompositionRecordId, LinkedJsxModulePlan>(sourcePlans);
@@ -437,6 +445,7 @@ export function planLinkedJsxModules(options: PlanLinkedJsxModulesOptions): Link
           sourcePlans,
           options.resolutions,
           options.sourceOutcomes,
+          options.allowUnresolvedAssetDownloads,
         ),
     );
   }

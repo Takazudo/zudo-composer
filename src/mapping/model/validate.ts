@@ -34,7 +34,7 @@ export function validateMappingTransform(value: unknown): value is MappingTransf
 
 export function validateMappingSourceProjection(value: unknown): value is MappingSourceProjection {
   if (!isPlainObject(value) || typeof value.kind !== "string") return false;
-  if (["value", "asset-ref", "reference-id", "reference-list-ids", "route-link"].includes(value.kind)) return exact(value, ["kind"]);
+  if (["value", "asset-ref", "asset-download", "reference-id", "reference-list-ids", "route-link"].includes(value.kind)) return exact(value, ["kind"]);
   if (value.kind === "asset-text") return exact(value, ["kind", "field"]) && ["alt", "caption", "label", "title", "description"].includes(String(value.field));
   return value.kind === "object-field" && exact(value, ["kind", "fieldIds"]) && Array.isArray(value.fieldIds) && value.fieldIds.length > 0 && value.fieldIds.every(isSafeRecordId);
 }

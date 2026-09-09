@@ -1,3 +1,4 @@
+import { assetKindForMime } from "../../assets/model";
 // Presentation derivations for the Dashboard (issue #173).
 //
 // `workspace-summary.ts` answers *what is in the workspace*; this module turns
@@ -47,23 +48,14 @@ export function countLabel(count: number, singular: string, plural = `${singular
 }
 
 /**
- * `byType` is keyed by raw asset type, so the split is folded into the three
+ * `byType` is keyed by raw asset type, so the split is folded into the allowlisted
  * groups an author recognises rather than printing `image/png · image/jpeg`.
  */
 export function assetTypeSummary(byType: AssetCounts["byType"]): readonly string[] {
-  let images = 0;
-  let pdfs = 0;
-  let other = 0;
-  for (const [assetType, count] of Object.entries(byType)) {
-    if (assetType.startsWith("image/")) images += count;
-    else if (assetType === "application/pdf") pdfs += count;
-    else other += count;
-  }
-  const parts: string[] = [];
-  if (images > 0) parts.push(countLabel(images, "image"));
-  if (pdfs > 0) parts.push(`${pdfs} PDF${pdfs === 1 ? "" : "s"}`);
-  if (other > 0) parts.push(countLabel(other, "other file"));
-  return parts;
+  const counts = { image: 0, document: 0, archive: 0, text: 0, other: 0 };
+  for (const [mimeType, count] of Object.entries(byType)) counts[assetKindForMime(mimeType)?.kind ?? "other"] += count;
+  const labels = { image: "image", document: "document", archive: "archive", text: "text file", other: "other file" };
+  return Object.entries(counts).filter(([, count]) => count > 0).map(([kind, count]) => countLabel(count, labels[kind as keyof typeof labels]));
 }
 
 export function greeting(now: Date = new Date()): string {
