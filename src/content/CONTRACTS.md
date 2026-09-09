@@ -20,15 +20,15 @@ depth is bounded at 16. Models retain collection/single cardinality.
 - `reference-list`: same target plus required `ordered: boolean`. Values are
   unique references. Stored order is always preserved, including ordered edits.
 - `object`: nested `fields`; `list`: recursive `item` schema.
-- `media-use`: schema selects `use: "image" | "link" | "card"`. Values contain
+- `asset-use`: schema selects `use: "image" | "link" | "card"`. Values contain
   `{kind,asset:{providerId,assetId}}` plus image `{alt,decorative,caption}`, link `{label}`,
   or card `{title,description}`. Decorative image alt must be empty. Asset notes
   never supply alt. The provider-qualified asset identity is stable authoring
-  data; it deliberately has no version ID. The Media/release layer resolves the
+  data; it deliberately has no version ID. The Asset/release layer resolves the
   current active head under a durable mutation token and pins the exact
   immutable version in a release candidate.
 
-`isValueValidForField` validates saved types and date/URL/choice/ref/media
+`isValueValidForField` validates saved types and date/URL/choice/ref/asset
 semantics. Date/URL empty strings and absent required fields remain savable.
 `diagnoseContentEntryCompleteness` separately finds required missing/empty
 strings and arrays, nested required values, and missing per-use accessible
@@ -42,7 +42,7 @@ the model showing the inverse. Inverses never store a second relationship.
 
 `createContentValueSchema` supplies usable defaults; reference creation requires
 an explicit target. `traverseContentSchema` and `traverseContentValues` preserve
-field/list order and report nested paths. `projectContentMediaUse(use,url)`
+field/list order and report nested paths. `projectContentAssetUse(use,url)`
 projects per-use props using a caller-resolved URL, without importing features.
 Scalar Mapping explicitly rejects all new rich kinds until its structured
 mapping implementation; structured values cannot fall through to stringify.
@@ -58,7 +58,7 @@ changed entry receives the transaction token as its generation. Tokens must be
 read from storage; notifications are only optional invalidation hints.
 
 `buildContentGraphIndex(snapshots)` consumes complete snapshots, not UI pages.
-It exposes provider-qualified relation owners/targets, incoming edges, media
+It exposes provider-qualified relation owners/targets, incoming edges, asset
 locations, schema/field dependencies, diagnostics and `complete`. Missing
 providers/records or invalid data make the graph incomplete; authoring
 completeness diagnostics do not. `getContentDeletionBlockers` explains known
@@ -153,4 +153,4 @@ from changing lifecycle after B has reconciled. Missing or changed entries are
 skipped, preserving edits made after review.
 Matching lifecycle metadata changes receive a new generation in the same
 transaction. Activation/release workflow, mutable workspace lifetime and
-immutable build/media identities remain the downstream owners' responsibilities.
+immutable build/asset identities remain the downstream owners' responsibilities.

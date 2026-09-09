@@ -71,7 +71,7 @@ export function buildContentGraphIndex(snapshots: readonly ContentSnapshot[]): C
       for (const { schema, field, path, value } of traverseContentValues(model, entry)) {
         if (!isValueValidForField(schema, value)) continue;
         const location = { entry: { providerId: snapshot.providerId, modelId: entry.modelId, recordId: entry.id }, fieldId: field.id, path };
-        if (schema.kind === "media-use") assetUses.push({ location, use: value as unknown as ContentAssetUse });
+        if (schema.kind === "asset-use") assetUses.push({ location, use: value as unknown as ContentAssetUse });
         if (schema.kind !== "reference" && schema.kind !== "reference-list") continue;
         const targets = (schema.kind === "reference" ? [value] : value) as unknown as ContentEntryRef[];
         targets.forEach((target, index) => {

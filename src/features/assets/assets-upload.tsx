@@ -4,27 +4,27 @@ import { useWorkspace } from "../../app/workspace-context";
 import { ASSET_MAX_BYTE_LENGTH, type AssetRecord } from "../../assets";
 import { UploadIcon, XMarkIcon } from "../../components/icons";
 import { Button, Chip, type ChipTone } from "../../components/ui";
-import { formatBytes } from "./media-format";
+import { formatBytes } from "./assets-format";
 import { normalizedClipboardFiles, normalizedFilesFromTransfer, uploadExtensionForMime } from "./upload-input";
 import {
-  initialMediaUploadState,
-  MEDIA_UPLOAD_BUSY_REJECTION,
-  mediaUploadItemId,
-  reduceMediaUploadDrop,
-  type MediaUploadSource,
-  type MediaUploadState,
-  type MediaUploadStatus,
+  initialAssetUploadState,
+  ASSET_UPLOAD_BUSY_REJECTION,
+  assetUploadItemId,
+  reduceAssetUploadDrop,
+  type AssetUploadSource,
+  type AssetUploadState,
+  type AssetUploadStatus,
 } from "./upload-reducer";
 
-export const MEDIA_UPLOAD_ACCEPT = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
-export { MEDIA_UPLOAD_BUSY_REJECTION } from "./upload-reducer";
+export const ASSET_UPLOAD_ACCEPT = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
+export { ASSET_UPLOAD_BUSY_REJECTION } from "./upload-reducer";
 
-export interface MediaUploadStore {
+export interface AssetUploadStore {
   upload(file: Blob & { name: string }): Promise<AssetRecord>;
 }
 
-export interface UseMediaUploadOptions {
-  store: MediaUploadStore;
+export interface UseAssetUploadOptions {
+  store: AssetUploadStore;
   refresh(): void | Promise<void>;
   now?: () => number;
 }
@@ -35,8 +35,8 @@ export interface UseMediaUploadOptions {
  * input. Only the strip is a drop target; the header button just opens the
  * picker.
  */
-export interface MediaUploadController {
-  readonly state: MediaUploadState;
+export interface AssetUploadController {
+  readonly state: AssetUploadState;
   readonly dragActive: boolean;
   readonly inputRef: RefObject<HTMLInputElement>;
   openPicker(): void;
@@ -50,14 +50,14 @@ export interface MediaUploadController {
   onPaste(event: JSX.TargetedClipboardEvent<HTMLElement>): void;
 }
 
-const STATUS_LABEL: Readonly<Record<MediaUploadStatus, string>> = {
+const STATUS_LABEL: Readonly<Record<AssetUploadStatus, string>> = {
   queued: "Queued",
   uploading: "Uploading",
   stored: "Stored",
   failed: "Failed",
 };
 
-const STATUS_TONE: Readonly<Record<MediaUploadStatus, ChipTone>> = {
+const STATUS_TONE: Readonly<Record<AssetUploadStatus, ChipTone>> = {
   queued: "neutral",
   uploading: "accent",
   stored: "ok",
@@ -68,11 +68,11 @@ function messageForError(reason: unknown): string {
   return reason instanceof Error ? reason.message : "Upload failed.";
 }
 
-export function useMediaUpload({ store, refresh, now = Date.now }: UseMediaUploadOptions): MediaUploadController {
+export function useAssetUpload({ store, refresh, now = Date.now }: UseAssetUploadOptions): AssetUploadController {
   const integration = useWorkspace()?.integration;
   const pending = useRef<Promise<void>>(Promise.resolve());
   const sessionRef = useRef<ReturnType<NonNullable<typeof integration>["sessions"]["register"]> | null>(null);
-  const [state, dispatch] = useReducer(reduceMediaUploadDrop, initialMediaUploadState);
+  const [state, dispatch] = useReducer(reduceAssetUploadDrop, initialAssetUploadState);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const alive = useRef(true);
@@ -84,17 +84,17 @@ export function useMediaUpload({ store, refresh, now = Date.now }: UseMediaUploa
   const retryFiles = useRef(new Map<string, File>());
   useEffect(() => {
     if (!integration) return;
-    const session = integration.sessions.register({ feature: "Media upload", providerId: integration.assetProvider?.descriptor.id ?? "media-unavailable", workspaceId: integration.workspace.id }, { flush: () => pending.current });
+    const session = integration.sessions.register({ feature: "Asset upload", providerId: integration.assetProvider?.descriptor.id ?? "asset-unavailable", workspaceId: integration.workspace.id }, { flush: () => pending.current });
     sessionRef.current = session;
     return () => { session.detach(); sessionRef.current = null; };
   }, [integration]);
 
   useEffect(() => () => { alive.current = false; }, []);
 
-  const ingestFiles = useCallback((incoming: readonly File[], source: MediaUploadSource): boolean => {
+  const ingestFiles = useCallback((incoming: readonly File[], source: AssetUploadSource): boolean => {
     if (incoming.length === 0) return false;
     if (ingestGuard.current.busy) {
-      dispatch({ type: "reject", message: MEDIA_UPLOAD_BUSY_REJECTION });
+      dispatch({ type: "reject", message: ASSET_UPLOAD_BUSY_REJECTION });
       return false;
     }
 
@@ -116,7 +116,7 @@ export function useMediaUpload({ store, refresh, now = Date.now }: UseMediaUploa
       const failures: string[] = [];
       try {
         for (const [index, file] of files.entries()) {
-          const id = mediaUploadItemId(source, claimed, index);
+          const id = assetUploadItemId(source, claimed, index);
           if (alive.current) dispatch({ type: "uploading", id });
           try {
             const record = await store.upload(file);
@@ -181,8 +181,8 @@ export function useMediaUpload({ store, refresh, now = Date.now }: UseMediaUploa
   };
 }
 
-export interface MediaUploadPanelProps {
-  controller: MediaUploadController;
+export interface AssetUploadPanelProps {
+  controller: AssetUploadController;
 }
 
 /**
@@ -190,12 +190,12 @@ export interface MediaUploadPanelProps {
  * the hero-sized box this route used to open with: uploading is one of the
  * things an author does here, not the point of the page.
  */
-export function MediaUploadPanel({ controller }: MediaUploadPanelProps): JSX.Element {
+export function AssetUploadPanel({ controller }: AssetUploadPanelProps): JSX.Element {
   const { state } = controller;
   return (
     <section
-      class={`sg-media-upload${controller.dragActive ? " sg-media-upload--drag-active" : ""}`}
-      aria-label="Upload media"
+      class={`sg-assets-upload${controller.dragActive ? " sg-assets-upload--drag-active" : ""}`}
+      aria-label="Upload asset"
       onDragOver={controller.onDragOver}
       onDragLeave={controller.onDragLeave}
       onDrop={controller.onDrop}
@@ -203,29 +203,29 @@ export function MediaUploadPanel({ controller }: MediaUploadPanelProps): JSX.Ele
     >
       <input
         ref={controller.inputRef}
-        class="sg-media-upload__input"
+        class="sg-assets-upload__input"
         type="file"
         multiple
-        accept={MEDIA_UPLOAD_ACCEPT}
+        accept={ASSET_UPLOAD_ACCEPT}
         onChange={controller.onInput}
       />
-      <div class="sg-media-drop">
-        <UploadIcon size="sm" class="sg-media-drop__icon" />
-        <span class="sg-media-drop__text">
+      <div class="sg-assets-drop">
+        <UploadIcon size="sm" class="sg-assets-drop__icon" />
+        <span class="sg-assets-drop__text">
           Drop files here, paste from the clipboard, or{" "}
-          <Button size="xs" variant="ghost" class="sg-media-drop__choose" disabled={state.busy} onClick={controller.openPicker}>
+          <Button size="xs" variant="ghost" class="sg-assets-drop__choose" disabled={state.busy} onClick={controller.openPicker}>
             Choose files
           </Button>
         </span>
-        <span class="sg-media-drop__hint">{`PNG, JPEG, GIF, WebP, PDF · up to ${formatBytes(ASSET_MAX_BYTE_LENGTH)}`}</span>
+        <span class="sg-assets-drop__hint">{`PNG, JPEG, GIF, WebP, PDF · up to ${formatBytes(ASSET_MAX_BYTE_LENGTH)}`}</span>
       </div>
-      {state.rejection ? <p class="sg-media-upload__rejection" role="status">{state.rejection}</p> : null}
+      {state.rejection ? <p class="sg-assets-upload__rejection" role="status">{state.rejection}</p> : null}
       <div aria-live="polite">
         {state.items.length > 0 ? (
-          <ul class="sg-media-uploads" aria-label="Upload status">
+          <ul class="sg-assets-uploads" aria-label="Upload status">
             {state.items.map((item) => (
-              <li key={item.id} class="sg-media-uploads__row">
-                <span class="sg-media-uploads__name" title={item.fileName}>{item.fileName}</span>
+              <li key={item.id} class="sg-assets-uploads__row">
+                <span class="sg-assets-uploads__name" title={item.fileName}>{item.fileName}</span>
                 <Chip tone={STATUS_TONE[item.status]} dot>{STATUS_LABEL[item.status]}</Chip>
                 {item.status === "failed" ? (
                   <Button size="xs" disabled={state.busy || !controller.canRetry(item.id)} onClick={() => controller.retry(item.id)}>Retry upload</Button>
@@ -242,9 +242,9 @@ export function MediaUploadPanel({ controller }: MediaUploadPanelProps): JSX.Ele
                   </Button>
                 ) : null}
                 {item.storedFileName && item.storedFileName !== item.fileName ? (
-                  <span class="sg-media-uploads__detail">Stored as {item.storedFileName}</span>
+                  <span class="sg-assets-uploads__detail">Stored as {item.storedFileName}</span>
                 ) : null}
-                {item.error ? <span class="sg-media-uploads__detail">{item.error}</span> : null}
+                {item.error ? <span class="sg-assets-uploads__detail">{item.error}</span> : null}
               </li>
             ))}
           </ul>

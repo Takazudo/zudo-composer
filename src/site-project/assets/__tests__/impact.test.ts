@@ -46,7 +46,7 @@ describe("provider-qualified assets impact", () => {
   });
   it("indexes typed Content and nested declared props, preserving arbitrary text and external URLs", () => {
     const value = project(); const model = value.providers.content[0]!.models[0]!;
-    model.document.fields.push({ id: "hero", key: "hero", label: "Hero", required: false, kind: "media-use", use: "image" });
+    model.document.fields.push({ id: "hero", key: "hero", label: "Hero", required: false, kind: "asset-use", use: "image" });
     const record = entry("one"); record.values.hero = { kind: "image", asset: { providerId: "asset-files", assetId: "asset" }, alt: "Context", decorative: false, caption: "" }; value.providers.content[0]!.entries.push(record);
     const props = value.providers.compositions[0]!.records[0]!.document.root[0]!.props;
     props.href = "/uploaded-assets/asset-asset"; props.body = "![image](/uploaded-assets/asset-asset) [external](https://example.com/external)";

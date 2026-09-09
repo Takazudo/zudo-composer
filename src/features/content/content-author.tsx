@@ -9,7 +9,7 @@ import type { ContentAuthoringController, ContentAuthoringState } from "./contro
 import { FieldKindPicker, contentFieldKindPresentation } from "./field-kind-picker";
 import { MarkdownEditor } from "./markdown-editor";
 import { deriveSlug } from "./slug";
-import { StructuredValueEditor, type ContentMediaPickerRenderer } from "./structured-field-editor";
+import { StructuredValueEditor, type ContentAssetPickerRenderer } from "./structured-field-editor";
 
 /** The route's reporter: it runs an action and shows what it failed with. */
 export type ContentAuthorRun = (action: () => void | Promise<void>) => void;
@@ -137,7 +137,7 @@ function FieldSchemaOptions({ field, controller, run }: { field: ContentFieldDef
   useEffect(() => { if (field.kind !== "reference" && field.kind !== "reference-list") return; let live = true; void controller.referenceModels().then((items) => { if (live) setModels(items); }); return () => { live = false; }; }, [controller, field.kind]);
   if (field.kind === "choice") return <ChoiceOptionsEditor field={field} controller={controller} run={run} />;
   if (field.kind === "reference" || field.kind === "reference-list") return <div class="sg-content-schema-options"><Select aria-label={`Target model for ${field.label}`} value={`${field.target.providerId}/${field.target.recordId}`} onChange={(event) => { const target = models.find((item) => `${item.ref.providerId}/${item.ref.recordId}` === event.currentTarget.value)?.ref; if (target) run(() => controller.replaceField(field.id, { ...field, target })); }}>{models.map((model) => <option key={`${model.ref.providerId}/${model.ref.recordId}`} value={`${model.ref.providerId}/${model.ref.recordId}`}>{model.label} · {model.providerLabel}</option>)}</Select>{field.kind === "reference-list" ? <Switch label="Preserve explicit order" checked={field.ordered} onCheckedChange={(ordered) => run(() => controller.replaceField(field.id, { ...field, ordered }))} /> : null}</div>;
-  if (field.kind === "media-use") return <Select aria-label={`Media presentation for ${field.label}`} value={field.use} onChange={(event) => run(() => controller.replaceField(field.id, { ...field, use: event.currentTarget.value as "image" | "link" | "card" }))}><option value="image">Image</option><option value="link">Link</option><option value="card">Card</option></Select>;
+  if (field.kind === "asset-use") return <Select aria-label={`Asset presentation for ${field.label}`} value={field.use} onChange={(event) => run(() => controller.replaceField(field.id, { ...field, use: event.currentTarget.value as "image" | "link" | "card" }))}><option value="image">Image</option><option value="link">Link</option><option value="card">Card</option></Select>;
   if (field.kind === "list") return <Select aria-label={`Item type for ${field.label}`} value={field.item.kind} onChange={(event) => run(() => controller.replaceField(field.id, { ...field, item: createContentValueSchema(event.currentTarget.value as ContentFieldKind, { providerId: controller.provider.descriptor.id, recordId: controller.state.model!.id }) }))}>{["text", "long-text", "number", "boolean", "date", "url", "object"].map((kind) => <option value={kind} key={kind}>{contentFieldKindPresentation(kind as ContentFieldKind).label}</option>)}</Select>;
   if (field.kind === "object") return <div class="sg-content-schema-options"><span class="sg-content-hint">{field.fields.length} nested fields</span><Button size="xs" onClick={() => { const index = field.fields.length + 1; const child: ContentFieldDefinition = { id: `nested-${field.id}-${index}`, key: `field${index}`, label: `Nested field ${index}`, required: false, kind: "text" }; run(() => controller.replaceField(field.id, { ...field, fields: [...field.fields, child] })); }}>Add nested field</Button></div>;
   return null;
@@ -275,7 +275,7 @@ export interface ContentEntryAuthorProps {
   state: ContentAuthoringState;
   controller: ContentAuthoringController;
   run: ContentAuthorRun;
-  renderMediaPicker?: ContentMediaPickerRenderer;
+  renderAssetPicker?: ContentAssetPickerRenderer;
 }
 
 /**
@@ -285,7 +285,7 @@ export interface ContentEntryAuthorProps {
  * Entry's "used by" is resolved by the Mapping catalogue, which the inspector's
  * Usage tab owns; inventing a count here would mean guessing.
  */
-export function ContentEntryAuthor({ state, controller, run, renderMediaPicker }: ContentEntryAuthorProps): JSX.Element {
+export function ContentEntryAuthor({ state, controller, run, renderAssetPicker }: ContentEntryAuthorProps): JSX.Element {
   const entry = state.entry!;
   const allFields = state.model!.document.fields;
   const view = state.model!.document.presentation?.views.find((item) => item.id === state.viewId);
@@ -338,8 +338,8 @@ export function ContentEntryAuthor({ state, controller, run, renderMediaPicker }
         const kind = <span aria-hidden="true"><KindIcon size="xs" />{kindLabel}</span>;
         const commit = (next: ContentEntryRecord["values"][string] | undefined) => run(() => controller.updateEntryValue(field.id, next));
 
-        if (["choice", "reference", "reference-list", "object", "list", "media-use"].includes(field.kind)) {
-          return <div class="sg-content-rich-field" data-content-field-id={field.id} data-content-value-path="/" key={field.id}><Field controlId={controlId} label={field.label} required={field.required} kind={kind}><StructuredValueEditor schema={field} field={field} value={value} path={[]} controller={controller} run={run} renderMediaPicker={renderMediaPicker} commit={(next) => controller.updateEntryValue(field.id, next)} /></Field></div>;
+        if (["choice", "reference", "reference-list", "object", "list", "asset-use"].includes(field.kind)) {
+          return <div class="sg-content-rich-field" data-content-field-id={field.id} data-content-value-path="/" key={field.id}><Field controlId={controlId} label={field.label} required={field.required} kind={kind}><StructuredValueEditor schema={field} field={field} value={value} path={[]} controller={controller} run={run} renderAssetPicker={renderAssetPicker} commit={(next) => controller.updateEntryValue(field.id, next)} /></Field></div>;
         }
 
         if (field.kind === "markdown") {

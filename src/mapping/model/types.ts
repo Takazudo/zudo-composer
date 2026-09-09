@@ -31,8 +31,8 @@ export interface MappingTarget { nodeId: string; prop: string }
 export type MappingSourceProjection =
   | { kind: "value" }
   | { kind: "object-field"; fieldIds: readonly RecordId[] }
-  | { kind: "media-asset-ref" }
-  | { kind: "media-text"; field: "alt" | "caption" | "label" | "title" | "description" }
+  | { kind: "asset-ref" }
+  | { kind: "asset-text"; field: "alt" | "caption" | "label" | "title" | "description" }
   | { kind: "reference-id" }
   | { kind: "reference-list-ids" }
   | { kind: "route-link" };

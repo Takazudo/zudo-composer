@@ -651,7 +651,7 @@ describe("dev/build registration boundary", () => {
       await expect(readFile(join(workspaceRoot, ASSET_FILE_PROVIDER_ROOT, "catalog.json"))).rejects.toMatchObject({ code: "ENOENT" });
       expect(setupSource("build", assetsStoreRoot).source).toBe("export const fileProviderConfig = undefined;\n");
     });
-    it.each(["relative/media", "/tmp/../assets", "/tmp/media/"])("rejects unresolved roots %s", (assetsStoreRoot) => {
+    it.each(["relative/assets", "/tmp/../assets", "/tmp/assets/"])("rejects unresolved roots %s", (assetsStoreRoot) => {
       expect(() => plugin({ assetsStoreRoot })).toThrow("absolute resolved");
       expect(() => createAssetFileMiddleware({ workspaceRoot: sandbox, assetsStoreRoot })).toThrow("absolute resolved");
     });
@@ -763,11 +763,11 @@ describe("dev/build registration boundary", () => {
       const middleware = createAssetFileMiddleware({ workspaceRoot: sandbox, operations: { lstat } });
       const unsafeUrls = [
         "/uploaded-assets/../x",
-        "/uploaded-assets/media-a.png/../b.png",
+        "/uploaded-assets/asset-a.png/../b.png",
         "/uploaded-assets/%2e%2e",
-        "/uploaded-assets/media-%2e%2e.png",
-        "/uploaded-assets/.media-x.png",
-        "/uploaded-assets/nested/media-x.png",
+        "/uploaded-assets/asset-%2e%2e.png",
+        "/uploaded-assets/.asset-x.png",
+        "/uploaded-assets/nested/asset-x.png",
       ];
 
       for (const url of unsafeUrls) {
@@ -783,13 +783,13 @@ describe("dev/build registration boundary", () => {
       const middleware = createAssetFileMiddleware({ workspaceRoot: sandbox, operations: { lstat } });
       const overlongId = "a".repeat(129);
       const driftedUrls = [
-        "/uploaded-assets/media-_a.png",
-        "/uploaded-assets/media-a_.png",
-        "/uploaded-assets/media--a.png",
-        "/uploaded-assets/media-a-.png",
-        "/uploaded-assets/media-A.png",
-        `/uploaded-assets/media-${overlongId}.png`,
-        "/uploaded-assets/media-a.bmp",
+        "/uploaded-assets/asset-_a.png",
+        "/uploaded-assets/asset-a_.png",
+        "/uploaded-assets/asset--a.png",
+        "/uploaded-assets/asset-a-.png",
+        "/uploaded-assets/asset-A.png",
+        `/uploaded-assets/asset-${overlongId}.png`,
+        "/uploaded-assets/asset-a.bmp",
       ];
 
       for (const url of driftedUrls) {
@@ -805,7 +805,7 @@ describe("dev/build registration boundary", () => {
       const middleware = createAssetFileMiddleware({ workspaceRoot: sandbox, operations: { lstat } });
       const next = vi.fn();
 
-      await invokeRegistered([middleware], assetRequest("POST", "/uploaded-assets/media-post.png"), assetResponse(), next);
+      await invokeRegistered([middleware], assetRequest("POST", "/uploaded-assets/asset-post.png"), assetResponse(), next);
 
       expect(next).toHaveBeenCalledTimes(1);
       expect(lstat).not.toHaveBeenCalled();

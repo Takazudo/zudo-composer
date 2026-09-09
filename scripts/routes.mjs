@@ -1,7 +1,7 @@
 // @ts-check
 
 /** @type {string[]} */
-export const AUTHORING_ROUTES = ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/media"];
+export const AUTHORING_ROUTES = ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/assets"];
 /** The checked-in sample compiler currently emits one root and six nested site routes. */
 /** @type {string[]} */
 export const SITE_ROUTES = [

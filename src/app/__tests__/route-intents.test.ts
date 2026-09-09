@@ -11,7 +11,7 @@ describe("strict workspace intents", () => {
       { route: "content", providerId: "catalog", modelId: "people", entryId: "person", fieldId: "gallery", valuePath: [2, "caption"] },
       { route: "mapping", providerId: "mapping-filesystem", mappingId: "card" },
       { route: "sitemapper", providerId: "sitemap-filesystem", sitemapId: "site", pageId: "home" },
-      { route: "media", providerId: "asset-files", assetId: "portrait" },
+      { route: "assets", providerId: "asset-files", assetId: "portrait" },
       { route: "review" },
     ];
     for (const intent of intents) expect(parseIntent(formatIntent(intent))).toEqual({ status: "matched", intent });
@@ -21,7 +21,7 @@ describe("strict workspace intents", () => {
     expect(decodeContentValuePath("/f:123/i:0/f:caption")).toEqual(["123", 0, "caption"]);
   });
   it("does not treat an isolated preview or bare module as a record", () => {
-    for (const href of ["/", "/composer/preview?new=1", "/composer", "/content", "/media", "/mapping", "/sitemapper"]) expect(parseIntent(href)).toEqual({ status: "none" });
+    for (const href of ["/", "/composer/preview?new=1", "/composer", "/content", "/assets", "/mapping", "/sitemapper"]) expect(parseIntent(href)).toEqual({ status: "none" });
   });
   it("rejects missing, duplicated, empty, malformed and unexpected parameters without fallback", () => {
     for (const href of [
@@ -32,12 +32,12 @@ describe("strict workspace intents", () => {
       "/content?provider=one&model=people&field=title", "/content?provider=one&model=people&entry=person&path=%2Ff%3Atitle",
       "/content?provider=one&model=people&entry=person&field=title&path=title", "/content?provider=one&model=people&entry=person&field=title&path=%2Fi%3A-1",
       "/content?provider=one&model=people&entry=person&field=title&path=%2Ff%3Atitle&path=%2Ff%3Aother",
-      "/composer?provider=files", "/composer#/composition/files/page", "/mapping?provider=one&mapping=x&mapping=y", "/media?provider=one&asset=",
+      "/composer?provider=files", "/composer#/composition/files/page", "/mapping?provider=one&mapping=x&mapping=y", "/assets?provider=one&asset=",
       "/sitemapper?provider=one&page=home", "/review?provider=one",
     ]) expect(parseIntent(href), href).toMatchObject({ status: "invalid" });
   });
   it("accepts locations and URLs, and refuses invalid typed builders at runtime", () => {
-    const url = new URL("https://example.test/media?provider=asset-files&asset=hero");
+    const url = new URL("https://example.test/assets?provider=asset-files&asset=hero");
     expect(parseIntent(url)).toEqual(parseIntent({ pathname: url.pathname, search: url.search }));
     expect(() => formatIntent({ route: "content", providerId: "one", modelId: "../wrong" })).toThrow();
   });

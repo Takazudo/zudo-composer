@@ -13,7 +13,7 @@ const sandboxes: string[] = [];
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const PDF = new TextEncoder().encode("%PDF-1.7\nsynthetic version");
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
-async function sandbox() { const root = await fs.mkdtemp(join(tmpdir(), "zudo-media-store-")); sandboxes.push(root); return root; }
+async function sandbox() { const root = await fs.mkdtemp(join(tmpdir(), "zudo-assets-store-")); sandboxes.push(root); return root; }
 afterEach(async () => { await Promise.all(sandboxes.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))); });
 function options(root: string, extra: Partial<FilesystemAssetStoreOptions> = {}): FilesystemAssetStoreOptions {
   let sequence = 0;

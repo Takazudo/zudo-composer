@@ -3,12 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAssetRecord, type AssetRecord } from "../../../assets";
 import {
-  MEDIA_UPLOAD_ACCEPT,
-  MEDIA_UPLOAD_BUSY_REJECTION,
-  MediaUploadPanel,
-  useMediaUpload,
-  type MediaUploadStore,
-} from "../media-upload";
+  ASSET_UPLOAD_ACCEPT,
+  ASSET_UPLOAD_BUSY_REJECTION,
+  AssetUploadPanel,
+  useAssetUpload,
+  type AssetUploadStore,
+} from "../assets-upload";
 
 const checksum = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
 const bytes = new Uint8Array([1]);
@@ -20,29 +20,29 @@ const deferred = <T,>() => { let resolve!: (value: T) => void; let reject!: (rea
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 /** The route's shape: one queue behind the header's button and the drop strip. */
-function Harness({ store, refresh }: { store: MediaUploadStore; refresh: () => Promise<void> }): JSX.Element {
-  const controller = useMediaUpload({ store, refresh, now: () => 777 });
+function Harness({ store, refresh }: { store: AssetUploadStore; refresh: () => Promise<void> }): JSX.Element {
+  const controller = useAssetUpload({ store, refresh, now: () => 777 });
   return (
     <>
       <button type="button" disabled={controller.state.busy} onClick={controller.openPicker}>Upload</button>
-      <MediaUploadPanel controller={controller} />
+      <AssetUploadPanel controller={controller} />
     </>
   );
 }
 
 function setup(
-  upload = vi.fn<MediaUploadStore["upload"]>().mockImplementation((source) => Promise.resolve(record(source.name))),
+  upload = vi.fn<AssetUploadStore["upload"]>().mockImplementation((source) => Promise.resolve(record(source.name))),
   refresh = vi.fn().mockResolvedValue(undefined),
 ) {
   const rendered = render(<Harness store={{ upload }} refresh={refresh} />);
-  const surface = rendered.container.querySelector<HTMLElement>(".sg-media-upload")!;
+  const surface = rendered.container.querySelector<HTMLElement>(".sg-assets-upload")!;
   const input = rendered.container.querySelector<HTMLInputElement>('input[type="file"]')!;
   return { ...rendered, surface, input, upload, refresh };
 }
 
-describe("Media upload", () => {
+describe("Asset upload", () => {
   it.each(["commit-uncertain", "committed-stale"])("retries a safe failure but never offers blind %s retry", async (code) => {
-    const upload = vi.fn<MediaUploadStore["upload"]>().mockRejectedValueOnce(new Error("temporary write failure")).mockResolvedValue(record("retry.png"));
+    const upload = vi.fn<AssetUploadStore["upload"]>().mockRejectedValueOnce(new Error("temporary write failure")).mockResolvedValue(record("retry.png"));
     const { input } = setup(upload);
     fireEvent.change(input, { target: { files: [file("retry.png")] } });
     const retry = await screen.findByRole("button", { name: "Retry upload" });
@@ -55,10 +55,10 @@ describe("Media upload", () => {
   });
   it("offers the explicit native picker, resets it before awaiting, and allows a same-file re-pick", async () => {
     const first = deferred<AssetRecord>();
-    const upload = vi.fn<MediaUploadStore["upload"]>().mockReturnValueOnce(first.promise).mockResolvedValue(record("same.png"));
+    const upload = vi.fn<AssetUploadStore["upload"]>().mockReturnValueOnce(first.promise).mockResolvedValue(record("same.png"));
     const { input } = setup(upload);
     expect(input).toHaveAttribute("multiple");
-    expect(input).toHaveAttribute("accept", MEDIA_UPLOAD_ACCEPT);
+    expect(input).toHaveAttribute("accept", ASSET_UPLOAD_ACCEPT);
     Object.defineProperty(input, "value", { value: "C:\\fakepath\\same.png", writable: true, configurable: true });
     fireEvent.change(input, { target: { files: [file("same.png")] } });
     expect(input.value).toBe("");
@@ -80,15 +80,15 @@ describe("Media upload", () => {
     const dataTransfer = transfer([file("drop.png")]);
     expect(fireEvent.dragOver(surface, { dataTransfer })).toBe(false);
     expect(dataTransfer.dropEffect).toBe("copy");
-    expect(surface).toHaveClass("sg-media-upload--drag-active");
+    expect(surface).toHaveClass("sg-assets-upload--drag-active");
     const childLeave = new Event("dragleave", { bubbles: true, cancelable: true });
     Object.defineProperty(childLeave, "relatedTarget", { value: screen.getByRole("button", { name: "Choose files" }) });
     fireEvent(surface, childLeave);
-    expect(surface).toHaveClass("sg-media-upload--drag-active");
+    expect(surface).toHaveClass("sg-assets-upload--drag-active");
     const outerLeave = new Event("dragleave", { bubbles: true, cancelable: true });
     Object.defineProperty(outerLeave, "relatedTarget", { value: document.body });
     fireEvent(surface, outerLeave);
-    expect(surface).not.toHaveClass("sg-media-upload--drag-active");
+    expect(surface).not.toHaveClass("sg-assets-upload--drag-active");
     expect(fireEvent.drop(surface, { dataTransfer })).toBe(false);
     await screen.findByText("Stored");
   });
@@ -111,13 +111,13 @@ describe("Media upload", () => {
 
   it("uses a synchronous busy guard so a second paste is unclaimed", async () => {
     const pending = deferred<AssetRecord>();
-    const upload = vi.fn<MediaUploadStore["upload"]>().mockReturnValue(pending.promise);
+    const upload = vi.fn<AssetUploadStore["upload"]>().mockReturnValue(pending.promise);
     const { surface } = setup(upload);
     const clipboardData = transfer([file("first.png")]);
     expect(fireEvent.paste(surface, { clipboardData })).toBe(false);
     expect(fireEvent.paste(surface, { clipboardData: transfer([file("second.png")]) })).toBe(true);
     expect(upload).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(MEDIA_UPLOAD_BUSY_REJECTION)).toBeInTheDocument();
+    expect(screen.getByText(ASSET_UPLOAD_BUSY_REJECTION)).toBeInTheDocument();
     pending.resolve(record("first.png"));
     await screen.findByText("Stored");
   });
@@ -126,7 +126,7 @@ describe("Media upload", () => {
     const first = deferred<AssetRecord>();
     const second = deferred<AssetRecord>();
     const third = deferred<AssetRecord>();
-    const upload = vi.fn<MediaUploadStore["upload"]>().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise).mockReturnValueOnce(third.promise);
+    const upload = vi.fn<AssetUploadStore["upload"]>().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise).mockReturnValueOnce(third.promise);
     const refresh = vi.fn().mockResolvedValue(undefined);
     const { input } = setup(upload, refresh);
     fireEvent.change(input, { target: { files: [file("one.png"), file("two.png"), file("three.png")] } });
@@ -147,7 +147,7 @@ describe("Media upload", () => {
   });
 
   it("keeps a failed row across the next batch until it is dismissed", async () => {
-    const upload = vi.fn<MediaUploadStore["upload"]>()
+    const upload = vi.fn<AssetUploadStore["upload"]>()
       .mockRejectedValueOnce(new Error("Invalid image bytes."))
       .mockImplementation((source) => Promise.resolve(record(source.name)));
     const { input } = setup(upload);

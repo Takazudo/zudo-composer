@@ -7,7 +7,7 @@ import { createAssetReferenceLock, resolvePinnedAsset, checkAssetLockPreconditio
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function setup() {
-  const root = await mkdtemp(join(tmpdir(), "media-reference-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "assets-reference-")); roots.push(root);
   const store = await createFilesystemAssetStore({ assetsStoreRoot: root });
   const bytes = Uint8Array.from([137,80,78,71,13,10,26,10,1,2,3,4]);
   const record = await store.upload({ fileName: "image.png", declaredMimeType: "image/png", bytes });

@@ -18,7 +18,7 @@ describe("coherent project assets inspection", () => {
     value.providers.compositions[0]!.records[0]!.document.root[0]!.props.title = "Changed";
     expect(await inspection.isCurrent(result.revision)).toBe(false);
   });
-  it("captures media-free projects without a provider and returns typed provider failure", async () => {
+  it("captures asset-free projects without a provider and returns typed provider failure", async () => {
     expect(await captureSiteProjectAssetLock(project(), componentCatalog, undefined)).toMatchObject({ status: "ready", lock: undefined });
     const unavailable = { snapshot: async () => { throw new Error("Offline"); } } as unknown as VersionedAssetStore;
     expect(await captureSiteProjectAssetLock(project(), componentCatalog, unavailable)).toMatchObject({ status: "blocked", index: { complete: false }, diagnostics: [{ code: "unavailable", message: "Offline" }] });

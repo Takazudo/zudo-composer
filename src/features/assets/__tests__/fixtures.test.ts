@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { createAssetRecord } from "../../../assets";
-import { createMemoryMediaProvider } from "../fixtures";
+import { createMemoryAssetProvider } from "../fixtures";
 
 const timestamp = "2026-01-01T00:00:00.000Z";
 const bytes = new Uint8Array([1, 2, 3]);
 const checksum = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81";
 
-function media(id: string, updatedAt = timestamp) {
+function asset(id: string, updatedAt = timestamp) {
   return createAssetRecord({ fileName: `${id}.png`, mimeType: "image/png", byteLength: bytes.byteLength, checksum }, { id, timestamp: updatedAt });
 }
 
-describe("in-memory Media provider", () => {
+describe("in-memory Asset provider", () => {
   it("lists summaries newest-first and returns detached records", async () => {
-    const provider = createMemoryMediaProvider({ records: [media("older"), media("newer", "2026-01-02T00:00:00.000Z")] });
+    const provider = createMemoryAssetProvider({ records: [asset("older"), asset("newer", "2026-01-02T00:00:00.000Z")] });
     expect(await provider.initialization.initialize()).toMatchObject({ status: "ready", summaries: [{ id: "newer" }, { id: "older" }] });
     expect(await provider.store.list()).toMatchObject([{ id: "newer" }, { id: "older" }]);
     const loaded = await provider.store.get("newer");
@@ -24,8 +24,8 @@ describe("in-memory Media provider", () => {
   });
 
   it("reports absent and mismatched bytes separately from valid metadata", async () => {
-    const provider = createMemoryMediaProvider({
-      records: [media("present"), media("missing"), media("mismatch")],
+    const provider = createMemoryAssetProvider({
+      records: [asset("present"), asset("missing"), asset("mismatch")],
       bytes: { present: bytes, mismatch: new Uint8Array([9]) },
       missingBytes: ["missing"],
     });
@@ -35,21 +35,21 @@ describe("in-memory Media provider", () => {
   });
 
   it("supports writes, idempotent deletes, seed, and explicit startFresh", async () => {
-    const provider = createMemoryMediaProvider();
-    await provider.store.put(media("one"), bytes);
+    const provider = createMemoryAssetProvider();
+    await provider.store.put(asset("one"), bytes);
     expect(await provider.store.get("one")).toMatchObject({ status: "loaded" });
     expect(await provider.store.delete("one")).toBe(true);
     expect(await provider.store.delete("one")).toBe(false);
-    await provider.store.seed!({ records: [media("seeded")], bytes: { seeded: bytes } });
+    await provider.store.seed!({ records: [asset("seeded")], bytes: { seeded: bytes } });
     expect(await provider.store.list()).toHaveLength(1);
     expect((await provider.initialization.startFresh()).status).toBe("ready");
     expect(await provider.store.list()).toEqual([]);
   });
 
   it("quarantines malformed fixture metadata until startFresh", async () => {
-    const valid = media("valid");
+    const valid = asset("valid");
     const future = { ...valid, id: "future", document: { ...valid.document, id: "future", schemaVersion: 3 } };
-    const provider = createMemoryMediaProvider({ records: [valid, future as never] });
+    const provider = createMemoryAssetProvider({ records: [valid, future as never] });
     expect(await provider.initialization.initialize()).toMatchObject({
       status: "recovery-required",
       summaries: [{ id: "valid" }],

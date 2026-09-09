@@ -246,7 +246,7 @@ export function fieldIcon(kind: ContentFieldKind): IconComponent {
     case "slug": return SlugIcon;
     case "color": return ColorIcon;
     case "url": return UrlIcon;
-    case "choice": case "reference": case "reference-list": case "object": case "list": case "media-use": return TextIcon;
+    case "choice": case "reference": case "reference-list": case "object": case "list": case "asset-use": return TextIcon;
   }
 }
 

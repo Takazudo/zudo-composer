@@ -1,21 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import { summarizeAsset } from "../../../assets";
 import { createWorkspaceSaveRegistry } from "../../../app/workspace-sessions";
-import { createMediaLibraryController, mediaMarkdown } from "../controller";
+import { createAssetLibraryController, assetMarkdown } from "../controller";
 import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture";
 
-describe("versioned Media controller", () => {
+describe("versioned Asset controller", () => {
   it("blocks trash for injected Composition impacts even without structured Content uses", async () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     const contentServices = completeServices({ scan: async () => ({ status: "complete", locations: [], tokens: {}, message: "Composition uses remain", additionalLocations: [{ location: { domain: "compositions", providerId: "files", recordId: "page", nodeId: "image", property: "src", valuePath: ["src"] } }] }) });
-    const controller = createMediaLibraryController(provider, { contentServices }); await controller.initialize();
+    const controller = createAssetLibraryController(provider, { contentServices }); await controller.initialize();
     await expect(controller.trash(controller.state.records)).rejects.toThrow("project uses");
     expect((await filesystem.list())[0]!.state).toBe("active");
   });
   it("never exposes a retryable upload failure after the write committed", async () => {
     const { provider, filesystem } = await providerFixture();
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     const snapshot = vi.spyOn(filesystem, "snapshot").mockRejectedValue(new Error("Read failed"));
     await expect(controller.upload(new File([PNG], "committed.png", { type: "image/png" }), null)).rejects.toMatchObject({ code: "committed-stale" });
     expect(controller.state.uncertain).toBe(true); expect(controller.capability("replace")).toBe(false);
@@ -27,7 +27,7 @@ describe("versioned Media controller", () => {
   it("drains newer same-ID drafts before resolving the save barrier", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     const original = filesystem.updateMetadata.bind(filesystem);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -41,7 +41,7 @@ describe("versioned Media controller", () => {
   it.each([false, true])("handles a newer draft with a different base revision (external commit: %s)", async (external) => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     const original = filesystem.updateMetadata.bind(filesystem);
     const update = vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => {
       const saved = await original(...args);
@@ -63,7 +63,7 @@ describe("versioned Media controller", () => {
   it("preserves unrelated pending fields and their conflict base when newer records arrive", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     controller.draftMetadata(summarizeAsset(record), { note: "Unsaved note" });
     const newer = await filesystem.updateMetadata(record.id, { note: "External note" }, { expectedRevision: record.revision });
     controller.draftMetadata(summarizeAsset(newer), { fileName: "Local name.png" });
@@ -76,7 +76,7 @@ describe("versioned Media controller", () => {
   it("retains pending fields if a newer input arrives before the active save conflicts", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     const original = filesystem.updateMetadata.bind(filesystem);
     const update = vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => {
       const external = await original(record.id, { note: "External note" }, { expectedRevision: 1 });
@@ -94,7 +94,7 @@ describe("versioned Media controller", () => {
   it("preserves unrelated concurrent fields when an incoming patch uses the saved base", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     const original = filesystem.updateMetadata.bind(filesystem);
     vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => {
       const saved = await original(...args);
@@ -110,7 +110,7 @@ describe("versioned Media controller", () => {
   it("does not regress a rebased concurrent draft when an inspector supplies its old base", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     const original = filesystem.updateMetadata.bind(filesystem);
     const update = vi.spyOn(filesystem, "updateMetadata").mockImplementationOnce(async (...args) => {
       controller.draftMetadata(summarizeAsset(record), { note: "While saving" });
@@ -127,7 +127,7 @@ describe("versioned Media controller", () => {
   it("refuses external changes after a successful save without losing the unsaved draft", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     controller.draftMetadata(summarizeAsset(record), { note: "Saved" }); await controller.saveDraft(record.id);
     const base = controller.state.records[0]!;
     controller.draftMetadata(base, { note: "Local unsaved" });
@@ -140,7 +140,7 @@ describe("versioned Media controller", () => {
   it("deduplicates an explicit draft save racing the workspace save barrier", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     const original = filesystem.updateMetadata.bind(filesystem);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -157,7 +157,7 @@ describe("versioned Media controller", () => {
   });
   it("recovers uncertain outcomes only after deliberate authoritative inspection", async () => {
     const { provider, filesystem } = await providerFixture();
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     vi.spyOn(filesystem, "upload").mockRejectedValueOnce(Object.assign(new Error("Inspect storage"), { code: "commit-uncertain" }));
     await expect(controller.upload(new File([PNG], "uncertain.png", { type: "image/png" }), null)).rejects.toMatchObject({ code: "commit-uncertain" });
     expect(controller.state.uncertain).toBe(true);
@@ -165,7 +165,7 @@ describe("versioned Media controller", () => {
     await controller.reload(); expect(controller.state.uncertain).toBe(false);
   });
   it("fails closed for every mutation capability while loading or unreadable", async () => {
-    const { provider, filesystem } = await providerFixture(); const controller = createMediaLibraryController(provider);
+    const { provider, filesystem } = await providerFixture(); const controller = createAssetLibraryController(provider);
     expect(controller.capability("trash")).toBe(false); await controller.initialize();
     const snapshot = vi.spyOn(filesystem, "snapshot").mockRejectedValue(new Error("Offline"));
     const refresh = controller.refresh(); expect(controller.capability("replace")).toBe(false);
@@ -176,9 +176,9 @@ describe("versioned Media controller", () => {
   it("persists metadata drafts through detached workspace-session flush", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     const registry = createWorkspaceSaveRegistry();
-    const session = registry.register({ feature: "Media", providerId: provider.descriptor.id }, { flush: () => controller.flush() });
+    const session = registry.register({ feature: "Asset", providerId: provider.descriptor.id }, { flush: () => controller.flush() });
     controller.draftMetadata(summarizeAsset(record), { fileName: "renamed.png", note: "Internal note" }); session.changed();
     controller.dispose(); session.detach();
     expect((await registry.flush()).status).toBe("ready");
@@ -187,7 +187,7 @@ describe("versioned Media controller", () => {
   it("preserves identity and old versions through move, replace, guarded trash and restore", async () => {
     const { provider, filesystem } = await providerFixture(); const contentServices = completeServices();
     const original = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider, { contentServices }); await controller.initialize();
+    const controller = createAssetLibraryController(provider, { contentServices }); await controller.initialize();
     const folder = await controller.createFolder("Assets", null, 0, controller.state.snapshot!.mutationToken);
     await controller.move(controller.state.records, folder.id);
     await controller.replace(controller.state.records[0]!, new File([PDF], "new.pdf", { type: "application/pdf" }));
@@ -195,14 +195,14 @@ describe("versioned Media controller", () => {
     expect(controller.state.snapshot!.records[0]!.document.versions).toHaveLength(2);
     await controller.trash(controller.state.records); expect(controller.state.records[0]!.state).toBe("trash");
     await controller.restore(controller.state.records); expect(controller.state.records[0]!.state).toBe("active");
-    expect(mediaMarkdown(controller.state.records[0]!)).toContain(`/uploaded-assets/asset-${original.id}`);
+    expect(assetMarkdown(controller.state.records[0]!)).toContain(`/uploaded-assets/asset-${original.id}`);
     expect(await filesystem.resolveVersion({ providerId: provider.descriptor.id, assetId: original.id, versionId: original.document.currentVersionId })).toBeDefined();
   });
   it.each(["unavailable", "incomplete", "used", "changed"])("blocks trash when safety is %s", async (condition) => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     const services = completeServices({ scan: async () => ({ status: condition === "incomplete" ? "incomplete" : condition === "unavailable" ? "unavailable" : "complete", locations: condition === "used" ? [{} as never] : [], tokens: {}, message: "Guard" }), isCurrent: async () => condition !== "changed" });
-    const controller = createMediaLibraryController(provider, { contentServices: services }); await controller.initialize();
+    const controller = createAssetLibraryController(provider, { contentServices: services }); await controller.initialize();
     await expect(controller.trash(controller.state.records)).rejects.toThrow();
     expect((await filesystem.list())[0]!.state).toBe("active");
   });
@@ -210,7 +210,7 @@ describe("versioned Media controller", () => {
     const { provider, filesystem } = await providerFixture();
     const one = await filesystem.upload({ fileName: "one.png", declaredMimeType: "image/png", bytes: PNG });
     const two = await filesystem.upload({ fileName: "two.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider); await controller.initialize();
+    const controller = createAssetLibraryController(provider); await controller.initialize();
     const folder = await filesystem.createFolder({ name: "Destination", parentId: null }, await filesystem.mutationToken());
     await filesystem.updateMetadata(two.id, { note: "Other tab" }, { expectedRevision: 1 });
     await expect(controller.move([summarizeAsset(one), summarizeAsset(two)], folder.id)).rejects.toMatchObject({ code: "conflict" });
@@ -221,7 +221,7 @@ describe("versioned Media controller", () => {
   it("does not enable writes based on a method name without capabilities", async () => {
     const { provider } = await providerFixture();
     const readonly = { ...provider, store: { provider: provider.descriptor, list: provider.store.list, get: provider.store.get, put: provider.store.put, delete: provider.store.delete, clear: provider.store.clear, upload: vi.fn() } };
-    const controller = createMediaLibraryController(readonly);
+    const controller = createAssetLibraryController(readonly);
     expect(controller.capability("replace")).toBe(false);
     expect(() => controller.upload(new File([PNG], "x.png"), null)).toThrow("unavailable");
   });

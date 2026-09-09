@@ -15,12 +15,12 @@ afterEach(async () => {
 
 async function content(): Promise<ContentProvider> {
   const model = createContentModelRecord({ name: "Resources", kind: "collection", fields: [
-    { id: "hero", key: "hero", label: "Hero", kind: "media-use", use: "image", required: false },
-    { id: "links", key: "links", label: "Links", kind: "list", item: { kind: "media-use", use: "link" }, required: false },
-    { id: "nested", key: "nested", label: "Nested", kind: "object", required: false, fields: [{ id: "card", key: "card", label: "Card", required: false, kind: "media-use", use: "card" }] },
+    { id: "hero", key: "hero", label: "Hero", kind: "asset-use", use: "image", required: false },
+    { id: "links", key: "links", label: "Links", kind: "list", item: { kind: "asset-use", use: "link" }, required: false },
+    { id: "nested", key: "nested", label: "Nested", kind: "object", required: false, fields: [{ id: "card", key: "card", label: "Card", required: false, kind: "asset-use", use: "card" }] },
   ] }, { id: "resources" });
   const entries = Array.from({ length: 40 }, (_, index) => createContentEntryRecord(model.id, { nested: {} }, { id: `entry-${index}` }));
-  const contentRoot = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "zudo-media-content-")));
+  const contentRoot = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "zudo-asset-content-")));
   sandboxes.push(contentRoot);
   const store = await createFilesystemContentStore({ contentRoot });
   await store.seed({ models: [model], entries });

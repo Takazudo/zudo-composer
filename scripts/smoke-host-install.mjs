@@ -45,7 +45,7 @@ const HOST_NAME = "zudo-composer-install-smoke-host";
 const SITEMAP_NAME = "Install smoke sitemap";
 
 /** Routes the README promises a host. Each must answer the shell, not a 404. */
-const ROUTES = ["/", "/composer", "/content", "/mapping", "/sitemapper", "/media"];
+const ROUTES = ["/", "/composer", "/content", "/mapping", "/sitemapper", "/assets"];
 
 /**
  * Directories a host agrees zudo-composer may write into. `node_modules` is the

@@ -48,7 +48,7 @@ export function createAssetContentServices(providers: readonly ContentProvider[]
   const flushStatus = (value: unknown) => value && typeof value === "object" && "status" in value ? String((value as { status: unknown }).status) : "ready";
   const capture = async () => {
     // A flush reports `changed` when edits landed while it was saving. Nobody is
-    // typing during a Assets scan — that is the application's own churn settling
+    // typing during an asset scan — that is the application's own churn settling
     // — so it is a flush to repeat rather than an answer. `failed` stays an
     // error: a save that did not land must not be scanned around.
     let result = await flush();
@@ -125,9 +125,9 @@ export function createAssetContentServices(providers: readonly ContentProvider[]
       for (const snapshot of graph.snapshots.filter((snapshot) => stores.some((store) => store.provider.id === snapshot.providerId && store.transactionScope === "provider"))) for (const entry of snapshot.entries) {
         const model = snapshot.models.find(({ id }) => id === entry.modelId)!;
         const walk = (schema: ContentValueSchema, value: JsonValue | undefined, field: ContentFieldDefinition, path: (string | number)[]) => {
-          if (schema.kind === "media-use" || (schema.kind === "list" && schema.item.kind === "media-use")) {
+          if (schema.kind === "asset-use" || (schema.kind === "list" && schema.item.kind === "asset-use")) {
             targets.push({ providerId: snapshot.providerId, modelId: model.id, entryId: entry.id, fieldId: field.id, valuePath: path,
-              modelName: model.document.name, entryTitle: entry.id, fieldLabel: field.label, kind: schema.kind === "media-use" ? schema.use : (schema.item as { use: AssetUse["kind"] }).use,
+              modelName: model.document.name, entryTitle: entry.id, fieldLabel: field.label, kind: schema.kind === "asset-use" ? schema.use : (schema.item as { use: AssetUse["kind"] }).use,
               append: schema.kind === "list", mutationToken: snapshot.mutationToken });
           } else if (schema.kind === "object" && value && typeof value === "object" && !Array.isArray(value)) {
             for (const child of schema.fields) walk(child, (value as Record<string, JsonValue>)[child.id], field, [...path, child.id]);
@@ -158,7 +158,7 @@ export function createAssetContentServices(providers: readonly ContentProvider[]
           schema = schema.item; at = at[part];
         } else throw new Error("Invalid nested Content destination.");
       }
-      const matches = target.append ? schema.kind === "list" && schema.item.kind === "media-use" && schema.item.use === value.kind : schema.kind === "media-use" && schema.use === value.kind;
+      const matches = target.append ? schema.kind === "list" && schema.item.kind === "asset-use" && schema.item.use === value.kind : schema.kind === "asset-use" && schema.use === value.kind;
       if (!matches) throw new Error("The destination schema does not match the selected presentation.");
       const record = structuredClone(entry);
       let parent: Record<string | number, JsonValue> = record.values;

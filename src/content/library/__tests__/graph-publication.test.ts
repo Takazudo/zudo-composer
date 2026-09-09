@@ -9,7 +9,7 @@ const entry = (id: string, title = id) => createContentEntryRecord("items", { ti
 const snapshot = (entries: ContentSnapshot["entries"]): ContentSnapshot => ({ providerId, mutationToken: 1, models: [model], entries });
 
 describe("Complete provider-qualified Content graph", () => {
-  it("finds incoming refs beyond 25 entries, preserving order and nested media locations", () => {
+  it("finds incoming refs beyond 25 entries, preserving order and nested asset locations", () => {
     const entries = Array.from({ length: 60 }, (_, i) => entry(`entry-${i}`));
     entries[59]!.values.refs = [ref("entry-0"), ref("entry-1")];
     const graph = buildContentGraphIndex([snapshot(entries)]);

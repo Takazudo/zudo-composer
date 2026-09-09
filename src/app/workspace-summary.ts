@@ -4,10 +4,10 @@
 // Two rules shape the design:
 //
 //   1. Sources resolve INDEPENDENTLY. Nothing transacts across the four
-//      authoring domains and the Media provider is a separate dev service, so
+//      authoring domains and the Asset provider is a separate dev service, so
 //      a single failure must degrade one panel rather than blank the dashboard.
 //      Every source therefore returns `ok` or `unavailable` on its own — except
-//      Media, which can also be `absent`: there is no dev provider configured
+//      Asset, which can also be `absent`: there is no dev provider configured
 //      at all, which is not the same failure as a configured one that could not
 //      be read.
 //   2. Provider initialization happens ONCE per summary UNLESS it failed. A
@@ -43,14 +43,14 @@ export type WorkspaceSource<T> =
   | { readonly status: "unavailable"; readonly error: string };
 
 /**
- * Media-only: a third status for "no provider is configured", distinct from
+ * Asset-only: a third status for "no provider is configured", distinct from
  * `unavailable` (a configured provider that failed). Every other domain stays
  * on the plain `WorkspaceSource<T>` above and is structurally incapable of
  * being absent.
  */
-export type WorkspaceMediaSource<T> = WorkspaceSource<T> | { readonly status: "absent" };
+export type WorkspaceAssetSource<T> = WorkspaceSource<T> | { readonly status: "absent" };
 
-export type WorkspaceSourceName = "compositions" | "mappings" | "sitemaps" | "content" | "media";
+export type WorkspaceSourceName = "compositions" | "mappings" | "sitemaps" | "content" | "assets";
 
 export interface WorkspaceSourceFailure {
   readonly source: WorkspaceSourceName;
@@ -76,10 +76,10 @@ export interface ContentCounts {
   readonly entries: number;
   readonly incompleteEntries: number;
 }
-export interface MediaCounts {
+export interface AssetCounts {
   readonly assets: number;
   readonly bytes: number;
-  /** Keyed by the provider's media type, e.g. `image/png`. */
+  /** Keyed by the provider's asset type, e.g. `image/png`. */
   readonly byType: Readonly<Record<string, number>>;
 }
 
@@ -88,7 +88,7 @@ export interface WorkspaceCounts {
   readonly mappings: WorkspaceSource<MappingCounts>;
   readonly sitemaps: WorkspaceSource<SitemapCounts>;
   readonly content: WorkspaceSource<ContentCounts>;
-  readonly media: WorkspaceMediaSource<MediaCounts>;
+  readonly assets: WorkspaceAssetSource<AssetCounts>;
 }
 
 export type WorkspaceRecordKind =
@@ -99,7 +99,7 @@ export type WorkspaceRecordKind =
   | "sitemap"
   | "content-model"
   | "content-entry"
-  | "media";
+  | "asset";
 
 export interface WorkspaceRecord {
   readonly kind: WorkspaceRecordKind;
@@ -198,8 +198,8 @@ interface ContentData {
   readonly records: readonly WorkspaceRecord[];
   readonly attention: readonly WorkspaceAttentionItem[];
 }
-interface MediaData {
-  readonly counts: MediaCounts;
+interface AssetData {
+  readonly counts: AssetCounts;
   readonly records: readonly WorkspaceRecord[];
 }
 
@@ -208,7 +208,7 @@ interface WorkspaceData {
   readonly mappings: WorkspaceSource<MappingsData>;
   readonly sitemaps: WorkspaceSource<SitemapsData>;
   readonly content: WorkspaceSource<ContentData>;
-  readonly media: WorkspaceMediaSource<MediaData>;
+  readonly assets: WorkspaceAssetSource<AssetData>;
 }
 
 function reason(cause: unknown, fallback: string): string {
@@ -219,7 +219,7 @@ function project<A, B>(source: WorkspaceSource<A>, map: (value: A) => B): Worksp
   return source.status === "ok" ? { status: "ok", value: map(source.value) } : source;
 }
 
-function projectMedia<A, B>(source: WorkspaceMediaSource<A>, map: (value: A) => B): WorkspaceMediaSource<B> {
+function projectAsset<A, B>(source: WorkspaceAssetSource<A>, map: (value: A) => B): WorkspaceAssetSource<B> {
   return source.status === "ok" ? { status: "ok", value: map(source.value) } : source;
 }
 
@@ -431,9 +431,9 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     return { counts: { models: models.length, entries, incompleteEntries }, records, attention };
   };
 
-  // Media is a separate provider with its own lifecycle, so it deliberately does
+  // Assets use a separate provider with its own lifecycle, so they deliberately do
   // not wait on — or fail with — the SiteProject integration.
-  const loadMedia = async (provider: NonNullable<WorkspaceSummaryIntegration["assetProvider"]>): Promise<MediaData> => {
+  const loadAsset = async (provider: NonNullable<WorkspaceSummaryIntegration["assetProvider"]>): Promise<AssetData> => {
     const summaries = await provider.store.list();
     const byType: Record<string, number> = {};
     let bytes = 0;
@@ -441,21 +441,21 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     for (const summary of summaries) {
       bytes += summary.byteLength;
       byType[summary.mimeType] = (byType[summary.mimeType] ?? 0) + 1;
-      const intent: RouteIntent = { route: "media", providerId: integration.assetProvider!.descriptor.id, assetId: summary.id };
-      records.push({ kind: "media", id: summary.id, label: summary.fileName, updatedAt: summary.updatedAt, href: formatIntent(intent), intent });
+      const intent: RouteIntent = { route: "assets", providerId: integration.assetProvider!.descriptor.id, assetId: summary.id };
+      records.push({ kind: "asset", id: summary.id, label: summary.fileName, updatedAt: summary.updatedAt, href: formatIntent(intent), intent });
     }
     return { counts: { assets: summaries.length, bytes, byType }, records };
   };
 
   // Unlike `guard`, "no provider connected" is reported as `absent` rather than
   // caught as a failure — it is the ordinary dev answer, not a broken read.
-  const readAsset = async (): Promise<WorkspaceMediaSource<MediaData>> => {
+  const readAsset = async (): Promise<WorkspaceAssetSource<AssetData>> => {
     const provider = integration.assetProvider;
     if (!provider) return { status: "absent" };
     try {
-      return { status: "ok", value: await loadMedia(provider) };
+      return { status: "ok", value: await loadAsset(provider) };
     } catch (cause) {
-      return { status: "unavailable", error: reason(cause, "Media could not be read.") };
+      return { status: "unavailable", error: reason(cause, "Asset could not be read.") };
     }
   };
 
@@ -471,14 +471,14 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
   // schemas and Compositions, while the other summaries own just their domain.
   let cached: Partial<{ -readonly [K in keyof WorkspaceData]: Promise<WorkspaceData[K]> }> = {};
   const read = async (): Promise<WorkspaceData> => {
-    const [compositions, mappings, sitemaps, content, media] = await Promise.all([
+    const [compositions, mappings, sitemaps, content, asset] = await Promise.all([
       cached.compositions ??= guard("Compositions could not be read.", loadCompositions),
       cached.mappings ??= guard("Mappings could not be read.", loadMappings),
       cached.sitemaps ??= guard("Sitemaps could not be read.", loadSitemaps),
       cached.content ??= guard("Content could not be read.", loadContent),
-      cached.media ??= readAsset(),
+      cached.assets ??= readAsset(),
     ]);
-    return { compositions, mappings, sitemaps, content, media };
+    return { compositions, mappings, sitemaps, content, assets: asset };
   };
 
   const listeners = new Set<() => void>();
@@ -488,7 +488,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
     else if (channel === CONTENT_FILE_PROVIDER_DOMAIN) { delete cached.content; delete cached.mappings; }
     else if (channel === MAPPING_FILE_PROVIDER_DOMAIN) delete cached.mappings;
     else if (channel === SITEMAP_FILE_PROVIDER_DOMAIN) delete cached.sitemaps;
-    else if (channel === ASSET_PERSISTENCE_CHANNEL) delete cached.media;
+    else if (channel === ASSET_PERSISTENCE_CHANNEL) delete cached.assets;
     else cached = {}; // Workspace selection and legacy broad hints.
     for (const listener of listeners) listener();
   });
@@ -502,7 +502,7 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
         mappings: project(data.mappings, ({ counts }) => counts),
         sitemaps: project(data.sitemaps, ({ counts }) => counts),
         content: project(data.content, ({ counts }) => counts),
-        media: projectMedia(data.media, ({ counts }) => counts),
+        assets: projectAsset(data.assets, ({ counts }) => counts),
       };
     },
     async recent(limit = DEFAULT_RECENT_LIMIT) {
@@ -514,10 +514,10 @@ export function createWorkspaceSummary(integration: WorkspaceSummaryIntegration)
         if (entry.status === "ok") records.push(...entry.value.records);
         else unavailable.push({ source, error: entry.error });
       }
-      // An absent Media provider is the ordinary dev answer, not a failed read,
+      // An absent Asset provider is the ordinary dev answer, not a failed read,
       // so — unlike the four sources above — it is skipped rather than listed.
-      if (data.media.status === "ok") records.push(...data.media.value.records);
-      else if (data.media.status === "unavailable") unavailable.push({ source: "media", error: data.media.error });
+      if (data.assets.status === "ok") records.push(...data.assets.value.records);
+      else if (data.assets.status === "unavailable") unavailable.push({ source: "assets", error: data.assets.error });
       return { records: records.sort(byRecency).slice(0, Math.max(0, limit)), unavailable };
     },
     async attention() {

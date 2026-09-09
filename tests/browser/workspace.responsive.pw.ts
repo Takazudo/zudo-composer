@@ -5,9 +5,9 @@ const modules = [
   ["/", /^Good (morning|afternoon|evening)\.$/],
   ["/content", "Content"], ["/composer", "Compositions"],
   ["/mapping", "Mappings"], ["/sitemapper", "Sitemaps"],
-  ["/media", "Media"], ["/review", "Review & release"],
+  ["/assets", "Assets"], ["/review", "Review & release"],
 ] as const;
-const navigationNames = ["Overview", "Content", "Media", "Compositions", "Mappings", "Sitemaps", "Review & release", "Website preview — choose preview source"];
+const navigationNames = ["Overview", "Content", "Assets", "Compositions", "Mappings", "Sitemaps", "Review & release", "Website preview — choose preview source"];
 async function noOverflow(page: Page) {
   const root = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
   expect(root.scroll).toBeLessThanOrEqual(root.width);
@@ -60,7 +60,7 @@ test("release capabilities and stale targets remain truthful instead of silently
   await page.goto("/review");
   await expect(page.getByText(/Static read-only mode/)).toHaveCount(0);
   for (const name of ["Run release checks", "Apply / stage exact candidate", "Build staged candidate", "Activate locally"]) await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
-  await page.goto("/media?provider=media-files&asset=missing-browser-asset");
+  await page.goto("/assets?provider=asset-files&asset=missing-browser-asset");
   await expect(page.getByRole("alert").first()).toBeVisible();
   await page.goto("/content?provider=unknown-provider&model=missing");
   await expect(page.getByRole("heading", { name: "Invalid workspace link" })).toBeVisible();
@@ -68,7 +68,7 @@ test("release capabilities and stale targets remain truthful instead of silently
 });
 
 test("coarse navigation controls are real touch targets", async ({ page }, info) => {
-  // Desktop runs the same source for geometry; coarse proves real pointer media.
+  // Desktop runs the same source for geometry; coarse proves the real pointer query.
   const coarse = info.project.name === "coarse";
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto("/");
   expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(coarse);

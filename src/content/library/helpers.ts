@@ -54,9 +54,9 @@ export function diagnoseContentEntryCompleteness(model: ContentModelRecord, entr
     if (empty(value)) { if (required) add("required-value-missing", `Required field "${field.label}" is empty.`); return; }
     if (schema.kind === "object" && value && typeof value === "object" && !Array.isArray(value)) for (const child of schema.fields) visit(child, (value as Record<string, unknown>)[child.id], child, [...path, child.id], child.required);
     if (schema.kind === "list" && Array.isArray(value)) value.forEach((item, index) => visit(schema.item, item, field, [...path, index], true));
-    if (schema.kind === "media-use" && value && typeof value === "object") {
+    if (schema.kind === "asset-use" && value && typeof value === "object") {
       const use = value as Record<string, unknown>;
-      if ((use.kind === "image" && !use.decorative && empty(use.alt)) || (use.kind === "link" && empty(use.label)) || (use.kind === "card" && empty(use.title))) add("semantic-value-incomplete", `Media use in "${field.label}" needs its per-use accessible text.`);
+      if ((use.kind === "image" && !use.decorative && empty(use.alt)) || (use.kind === "link" && empty(use.label)) || (use.kind === "card" && empty(use.title))) add("semantic-value-incomplete", `Asset use in "${field.label}" needs its per-use accessible text.`);
     }
   }
   for (const field of model.document.fields) visit(field, entry.values[field.id], field, [field.id], field.required);

@@ -4,7 +4,7 @@ import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { createMappingAttachmentService } from "../mapping-attachment-service";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import type { WorkspaceRecord } from "../workspace-record";
-import { providerFixture, PNG } from "../../features/media/__tests__/versioned-fixture";
+import { providerFixture, PNG } from "../../features/assets/__tests__/versioned-fixture";
 import { createProductionProviderIntegration } from "../provider-integration";
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../test/workspace-providers";
 import { createHash } from "node:crypto";
@@ -19,7 +19,7 @@ async function host(): Promise<TemporaryWorkspaceProviders> {
 }
 
 describe("mapping attachment aggregate service", () => {
-  it("attaches an unpersisted candidate with the real production Media store and metadata CAS", async () => {
+  it("attaches an unpersisted candidate with the real production Asset store and metadata CAS", async () => {
     const { provider, filesystem } = await providerFixture();
     const asset = await filesystem.upload({ fileName: "link.png", declaredMimeType: "image/png", bytes: PNG });
     const project = loadSampleSiteProject(activeSiteProjectValidationContext);
@@ -34,7 +34,7 @@ describe("mapping attachment aggregate service", () => {
     expect(after.mutationToken).toBeGreaterThan(before.mutationToken);
     expect(after.metadata.collectionAttachments).toHaveLength(1);
   });
-  it("pins managed Media in attachment previews and reports missing provider as blocking", async () => {
+  it("pins managed Asset in attachment previews and reports missing provider as blocking", async () => {
     const { provider, filesystem } = await providerFixture();
     const asset = await filesystem.upload({ fileName: "link.png", declaredMimeType: "image/png", bytes: PNG });
     const project = loadSampleSiteProject(activeSiteProjectValidationContext);

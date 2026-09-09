@@ -11,10 +11,10 @@ export interface MappingProjectionOption {
 export function sourceProjectionOptions(field: ContentFieldDefinition): readonly MappingProjectionOption[] {
   const options: MappingProjectionOption[] = [{ projection: { kind: "value" }, label: "Whole value", kind: field.kind }];
   if (field.kind === "object") collectObjectProjections(field, [], options, field);
-  if (field.kind === "media-use") {
-    options.push({ projection: { kind: "media-asset-ref" }, label: "Media asset", kind: "object" });
+  if (field.kind === "asset-use") {
+    options.push({ projection: { kind: "asset-ref" }, label: "Asset reference", kind: "object" });
     const fields = field.use === "image" ? ["alt", "caption"] : field.use === "link" ? ["label"] : ["title", "description"];
-    for (const candidate of fields) options.push({ projection: { kind: "media-text", field: candidate as "alt" | "caption" | "label" | "title" | "description" }, label: `Media ${candidate}`, kind: "text" });
+    for (const candidate of fields) options.push({ projection: { kind: "asset-text", field: candidate as "alt" | "caption" | "label" | "title" | "description" }, label: `Asset ${candidate}`, kind: "text" });
   }
   if (field.kind === "reference") {
     options.push({ projection: { kind: "reference-id" }, label: "Referenced record ID", kind: "text" });
@@ -44,7 +44,7 @@ function objectPathLabels(root: ContentFieldDefinition, path: readonly string[])
 }
 
 export function projectionKey(projection: MappingSourceProjection): string {
-  return projection.kind === "object-field" ? `${projection.kind}:${projection.fieldIds.join(",")}` : projection.kind === "media-text" ? `${projection.kind}:${projection.field}` : projection.kind;
+  return projection.kind === "object-field" ? `${projection.kind}:${projection.fieldIds.join(",")}` : projection.kind === "asset-text" ? `${projection.kind}:${projection.field}` : projection.kind;
 }
 
 export function parseProjectionKey(value: string, options: readonly MappingProjectionOption[]): MappingSourceProjection {
@@ -62,8 +62,8 @@ export function projectionLabel(projection: MappingSourceProjection, source?: Co
     }
     return labels.join(" › ");
   }
-  if (projection.kind === "media-asset-ref") return "Media asset";
-  if (projection.kind === "media-text") return `Media ${projection.field}`;
+  if (projection.kind === "asset-ref") return "Asset reference";
+  if (projection.kind === "asset-text") return `Asset ${projection.field}`;
   if (projection.kind === "reference-id") return "Referenced record ID";
   if (projection.kind === "reference-list-ids") return "Referenced record IDs";
   return "Resolved route link";

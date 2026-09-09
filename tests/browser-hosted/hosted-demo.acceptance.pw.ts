@@ -39,7 +39,7 @@ const ROUTES = [
   ["/content", "Content"],
   ["/mapping", "Mappings"],
   ["/sitemapper", "Sitemaps"],
-  ["/media", "Media"],
+  ["/assets", "Assets"],
   ["/review", "Review & release"],
 ] as const;
 
@@ -148,19 +148,19 @@ test.describe("hosted demo", () => {
     await screenshotWithGeometry(page, testInfo, "review-1000-light");
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/media", { waitUntil: "domcontentloaded" });
-    await waitForRoute(page, "Media");
+    await page.goto("/assets", { waitUntil: "domcontentloaded" });
+    await waitForRoute(page, "Assets");
     await expectNoHorizontalOverflow(page);
     await expect.poll(() => page.locator(".cms-library").evaluate((element) => getComputedStyle(element).paddingLeft)).toBe("8px");
-    await screenshotWithGeometry(page, testInfo, "media-390-light");
+    await screenshotWithGeometry(page, testInfo, "assets-390-light");
 
     await page.evaluate(() => localStorage.setItem("zudo-composer-theme", "dark"));
-    await page.goto("/media", { waitUntil: "domcontentloaded" });
+    await page.goto("/assets", { waitUntil: "domcontentloaded" });
     await page.reload({ waitUntil: "domcontentloaded" });
-    await waitForRoute(page, "Media");
+    await waitForRoute(page, "Assets");
     await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe("dark");
     await expectNoHorizontalOverflow(page);
-    await screenshotWithGeometry(page, testInfo, "media-390-dark");
+    await screenshotWithGeometry(page, testInfo, "assets-390-dark");
 
     expect(localEndpointRequests, localEndpointRequests.join("\n")).toEqual([]);
     expect(failures, failures.join("\n")).toEqual([]);
@@ -170,10 +170,10 @@ test.describe("hosted demo", () => {
     const failures = watchRuntimeFailures(page);
     const localEndpointRequests = watchLocalEndpointRequests(page);
     await page.setViewportSize({ width: 1_000, height: 900 });
-    await page.goto("/media", { waitUntil: "domcontentloaded" });
-    await waitForRoute(page, "Media");
-    await expect(page.locator(".sg-media-grid img")).toHaveCount(4);
-    await expect.poll(() => page.locator(".sg-media-grid img").evaluateAll((images) => images.map((image) => ({
+    await page.goto("/assets", { waitUntil: "domcontentloaded" });
+    await waitForRoute(page, "Assets");
+    await expect(page.locator(".sg-assets-grid img")).toHaveCount(4);
+    await expect.poll(() => page.locator(".sg-assets-grid img").evaluateAll((images) => images.map((image) => ({
       width: (image as HTMLImageElement).naturalWidth,
       height: (image as HTMLImageElement).naturalHeight,
     })))).toEqual(Array.from({ length: 4 }, () => ({ width: 480, height: 320 })));
@@ -190,7 +190,7 @@ test.describe("hosted demo", () => {
     expect((await digestObjectUrl(page, seedVersion!)).byteLength).toBeGreaterThan(0);
     await seedDialog.getByRole("button", { name: "Close", exact: true }).click();
 
-    const uploadInput = page.locator(".sg-media-upload input[type=file]");
+    const uploadInput = page.locator(".sg-assets-upload input[type=file]");
     await uploadInput.setInputFiles([
       { name: "hosted-confirm-unique.png", mimeType: "image/png", buffer: PNG_BYTES },
       { name: "hosted-confirm-guide.pdf", mimeType: "application/pdf", buffer: PDF_BYTES },
@@ -231,12 +231,12 @@ test.describe("hosted demo", () => {
     await pdfPopup.close();
     await pdfDialog.getByRole("button", { name: "Close", exact: true }).click();
 
-    const assetId = await page.locator(".sg-media-inspector code").innerText();
-    const authoringUrl = `${new URL(page.url()).origin}/uploaded-media/asset-${assetId}`;
+    const assetId = await page.locator(".sg-assets-inspector code").innerText();
+    const authoringUrl = `${new URL(page.url()).origin}/uploaded-assets/asset-${assetId}`;
     expect((await page.evaluate(async (url) => (await fetch(url)).status, authoringUrl))).toBe(200);
     const secondTab = await context.newPage();
-    await secondTab.goto("/media", { waitUntil: "domcontentloaded" });
-    await waitForRoute(secondTab, "Media");
+    await secondTab.goto("/assets", { waitUntil: "domcontentloaded" });
+    await waitForRoute(secondTab, "Assets");
     await expect(secondTab.getByRole("button", { name: "Inspect hosted-confirm-unique.png", exact: true })).toHaveCount(0);
     expect(await secondTab.evaluate(async (url) => (await fetch(url)).status, authoringUrl)).toBe(404);
     await secondTab.close();
@@ -253,15 +253,15 @@ test.describe("hosted demo", () => {
       image.onerror = () => resolve({ width: 0, height: 0 });
       image.src = path;
       document.body.append(image);
-    }), `/uploaded-media/asset-${uploadedPngAssetId}`);
+    }), `/uploaded-assets/asset-${uploadedPngAssetId}`);
     expect(uploadedPreview).toEqual({ width: 1, height: 1 });
     await workingPreviewPopup.close();
 
-    await page.goto("/media", { waitUntil: "domcontentloaded" });
+    await page.goto("/assets", { waitUntil: "domcontentloaded" });
     await page.reload({ waitUntil: "domcontentloaded" });
-    await waitForRoute(page, "Media");
+    await waitForRoute(page, "Assets");
     await expect(page.getByRole("button", { name: "Inspect hosted-confirm-unique.png", exact: true })).toHaveCount(0);
-    await expect(page.locator(".sg-media-grid img")).toHaveCount(4);
+    await expect(page.locator(".sg-assets-grid img")).toHaveCount(4);
     expect(localEndpointRequests, localEndpointRequests.join("\n")).toEqual([]);
     expect(failures, failures.join("\n")).toEqual([]);
   });

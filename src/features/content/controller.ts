@@ -29,7 +29,7 @@ import { createSaveQueue, type SaveQueue } from "../../shared/persistence";
 export const CONTENT_ENTRY_PAGE_SIZE = 25;
 export type ContentWorkMode = "entries" | "model-fields" | "relationships";
 export type ContentSaveStatus = "pristine" | "saved" | "dirty" | "saving" | "error";
-export interface ContentMediaCatalogSource { descriptor: { id: string; label: string }; store: { list(): Promise<readonly { id: string; fileName: string; state: "active" | "trash" }[]> } }
+export interface ContentAssetCatalogSource { descriptor: { id: string; label: string }; store: { list(): Promise<readonly { id: string; fileName: string; state: "active" | "trash" }[]> } }
 
 export interface ContentAuthoringState {
   viewId: string | null;
@@ -81,7 +81,7 @@ export class ContentAuthoringController {
   private readonly idFactory: IdFactory;
   private readonly now: () => string;
   private readonly providers: readonly ContentProvider[];
-  private readonly assetProvider?: ContentMediaCatalogSource;
+  private readonly assetProvider?: ContentAssetCatalogSource;
   private readonly loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]>;
   private baselineEntry: ContentEntryRecord | null = null;
   private baselineAvailable = false;
@@ -100,7 +100,7 @@ export class ContentAuthoringController {
   /** Invalidates an in-flight completeness sweep when the library reloads under it. */
   private scanGeneration = 0;
 
-  constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; assetProvider?: ContentMediaCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> } = {}) {
+  constructor(readonly provider: ContentProvider, options: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; assetProvider?: ContentAssetCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> } = {}) {
     this.idFactory = options.idFactory ?? createUuidIdFactory();
     this.now = options.now ?? (() => new Date().toISOString());
     this.providers = [...new Map([provider, ...(options.providers ?? [])].map((candidate) => [candidate.store.provider.id, candidate])).values()];
@@ -430,8 +430,8 @@ export class ContentAuthoringController {
     return results.flatMap((result) => result.status === "fulfilled" ? result.value.models.map((model) => ({ ref: { providerId: result.value.provider.descriptor.id, recordId: model.id }, label: model.name, providerLabel: result.value.provider.descriptor.label })) : []);
   }
 
-  async mediaAssets(): Promise<{ providerId: string; assetId: string; label: string }[]> {
-    if (!this.assetProvider) throw new Error("The Media provider is unavailable. Open Media after connecting a provider.");
+  async assetAssets(): Promise<{ providerId: string; assetId: string; label: string }[]> {
+    if (!this.assetProvider) throw new Error("The Assets provider is unavailable. Open Assets after connecting a provider.");
     const assets = await this.assetProvider.store.list();
     return assets.filter((asset) => asset.state === "active").map((asset) => ({ providerId: this.assetProvider!.descriptor.id, assetId: asset.id, label: asset.fileName }));
   }
@@ -888,7 +888,7 @@ function shiftCount(counts: Readonly<Record<string, number>>, modelId: string, d
   return { ...counts, [modelId]: Math.max(0, (counts[modelId] ?? 0) + delta) };
 }
 
-export function createContentAuthoringController(provider: ContentProvider, options?: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; assetProvider?: ContentMediaCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> }): ContentAuthoringController {
+export function createContentAuthoringController(provider: ContentProvider, options?: { idFactory?: IdFactory; now?: () => string; providers?: readonly ContentProvider[]; assetProvider?: ContentAssetCatalogSource; loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]> }): ContentAuthoringController {
   return new ContentAuthoringController(provider, options);
 }
 

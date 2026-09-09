@@ -5,8 +5,8 @@ import type { ProductionProviderIntegration } from "../provider-integration";
 import { createWorkspaceSaveRegistry } from "../workspace-sessions";
 import { harness, mappingRecord } from "../../features/mapping/__tests__/harness";
 import { activeComponentProvider } from "../../features/composer/active-pack";
-import { createAssetContentServices } from "../../features/media";
-import { MediaFieldPicker, MediaRouteContent } from "../../features/media";
+import { createAssetContentServices } from "../../features/assets";
+import { AssetFieldPicker, AssetRouteContent } from "../../features/assets";
 import { ContentRouteContent } from "../../features/content";
 import { notifyPersistenceChange } from "../../shared/persistence-generation";
 import { AUTHORING_PERSISTENCE_CHANNELS } from "../persistence-channels";
@@ -20,14 +20,14 @@ vi.mock("../dashboard", async () => {
   const { useWorkspace } = await import("../workspace-context");
   return { Dashboard: () => { const workspace = useWorkspace()!; return <main><h1>Workspace {workspace.integration.workspace.id}</h1><input aria-label="Draft" defaultValue="draft" /><button onClick={() => void workspace.reset()}>Reset workspace</button></main>; } };
 });
-vi.mock("../workspace-summary", () => ({ createWorkspaceSummary: () => ({ counts: async () => ({ content: { status: "unavailable" }, compositions: { status: "unavailable" }, mappings: { status: "unavailable" }, sitemaps: { status: "unavailable" }, media: { status: "absent" } }), dispose: () => undefined }) }));
+vi.mock("../workspace-summary", () => ({ createWorkspaceSummary: () => ({ counts: async () => ({ content: { status: "unavailable" }, compositions: { status: "unavailable" }, mappings: { status: "unavailable" }, sitemaps: { status: "unavailable" }, assets: { status: "absent" } }), dispose: () => undefined }) }));
 vi.mock("../../features/composer/chrome/composer-app", () => ({ default: () => <h1>Composition editor</h1> }));
 vi.mock("../../features/content", () => ({ ContentRouteContent: vi.fn(() => <h1>Content editor</h1>) }));
-vi.mock("../../features/media", async () => {
+vi.mock("../../features/assets", async () => {
   const { createAssetContentServices } = await import("../../assets/integration/content");
   return {
-    MediaRouteContent: vi.fn(() => <h1>Media editor</h1>),
-    MediaFieldPicker: vi.fn(() => <div>Media field picker</div>),
+    AssetRouteContent: vi.fn(() => <h1>Asset editor</h1>),
+    AssetFieldPicker: vi.fn(() => <div>Asset field picker</div>),
     createAssetContentServices: vi.fn(createAssetContentServices),
   };
 });
@@ -77,26 +77,26 @@ describe("application workspace lifetime", () => {
       expect(controller.getSnapshot().gateBlocked).toBe(false);
     } finally { spy.mockRestore(); }
   });
-  it("adapts Content field picking and exact Media usage locations without feature globals", async () => {
+  it("adapts Content field picking and exact Asset usage locations without feature globals", async () => {
     const assetProvider = { descriptor: { id: "asset-files" } };
     const integration = { ...workspace(), assetProvider };
     window.history.replaceState(null, "", "/content?provider=content-filesystem&model=articles");
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     await screen.findByRole("heading", { name: "Content editor" });
     const contentProps = vi.mocked(ContentRouteContent).mock.lastCall![0];
-    const picker = contentProps.renderMediaPicker!({ kind: "card", onSelect: vi.fn(), onClose: vi.fn() }) as { type: unknown; props: { provider?: unknown; kind: string } };
-    expect(picker.type).toBe(MediaFieldPicker);
+    const picker = contentProps.renderAssetPicker!({ kind: "card", onSelect: vi.fn(), onClose: vi.fn() }) as { type: unknown; props: { provider?: unknown; kind: string } };
+    expect(picker.type).toBe(AssetFieldPicker);
     expect(picker.props).toMatchObject({ provider: assetProvider, kind: "card" });
 
-    fireEvent.click(screen.getByRole("link", { name: "Media" }));
-    await screen.findByRole("heading", { name: "Media editor" });
-    const mediaProps = vi.mocked(MediaRouteContent).mock.lastCall![0];
-    expect(mediaProps.usageHref!({ providerId: "content-filesystem", modelId: "articles", entryId: "entry-1", fieldId: "body", valuePath: ["cards", 2] }))
+    fireEvent.click(screen.getByRole("link", { name: "Assets" }));
+    await screen.findByRole("heading", { name: "Asset editor" });
+    const assetProps = vi.mocked(AssetRouteContent).mock.lastCall![0];
+    expect(assetProps.usageHref!({ providerId: "content-filesystem", modelId: "articles", entryId: "entry-1", fieldId: "body", valuePath: ["cards", 2] }))
       .toBe("/content?provider=content-filesystem&model=articles&entry=entry-1&field=body&path=%2Ff%3Acards%2Fi%3A2");
-    expect(mediaProps.usageHref!({ providerId: "content-filesystem", modelId: "articles", entryId: "entry-1", fieldId: "hero", valuePath: [] }))
+    expect(assetProps.usageHref!({ providerId: "content-filesystem", modelId: "articles", entryId: "entry-1", fieldId: "hero", valuePath: [] }))
       .toBe("/content?provider=content-filesystem&model=articles&entry=entry-1&field=hero");
   });
-  it("invalidates Media usage on every authoring channel and on nothing else", async () => {
+  it("invalidates Asset usage on every authoring channel and on nothing else", async () => {
     const integration = workspace();
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     await screen.findByRole("heading", { name: "Workspace one" });
@@ -105,7 +105,7 @@ describe("application workspace lifetime", () => {
     try {
       notifyPersistenceChange("assets");
       notifyPersistenceChange("sidebar-preferences");
-      integration.sessions.register({ feature: "Media", providerId: "asset-files" }, { flush: async () => undefined }).changed();
+      integration.sessions.register({ feature: "Asset", providerId: "asset-files" }, { flush: async () => undefined }).changed();
       expect(listener).not.toHaveBeenCalled();
       for (const channel of AUTHORING_PERSISTENCE_CHANNELS) notifyPersistenceChange(channel);
       expect(listener).toHaveBeenCalledTimes(AUTHORING_PERSISTENCE_CHANNELS.length);
@@ -144,16 +144,16 @@ describe("application workspace lifetime", () => {
   it("preserves Back/Forward destinations when a save rejects browser traversal", async () => {
     const integration = workspace();
     render(<App integration={integration as unknown as ProductionProviderIntegration} />); await screen.findByRole("heading", { name: "Workspace one" });
-    fireEvent.click(screen.getByRole("link", { name: "Media" })); await screen.findByRole("heading", { name: "Media editor" });
+    fireEvent.click(screen.getByRole("link", { name: "Assets" })); await screen.findByRole("heading", { name: "Asset editor" });
     let fail = true;
-    integration.sessions.register({ feature: "Media", providerId: "asset-files" }, { flush: async () => { if (fail) throw new Error("pending upload failed"); } });
+    integration.sessions.register({ feature: "Asset", providerId: "asset-files" }, { flush: async () => { if (fail) throw new Error("pending upload failed"); } });
     const length = history.length;
     act(() => history.back());
     expect(await screen.findByRole("alert")).toHaveTextContent("pending upload failed");
-    expect(location.pathname).toBe("/media"); expect(history.length).toBe(length);
+    expect(location.pathname).toBe("/assets"); expect(history.length).toBe(length);
     fail = false;
     act(() => history.back()); await screen.findByRole("heading", { name: "Workspace one" }); expect(location.pathname).toBe("/");
-    act(() => history.forward()); await screen.findByRole("heading", { name: "Media editor" }); expect(location.pathname).toBe("/media");
+    act(() => history.forward()); await screen.findByRole("heading", { name: "Asset editor" }); expect(location.pathname).toBe("/assets");
   });
   it("waits for registered saves before navigation and keeps the editor mounted while waiting", async () => {
     const integration = workspace(); let finish!: () => void;

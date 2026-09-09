@@ -29,7 +29,7 @@ export function createContentValueSchema(kind: ContentFieldKind, target?: Conten
       return kind === "reference" ? { kind, target } : { kind, target, ordered: true };
     case "object": return { kind, fields: [] };
     case "list": return { kind, item: { kind: "text" } };
-    case "media-use": return { kind, use: "image" };
+    case "asset-use": return { kind, use: "image" };
     default: return { kind };
   }
 }
@@ -46,7 +46,7 @@ export function traverseContentSchema(fields: readonly ContentFieldDefinition[])
 }
 
 /** The resolver supplies an asset URL; no asset notes or mutable metadata become presentation. */
-export function projectContentMediaUse(use: ContentAssetUse, url: string): Record<string, JsonValue> {
+export function projectContentAssetUse(use: ContentAssetUse, url: string): Record<string, JsonValue> {
   switch (use.kind) {
     case "image": return { src: url, alt: use.decorative ? "" : use.alt, decorative: use.decorative, caption: use.caption };
     case "link": return { href: url, label: use.label };

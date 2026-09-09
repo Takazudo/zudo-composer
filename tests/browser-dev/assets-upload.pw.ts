@@ -5,41 +5,41 @@ import { expect, test } from "@playwright/test";
 import { ensureDevWorkspace } from "./workspace-bootstrap";
 import { requireDevBrowserRoots } from "./isolated-roots";
 
-const { mediaRoot } = requireDevBrowserRoots(process.env);
+const { assetsRoot } = requireDevBrowserRoots(process.env);
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 const REPLACEMENT = Buffer.concat([PNG, Buffer.from("synthetic-version-2")]);
 
-test("versioned Media persists bytes, folders, identity and per-use Content text", async ({ page }) => {
+test("versioned Assets persist bytes, folders, identity and per-use Content text", async ({ page }) => {
   test.setTimeout(120_000);
   const suffix = `${process.pid}-${Date.now()}`;
-  const fileName = `media-${suffix}.png`; const modelId = `media-test-${suffix}`;
+  const fileName = `asset-${suffix}.png`; const modelId = `asset-test-${suffix}`;
   let assetId: string | undefined;
   await ensureDevWorkspace(page);
   // Seed only this test's synthetic Content destination through real domain
-  // operations before Media mounts, so the picker never depends on the timing
+  // operations before Assets mounts, so the picker never depends on the timing
   // of a cross-context IndexedDB notification to discover it.
   await page.evaluate(async ({ modelId }) => {
     const integrationPath = "/src/app/provider-integration.ts", contentPath = "/src/content/index.ts";
     const { createProductionProviderIntegration } = await import(integrationPath);
     const { createContentModelRecord, createContentEntryRecord } = await import(contentPath);
     const integration = createProductionProviderIntegration(); await integration.initialization.initialize();
-    await integration.contentProvider.store.putModel(createContentModelRecord({ name: modelId, kind: "collection", fields: [{ id: "picture", key: "picture", label: "Picture", required: false, kind: "media-use", use: "image" }] }, { id: modelId }));
+    await integration.contentProvider.store.putModel(createContentModelRecord({ name: modelId, kind: "collection", fields: [{ id: "picture", key: "picture", label: "Picture", required: false, kind: "asset-use", use: "image" }] }, { id: modelId }));
     await integration.contentProvider.store.putEntry(createContentEntryRecord(modelId, {}, { id: modelId + "-entry" }));
   }, { modelId });
-  await page.goto("/media");
-  await expect(page.getByRole("heading", { name: "Media", exact: true })).toBeVisible();
+  await page.goto("/assets");
+  await expect(page.getByRole("heading", { name: "Assets", exact: true })).toBeVisible();
   try {
-    const responsePromise = page.waitForResponse((response) => response.request().headers()["x-zudo-composer-media-operation"] === "upload");
-    await page.locator('.sg-media-upload input[type="file"]').setInputFiles({ name: fileName, mimeType: "image/png", buffer: PNG });
+    const responsePromise = page.waitForResponse((response) => response.request().headers()["x-zudo-composer-asset-operation"] === "upload");
+    await page.locator('.sg-assets-upload input[type="file"]').setInputFiles({ name: fileName, mimeType: "image/png", buffer: PNG });
     const response = await responsePromise; expect(response.ok()).toBe(true);
     const record = (await response.json()).result; assetId = record.id;
     const oldUrl: string = record.document.versions[0].url;
     expect(record.document.currentVersionId).toBe(createHash("sha256").update(PNG).digest("hex"));
-    const tile = page.locator(".sg-media-tile").filter({ hasText: fileName });
+    const tile = page.locator(".sg-assets-tile").filter({ hasText: fileName });
     await expect(tile).toHaveCount(1);
     await expect.poll(() => tile.locator("img").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
-    expect(await readFile(join(mediaRoot, "versions", oldUrl.split("/").at(-1)!))).toEqual(PNG);
+    expect(await readFile(join(assetsRoot, "versions", oldUrl.split("/").at(-1)!))).toEqual(PNG);
     await page.getByRole("button", { name: `Inspect ${fileName}` }).click();
     const inspector = page.getByRole("complementary", { name: "Asset details" });
     await inspector.getByLabel("Asset name", { exact: true }).fill(`renamed-${suffix}.png`);
@@ -71,7 +71,7 @@ test("versioned Media persists bytes, folders, identity and per-use Content text
     await expect(move).toBeHidden();
     // The explicit Replace action captures the selected revision before the picker.
     await inspector.getByRole("button", { name: "Replace file", exact: true }).click();
-    const replaced = page.waitForResponse((response) => response.request().headers()["x-zudo-composer-media-operation"] === "replace");
+    const replaced = page.waitForResponse((response) => response.request().headers()["x-zudo-composer-asset-operation"] === "replace");
     await page.getByLabel("Replacement file").setInputFiles({ name: "replacement.png", mimeType: "image/png", buffer: REPLACEMENT });
     expect((await (await replaced).json()).result.id).toBe(assetId);
     await page.reload();
@@ -96,13 +96,13 @@ test("versioned Media persists bytes, folders, identity and per-use Content text
     await inspector.getByRole("button", { name: "Restore asset" }).click();
     await expect(inspector).toContainText("Replace file");
   } finally {
-    // Reversible Media cleanup: retain records/versions in trash, never unlink bytes.
+    // Reversible Assets cleanup: retain records/versions in trash, never unlink bytes.
     await page.evaluate(async ({ modelId, assetId, suffix }) => {
       const path = "/src/app/provider-integration.ts"; const { createProductionProviderIntegration } = await import(path);
       const integration = createProductionProviderIntegration(); await integration.initialization.initialize();
       await integration.contentProvider.store.deleteEntry(modelId + "-entry"); await integration.contentProvider.store.deleteModel(modelId);
-      if (assetId && integration.mediaProvider) { const current = await integration.mediaProvider.store.get(assetId); if (current.status === "loaded" && current.record.document.state === "active") await integration.mediaProvider.store.trash(assetId, { expectedRevision: current.record.revision }); }
-      if (integration.mediaProvider) for (const folder of (await integration.mediaProvider.store.snapshot()).folders) if (folder.name === `Folder ${suffix}` && folder.state === "active") await integration.mediaProvider.store.trashFolder(folder.id, { expectedRevision: folder.revision });
+      if (assetId && integration.assetProvider) { const current = await integration.assetProvider.store.get(assetId); if (current.status === "loaded" && current.record.document.state === "active") await integration.assetProvider.store.trash(assetId, { expectedRevision: current.record.revision }); }
+      if (integration.assetProvider) for (const folder of (await integration.assetProvider.store.snapshot()).folders) if (folder.name === `Folder ${suffix}` && folder.state === "active") await integration.assetProvider.store.trashFolder(folder.id, { expectedRevision: folder.revision });
     }, { modelId, assetId, suffix });
   }
 });

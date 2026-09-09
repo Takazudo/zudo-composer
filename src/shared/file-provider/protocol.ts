@@ -2,7 +2,7 @@
  * Wire contract shared by every domain that persists through the dev-only
  * filesystem transport.
  *
- * Composer and Media keep their own endpoints and their own request shapes —
+ * Composer and Assets keep their own endpoints and their own request shapes —
  * they are covered by a separate contract spec and are deliberately not
  * multiplexed into this one. This module defines the shape the remaining
  * domains reuse so each port is mechanical.

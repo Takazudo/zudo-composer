@@ -4,7 +4,7 @@ import { normalizedClipboardFiles, normalizedFilesFromTransfer } from "../upload
 const file = (name: string, type = "image/png") => new File([new Uint8Array([1])], name, { type });
 const item = (value: File | null, kind = "file") => ({ kind, getAsFile: () => value });
 
-describe("media upload input normalization", () => {
+describe("asset upload input normalization", () => {
   it("prefers file-kind items and falls back to files only when no item files exist", () => {
     const fromItem = file("item.png");
     const fromFiles = file("files.png");

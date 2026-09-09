@@ -11,11 +11,11 @@ function resolverFor(store: VersionedAssetStore | undefined) {
   if (!store) return new LiveAssetReferenceResolver(undefined);
   let resolver = resolvers.get(store); if (!resolver) { resolver = new LiveAssetReferenceResolver(store); resolvers.set(store, resolver); } return resolver;
 }
-export async function resolvePreviewMediaSnapshot(snapshot: ComposerPreviewSnapshot, catalog: ComponentCatalog, resolver: LiveAssetReferenceResolver) {
+export async function resolvePreviewAssetSnapshot(snapshot: ComposerPreviewSnapshot, catalog: ComponentCatalog, resolver: LiveAssetReferenceResolver) {
   const identity = { providerId: resolver.store?.provider.id, preservePinnedUrls: true };
   const local = resolveCompositionAsset(snapshot.document, catalog, identity);
   const linked = snapshot.linked ? resolveCompositionAsset(snapshot.linked.sourceDocument, catalog, identity) : undefined;
-  if (!local.index.complete || linked?.index.complete === false) return { status: "blocked" as const, message: "Media inspection is incomplete. " + [...local.index.advisory, ...(linked?.index.advisory ?? [])].map(({ reason }) => reason).join(" ") };
+  if (!local.index.complete || linked?.index.complete === false) return { status: "blocked" as const, message: "Asset inspection is incomplete. " + [...local.index.advisory, ...(linked?.index.advisory ?? [])].map(({ reason }) => reason).join(" ") };
   const refs = [...local.index.references, ...(linked?.index.references ?? [])].map(({ ref }) => ref);
   if (!refs.length) return { status: "ready" as const, snapshot };
   const result = await resolver.resolve(refs);
@@ -24,7 +24,7 @@ export async function resolvePreviewMediaSnapshot(snapshot: ComposerPreviewSnaps
     ...(snapshot.linked ? { linked: { ...snapshot.linked, sourceDocument: resolveCompositionAsset(snapshot.linked.sourceDocument, catalog, { lock: result.lock }).document } } : {}) } };
 }
 /** Resolution runs in the owning host. The iframe receives only detached JSON. */
-export function useMediaResolvedPreviewSnapshot(snapshot: ComposerPreviewSnapshot | null, catalog: ComponentCatalog, enabled = true) {
+export function useAssetResolvedPreviewSnapshot(snapshot: ComposerPreviewSnapshot | null, catalog: ComponentCatalog, enabled = true) {
   const store = useWorkspace()?.integration.assetProvider?.store;
   const resolver = useMemo(() => resolverFor(store), [store]);
   const [generation, setGeneration] = useState(0);
@@ -39,7 +39,7 @@ export function useMediaResolvedPreviewSnapshot(snapshot: ComposerPreviewSnapsho
   useEffect(() => {
     if (!snapshot || !hasManaged) return;
     let active = true;
-    void resolvePreviewMediaSnapshot(snapshot, catalog, resolver).then((result) => { if (active) setResolved({ source: snapshot, generation, value: result.status === "ready" ? result.snapshot : null, ...(result.status === "blocked" ? { error: result.message } : {}) }); });
+    void resolvePreviewAssetSnapshot(snapshot, catalog, resolver).then((result) => { if (active) setResolved({ source: snapshot, generation, value: result.status === "ready" ? result.snapshot : null, ...(result.status === "blocked" ? { error: result.message } : {}) }); });
     return () => { active = false; };
   }, [snapshot, catalog, resolver, generation, hasManaged]);
   if (!hasManaged) return { snapshot, loading: false, error: undefined };

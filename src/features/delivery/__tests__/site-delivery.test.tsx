@@ -10,7 +10,7 @@ import { SiteDelivery, loadWorkingPreviewSnapshot } from "../site-delivery";
 import { compileSiteProject } from "../../../site-project/compiler";
 import type { ActivatedDeliveryArtifact, ActivatedDeliverySource, DeliverySourceContract } from "../source";
 import { validateActivatedDeliveryArtifact } from "../source";
-import { providerFixture, PNG } from "../../media/__tests__/versioned-fixture";
+import { providerFixture, PNG } from "../../assets/__tests__/versioned-fixture";
 
 afterEach(cleanup);
 const hosts: TemporaryWorkspaceProviders[] = [];
@@ -57,7 +57,7 @@ describe("SiteDelivery", () => {
     expect(artifact.build.routes.find(({ pathname }) => pathname === "/journal/start-with-the-question")?.ancestors.map(({ pathname }) => pathname)).toEqual(["/", "/journal"]);
     expect(Object.keys(artifact.files).filter((name) => name.startsWith("module-"))).toHaveLength(artifact.build.modules.length);
   });
-  it("captures exact managed Media for visitor output and blocks missing provider or corrupt bytes", async () => {
+  it("captures exact managed Asset for visitor output and blocks missing provider or corrupt bytes", async () => {
     const { provider, filesystem } = await providerFixture();
     const asset = await filesystem.upload({ fileName: "download.png", declaredMimeType: "image/png", bytes: PNG });
     const project = sample();
@@ -74,7 +74,7 @@ describe("SiteDelivery", () => {
     vi.spyOn(provider.store, "resolveVersion").mockRejectedValue(new Error("Corrupt bytes"));
     expect((await loadWorkingPreviewSnapshot(providers)).status).toBe("compiler-error");
   });
-  it.each(["media", "project"])("rejects a changed %s aggregate token rather than recapturing latest", async (domain) => {
+  it.each(["assets", "project"])("rejects a changed %s aggregate token rather than recapturing latest", async (domain) => {
     const { provider, filesystem } = await providerFixture();
     const project = sample();
     const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), assetProvider: provider, createProviders: (await host()).createProviders });
@@ -82,7 +82,7 @@ describe("SiteDelivery", () => {
     let checks = 0;
     const providers = { ...base, captureWorkspace: capture, isCaptureCurrent: async (value: Parameters<typeof base.isCaptureCurrent>[0]) => {
       if (++checks === 2) {
-        if (domain === "media") await filesystem.upload({ fileName: "changed.png", declaredMimeType: "image/png", bytes: PNG });
+        if (domain === "assets") await filesystem.upload({ fileName: "changed.png", declaredMimeType: "image/png", bytes: PNG });
         else await base.workspace.updateMetadata((await base.workspace.metadata()).mutationToken, { name: "Changed project" });
       }
       return base.isCaptureCurrent(value);

@@ -8,21 +8,21 @@ export function formatBytes(bytes: number): string {
 }
 
 /** `image/jpeg` reads as JPEG; the one non-image type reads as PDF. */
-export function mediaTypeLabel(mimeType: string): string {
+export function assetTypeLabel(mimeType: string): string {
   return mimeType === "application/pdf" ? "PDF" : mimeType.slice(mimeType.indexOf("/") + 1).toUpperCase();
 }
 
-export function isMediaImage(record: Pick<AssetSummary, "mimeType">): boolean {
+export function isAssetImage(record: Pick<AssetSummary, "mimeType">): boolean {
   return record.mimeType.startsWith("image/");
 }
 
 /** Pixel dimensions, present only for an image whose bytes the browser decoded. */
-export interface MediaPixelSize {
+export interface AssetPixelSize {
   readonly width: number;
   readonly height: number;
 }
 
-export function formatPixelSize(size: MediaPixelSize): string {
+export function formatPixelSize(size: AssetPixelSize): string {
   return `${size.width}×${size.height}`;
 }
 
@@ -31,7 +31,7 @@ export function formatPixelSize(size: MediaPixelSize): string {
  * then the stored byte size. A PDF never reports dimensions, and an image that
  * has not finished decoding shows its size alone rather than a placeholder.
  */
-export function mediaCaption(record: AssetSummary, size: MediaPixelSize | undefined): string {
+export function assetCaption(record: AssetSummary, size: AssetPixelSize | undefined): string {
   const bytes = formatBytes(record.byteLength);
   return size ? `${formatPixelSize(size)} · ${bytes}` : bytes;
 }

@@ -22,7 +22,7 @@ import type { WorkspaceCounts } from "./workspace-summary";
 // 64rem. Grouping follows the prototype — one Dashboard entry, then the records
 // an author writes, then the structures they are placed into.
 
-export type RailItemId = "home" | "content" | "media" | "composer" | "mapping" | "sitemapper" | "review" | "site";
+export type RailItemId = "home" | "content" | "assets" | "composer" | "mapping" | "sitemapper" | "review" | "site";
 
 export interface RailItem {
   readonly id: RailItemId;
@@ -57,7 +57,7 @@ export const RAIL_GROUPS: readonly RailGroup[] = [
     label: "Author",
     items: [
       { id: "content", label: "Content", href: "/content", icon: ContentIcon },
-      { id: "media", label: "Media", href: "/media", icon: FolderIcon },
+      { id: "assets", label: "Assets", href: "/assets", icon: FolderIcon },
     ],
   },
   {
@@ -92,7 +92,7 @@ export function railCounts(counts: WorkspaceCounts | null): RailCounts {
   if (!counts) return {};
   const railCount: RailCounts = {};
   if (counts.content.status === "ok") railCount.content = counts.content.value.models;
-  if (counts.media.status === "ok") railCount.media = counts.media.value.assets;
+  if (counts.assets.status === "ok") railCount.assets = counts.assets.value.assets;
   if (counts.compositions.status === "ok") railCount.composer = counts.compositions.value.compositions;
   if (counts.mappings.status === "ok") railCount.mapping = counts.mappings.value.mappings;
   if (counts.sitemaps.status === "ok") railCount.sitemapper = counts.sitemaps.value.sitemaps;

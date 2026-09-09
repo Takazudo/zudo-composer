@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { DEV_CONFIG } = vi.hoisted(() => ({ DEV_CONFIG: {
-  assetEndpoint: "/media-dev", capability: "secret", capabilityHeader: "x-cap",
+  assetEndpoint: "/assets-dev", capability: "secret", capabilityHeader: "x-cap",
   assetMaxBodyBytes: 25, assetOperationHeader: "x-operation",
   assetFileNameHeader: "x-file-name", assetRecordIdHeader: "x-record-id", assetMetadataHeader: "x-metadata",
 } }));
@@ -76,7 +76,7 @@ describe("browser assets file provider", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it("uses the shared capability and bounded header metadata for raw uploads", async () => {
-    const record = createAssetRecord({ fileName: "hero image.png", mimeType: "image/png", byteLength: 8, checksum: "a".repeat(64) }, { id: "media-1", timestamp: "2026-01-01T00:00:00.000Z" });
+    const record = createAssetRecord({ fileName: "hero image.png", mimeType: "image/png", byteLength: 8, checksum: "a".repeat(64) }, { id: "asset-1", timestamp: "2026-01-01T00:00:00.000Z" });
     fetchMock.mockResolvedValue(response({ ok: true, result: record }));
     const provider = createFileProviderAssetProvider({ fetch: fetchMock })!;
     const file = new File([new Uint8Array(8)], "hero image.png", { type: "image/png" });
