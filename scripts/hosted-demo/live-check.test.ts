@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { HOSTED_DEMO_LIVE_ROUTES, verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
-import { expectedMime } from "./artifact.mjs";
+import { HOSTED_DEMO_HEADERS, hostedAssetHeaders, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
 import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
 
 const SOURCE_REVISION = "c".repeat(40);
@@ -28,6 +28,7 @@ async function writeArtifact() {
   ] as const) {
     files.set(`uploaded-assets/sha256-${createHash("sha256").update(content).digest("hex")}.${extension}`, content);
   }
+  files.set(HOSTED_DEMO_HEADERS, Buffer.from(hostedAssetHeaders([...files].filter(([path]) => path.startsWith("uploaded-assets/")).map(([path, bytes]) => ({ path, byteLength: bytes.byteLength })))));
   const assets = Object.fromEntries([...files].map(([path, content]) => [path, createHash("sha256").update(content).digest("hex")]));
   await Promise.all([...files].map(([path, content]) => writeFile(join(root, path), content)));
   const manifest = { schemaVersion: 1, sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, mode: "disposable-hosted-demo", assets };
@@ -89,11 +90,26 @@ describe("hosted demo live verification", () => {
     });
     expect(proof.routes.map(({ path }) => path)).toEqual(HOSTED_DEMO_LIVE_ROUTES);
     expect(proof.assets).toHaveLength(9);
+    expect(mock.requests.some(({ path }) => path === "/_headers")).toBe(false);
     const routeRequest = mock.requests.find(({ path }) => path === "/composer");
     expect(routeRequest?.init?.headers).toEqual({ accept: "text/html", "sec-fetch-mode": "navigate" });
     const assetRequest = mock.requests.find(({ path }) => path.startsWith("/uploaded-assets/"));
     expect(assetRequest?.init?.headers).toEqual({});
     expect(mock.requests.every(({ url }) => url.searchParams.get("hosted-demo-revision") === SOURCE_REVISION)).toBe(true);
+  });
+
+  it("rejects missing or weakened deployment header rules even with an updated manifest", async () => {
+    const fixture = await writeArtifact();
+    fixtures.push(fixture.root);
+    const headers = fixture.files.get(HOSTED_DEMO_HEADERS)!.toString();
+    expect(headers).toContain("Content-Disposition: attachment;");
+    expect(headers.match(/Content-Disposition:/g)).toHaveLength(1);
+    for (const content of ["", headers.replaceAll("max-age=31536000, immutable", "max-age=0")]) {
+      await writeFile(join(fixture.root, HOSTED_DEMO_HEADERS), content);
+      fixture.manifest.assets[HOSTED_DEMO_HEADERS] = createHash("sha256").update(content).digest("hex");
+      await writeFile(join(fixture.root, "hosted-demo-manifest.json"), JSON.stringify(fixture.manifest));
+      await expect(verifyHostedDemoArtifact({ directory: fixture.root })).rejects.toThrow("header rules must match");
+    }
   });
 
   it("permits Cloudflare navigation analytics while checking the original HTML bytes separately", async () => {

@@ -12,6 +12,7 @@ it("serves artifact MIME types and SPA routes while keeping missing uploads 404"
     await writeFile(join(root, "index.html"), "<!doctype html><title>Hosted demo</title>");
     await writeFile(join(root, "assets/app.js"), "console.log('hosted');");
     await writeFile(join(root, "assets/pixel.png"), Buffer.from([137, 80, 78, 71]));
+    await writeFile(join(root, "_headers"), "/uploaded-assets/*\n  X-Content-Type-Options: nosniff\n");
     const checksum = "a".repeat(64);
     await writeFile(join(root, `uploaded-assets/sha256-${checksum}.zip`), Buffer.from([80, 75, 3, 4, 1, 2]));
     const hosted = await startHostedDemoStaticServer({ directory: root, port: 0 });
@@ -43,6 +44,7 @@ it("serves artifact MIME types and SPA routes while keeping missing uploads 404"
       for (const name of ["content-type", "content-disposition", "cache-control", "x-content-type-options", "content-length"]) expect(zipHead.headers.get(name)).toBe(zip.headers.get(name));
       expect(await zipHead.text()).toBe("");
 
+      expect((await fetch(`${hosted.url}/_headers`, { headers: { accept: "text/html" } })).status).toBe(404);
       expect((await fetch(`${hosted.url}/missing.js`, { headers: { accept: "text/html" } })).status).toBe(404);
       expect((await fetch(`${hosted.url}/uploaded-assets/missing.png`, { headers: { accept: "text/html" } })).status).toBe(404);
       expect((await fetch(`${hosted.url}/composer`, { method: "HEAD", headers: { accept: "text/html" } })).status).toBe(200);
