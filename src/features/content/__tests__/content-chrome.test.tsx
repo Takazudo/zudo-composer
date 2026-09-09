@@ -7,7 +7,16 @@ import { createContentEntryRecord, createContentModelRecord } from "../../../con
 
 // Vitest runs without `globals`, so Testing Library never installs its own
 // auto-cleanup and a second render would query against both trees.
-afterEach(cleanup);
+afterEach(async () => {
+  cleanup();
+  // Provider updates can schedule Preact's after-paint effects outside act().
+  // Unmounting removes their components but does not cancel the queued RAF and
+  // its timeout fallback. Let that frame and its posted effect task drain while
+  // jsdom's cancelAnimationFrame still exists, before Vitest disposes the window.
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+});
 
 function visit(href: string): void {
   window.history.replaceState(null, "", href);

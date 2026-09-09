@@ -197,3 +197,22 @@ for (const packed of rootPackedPaths) {
 }
 
 console.log(`Package conformance passed: ${rootPackageJson.name} (${rootPackedPaths.size} packed files)`);
+
+// Nested private package manifests disable parent negations: allowlist each runtime file.
+/** @param {string} directory @returns {Promise<string[]>} */
+async function editorRuntimeSources(directory) {
+ const result = [];
+ for (const entry of await readdir(path.join(repositoryRoot, directory), {withFileTypes:true})) {
+  if (entry.name === '__tests__' || entry.name === 'type-tests') continue;
+  const name = `${directory}/${entry.name}`;
+  if (entry.isDirectory()) result.push(...await editorRuntimeSources(name));
+  else if (/\.(?:ts|tsx|css)$/u.test(name) && !/\.(?:test|spec)\./u.test(name)) result.push(name);
+ }
+ return result.sort();
+}
+const editorSources = await editorRuntimeSources('packages/image-editor/src');
+const packedEditorSources = [...rootPackedPaths].filter(name => name.startsWith('packages/image-editor/')).sort();
+assert(JSON.stringify(editorSources) === JSON.stringify(packedEditorSources), 'packed editor runtime sources must match disk exactly and omit tests and manifest');
+assert(editorSources.every(name => rootPackageJson.files.includes(name)), 'editor runtime sources must be individually allowlisted');
+assert(rootPackageJson.devDependencies?.['@zudo-composer/image-editor'] === 'workspace:*', 'private editor must be a workspace devDependency');
+assert(!rootPackageJson.dependencies?.['@zudo-composer/image-editor'] && !rootPackageJson.peerDependencies?.['@zudo-composer/image-editor'], 'private editor must not be a runtime dependency');

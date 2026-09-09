@@ -28,6 +28,8 @@ import { APP_ROOT, resolveAppWarmupFiles, resolveFsAllow, resolvePublicDir, reso
 import { createModuleEvaluator } from "./module-evaluator.mjs";
 import { loadHostConfig } from "./host-context.mjs";
 
+import { resolveImageEditorAliases } from "../plugins/image-editor-aliases.mjs";
+
 export { loadHostConfig };
 
 /**
@@ -121,7 +123,7 @@ export async function resolveComposerDevConfig(options = {}) {
         // on a full-reload discovery round.
         entries: [resolve(APP_ROOT, APP_ENTRY_MODULE)],
       },
-      resolve: { alias: resolvePreactAliases() },
+      resolve: { alias: [...resolvePreactAliases(), ...resolveImageEditorAliases()] },
       server: {
         fs: { allow: [...resolveFsAllow(workspaceRoot), componentPack.identity.packageRoot] },
         watch: { ignored: resolveWatchIgnored([paths.data, paths.compositions, paths.content, paths.mappings, paths.sitemaps, paths.assets, paths.publicAssets, resolveSiteProjectLocalRoot(workspaceRoot)]) },

@@ -40,6 +40,19 @@
     "packages/component-contract/src/runtime.ts",
     "packages/component-contract/src/types.ts",
     "packages/component-contract/src/validation.ts",
+    "packages/image-editor/src/core/encode.ts",
+    "packages/image-editor/src/core/geometry.ts",
+    "packages/image-editor/src/core/history.ts",
+    "packages/image-editor/src/core/limits.ts",
+    "packages/image-editor/src/core/pipeline.ts",
+    "packages/image-editor/src/core/resample.ts",
+    "packages/image-editor/src/core/tone.ts",
+    "packages/image-editor/src/core/types.ts",
+    "packages/image-editor/src/index.ts",
+    "packages/image-editor/src/worker/client.ts",
+    "packages/image-editor/src/worker/fallback.ts",
+    "packages/image-editor/src/worker/worker-core.ts",
+    "packages/image-editor/src/worker/worker.ts",
     "!**/__tests__",
     "!**/type-tests",
     "!**/*.test.*",
@@ -114,6 +127,7 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11",
-    "wrangler": "4.130.0"
+    "wrangler": "4.130.0",
+    "@zudo-composer/image-editor": "workspace:*"
   }
 }
