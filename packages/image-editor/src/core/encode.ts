@@ -51,7 +51,7 @@ export async function encode(
   // Native encoder scratch and browser overhead remain additional.
   guardWorkingSet(image.data.byteLength * 4);
   try {
-    const pixels = { ...image, data: image.data.slice() };
+    const pixels = { width: image.width, height: image.height, data: image.data.slice() };
     if (options.type === "image/jpeg")
       for (let p = 0; p < pixels.data.length; p += 4) {
         const a = pixels.data[p + 3] / 255;

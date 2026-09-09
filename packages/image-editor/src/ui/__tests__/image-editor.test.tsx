@@ -186,6 +186,25 @@ describe('image editor UI contract', () => {
     for (const value of ['', '1', '10', '100']) fireEvent.input(width, { target: { value } });
     expect(screen.getByLabelText('Output dimensions')).toHaveTextContent('100 × 75');
   });
+  it.each(['data', 'bitmap'] as const)('normalizes browser-shaped %s readback to an explicit worker DTO', async kind => {
+    const pixels = new Uint8ClampedArray(400 * 300 * 4);
+    class NativeImageDataShape {
+      get width() { return 400; }
+      get height() { return 300; }
+      get data() { return pixels; }
+    }
+    const native = new NativeImageDataShape();
+    const close = vi.fn();
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({ putImageData: mocks.paint, drawImage: vi.fn(), getImageData: () => native } as unknown as CanvasRenderingContext2D);
+    const source = kind === 'data' ? native as ImageData : { width: 400, height: 300, close } as unknown as ImageBitmap;
+    const { client } = await mount({ source });
+    const registered = client.registerSource.mock.calls[0][0];
+    expect(Object.keys(registered).sort()).toEqual(['data', 'height', 'width']);
+    expect(registered).toEqual({ width: 400, height: 300, data: pixels });
+    expect(registered.data).toBe(pixels);
+    expect(Object.keys(native)).toEqual([]);
+    expect(close).not.toHaveBeenCalled();
+  });
   it('guards the working set for otherwise legal output sizes', () => {
     const doc: EditDoc = { crop: { x: 0, y: 0, width: 1, height: 1 }, rotate: 0, flipH: false, flipV: false, resize: { width: 6000, height: 6000 }, tone: { brightness: 0, contrast: 0, saturation: 0, hue: 0 } };
     expect(documentError(doc, { width: 4000, height: 3000 })).toContain('memory-limit');

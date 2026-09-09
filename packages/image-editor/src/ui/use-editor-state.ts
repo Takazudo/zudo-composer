@@ -32,14 +32,15 @@ export function withCrop(doc: EditDoc, crop: Rect): EditDoc {
 function readSource(source: ImageBitmap | ImageData): RgbaImage {
   // Account for the caller bitmap, canvas, RGBA readback, and worker copy before conversion.
   guardWorkingSet(validateSize(source) * ('data' in source ? 8 : 16), 1024 * 1024 * 8);
-  if ('data' in source) return source;
+  if ('data' in source) return { width: source.width, height: source.height, data: source.data };
   const canvas = document.createElement('canvas');
   canvas.width = source.width; canvas.height = source.height;
   try {
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Cannot read image');
     context.drawImage(source, 0, 0);
-    return context.getImageData(0, 0, source.width, source.height);
+    const pixels = context.getImageData(0, 0, source.width, source.height);
+    return { width: pixels.width, height: pixels.height, data: pixels.data };
   } finally { canvas.width = canvas.height = 0; }
 }
 export function useEditorState(props: ImageEditorProps) {

@@ -209,3 +209,31 @@ it("does not deliver an old-source save after source replacement", async () => {
   await replacement;
   client.dispose();
 });
+
+it("registers native ImageData-shaped prototype accessors without dropping dimensions or mutating input", async () => {
+  class NativeImageDataShape {
+    get width() { return 2; }
+    get height() { return 2; }
+    get data() { return pixels; }
+  }
+  const pixels = new Uint8ClampedArray(16).fill(127);
+  const native = new NativeImageDataShape();
+  expect(Object.keys(native)).toEqual([]);
+  const worker = new FakeWorker();
+  const client = createImageEditorClient({ workerFactory: () => worker });
+  const registration = client.registerSource(native);
+  const request = worker.requests[0];
+  expect(request.kind).toBe("register");
+  if (request.kind !== "register") throw new Error("Expected registration");
+  expect(request.image).toEqual({ width: 2, height: 2, data: pixels });
+  expect(request.image.data).not.toBe(pixels);
+  worker.finish();
+  await registration;
+  const preview = client.renderPreview(createEditDoc(native));
+  worker.finish();
+  expect(await preview).toEqual({ width: 2, height: 2, data: pixels });
+  expect(native.data).toBe(pixels);
+  expect([...pixels]).toEqual(Array(16).fill(127));
+  expect(Object.keys(native)).toEqual([]);
+  client.dispose();
+});

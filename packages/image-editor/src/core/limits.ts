@@ -51,5 +51,5 @@ export function guardWorkingSet(...bytes: number[]): void {
     throw new ImageEditorError("memory-limit");
 }
 export function allocate(size: Size): RgbaImage {
-  return { ...size, data: new Uint8ClampedArray(validateSize(size) * 4) };
+  return { width: size.width, height: size.height, data: new Uint8ClampedArray(validateSize(size) * 4) };
 }
