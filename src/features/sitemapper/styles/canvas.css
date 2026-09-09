@@ -22,16 +22,21 @@
 }
 
 .sg-sitemapper-canvas__scroll {
+  block-size: 100%;
+  box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   min-height: 0;
   padding: var(--sp-3);
   overflow: auto;
+  /* Keep outline widths independent of vertical scrollbar appearance. */
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
 }
 
-.sg-sitemapper-canvas__viewport { position: relative; }
+/* The unscaled absolute stage must not enlarge the scaled scroll footprint. */
+.sg-sitemapper-canvas__viewport { position: relative; overflow: clip; }
 
 .sg-sitemapper-canvas__stage {
   position: absolute;
