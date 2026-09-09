@@ -12,6 +12,7 @@ import type { FilesystemAssetStoreOptions } from "../types";
 const sandboxes: string[] = [];
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const PDF = new TextEncoder().encode("%PDF-1.7\nsynthetic version");
+const ZIP = Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]);
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 async function sandbox() { const root = await fs.mkdtemp(join(tmpdir(), "zudo-assets-store-")); sandboxes.push(root); return root; }
 afterEach(async () => { await Promise.all(sandboxes.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))); });
@@ -94,6 +95,15 @@ describe("versioned global Assets store", () => {
     snapshot.records[0]!.document.fileName = "detached.pdf";
     expect((await store.list())[0]!.fileName).toBe("report.bin");
     expect(await (await createFilesystemAssetStore(options(root))).mutationToken()).toBe(snapshot.mutationToken);
+  });
+  it("accepts ZIP and declared text kinds, classifying Office containers as ZIP and rejecting executables", async () => {
+    const root = await sandbox(); const store = await createFilesystemAssetStore(options(root));
+    const office = await store.upload({ fileName: "brief.docx", declaredMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", bytes: ZIP });
+    expect(currentAssetVersion(office)).toMatchObject({ mimeType: "application/zip", url: `/uploaded-assets/sha256-${digest(ZIP)}.zip` });
+    const text = await store.upload({ fileName: "notes.txt", declaredMimeType: "text/plain", bytes: new TextEncoder().encode("plain notes") });
+    expect(currentAssetVersion(text)).toMatchObject({ mimeType: "text/plain", url: `/uploaded-assets/sha256-${digest(new TextEncoder().encode("plain notes"))}.txt` });
+    await expect(store.upload({ fileName: "bad.exe", declaredMimeType: "application/x-msdownload", bytes: new TextEncoder().encode("MZ executable") })).rejects.toMatchObject({ code: "validation" });
+    await expect(store.upload({ fileName: "bad.html", declaredMimeType: "text/html", bytes: new TextEncoder().encode("<p>not allowed</p>") })).rejects.toMatchObject({ code: "validation" });
   });
   it("retains every immutable byte version after replace, rename, move, trash and restore", async () => {
     const root = await sandbox(); const store = await createFilesystemAssetStore(options(root));

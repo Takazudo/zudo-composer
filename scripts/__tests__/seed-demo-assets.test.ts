@@ -20,16 +20,16 @@ async function files(root: string) {
 }
 
 describe("dogfood demo Assets seed", () => {
-  it("seeds small valid images, preserves unrelated records/folders, and reruns without changing any bytes", async () => {
+  it("seeds valid images and non-image assets, preserves unrelated records/folders, and reruns without changing any bytes", async () => {
     const root = await sandbox();
     const store = await createFilesystemAssetStore({ assetsStoreRoot: root });
     const source = await readFile(new URL("../demo-assets/demo-sunrise.png", import.meta.url));
     const folder = await store.createFolder({ name: "Personal", parentId: null }, await store.mutationToken());
     const unrelated = await store.upload({ fileName: "personal.png", bytes: source, declaredMimeType: "image/png", folderId: folder.id, note: "Keep this note" });
     const sameName = await store.upload({ fileName: "demo-lagoon.png", bytes: source, declaredMimeType: "image/png" });
-    expect(await seedDemoAsset(root)).toEqual({ added: 4, skipped: 0 });
+    expect(await seedDemoAsset(root)).toEqual({ added: 6, skipped: 0 });
     const snapshot = await store.snapshot();
-    expect(snapshot.records).toHaveLength(6);
+    expect(snapshot.records).toHaveLength(8);
     expect(snapshot.records).toContainEqual(unrelated);
     expect(snapshot.records).toContainEqual(sameName);
     expect(snapshot.folders).toEqual([folder]);
@@ -37,14 +37,20 @@ describe("dogfood demo Assets seed", () => {
       expect(demoFileNames).toContain(record.document.fileName);
       const version = record.document.versions[0];
       expect(version.byteLength).toBeLessThanOrEqual(60 * 1024);
-      expect(version.mimeType).toBe("image/png");
       expect((await store.get(record.id)).status).toBe("loaded");
       const bytes = await readFile(join(root, "versions", version.url.split("/").at(-1)!));
-      expect(bytes.readUInt32BE(16)).toBe(480);
-      expect(bytes.readUInt32BE(20)).toBe(320);
+      if (version.mimeType === "image/png") {
+        expect(bytes.readUInt32BE(16)).toBe(480);
+        expect(bytes.readUInt32BE(20)).toBe(320);
+      } else if (version.mimeType === "application/pdf") {
+        expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+      } else {
+        expect(version.mimeType).toBe("application/zip");
+        expect(bytes.subarray(0, 4).toString("hex")).toBe("504b0304");
+      }
     }
     const before = await files(root);
-    expect(await seedDemoAsset(root)).toEqual({ added: 0, skipped: 4 });
+    expect(await seedDemoAsset(root)).toEqual({ added: 0, skipped: 6 });
     expect(await files(root)).toEqual(before);
   });
 
@@ -57,7 +63,7 @@ describe("dogfood demo Assets seed", () => {
     const bytes = await readFile(new URL("../demo-assets/demo-twilight.png", import.meta.url));
     await store.replace(second.id, { bytes }, { expectedRevision: second.revision });
     const before = await files(root);
-    expect(await seedDemoAsset(root)).toEqual({ added: 0, skipped: 4 });
+    expect(await seedDemoAsset(root)).toEqual({ added: 0, skipped: 6 });
     expect(await files(root)).toEqual(before);
   });
 

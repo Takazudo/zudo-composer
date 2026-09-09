@@ -1,4 +1,4 @@
-import { assetAuthoringUrl, assetPinKey, assetVersionUrl, validateAssetAssetRef, validateAssetVersionRef, validateAssetVersionPin, validateAssetSnapshot, isValidAssetChecksum, type AssetAssetRef, type AssetVersionRef, type AssetVersionPin, type AssetSnapshot } from "../model";
+import { ASSET_CHECKSUM_URL_PATTERN, assetAuthoringUrl, assetPinKey, assetVersionUrl, validateAssetAssetRef, validateAssetVersionRef, validateAssetVersionPin, validateAssetSnapshot, isValidAssetChecksum, type AssetAssetRef, type AssetVersionRef, type AssetVersionPin, type AssetSnapshot } from "../model";
 import type { VersionedAssetStore } from "../library";
 import { subscribePersistenceChanges } from "../../shared/persistence-generation";
 
@@ -14,7 +14,7 @@ export function parseManagedAssetUrl(value: string, providerId = "asset-files"):
   const ref = { providerId, assetId: value.slice(prefix.length) };
   return validateAssetAssetRef(ref) && value === assetAuthoringUrl(ref.assetId) ? ref : undefined;
 }
-export function isImmutableAssetUrl(value: string): boolean { return /^\/uploaded-assets\/sha256-[a-f0-9]{64}\.(?:png|jpg|gif|webp|pdf)$/.test(value); }
+export function isImmutableAssetUrl(value: string): boolean { return ASSET_CHECKSUM_URL_PATTERN.test(value); }
 export function validateAssetReferenceLock(value: unknown): value is AssetReferenceLock {
   if (!value || typeof value !== "object" || Object.keys(value).sort().join(",") !== "mutationToken,pins,providerId,schemaVersion") return false;
   const lock = value as AssetReferenceLock;

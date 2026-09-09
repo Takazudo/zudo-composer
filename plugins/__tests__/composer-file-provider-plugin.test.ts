@@ -11,6 +11,7 @@ import { createFilesystemCompositionStore } from "../../src/composer/storage/fil
 import { createWorkspaceScopedCompositionStore } from "../../src/composer/storage/file-provider/dev-server-entry";
 import { createFilesystemAssetStore } from "../../src/assets/storage/filesystem";
 import { createAssetRecord } from "../../src/assets/library";
+import { assetContentDisposition, assetMimeTypeForExtension, isValidAssetType } from "../../src/assets/model";
 import {
   CompositionPersistenceError,
   validateCompositionRecord,
@@ -411,6 +412,28 @@ describe("assets upload request boundary and core integration", () => {
     expect(await readFile(join(sandbox, ASSET_FILE_PROVIDER_ROOT, `versions/sha256-${createHash("sha256").update(bytes).digest("hex")}.png`))).toEqual(Buffer.from(bytes));
   });
 
+  it("stores Office ZIP uploads through the file-provider API and rejects executable bytes", async () => {
+    const store = await createFilesystemAssetStore({ assetsStoreRoot: join(sandbox, ASSET_FILE_PROVIDER_ROOT), idFactory: () => "office", now: () => T1 });
+    const handler = createAssetUploadMiddleware({ capability: CAPABILITY, createStore: async () => store });
+    const send = async (bytes: Uint8Array, contentType: string, fileName: string) => {
+      const res = connectResponse();
+      await handler(assetRequest([bytes], { headers: {
+        ...assetRequest([]).headers,
+        "content-type": contentType,
+        [ASSET_FILE_PROVIDER_FILE_NAME_HEADER]: encodeURIComponent(fileName),
+      } }), res);
+      return { status: res.statusCode, body: JSON.parse(res.end.mock.calls[0]![0] as string) };
+    };
+    const office = await send(Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 1, 2]), "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "brief.docx");
+    expect(office.status).toBe(200);
+    expect(office.body.result.document.versions[0].mimeType).toBe("application/zip");
+    expect(office.body.result.document.versions[0].url).toMatch(/\.zip$/);
+    expect(await store.list()).toHaveLength(1);
+    const executable = await send(Uint8Array.from([0x4d, 0x5a, 1, 2]), "application/x-msdownload", "bad.exe");
+    expect(executable.status).toBe(422);
+    expect(await store.list()).toHaveLength(1);
+  });
+
   it("rejects request-head failures before opening a store", async () => {
     const createStore = vi.fn();
     const handler = createAssetUploadMiddleware({ capability: CAPABILITY, createStore });
@@ -421,7 +444,7 @@ describe("assets upload request boundary and core integration", () => {
       assetRequest([], { headers: { ...assetRequest([]).headers, origin: "http://evil.example" } }),
       assetRequest([], { headers: { ...assetRequest([]).headers, "sec-fetch-site": "cross-site" } }),
       assetRequest([], { headers: { ...assetRequest([]).headers, [COMPOSER_FILE_PROVIDER_CAPABILITY_HEADER]: "wrong" } }),
-      assetRequest([], { headers: { ...assetRequest([]).headers, "content-type": "text/plain" } }),
+      assetRequest([], { headers: { ...assetRequest([]).headers, "content-type": "text/html", [ASSET_FILE_PROVIDER_OPERATION_HEADER]: "list" } }),
     ]) {
       const res = connectResponse();
       await handler(requestStream, res);
@@ -617,9 +640,10 @@ describe("dev/build registration boundary", () => {
     await writeFile(join(bytesRoot, fileName), bytes);
     const store = await createFilesystemAssetStore({ assetsStoreRoot: join(sandbox, ASSET_FILE_PROVIDER_ROOT) });
     const snapshot = await store.snapshot();
-    const types = { png: "image/png", jpg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf" } as const;
-    const extension = fileName.split(".").at(-1)! as keyof typeof types;
-    snapshot.records.push(createAssetRecord({ fileName: "fixture." + extension, mimeType: types[extension], byteLength: bytes.length,
+    const extension = fileName.split(".").at(-1)!;
+    const mimeType = assetMimeTypeForExtension(extension);
+    if (mimeType === undefined || !isValidAssetType(mimeType)) throw new Error(`Missing MIME contract for ${extension}`);
+    snapshot.records.push(createAssetRecord({ fileName: "fixture." + extension, mimeType, byteLength: bytes.length,
       checksum: fileName.slice(7, 71) }, { id: `fixture-${snapshot.records.length}` }));
     await writeFile(join(sandbox, ASSET_FILE_PROVIDER_ROOT, "catalog.json"), JSON.stringify(snapshot));
   }
@@ -699,6 +723,26 @@ describe("dev/build registration boundary", () => {
       expect(await responseBytes(retained)).toEqual(Buffer.from(original));
     });
 
+    it("uses the checksum filename for ZIP downloads on GET, HEAD and authoring redirects", async () => {
+      const store = await createFilesystemAssetStore({ assetsStoreRoot: join(sandbox, ASSET_FILE_PROVIDER_ROOT) });
+      const bytes = Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]);
+      const record = await store.upload({ fileName: "archive.docx", declaredMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", bytes });
+      const url = record.document.versions[0]!.url;
+      const middleware = createAssetFileMiddleware({ workspaceRoot: sandbox, createStore: async () => store });
+      const get = assetResponse(); await invokeRegistered([middleware], assetRequest("GET", url), get);
+      const checksum = record.document.versions[0]!.checksum;
+      expect(get.headers).toMatchObject({ "content-type": "application/zip", "content-disposition": `attachment; filename="${checksum}.zip"`, "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff" });
+      expect(await responseBytes(get)).toEqual(Buffer.from(bytes));
+      const head = assetResponse(); await invokeRegistered([middleware], assetRequest("HEAD", url), head);
+      expect(head.headers).toEqual(get.headers);
+      expect(await responseBytes(head)).toEqual(Buffer.alloc(0));
+      for (const method of ["GET", "HEAD"]) {
+        const redirect = assetResponse(); await invokeRegistered([middleware], assetRequest(method, `/uploaded-assets/asset-${record.id}`), redirect);
+        expect(redirect.statusCode).toBe(307);
+        expect(redirect.headers.location).toBe(url);
+      }
+    });
+
     it("serves files created after middleware registration with the stored byte type", async () => {
       const { middlewares } = await setupServeServer();
       const variants = [
@@ -707,6 +751,8 @@ describe("dev/build registration boundary", () => {
         ["gif", "image/gif", Uint8Array.from([0x47, 0x49, 0x46, 0x38, 3])],
         ["webp", "image/webp", Uint8Array.from([0x52, 0x49, 0x46, 0x46, 4])],
         ["pdf", "application/pdf", Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 5])],
+        ["zip", "application/zip", Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 6])],
+        ["txt", "text/plain", Uint8Array.from([7, 8, 9])],
       ] as const;
 
       for (const [extension, contentType, bytes] of variants) {
@@ -721,6 +767,7 @@ describe("dev/build registration boundary", () => {
           "content-length": String(bytes.byteLength),
           "cache-control": "public, max-age=31536000, immutable",
           "x-content-type-options": "nosniff",
+          ...(assetContentDisposition(contentType, fileName.slice(7, 71)) === undefined ? {} : { "content-disposition": assetContentDisposition(contentType, fileName.slice(7, 71)) }),
         });
         await expect(responseBytes(response)).resolves.toEqual(Buffer.from(bytes));
       }

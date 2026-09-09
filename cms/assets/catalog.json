@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "mutationToken": "325dd9c33d6a053378207157ad2ef1e531b6539f0d4e8575efc2fa644ac21e0b",
+  "mutationToken": "bc028e060fac9f490b1d7815d8be568222a8e5fcca52ea56ee328a27b3faf15b",
   "records": [
     {
       "id": "assets-b9033527-b1cc-42ad-9f58-5b7075acc23b",
@@ -98,6 +98,56 @@
             "byteLength": 5380,
             "url": "/uploaded-assets/sha256-849da52a0b7f631df48cacfeb1417e7067993aea5deffda87b5c2dd67c6aabda.png",
             "createdAt": "2026-09-09T17:30:17.537Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-21f3f33e-6f07-4e70-918a-92e20bbfdd9b",
+      "revision": 1,
+      "createdAt": "2026-09-09T19:18:30.328Z",
+      "updatedAt": "2026-09-09T19:18:30.328Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-21f3f33e-6f07-4e70-918a-92e20bbfdd9b",
+        "fileName": "demo-guide.pdf",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "554f5147984d75fe7e43c6f15d08e3d52097907a122299c06613e84b3b4c8749",
+        "versions": [
+          {
+            "id": "554f5147984d75fe7e43c6f15d08e3d52097907a122299c06613e84b3b4c8749",
+            "checksum": "554f5147984d75fe7e43c6f15d08e3d52097907a122299c06613e84b3b4c8749",
+            "mimeType": "application/pdf",
+            "byteLength": 142,
+            "url": "/uploaded-assets/sha256-554f5147984d75fe7e43c6f15d08e3d52097907a122299c06613e84b3b4c8749.pdf",
+            "createdAt": "2026-09-09T19:18:30.328Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-c2b36b33-e5e7-41d5-bc67-b571955c47eb",
+      "revision": 1,
+      "createdAt": "2026-09-09T19:18:30.375Z",
+      "updatedAt": "2026-09-09T19:18:30.375Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-c2b36b33-e5e7-41d5-bc67-b571955c47eb",
+        "fileName": "demo-archive.zip",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "0e44e3a01233931024a8f1161657823d7ac0bbc9cbcffbf300d48811926ecd35",
+        "versions": [
+          {
+            "id": "0e44e3a01233931024a8f1161657823d7ac0bbc9cbcffbf300d48811926ecd35",
+            "checksum": "0e44e3a01233931024a8f1161657823d7ac0bbc9cbcffbf300d48811926ecd35",
+            "mimeType": "application/zip",
+            "byteLength": 185,
+            "url": "/uploaded-assets/sha256-0e44e3a01233931024a8f1161657823d7ac0bbc9cbcffbf300d48811926ecd35.zip",
+            "createdAt": "2026-09-09T19:18:30.375Z"
           }
         ]
       }

@@ -1,24 +1,47 @@
 import type { RecordId } from "../../shared";
+import {
+  ASSET_ACCEPT,
+  ASSET_CHECKSUM_FILE_NAME_PATTERN,
+  ASSET_CHECKSUM_URL_PATTERN,
+  ASSET_CONTENT_TYPE_BY_EXTENSION,
+  ASSET_EXTENSION_ALTERNATION,
+  ASSET_EXTENSION_BY_TYPE,
+  ASSET_IMMUTABLE_CACHE_CONTROL,
+  ASSET_KINDS,
+  ASSET_NOSNIFF,
+  ASSET_PIN_FILE_NAME_PATTERN,
+  ASSET_TYPES,
+  ASSET_TYPE_ALLOWLIST,
+  assetContentDisposition,
+  assetKindForMime,
+  assetMimeTypeForExtension,
+} from "./asset-kinds.mjs";
+export {
+  ASSET_ACCEPT,
+  ASSET_CHECKSUM_FILE_NAME_PATTERN,
+  ASSET_CHECKSUM_URL_PATTERN,
+  ASSET_CONTENT_TYPE_BY_EXTENSION,
+  ASSET_EXTENSION_ALTERNATION,
+  ASSET_EXTENSION_BY_TYPE,
+  ASSET_IMMUTABLE_CACHE_CONTROL,
+  ASSET_KINDS,
+  ASSET_NOSNIFF,
+  ASSET_PIN_FILE_NAME_PATTERN,
+  ASSET_TYPES,
+  ASSET_TYPE_ALLOWLIST,
+  assetContentDisposition,
+  assetKindForMime,
+  assetMimeTypeForExtension,
+};
+export type { AssetKindDescriptor, AssetKindName } from "./asset-kinds.mjs";
 
 /** The only Assets document schema understood by this build. */
 export const ASSET_SCHEMA_VERSION = 1 as const;
 export type AssetSchemaVersion = typeof ASSET_SCHEMA_VERSION;
 
-/**
- * Assets types accepted by the first Assets provider.  Keep this list in the
- * domain so every provider applies the same boundary to untrusted metadata.
- */
-export const ASSET_TYPES = [
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-  "application/pdf",
-] as const;
 export type AssetType = (typeof ASSET_TYPES)[number];
-
-/** Alias retained as a descriptive name for callers building MIME pickers. */
-export const ASSET_TYPE_ALLOWLIST = ASSET_TYPES;
+export type AssetExtension = (typeof ASSET_KINDS)[keyof typeof ASSET_KINDS]["extension"];
+export type AssetKind = (typeof ASSET_KINDS)[keyof typeof ASSET_KINDS]["kind"];
 
 /** Maximum display filename length, measured in Unicode code points. */
 export const ASSET_FILE_NAME_MAX_LENGTH = 255;
@@ -89,11 +112,6 @@ export interface AssetVersionPin extends AssetVersionRef {
   url: string;
 }
 export interface AssetPinManifest { schemaVersion: 1; pins: AssetVersionPin[] }
-
-export const ASSET_EXTENSION_BY_TYPE = {
-  "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif",
-  "image/webp": "webp", "application/pdf": "pdf",
-} as const;
 
 export function assetVersionUrl(checksum: string, mimeType: AssetType): string {
   return `/uploaded-assets/sha256-${checksum}.${ASSET_EXTENSION_BY_TYPE[mimeType]}`;
