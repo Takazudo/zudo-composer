@@ -54,12 +54,23 @@ function modeFromMediaQuery(query: Pick<MediaQueryList, "matches"> | undefined):
   return query?.matches ? "cluster" : "outline";
 }
 
-function sameMeasurements(previous: Measurements, width: number, height: number, heights: ReadonlyMap<string, number>): boolean {
-  if (previous.viewportWidth !== width || previous.viewportHeight !== height || previous.heights.size !== heights.size) return false;
+function sameHeights(previous: NodeHeights, heights: NodeHeights): boolean {
+  if (previous.size !== heights.size) return false;
   for (const [id, height] of heights) {
-    if (previous.heights.get(id) !== height) return false;
+    if (previous.get(id) !== height) return false;
   }
   return true;
+}
+
+function contentBox(scroller: HTMLElement): { width: number; height: number } {
+  const style = getComputedStyle(scroller);
+  const pixels = (value: string): number => Number.parseFloat(value) || 0;
+  // client dimensions include padding. Feeding that padding back into the
+  // child viewport grows an intrinsically sized scroller on every observation.
+  return {
+    width: Math.max(0, scroller.clientWidth - pixels(style.paddingLeft) - pixels(style.paddingRight)),
+    height: Math.max(0, scroller.clientHeight - pixels(style.paddingTop) - pixels(style.paddingBottom)),
+  };
 }
 
 function nodeMap(document: SitemapDocument): ReadonlyMap<string, SitemapNodeModel> {
@@ -123,7 +134,7 @@ export function SitemapCanvas({
   const layout = useMemo(() => document.root.length === 0
     ? null
     : layoutSitemap(logicalTree, measurements.heights, measurements.viewportWidth, layoutMode),
-  [document, layoutMode, logicalTree, measurements]);
+  [document, layoutMode, logicalTree, measurements.heights, measurements.viewportWidth]);
 
   useEffect(() => {
     if (typeof globalThis.matchMedia !== "function") return undefined;
@@ -141,16 +152,18 @@ export function SitemapCanvas({
     // `offsetHeight` rather than `getBoundingClientRect()`: the stage carries a
     // zoom transform, and a transformed rect would feed a scaled height back
     // into the layout that produced it.
-    const viewportWidth = scroller.clientWidth;
-    const viewportHeight = scroller.clientHeight;
+    const { width: viewportWidth, height: viewportHeight } = contentBox(scroller);
     const heights = new Map<string, number>();
     for (const logical of logicalTree.nodes) {
       const element = nodeRefs.current.get(logical.node.id);
       if (element) heights.set(logical.node.id, Math.max(NODE_MIN_HEIGHT, element.offsetHeight));
     }
-    setMeasurements((previous) => sameMeasurements(previous, viewportWidth, viewportHeight, heights)
-      ? previous
-      : { viewportWidth, viewportHeight, heights });
+    setMeasurements((previous) => {
+      const stableHeights = sameHeights(previous.heights, heights) ? previous.heights : heights;
+      return previous.viewportWidth === viewportWidth && previous.viewportHeight === viewportHeight && previous.heights === stableHeights
+        ? previous
+        : { viewportWidth, viewportHeight, heights: stableHeights };
+    });
   }, [logicalTree]);
 
   const scheduleMeasure = useCallback(() => {
@@ -178,10 +191,13 @@ export function SitemapCanvas({
   const centerOnSelection = useCallback(() => {
     const scroller = scrollRef.current;
     const element = selectedId ? nodeRefs.current.get(selectedId) : undefined;
-    if (!scroller || !element) return;
-    scroller.scrollLeft = Math.max(0, (element.offsetLeft + element.offsetWidth / 2) * zoom - scroller.clientWidth / 2);
-    scroller.scrollTop = Math.max(0, (element.offsetTop + element.offsetHeight / 2) * zoom - scroller.clientHeight / 2);
-  }, [selectedId, zoom]);
+    if (!scroller || !element || !layout) return;
+    const { width, height } = contentBox(scroller);
+    const left = canvasStageMargin(measurements.viewportWidth, layout.width, zoom);
+    const top = canvasStageMargin(measurements.viewportHeight, layout.height, zoom);
+    scroller.scrollLeft = Math.max(0, left + (element.offsetLeft + element.offsetWidth / 2) * zoom - width / 2);
+    scroller.scrollTop = Math.max(0, top + (element.offsetTop + element.offsetHeight / 2) * zoom - height / 2);
+  }, [layout, measurements.viewportWidth, measurements.viewportHeight, selectedId, zoom]);
 
   /**
    * The selection this canvas has already brought into view.
@@ -209,7 +225,8 @@ export function SitemapCanvas({
   const fit = useCallback(() => {
     const scroller = scrollRef.current;
     if (!scroller || !layout || layout.width === 0) return;
-    const nextZoom = fitCanvasZoom(scroller.clientWidth, scroller.clientHeight, layout.width, layout.height);
+    const { width, height } = contentBox(scroller);
+    const nextZoom = fitCanvasZoom(width, height, layout.width, layout.height);
     onZoomChange(nextZoom);
     requestAnimationFrame(() => {
       const current = scrollRef.current;

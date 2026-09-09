@@ -163,3 +163,27 @@ test("the isolated preview document loads no shell stylesheet and no shell modul
 
   expect(failures).toEqual([]);
 });
+
+test("the sitemap canvas geometry stays fixed after opening", async ({ page }) => {
+  const failures = watchRuntimeFailures(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/sitemapper?provider=sitemap-filesystem&sitemap=sample-studio-sitemap&page=home-node");
+  await page.getByRole("radio", { name: "Canvas", exact: true }).click();
+  const scroller = page.locator(".sg-sitemapper-canvas__scroll");
+  await expect(scroller.locator(".sg-sitemapper-node-wrap").first()).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const sample = () => scroller.evaluate((element) => {
+    const stage = element.querySelector<HTMLElement>(".sg-sitemapper-canvas__stage")!;
+    return {
+      scrollHeight: element.scrollHeight,
+      stageTop: getComputedStyle(stage).top,
+      documentHeight: document.scrollingElement!.scrollHeight,
+    };
+  });
+  // Let initial node measurements settle, then compare independent samples.
+  await page.waitForTimeout(1000);
+  const first = await sample();
+  await page.waitForTimeout(1200);
+  expect(await sample()).toEqual(first);
+  expect(failures).toEqual([]);
+});

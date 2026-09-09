@@ -7,6 +7,9 @@ const css = readFileSync(resolve(process.cwd(), "src/features/sitemapper/styles/
 describe("Sitemapper canvas containment styles", () => {
   it("contains both axes in the canvas instead of the page", () => {
     const scrollRule = css.match(/\.sg-sitemapper-canvas__scroll\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(scrollRule).toContain("block-size: 100%");
+    expect(scrollRule).toContain("box-sizing: border-box");
+    expect(scrollRule).toContain("scrollbar-gutter: stable");
     expect(scrollRule).toContain("width: 100%");
     expect(scrollRule).toContain("max-width: 100%");
     expect(scrollRule).toContain("min-width: 0");
@@ -22,6 +25,8 @@ describe("Sitemapper canvas containment styles", () => {
     const stageRule = css.match(/\.sg-sitemapper-canvas__stage\s*\{([^}]*)\}/)?.[1] ?? "";
     expect(stageRule).toContain("transform-origin: 0 0");
     expect(stageRule).toContain("position: absolute");
+    const viewportRule = css.match(/\.sg-sitemapper-canvas__viewport\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(viewportRule).toContain("overflow: clip");
   });
 
   it("uses semantic z-index tokens and no numeric z-index", () => {

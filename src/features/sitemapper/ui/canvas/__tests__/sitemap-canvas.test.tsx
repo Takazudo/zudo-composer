@@ -1,8 +1,8 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SitemapDocument, SitemapNode } from "../../../../../sitemapper/model";
 import { SITEMAP_SCHEMA_VERSION } from "../../../../../sitemapper/model";
 import type { PageSourceLabel } from "../page-source";
@@ -16,9 +16,10 @@ class ResizeObserverStub {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
-beforeAll(() => {
+beforeEach(() => {
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
   vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
@@ -50,6 +51,77 @@ function props(document = doc(), sources: ReadonlyMap<string, PageSourceLabel> =
 }
 
 describe("SitemapCanvas", () => {
+  it.each(["cluster", "outline"] as const)("settles an indefinite padded %s scroller within two observer passes", async (layoutPreference) => {
+    let notify: () => void = () => {};
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: () => void) { notify = callback; }
+      observe(): void {}
+      disconnect(): void {}
+    });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    const { container } = render(<SitemapCanvas {...props()} layoutPreference={layoutPreference} />);
+    const scroller = container.querySelector<HTMLElement>(".sg-sitemapper-canvas__scroll")!;
+    const viewport = container.querySelector<HTMLElement>(".sg-sitemapper-canvas__viewport")!;
+    const stage = container.querySelector<HTMLElement>(".sg-sitemapper-canvas__stage")!;
+    scroller.style.padding = "16px";
+    Object.defineProperties(scroller, {
+      clientWidth: { get: () => 832 },
+      // Model the browser's content-derived height, including its padding.
+      clientHeight: { get: () => Number.parseFloat(viewport.style.height) + 32 },
+    });
+    const sample = () => ({ height: viewport.style.height, top: stage.style.top, width: stage.style.width });
+    const resize = async () => {
+      await act(() => {
+        notify();
+        notify(); // Coalesce a burst of node/scroller notifications.
+        expect(frames).toHaveLength(1);
+        frames.shift()!(0);
+      });
+    };
+    await resize();
+    await resize();
+    const settled = sample();
+    for (let pass = 0; pass < 4; pass += 1) {
+      await resize();
+      expect(sample()).toEqual(settled);
+    }
+    expect(viewport.style.width).toBe("800px");
+    expect(stage.style.top).toBe("0px");
+  });
+
+  it("uses available content dimensions for Fit and includes the stage margin when centering", async () => {
+    let notify: () => void = () => {};
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: () => void) { notify = callback; }
+      observe(): void {}
+      disconnect(): void {}
+    });
+    const callbacks = { ...props(), selectedId: "Child", zoom: 0.5, layoutPreference: "cluster" as const };
+    const { container } = render(<SitemapCanvas {...callbacks} />);
+    const scroller = container.querySelector<HTMLElement>(".sg-sitemapper-canvas__scroll")!;
+    scroller.style.padding = "16px";
+    Object.defineProperties(scroller, { clientWidth: { value: 832 }, clientHeight: { value: 132 } });
+    await act(() => {
+      notify();
+      frames.shift()!(0);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Fit", exact: true }));
+    // The two-row stage is 224px tall: 100 available pixels fit at 45%,
+    // whereas the 132px padding box would incorrectly choose 59%.
+    expect(callbacks.onZoomChange).toHaveBeenCalledWith(0.45);
+    const child = container.querySelectorAll<HTMLElement>(".sg-sitemapper-node-wrap")[1]!;
+    Object.defineProperties(child, {
+      offsetLeft: { value: 700 }, offsetTop: { value: 100 },
+      offsetWidth: { value: 200 }, offsetHeight: { value: 56 },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Center on selection" }));
+    expect(scroller.scrollLeft).toBe(200);
+    expect(scroller.scrollTop).toBe(14);
+  });
+
   it("offers Add child page for a Mapping-sourced canvas node", async () => {
     const value = doc(); value.root[0]!.source = { kind: "mapping", ref: { providerId: "mapping-filesystem", recordId: "articles" }, route: { kind: "entry-field", fieldId: "slug" } };
     const callbacks = props(value); render(<SitemapCanvas {...callbacks} />);
