@@ -21,7 +21,7 @@ import { isSafeRecordId } from "../../shared";
 const FIXTURE_TIMESTAMP = "2026-01-01T00:00:00.000Z";
 const FIXTURE_CHECKSUM = "0000000000000000000000000000000000000000000000000000000000000000";
 
-export interface MemoryMediaProviderOptions {
+export interface MemoryAssetProviderOptions {
   initialization?: AssetInitializationOutcome;
   failWrites?: boolean;
   records?: readonly AssetRecord[];
@@ -96,8 +96,8 @@ function scanInitialization(records: Iterable<unknown>): AssetInitializationOutc
     index += 1;
     const loaded = loadAssetRecord(raw);
     if (loaded.status === "loaded") summaries.push(summarizeAsset(loaded.record));
-    else if (loaded.status === "future-schema") failures.push({ id: rawId(raw, `media-unknown-${index}`), status: loaded.status, version: loaded.foundSchemaVersion });
-    else if (loaded.status === "invalid") failures.push({ id: rawId(raw, `media-unknown-${index}`), status: loaded.status });
+    else if (loaded.status === "future-schema") failures.push({ id: rawId(raw, `asset-unknown-${index}`), status: loaded.status, version: loaded.foundSchemaVersion });
+    else if (loaded.status === "invalid") failures.push({ id: rawId(raw, `asset-unknown-${index}`), status: loaded.status });
   }
   summaries.sort((a, b) => a.updatedAt === b.updatedAt ? a.id.localeCompare(b.id) : a.updatedAt > b.updatedAt ? -1 : 1);
   if (failures.length === 0) return { status: "ready", summaries };
@@ -112,8 +112,8 @@ function scanInitialization(records: Iterable<unknown>): AssetInitializationOutc
       affectedRecordIds: failures.map((failure) => failure.id),
       ...(future?.version === undefined ? {} : { foundSchemaVersion: future.version }),
       message: future === undefined
-        ? "Media storage contains malformed records. The source data was preserved."
-        : "Media storage contains records from a newer schema. The source data was preserved.",
+        ? "Asset storage contains malformed records. The source data was preserved."
+        : "Asset storage contains records from a newer schema. The source data was preserved.",
     },
   };
 }
@@ -138,15 +138,15 @@ function cloneInitialization(outcome: AssetInitializationOutcome): AssetInitiali
  * store/provider shape as the production provider without touching browser or
  * filesystem APIs.
  */
-export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = {}): AssetProvider {
+export function createMemoryAssetProvider(options: MemoryAssetProviderOptions = {}): AssetProvider {
   const records = new Map<string, unknown>();
   (options.records ?? []).forEach((record, index) => {
     const raw = record as unknown;
-    records.set(rawId(raw, `media-unknown-${index + 1}`), structuredClone(raw));
+    records.set(rawId(raw, `asset-unknown-${index + 1}`), structuredClone(raw));
   });
   const bytes = new Map<string, Uint8Array>(Object.entries(options.bytes ?? {}).map(([id, value]) => [id, cloneBytes(value)]));
   const missingBytes = new Set(options.missingBytes ?? []);
-  const provider = { id: "media-memory", label: "In-memory Media" } as const;
+  const provider = { id: "asset-memory", label: "In-memory Asset" } as const;
 
   const summaries = (): AssetSummary[] => [...records.values()].flatMap((raw) => {
     const loaded = loadAssetRecord(raw);
@@ -158,7 +158,7 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
     : cloneInitialization(options.initialization);
 
   const failWrite = (operation: "put" | "delete" | "seed" | "clear"): never => {
-    throw new AssetPersistenceError(operation, "write-failed", "Media fixture write failed.", true);
+    throw new AssetPersistenceError(operation, "write-failed", "Asset fixture write failed.", true);
   };
 
   const store: AssetStore = {
@@ -231,7 +231,7 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
             status: "error",
             error: error instanceof AssetPersistenceError
               ? error
-              : new AssetPersistenceError("clear", "unknown", "Starting fresh Media storage failed.", true, { cause: error }),
+              : new AssetPersistenceError("clear", "unknown", "Starting fresh Asset storage failed.", true, { cause: error }),
           };
         }
       },
@@ -241,14 +241,14 @@ export function createMemoryMediaProvider(options: MemoryMediaProviderOptions = 
 
 const defaultRecord = createAssetRecord({ fileName: "sample.png", mimeType: "image/png", byteLength: 12, checksum: FIXTURE_CHECKSUM }, { id: "sample-image", timestamp: FIXTURE_TIMESTAMP });
 
-export type MediaRenderFixtureName = "populated" | "empty" | "broken";
+export type AssetRenderFixtureName = "populated" | "empty" | "broken";
 
-/** Stable fixtures used by the Media route and its controller tests. */
-export const mediaRenderFixtures: Readonly<Record<MediaRenderFixtureName, () => { provider: AssetProvider }>> = Object.freeze({
-  populated: () => ({ provider: createMemoryMediaProvider({ records: [defaultRecord] }) }),
-  empty: () => ({ provider: createMemoryMediaProvider() }),
+/** Stable fixtures used by the Asset route and its controller tests. */
+export const assetRenderFixtures: Readonly<Record<AssetRenderFixtureName, () => { provider: AssetProvider }>> = Object.freeze({
+  populated: () => ({ provider: createMemoryAssetProvider({ records: [defaultRecord] }) }),
+  empty: () => ({ provider: createMemoryAssetProvider() }),
   broken: () => ({
-    provider: createMemoryMediaProvider({
+    provider: createMemoryAssetProvider({
       initialization: {
         status: "recovery-required",
         summaries: [],
@@ -256,9 +256,9 @@ export const mediaRenderFixtures: Readonly<Record<MediaRenderFixtureName, () => 
           kind: "quarantined",
           reason: "future-schema",
           sourcePreserved: true,
-          affectedRecordIds: ["future-media"],
+          affectedRecordIds: ["future-asset"],
           foundSchemaVersion: 3,
-          message: "A newer Media record was preserved.",
+          message: "A newer Asset record was preserved.",
         },
       },
     }),
@@ -266,6 +266,6 @@ export const mediaRenderFixtures: Readonly<Record<MediaRenderFixtureName, () => 
 });
 
 /** Default fixture factory used by route harnesses. */
-export function createDefaultMemoryMediaProvider(): AssetProvider {
-  return createMemoryMediaProvider({ records: [defaultRecord] });
+export function createDefaultMemoryAssetProvider(): AssetProvider {
+  return createMemoryAssetProvider({ records: [defaultRecord] });
 }

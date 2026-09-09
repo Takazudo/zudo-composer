@@ -70,7 +70,7 @@ describe("local release capability bridge", () => {
       .rejects.toThrow("Activated release toolchain does not match the current installed runtime.");
   });
   it("passes the isolated Assets root to the release service without exposing a client path", async () => {
-    const assetsStoreRoot = "/tmp/release-bridge-isolated/media";
+    const assetsStoreRoot = "/tmp/release-bridge-isolated/assets";
     const h = harness(false, undefined, assetsStoreRoot);
     const { done } = await h.request();
     await vi.waitFor(() => expect(h.client.send).toHaveBeenCalled());

@@ -19,13 +19,13 @@ import {
 } from "../../components/library-page";
 import { Button, Checkbox, SegmentedControl, type DataTableColumn } from "../../components/ui";
 import { compareAssetSummariesNewestFirst } from "../../assets";
-import type { MediaDimensionStore } from "./media-dimensions";
-import { formatBytes, isMediaImage, mediaCaption, mediaTypeLabel } from "./media-format";
-import { MediaThumb } from "./media-thumb";
+import type { AssetDimensionStore } from "./assets-dimensions";
+import { formatBytes, isAssetImage, assetCaption, assetTypeLabel } from "./assets-format";
+import { AssetThumb } from "./assets-thumb";
 
-export type MediaTypeFilter = "all" | "images" | "pdfs";
+export type AssetTypeFilter = "all" | "images" | "pdfs";
 
-export const MEDIA_SORTS: readonly LibrarySort<AssetSummary>[] = [
+export const ASSET_SORTS: readonly LibrarySort<AssetSummary>[] = [
   { id: "newest", label: "Newest", compare: compareAssetSummariesNewestFirst },
   { id: "oldest", label: "Oldest", compare: (a, b) => compareAssetSummariesNewestFirst(b, a) },
   { id: "name", label: "Name", compare: (a, b) => a.fileName.localeCompare(b.fileName) },
@@ -40,24 +40,24 @@ export const MEDIA_SORTS: readonly LibrarySort<AssetSummary>[] = [
  * menus, and the prototype's control is a `SegmentedControl` carrying counts.
  * The definition and the control therefore live together here.
  */
-const MEDIA_TYPE_FILTER_ID = "type";
+const ASSET_TYPE_FILTER_ID = "type";
 
-export const MEDIA_TYPE_FACET: LibraryFacet<AssetSummary> = {
-  id: MEDIA_TYPE_FILTER_ID,
+export const ASSET_TYPE_FACET: LibraryFacet<AssetSummary> = {
+  id: ASSET_TYPE_FILTER_ID,
   label: "Type",
   options: [
     { id: "all", label: "All" },
-    { id: "images", label: "Images", match: isMediaImage },
-    { id: "pdfs", label: "PDFs", match: (row) => !isMediaImage(row) },
+    { id: "images", label: "Images", match: isAssetImage },
+    { id: "pdfs", label: "PDFs", match: (row) => !isAssetImage(row) },
   ],
 };
 
-export interface MediaLibraryProps {
+export interface AssetLibraryProps {
   /** Every asset in the library, for the filter counts and the pager total. */
   records: readonly AssetSummary[];
   query: LibraryQueryController<AssetSummary>;
   selection: LibrarySelectionController<AssetSummary>;
-  dimensions: MediaDimensionStore;
+  dimensions: AssetDimensionStore;
   view: LibraryView;
   onViewChange(view: LibraryView): void;
   /** The asset the detail panel is showing. */
@@ -75,7 +75,7 @@ export interface MediaLibraryProps {
 const CONTRACT: LibraryRowContract<AssetSummary> = {
   id: (row) => row.id,
   name: (row) => row.fileName,
-  // No `kind` accessor: the media type is a column of its own here rather than
+  // No `kind` accessor: the asset type is a column of its own here rather than
   // a chip, because it is the value the type filter above is narrowing on.
   //
   // The built-in timestamp column reads `Added` because there is no way to
@@ -84,7 +84,7 @@ const CONTRACT: LibraryRowContract<AssetSummary> = {
   updatedAt: (row) => row.createdAt,
 };
 
-export function MediaLibrary({
+export function AssetLibrary({
   records,
   query,
   selection,
@@ -98,13 +98,13 @@ export function MediaLibrary({
   onDelete,
   bulkBar,
   uploadPanel,
-}: MediaLibraryProps): JSX.Element {
-  const imageCount = records.filter(isMediaImage).length;
-  const filter = query.facetValue(MEDIA_TYPE_FILTER_ID) as MediaTypeFilter;
+}: AssetLibraryProps): JSX.Element {
+  const imageCount = records.filter(isAssetImage).length;
+  const filter = query.facetValue(ASSET_TYPE_FILTER_ID) as AssetTypeFilter;
   const totalBytes = records.reduce((sum, record) => sum + record.byteLength, 0);
 
   const columns: readonly DataTableColumn<AssetSummary>[] = [
-    { key: "type", header: "Type", variant: "muted", cell: (row) => mediaTypeLabel(row.mimeType) },
+    { key: "type", header: "Type", variant: "muted", cell: (row) => assetTypeLabel(row.mimeType) },
     { key: "size", header: "Size", variant: "num", cell: (row) => formatBytes(row.byteLength) },
   ];
 
@@ -121,7 +121,7 @@ export function MediaLibrary({
   const noMatch = <LibraryNoMatch search={query.search} onClearFilters={query.clearFilters} />;
 
   return (
-    <div class="sg-media-browser">
+    <div class="sg-assets-browser">
       <LibraryToolbar
         // The toolbar renders one menu per facet, and this route's single facet
         // is the prototype's `SegmentedControl` instead. Handing it a
@@ -129,22 +129,22 @@ export function MediaLibrary({
         // search input while the two choice controls are placed by hand, in the
         // prototype's order.
         query={{ ...query, facets: [], sorts: [] }}
-        searchLabel="Filter media"
+        searchLabel="Filter assets"
         searchPlaceholder="Filter by file name or ID"
         end={<LibraryViewToggle value={view} onChange={onViewChange} tableLabel="List view" cardsLabel="Grid view" />}
       >
-        <SegmentedControl<MediaTypeFilter>
+        <SegmentedControl<AssetTypeFilter>
           label="Type"
           size="sm"
           value={filter}
-          onChange={(next) => query.setFacetValue(MEDIA_TYPE_FILTER_ID, next)}
+          onChange={(next) => query.setFacetValue(ASSET_TYPE_FILTER_ID, next)}
           options={[
             { value: "all", label: <TypeSegment label="All" count={records.length} /> },
             { value: "images", label: <TypeSegment label="Images" count={imageCount} /> },
             { value: "pdfs", label: <TypeSegment label="PDFs" count={records.length - imageCount} /> },
           ]}
         />
-        <LibrarySortMenu sorts={MEDIA_SORTS} value={query.sortId} onChange={query.setSortId} />
+        <LibrarySortMenu sorts={ASSET_SORTS} value={query.sortId} onChange={query.setSortId} />
       </LibraryToolbar>
 
       {uploadPanel}
@@ -153,9 +153,9 @@ export function MediaLibrary({
         <>
           {bulkBar ? <div class="cms-table__bulk">{bulkBar}</div> : null}
           {query.rows.length === 0 ? noMatch : (
-            <ul class="sg-media-grid" aria-label="Media assets">
+            <ul class="sg-assets-grid" aria-label="Assets">
               {query.rows.map((row) => (
-                <MediaTile
+                <AssetTile
                   key={row.id}
                   record={row}
                   dimensions={dimensions}
@@ -172,7 +172,7 @@ export function MediaLibrary({
         </>
       ) : (
         <LibraryTable
-          caption="Media assets"
+          caption="Assets"
           rows={query.rows}
           contract={CONTRACT}
           columns={columns}
@@ -195,14 +195,14 @@ function TypeSegment({ label, count }: { label: string; count: number }): JSX.El
   return (
     <>
       {label}
-      <span class="sg-media-seg__count">{count}</span>
+      <span class="sg-assets-seg__count">{count}</span>
     </>
   );
 }
 
-interface MediaTileProps {
+interface AssetTileProps {
   record: AssetSummary;
-  dimensions: MediaDimensionStore;
+  dimensions: AssetDimensionStore;
   active: boolean;
   selected: boolean;
   onToggleSelected(selected: boolean): void;
@@ -211,13 +211,13 @@ interface MediaTileProps {
   rowMenu: RowMenuProps;
 }
 
-function MediaTile({ record, dimensions, active, selected, onToggleSelected, onActivate, onCopyUrl, rowMenu }: MediaTileProps): JSX.Element {
+function AssetTile({ record, dimensions, active, selected, onToggleSelected, onActivate, onCopyUrl, rowMenu }: AssetTileProps): JSX.Element {
   return (
-    <li class={`sg-media-asset${active ? " sg-media-asset--active" : ""}${selected ? " sg-media-asset--selected" : ""}`}>
-      <div class="sg-media-asset__thumb">
+    <li class={`sg-assets-asset${active ? " sg-assets-asset--active" : ""}${selected ? " sg-assets-asset--selected" : ""}`}>
+      <div class="sg-assets-asset__thumb">
         <button
           type="button"
-          class="sg-media-asset__open"
+          class="sg-assets-asset__open"
           // The tile is the route's way into the detail panel, and the panel
           // shows exactly one asset — `aria-current` says which, where
           // `aria-pressed` would promise a toggle that clicking again does not
@@ -226,21 +226,21 @@ function MediaTile({ record, dimensions, active, selected, onToggleSelected, onA
           aria-label={`Show details for ${record.fileName}`}
           onClick={onActivate}
         >
-          <MediaThumb record={record} dimensions={dimensions} />
+          <AssetThumb record={record} dimensions={dimensions} />
         </button>
-        <span class="sg-media-asset__check">
+        <span class="sg-assets-asset__check">
           <Checkbox checked={selected} onCheckedChange={onToggleSelected} aria-label={record.fileName} />
         </span>
-        <span class="sg-media-asset__acts">
+        <span class="sg-assets-asset__acts">
           <Button size="sm" iconOnly aria-label={`Copy URL for ${record.fileName}`} onClick={onCopyUrl}>
             <CopyIcon size="sm" />
           </Button>
           <RowMenu {...rowMenu} />
         </span>
       </div>
-      <div class="sg-media-asset__caption">
-        <span class="sg-media-asset__name" title={record.fileName}>{record.fileName}</span>
-        <span class="sg-media-asset__meta">{mediaCaption(record, dimensions.get(record.id))}</span>
+      <div class="sg-assets-asset__caption">
+        <span class="sg-assets-asset__name" title={record.fileName}>{record.fileName}</span>
+        <span class="sg-assets-asset__meta">{assetCaption(record, dimensions.get(record.id))}</span>
       </div>
     </li>
   );

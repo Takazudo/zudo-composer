@@ -6,9 +6,9 @@ import type { LibraryTimestamp } from "./library-format";
 // The row contract every library route implements (issue #164).
 //
 // `LibraryTable` is generic over the route's own record type — a
-// `CompositionSummary`, a `SitemapRecord`, a media asset — and reads it only
+// `CompositionSummary`, a `SitemapRecord`, an asset — and reads it only
 // through these accessors. Routes therefore keep their domain types; nothing
-// here names compositions, mappings, sitemaps or media.
+// here names compositions, mappings, sitemaps or assets.
 
 /** The chip in the built-in `Kind` column. */
 export interface LibraryKindTag {

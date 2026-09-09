@@ -8,7 +8,7 @@ import { RowMenu, type RowMenuProps } from "./row-menu";
 // The library table (issue #164): the shared `DataTable` with the name, kind
 // and updated columns the pattern always has, and the route's own columns in
 // between. Everything it knows about a record comes through
-// `LibraryRowContract`, so Compositions, Mappings, Sitemaps and Media share
+// `LibraryRowContract`, so Compositions, Mappings, Sitemaps and Assets share
 // one table without the component naming any of them.
 
 /** An absent value reads as an em dash, and stays out of the accessible name. */

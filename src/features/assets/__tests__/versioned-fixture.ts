@@ -9,9 +9,9 @@ import type { AssetContentServices } from "../../../assets/integration/content";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 export const PNG = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
-export const PDF = new TextEncoder().encode("%PDF-1.7\nsynthetic media");
+export const PDF = new TextEncoder().encode("%PDF-1.7\nsynthetic asset");
 export async function providerFixture() {
-  const root = await mkdtemp(join(tmpdir(), "media-ui-")); roots.push(root);
+  const root = await mkdtemp(join(tmpdir(), "asset-ui-")); roots.push(root);
   const filesystem = await createFilesystemAssetStore({ assetsStoreRoot: root });
   const blobBytes = (file: Blob) => new Promise<Uint8Array>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer)); reader.onerror = reject; reader.readAsArrayBuffer(file); });
   const store = new Proxy(filesystem, { get(target, property) {

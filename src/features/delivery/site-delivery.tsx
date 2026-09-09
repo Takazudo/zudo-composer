@@ -43,8 +43,8 @@ export async function loadWorkingPreviewSnapshot(providers: ProductionProviderIn
     }
     const validated = validateSiteProject(project, { componentPack: providers.componentProvider.manifest });
     if (!validated.ok) return { status: "validation-error", message: validated.diagnostics.map(({ message }) => message).join(" ") };
-    const assetSnapshot = capture?.values[`media:${providers.assetProvider?.descriptor.id}`];
-    if (capture && !validateAssetSnapshot(assetSnapshot)) return { status: "compiler-error", message: "Aggregate capture has no valid Media snapshot." };
+    const assetSnapshot = capture?.values[`assets:${providers.assetProvider?.descriptor.id}`];
+    if (capture && !validateAssetSnapshot(assetSnapshot)) return { status: "compiler-error", message: "Aggregate capture has no valid Asset snapshot." };
     const compilation = await compileWithCapturedAsset(validated.project, { catalog: providers.componentProvider.catalog, assetStore: providers.assetProvider?.store,
       ...(capture ? { snapshot: assetSnapshot as import("../../assets/model").AssetSnapshot, isCaptureCurrent: () => providers.isCaptureCurrent(capture!) } : {}),
     });

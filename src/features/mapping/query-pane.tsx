@@ -60,7 +60,7 @@ export function CollectionQueryPane({ state, onModeChange, onQueryChange, onOpen
               <option value="include-drafts">Include drafts</option>
             </Select>
           </Field>
-          {unsupportedFields.length ? <p class="cms-mapping-query__help" role="status">Structured, media and reference fields are unavailable for deterministic query authoring: {unsupportedFields.map((field) => field.label).join(", ")}.</p> : null}
+          {unsupportedFields.length ? <p class="cms-mapping-query__help" role="status">Structured, asset and reference fields are unavailable for deterministic query authoring: {unsupportedFields.map((field) => field.label).join(", ")}.</p> : null}
           <ConditionEditor query={query} fields={fields} onChange={onQueryChange} />
           <SortEditor query={query} fields={fields} onChange={onQueryChange} />
           <PaneSection title="Ordered pins" class="cms-mapping-query__nested" action={<Button size="sm" variant="ghost" onClick={onOpenPins}><PlusIcon size="sm" />Choose</Button>}>

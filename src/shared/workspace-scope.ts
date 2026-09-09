@@ -12,7 +12,7 @@
 // `mappingsDir` / `sitemapsDir` meaningful — a host may point them anywhere,
 // and each still carries its own workspaces.
 //
-// Media is deliberately not scoped: the Media store is a separate provider that
+// Assets are deliberately not scoped: the Assets store is a separate provider that
 // is not one of the four authoring domains, and no workspace owns its bytes.
 
 import { join } from "node:path";

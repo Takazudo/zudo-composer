@@ -117,7 +117,7 @@ test("forced non-modal fallback restores Create project focus after Escape", asy
   await expect(trigger).toBeFocused();
 });
 
-// These focus tests intentionally precede the Media test below: the browser
+// These focus tests intentionally precede the Assets test below: the browser
 // runner shares one disposable source root within a spec, and that test
 // initializes a workspace through ensureDevWorkspace.
 
@@ -138,22 +138,22 @@ test("an unavailable workspace source stays explicit, not synthetic editable dat
   await expect(page.getByRole("button", { name: "Create fresh workspace", exact: true })).toBeVisible();
 });
 
-test("Media loading, unavailable and no-match states retain actionable truth", async ({ page }) => {
+test("Assets loading, unavailable and no-match states retain actionable truth", async ({ page }) => {
   await ensureDevWorkspace(page);
   let resume!: () => void;
   const paused = new Promise<void>((resolve) => { resume = resolve; });
-  await page.route("**/__zudo_composer_media_file_provider", async (route) => {
+  await page.route("**/__zudo_composer_asset_file_provider", async (route) => {
     await paused;
     await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "unavailable", message: "Injected browser availability failure" } }) });
   });
-  await page.goto("/media");
-  await expect(page.getByText("Loading media…", { exact: true })).toBeVisible();
+  await page.goto("/assets");
+  await expect(page.getByText("Loading assets…", { exact: true })).toBeVisible();
   resume();
   await expect(page.getByRole("button", { name: "Retry loading", exact: true })).toBeVisible();
   await expect(page.getByRole("alert").first()).toBeVisible();
-  await page.unroute("**/__zudo_composer_media_file_provider");
+  await page.unroute("**/__zudo_composer_asset_file_provider");
   await page.getByRole("button", { name: "Retry loading", exact: true }).click();
-  await page.getByRole("searchbox", { name: "Search media" }).fill("no-assets-can-match-this-browser-probe");
+  await page.getByRole("searchbox", { name: "Search assets" }).fill("no-assets-can-match-this-browser-probe");
   await expect(page.getByText("No assets match these filters.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Trash…", exact: true })).toBeDisabled();
 });

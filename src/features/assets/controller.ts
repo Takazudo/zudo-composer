@@ -2,11 +2,11 @@ import { summarizeAsset, type AssetProvider, type AssetSummary, type AssetSnapsh
 import type { AssetFileProviderStore } from "../../assets/storage/file-provider";
 import type { AssetContentServices, AssetUsageScan, AssetInsertionTarget, AssetUse } from "../../assets/integration/content";
 
-export interface MediaLibraryControllerOptions {
+export interface AssetLibraryControllerOptions {
   writeClipboard?: (text: string) => void | Promise<void>;
   contentServices?: AssetContentServices;
 }
-export interface MediaLibraryState {
+export interface AssetLibraryState {
   phase: "idle" | "loading" | "ready" | "recovery" | "error";
   records: readonly AssetSummary[];
   snapshot: AssetSnapshot | null;
@@ -18,21 +18,21 @@ export interface MediaLibraryState {
   generation: number;
   uncertain: boolean;
 }
-export function versionedMediaStore(provider: AssetProvider): AssetFileProviderStore | undefined {
+export function versionedAssetStore(provider: AssetProvider): AssetFileProviderStore | undefined {
   const store = provider.store as Partial<AssetFileProviderStore>;
   return store.capabilities?.snapshot && typeof store.snapshot === "function" ? store as AssetFileProviderStore : undefined;
 }
-export function mediaPublicFileName(record: Pick<AssetSummary, "url">): string { return record.url.split("/").at(-1)!; }
-export function mediaUrl(record: Pick<AssetSummary, "authoringUrl">): string { return record.authoringUrl; }
-export function mediaMarkdown(record: Pick<AssetSummary, "authoringUrl" | "fileName" | "mimeType">): string {
+export function assetPublicFileName(record: Pick<AssetSummary, "url">): string { return record.url.split("/").at(-1)!; }
+export function assetUrl(record: Pick<AssetSummary, "authoringUrl">): string { return record.authoringUrl; }
+export function assetMarkdown(record: Pick<AssetSummary, "authoringUrl" | "fileName" | "mimeType">): string {
   const label = record.fileName.replace(/\.[^.]+$/, "").replace(/([\\[\]])/g, "\\$1");
   return `${record.mimeType.startsWith("image/") ? "!" : ""}[${label}](${record.authoringUrl})`;
 }
-const message = (error: unknown) => error instanceof Error ? error.message : "Media operation failed.";
+const message = (error: unknown) => error instanceof Error ? error.message : "Asset operation failed.";
 
-export class MediaLibraryController {
-  private current: MediaLibraryState = { phase: "idle", records: [], snapshot: null, errorMessage: null, recoveryMessage: null, notice: null, busy: false, operation: null, generation: 0, uncertain: false };
-  private listeners = new Set<(state: MediaLibraryState) => void>();
+export class AssetLibraryController {
+  private current: AssetLibraryState = { phase: "idle", records: [], snapshot: null, errorMessage: null, recoveryMessage: null, notice: null, busy: false, operation: null, generation: 0, uncertain: false };
+  private listeners = new Set<(state: AssetLibraryState) => void>();
   private request = 0;
   private pending: Promise<unknown> = Promise.resolve();
   private drafts = new Map<string, { record: AssetSummary; patch: AssetMetadataPatch }>();
@@ -41,12 +41,12 @@ export class MediaLibraryController {
   private flushing: Promise<void> | undefined;
   readonly store: AssetFileProviderStore | undefined;
   readonly contentServices: AssetContentServices | undefined;
-  constructor(readonly provider: AssetProvider, private options: MediaLibraryControllerOptions = {}) {
-    this.store = versionedMediaStore(provider); this.contentServices = options.contentServices;
+  constructor(readonly provider: AssetProvider, private options: AssetLibraryControllerOptions = {}) {
+    this.store = versionedAssetStore(provider); this.contentServices = options.contentServices;
   }
   get state() { return this.current; }
-  subscribe(listener: (state: MediaLibraryState) => void) { this.listeners.add(listener); listener(this.current); return () => { this.listeners.delete(listener); }; }
-  private set(patch: Partial<MediaLibraryState>) { this.current = { ...this.current, ...patch }; for (const listener of this.listeners) listener(this.current); }
+  subscribe(listener: (state: AssetLibraryState) => void) { this.listeners.add(listener); listener(this.current); return () => { this.listeners.delete(listener); }; }
+  private set(patch: Partial<AssetLibraryState>) { this.current = { ...this.current, ...patch }; for (const listener of this.listeners) listener(this.current); }
   reportFailure(error: unknown) { this.set({ notice: { tone: "err", text: message(error) } }); }
   clearNotice() { this.set({ notice: null }); }
   async initialize() {
@@ -62,7 +62,7 @@ export class MediaLibraryController {
   async reload() {
     if (this.current.busy) throw new Error("Wait for the pending operation before inspecting current state.");
     await this.refresh();
-    if (this.current.phase !== "ready" || (this.store && !this.current.snapshot)) throw new Error("Authoritative Media inspection did not complete.");
+    if (this.current.phase !== "ready" || (this.store && !this.current.snapshot)) throw new Error("Authoritative Asset inspection did not complete.");
     this.pending = Promise.resolve();
     this.set({ uncertain: false, notice: { tone: "info", text: "Authoritative state reloaded. Inspect current records before starting a new operation; unsaved drafts retain their original revisions." } });
   }
@@ -77,7 +77,7 @@ export class MediaLibraryController {
   }
   capability(name: keyof NonNullable<AssetFileProviderStore["capabilities"]>): boolean { return this.current.phase === "ready" && !this.current.uncertain && this.store?.capabilities[name] === true; }
   private requireStore(capability: keyof AssetFileProviderStore["capabilities"]): AssetFileProviderStore {
-    if (!this.store || !this.capability(capability)) throw new Error(`Media ${capability} is unavailable for this provider.`);
+    if (!this.store || !this.capability(capability)) throw new Error(`Asset ${capability} is unavailable for this provider.`);
     return this.store;
   }
   /** Pending writes survive presentation unmount and are visible to release flush. */
@@ -148,8 +148,8 @@ export class MediaLibraryController {
     this.set({ generation: this.current.generation + 1, notice: null });
   }
   private mutate<T>(label: string, task: () => Promise<T>): Promise<T> {
-    if (this.current.busy) return Promise.reject(new Error("Wait for the current Media operation to finish."));
-    if (this.current.phase !== "ready" || this.current.uncertain) return Promise.reject(new Error("Reload authoritative Media state before making changes."));
+    if (this.current.busy) return Promise.reject(new Error("Wait for the current Asset operation to finish."));
+    if (this.current.phase !== "ready" || this.current.uncertain) return Promise.reject(new Error("Reload authoritative Asset state before making changes."));
     const pending = Promise.resolve().then(async () => {
       let committed = false;
       try { const result = await task(); committed = true; await this.refresh(); this.set({ notice: { tone: "info", text: `${label} saved.` } }); return result; }
@@ -225,14 +225,14 @@ export class MediaLibraryController {
     if (!this.contentServices) return Promise.reject(new Error("Content insertion is unavailable."));
     return this.mutate("Content usage", async () => {
       const current = await this.provider.store.get(value.asset.assetId);
-      if (value.asset.providerId !== this.provider.descriptor.id || current.status !== "loaded" || current.record.document.state !== "active") throw new Error("The selected Media asset is unavailable or trashed.");
+      if (value.asset.providerId !== this.provider.descriptor.id || current.status !== "loaded" || current.record.document.state !== "active") throw new Error("The selected asset is unavailable or trashed.");
       if (value.kind === "image" && !summarizeAsset(current.record).mimeType.startsWith("image/")) throw new Error("The asset is no longer an image. Choose another asset or presentation.");
       await this.contentServices!.insert(target, value);
     });
   }
   async copyUrl(record: AssetSummary) { await this.copy(record.authoringUrl); }
-  async copyMarkdown(record: AssetSummary) { await this.copy(mediaMarkdown(record)); }
+  async copyMarkdown(record: AssetSummary) { await this.copy(assetMarkdown(record)); }
   async copy(text: string) { await (this.options.writeClipboard ?? ((value) => navigator.clipboard.writeText(value)))(text); this.set({ notice: { tone: "info", text: "Copied." } }); }
   dispose() { this.request++; this.listeners.clear(); }
 }
-export function createMediaLibraryController(provider: AssetProvider, options?: MediaLibraryControllerOptions) { return new MediaLibraryController(provider, options); }
+export function createAssetLibraryController(provider: AssetProvider, options?: AssetLibraryControllerOptions) { return new AssetLibraryController(provider, options); }

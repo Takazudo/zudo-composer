@@ -495,7 +495,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     resolveComposition: async (ref) => { try { await ensureReady(); return initializedCompositionCatalog().resolveComposition(ref); } catch { return { status: "provider-unavailable" }; } },
   };
 
-  const sources = (includeMedia: boolean): WorkspaceSnapshotSource[] => {
+  const sources = (includeAssets: boolean): WorkspaceSnapshotSource[] => {
     if (!project || !workspaceId) throw new ProviderIntegrationError("snapshot", "Open a workspace before capture.");
     const result: WorkspaceSnapshotSource[] = [{ id: "workspace", token: async () => (await storage.open(workspaceId))!.mutationToken, read: async () => { const value = (await storage.open(workspaceId))!; return { mutationToken: value.mutationToken, value }; } }];
     for (const domain of ["compositions", "mappings", "sitemaps"] as const) for (const declared of project.providers[domain]) {
@@ -508,21 +508,21 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       const store = byDomain.content.get(browserProviderIdFor("content", declared.id) as "content-filesystem")!.store;
       result.push({ id: `content:${declared.id}`, token: async () => (await store.readAll()).mutationToken, read: async () => { const value = await store.readAll(); return { mutationToken: value.mutationToken, value }; } });
     }
-    if (includeMedia) {
-      if (!assetProvider) throw new ProviderIntegrationError("snapshot", "Media is unavailable; a release capture cannot claim a complete media snapshot.", false);
-      result.push({ id: `media:${assetProvider.descriptor.id}`, token: () => assetProvider.store.mutationToken(), read: async () => { const value = await assetProvider.store.snapshot(); return { mutationToken: value.mutationToken, value }; } });
+    if (includeAssets) {
+      if (!assetProvider) throw new ProviderIntegrationError("snapshot", "Assets are unavailable; a release capture cannot claim a complete assets snapshot.", false);
+      result.push({ id: `assets:${assetProvider.descriptor.id}`, token: () => assetProvider.store.mutationToken(), read: async () => { const value = await assetProvider.store.snapshot(); return { mutationToken: value.mutationToken, value }; } });
     }
     return result;
   };
-  const capture = async (includeMedia: boolean): Promise<WorkspaceCaptureOutcome> => {
+  const capture = async (includeAssets: boolean): Promise<WorkspaceCaptureOutcome> => {
     const ready = await lifecycle.initialize();
     if (ready.status === "error") return { status: "unavailable", source: ready.error.phase, error: ready.error };
-    try { return await captureWorkspaceSnapshot(workspaceId!, sessions, sources(includeMedia)); }
+    try { return await captureWorkspaceSnapshot(workspaceId!, sessions, sources(includeAssets)); }
     catch (cause) { return { status: "unavailable", source: "capabilities", error: integrationError("snapshot", cause, "Workspace capture capability is unavailable.") }; }
   };
   const isCaptureCurrent = async (value: WorkspaceCapture) => {
     await ensureReady();
-    return checkWorkspaceCapture(value, workspaceId!, sessions, sources(Object.keys(value.tokens).some((key) => key.startsWith("media:"))));
+    return checkWorkspaceCapture(value, workspaceId!, sessions, sources(Object.keys(value.tokens).some((key) => key.startsWith("assets:"))));
   };
   const openIntegration = async (id: string, creation?: WorkspaceCreateOptions): Promise<ProductionProviderIntegration> => {
     const next = createProductionProviderIntegration({ ...options, creation, workspaceId: id, saveRegistry: sessions });
@@ -562,7 +562,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       return create(initialProject, initialRevision);
     },
   };
-  const captureWithoutSessions = async (includeMedia: boolean): Promise<WorkspaceCaptureOutcome> => {
+  const captureWithoutSessions = async (includeAssets: boolean): Promise<WorkspaceCaptureOutcome> => {
     if (!project || !workspaceId) return { status: "unavailable", source: "workspace", error: new ProviderIntegrationError("snapshot", "Open a workspace before capture.") };
     const ready = await lifecycle.initialize();
     if (ready.status === "error") return { status: "unavailable", source: ready.error.phase, error: ready.error };
@@ -573,7 +573,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     let sourceList: WorkspaceSnapshotSource[];
     let current = "workspace";
     try {
-      sourceList = sources(includeMedia);
+      sourceList = sources(includeAssets);
       for (const source of sourceList) { current = source.id; before[source.id] = await source.token(); }
       for (const source of sourceList) { current = source.id; const snapshot = await source.read(); values[source.id] = snapshot.value; embedded[source.id] = snapshot.mutationToken; }
       const changed: string[] = [];
@@ -590,7 +590,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
    * the filesystem, and project captures depend on every authoring domain, so a write
    * landing inside the capture window is ordinary rather than exceptional. The
    * capture reports that as `changed`, which is a read asking to be repeated —
-   * and no caller repeats it, so a Media usage scan or a release preview that
+   * and no caller repeats it, so an Assets usage scan or a release preview that
    * happened to overlap one edit stayed unusable until something unrelated
    * triggered it again. Only a workspace that never holds still is an error.
    */

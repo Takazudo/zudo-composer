@@ -67,13 +67,13 @@ async function runCli(request, environment) {
 const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-site-project-browser-")));
 try {
   const releaseRoot = join(temporaryRoot, "release");
-  const mediaRoot = join(temporaryRoot, "media");
+  const assetsRoot = join(temporaryRoot, "assets");
   // The data root covers content, mappings, sitemaps and the workspace
   // registry. Without it the lane seeds its workspace into THIS repository's
   // `cms/`, which both leaves state behind and makes the run order matter.
   const dataRoot = join(temporaryRoot, "data");
-  await Promise.all([mkdir(releaseRoot), mkdir(mediaRoot), mkdir(dataRoot)]);
-  const environment = { ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_ASSETS_STORE_ROOT: mediaRoot, ZUDO_DATA_ROOT: dataRoot };
+  await Promise.all([mkdir(releaseRoot), mkdir(assetsRoot), mkdir(dataRoot)]);
+  const environment = { ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_ASSETS_STORE_ROOT: assetsRoot, ZUDO_DATA_ROOT: dataRoot };
   const project = /** @type {SiteProject} */ (JSON.parse(await readFile(join(root, "src/test/site-project-fixture.json"), "utf8")));
   const plan = /** @type {ReleasePlan} */ (/** @type {unknown} */ (await runCli({
     protocolVersion: 2,

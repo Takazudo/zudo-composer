@@ -38,7 +38,7 @@ describe("delivery routing", () => {
 
   it("rewrites rendered Markdown links and removes unsafe destinations", () => {
     const root = document.createElement("div");
-    root.innerHTML = '<div class="zc-prose-md"><a href="/about">About</a><a href="/uploaded-assets/photo.webp?variant=thumb#preview">Media</a><a href="#part">Part</a><a href="https://example.com">External</a><a href="java&#10;script:alert(1)">Unsafe</a></div>';
+    root.innerHTML = '<div class="zc-prose-md"><a href="/about">About</a><a href="/uploaded-assets/photo.webp?variant=thumb#preview">Asset</a><a href="#part">Part</a><a href="https://example.com">External</a><a href="java&#10;script:alert(1)">Unsafe</a></div>';
     normalizeDeliveryLinks(root);
     const anchors = root.querySelectorAll("a");
     expect(anchors[0]!.getAttribute("href")).toBe("/site/about");

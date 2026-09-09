@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { prepareDemoAsset } from "./prepare";
 it("exports only explicit assets and refuses allowlist checksum or metadata drift", async () => {
-  const root = await mkdtemp(join(tmpdir(), "hosted-media-"));
+  const root = await mkdtemp(join(tmpdir(), "hosted-assets-"));
   try {
     await cp(resolve("cms/assets"), root, { recursive: true });
     await writeFile(join(root, "private.txt"), "MUST NOT SHIP");

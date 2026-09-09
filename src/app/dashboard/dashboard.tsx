@@ -39,8 +39,8 @@ import {
 import { useWorkspaceView } from "./use-workspace-view";
 import "./dashboard.css";
 
-/** The Media stat card and the Storage row read the same three-way status. */
-type MediaStorageStatus = WorkspaceCounts["media"]["status"];
+/** The Asset stat card and the Storage row read the same three-way status. */
+type AssetStorageStatus = WorkspaceCounts["assets"]["status"];
 
 export interface DashboardProps {
   hostedDemo?: boolean;
@@ -66,10 +66,10 @@ const NEW_COMPOSITION_HREF = formatIntent({ route: "composer", action: "new" });
 export function Dashboard({ summary, now, hostedDemo = false }: DashboardProps): JSX.Element {
   const view = useWorkspaceView(summary);
   const { counts, recent, attention, loading, error, reload } = view;
-  const mediaReady = counts?.media.status === "ok";
+  const assetReady = counts?.assets.status === "ok";
   // Before the first read, no provider has answered either way; that reads the
   // same as `absent` rather than as an unreadable provider.
-  const mediaStatus: MediaStorageStatus = counts === null ? "absent" : counts.media.status;
+  const assetStatus: AssetStorageStatus = counts === null ? "absent" : counts.assets.status;
   const empty = counts !== null && isEmptyWorkspace(counts);
   // Recent activity and the attention list are answers about records. With no
   // summary mounted, or after one that rejected, there is no answer to give —
@@ -83,7 +83,7 @@ export function Dashboard({ summary, now, hostedDemo = false }: DashboardProps):
           <h1>{greeting(now)}</h1>
           <p>Everything in this workspace lives in this browser.</p>
         </div>
-        {empty ? null : <QuickActions mediaReady={mediaReady} />}
+        {empty ? null : <QuickActions assetReady={assetReady} />}
       </header>
 
       {error ? (
@@ -95,7 +95,7 @@ export function Dashboard({ summary, now, hostedDemo = false }: DashboardProps):
       {counts === null ? (
         loading ? <StatsSkeleton /> : null
       ) : empty ? (
-        <StartHere mediaReady={mediaReady} />
+        <StartHere assetReady={assetReady} />
       ) : (
         <section class="cms-dash__stats" aria-label="Workspace status">
           {statCards(counts).map((card) => (
@@ -167,14 +167,14 @@ export function Dashboard({ summary, now, hostedDemo = false }: DashboardProps):
             </div>
           </DashCard>
 
-          <StorageCard hostedDemo={hostedDemo} mediaStatus={mediaStatus} recentLastWrite={recent === null ? null : lastWrite(recent)} />
+          <StorageCard hostedDemo={hostedDemo} assetStatus={assetStatus} recentLastWrite={recent === null ? null : lastWrite(recent)} />
         </div>
       </div>
     </main>
   );
 }
 
-function QuickActions({ mediaReady }: { mediaReady: boolean }): JSX.Element {
+function QuickActions({ assetReady }: { assetReady: boolean }): JSX.Element {
   return (
     <div class="cms-dash__quick">
       <a class="cms-btn" href="/content">
@@ -186,25 +186,25 @@ function QuickActions({ mediaReady }: { mediaReady: boolean }): JSX.Element {
         New composition
       </a>
       {/* Upload authoring is dev-only, so the action appears only once the
-          Media provider has actually answered. */}
-      {mediaReady ? (
-        <a class="cms-btn cms-btn--primary" href="/media">
+          Asset provider has actually answered. */}
+      {assetReady ? (
+        <a class="cms-btn cms-btn--primary" href="/assets">
           <UploadIcon size="sm" />
-          Upload media
+          Upload assets
         </a>
       ) : null}
     </div>
   );
 }
 
-function StartHere({ mediaReady }: { mediaReady: boolean }): JSX.Element {
+function StartHere({ assetReady }: { assetReady: boolean }): JSX.Element {
   return (
     <section class="cms-dash__start" aria-label="Start here">
       <EmptyState
         icon={ComposerIcon}
         title="Start here"
         description="This workspace has no records yet. Define a Content model to hold the words, build a Composition to shape a page, then bind them with a Mapping and place them on a Sitemap."
-        action={<QuickActions mediaReady={mediaReady} />}
+        action={<QuickActions assetReady={assetReady} />}
       />
     </section>
   );
@@ -249,7 +249,7 @@ function StatCardView({ card, onRetry, retrying }: { card: StatCard; onRetry: ()
   }
 
   if (card.status === "absent") {
-    // No provider configured — the ordinary dev answer for Media, not a
+    // No provider configured — the ordinary dev answer for Asset, not a
     // failure, so it gets an informational chip and no Retry action.
     return (
       <div class="cms-dash-stat cms-dash-stat--absent">
@@ -364,8 +364,8 @@ function SourcesUnavailable({
   );
 }
 
-/** Media files: `ok` → dev only, `absent` → not connected, `unavailable` → plain — its own Retry lives on the stat card. */
-const MEDIA_STORAGE_LABEL: Record<MediaStorageStatus, string> = {
+/** Asset files: `ok` → dev only, `absent` → not connected, `unavailable` → plain — its own Retry lives on the stat card. */
+const ASSET_STORAGE_LABEL: Record<AssetStorageStatus, string> = {
   ok: "Dev only",
   absent: "Not connected",
   unavailable: "Unavailable",
@@ -373,11 +373,11 @@ const MEDIA_STORAGE_LABEL: Record<MediaStorageStatus, string> = {
 
 function StorageCard({
   hostedDemo,
-  mediaStatus,
+  assetStatus,
   recentLastWrite,
 }: {
   hostedDemo: boolean;
-  mediaStatus: MediaStorageStatus;
+  assetStatus: AssetStorageStatus;
   recentLastWrite: LastWrite | null;
 }): JSX.Element {
   return (
@@ -386,8 +386,8 @@ function StorageCard({
         <StorageRow icon={LibraryIcon} label="Project files">
           <span class="cms-dash-storage__value">{hostedDemo ? "This tab’s memory · resets on reload" : "Local filesystem · zudo-composer"}</span>
         </StorageRow>
-        <StorageRow icon={FolderIcon} label="Media files">
-          <Chip tone="plain">{hostedDemo && mediaStatus === "ok" ? "This tab only" : MEDIA_STORAGE_LABEL[mediaStatus]}</Chip>
+        <StorageRow icon={FolderIcon} label="Asset files">
+          <Chip tone="plain">{hostedDemo && assetStatus === "ok" ? "This tab only" : ASSET_STORAGE_LABEL[assetStatus]}</Chip>
         </StorageRow>
         <StorageRow icon={SavedIcon} label="Last write">
           {recentLastWrite === null || recentLastWrite.status === "unknown" ? (

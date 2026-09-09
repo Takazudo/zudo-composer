@@ -28,7 +28,7 @@ import type { ContentSnapshot, ContentStore } from "../library";
 const timestamp = "2026-09-01T00:00:00.000Z";
 const nextTimestamp = "2026-09-02T00:00:00.000Z";
 const contentProviderId = "content-filesystem";
-const mediaProviderId = "asset-files";
+const assetProviderId = "asset-files";
 const contentModelRef = { providerId: contentProviderId, recordId: "article" };
 const targetEntryRef: ContentEntryRef = { providerId: contentProviderId, modelId: "article", recordId: "target" };
 
@@ -36,14 +36,14 @@ function field(id: string, schema: ContentValueSchema, required = false): Conten
   return { id, key: id, label: id, required, ...schema } as ContentFieldDefinition;
 }
 
-function mediaUse(kind: ContentAssetUse["kind"], assetId: string): ContentAssetUse {
-  const asset = { providerId: mediaProviderId, assetId };
+function assetUse(kind: ContentAssetUse["kind"], assetId: string): ContentAssetUse {
+  const asset = { providerId: assetProviderId, assetId };
   if (kind === "image") return { kind, asset, alt: "Alt", decorative: false, caption: "Caption" };
   if (kind === "link") return { kind, asset, label: "Download" };
   return { kind, asset, title: "Card", description: "Description" };
 }
 
-function mediaRecord(id: string, mimeType: AssetType, checksumCharacter: string, createdAt = timestamp): AssetRecord {
+function assetRecord(id: string, mimeType: AssetType, checksumCharacter: string, createdAt = timestamp): AssetRecord {
   return createAssetRecord({
     fileName: `${id}.${mimeType === "application/pdf" ? "pdf" : "png"}`,
     mimeType,
@@ -57,30 +57,30 @@ function fixture() {
     name: "Article",
     kind: "collection",
     fields: [
-      field("media", { kind: "object", fields: [
-        field("image", { kind: "media-use", use: "image" }),
-        field("link", { kind: "media-use", use: "link" }),
-        field("card", { kind: "media-use", use: "card" }),
+      field("asset", { kind: "object", fields: [
+        field("image", { kind: "asset-use", use: "image" }),
+        field("link", { kind: "asset-use", use: "link" }),
+        field("card", { kind: "asset-use", use: "card" }),
       ] }),
       field("related", { kind: "reference", target: contentModelRef }),
     ],
   }, { id: "article", timestamp });
   const entry = createContentEntryRecord("article", {
-    media: {
-      image: mediaUse("image", "hero"),
-      link: mediaUse("link", "document"),
-      card: mediaUse("card", "card"),
+    asset: {
+      image: assetUse("image", "hero"),
+      link: assetUse("link", "document"),
+      card: assetUse("card", "card"),
     },
     related: { ...targetEntryRef },
   }, { id: "entry", timestamp });
   const target = createContentEntryRecord("article", {}, { id: "target", timestamp });
   const contentSnapshot: ContentSnapshot = { providerId: contentProviderId, mutationToken: 7, models: [model], entries: [entry, target] };
 
-  const hero = mediaRecord("hero", "image/png", "a");
-  const document = mediaRecord("document", "application/pdf", "b");
-  const card = mediaRecord("card", "image/png", "c");
+  const hero = assetRecord("hero", "image/png", "a");
+  const document = assetRecord("document", "application/pdf", "b");
+  const card = assetRecord("card", "image/png", "c");
   const assetSnapshot: AssetSnapshot = { schemaVersion: ASSET_SCHEMA_VERSION, mutationToken: "1".repeat(64), records: [hero, document, card], folders: [] };
-  const heroReplacement = mediaRecord("hero", "image/png", "d", nextTimestamp);
+  const heroReplacement = assetRecord("hero", "image/png", "d", nextTimestamp);
   const replacedHero: AssetRecord = {
     ...hero,
     revision: 2,
@@ -91,12 +91,12 @@ function fixture() {
       versions: [...hero.document.versions, ...heroReplacement.document.versions],
     },
   };
-  const replacedMediaSnapshot: AssetSnapshot = {
+  const replacedAssetSnapshot: AssetSnapshot = {
     ...assetSnapshot,
     mutationToken: "2".repeat(64),
     records: [replacedHero, document, card],
   };
-  return { contentSnapshot, entry, assetSnapshot, replacedMediaSnapshot };
+  return { contentSnapshot, entry, assetSnapshot, replacedAssetSnapshot };
 }
 
 function pinFor(snapshot: AssetSnapshot, ref: AssetVersionRef): AssetVersionPin {
@@ -105,13 +105,13 @@ function pinFor(snapshot: AssetSnapshot, ref: AssetVersionRef): AssetVersionPin 
   return { ...ref, checksum: version.checksum, byteLength: version.byteLength, mimeType: version.mimeType, url: assetVersionUrl(version.checksum, version.mimeType) };
 }
 
-describe("headless Content/Media/Mapping workspace contracts", () => {
+describe("headless Content/Asset/Mapping workspace contracts", () => {
   it("keeps image/link/card authoring refs stable and resolves exact current pins at release", async () => {
-    const { contentSnapshot, entry, assetSnapshot, replacedMediaSnapshot } = fixture();
+    const { contentSnapshot, entry, assetSnapshot, replacedAssetSnapshot } = fixture();
     const graph = buildContentGraphIndex([contentSnapshot]);
     expect(graph.complete).toBe(true);
     expect(graph.assetUses.map(({ location }) => location.path)).toEqual([
-      ["media", "image"], ["media", "link"], ["media", "card"],
+      ["asset", "image"], ["asset", "link"], ["asset", "card"],
     ]);
     expect(graph.relations).toMatchObject([{ owner: { entry: { recordId: "entry" }, path: ["related"] }, target: targetEntryRef }]);
 
@@ -120,7 +120,7 @@ describe("headless Content/Media/Mapping workspace contracts", () => {
       expect(Object.keys(use.asset).sort()).toEqual(["assetId", "providerId"]);
       const asset: AssetAssetRef = use.asset;
       const ref = resolveCurrentAssetVersionRef(assetSnapshot, asset);
-      expect(ref).toMatchObject({ providerId: mediaProviderId, assetId: asset.assetId });
+      expect(ref).toMatchObject({ providerId: assetProviderId, assetId: asset.assetId });
       expect(ref.versionId).toBe(assetSnapshot.records.find(({ id }) => id === asset.assetId)!.document.currentVersionId);
       expect(validateAssetVersionPin(pinFor(assetSnapshot, ref), ref)).toBe(true);
     }
@@ -129,7 +129,7 @@ describe("headless Content/Media/Mapping workspace contracts", () => {
     const oldRef = resolveCurrentAssetVersionRef(assetSnapshot, image.asset);
     const oldPin = pinFor(assetSnapshot, oldRef);
     const stableStore = {
-      provider: { id: mediaProviderId, label: "Project files" },
+      provider: { id: assetProviderId, label: "Project files" },
       snapshot: vi.fn(async () => assetSnapshot),
       mutationToken: vi.fn(async () => assetSnapshot.mutationToken),
       resolveVersion: vi.fn(async (ref: AssetVersionRef) => pinFor(assetSnapshot, ref)),
@@ -137,18 +137,18 @@ describe("headless Content/Media/Mapping workspace contracts", () => {
     await expect(resolveCurrentAssetVersionPin(stableStore, image.asset)).resolves.toEqual(oldPin);
     expect(stableStore.resolveVersion).toHaveBeenCalledWith(oldRef);
     stableStore.snapshot.mockClear();
-    const foreignStore = { ...stableStore, provider: { id: "other-media", label: "Other files" } };
+    const foreignStore = { ...stableStore, provider: { id: "other-asset", label: "Other files" } };
     await expect(resolveCurrentAssetVersionPin(foreignStore, image.asset)).rejects.toMatchObject({ code: "validation" });
     expect(foreignStore.snapshot).not.toHaveBeenCalled();
 
-    const newRef = resolveCurrentAssetVersionRef(replacedMediaSnapshot, image.asset);
+    const newRef = resolveCurrentAssetVersionRef(replacedAssetSnapshot, image.asset);
     expect(newRef.versionId).not.toBe(oldRef.versionId);
     expect(validateAssetVersionPin(oldPin, oldRef)).toBe(true);
-    expect(entry.values.media).not.toHaveProperty("versionId");
+    expect(entry.values.asset).not.toHaveProperty("versionId");
 
     const changedStore = {
       ...stableStore,
-      mutationToken: vi.fn(async () => replacedMediaSnapshot.mutationToken),
+      mutationToken: vi.fn(async () => replacedAssetSnapshot.mutationToken),
     };
     await expect(resolveCurrentAssetVersionPin(changedStore, image.asset)).rejects.toMatchObject({ code: "conflict" });
     const trashed = structuredClone(assetSnapshot);
@@ -156,7 +156,7 @@ describe("headless Content/Media/Mapping workspace contracts", () => {
     expect(() => resolveCurrentAssetVersionRef(trashed, image.asset)).toThrow("not active");
   });
 
-  it("never treats incomplete reference/media scans as proof of unused data", async () => {
+  it("never treats incomplete reference/asset scans as proof of unused data", async () => {
     const { contentSnapshot, entry } = fixture();
     const missingTarget: ContentSnapshot = { ...contentSnapshot, entries: [entry] };
     const incomplete = buildContentGraphIndex([missingTarget]);
@@ -186,7 +186,7 @@ describe("headless Content/Media/Mapping workspace contracts", () => {
     ])).rejects.toMatchObject({ code: "unsupported-transaction" });
     expect(transact).not.toHaveBeenCalled();
 
-    for (const kind of ["choice", "reference", "reference-list", "object", "list", "media-use"] as const) {
+    for (const kind of ["choice", "reference", "reference-list", "object", "list", "asset-use"] as const) {
       expect(isMappingCompatible(kind, "text", { kind: "identity" })).toBe(false);
     }
     expect(() => applyMappingTransform({ kind: "image" } as never, { kind: "identity" })).toThrow("structured Content");
@@ -196,9 +196,9 @@ describe("headless Content/Media/Mapping workspace contracts", () => {
     const futureEntry = { ...entry, schemaVersion: CONTENT_ENTRY_SCHEMA_VERSION + 1 };
     expect(loadContentEntryRecord(futureEntry)).toMatchObject({ status: "future-schema", raw: futureEntry });
     const record = assetSnapshot.records[0]!;
-    const oldMedia = { ...record, document: { ...record.document, schemaVersion: 0 as never } };
-    expect(loadAssetRecord(oldMedia)).toMatchObject({ status: "invalid", raw: oldMedia });
-    const futureMedia = { ...record, document: { ...record.document, schemaVersion: ASSET_SCHEMA_VERSION + 1 } };
-    expect(loadAssetRecord(futureMedia)).toMatchObject({ status: "future-schema", raw: futureMedia });
+    const oldAsset = { ...record, document: { ...record.document, schemaVersion: 0 as never } };
+    expect(loadAssetRecord(oldAsset)).toMatchObject({ status: "invalid", raw: oldAsset });
+    const futureAsset = { ...record, document: { ...record.document, schemaVersion: ASSET_SCHEMA_VERSION + 1 } };
+    expect(loadAssetRecord(futureAsset)).toMatchObject({ status: "future-schema", raw: futureAsset });
   });
 });

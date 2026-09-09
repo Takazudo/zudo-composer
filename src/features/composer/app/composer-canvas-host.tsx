@@ -1,5 +1,5 @@
 "use client";
-import { useMediaResolvedPreviewSnapshot } from "../preview/media-snapshot";
+import { useAssetResolvedPreviewSnapshot } from "../preview/assets-snapshot";
 
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
@@ -148,8 +148,8 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
     () => snapshotProp ?? localPreviewSnapshot(doc, doc.id),
     [doc, snapshotProp],
   );
-  const media = useMediaResolvedPreviewSnapshot(authoredSnapshot, componentProvider.catalog, session.mode === "preview");
-  const snapshot = media.snapshot;
+  const asset = useAssetResolvedPreviewSnapshot(authoredSnapshot, componentProvider.catalog, session.mode === "preview");
+  const snapshot = asset.snapshot;
 
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const bridgeRef = useRef<ComposerPreviewBridge | null>(null);
@@ -341,7 +341,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
         </div>
       )}
       <div class="sg-composer-canvas-frame" style={frameStyle}>
-        {media.error && <p role="alert">{media.error}</p>}
+        {asset.error && <p role="alert">{asset.error}</p>}
         <iframe ref={frameRef} hidden={!snapshot} style={{ display: snapshot ? undefined : "none" }} class="sg-composer-preview-iframe" {...frameProps} />
       </div>
     </div>

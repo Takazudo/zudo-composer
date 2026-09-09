@@ -4,7 +4,7 @@
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { watchRuntimeFailures } from "../runtime-failures";
 
-const PRODUCT_LINKS = ["Compositions", "Content", "Mappings", "Sitemaps", "Media"] as const;
+const PRODUCT_LINKS = ["Compositions", "Content", "Mappings", "Sitemaps", "Assets"] as const;
 const COLLECTION_MAPPING = "Journal entry mapping";
 const SINGLE_MAPPING = "Browser Site settings mapping";
 

@@ -46,7 +46,7 @@ describe("generic structured Content authoring", () => {
       { id: "tone", key: "tone", label: "Tone", required: true, kind: "choice", options: [{ value: "warm", label: "Warm" }, { value: "cool", label: "Cool" }] },
       { id: "details", key: "details", label: "Details", required: false, kind: "object", fields: [{ id: "caption", key: "caption", label: "Caption", required: true, kind: "text" }] },
       { id: "tags", key: "tags", label: "Tags", required: false, kind: "list", item: { kind: "text" } },
-      { id: "hero", key: "hero", label: "Hero", required: false, kind: "media-use", use: "image" },
+      { id: "hero", key: "hero", label: "Hero", required: false, kind: "asset-use", use: "image" },
     ] }, { id: "cards", timestamp: stamp });
     const entry = createContentEntryRecord("cards", {}, { id: "card", timestamp: stamp });
     const provider = createMemoryContentProvider({ models: [model], entries: [entry] });
@@ -59,8 +59,8 @@ describe("generic structured Content authoring", () => {
     fireEvent.input(screen.getByRole("textbox", { name: "Caption" }), { target: { value: "Nested" } });
     fireEvent.click(screen.getByRole("button", { name: "Add item" }));
     fireEvent.input(document.querySelector('[data-content-field-id="tags"] input')!, { target: { value: "first" } });
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Media asset" })).toHaveTextContent("hero.png"));
-    fireEvent.change(screen.getByRole("combobox", { name: "Media asset" }), { target: { value: "hero-image" } });
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Asset" })).toHaveTextContent("hero.png"));
+    fireEvent.change(screen.getByRole("combobox", { name: "Asset" }), { target: { value: "hero-image" } });
     fireEvent.input(screen.getByRole("textbox", { name: "Alternative text" }), { target: { value: "A descriptive hero" } });
     await waitFor(() => expect(controller.state.entry?.values).toMatchObject({ tone: "cool", details: { caption: "Nested" }, tags: ["first"], hero: { kind: "image", alt: "A descriptive hero" } }));
   });
@@ -75,13 +75,13 @@ describe("generic structured Content authoring", () => {
     expect(screen.getByText(/"caption-id": "Hello"/)).toBeInTheDocument();
   });
 
-  it("consumes the callback-only Media picker seam without importing Media presentation", async () => {
-    const model = createContentModelRecord({ name: "Cards", kind: "collection", fields: [{ id: "hero", key: "hero", label: "Hero", required: false, kind: "media-use", use: "image" }] }, { id: "cards", timestamp: stamp });
+  it("consumes the callback-only Asset picker seam without importing Asset presentation", async () => {
+    const model = createContentModelRecord({ name: "Cards", kind: "collection", fields: [{ id: "hero", key: "hero", label: "Hero", required: false, kind: "asset-use", use: "image" }] }, { id: "cards", timestamp: stamp });
     const entry = createContentEntryRecord("cards", {}, { id: "card", timestamp: stamp });
     const controller = createContentAuthoringController(createMemoryContentProvider({ models: [model], entries: [entry] }));
     await controller.initialize(); await controller.openModel("cards"); await controller.openEntry("card");
-    render(<ContentEntryAuthor state={controller.state} controller={controller} run={run} renderMediaPicker={({ onSelect }) => <div role="dialog" aria-label="Media picker"><button onClick={() => onSelect({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "", decorative: false, caption: "" })}>Choose hero</button></div>} />);
-    fireEvent.click(screen.getByRole("button", { name: "Choose from Media" }));
+    render(<ContentEntryAuthor state={controller.state} controller={controller} run={run} renderAssetPicker={({ onSelect }) => <div role="dialog" aria-label="Asset picker"><button onClick={() => onSelect({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "", decorative: false, caption: "" })}>Choose hero</button></div>} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose from Assets" }));
     fireEvent.click(screen.getByRole("button", { name: "Choose hero" }));
     expect(controller.state.entry?.values.hero).toMatchObject({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" } });
   });

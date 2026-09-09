@@ -140,7 +140,7 @@ describe('App', () => {
     ['/content', 'tree', 'Content', 'Content'],
     ['/mapping', 'heading', 'Mappings', 'Mappings'],
     ['/sitemapper', 'heading', 'Sitemaps', 'Sitemaps'],
-    ['/media', 'heading', 'Media', 'Media'],
+    ['/assets', 'heading', 'Assets', 'Assets'],
   ])('mounts the real product on direct refresh at %s', async (route, role, name, railLabel) => {
     window.history.replaceState(null, '', route);
     await renderApp();
@@ -164,13 +164,13 @@ describe('App', () => {
     expect(document.querySelectorAll('.cms-rail__item svg')).toHaveLength(8);
   });
 
-  it('keeps the production Media state truthful without probing a provider', async () => {
+  it('keeps the production Assets state truthful without probing a provider', async () => {
     const request = vi.fn();
     vi.stubGlobal('fetch', request);
-    window.history.replaceState(null, '', '/media');
+    window.history.replaceState(null, '', '/assets');
     await renderApp();
 
-    expect(await screen.findByRole('heading', { name: 'Media' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Assets' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /upload/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /new folder/i })).toBeDisabled();
     expect(request).not.toHaveBeenCalled();

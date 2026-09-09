@@ -363,8 +363,8 @@ class BrowserFileProviderCompositionStore implements CompositionLifecycleStore {
       );
     }
 
-    const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-    if (mediaType !== "application/json") {
+    const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+    if (contentType !== "application/json") {
       throw persistenceError(
         persistenceOperation(operation),
         "unknown",

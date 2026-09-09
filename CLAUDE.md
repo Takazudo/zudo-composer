@@ -19,7 +19,7 @@ own root, and owns everything the tool authors into that host: its
 **templates** (data, not code — a Composition whose `publication.kind` is
 `"global-template"`, stored under `compositionsDir` like any other composition;
 there is no templates directory or template file format), and its **CMS data**
-(the four JSON domains plus media, rooted at `dataDir`/`assetsDir`). See the
+(the four JSON domains plus assets, rooted at `dataDir`/`assetsDir`). See the
 settings table in [`README.md`](./README.md) for the full default layout.
 
 zudo-sg owns only the installed `@zudo-sg/ui` provider: typed component
@@ -31,7 +31,7 @@ is otherwise an ordinary component pack — any themeset that satisfies the same
 contract is interchangeable with it.
 
 Exact routes are `/`, `/composer`, same-origin `/composer/preview`, `/content`,
-`/mapping`, `/sitemapper`, `/media`, and the sample SiteProject delivery routes
+`/mapping`, `/sitemapper`, `/assets`, and the sample SiteProject delivery routes
 `/site`, `/site/about`, `/site/services`, `/site/journal`,
 `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
 and `/site/journal/start-with-the-question`; emitted files live under

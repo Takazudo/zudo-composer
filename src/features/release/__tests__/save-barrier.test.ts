@@ -16,7 +16,7 @@ describe("release save barrier", () => {
   });
   it("keeps failed detached writes pending until explicit successful retry", async () => {
     const registry = createWorkspaceSaveRegistry(); let fail = true;
-    const session = registry.register({ feature: "Media", providerId: "files" }, { flush: async () => { if (fail) throw new Error("failed bytes"); }, retry: () => { fail = false; } });
+    const session = registry.register({ feature: "Asset", providerId: "files" }, { flush: async () => { if (fail) throw new Error("failed bytes"); }, retry: () => { fail = false; } });
     session.changed(); session.detach(); expect((await registry.flush()).status).toBe("failed"); expect(registry.hasPending).toBe(true);
     session.retry(); expect((await registry.flush()).status).toBe("ready"); expect(registry.hasPending).toBe(false);
   });

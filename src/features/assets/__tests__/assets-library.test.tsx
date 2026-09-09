@@ -3,19 +3,19 @@ import { AUTHORING_PERSISTENCE_CHANNELS, PROJECT_USAGE_CHANNELS, subscribeAuthor
 import { notifyPersistenceChange } from "../../../shared/persistence-generation";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MediaApp } from "../media-app";
-import { MediaFieldPicker } from "../media-use-picker";
-import { createMediaLibraryController } from "../controller";
+import { AssetApp } from "../assets-app";
+import { AssetFieldPicker } from "../assets-use-picker";
+import { createAssetLibraryController } from "../controller";
 import { providerFixture, completeServices, PNG, PDF } from "./versioned-fixture";
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
-describe("Media workspace", () => {
+describe("Asset workspace", () => {
   it("uses provider display URLs for version links without changing canonical records", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "temporary.png", declaredMimeType: "image/png", bytes: PNG });
     const version = record.document.versions[0]!;
     const previewUrl = vi.fn((url: string) => `blob:https://example.test/${url.split("/").at(-1)}`);
-    render(<MediaApp provider={{ ...provider, previewUrl }} contentServices={completeServices()} intent={{ status: "none" }} />);
+    render(<AssetApp provider={{ ...provider, previewUrl }} contentServices={completeServices()} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Inspect temporary.png" }));
     const inspector = screen.getByRole("complementary", { name: "Asset details" });
     expect(await within(inspector).findByRole("link", { name: version.id.slice(0, 12) })).toHaveAttribute("href", previewUrl(version.url));
@@ -31,7 +31,7 @@ describe("Media workspace", () => {
     await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     const services = completeServices({ subscribeChanges: (listener) => subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, listener) });
     const scan = vi.spyOn(services, "scan");
-    render(<MediaApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
+    render(<AssetApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
     await waitFor(() => expect(scan).toHaveBeenCalled());
     for (const channel of AUTHORING_PERSISTENCE_CHANNELS) {
@@ -52,7 +52,7 @@ describe("Media workspace", () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     const services = completeServices({ scan: async () => ({ status: "complete", locations: [], tokens: {}, message: "Complete project scan", additionalLocations: [{ href: "/composer?record=page", location: { domain: "materialization", providerId: "files", recordId: "page", nodeId: "hero", property: "markdown", valuePath: ["markdown"], pathname: "/about", markdown: { from: 4, to: 32, useFrom: 0, useTo: 33 } } }] }) });
-    render(<MediaApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
+    render(<AssetApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
     fireEvent.click(within(screen.getByRole("complementary", { name: "Asset details" })).getByRole("button", { name: "Trash…", exact: true }));
     const dialog = await screen.findByRole("dialog", { name: "Move assets to trash?" });
@@ -64,7 +64,7 @@ describe("Media workspace", () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     const stop = vi.fn(), subscribe = vi.fn(() => stop);
-    render(<MediaApp provider={provider} contentServices={completeServices({ subscribeChanges: subscribe })} intent={{ status: "none" }} />);
+    render(<AssetApp provider={provider} contentServices={completeServices({ subscribeChanges: subscribe })} intent={{ status: "none" }} />);
     const inspect = await screen.findByRole("button", { name: "Inspect hero.png" });
     expect(subscribe).not.toHaveBeenCalled(); fireEvent.click(inspect);
     await waitFor(() => expect(subscribe).toHaveBeenCalledTimes(1));
@@ -76,8 +76,8 @@ describe("Media workspace", () => {
     const asset = await filesystem.upload({ fileName: "late.png", declaredMimeType: "image/png", bytes: PNG });
     const snapshot = await filesystem.snapshot();
     const read = vi.spyOn(filesystem, "snapshot").mockResolvedValue({ ...snapshot, records: [] });
-    const controller = createMediaLibraryController(provider);
-    render(<MediaApp provider={provider} controller={controller} intent={{ status: "matched", intent: { route: "media", providerId: provider.descriptor.id, assetId: asset.id } }} />);
+    const controller = createAssetLibraryController(provider);
+    render(<AssetApp provider={provider} controller={controller} intent={{ status: "matched", intent: { route: "assets", providerId: provider.descriptor.id, assetId: asset.id } }} />);
     await screen.findByText(/link targets a missing or unavailable/);
     read.mockRestore(); await controller.reload();
     await screen.findByRole("button", { name: "Inspect late.png" });
@@ -88,8 +88,8 @@ describe("Media workspace", () => {
   });
   it("surfaces malformed asset intent without selecting another asset", async () => {
     const { provider } = await providerFixture();
-    render(<MediaApp provider={provider} intent={{ status: "invalid", message: "Malformed Media asset identity" }} />);
-    expect(await screen.findByText("Malformed Media asset identity")).toBeTruthy();
+    render(<AssetApp provider={provider} intent={{ status: "invalid", message: "Malformed asset identity" }} />);
+    expect(await screen.findByText("Malformed asset identity")).toBeTruthy();
   });
   it("invalidates displayed usage claims when the injected Content generation changes", async () => {
     const { provider, filesystem } = await providerFixture();
@@ -97,7 +97,7 @@ describe("Media workspace", () => {
     let invalidate!: () => void;
     const services = completeServices({ subscribeChanges: (listener) => { invalidate = listener; return () => undefined; } });
     const scan = vi.spyOn(services, "scan").mockResolvedValue({ status: "complete", locations: [], tokens: {}, message: "Old complete snapshot" });
-    render(<MediaApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
+    render(<AssetApp provider={provider} contentServices={services} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
     await screen.findByText("Old complete snapshot");
     let finish!: (value: Awaited<ReturnType<typeof services.scan>>) => void;
@@ -112,7 +112,7 @@ describe("Media workspace", () => {
     const { provider, filesystem } = await providerFixture();
     await filesystem.createFolder({ name: "A", parentId: null }, await filesystem.mutationToken());
     await filesystem.createFolder({ name: "C", parentId: null }, await filesystem.mutationToken());
-    render(<MediaApp provider={provider} contentServices={completeServices()} intent={{ status: "none" }} />);
+    render(<AssetApp provider={provider} contentServices={completeServices()} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Insert before C" }));
     const dialog = await screen.findByRole("dialog", { name: "New folder" });
     fireEvent.input(within(dialog).getByLabelText("Folder name"), { target: { value: "B" } });
@@ -122,19 +122,19 @@ describe("Media workspace", () => {
     await waitFor(() => expect(screen.getByRole("treeitem", { name: /^B/ })).toHaveFocus());
   });
   it("shows truthful unavailability with no fabricated assets", () => {
-    render(<MediaApp />);
-    expect(screen.getByText(/The Media library and upload authoring are available only/)).toBeTruthy();
+    render(<AssetApp />);
+    expect(screen.getByText(/The Assets library and upload authoring are available only/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Upload" })).toHaveProperty("disabled", true);
     expect(screen.queryByRole("img")).toBeNull();
   });
   it("saves inspector details, accepts another edit, and flushes against the committed revision", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    const controller = createMediaLibraryController(provider, { contentServices: completeServices() });
+    const controller = createAssetLibraryController(provider, { contentServices: completeServices() });
     const sessions = createWorkspaceSaveRegistry();
-    const session = sessions.register({ feature: "Media metadata", providerId: provider.descriptor.id, recordId: record.id }, { flush: () => controller.flush() });
+    const session = sessions.register({ feature: "Asset metadata", providerId: provider.descriptor.id, recordId: record.id }, { flush: () => controller.flush() });
     const update = vi.spyOn(filesystem, "updateMetadata");
-    render(<MediaApp provider={provider} controller={controller} intent={{ status: "none" }} />);
+    render(<AssetApp provider={provider} controller={controller} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
     const inspector = screen.getByRole("complementary", { name: "Asset details" });
     fireEvent.input(within(inspector).getByLabelText("Internal note"), { target: { value: "First save" } });
@@ -151,22 +151,22 @@ describe("Media workspace", () => {
     const { provider, filesystem } = await providerFixture();
     const image = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
     await filesystem.upload({ fileName: "guide.pdf", declaredMimeType: "application/pdf", bytes: PDF });
-    render(<MediaApp provider={provider} contentServices={completeServices()} intent={{ status: "none" }} />);
+    render(<AssetApp provider={provider} contentServices={completeServices()} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Inspect hero.png" }));
     const inspector = screen.getByRole("complementary", { name: "Asset details" });
     fireEvent.input(within(inspector).getByLabelText("Asset name"), { target: { value: "renamed.png" } });
     fireEvent.input(within(inspector).getByLabelText("Internal note"), { target: { value: "Internal library note" } });
     fireEvent.click(within(inspector).getByRole("button", { name: "Save details" }));
     await waitFor(async () => expect(await filesystem.get(image.id)).toMatchObject({ record: { id: image.id, document: { fileName: "renamed.png", note: "Internal library note" } } }));
-    fireEvent.input(screen.getByRole("searchbox", { name: "Search media" }), { target: { value: "guide" } });
+    fireEvent.input(screen.getByRole("searchbox", { name: "Search assets" }), { target: { value: "guide" } });
     await waitFor(() => expect(screen.queryByRole("button", { name: "Inspect renamed.png" })).toBeNull());
     fireEvent.click(screen.getByRole("radio", { name: "List" }));
-    expect(await screen.findByRole("table", { name: "Media assets" })).toBeTruthy();
+    expect(await screen.findByRole("table", { name: "Assets" })).toBeTruthy();
   });
   it("guards trash with complete structured usages and restores retained records", async () => {
     const { provider, filesystem } = await providerFixture();
     const asset = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
-    render(<MediaApp provider={provider} contentServices={completeServices()} intent={{ status: "none" }} />);
+    render(<AssetApp provider={provider} contentServices={completeServices()} intent={{ status: "none" }} />);
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select hero.png" }));
     fireEvent.click(screen.getByRole("button", { name: "Trash…", exact: true }));
     const dialog = await screen.findByRole("dialog", { name: "Move assets to trash?" });
@@ -182,9 +182,9 @@ describe("Media workspace", () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG, note: "Asset note" });
     const choose = vi.fn(); const close = vi.fn();
-    render(<MediaFieldPicker provider={provider} kind="image" onSelect={choose} onClose={close} />);
+    render(<AssetFieldPicker provider={provider} kind="image" onSelect={choose} onClose={close} />);
     await screen.findByRole("option", { name: "hero.png" });
-    fireEvent.change(screen.getByLabelText("Media asset"), { target: { value: record.id } });
+    fireEvent.change(screen.getByLabelText("Asset"), { target: { value: record.id } });
     fireEvent.input(screen.getByLabelText("Alternative text for this usage"), { target: { value: "A contextual image description" } });
     fireEvent.click(screen.getByRole("button", { name: "Use in content" }));
     await waitFor(() => expect(choose).toHaveBeenCalledWith(expect.objectContaining({ kind: "image", asset: { providerId: provider.descriptor.id, assetId: record.id }, alt: "A contextual image description" })));

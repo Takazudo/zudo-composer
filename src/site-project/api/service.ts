@@ -71,7 +71,7 @@ export function createSiteProjectApiService(dependencies: SiteProjectApiDependen
         if (dependencies.isWorkingCurrent && !await dependencies.isWorkingCurrent(approved.workingProject, approved.workingPrecondition)) return fail("conflict", "Working generations changed after review.");
         const fresh = await plan(approved.workingProject, approved.workingPrecondition, approved.selection, approved.expectedRevision, approved.expectedActive);
         if ("ok" in fresh) return fresh;
-        if (fresh.planDigest !== planDigest) return fail("conflict", "Approval is stale; review current candidate, Media, toolchain and base again.");
+        if (fresh.planDigest !== planDigest) return fail("conflict", "Approval is stale; review current candidate, Assets, toolchain and base again.");
         if (fresh.checks.some(({ severity }) => severity === "blocking")) return fail("compile-blocked", "Candidate release checks are blocking.", fresh.checks);
         if (fresh.assetLock && (!dependencies.assetStore || !await checkAssetLockPreconditions(fresh.assetLock, dependencies.assetStore))) return fail("conflict", "Assets changed after approval validation.");
         if (dependencies.isWorkingCurrent && !await dependencies.isWorkingCurrent(approved.workingProject, approved.workingPrecondition)) return fail("conflict", "Working generations changed while staging.");

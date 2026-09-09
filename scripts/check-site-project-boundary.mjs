@@ -20,7 +20,7 @@ const runtimeFailures = read("tests/runtime-failures.ts");
 const browserRunner = read("scripts/run-site-project-browser.mjs");
 const browserConfig = read("playwright.site-project.config.ts");
 
-assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/media"]);
+assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/assets"]);
 assert.deepEqual(SITE_ROUTES, [
   "/site",
   "/site/about",
@@ -46,17 +46,17 @@ assert.ok(browserRunner.includes("env: { ...process.env, ...environment }"), "br
 assert.ok(browserConfig.includes("reuseExistingServer: false"), "isolated dev browser config must own its server");
 assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must use one deterministic worker");
 
-// The committed-media static root moves with the host config: pinning a
+// The committed-assets static root moves with the host config: pinning a
 // literal here would re-hardcode the directory `publicAssetsDir` exists to move.
 assert.ok(
   vite.includes("publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicAssets)"),
-  "Vite dev server must expose the host's committed media root, resolved from the config",
+  "Vite dev server must expose the host's committed assets root, resolved from the config",
 );
-// Media falls back to the host config through the same domain resolver every
+// Assets fall back to the host config through the same domain resolver every
 // other CMS root uses, so the fallback is asserted where it is defined.
 assert.ok(
   vite.includes("?? domainRoot('assets')") && vite.includes("dataRoot ? resolve(dataRoot, domain) : composerConfig.paths[domain]"),
-  "Vite must resolve the Media store root from the host config",
+  "Vite must resolve the Assets store root from the host config",
 );
 // The excluded pack name is DERIVED from the resolved config, never spelled
 // out: pinning the literal here would quietly re-hardcode the provider that

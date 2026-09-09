@@ -56,7 +56,7 @@ function collector(options: AssetImpactOptions = {}) {
   };
   const content = (schema: ContentValueSchema, value: JsonValue | undefined, location: AssetImpactLocation): JsonValue | undefined => {
     if (value === undefined) return value;
-    if (schema.kind === "media-use" && value && typeof value === "object" && !Array.isArray(value) && validateAssetAssetRef((value as Record<string, JsonValue>).asset)) { index.references.push({ ref: (value as Record<string, JsonValue>).asset as unknown as AssetAssetRef, location: { ...location, selectionPath: location.valuePath, valuePath: [...location.valuePath, "asset"] } }); return value; }
+    if (schema.kind === "asset-use" && value && typeof value === "object" && !Array.isArray(value) && validateAssetAssetRef((value as Record<string, JsonValue>).asset)) { index.references.push({ ref: (value as Record<string, JsonValue>).asset as unknown as AssetAssetRef, location: { ...location, selectionPath: location.valuePath, valuePath: [...location.valuePath, "asset"] } }); return value; }
     if (schema.kind === "url" && typeof value === "string") return url(value, location);
     if (schema.kind === "markdown" && typeof value === "string") return markdown(value, location);
     if (schema.kind === "object" && value && typeof value === "object" && !Array.isArray(value)) {

@@ -196,7 +196,7 @@ describe("filesystem workspace registry", () => {
 });
 
 describe("workspace scoping on disk", () => {
-  it("prefixes every authoring domain root and leaves media unscoped", () => {
+  it("prefixes every authoring domain root and leaves assets unscoped", () => {
     const domains = { compositions: "/cms/compositions", content: "/elsewhere/content", mappings: "/cms/mappings", sitemaps: "/cms/sitemaps" };
     expect(workspaceDomainRoots(domains, "alpha")).toEqual({
       compositions: "/cms/compositions/workspace-v1-alpha",

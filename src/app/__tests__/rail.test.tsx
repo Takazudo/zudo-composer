@@ -22,7 +22,7 @@ function counts(overrides: Partial<WorkspaceCounts> = {}): WorkspaceCounts {
     mappings: { status: "ok", value: { mappings: 3, blockedMappings: 0 } },
     sitemaps: { status: "ok", value: { sitemaps: 2, pages: 9, unassignedPages: 0 } },
     content: { status: "ok", value: { models: 2, entries: 5, incompleteEntries: 0 } },
-    media: { status: "ok", value: { assets: 14, bytes: 1024, byType: {} } },
+    assets: { status: "ok", value: { assets: 14, bytes: 1024, byType: {} } },
     ...overrides,
   };
 }
@@ -38,7 +38,7 @@ describe("rail navigation model", () => {
     expect(RAIL_ITEMS.map((item) => item.id)).toEqual([
       "home",
       "content",
-      "media",
+      "assets",
       "composer",
       "mapping",
       "sitemapper",
@@ -51,7 +51,7 @@ describe("rail navigation model", () => {
     expect(currentRailItem("/")?.id).toBe("home");
     expect(currentRailItem("")?.id).toBe("home");
     expect(currentRailItem("/composer")?.id).toBe("composer");
-    expect(currentRailItem("/media")?.id).toBe("media");
+    expect(currentRailItem("/assets")?.id).toBe("assets");
     expect(currentRailItem("/nowhere")).toBeNull();
   });
 
@@ -67,7 +67,7 @@ describe("rail counts", () => {
   it("maps each readable source onto its rail slot", () => {
     expect(railCounts(counts())).toEqual({
       content: 2,
-      media: 14,
+      assets: 14,
       composer: 6,
       mapping: 3,
       sitemapper: 2,
@@ -75,14 +75,14 @@ describe("rail counts", () => {
   });
 
   it("omits a slot whose source is unavailable rather than showing zero", () => {
-    const partial = railCounts(counts({ media: { status: "unavailable", error: "The Media database is blocked." } }));
-    expect(partial).not.toHaveProperty("media");
+    const partial = railCounts(counts({ assets: { status: "unavailable", error: "The Assets database is blocked." } }));
+    expect(partial).not.toHaveProperty("assets");
     expect(partial.content).toBe(2);
   });
 
   it("omits a slot whose source is absent rather than showing zero", () => {
-    const partial = railCounts(counts({ media: { status: "absent" } }));
-    expect(partial).not.toHaveProperty("media");
+    const partial = railCounts(counts({ assets: { status: "absent" } }));
+    expect(partial).not.toHaveProperty("assets");
     expect(partial.content).toBe(2);
   });
 
@@ -163,9 +163,9 @@ describe("Rail", () => {
   it("renders a count only where the summary supplied one", () => {
     renderRail({ counts: { content: 2, composer: 6 } });
     const content = screen.getByRole("link", { name: "Content" });
-    const media = screen.getByRole("link", { name: "Media" });
+    const assets = screen.getByRole("link", { name: "Assets" });
     expect(content.querySelector(".cms-rail__count")).toHaveTextContent("2");
-    expect(media.querySelector(".cms-rail__count")).toBeNull();
+    expect(assets.querySelector(".cms-rail__count")).toBeNull();
   });
 
   it("keeps every item accessibly named while collapsed", () => {
