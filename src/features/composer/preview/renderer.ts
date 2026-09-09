@@ -33,6 +33,7 @@
 // Selection itself is a bare attribute swap (`data-zc-selected`) styled with
 // `outline`, which is out-of-flow: it neither remounts nor reflows the node.
 
+import { renderAssetDownloadMarkdown } from "../../../components/asset-download-markdown";
 import { Component, Fragment, h } from "preact";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { ComponentChildren, JSX } from "preact";
@@ -870,9 +871,9 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
       componentProps[slot.prop] = single ? rendered[0] : rendered;
     }
 
-    return runtime.adapters?.render
-      ? runtime.adapters.render(componentProps) as ComponentChildren
-      : h(runtime.component as never, componentProps);
+    return renderAssetDownloadMarkdown(definition, componentProps, (chunk) => runtime.adapters?.render
+      ? runtime.adapters.render(chunk) as ComponentChildren
+      : h(runtime.component as never, chunk));
   }
 
   /**

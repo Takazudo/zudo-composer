@@ -11,7 +11,7 @@ if (!root) throw new Error("Missing #app mount point");
 const initialTheme = bootstrapTheme();
 
 if (window.location.pathname === "/composer/preview") {
-  (await import("./frame-media")).installComposerDemoMedia();
+  (await import("./frame-assets")).installComposerDemoAsset();
   void import("../features/composer/preview/preview-entry").then(({ mountComposerPreview }) => mountComposerPreview(root));
 } else {
   const themeController = createThemeController(initialTheme);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createContentEntryRecord, createContentModelRecord, diagnoseContentEntryCompleteness } from "../../library";
-import { createContentValueSchema, isValueValidForField, loadContentEntryRecord, loadContentModelRecord, projectContentMediaUse, traverseContentValues, validateContentModelRecord } from "..";
+import { createContentValueSchema, isValueValidForField, loadContentEntryRecord, loadContentModelRecord, projectContentAssetUse, traverseContentValues, validateContentModelRecord } from "..";
 import type { ContentFieldDefinition, ContentValueSchema } from "..";
 
 const timestamp = "2026-01-01T00:00:00.000Z";
@@ -17,9 +17,10 @@ describe("Rich Content schema", () => {
     [{ kind: "reference", target }, ref], [{ kind: "reference-list", target, ordered: true }, [ref]],
     [{ kind: "object", fields: [field({ kind: "boolean" }, "flag")] }, { flag: false }],
     [{ kind: "list", item: { kind: "number" } }, [0, 1]],
-    [{ kind: "media-use", use: "image" }, { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, alt: "A diagram", decorative: false, caption: "Caption" }],
-    [{ kind: "media-use", use: "link" }, { kind: "link", asset: { providerId: "media-files", assetId: "asset" }, label: "Read the PDF" }],
-    [{ kind: "media-use", use: "card" }, { kind: "card", asset: { providerId: "media-files", assetId: "asset" }, title: "Card title", description: "Card details" }],
+    [{ kind: "asset-use", use: "image" }, { kind: "image", asset: { providerId: "asset-files", assetId: "asset" }, alt: "A diagram", decorative: false, caption: "Caption" }],
+    [{ kind: "asset-use", use: "download" }, { kind: "download", asset: { providerId: "asset-files", assetId: "asset" }, label: "Download archive", showSize: true, showType: false }],
+    [{ kind: "asset-use", use: "link" }, { kind: "link", asset: { providerId: "asset-files", assetId: "asset" }, label: "Read the PDF" }],
+    [{ kind: "asset-use", use: "card" }, { kind: "card", asset: { providerId: "asset-files", assetId: "asset" }, title: "Card title", description: "Card details" }],
   ] as const)("round trips %j", (schema, value) => {
     const model = createContentModelRecord({ name: "Items", kind: "collection", description: "Rich content", fields: [field(structuredClone(schema) as ContentValueSchema)] }, { id: "items", timestamp });
     const entry = createContentEntryRecord("items", { value }, { id: "entry", timestamp });
@@ -30,14 +31,14 @@ describe("Rich Content schema", () => {
     expect(entry).toMatchObject({ lifecycle: "draft", generation: 0 });
   });
 
-  it("rejects impossible dates, unsafe URLs, unknown choices, wrong ref types, duplicate refs and malformed media", () => {
+  it("rejects impossible dates, unsafe URLs, unknown choices, wrong ref types, duplicate refs and malformed asset", () => {
     expect(isValueValidForField({ kind: "date" }, "2026-02-29")).toBe(false);
     for (const url of ["javascript:alert(1)", "//example.com", "/\\example.com", "https://a b"]) expect(isValueValidForField({ kind: "url" }, url)).toBe(false);
     expect(isValueValidForField({ kind: "choice", options: [{ value: "a", label: "A" }] }, "b")).toBe(false);
     expect(isValueValidForField({ kind: "reference", target }, { ...ref, modelId: "wrong" })).toBe(false);
     expect(isValueValidForField({ kind: "reference-list", target, ordered: true }, [ref, ref])).toBe(false);
-    expect(isValueValidForField({ kind: "media-use", use: "image" }, { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, notes: "Not alt" })).toBe(false);
-    expect(isValueValidForField({ kind: "media-use", use: "image" }, { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, alt: "Wrong", decorative: true, caption: "" })).toBe(false);
+    expect(isValueValidForField({ kind: "asset-use", use: "image" }, { kind: "image", asset: { providerId: "asset-files", assetId: "asset" }, notes: "Not alt" })).toBe(false);
+    expect(isValueValidForField({ kind: "asset-use", use: "image" }, { kind: "image", asset: { providerId: "asset-files", assetId: "asset" }, alt: "Wrong", decorative: true, caption: "" })).toBe(false);
   });
 
   it("keeps empty required lists incomplete and false/zero complete, including nested values", () => {
@@ -46,9 +47,9 @@ describe("Rich Content schema", () => {
       field({ kind: "list", item: { kind: "text" } }, "list"),
       field({ kind: "reference-list", target, ordered: true }, "refs"),
       field({ kind: "object", fields: [field({ kind: "text" }, "title")] }, "object"),
-      field({ kind: "media-use", use: "image" }, "image"),
+      field({ kind: "asset-use", use: "image" }, "image"),
     ] }, { id: "items", timestamp });
-    const entry = createContentEntryRecord("items", { flag: false, number: 0, list: [], refs: [], object: {}, image: { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, alt: "", decorative: false, caption: "" } }, { id: "entry", timestamp });
+    const entry = createContentEntryRecord("items", { flag: false, number: 0, list: [], refs: [], object: {}, image: { kind: "image", asset: { providerId: "asset-files", assetId: "asset" }, alt: "", decorative: false, caption: "" } }, { id: "entry", timestamp });
     expect(diagnoseContentEntryCompleteness(model, entry).map((issue) => issue.path)).toEqual([["list"], ["refs"], ["object", "title"], ["image"]]);
     expect(isValueValidForField(model.document.fields[5]!, entry.values.image)).toBe(true);
   });
@@ -66,11 +67,11 @@ describe("Rich Content schema", () => {
     expect(() => createContentValueSchema("reference")).toThrow("explicit target");
   });
 
-  it("projects only per-use media text and traverses ordered nested leaves", () => {
-    const use = { kind: "image" as const, asset: { providerId: "media-files", assetId: "asset" }, alt: "Per-use alt", decorative: false, caption: "Caption" };
-    expect(projectContentMediaUse(use, "/immutable.png")).toEqual({ src: "/immutable.png", alt: "Per-use alt", decorative: false, caption: "Caption" });
-    const model = createContentModelRecord({ name: "Items", kind: "collection", fields: [field({ kind: "list", item: { kind: "object", fields: [field({ kind: "media-use", use: "image" }, "image")] } })] }, { id: "items", timestamp });
+  it("projects only per-use asset text and traverses ordered nested leaves", () => {
+    const use = { kind: "image" as const, asset: { providerId: "asset-files", assetId: "asset" }, alt: "Per-use alt", decorative: false, caption: "Caption" };
+    expect(projectContentAssetUse(use, "/immutable.png")).toEqual({ src: "/immutable.png", alt: "Per-use alt", decorative: false, caption: "Caption" });
+    const model = createContentModelRecord({ name: "Items", kind: "collection", fields: [field({ kind: "list", item: { kind: "object", fields: [field({ kind: "asset-use", use: "image" }, "image")] } })] }, { id: "items", timestamp });
     const entry = createContentEntryRecord("items", { value: [{ image: use }, { image: use }] }, { id: "entry", timestamp });
-    expect(traverseContentValues(model, entry).filter((item) => item.schema.kind === "media-use").map((item) => item.path)).toEqual([["value", 0, "image"], ["value", 1, "image"]]);
+    expect(traverseContentValues(model, entry).filter((item) => item.schema.kind === "asset-use").map((item) => item.path)).toEqual([["value", 0, "image"], ["value", 1, "image"]]);
   });
 });

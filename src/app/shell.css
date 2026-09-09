@@ -226,7 +226,8 @@
 .cms-topbar__control[aria-expanded="true"] { color: var(--color-fg); border-color: var(--color-border); background: var(--color-surface-2); }
 
 /* The route workspace scrolls inside the shell, so the rail and topbar stay put. */
-.cms-shell-main { min-width: 0; min-height: 0; overflow: auto; }
+.cms-shell-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: auto; }
+.cms-shell-main > :not(.cms-route-content) { flex: 0 0 auto; }
 
 /* --------------------------------------------------------------------------
  * Notifications disclosure — the one floating surface the shell still owns
@@ -369,10 +370,9 @@
   .app-shell { --zc-rail-w: 218px; }
 }
 
-/* Percentage-height editors need a definite containing block, not only a
- * minimum: intrinsic coarse controls must not grow the viewport-sized slot.
- * Ordinary long routes still overflow into the scrollable cms-shell-main. */
-.cms-route-content { min-width: 0; height: 100%; min-height: 100%; }
+/* The definite flex remainder accounts for hosted and workspace notices while
+ * long routes can still overflow into the scrollable shell. */
+.cms-route-content { flex: 1 1 0; min-width: 0; min-height: 0; }
 .cms-shell-notice { margin: 0; padding: var(--sp-2); background: var(--color-surface-2); }
 .cms-rail__toolbar { display: grid; justify-items: end; gap: var(--sp-1); padding: var(--sp-2); }
 .cms-rail[data-compact="true"] .cms-rail__toolbar { justify-items: center; padding-inline: 0; }

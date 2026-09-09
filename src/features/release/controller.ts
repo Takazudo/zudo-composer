@@ -97,7 +97,7 @@ export function createReleaseController(integration: ProductionProviderIntegrati
       if (!await integration.isCaptureCurrent(captured.capture)) { emit({ phase: "inspect", changed: true }); throw new Error("Approval changed; review again."); }
       const approved = state.plan;
       // Keep exact identity for inspection even when acknowledgement is lost.
-      const stage: StagedRelease = { schemaVersion: 2, projectId: approved.candidate.id, revision: approved.projectRevision, buildId: approved.buildId, mediaLock: approved.mediaLock, toolchain: approved.toolchain, planDigest: approved.planDigest, publication: approved.publication };
+      const stage: StagedRelease = { schemaVersion: 2, projectId: approved.candidate.id, revision: approved.projectRevision, buildId: approved.buildId, assetLock: approved.assetLock, toolchain: approved.toolchain, planDigest: approved.planDigest, publication: approved.publication };
       emit({ staged: stage });
       try {
         const result = await call<{ staged: StagedRelease; stageGeneration: number }>({ protocolVersion: 2, operation: "apply", plan: approved });

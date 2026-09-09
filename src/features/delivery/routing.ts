@@ -19,11 +19,11 @@ export function deliveryRoutePathname(pathname: string, basePath: "/site" | "/we
 
 const DELIVERY_BASE_URL = "https://site-project.invalid/site/";
 
-function isCanonicalUploadedMediaHref(value: string): boolean {
-  if (!value.startsWith("/uploaded-media/")) return false;
+function isCanonicalUploadedAssetHref(value: string): boolean {
+  if (!value.startsWith("/uploaded-assets/")) return false;
   try {
     const parsed = new URL(value, DELIVERY_BASE_URL);
-    return parsed.origin === "https://site-project.invalid" && parsed.pathname.startsWith("/uploaded-media/");
+    return parsed.origin === "https://site-project.invalid" && parsed.pathname.startsWith("/uploaded-assets/");
   } catch {
     return false;
   }
@@ -36,7 +36,7 @@ export function safeDeliveryHref(value: string, basePath: "/site" | "/website-pr
   });
   if (value !== value.trim() || unsafeCharacter || value.startsWith("//")) return undefined;
   if (value.startsWith("#")) return value;
-  if (isCanonicalUploadedMediaHref(value)) return value;
+  if (isCanonicalUploadedAssetHref(value)) return value;
   if (value.startsWith("/")) return toDeliveryHref(value, basePath);
   let parsed: URL;
   try { parsed = new URL(value, DELIVERY_BASE_URL); } catch { return undefined; }

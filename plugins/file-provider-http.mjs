@@ -1,7 +1,7 @@
 // @ts-check
 // Dev-only HTTP guards shared by every filesystem transport endpoint.
 //
-// Composer, Media and each domain endpoint enforce the same admission rules:
+// Composer, Assets and each domain endpoint enforce the same admission rules:
 // exact URL, POST only, a same-origin development request, a per-dev-server
 // capability compared in constant time, and a declared content type. Keeping
 // one implementation means a new domain endpoint cannot accidentally ship a
@@ -131,8 +131,9 @@ export function validateRequestHead(
   req,
   endpoint,
   capability,
-  acceptedMediaTypes = new Set(["application/json"]),
-  unsupportedMediaTypeMessage = "Content-Type must be application/json.",
+  acceptedAssetTypes = new Set(["application/json"]),
+  unsupportedAssetTypeMessage = "Content-Type must be application/json.",
+  allowAnyAssetType = false,
 ) {
   if (req.url !== endpoint) return errorResponse(404, "not-found", "File-provider route not found.");
   if (req.method !== "POST") {
@@ -144,9 +145,9 @@ export function validateRequestHead(
   if (!hasCapability(req, capability)) {
     return errorResponse(401, "invalid-capability", "The development file capability is missing or invalid.");
   }
-  const mediaType = req.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
-  if (mediaType === undefined || !acceptedMediaTypes.has(mediaType)) {
-    return errorResponse(415, "unsupported-media-type", unsupportedMediaTypeMessage);
+  const mimeType = req.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mimeType === undefined || (!allowAnyAssetType && !acceptedAssetTypes.has(mimeType))) {
+    return errorResponse(415, "unsupported-media-type", unsupportedAssetTypeMessage);
   }
   return undefined;
 }

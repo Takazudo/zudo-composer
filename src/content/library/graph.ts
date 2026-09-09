@@ -1,5 +1,5 @@
 import { isValueValidForField, traverseContentSchema, traverseContentValues, validateContentEntryRecord, validateContentModelRecord } from "../model";
-import type { ContentEntryRef, ContentMediaUse, ContentModelRecord, ContentRecordRef } from "../model";
+import type { ContentEntryRef, ContentAssetUse, ContentModelRecord, ContentRecordRef } from "../model";
 import { diagnoseContentEntryCompleteness } from "./helpers";
 import { ContentPersistenceError } from "./types";
 import type { ContentMutation, ContentSnapshot, ContentStore } from "./types";
@@ -14,7 +14,7 @@ export interface ContentGraphIndex {
   complete: boolean;
   diagnostics: ContentGraphDiagnostic[];
   relations: ContentRelationEdge[];
-  mediaUses: { location: ContentGraphLocation; use: ContentMediaUse }[];
+  assetUses: { location: ContentGraphLocation; use: ContentAssetUse }[];
   modelDependencies: { source: ContentRecordRef; target: ContentRecordRef; fieldId: string; path: readonly string[] }[];
   fieldDependencies: { source: ContentRecordRef; target: ContentRecordRef; fieldId: string; reason: string }[];
   incoming(ref: ContentEntryRef): readonly ContentRelationEdge[];
@@ -23,7 +23,7 @@ export interface ContentGraphIndex {
 /** Every supplied provider snapshot must come from readAll, never a loaded UI page. */
 export function buildContentGraphIndex(snapshots: readonly ContentSnapshot[]): ContentGraphIndex {
   const diagnostics: ContentGraphDiagnostic[] = [], relations: ContentRelationEdge[] = [];
-  const mediaUses: ContentGraphIndex["mediaUses"] = [], modelDependencies: ContentGraphIndex["modelDependencies"] = [];
+  const assetUses: ContentGraphIndex["assetUses"] = [], modelDependencies: ContentGraphIndex["modelDependencies"] = [];
   const fieldDependencies: ContentGraphIndex["fieldDependencies"] = [];
   const providers = new Map<string, ContentSnapshot>();
   const modelsByRef = new Map<string, ContentModelRecord>(), entryRefs = new Set<string>();
@@ -71,7 +71,7 @@ export function buildContentGraphIndex(snapshots: readonly ContentSnapshot[]): C
       for (const { schema, field, path, value } of traverseContentValues(model, entry)) {
         if (!isValueValidForField(schema, value)) continue;
         const location = { entry: { providerId: snapshot.providerId, modelId: entry.modelId, recordId: entry.id }, fieldId: field.id, path };
-        if (schema.kind === "media-use") mediaUses.push({ location, use: value as unknown as ContentMediaUse });
+        if (schema.kind === "asset-use") assetUses.push({ location, use: value as unknown as ContentAssetUse });
         if (schema.kind !== "reference" && schema.kind !== "reference-list") continue;
         const targets = (schema.kind === "reference" ? [value] : value) as unknown as ContentEntryRef[];
         targets.forEach((target, index) => {
@@ -83,7 +83,7 @@ export function buildContentGraphIndex(snapshots: readonly ContentSnapshot[]): C
       }
     }
   }
-  return { complete: diagnostics.every((issue) => issue.code === "incomplete"), diagnostics, relations, mediaUses, modelDependencies, fieldDependencies, incoming: (ref) => relations.filter((edge) => contentEntryRefKey(edge.target) === contentEntryRefKey(ref)) };
+  return { complete: diagnostics.every((issue) => issue.code === "incomplete"), diagnostics, relations, assetUses, modelDependencies, fieldDependencies, incoming: (ref) => relations.filter((edge) => contentEntryRefKey(edge.target) === contentEntryRefKey(ref)) };
 }
 
 export type ContentDeletionTarget = { kind: "entry"; ref: ContentEntryRef } | { kind: "model"; ref: ContentRecordRef } | { kind: "field"; ref: ContentRecordRef; fieldId: string };

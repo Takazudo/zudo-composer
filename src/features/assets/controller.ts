@@ -1,0 +1,284 @@
+import { assetDownloadMarkdown } from "../../assets/integration/download";
+import { assetKindForMime } from "../../assets/model";
+import { summarizeAsset, type AssetProvider, type AssetSummary, type AssetSnapshot, type AssetRecord, type AssetMetadataPatch, type AssetFolderPatch } from "../../assets";
+import type { AssetFileProviderStore } from "../../assets/storage/file-provider";
+import type { AssetContentServices, AssetUsageScan, AssetInsertionTarget, AssetUse } from "../../assets/integration/content";
+import { ASSET_MAX_BYTE_LENGTH, ASSET_EXTENSION_BY_TYPE } from "../../assets/model";
+import type { EditableMime } from "@zudo-composer/image-editor";
+
+export interface AssetLibraryControllerOptions {
+  writeClipboard?: (text: string) => void | Promise<void>;
+  contentServices?: AssetContentServices;
+}
+export interface AssetLibraryState {
+  phase: "idle" | "loading" | "ready" | "recovery" | "error";
+  records: readonly AssetSummary[];
+  snapshot: AssetSnapshot | null;
+  errorMessage: string | null;
+  recoveryMessage: string | null;
+  notice: { tone: "info" | "err"; text: string } | null;
+  busy: boolean;
+  operation: string | null;
+  generation: number;
+  uncertain: boolean;
+}
+export function versionedAssetStore(provider: AssetProvider): AssetFileProviderStore | undefined {
+  const store = provider.store as Partial<AssetFileProviderStore>;
+  return store.capabilities?.snapshot && typeof store.snapshot === "function" ? store as AssetFileProviderStore : undefined;
+}
+export function assetPublicFileName(record: Pick<AssetSummary, "url">): string { return record.url.split("/").at(-1)!; }
+export function assetUrl(record: Pick<AssetSummary, "authoringUrl">): string { return record.authoringUrl; }
+export function assetMarkdown(record: Pick<AssetSummary, "id" | "authoringUrl" | "fileName" | "mimeType">, providerId = "asset-files"): string {
+  if (assetKindForMime(record.mimeType)?.inline === false) return `\n\n${assetDownloadMarkdown({ kind: "download", asset: { providerId, assetId: record.id }, label: record.fileName, showSize: true, showType: true })}\n\n`;
+  const label = record.fileName.replace(/\.[^.]+$/, "").replace(/([\\[\]])/g, "\\$1");
+  return `${record.mimeType.startsWith("image/") ? "!" : ""}[${label}](${record.authoringUrl})`;
+}
+const message = (error: unknown) => error instanceof Error ? error.message : "Asset operation failed.";
+const EDITABLE_MIME_TYPES = new Set<EditableMime>(["image/png", "image/jpeg", "image/webp"]);
+
+function editableMime(value: string): value is EditableMime {
+  return EDITABLE_MIME_TYPES.has(value as EditableMime);
+}
+
+function fileNameWithExtension(fileName: string, extension: string): string {
+  const stem = fileName.replace(/\.[^.]*$/, "");
+  return `${stem}.${extension}`;
+}
+
+function editedCopyName(fileName: string, extension: string): string {
+  const stem = fileName.replace(/\.[^.]*$/, "");
+  return `${stem} (edited).${extension}`;
+}
+
+export class AssetLibraryController {
+  private current: AssetLibraryState = { phase: "idle", records: [], snapshot: null, errorMessage: null, recoveryMessage: null, notice: null, busy: false, operation: null, generation: 0, uncertain: false };
+  private listeners = new Set<(state: AssetLibraryState) => void>();
+  private request = 0;
+  private pending: Promise<unknown> = Promise.resolve();
+  private drafts = new Map<string, { record: AssetSummary; patch: AssetMetadataPatch }>();
+  private persistingDrafts = new Map<string, { record: AssetSummary; patch: AssetMetadataPatch }>();
+  private draftSaves = new Map<string, Promise<void>>();
+  private flushing: Promise<void> | undefined;
+  readonly store: AssetFileProviderStore | undefined;
+  readonly contentServices: AssetContentServices | undefined;
+  constructor(readonly provider: AssetProvider, private options: AssetLibraryControllerOptions = {}) {
+    this.store = versionedAssetStore(provider); this.contentServices = options.contentServices;
+  }
+  get state() { return this.current; }
+  subscribe(listener: (state: AssetLibraryState) => void) { this.listeners.add(listener); listener(this.current); return () => { this.listeners.delete(listener); }; }
+  private set(patch: Partial<AssetLibraryState>) { this.current = { ...this.current, ...patch }; for (const listener of this.listeners) listener(this.current); }
+  reportFailure(error: unknown) { this.set({ notice: { tone: "err", text: message(error) } }); }
+  clearNotice() { this.set({ notice: null }); }
+  async initialize() {
+    this.set({ phase: "loading" });
+    try {
+      const outcome = await this.provider.initialization.initialize();
+      if (outcome.status === "error") throw outcome.error;
+      if (outcome.status === "recovery-required") { this.set({ phase: "recovery", recoveryMessage: outcome.recovery.message, records: outcome.summaries }); return; }
+      await this.refresh();
+    } catch (error) { this.set({ phase: "error", errorMessage: message(error) }); }
+  }
+  retryInitialization() { return this.initialize(); }
+  async reload() {
+    if (this.current.busy) throw new Error("Wait for the pending operation before inspecting current state.");
+    await this.refresh();
+    if (this.current.phase !== "ready" || (this.store && !this.current.snapshot)) throw new Error("Authoritative Asset inspection did not complete.");
+    this.pending = Promise.resolve();
+    this.set({ uncertain: false, notice: { tone: "info", text: "Authoritative state reloaded. Inspect current records before starting a new operation; unsaved drafts retain their original revisions." } });
+  }
+  async refresh() {
+    const request = ++this.request;
+    this.set({ phase: "loading" });
+    try {
+      const snapshot = this.store ? await this.store.snapshot() : null;
+      const records = snapshot ? snapshot.records.map(summarizeAsset) : await this.provider.store.list();
+      if (request === this.request) this.set({ snapshot, records, phase: "ready", errorMessage: null, recoveryMessage: null });
+    } catch (error) { if (request === this.request) this.set({ phase: "error", errorMessage: message(error) }); throw error; }
+  }
+  capability(name: keyof NonNullable<AssetFileProviderStore["capabilities"]>): boolean { return this.current.phase === "ready" && !this.current.uncertain && this.store?.capabilities[name] === true; }
+  private requireStore(capability: keyof AssetFileProviderStore["capabilities"]): AssetFileProviderStore {
+    if (!this.store || !this.capability(capability)) throw new Error(`Asset ${capability} is unavailable for this provider.`);
+    return this.store;
+  }
+  /** Pending writes survive presentation unmount and are visible to release flush. */
+  flush(): Promise<void> {
+    if (this.flushing) return this.flushing;
+    const run = Promise.resolve().then(async () => {
+      await this.pending;
+      while (this.drafts.size) await this.saveDraft(this.drafts.keys().next().value!);
+    });
+    this.flushing = run;
+    void run.finally(() => { if (this.flushing === run) this.flushing = undefined; }).catch(() => undefined);
+    return run;
+  }
+  draftMetadata(record: AssetSummary, patch: AssetMetadataPatch) {
+    const previous = this.drafts.get(record.id);
+    const persisting = this.persistingDrafts.get(record.id);
+    // Only replace a prior patch when every field belongs to the active save.
+    // Uncommitted fields keep their original base so external changes still
+    // conflict; a stale inspector can never move an existing draft backwards.
+    const hasUncommitted = previous && (Object.keys(previous.patch) as (keyof AssetMetadataPatch)[])
+      .some((key) => !persisting || previous.patch[key] !== persisting.patch[key]);
+    const newerBase = previous && record.revision > previous.record.revision && !hasUncommitted;
+    this.drafts.set(record.id, {
+      record: previous && !newerBase ? previous.record : record,
+      patch: { ...(newerBase ? undefined : previous?.patch), ...patch },
+    });
+    this.set({ generation: this.current.generation + 1 });
+  }
+  saveDraft(id: string): Promise<void> {
+    const active = this.draftSaves.get(id);
+    if (active) return active.then(() => this.drafts.has(id) ? this.saveDraft(id) : undefined);
+    const saving = this.persistDraft(id);
+    this.draftSaves.set(id, saving);
+    void saving.finally(() => { if (this.draftSaves.get(id) === saving) this.draftSaves.delete(id); }).catch(() => undefined);
+    return saving;
+  }
+  private async persistDraft(id: string) {
+    const draft = this.drafts.get(id); if (!draft) return;
+    this.persistingDrafts.set(id, draft);
+    let saved: AssetRecord;
+    try { saved = await this.updateMetadata(draft.record, draft.patch); }
+    catch (error) {
+      // A newer input base is not proof that our write committed. Restore
+      // its pending fields and conflict base when the write/refresh fails.
+      const newer = this.drafts.get(id);
+      if (newer && newer !== draft) this.drafts.set(id, { record: draft.record, patch: { ...draft.patch, ...newer.patch } });
+      throw error;
+    }
+    finally { this.persistingDrafts.delete(id); }
+    const newer = this.drafts.get(id);
+    if (!newer) return;
+    if (newer === draft) this.drafts.delete(id);
+    else if (newer.record.revision <= saved.revision) {
+      // Concurrent edits survive our own commit, including an inspector that
+      // already advanced to the saved revision while the refresh was running.
+      this.drafts.set(id, { ...newer, record: summarizeAsset(saved) });
+    } else {
+      // This draft was authored against a later authoritative revision. Keep
+      // that base; moving it back to our result would create a false conflict.
+      this.drafts.set(id, newer);
+    }
+    this.set({ generation: this.current.generation + 1 });
+  }
+  hasDraft(id: string) { return this.drafts.has(id); }
+  discardDraft(id: string) {
+    if (this.current.busy || this.current.uncertain) throw new Error("Resolve the pending or uncertain operation before discarding changes.");
+    this.drafts.delete(id); this.pending = Promise.resolve();
+    this.set({ generation: this.current.generation + 1, notice: null });
+  }
+  private mutate<T>(label: string, task: () => Promise<T>): Promise<T> {
+    if (this.current.busy) return Promise.reject(new Error("Wait for the current Asset operation to finish."));
+    if (this.current.phase !== "ready" || this.current.uncertain) return Promise.reject(new Error("Reload authoritative Asset state before making changes."));
+    const pending = Promise.resolve().then(async () => {
+      let committed = false;
+      try { const result = await task(); committed = true; await this.refresh(); this.set({ notice: { tone: "info", text: `${label} saved.` } }); return result; }
+      catch (error) {
+        if (committed) {
+          const stale = Object.assign(new Error(`${label} was committed, but the refreshed library could not be read. Do not retry the write; reload authoritative state.`), { code: "committed-stale" });
+          this.set({ uncertain: true }); this.reportFailure(stale); throw stale;
+        }
+        if (error && typeof error === "object" && "code" in error && error.code === "commit-uncertain") this.set({ uncertain: true });
+        await this.refresh().catch(() => undefined); this.reportFailure(error); throw error;
+      }
+      finally { this.set({ busy: false, operation: null }); }
+    });
+    this.pending = pending;
+    this.set({ busy: true, operation: label, notice: null, generation: this.current.generation + 1 });
+    void pending.catch(() => undefined); return pending;
+  }
+  updateMetadata(record: AssetSummary, patch: AssetMetadataPatch) {
+    const store = this.requireStore("metadata");
+    return this.mutate("Asset details", () => store.updateMetadata(record.id, patch, { expectedRevision: record.revision }));
+  }
+  createFolder(name: string, parentId: string | null, index: number, token: string) {
+    const store = this.requireStore("folders");
+    return this.mutate("Folder", () => store.createFolder({ name, parentId, index }, token));
+  }
+  updateFolder(id: string, patch: AssetFolderPatch, revision: number, token: string) {
+    const store = this.requireStore("folders");
+    return this.mutate("Folder", () => store.updateFolder(id, patch, { expectedRevision: revision, expectedMutationToken: token }));
+  }
+  changeFolderState(id: string, revision: number, restore: boolean) {
+    const store = this.requireStore("folders");
+    return this.mutate(restore ? "Folder restore" : "Folder trash", () => restore ? store.restoreFolder(id, { expectedRevision: revision }) : store.trashFolder(id, { expectedRevision: revision }));
+  }
+  move(records: readonly AssetSummary[], folderId: string | null) {
+    const store = this.requireStore("metadata");
+    return this.mutate("Move", async () => { for (const record of records) await store.updateMetadata(record.id, { folderId }, { expectedRevision: record.revision }); });
+  }
+  restore(records: readonly AssetSummary[]) {
+    const store = this.requireStore("restore");
+    return this.mutate("Restore", async () => { for (const record of records) await store.restore(record.id, { expectedRevision: record.revision }); });
+  }
+  async scan(record: AssetSummary, fresh = false): Promise<AssetUsageScan> {
+    if (!this.contentServices) return { status: "unavailable", locations: [], tokens: {}, message: "Authoritative Content usage inspection is unavailable; trash is blocked." };
+    return this.contentServices.scan({ providerId: this.provider.descriptor.id, assetId: record.id }, fresh);
+  }
+  async trash(records: readonly AssetSummary[]) {
+    const store = this.requireStore("trash");
+    const ownDrafts = new Set(records.filter((record) => this.hasDraft(record.id)).map(({ id }) => id));
+    if (ownDrafts.size) {
+      await this.flush();
+      records = records.map((record) => ownDrafts.has(record.id) ? this.current.records.find(({ id }) => id === record.id)! : record);
+    }
+    // Capture before registering this write, so a Content flush cannot wait on itself.
+    const scans = await Promise.all(records.map((record) => this.scan(record, true)));
+    if (scans.some((scan) => scan.status !== "complete" || scan.locations.length > 0 || (scan.additionalLocations?.length ?? 0) > 0)) throw new Error("Trash blocked: active project uses or an incomplete authoritative scan remain.");
+    return this.mutate("Trash", async () => {
+      for (const [index, record] of records.entries()) {
+        if (!await this.contentServices!.isCurrent(scans[index]!)) throw new Error("Content changed during the safety check. Inspect usages again.");
+        await store.trash(record.id, { expectedRevision: record.revision });
+      }
+    });
+  }
+  upload(file: Blob & { name: string }, folderId: string | null): Promise<AssetRecord> {
+    const store = this.requireStore("replace");
+    if (typeof store.upload !== "function") return Promise.reject(new Error("Upload is unavailable."));
+    return this.mutate("Upload", () => store.upload(file, { folderId }));
+  }
+  replace(record: AssetSummary, file: Blob) {
+    const store = this.requireStore("replace");
+    return this.mutate("Replacement", () => store.replace(record.id, file, { expectedRevision: record.revision }));
+  }
+  /** Whether this provider can offer the image editor's Save as copy action. */
+  canSaveEditedImageCopy(): boolean {
+    return this.capability("replace") && typeof this.store?.upload === "function";
+  }
+  /**
+   * Persist one editor export against the exact record revision captured when
+   * the editor opened. Replace retains the record identity; copy uses the
+   * record's captured folder and a normalized source extension.
+   */
+  saveEditedImage(record: AssetSummary, blob: Blob, options: { mode: "replace" | "copy" }): Promise<AssetRecord> {
+    if (!this.store) return Promise.reject(new Error("Asset replace is unavailable for this provider."));
+    if (this.current.busy) return Promise.reject(new Error("Wait for the current Asset operation to finish."));
+    if (this.current.phase !== "ready" || this.current.uncertain) return Promise.reject(new Error("Reload authoritative Asset state before making changes."));
+    if (this.store.capabilities.replace !== true) return Promise.reject(new Error("Asset replace is unavailable for this provider."));
+    const store = this.store;
+    if (!editableMime(record.mimeType)) return Promise.reject(new Error("Only PNG, JPEG and WebP assets can be edited."));
+    if (blob.type !== record.mimeType) return Promise.reject(new Error("Edited image MIME type must match the source image."));
+    if (blob.size > ASSET_MAX_BYTE_LENGTH) return Promise.reject(new Error("Edited image exceeds the 25 MiB limit. Choose smaller dimensions."));
+    if (options.mode === "copy" && typeof store.upload !== "function") return Promise.reject(new Error("Saving an edited copy is unavailable for this provider."));
+    const extension = ASSET_EXTENSION_BY_TYPE[record.mimeType];
+    const name = options.mode === "copy" ? editedCopyName(record.fileName, extension) : fileNameWithExtension(record.fileName, extension);
+    const file = new File([blob], name, { type: record.mimeType });
+    return this.mutate("Edit", () => options.mode === "replace"
+      ? store.replace(record.id, file, { expectedRevision: record.revision })
+      : store.upload!(file, { folderId: record.folderId, note: record.note }));
+  }
+  insert(target: AssetInsertionTarget, value: AssetUse) {
+    if (!this.contentServices) return Promise.reject(new Error("Content insertion is unavailable."));
+    return this.mutate("Content usage", async () => {
+      const current = await this.provider.store.get(value.asset.assetId);
+      if (value.asset.providerId !== this.provider.descriptor.id || current.status !== "loaded" || current.record.document.state !== "active") throw new Error("The selected asset is unavailable or trashed.");
+      if (value.kind === "image" && !summarizeAsset(current.record).mimeType.startsWith("image/")) throw new Error("The asset is no longer an image. Choose another asset or presentation.");
+      await this.contentServices!.insert(target, value);
+    });
+  }
+  async copyUrl(record: AssetSummary) { await this.copy(record.authoringUrl); }
+  async copyMarkdown(record: AssetSummary) { await this.copy(assetMarkdown(record, this.provider.descriptor.id)); }
+  async copy(text: string) { await (this.options.writeClipboard ?? ((value) => navigator.clipboard.writeText(value)))(text); this.set({ notice: { tone: "info", text: "Copied." } }); }
+  dispose() { this.request++; this.listeners.clear(); }
+}
+export function createAssetLibraryController(provider: AssetProvider, options?: AssetLibraryControllerOptions) { return new AssetLibraryController(provider, options); }

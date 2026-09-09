@@ -7,13 +7,13 @@ export type RouteIntent =
   | (ProviderTarget & { readonly route: "content"; readonly modelId: RecordId; readonly entryId?: RecordId; readonly viewId?: string; readonly fieldId?: RecordId; readonly valuePath?: readonly (RecordId | number)[] })
   | (ProviderTarget & { readonly route: "mapping"; readonly mappingId: RecordId })
   | (ProviderTarget & { readonly route: "sitemapper"; readonly sitemapId: RecordId; readonly pageId?: RecordId })
-  | (ProviderTarget & { readonly route: "media"; readonly assetId: RecordId })
+  | (ProviderTarget & { readonly route: "assets"; readonly assetId: RecordId })
   | { readonly route: "review" };
 export type RouteIntentRoute = RouteIntent["route"];
 export type RouteIntentParseOutcome = { readonly status: "none" } | { readonly status: "matched"; readonly intent: RouteIntent } | { readonly status: "invalid"; readonly message: string };
 export interface RouteIntentLocation { readonly pathname: string; readonly search: string; readonly hash?: string }
-const PATHS: Record<string, RouteIntentRoute> = { "/composer": "composer", "/content": "content", "/mapping": "mapping", "/sitemapper": "sitemapper", "/media": "media", "/review": "review" };
-const PARAMS: Record<RouteIntentRoute, readonly string[]> = { composer: ["provider", "composition", "new"], content: ["provider", "model", "entry", "view", "field", "path"], mapping: ["provider", "mapping"], sitemapper: ["provider", "sitemap", "page"], media: ["provider", "asset"], review: [] };
+const PATHS: Record<string, RouteIntentRoute> = { "/composer": "composer", "/content": "content", "/mapping": "mapping", "/sitemapper": "sitemapper", "/assets": "assets", "/review": "review" };
+const PARAMS: Record<RouteIntentRoute, readonly string[]> = { composer: ["provider", "composition", "new"], content: ["provider", "model", "entry", "view", "field", "path"], mapping: ["provider", "mapping"], sitemapper: ["provider", "sitemap", "page"], assets: ["provider", "asset"], review: [] };
 export const isIntentProviderId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9](?:[a-z0-9_-]{0,126}[a-z0-9])?$/.test(value);
 
 /** Typed RFC6901 pointer segments: `f:` is a stable nested field id, `i:` a list index. */
@@ -76,7 +76,7 @@ export function parseIntent(input?: RouteIntentLocation | URL | string): RouteIn
     switch (route) {
       case "composer": intent = { route, providerId, compositionId: read("composition")! }; break;
       case "mapping": intent = { route, providerId, mappingId: read("mapping")! }; break;
-      case "media": intent = { route, providerId, assetId: read("asset")! }; break;
+      case "assets": intent = { route, providerId, assetId: read("asset")! }; break;
       case "sitemapper": {
         const pageId = read("page", true);
         intent = { route, providerId, sitemapId: read("sitemap")!, ...(pageId === undefined ? {} : { pageId }) }; break;
@@ -102,7 +102,7 @@ export function formatIntent(intent: RouteIntent): string {
     case "review": break;
     case "composer": if ("action" in intent) params.set("new", "1"); else params.set("composition", intent.compositionId); break;
     case "mapping": params.set("mapping", intent.mappingId); break;
-    case "media": params.set("asset", intent.assetId); break;
+    case "assets": params.set("asset", intent.assetId); break;
     case "sitemapper": params.set("sitemap", intent.sitemapId); if (intent.pageId !== undefined) params.set("page", intent.pageId); break;
     case "content": {
       params.set("model", intent.modelId);

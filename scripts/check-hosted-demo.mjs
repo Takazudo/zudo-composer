@@ -6,4 +6,4 @@ const directory = arguments_[0] ?? "dist-hosted-demo";
 const expectedSourceRevision = arguments_[1];
 const proof = await verifyHostedDemoArtifact({ directory, expectedSourceRevision });
 
-console.log(`Hosted demo verified: ${proof.files.length} files, four media assets, source ${proof.manifest.sourceRevision}.`);
+console.log(`Hosted demo verified: ${proof.files.length} files, six asset files, source ${proof.manifest.sourceRevision}.`);

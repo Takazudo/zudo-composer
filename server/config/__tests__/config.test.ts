@@ -42,8 +42,8 @@ describe("composer()", () => {
       contentDir: "cms/content",
       mappingsDir: "cms/mappings",
       sitemapsDir: "cms/sitemaps",
-      mediaDir: "cms/media",
-      publicMediaDir: "public/uploaded-media",
+      assetsDir: "cms/assets",
+      publicAssetsDir: "public/uploaded-assets",
       styles: "styles/base.css",
       pack: PACK,
     });
@@ -69,7 +69,7 @@ describe("composer()", () => {
     }
   });
 
-  it("re-bases the CMS domains when dataDir moves, but not the public media dir", () => {
+  it("re-bases the CMS domains when dataDir moves, but not the public assets dir", () => {
     const config = resolveConfig({ pack: PACK, dataDir: "store" });
 
     expect(config.settings).toMatchObject({
@@ -78,15 +78,15 @@ describe("composer()", () => {
       contentDir: "store/content",
       mappingsDir: "store/mappings",
       sitemapsDir: "store/sitemaps",
-      mediaDir: "store/media",
-      publicMediaDir: "public/uploaded-media",
+      assetsDir: "store/assets",
+      publicAssetsDir: "public/uploaded-assets",
     });
   });
 
   it("lets an explicit domain directory win over a moved dataDir", () => {
-    const config = resolveConfig({ pack: PACK, dataDir: "store", mediaDir: "assets/media" });
+    const config = resolveConfig({ pack: PACK, dataDir: "store", assetsDir: "assets/files" });
 
-    expect(config.settings.mediaDir).toBe("assets/media");
+    expect(config.settings.assetsDir).toBe("assets/files");
     expect(config.settings.contentDir).toBe("store/content");
   });
 
@@ -98,6 +98,15 @@ describe("composer()", () => {
 });
 
 describe("precedence", () => {
+  it("resolves the public Assets environment keys independently of dataDir", () => {
+    const config = resolveConfig({ pack: PACK, dataDir: "data" }, {
+      ZUDO_COMPOSER_ASSETS_DIR: "store/assets",
+      ZUDO_COMPOSER_PUBLIC_ASSETS_DIR: "public/library",
+    });
+    expect(config.paths.assets).toBe(resolve(HOST_ROOT, "store/assets"));
+    expect(config.paths.publicAssets).toBe(resolve(HOST_ROOT, "public/library"));
+  });
+
   it("prefers an environment override to the default", () => {
     const config = resolveConfig({ pack: PACK }, { [SETTING_ENVIRONMENT_KEYS.contentDir]: "env/content" });
 
@@ -143,8 +152,8 @@ describe("absolute paths", () => {
       content: resolve(HOST_ROOT, "store/content"),
       mappings: resolve(HOST_ROOT, "store/mappings"),
       sitemaps: resolve(HOST_ROOT, "store/sitemaps"),
-      media: resolve(HOST_ROOT, "store/media"),
-      publicMedia: resolve(HOST_ROOT, "public/uploaded-media"),
+      assets: resolve(HOST_ROOT, "store/assets"),
+      publicAssets: resolve(HOST_ROOT, "public/uploaded-assets"),
       styles: resolve(HOST_ROOT, "css/entry.css"),
     });
   });

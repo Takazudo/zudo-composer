@@ -83,7 +83,7 @@ describe("host and tool CSS ownership", () => {
 
   it("keeps the configured pack and WASM resources out of Vite's dev dependency optimizer", () => {
     const vite = readFileSync(resolve("vite.config.ts"), "utf8");
-    expect(vite).toContain("publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicMedia)");
+    expect(vite).toContain("publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicAssets)");
     // Derived, never spelled out: a literal here would re-hardcode the very
     // provider that `pack` exists to make swappable.
     expect(vite).toMatch(

@@ -5,7 +5,7 @@ import { CONTENT_PROVIDERS, ContentPersistenceError, type ContentInitializationO
 import { createFileProviderContentProvider, readContentFileProviderConfig } from "../content/storage/file-provider";
 import { activeComponentProvider } from "../features/composer/active-pack";
 import { createContentPreviewSource, type ContentPreviewSource } from "../features/content/preview-source";
-import { createFileProviderMediaProvider, type MediaFileProvider } from "../media";
+import { createFileProviderAssetProvider, type AssetFileProvider } from "../assets";
 import type { MappingContentEntryCatalog } from "../features/mapping";
 import type { MappingAttachmentCallbacks } from "../features/mapping/attachments";
 import { MAPPING_PROVIDERS, createCompositionCatalog as createMappingCompositionCatalog, createMappingCatalog, MappingPersistenceError, resolveMappingDefinition, type CompositionCatalog as MappingCompositionCatalog, type MappingCatalog, type MappingInitializationOutcome, type MappingProvider, type MappingRecord } from "../mapping";
@@ -17,7 +17,7 @@ import type { MappingAssignmentCatalog } from "../sitemapper/routes";
 import { createFileProviderSitemapProvider, readSitemapFileProviderConfig } from "../sitemapper/storage/file-provider";
 import { activeSiteProjectValidationContext } from "./site-project-manifest";
 import { createFileProviderWorkspaceStorage, withWorkspaceInitializationLock, type WorkspaceStorage } from "./workspace-storage";
-import { AUTHORING_PERSISTENCE_CHANNELS, isAuthoringPersistenceChannel, MEDIA_PERSISTENCE_CHANNEL, PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./persistence-channels";
+import { AUTHORING_PERSISTENCE_CHANNELS, isAuthoringPersistenceChannel, ASSET_PERSISTENCE_CHANNEL, PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./persistence-channels";
 import { projectFromWorkspace, type WorkspaceRecord } from "./workspace-record";
 import { createWorkspaceSaveRegistry, type WorkspaceSaveRegistry } from "./workspace-sessions";
 import { captureWorkspaceSnapshot, checkWorkspaceCapture, type WorkspaceCapture, type WorkspaceCaptureOutcome, type WorkspaceSnapshotSource, type WorkspaceToken } from "./workspace-snapshot";
@@ -112,7 +112,7 @@ export interface ProductionProviderIntegration {
   componentProvider: typeof activeComponentProvider;
   compositionProviders: readonly CompositionProvider[]; compositionCatalog: CompositionCatalog; mappingCompositionCatalog: MappingCompositionCatalog;
   contentProviders: readonly ContentProvider[]; contentProvider: ContentProvider; contentCatalog: ContentCatalog;
-  mediaProvider: MediaFileProvider | undefined;
+  assetProvider: AssetFileProvider | undefined;
   createContentPreviewSource(): ContentPreviewSource;
   mappingContentEntries: MappingContentEntryCatalog; mappingProviders: readonly MappingProvider[]; mappingProvider: MappingProvider; mappingCatalog: MappingCatalog;
   mappingAttachmentService: MappingAttachmentCallbacks;
@@ -150,7 +150,7 @@ interface ProductionProviderIntegrationCommonOptions {
   workspaceId?: string;
   creation?: WorkspaceCreateOptions;
   saveRegistry?: WorkspaceSaveRegistry;
-  mediaProvider?: MediaFileProvider | null;
+  assetProvider?: AssetFileProvider | null;
   /**
    * Replaces the whole filesystem transport, registry included. It is a factory
    * rather than a value because each integration resolves its own open
@@ -226,7 +226,7 @@ export function createFileProviderWorkspaceProviders(workspace: () => string): W
 }
 
 export function createProductionProviderIntegration(options: ProductionProviderIntegrationOptions = {}): ProductionProviderIntegration {
-  const mediaProvider = options.mediaProvider === undefined ? createFileProviderMediaProvider() : options.mediaProvider ?? undefined;
+  const assetProvider = options.assetProvider === undefined ? createFileProviderAssetProvider() : options.assetProvider ?? undefined;
   const usesInjectedSource = options.project === undefined;
   const activated: ReturnType<typeof activate> = usesInjectedSource && injectedDeliverySource.status === "error"
     ? { error: new ProviderIntegrationError("source", injectedDeliverySource.message, true, { sourceReason: "invalid" }) }
@@ -495,7 +495,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     resolveComposition: async (ref) => { try { await ensureReady(); return initializedCompositionCatalog().resolveComposition(ref); } catch { return { status: "provider-unavailable" }; } },
   };
 
-  const sources = (includeMedia: boolean): WorkspaceSnapshotSource[] => {
+  const sources = (includeAssets: boolean): WorkspaceSnapshotSource[] => {
     if (!project || !workspaceId) throw new ProviderIntegrationError("snapshot", "Open a workspace before capture.");
     const result: WorkspaceSnapshotSource[] = [{ id: "workspace", token: async () => (await storage.open(workspaceId))!.mutationToken, read: async () => { const value = (await storage.open(workspaceId))!; return { mutationToken: value.mutationToken, value }; } }];
     for (const domain of ["compositions", "mappings", "sitemaps"] as const) for (const declared of project.providers[domain]) {
@@ -508,21 +508,21 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       const store = byDomain.content.get(browserProviderIdFor("content", declared.id) as "content-filesystem")!.store;
       result.push({ id: `content:${declared.id}`, token: async () => (await store.readAll()).mutationToken, read: async () => { const value = await store.readAll(); return { mutationToken: value.mutationToken, value }; } });
     }
-    if (includeMedia) {
-      if (!mediaProvider) throw new ProviderIntegrationError("snapshot", "Media is unavailable; a release capture cannot claim a complete media snapshot.", false);
-      result.push({ id: `media:${mediaProvider.descriptor.id}`, token: () => mediaProvider.store.mutationToken(), read: async () => { const value = await mediaProvider.store.snapshot(); return { mutationToken: value.mutationToken, value }; } });
+    if (includeAssets) {
+      if (!assetProvider) throw new ProviderIntegrationError("snapshot", "Assets are unavailable; a release capture cannot claim a complete assets snapshot.", false);
+      result.push({ id: `assets:${assetProvider.descriptor.id}`, token: () => assetProvider.store.mutationToken(), read: async () => { const value = await assetProvider.store.snapshot(); return { mutationToken: value.mutationToken, value }; } });
     }
     return result;
   };
-  const capture = async (includeMedia: boolean): Promise<WorkspaceCaptureOutcome> => {
+  const capture = async (includeAssets: boolean): Promise<WorkspaceCaptureOutcome> => {
     const ready = await lifecycle.initialize();
     if (ready.status === "error") return { status: "unavailable", source: ready.error.phase, error: ready.error };
-    try { return await captureWorkspaceSnapshot(workspaceId!, sessions, sources(includeMedia)); }
+    try { return await captureWorkspaceSnapshot(workspaceId!, sessions, sources(includeAssets)); }
     catch (cause) { return { status: "unavailable", source: "capabilities", error: integrationError("snapshot", cause, "Workspace capture capability is unavailable.") }; }
   };
   const isCaptureCurrent = async (value: WorkspaceCapture) => {
     await ensureReady();
-    return checkWorkspaceCapture(value, workspaceId!, sessions, sources(Object.keys(value.tokens).some((key) => key.startsWith("media:"))));
+    return checkWorkspaceCapture(value, workspaceId!, sessions, sources(Object.keys(value.tokens).some((key) => key.startsWith("assets:"))));
   };
   const openIntegration = async (id: string, creation?: WorkspaceCreateOptions): Promise<ProductionProviderIntegration> => {
     const next = createProductionProviderIntegration({ ...options, creation, workspaceId: id, saveRegistry: sessions });
@@ -562,7 +562,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
       return create(initialProject, initialRevision);
     },
   };
-  const captureWithoutSessions = async (includeMedia: boolean): Promise<WorkspaceCaptureOutcome> => {
+  const captureWithoutSessions = async (includeAssets: boolean): Promise<WorkspaceCaptureOutcome> => {
     if (!project || !workspaceId) return { status: "unavailable", source: "workspace", error: new ProviderIntegrationError("snapshot", "Open a workspace before capture.") };
     const ready = await lifecycle.initialize();
     if (ready.status === "error") return { status: "unavailable", source: ready.error.phase, error: ready.error };
@@ -573,7 +573,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     let sourceList: WorkspaceSnapshotSource[];
     let current = "workspace";
     try {
-      sourceList = sources(includeMedia);
+      sourceList = sources(includeAssets);
       for (const source of sourceList) { current = source.id; before[source.id] = await source.token(); }
       for (const source of sourceList) { current = source.id; const snapshot = await source.read(); values[source.id] = snapshot.value; embedded[source.id] = snapshot.mutationToken; }
       const changed: string[] = [];
@@ -590,7 +590,7 @@ export function createProductionProviderIntegration(options: ProductionProviderI
    * the filesystem, and project captures depend on every authoring domain, so a write
    * landing inside the capture window is ordinary rather than exceptional. The
    * capture reports that as `changed`, which is a read asking to be repeated —
-   * and no caller repeats it, so a Media usage scan or a release preview that
+   * and no caller repeats it, so an Assets usage scan or a release preview that
    * happened to overlap one edit stayed unusable until something unrelated
    * triggered it again. Only a workspace that never holds still is an error.
    */
@@ -604,19 +604,19 @@ export function createProductionProviderIntegration(options: ProductionProviderI
     catch (cause) { return { status: "error", error: integrationError("snapshot", cause, "Snapshot validation failed.") }; }
   };
   const subscribeChanges = (listener: (channel?: string) => void, channels?: readonly string[]) => {
-    const stopStorage = subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel, channels ?? AUTHORING_PERSISTENCE_CHANNELS) || (channels === undefined && channel === MEDIA_PERSISTENCE_CHANNEL)) listener(channel); });
+    const stopStorage = subscribePersistenceChanges((channel) => { if (isAuthoringPersistenceChannel(channel, channels ?? AUTHORING_PERSISTENCE_CHANNELS) || (channels === undefined && channel === ASSET_PERSISTENCE_CHANNEL)) listener(channel); });
     let sessionGeneration = sessions.generation;
     const stopSessions = sessions.subscribe(() => { if (sessionGeneration !== sessions.generation) { sessionGeneration = sessions.generation; if (channels === undefined) listener("sessions"); } });
     return () => { stopStorage(); stopSessions(); };
   };
   const mappingAttachmentService = createMappingAttachmentService({
-    mediaStore: mediaProvider?.store,
+    assetStore: assetProvider?.store,
     getCurrentSiteProject,
     workspace,
     componentCatalog: activeComponentProvider.catalog,
     subscribe: (listener) => subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, listener),
   });
-  return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, mediaProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, mappingAttachmentService, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle, workspace, sessions,
+  return Object.freeze({ componentProvider: activeComponentProvider, compositionProviders, compositionCatalog, mappingCompositionCatalog, contentProviders, contentProvider, contentCatalog, assetProvider, createContentPreviewSource: preview, mappingContentEntries, mappingProviders, mappingProvider, mappingCatalog, mappingAttachmentService, sitemapProvider, sitemapperMappingCatalog, initialization: lifecycle, workspace, sessions,
     subscribeChanges,
     captureWorkspace: async (): Promise<WorkspaceProjectCaptureOutcome> => {
       const outcome = await capture(true);

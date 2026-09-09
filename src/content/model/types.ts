@@ -6,7 +6,7 @@ export const CONTENT_ENTRY_SCHEMA_VERSION = 1 as const;
 
 export const CONTENT_FIELD_KINDS = [
   "text", "long-text", "markdown", "number", "boolean", "date", "slug", "color", "url",
-  "choice", "reference", "reference-list", "object", "list", "media-use",
+  "choice", "reference", "reference-list", "object", "list", "asset-use",
 ] as const;
 export type ContentFieldKind = (typeof CONTENT_FIELD_KINDS)[number];
 export type ContentModelKind = "collection" | "single";
@@ -14,17 +14,18 @@ export type ContentModelKind = "collection" | "single";
 export interface ContentRecordRef { providerId: string; recordId: RecordId }
 export interface ContentEntryRef extends ContentRecordRef { modelId: RecordId }
 /**
- * Stable authoring identity for a managed Media asset.
+ * Stable authoring identity for a managed asset.
  *
- * Content deliberately does not persist a versionId: the current Media head
+ * Content deliberately does not persist a versionId: the current Asset head
  * may change while a draft is being edited. The provider-qualified shape is
- * shared structurally with MediaAssetRef so release can add an exact version
- * without losing which Media provider owns the asset.
+ * shared structurally with AssetAssetRef so release can add an exact version
+ * without losing which Asset provider owns the asset.
  */
 export type ContentAssetRef = { providerId: string; assetId: string };
-export type ContentMediaUse =
+export type ContentAssetUse =
   | { kind: "image"; asset: ContentAssetRef; alt: string; decorative: boolean; caption: string }
   | { kind: "link"; asset: ContentAssetRef; label: string }
+  | { kind: "download"; asset: ContentAssetRef; label: string; showSize: boolean; showType: boolean }
   | { kind: "card"; asset: ContentAssetRef; title: string; description: string };
 
 export type ContentValueSchema =
@@ -34,7 +35,7 @@ export type ContentValueSchema =
   | { kind: "reference-list"; target: ContentRecordRef; ordered: boolean }
   | { kind: "object"; fields: ContentFieldDefinition[] }
   | { kind: "list"; item: ContentValueSchema }
-  | { kind: "media-use"; use: ContentMediaUse["kind"] };
+  | { kind: "asset-use"; use: ContentAssetUse["kind"] };
 
 export type ContentFieldDefinition = {
   id: RecordId;

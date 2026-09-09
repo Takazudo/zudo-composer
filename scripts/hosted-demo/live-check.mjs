@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { HOSTED_DEMO_MANIFEST, sha256, verifyHostedDemoArtifact } from "./artifact.mjs";
 import { SPA_ROUTES } from "../routes.mjs";
+import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
 
 export const LIVE_ORIGIN = "https://zudo-composer.zudolab.dev";
 export const HTTP_TIMEOUT_MS = 10_000;
@@ -29,12 +30,14 @@ export function responseMime(response) {
  * @param {number} timeoutMs
  * @param {Record<string, string>} [headers]
  * @param {number} [deadlineAt]
+ * @param {"GET" | "HEAD"} [method]
  * @returns {Promise<Response>}
  */
-async function fetchWithTimeout(fetchImpl, url, timeoutMs, headers = {}, deadlineAt = Number.POSITIVE_INFINITY) {
+async function fetchWithTimeout(fetchImpl, url, timeoutMs, headers = {}, deadlineAt = Number.POSITIVE_INFINITY, method = "GET") {
   const remainingMs = Math.min(timeoutMs, deadlineAt - Date.now());
   if (remainingMs <= 0) throw new Error("Hosted demo live check exceeded its overall deadline");
   return fetchImpl(url, {
+    method,
     redirect: "error",
     cache: "no-store",
     headers,
@@ -118,6 +121,19 @@ export async function verifyLiveDeployment({
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.equal(sha256(bytes), file.sha256, `/${file.path}: response SHA-256 does not match the built artifact`);
     assert.equal(responseMime(response), file.mime, `/${file.path}: expected ${file.mime}, received ${responseMime(response) || "no Content-Type"}`);
+    if (ASSET_CHECKSUM_URL_PATTERN.test(assetPath)) {
+      const checksum = assetPath.slice("/uploaded-assets/sha256-".length, assetPath.lastIndexOf("."));
+      assert.equal(response.headers.get("cache-control"), ASSET_IMMUTABLE_CACHE_CONTROL, `/${file.path}: immutable cache policy is missing`);
+      assert.equal(response.headers.get("x-content-type-options"), ASSET_NOSNIFF, `/${file.path}: nosniff policy is missing`);
+      assert.equal(response.headers.get("content-length"), String(bytes.byteLength), `/${file.path}: byte length header is wrong`);
+      const disposition = assetContentDisposition(file.mime, checksum);
+      assert.equal(response.headers.get("content-disposition"), disposition ?? null, `/${file.path}: download disposition is wrong`);
+      const head = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(assetPath, origin), sourceRevision), requestTimeoutMs, {}, deadlineAt, "HEAD");
+      assert.ok(head.ok, `/${file.path}: HEAD expected HTTP 2xx, received ${head.status}`);
+      for (const header of ["content-type", "content-length", "cache-control", "x-content-type-options", "content-disposition"]) {
+        assert.equal(head.headers.get(header), response.headers.get(header), `/${file.path}: GET and HEAD ${header} headers differ`);
+      }
+    }
     return { path: file.path, sha256: file.sha256, mime: file.mime };
   }));
 

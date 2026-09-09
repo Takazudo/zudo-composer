@@ -66,7 +66,7 @@ function populatedPlan(): ReleasePlan {
   return {
     schemaVersion: 2, workingProject: project(), workingPrecondition: {}, candidate: project(), selection: [],
     expectedRevision: null, expectedActive: null, storeGeneration: 0, projectRevision: "a".repeat(64), buildId: "b".repeat(64),
-    mediaLock: null, toolchain: { compiler: "test", componentPack: { packId: "test", packVersion: "1", contractVersion: 1 }, packSpecifier: "@fixture/pack/composer-pack", packSource: "workspace:*", installedPackDigest: "c".repeat(64), contractDigest: "d".repeat(64) },
+    assetLock: null, toolchain: { compiler: "test", componentPack: { packId: "test", packVersion: "1", contractVersion: 1 }, packSpecifier: "@fixture/pack/composer-pack", packSource: "workspace:*", installedPackDigest: "c".repeat(64), contractDigest: "d".repeat(64) },
     changes: [{ kind: "changed", domain: "content", providerId: "local", recordId: "entry" }],
     checks: [{ severity: "blocking", code: "missing", message: "Missing linked record", path: "content/" + "a".repeat(64) }],
     affected: [{ kind: "route", identity: "/site/" + "b".repeat(64), reason: "Content changed" }],
@@ -79,7 +79,7 @@ it("renders populated review cards, error and blocking check without losing iden
   const { container } = render(<ReleaseRoute controller={stubController({
     working: project(), plan, phase: "reviewed", error: "Release failed", changed: true, gateBlocked: true,
     active: { projectId: "local", revision: "d".repeat(64), buildId: "e".repeat(64) },
-    staged: { schemaVersion: 2, projectId: "local", revision: plan.projectRevision, buildId: plan.buildId, mediaLock: null, toolchain: plan.toolchain, planDigest: plan.planDigest, publication: [] },
+    staged: { schemaVersion: 2, projectId: "local", revision: plan.projectRevision, buildId: plan.buildId, assetLock: null, toolchain: plan.toolchain, planDigest: plan.planDigest, publication: [] },
     retainedStages: [{ projectId: "first", buildId: "a".repeat(64), stageGeneration: 1 }, { projectId: "second", buildId: "b".repeat(64), stageGeneration: 2 }],
   })} href={() => "/content"} />);
   expect(container.querySelector(".cms-library__title")).toHaveTextContent("Review & release");

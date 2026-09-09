@@ -83,48 +83,48 @@ describe("immutable local release storage", () => {
     expect(await store.discard({ projectId: c.stage.projectId, buildId: c.stage.buildId, expectedStageGeneration: 3, expectedActive: null })).toMatchObject({ status: "ok" });
     expect(await store.list()).toMatchObject({ status: "ok", value: { projects: [expect.objectContaining({ head: b.stage.revision })] } });
   });
-  it("resumes a durable pinned Media copy without consulting unavailable source bytes", async () => {
-    const context = await fixture({ media: true }); const asset = await context.media!.upload({ fileName: "image.png", declaredMediaType: "image/png", bytes: PNG });
-    const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${asset.id}`;
+  it("resumes a durable pinned Assets copy without consulting unavailable source bytes", async () => {
+    const context = await fixture({ assets: true }); const asset = await context.assets!.upload({ fileName: "image.png", declaredMimeType: "image/png", bytes: PNG });
+    const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-assets/asset-${asset.id}`;
     const plan = await review(context.service, value); await call(context.service, "apply", { plan });
     const staged = await context.store.getStage({ projectId: value.id, buildId: plan.buildId }); if (staged.status !== "ok") throw new Error("Stage missing");
-    const compiled = await compileSiteProject(plan.candidate, { componentCatalog: catalog, mediaLock: plan.mediaLock! }); if (compiled.status !== "ready") throw new Error("Compile blocked");
+    const compiled = await compileSiteProject(plan.candidate, { componentCatalog: catalog, assetLock: plan.assetLock! }); if (compiled.status !== "ready") throw new Error("Compile blocked");
     let once = true;
-    const faulty = createLocalSiteProjectStore({ testRoot: context.testRoot, componentPack: catalog.pack, readMedia: async () => (async function* () { yield PNG; })(), fault(point) { if (once && point === "after-rename") { once = false; throw new Error("Copy acknowledged late"); } } });
+    const faulty = createLocalSiteProjectStore({ testRoot: context.testRoot, componentPack: catalog.pack, readAsset: async () => (async function* () { yield PNG; })(), fault(point) { if (once && point === "after-rename") { once = false; throw new Error("Copy acknowledged late"); } } });
     expect(await faulty.complete({ stage: staged.value, build: compiled.build })).toMatchObject({ status: "unavailable" });
-    let reads = 0; const retry = createLocalSiteProjectStore({ testRoot: context.testRoot, componentPack: catalog.pack, readMedia: async () => { reads++; throw new Error("Source offline"); } });
+    let reads = 0; const retry = createLocalSiteProjectStore({ testRoot: context.testRoot, componentPack: catalog.pack, readAsset: async () => { reads++; throw new Error("Source offline"); } });
     expect(await retry.complete({ stage: staged.value, build: compiled.build })).toMatchObject({ status: "ok" }); expect(reads).toBe(0);
-    await writeFile(join(context.testRoot, "builds", plan.buildId, `media-${asset.document.versions[0]!.url.split("/").at(-1)}`), "corrupt");
+    await writeFile(join(context.testRoot, "builds", plan.buildId, `asset-${asset.document.versions[0]!.url.split("/").at(-1)}`), "corrupt");
     expect(await retry.getCompleted({ projectId: value.id, buildId: plan.buildId })).toMatchObject({ status: "unavailable" });
   });
-  it("reads only verified active release bytes and switches the exact pinned Media namespace atomically", async () => {
-    const context = await fixture({ media: true });
+  it("reads only verified active release bytes and switches the exact pinned Assets namespace atomically", async () => {
+    const context = await fixture({ assets: true });
     expect(await context.store.readActiveRelease()).toEqual({ status: "ok", value: null });
-    const firstAsset = await context.media!.upload({ fileName: "first.png", declaredMediaType: "image/png", bytes: PNG });
-    const firstProject = project(); firstProject.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${firstAsset.id}`;
+    const firstAsset = await context.assets!.upload({ fileName: "first.png", declaredMimeType: "image/png", bytes: PNG });
+    const firstProject = project(); firstProject.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-assets/asset-${firstAsset.id}`;
     const firstPlan = await review(context.service, firstProject), first = await release(context.service, firstPlan);
-    const firstPin = first.stage.mediaLock!.pins[0]!;
+    const firstPin = first.stage.assetLock!.pins[0]!;
     expect(await context.store.readActiveRelease()).toMatchObject({ status: "ok", value: { project: { id: first.identity.projectId }, release: { identity: first.identity, completionDigest: first.completionDigest } } });
-    expect(await context.store.readActiveMedia(firstPin.url)).toMatchObject({ status: "ok", value: { bytes: PNG, mediaType: "image/png", identity: first.identity } });
-    expect(await context.store.readActiveMedia(`/uploaded-media/../${firstPin.url.split("/").at(-1)}`)).toEqual({ status: "not-found" });
-    expect(await context.store.readActiveMedia(`/uploaded-media/sha256-${"f".repeat(64)}.png`)).toEqual({ status: "not-found" });
+    expect(await context.store.readActiveAsset(firstPin.url)).toMatchObject({ status: "ok", value: { bytes: PNG, mimeType: "image/png", identity: first.identity } });
+    expect(await context.store.readActiveAsset(`/uploaded-assets/../${firstPin.url.split("/").at(-1)}`)).toEqual({ status: "not-found" });
+    expect(await context.store.readActiveAsset(`/uploaded-assets/sha256-${"f".repeat(64)}.png`)).toEqual({ status: "not-found" });
 
-    const liveVersion = join(context.mediaRoot, "versions", firstAsset.document.versions[0]!.url.split("/").at(-1)!);
+    const liveVersion = join(context.assetRoot, "versions", firstAsset.document.versions[0]!.url.split("/").at(-1)!);
     await writeFile(liveVersion, new Uint8Array([...PNG, 9]));
-    expect(await context.store.readActiveMedia(firstPin.url)).toMatchObject({ status: "ok", value: { bytes: PNG } });
+    expect(await context.store.readActiveAsset(firstPin.url)).toMatchObject({ status: "ok", value: { bytes: PNG } });
 
-    const copied = join(context.testRoot, "builds", first.identity.buildId, `media-${firstPin.url.split("/").at(-1)}`);
+    const copied = join(context.testRoot, "builds", first.identity.buildId, `asset-${firstPin.url.split("/").at(-1)}`);
     await writeFile(copied, "digest mismatch");
-    expect(await context.store.readActiveMedia(firstPin.url)).toMatchObject({ status: "unavailable", message: expect.stringContaining("integrity") });
+    expect(await context.store.readActiveAsset(firstPin.url)).toMatchObject({ status: "unavailable", message: expect.stringContaining("integrity") });
     await writeFile(copied, PNG);
 
-    const secondAsset = await context.media!.upload({ fileName: "second.png", declaredMediaType: "image/png", bytes: new Uint8Array([...PNG, 7]) });
-    const secondProject = structuredClone(firstProject); secondProject.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${secondAsset.id}`;
+    const secondAsset = await context.assets!.upload({ fileName: "second.png", declaredMimeType: "image/png", bytes: new Uint8Array([...PNG, 7]) });
+    const secondProject = structuredClone(firstProject); secondProject.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-assets/asset-${secondAsset.id}`;
     const secondPlan = await review(context.service, secondProject, { expectedRevision: first.identity.revision, expectedActive: first.identity });
-    const second = await release(context.service, secondPlan, first.identity), secondPin = second.stage.mediaLock!.pins[0]!;
+    const second = await release(context.service, secondPlan, first.identity), secondPin = second.stage.assetLock!.pins[0]!;
     expect(secondPin.url).not.toBe(firstPin.url);
-    expect(await context.store.readActiveMedia(firstPin.url)).toEqual({ status: "not-found" });
-    expect(await context.store.readActiveMedia(secondPin.url)).toMatchObject({ status: "ok", value: { bytes: new Uint8Array([...PNG, 7]), identity: second.identity } });
+    expect(await context.store.readActiveAsset(firstPin.url)).toEqual({ status: "not-found" });
+    expect(await context.store.readActiveAsset(secondPin.url)).toMatchObject({ status: "ok", value: { bytes: new Uint8Array([...PNG, 7]), identity: second.identity } });
   });
   it("fails the development delivery seam closed when installed bytes differ from an active stage attestation", async () => {
     const context = await fixture(), plan = await review(context.service, project());

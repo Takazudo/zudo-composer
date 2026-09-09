@@ -1,5 +1,5 @@
 "use client";
-import { useMediaResolvedPreviewSnapshot } from "../../preview/media-snapshot";
+import { useAssetResolvedPreviewSnapshot } from "../../preview/assets-snapshot";
 
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
@@ -137,8 +137,8 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
     [catalogById, entry, sourceDocument],
   );
   const authoredSnapshot = useMemo(() => authoredPreviewDocument ? localPreviewSnapshot(authoredPreviewDocument, authoredPreviewDocument.id) : null, [authoredPreviewDocument]);
-  const media = useMediaResolvedPreviewSnapshot(authoredSnapshot, componentProvider.catalog);
-  const previewDocument = media.snapshot?.document ?? null;
+  const asset = useAssetResolvedPreviewSnapshot(authoredSnapshot, componentProvider.catalog);
+  const previewDocument = asset.snapshot?.document ?? null;
   const latestPreviewDocumentRef = useRef(previewDocument);
   latestPreviewDocumentRef.current = previewDocument;
   const latestThemeRef = useRef(activeTheme);
@@ -205,6 +205,10 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
   return (
     <div class="sg-composer-chooser-preview">
       <p class="sg-composer-chooser-preview-label">{label}</p>
+      {(entry || sourceDocument) && (
+        <h3 class="sg-composer-chooser-preview-title">{entry?.title ?? sourceDocument?.name}</h3>
+      )}
+      {entry && <p class="sg-composer-chooser-preview-description">{entry.description}</p>}
       <div class="sg-composer-chooser-preview-stage">
         {fatalError && (
           <p class="sg-composer-chooser-pattern-error" role="alert" data-composer-preview-fatal="pack-mismatch">
@@ -214,7 +218,7 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
         {!previewDocument && (
           <p class="sg-composer-chooser-preview-empty">Hover or focus a component to preview it here.</p>
         )}
-        {media.error && <p role="alert">{media.error}</p>}
+        {asset.error && <p role="alert">{asset.error}</p>}
         <iframe ref={frameRef} hidden={!previewDocument} style={{ display: previewDocument ? undefined : "none" }} class="sg-composer-preview-iframe" {...frameProps} />
       </div>
     </div>

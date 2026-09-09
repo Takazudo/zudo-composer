@@ -56,19 +56,19 @@ describe("protocol-2 staged release API", () => {
     const active = await release(service, plan);
     expect(reconcile).toHaveBeenCalledWith(active, [expect.objectContaining({ expectedGeneration: 7, lifecycle: "published" })], 1);
   });
-  it("pins exact bytes and gives the same project/new Media a different immutable build", async () => {
-    const { service, media, testRoot } = await fixture({ media: true });
-    const asset = await media!.upload({ fileName: "asset.png", declaredMediaType: "image/png", bytes: PNG });
-    const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${asset.id}`;
+  it("pins exact bytes and gives the same project/new Assets a different immutable build", async () => {
+    const { service, assets, testRoot } = await fixture({ assets: true });
+    const asset = await assets!.upload({ fileName: "asset.png", declaredMimeType: "image/png", bytes: PNG });
+    const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-assets/asset-${asset.id}`;
     const first = await review(service, value); await call(service, "apply", { plan: first });
-    const nextAsset = await media!.replace(asset.id, { bytes: new Uint8Array([...PNG, 9]) }, { expectedRevision: asset.revision });
+    const nextAsset = await assets!.replace(asset.id, { bytes: new Uint8Array([...PNG, 9]) }, { expectedRevision: asset.revision });
     const completed = await call<CompletedRelease>(service, "build", { projectId: value.id, buildId: first.buildId });
-    const pinnedName = Object.keys(completed.files).find((name) => name.startsWith("media-"))!;
+    const pinnedName = Object.keys(completed.files).find((name) => name.startsWith("asset-"))!;
     expect(await readFile(join(testRoot, "builds", first.buildId, pinnedName))).toEqual(Buffer.from(PNG));
     const active = await release(service, first);
     const second = await review(service, value, { expectedRevision: first.projectRevision, expectedActive: active });
     expect(second.projectRevision).toBe(first.projectRevision); expect(second.buildId).not.toBe(first.buildId);
-    await media!.trash(asset.id, { expectedRevision: nextAsset.revision });
+    await assets!.trash(asset.id, { expectedRevision: nextAsset.revision });
     expect(await service.handle({ protocolVersion: 2, operation: "apply", plan: second })).toMatchObject({ ok: false, error: { code: "conflict" } });
     expect((await call<CompletedRelease>(service, "completed", { projectId: value.id, buildId: first.buildId })).completionDigest).toBe(completed.completionDigest);
   });
@@ -101,12 +101,12 @@ describe("protocol-2 staged release API", () => {
     expect(await context.service.handle({ protocolVersion: 2, operation: "plan", project: project(), workingPrecondition: 1, selection: [], expectedRevision: second.projectRevision, expectedActive: null })).toMatchObject({ ok: false, error: { code: "unavailable" } });
   });
   it("fails pinned-byte corruption without changing an already activated release", async () => {
-    const context = await fixture({ media: true }); const asset = await context.media!.upload({ fileName: "asset.png", declaredMediaType: "image/png", bytes: PNG });
-    const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${asset.id}`;
+    const context = await fixture({ assets: true }); const asset = await context.assets!.upload({ fileName: "asset.png", declaredMimeType: "image/png", bytes: PNG });
+    const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-assets/asset-${asset.id}`;
     const first = await review(context.service, value); const active = await release(context.service, first);
-    const replacement = await context.media!.replace(asset.id, { bytes: new Uint8Array([...PNG, 8]) }, { expectedRevision: asset.revision });
+    const replacement = await context.assets!.replace(asset.id, { bytes: new Uint8Array([...PNG, 8]) }, { expectedRevision: asset.revision });
     const next = await review(context.service, value, { expectedRevision: first.projectRevision, expectedActive: active }); await call(context.service, "apply", { plan: next });
-    await writeFile(join(context.mediaRoot, "versions", replacement.document.versions.at(-1)!.url.split("/").at(-1)!), "corrupt");
+    await writeFile(join(context.assetRoot, "versions", replacement.document.versions.at(-1)!.url.split("/").at(-1)!), "corrupt");
     expect(await context.service.handle({ protocolVersion: 2, operation: "build", projectId: value.id, buildId: next.buildId })).toMatchObject({ ok: false, error: { code: "unavailable" } });
     expect((await call<{ active: SiteProjectActiveSelection }>(context.service, "active")).active).toEqual(active);
   });

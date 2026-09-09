@@ -8,13 +8,13 @@ import { WorkspaceContext } from "./app/workspace-context";
 import { parseIntent, formatIntent } from "./app/route-intents";
 import { Banner, Button } from "./components/ui";
 import { PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./app/persistence-channels";
-import { createProjectMediaUsageInspection } from "./site-project/media/usage";
+import { createProjectAssetUsageInspection } from "./site-project/assets/usage";
 import { Shell } from "./app/shell";
 import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
 import { ContentRouteContent } from "./features/content";
 import { MappingRouteContent } from "./features/mapping";
-import { MediaFieldPicker, MediaRouteContent, createMediaContentServices } from "./features/media";
+import { AssetFieldPicker, AssetRouteContent, createAssetContentServices } from "./features/assets";
 import { SitemapperRouteContent } from "./features/sitemapper";
 import { ReleaseRoute, createReleaseController, createReleaseTransport } from "./features/release";
 import { createApplicationOperationGate } from "./app/operation-gate";
@@ -168,7 +168,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       const anchor = event.target.closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor || anchor.target || anchor.hasAttribute("download") || anchor.getAttribute("aria-disabled") === "true") return;
       const url = new URL(anchor.href);
-      if (url.origin !== window.location.origin || (!["/", "/content", "/composer", "/mapping", "/sitemapper", "/media", "/review", "/website-preview", "/site"].includes(url.pathname) && !(hostedDemo && (isSitePath(url.pathname) || isWorkingPreviewPath(url.pathname))))) return;
+      if (url.origin !== window.location.origin || (!["/", "/content", "/composer", "/mapping", "/sitemapper", "/assets", "/review", "/website-preview", "/site"].includes(url.pathname) && !(hostedDemo && (isSitePath(url.pathname) || isWorkingPreviewPath(url.pathname))))) return;
       event.preventDefault(); void navigate(url.href);
     };
     window.addEventListener("popstate", pop, true);
@@ -188,14 +188,14 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [providers, release]);
-  const mediaContentServices = useMemo(() => createMediaContentServices(
+  const assetContentServices = useMemo(() => createAssetContentServices(
     providers.contentProviders,
     () => providers.sessions.flush(),
     (listener) => subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, listener),
-    createProjectMediaUsageInspection({
+    createProjectAssetUsageInspection({
       readProject: async () => { const result = await providers.getCurrentSiteProject({ flushSessions: false }); if (result.status !== "ready") throw new Error(result.error.message); return result.project; },
       catalog: providers.componentProvider.catalog,
-      mediaStore: providers.mediaProvider?.store,
+      assetStore: providers.assetProvider?.store,
       href: (location) => {
         const path = location.selectionPath ?? location.valuePath;
         return location.domain === "content" && location.modelId
@@ -213,7 +213,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   let content: ComponentChildren;
   const intent = parseIntent(location);
   const target = intent.status === "matched" ? intent.intent : null;
-  const providerKnown = !target || !("providerId" in target) || (target.route === "content" ? providers.contentProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "composer" ? providers.compositionProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "mapping" ? providers.mappingProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "media" ? providers.mediaProvider?.descriptor.id === target.providerId : providers.sitemapProvider.descriptor?.id === target.providerId);
+  const providerKnown = !target || !("providerId" in target) || (target.route === "content" ? providers.contentProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "composer" ? providers.compositionProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "mapping" ? providers.mappingProviders.some((provider) => provider.descriptor.id === target.providerId) : target.route === "assets" ? providers.assetProvider?.descriptor.id === target.providerId : providers.sitemapProvider.descriptor?.id === target.providerId);
   if (!ready) content = <main class="route-placeholder"><h1>Open workspace</h1>
     <p>{openingReason === "absent" ? "No SiteProject is activated. Create a project to start your first workspace, or activate a source and retry opening." : openingReason === "invalid" ? "The activated SiteProject is invalid. Fix the configured source, then retry opening." : openingReason === "storage" ? "The workspace could not be read or opened. Retry opening after resolving the storage error. Existing drafts remain stored." : "Opening the selected workspace…"}</p>
     <Button disabled={busy} onClick={() => void retry()}>Retry opening</Button>
@@ -228,17 +228,17 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   </main>;
   else if (intent.status === "invalid" || !providerKnown) content = <main class="route-placeholder"><h1>Invalid workspace link</h1><p role="alert">{intent.status === "invalid" ? intent.message : "The requested provider is unavailable. No other record was selected."}</p></main>;
   else if (path === "/composer") content = <ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} />;
-  else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} renderMediaPicker={(request) => <MediaFieldPicker provider={providers.mediaProvider} {...request} />} />;
+  else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} renderAssetPicker={(request) => <AssetFieldPicker provider={providers.assetProvider} {...request} />} />;
   else if (path === "/mapping") content = <MappingRouteContent provider={target?.route === "mapping" ? providers.mappingProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} attachmentCallbacks={mappingAttachmentService} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
-  else if (path === "/media") content = <MediaRouteContent provider={providers.mediaProvider} contentServices={mediaContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;
+  else if (path === "/assets") content = <AssetRouteContent provider={providers.assetProvider} contentServices={assetContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;
   else if (path === "/") content = <Dashboard summary={workspaceSummary} hostedDemo={hostedDemo} />;
   else if (path === "/review") content = <ReleaseRoute hostedDemo={hostedDemo} controller={release} href={(item) => {
-    if (!("domain" in item)) return item.path.includes("media") ? "/media" : item.path.includes("sitemap") ? "/sitemapper" : item.path.includes("mapping") ? "/mapping" : item.path.includes("content") ? "/content" : null;
+    if (!("domain" in item)) return item.path.includes("assets") ? "/assets" : item.path.includes("sitemap") ? "/sitemapper" : item.path.includes("mapping") ? "/mapping" : item.path.includes("content") ? "/content" : null;
     if (item.domain === "content-entry") { const entry = release.getSnapshot().working?.providers.content.find(({ id }) => id === item.providerId)?.entries.find(({ id }) => id === item.recordId); return entry ? formatIntent({ route: "content", providerId: item.providerId, modelId: entry.modelId, entryId: entry.id }) : "/content"; }
     if (item.domain === "content-model") return formatIntent({ route: "content", providerId: item.providerId, modelId: item.recordId });
     if (item.domain === "compositions") return formatIntent({ route: "composer", providerId: item.providerId, compositionId: item.recordId });
-    return item.domain === "media" ? "/media" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
+    return item.domain === "assets" ? "/assets" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
   }} />;
   else content = <NotFound />;
   return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}>{hostedDemo && <Banner tone="info">Disposable hosted demo — edits and uploads stay in this tab and reset on reload. Export JSON to keep your project. Local release operations are unavailable.</Banner>}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;

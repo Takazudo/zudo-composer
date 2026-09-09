@@ -1,3 +1,8 @@
+import { minify } from "vite";
+import { downloadAsset } from "../../../browser/asset-download.mjs";
+import { createComponentCatalog } from "../../model/types";
+import { assetDownloadMarkdown } from "../../../assets/integration/download";
+import { assetVersionUrl } from "../../../assets/model";
 // Proves the JSX generator emits code that PARSES and TYPECHECKS as real
 // Preact JSX with its emitted imports — including the required multiline +
 // quote-bearing string prop (the bug class the escaping contract prevents).
@@ -153,6 +158,22 @@ function comprehensiveDocument() {
 }
 
 describe("generated fixture parses + typechecks as Preact JSX", () => {
+  it("typechecks the emitted native download handler under strict DOM and Preact types", async () => {
+    const definition: ComponentDefinition = { ...fixtureEntries[0]!, id: "download-prose", defaults: { markdown: "" }, fields: [{ prop: "markdown", label: "Markdown", schema: { type: "string" }, editor: { kind: "text", mode: "markdown-source" } }], slots: [] };
+    const manifest = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "download-test", packVersion: "1", components: [definition] });
+    const markdown = assetDownloadMarkdown({ kind: "download", asset: { providerId: "asset-files", assetId: "bundle" }, label: "Download", showSize: false, showType: false }, { url: assetVersionUrl("a".repeat(64), "application/zip"), fileName: "Release.v2.zip", mimeType: "application/zip", byteLength: 22 });
+    const document = { schemaVersion: COMPOSITION_SCHEMA_VERSION, id: "download", name: "Download", root: [node(definition.id, { markdown }, {}, "download-node")] };
+    const result = generateJsx(document, manifest);
+    expect(result.ok).toBe(true);
+    expect(typecheckGenerated(result.code, [definition])).toEqual([]);
+    const minified = await minify("download.js", `globalThis.handler = ${downloadAsset.toString()};`, { compress: true, mangle: true });
+    const isolated: { handler?: typeof downloadAsset } = {};
+    new Function("globalThis", minified.code)(isolated);
+    expect(typecheckGenerated(result.code.replace(downloadAsset.toString(), isolated.handler!.toString()), [definition])).toEqual([]);
+    const unsupported = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "download-test", packVersion: "1", components: [{ ...definition, fields: [...definition.fields, { prop: "title", label: "Title", schema: { type: "string" }, editor: { kind: "text" } }] }] });
+    expect(generateJsx(document, unsupported)).toMatchObject({ blocked: true, code: "" });
+  });
+
   it("generates unblocked JSX with a multiline/quote/backslash expression prop", () => {
     const result = generateJsx(comprehensiveDocument(), M);
     expect(result.ok).toBe(true);

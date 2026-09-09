@@ -3,7 +3,7 @@
  *
  * One generic page over a ROW CONTRACT: `LibraryRowContract<Row>` is the only
  * thing the components know about a record, so Compositions, Mappings,
- * Sitemaps and Media share this pattern while keeping their own domain types.
+ * Sitemaps and Assets share this pattern while keeping their own domain types.
  * Nothing here names a record type, and the bulk-bar and row-menu actions are
  * supplied by the route — Delete everywhere, Duplicate only where duplication
  * exists.

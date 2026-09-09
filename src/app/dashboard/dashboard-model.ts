@@ -1,3 +1,4 @@
+import { assetKindForMime } from "../../assets/model";
 // Presentation derivations for the Dashboard (issue #173).
 //
 // `workspace-summary.ts` answers *what is in the workspace*; this module turns
@@ -15,17 +16,17 @@ import {
   SitemapperIcon,
   type IconComponent,
 } from "../../components/icons";
-// By path, not the `src/features/media` barrel — the barrel re-exports the
+// By path, not the `src/features/assets` barrel — the barrel re-exports the
 // upload/app modules too, and would pull that graph into the Home chunk.
-import { formatBytes } from "../../features/media/media-format";
+import { formatBytes } from "../../features/assets/assets-format";
 import type {
   ContentCounts,
-  MediaCounts,
+  AssetCounts,
   WorkspaceAttention,
   WorkspaceAttentionItem,
   WorkspaceAttentionKind,
   WorkspaceCounts,
-  WorkspaceMediaSource,
+  WorkspaceAssetSource,
   WorkspaceRecent,
   WorkspaceRecordKind,
   WorkspaceSource,
@@ -36,7 +37,7 @@ import type {
 /** How each source is named when the page has to talk about it failing. */
 export const SOURCE_LABELS: Record<WorkspaceSourceName, string> = {
   content: "Content",
-  media: "Media",
+  assets: "Assets",
   compositions: "Compositions",
   mappings: "Mappings",
   sitemaps: "Sitemaps",
@@ -47,23 +48,14 @@ export function countLabel(count: number, singular: string, plural = `${singular
 }
 
 /**
- * `byType` is keyed by raw media type, so the split is folded into the three
+ * `byType` is keyed by raw asset type, so the split is folded into the allowlisted
  * groups an author recognises rather than printing `image/png · image/jpeg`.
  */
-export function mediaTypeSummary(byType: MediaCounts["byType"]): readonly string[] {
-  let images = 0;
-  let pdfs = 0;
-  let other = 0;
-  for (const [mediaType, count] of Object.entries(byType)) {
-    if (mediaType.startsWith("image/")) images += count;
-    else if (mediaType === "application/pdf") pdfs += count;
-    else other += count;
-  }
-  const parts: string[] = [];
-  if (images > 0) parts.push(countLabel(images, "image"));
-  if (pdfs > 0) parts.push(`${pdfs} PDF${pdfs === 1 ? "" : "s"}`);
-  if (other > 0) parts.push(countLabel(other, "other file"));
-  return parts;
+export function assetTypeSummary(byType: AssetCounts["byType"]): readonly string[] {
+  const counts = { image: 0, document: 0, archive: 0, text: 0, other: 0 };
+  for (const [mimeType, count] of Object.entries(byType)) counts[assetKindForMime(mimeType)?.kind ?? "other"] += count;
+  const labels = { image: "image", document: "document", archive: "archive", text: "text file", other: "other file" };
+  return Object.entries(counts).filter(([, count]) => count > 0).map(([kind, count]) => countLabel(count, labels[kind as keyof typeof labels]));
 }
 
 export function greeting(now: Date = new Date()): string {
@@ -83,7 +75,7 @@ export interface RecordKindPresentation {
 const RECORD_KINDS: Record<WorkspaceRecordKind, RecordKindPresentation> = {
   "content-model": { label: "Content model", icon: ContentIcon },
   "content-entry": { label: "Entry", icon: FileIcon },
-  media: { label: "Media", icon: FileIcon },
+  asset: { label: "Asset", icon: FileIcon },
   composition: { label: "Composition", icon: ComposerIcon },
   pattern: { label: "Pattern", icon: ComposerIcon, accent: true },
   "global-template": { label: "Global template", icon: ComposerIcon, accent: true },
@@ -119,7 +111,7 @@ export type StatCard = StatCardIdentity &
   (
     | ({ readonly status: "ok" } & StatCardFigures)
     | { readonly status: "unavailable"; readonly error: string }
-    /** Media only: no provider is configured. Never paired with a Retry action. */
+    /** Asset only: no provider is configured. Never paired with a Retry action. */
     | { readonly status: "absent" }
   );
 
@@ -129,7 +121,7 @@ function statCard<T>(identity: StatCardIdentity, source: WorkspaceSource<T>, fig
     : { ...identity, status: "unavailable", error: source.error };
 }
 
-function mediaStatCard(identity: StatCardIdentity, source: WorkspaceMediaSource<MediaCounts>, figures: (value: MediaCounts) => StatCardFigures): StatCard {
+function assetStatCard(identity: StatCardIdentity, source: WorkspaceAssetSource<AssetCounts>, figures: (value: AssetCounts) => StatCardFigures): StatCard {
   return source.status === "absent" ? { ...identity, status: "absent" } : statCard(identity, source, figures);
 }
 
@@ -146,10 +138,10 @@ export function statCards(counts: WorkspaceCounts): readonly StatCard[] {
       detail: [countLabel(value.models, "model")],
       alert: nonZero(value.incompleteEntries, "incomplete"),
     })),
-    mediaStatCard({ id: "media", label: "Media", href: "/media", icon: FolderIcon }, counts.media, (value) => ({
+    assetStatCard({ id: "assets", label: "Assets", href: "/assets", icon: FolderIcon }, counts.assets, (value) => ({
       value: value.assets,
       unit: value.assets === 1 ? "asset" : "assets",
-      detail: [...mediaTypeSummary(value.byType), formatBytes(value.bytes)],
+      detail: [...assetTypeSummary(value.byType), formatBytes(value.bytes)],
     })),
     statCard({ id: "compositions", label: "Compositions", href: "/composer", icon: ComposerIcon }, counts.compositions, (value) => ({
       value: value.compositions,
@@ -172,9 +164,9 @@ export function statCards(counts: WorkspaceCounts): readonly StatCard[] {
  * A workspace nobody has authored into yet.
  *
  * An authoring source that could not be read might hold records, so it is never
- * counted as empty. Media is the one exception, but only when it is `absent`:
- * "no Media provider is configured" is the ordinary dev answer and means there
- * are no assets to show. A media provider that is merely `unavailable` might
+ * counted as empty. Assets are the one exception, but only when they are `absent`:
+ * "no Assets provider is configured" is the ordinary dev answer and means there
+ * are no assets to show. An Assets provider that is merely `unavailable` might
  * still hold assets, so it follows the same rule as every other source.
  */
 export function isEmptyWorkspace(counts: WorkspaceCounts): boolean {
@@ -188,7 +180,7 @@ export function isEmptyWorkspace(counts: WorkspaceCounts): boolean {
     counts.mappings.value.mappings === 0 &&
     counts.sitemaps.status === "ok" &&
     counts.sitemaps.value.sitemaps === 0 &&
-    (counts.media.status === "absent" || (counts.media.status === "ok" && counts.media.value.assets === 0))
+    (counts.assets.status === "absent" || (counts.assets.status === "ok" && counts.assets.value.assets === 0))
   );
 }
 

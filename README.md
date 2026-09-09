@@ -11,10 +11,10 @@ over a shared filesystem storage engine:
 - Mapping owns its binding model, resolver, preview handoff, and authoring UI.
 - Sitemapper owns its page-tree model, library, authoring UI, and the catalog
   integration that resolves saved Composer records.
-- Media owns its metadata model, library route, and upload/delivery boundaries.
+- Assets owns its metadata model, library route, and upload/delivery boundaries.
 
 All five persist to the host's own project files — the four JSON domains plus
-media, under paths the host's `zudo-composer.config.ts` controls (see
+assets, under paths the host's `zudo-composer.config.ts` controls (see
 [Settings and host directory layout](#settings-and-host-directory-layout)
 below). The tool does not depend on zudo-doc, a zfb
 application runtime/configuration, or a styleguide registry. `zudo-sg` has a
@@ -36,17 +36,17 @@ The Vite application has base `/` and these exact SPA routes:
 - `/content` — Content model and Entry authoring
 - `/mapping` — Content-to-Composition Mapping authoring
 - `/sitemapper` — Sitemapper library and editor
-- `/media` — Media library and upload/delivery status
+- `/assets` — Assets library and upload/delivery status
 - `/site` — bundled/published sample home
 - `/site/about`, `/site/services`, `/site/journal` — canonical nested sample pages
 - `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
   `/site/journal/start-with-the-question` — compiler-emitted Entry routes
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
-- `/uploaded-media/` — committed images and PDFs from the host's `publicMediaDir`
+- `/uploaded-assets/` — committed images and PDFs from the host's `publicAssetsDir`
 
 The preview route is an implementation boundary, not an independent public
-product. Build-emitted assets remain rooted at `/assets/`, while committed media
-is delivered from `/uploaded-media/`. Upload authoring is available only in local
+product. Build-emitted assets remain rooted at `/assets/`, while committed assets
+is delivered from `/uploaded-assets/`. Upload authoring is available only in local
 development.
 
 The provider-scoped SiteProject graph, whole-project apply rule, active identity,
@@ -57,13 +57,13 @@ uses the bundled sample; local project state is disposable and ignored.
 Hosted persistence, a hosted API, and authentication are future adapter work;
 nothing in this repository claims them.
 
-## Demo media in this repository
+## Demo assets in this repository
 
 This repository is its own dogfood host and includes four demo images in the
-tracked `cms/media/` store. Ordinary Media edits under `pnpm dev` will dirty
-`cms/media/catalog.json`; this is intended. Other runtime `cms/` directories
-are ignored. Run `pnpm media:seed-demo` to seed missing demos from the committed
-source PNGs in `scripts/demo-media/`; rerunning skips matching filenames and
+tracked `cms/assets/` store. Ordinary Assets edits under `pnpm dev` will dirty
+`cms/assets/catalog.json`; this is intended. Other runtime `cms/` directories
+are ignored. Run `pnpm assets:seed-demo` to seed missing demos from the committed
+source PNGs in `scripts/demo-assets/`; rerunning skips matching filenames and
 checksums, including trashed assets and historical versions, and preserves
 existing records. The demo store is not included in the installed package or
 published by a static build.
@@ -71,7 +71,7 @@ published by a static build.
 From a fresh checkout, run `corepack pnpm install --frozen-lockfile`, then
 `pnpm dev` and open the local URL it prints. On **Open workspace**, click
 **Create project**, enter a **Project name**, and click **Create project** in
-the dialog. Open **Media** in the navigation (`/media`), select **Grid** if
+the dialog. Open **Assets** in the navigation (`/assets`), select **Grid** if
 needed, click a demo thumbnail to inspect it, then click **Preview**.
 
 ## Installing into a host project
@@ -112,17 +112,17 @@ export default defineComposerConfig({
 
 Every setting except `pack` has a default and is resolved host-root-relative;
 `dataDir` re-bases the five settings below it, so moving all CMS data is one
-edit. `publicMediaDir` and `styles` are not CMS data and are never re-based.
+edit. `publicAssetsDir` and `styles` are not CMS data and are never re-based.
 
 | Setting | Default | What it is |
 | --- | --- | --- |
-| `dataDir` | `cms` | Root for the four JSON domains plus media |
+| `dataDir` | `cms` | Root for the four JSON domains plus assets |
 | `compositionsDir` | `cms/compositions` | Composition JSON, including global templates |
 | `contentDir` | `cms/content` | Content-domain JSON |
 | `mappingsDir` | `cms/mappings` | Mapping-domain JSON |
 | `sitemapsDir` | `cms/sitemaps` | Sitemapper-domain JSON |
-| `mediaDir` | `cms/media` | Media content-addressed store |
-| `publicMediaDir` | `public/uploaded-media` | Published media bytes the host commits and serves |
+| `assetsDir` | `cms/assets` | Asset content-addressed store |
+| `publicAssetsDir` | `public/uploaded-assets` | Published asset bytes the host commits and serves |
 | `styles` | `styles/base.css` | The host's base CSS entry — see [Styles ownership](#styles-ownership) |
 | `pack` | *(required, no default)* | Component-pack module specifier — see below |
 
@@ -139,13 +139,13 @@ my-site/
 ├── styles/
 │   └── base.css                  # imported pack CSS + Tailwind @source
 ├── public/
-│   └── uploaded-media/           # publicMediaDir — committed, served bytes
+│   └── uploaded-assets/          # publicAssetsDir — committed, served bytes
 └── cms/                          # dataDir — everything the tool authors
     ├── compositions/
     ├── content/
     ├── mappings/
     ├── sitemaps/
-    └── media/
+    └── assets/
 ```
 
 Every setting can also be overridden per-environment as

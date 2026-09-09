@@ -73,9 +73,9 @@ export const APP_ROUTES: readonly AppRoute[] = [
     icon: SitemapperIcon,
   },
   {
-    label: "Media",
-    href: "/media",
-    description: "Browse project media and prepare references for authored content.",
+    label: "Assets",
+    href: "/assets",
+    description: "Browse project assets and prepare references for authored content.",
     icon: FolderIcon,
   },
 ] as const;

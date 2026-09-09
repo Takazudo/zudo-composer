@@ -59,6 +59,8 @@ import {
   eligibleEntries,
   matchesQuery,
 } from "./chooser-helpers";
+import { LibraryViewToggle } from "../../../../components/library-page/library-toolbar";
+import { ChooserCardGrid } from "./chooser-card-grid";
 import { ChooserPreviewHost } from "./chooser-preview-host";
 import { Dialog } from "../../../../components/overlay";
 import { Banner, Button, EmptyState, Input, SegmentedControl } from "../../../../components/ui";
@@ -155,6 +157,12 @@ function selectionError(outcome: Exclude<ReuseSelectionOutcome, { status: "loade
 }
 
 const ALL_CATEGORY = "All" as const;
+const VIEW_STORAGE_KEY = "zudo-composer.chooser.view";
+type ChooserView = "list" | "cards";
+function readView(): ChooserView {
+  try { return globalThis.localStorage?.getItem(VIEW_STORAGE_KEY) === "list" ? "list" : "cards"; }
+  catch { return "cards"; }
+}
 
 export function ComposerChooser({
   componentProvider,
@@ -178,6 +186,12 @@ export function ComposerChooser({
   previewHostWindow,
 }: ComposerChooserProps): JSX.Element {
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const catalogRef = useRef<HTMLDivElement>(null);
+  const [viewMode, setViewMode] = useState<ChooserView>(readView);
+  function changeView(view: ChooserView) {
+    setViewMode(view);
+    try { globalThis.localStorage?.setItem(VIEW_STORAGE_KEY, view); } catch { /* Storage is optional. */ }
+  }
 
   // The captured target lives in STATE (not just a ref) so the false -> true
   // capture produces a render — a ref mutation alone wouldn't. Every render
@@ -360,6 +374,11 @@ export function ComposerChooser({
   // whichever happens to sort first would be a surprising, easy-to-mistrigger
   // footgun rather than a helpful shortcut.
   function handleSearchKeyDown(event: JSX.TargetedKeyboardEvent<HTMLInputElement>) {
+    if (activeTab === "components" && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      const results = catalogRef.current?.querySelectorAll<HTMLButtonElement>("[data-chooser-result]");
+      const result = event.key === "ArrowDown" ? results?.[0] : results?.[results.length - 1];
+      if (result) { event.preventDefault(); result.focus(); }
+    }
     if (activeTab === "components" && event.key === "Enter" && filtered.length === 1) {
       event.preventDefault();
       confirmAdd(filtered[0]!.id);
@@ -378,7 +397,7 @@ export function ComposerChooser({
     <>
       <Dialog
         open={open}
-        size="wide"
+        size="full"
         class="sg-composer-chooser"
         title={capturedTarget ? `Add to ${targetLabel}` : "Add component"}
         initialFocusRef={searchRef}
@@ -410,23 +429,30 @@ export function ComposerChooser({
 
             <div class="sg-composer-chooser-body">
               {activeTab === "components" ? (
-                <div class="sg-composer-chooser-catalog" aria-label="Components">
+                <div ref={catalogRef} class="sg-composer-chooser-catalog" aria-label="Components">
                   {blockedReason ? (
                     <Banner tone="warn">{blockedReason}</Banner>
                   ) : (
                     <>
                       <div class="sg-composer-chooser-controls">
-                        <Input
-                          elementRef={searchRef}
-                          type="search"
-                          icon={SearchIcon}
-                          class="sg-composer-chooser-search"
-                          aria-label="Search components"
-                          placeholder="Search components…"
-                          value={query}
-                          onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-                          onKeyDown={handleSearchKeyDown}
-                        />
+                        <div class="sg-composer-chooser-toolbar">
+                          <Input
+                            elementRef={searchRef}
+                            type="search"
+                            icon={SearchIcon}
+                            class="sg-composer-chooser-search"
+                            aria-label="Search components"
+                            placeholder="Search components…"
+                            value={query}
+                            onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+                            onKeyDown={handleSearchKeyDown}
+                          />
+                          <div class="sg-composer-chooser-view-toggle">
+                            <LibraryViewToggle value={viewMode === "list" ? "table" : "cards"}
+                              onChange={(view) => changeView(view === "table" ? "list" : "cards")}
+                              label="Component view" tableLabel="List" />
+                          </div>
+                        </div>
 
                         <div class="sg-composer-chooser-categories" role="group" aria-label="Filter by category">
                           {categories.map((cat) => (
@@ -459,6 +485,9 @@ export function ComposerChooser({
                             </Button>
                           )}
                         />
+                      ) : viewMode === "cards" ? (
+                        <ChooserCardGrid entries={filtered} componentProvider={componentProvider} catalogById={catalogById}
+                          onPreview={setPreviewedComponentId} onConfirm={confirmAdd} location={previewLocation} />
                       ) : (
                         <ul class="sg-composer-chooser-list">
                           {filtered.map((entry) => (
@@ -466,6 +495,7 @@ export function ComposerChooser({
                               <button
                                 type="button"
                                 class="sg-composer-chooser-card"
+                                data-chooser-result
                                 aria-label={entry.title}
                                 aria-describedby={`${entry.id}-meta`}
                                 onClick={() => confirmAdd(entry.id)}
@@ -490,17 +520,19 @@ export function ComposerChooser({
               ) : (
                 <div class="sg-composer-chooser-catalog" aria-label="Patterns">
                   <div class="sg-composer-chooser-controls">
-                    <Input
-                      elementRef={searchRef}
-                      type="search"
-                      icon={SearchIcon}
-                      class="sg-composer-chooser-search"
-                      aria-label="Search Patterns"
-                      placeholder="Search Patterns…"
-                      value={query}
-                      onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
-                      onKeyDown={handleSearchKeyDown}
-                    />
+                    <div class="sg-composer-chooser-toolbar">
+                      <Input
+                        elementRef={searchRef}
+                        type="search"
+                        icon={SearchIcon}
+                        class="sg-composer-chooser-search"
+                        aria-label="Search Patterns"
+                        placeholder="Search Patterns…"
+                        value={query}
+                        onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+                        onKeyDown={handleSearchKeyDown}
+                      />
+                    </div>
                   </div>
 
                   {patternCatalogLoading ? (

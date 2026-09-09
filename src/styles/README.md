@@ -7,7 +7,7 @@
 Component barrels carry the CSS for components that own their presentation:
 `ui/index.ts`, `editor-chrome/index.ts`, `outline-tree/index.ts`,
 `overlay/index.ts`, and `library-page/index.ts` each import their sibling sheet.
-Feature route entries import the content, media, mapping, and sitemapper sheets;
+Feature route entries import the content, assets, mapping, and sitemapper sheets;
 the sitemapper sheet is a barrel for its canvas, inspector, shell, and token
 leaves. Preview CSS is imported by the preview entry and stays in the iframe.
 

@@ -1,5 +1,6 @@
+import { assetDownloadMarkdown } from "../../assets/integration/download";
 import type { JsonValue } from "@zudo-composer/component-contract";
-import type { ContentEntryRecord, ContentFieldDefinition, ContentFieldKind, ContentMediaUse } from "../../content/model";
+import type { ContentEntryRecord, ContentFieldDefinition, ContentFieldKind, ContentAssetUse } from "../../content/model";
 import { isValueValidForField } from "../../content/model";
 import type { MappingSourceProjection } from "../model";
 import { validateMappingSourceProjection } from "../model";
@@ -28,10 +29,11 @@ export function resolveMappingProjectionDefinition(field: ContentFieldDefinition
     for (const fieldId of projection.fieldIds) current = current?.kind === "object" ? current.fields.find((candidate) => candidate.id === fieldId) : undefined;
     return current ? { status: "ready", kind: current.kind } : { status: "invalid", message: `Structured source projection ${JSON.stringify(projection.fieldIds)} is stale.` };
   }
-  if (projection.kind === "media-asset-ref") return field.kind === "media-use" ? { status: "ready", kind: "object" } : { status: "invalid", message: "media-asset-ref requires a media-use field." };
-  if (projection.kind === "media-text") {
-    const supported = field.kind === "media-use" && ({ image: ["alt", "caption"], link: ["label"], card: ["title", "description"] } as const)[field.use].includes(projection.field as never);
-    return supported ? { status: "ready", kind: "text" } : { status: "invalid", message: `media-text ${projection.field} is unavailable for this field.` };
+  if (projection.kind === "asset-download") return field.kind === "asset-use" && field.use === "download" ? { status: "ready", kind: "markdown" } : { status: "invalid", message: "asset-download requires a download use." };
+  if (projection.kind === "asset-ref") return field.kind === "asset-use" ? { status: "ready", kind: "object" } : { status: "invalid", message: "asset-ref requires an asset-use field." };
+  if (projection.kind === "asset-text") {
+    const supported = field.kind === "asset-use" && ({ image: ["alt", "caption"], link: ["label"], download: ["label"], card: ["title", "description"] } as const)[field.use].includes(projection.field as never);
+    return supported ? { status: "ready", kind: "text" } : { status: "invalid", message: `asset-text ${projection.field} is unavailable for this field.` };
   }
   if (projection.kind === "reference-list-ids") return field.kind === "reference-list" ? { status: "ready", kind: "list" } : { status: "invalid", message: "reference-list-ids requires a reference-list field." };
   return field.kind === "reference" ? { status: "ready", kind: "text" } : { status: "invalid", message: `${projection.kind} requires a reference field.` };
@@ -51,6 +53,10 @@ export function projectContentValue(options: {
   if (value === undefined) return { status: "invalid", message: `Source field "${options.field.id}" has no value.` };
   if (!isValueValidForField(options.field, value)) return { status: "invalid", message: `Source field "${options.field.id}" has an invalid value.` };
   if (projection.kind === "value") return { status: "projected", value };
+  if (projection.kind === "asset-download") {
+    const use = value as unknown as ContentAssetUse;
+    return options.field.kind === "asset-use" && use.kind === "download" ? { status: "projected", value: assetDownloadMarkdown(use) } : { status: "invalid", message: "asset-download requires a download use." };
+  }
   if (projection.kind === "object-field") {
     let current: JsonValue = value;
     let fields = options.field.kind === "object" ? options.field.fields : undefined;
@@ -62,12 +68,12 @@ export function projectContentValue(options: {
     }
     return current === undefined ? { status: "invalid", message: "Structured field projection has no value." } : { status: "projected", value: current };
   }
-  if (projection.kind === "media-asset-ref" || projection.kind === "media-text") {
-    if (options.field.kind !== "media-use" || value === null || Array.isArray(value) || typeof value !== "object") return { status: "invalid", message: "Media projection requires a media-use value." };
-    const media = value as unknown as ContentMediaUse;
-    if (projection.kind === "media-asset-ref") return { status: "projected", value: media.asset as unknown as JsonValue };
-    const text = projection.field in media ? (media as unknown as Record<string, JsonValue>)[projection.field] : undefined;
-    return typeof text === "string" ? { status: "projected", value: text } : { status: "invalid", message: `Media ${projection.field} is unavailable for this use.` };
+  if (projection.kind === "asset-ref" || projection.kind === "asset-text") {
+    if (options.field.kind !== "asset-use" || value === null || Array.isArray(value) || typeof value !== "object") return { status: "invalid", message: "Asset projection requires an asset-use value." };
+    const asset = value as unknown as ContentAssetUse;
+    if (projection.kind === "asset-ref") return { status: "projected", value: asset.asset as unknown as JsonValue };
+    const text = projection.field in asset ? (asset as unknown as Record<string, JsonValue>)[projection.field] : undefined;
+    return typeof text === "string" ? { status: "projected", value: text } : { status: "invalid", message: `Asset ${projection.field} is unavailable for this use.` };
   }
   if (projection.kind === "reference-id" || projection.kind === "route-link") {
     if (options.field.kind !== "reference") return { status: "invalid", message: `${projection.kind} requires a reference field.` };

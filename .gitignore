@@ -10,11 +10,11 @@ coverage/
 *.log
 .DS_Store
 
-# Dogfood host runtime data; the demo Media store is intentionally tracked.
+# Dogfood host runtime data; the demo Assets store is intentionally tracked.
 /cms/*
-!/cms/media/
-/cms/media/.mutation.lock
-/cms/media/.upload-*.stage
-/cms/media/.*.tmp
+!/cms/assets/
+/cms/assets/.mutation.lock
+/cms/assets/.upload-*.stage
+/cms/assets/.*.tmp
 
 /dist-hosted-demo/

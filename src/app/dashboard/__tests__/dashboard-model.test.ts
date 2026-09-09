@@ -5,7 +5,7 @@ import {
   greeting,
   isEmptyWorkspace,
   lastWrite,
-  mediaTypeSummary,
+  assetTypeSummary,
   pipelineStages,
   statCards,
 } from "../dashboard-model";
@@ -15,7 +15,7 @@ const AT = (day: number) => `2026-08-${String(day).padStart(2, "0")}T00:00:00.00
 function counts(overrides: Partial<WorkspaceCounts> = {}): WorkspaceCounts {
   return {
     content: { status: "ok", value: { models: 2, entries: 78, incompleteEntries: 3 } },
-    media: { status: "ok", value: { assets: 14, bytes: 8_598_323, byType: { "image/png": 8, "image/jpeg": 3, "application/pdf": 3 } } },
+    assets: { status: "ok", value: { assets: 14, bytes: 8_598_323, byType: { "image/png": 8, "image/jpeg": 3, "application/pdf": 3 } } },
     compositions: { status: "ok", value: { compositions: 6, patterns: 2, globalTemplates: 1 } },
     mappings: { status: "ok", value: { mappings: 3, blockedMappings: 1 } },
     sitemaps: { status: "ok", value: { sitemaps: 2, pages: 19, unassignedPages: 4 } },
@@ -26,7 +26,7 @@ function counts(overrides: Partial<WorkspaceCounts> = {}): WorkspaceCounts {
 function emptyCounts(): WorkspaceCounts {
   return {
     content: { status: "ok", value: { models: 0, entries: 0, incompleteEntries: 0 } },
-    media: { status: "absent" },
+    assets: { status: "absent" },
     compositions: { status: "ok", value: { compositions: 0, patterns: 0, globalTemplates: 0 } },
     mappings: { status: "ok", value: { mappings: 0, blockedMappings: 0 } },
     sitemaps: { status: "ok", value: { sitemaps: 0, pages: 0, unassignedPages: 0 } },
@@ -36,12 +36,12 @@ function emptyCounts(): WorkspaceCounts {
 describe("statCards", () => {
   it("reads every count off the summary in the prototype's order", () => {
     const cards = statCards(counts());
-    expect(cards.map((card) => card.id)).toEqual(["content", "media", "compositions", "mappings", "sitemaps"]);
-    expect(cards.map((card) => card.href)).toEqual(["/content", "/media", "/composer", "/mapping", "/sitemapper"]);
+    expect(cards.map((card) => card.id)).toEqual(["content", "assets", "compositions", "mappings", "sitemaps"]);
+    expect(cards.map((card) => card.href)).toEqual(["/content", "/assets", "/composer", "/mapping", "/sitemapper"]);
 
-    const [content, media, compositions, mappings, sitemaps] = cards;
+    const [content, asset, compositions, mappings, sitemaps] = cards;
     expect(content).toMatchObject({ status: "ok", value: 78, unit: "entries", detail: ["2 models"], alert: "3 incomplete" });
-    expect(media).toMatchObject({ status: "ok", value: 14, unit: "assets", detail: ["11 images", "3 PDFs", "8.2 MB"] });
+    expect(asset).toMatchObject({ status: "ok", value: 14, unit: "assets", detail: ["11 images", "3 documents", "8.2 MB"] });
     expect(compositions).toMatchObject({ status: "ok", value: 6, detail: ["2 patterns", "1 global template"] });
     expect(mappings).toMatchObject({ status: "ok", value: 3, alert: "1 blocked" });
     expect(sitemaps).toMatchObject({ status: "ok", value: 2, detail: ["19 pages"], alert: "4 unassigned" });
@@ -53,50 +53,51 @@ describe("statCards", () => {
   });
 
   it("carries a failed source through as unavailable rather than as a zero", () => {
-    const cards = statCards(counts({ media: { status: "unavailable", error: "The Media database is blocked." } }));
-    const media = cards.find((card) => card.id === "media");
-    expect(media).toEqual({
-      id: "media",
-      label: "Media",
-      href: "/media",
+    const cards = statCards(counts({ assets: { status: "unavailable", error: "The Asset database is blocked." } }));
+    const asset = cards.find((card) => card.id === "assets");
+    expect(asset).toEqual({
+      id: "assets",
+      label: "Assets",
+      href: "/assets",
       icon: expect.anything(),
       status: "unavailable",
-      error: "The Media database is blocked.",
+      error: "The Asset database is blocked.",
     });
-    expect(media).not.toHaveProperty("value");
+    expect(asset).not.toHaveProperty("value");
   });
 
-  it("carries an absent Media provider through without a value or an error", () => {
-    const cards = statCards(counts({ media: { status: "absent" } }));
-    const media = cards.find((card) => card.id === "media");
-    expect(media).toEqual({ id: "media", label: "Media", href: "/media", icon: expect.anything(), status: "absent" });
-    expect(media).not.toHaveProperty("value");
-    expect(media).not.toHaveProperty("error");
+  it("carries an absent Assets provider through without a value or an error", () => {
+    const cards = statCards(counts({ assets: { status: "absent" } }));
+    const asset = cards.find((card) => card.id === "assets");
+    expect(asset).toEqual({ id: "assets", label: "Assets", href: "/assets", icon: expect.anything(), status: "absent" });
+    expect(asset).not.toHaveProperty("value");
+    expect(asset).not.toHaveProperty("error");
   });
 
   it("uses singular units for a workspace holding one of a thing", () => {
     const cards = statCards(
       counts({
         content: { status: "ok", value: { models: 1, entries: 1, incompleteEntries: 0 } },
-        media: { status: "ok", value: { assets: 1, bytes: 512, byType: { "application/pdf": 1 } } },
+        assets: { status: "ok", value: { assets: 1, bytes: 512, byType: { "application/pdf": 1 } } },
       }),
     );
     expect(cards[0]).toMatchObject({ unit: "entry", detail: ["1 model"] });
-    expect(cards[1]).toMatchObject({ unit: "asset", detail: ["1 PDF", "512 B"] });
+    expect(cards[1]).toMatchObject({ unit: "asset", detail: ["1 document", "512 B"] });
   });
 });
 
-describe("mediaTypeSummary", () => {
-  it("folds raw media types into the three groups an author recognises", () => {
-    expect(mediaTypeSummary({ "image/png": 8, "image/jpeg": 3, "application/pdf": 3, "text/plain": 1 })).toEqual([
+describe("assetTypeSummary", () => {
+  it("folds raw MIME types into author-facing kinds", () => {
+    expect(assetTypeSummary({ "image/png": 8, "image/jpeg": 3, "application/pdf": 3, "application/zip": 2, "text/plain": 1 })).toEqual([
       "11 images",
-      "3 PDFs",
-      "1 other file",
+      "3 documents",
+      "2 archives",
+      "1 text file",
     ]);
   });
 
   it("lists nothing for an empty library", () => {
-    expect(mediaTypeSummary({})).toEqual([]);
+    expect(assetTypeSummary({})).toEqual([]);
   });
 });
 
@@ -111,24 +112,24 @@ describe("isEmptyWorkspace", () => {
     expect(isEmptyWorkspace(unreadable)).toBe(false);
   });
 
-  it("is false where Media holds assets", () => {
-    const withMedia = {
+  it("is false where Asset holds assets", () => {
+    const withAsset = {
       ...emptyCounts(),
-      media: { status: "ok", value: { assets: 2, bytes: 10, byType: { "image/png": 2 } } },
+      assets: { status: "ok", value: { assets: 2, bytes: 10, byType: { "image/png": 2 } } },
     } as WorkspaceCounts;
-    expect(isEmptyWorkspace(withMedia)).toBe(false);
+    expect(isEmptyWorkspace(withAsset)).toBe(false);
   });
 
-  it("is false where Media is unavailable, because a failed provider may hold assets", () => {
-    const unavailableMedia = {
+  it("is false where Assets are unavailable, because a failed provider may hold assets", () => {
+    const unavailableAsset = {
       ...emptyCounts(),
-      media: { status: "unavailable", error: "The Media database is blocked." },
+      assets: { status: "unavailable", error: "The Asset database is blocked." },
     } as WorkspaceCounts;
-    expect(isEmptyWorkspace(unavailableMedia)).toBe(false);
+    expect(isEmptyWorkspace(unavailableAsset)).toBe(false);
   });
 
-  it("is true where Media is absent, the ordinary dev answer for no assets", () => {
-    expect(isEmptyWorkspace({ ...emptyCounts(), media: { status: "absent" } })).toBe(true);
+  it("is true where Assets are absent, the ordinary dev answer for no assets", () => {
+    expect(isEmptyWorkspace({ ...emptyCounts(), assets: { status: "absent" } })).toBe(true);
   });
 });
 

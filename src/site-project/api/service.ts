@@ -1,6 +1,6 @@
 import type { JsonValue } from "@zudo-composer/component-contract";
 import { isJsonSafe, isPlainObject, isSafeRecordId } from "../../shared";
-import { checkMediaLockPreconditions, validateMediaReferenceLock } from "../../media/references";
+import { checkAssetLockPreconditions, validateAssetReferenceLock } from "../../assets/references";
 import { compileSiteProject } from "../compiler";
 import { canonicalizeSiteProject } from "../model/canonical";
 import { validateSiteProject } from "../model/validation";
@@ -13,7 +13,7 @@ const digest = (value: unknown): value is string => typeof value === "string" &&
 const keys = (value: Record<string, unknown>, expected: readonly string[]) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 const active = (value: unknown): value is SiteProjectActiveSelection | null => value === null || (isPlainObject(value) && keys(value, ["projectId", "revision", "buildId"]) && isSafeRecordId(value.projectId) && digest(value.revision) && digest(value.buildId));
 const shapes = { describe: [], list: [], active: [], get: ["projectId", "revision"], plan: ["project", "workingPrecondition", "selection", "expectedRevision", "expectedActive"], apply: ["plan"], stage: ["projectId", "buildId"], build: ["projectId", "buildId"], completed: ["projectId", "buildId"], activate: ["projectId", "revision", "buildId", "expectedActive"], discard: ["projectId", "buildId", "expectedStageGeneration", "expectedActive"] };
-const planKeys = ["schemaVersion", "workingProject", "workingPrecondition", "candidate", "selection", "expectedRevision", "expectedActive", "storeGeneration", "projectRevision", "buildId", "mediaLock", "toolchain", "changes", "checks", "affected", "publication", "planDigest"];
+const planKeys = ["schemaVersion", "workingProject", "workingPrecondition", "candidate", "selection", "expectedRevision", "expectedActive", "storeGeneration", "projectRevision", "buildId", "assetLock", "toolchain", "changes", "checks", "affected", "publication", "planDigest"];
 const fail = (code: SiteProjectApiErrorCode, message: string, diagnostics?: readonly unknown[]): SiteProjectApiResponse => ({ ok: false, error: { code, message, ...(diagnostics ? { diagnostics: diagnostics as JsonValue[] } : {}) } });
 const ok = (result: unknown): SiteProjectApiResponse => ({ ok: true, result: result as JsonValue });
 function parse(value: unknown): SiteProjectApiRequest | SiteProjectApiResponse {
@@ -24,7 +24,7 @@ function parse(value: unknown): SiteProjectApiRequest | SiteProjectApiResponse {
   if (value.operation === "plan" && (!Array.isArray(value.selection) || !value.selection.every((item) => isPlainObject(item) && keys(item, ["ref", "action"]) && ["publish", "delete", "unpublish"].includes(String(item.action)) && isPlainObject(item.ref) && keys(item.ref, ["providerId", "modelId", "recordId"]) && Object.values(item.ref).every(isSafeRecordId)))) return fail("malformed-request", "Publication selection requires exact provider-qualified entries.");
   if (value.operation === "apply") {
     const plan = value.plan;
-    if (!isPlainObject(plan) || !keys(plan, planKeys) || plan.schemaVersion !== 2 || !digest(plan.planDigest) || !digest(plan.projectRevision) || !digest(plan.buildId) || !isPlainObject(plan.candidate) || !isPlainObject(plan.workingProject) || !active(plan.expectedActive) || !(plan.expectedRevision === null || digest(plan.expectedRevision)) || !Number.isSafeInteger(plan.storeGeneration) || Number(plan.storeGeneration) < 0 || !validateReleaseToolchain(plan.toolchain) || !(plan.mediaLock === null || validateMediaReferenceLock(plan.mediaLock)) || ![plan.selection, plan.changes, plan.checks, plan.affected, plan.publication].every(Array.isArray)) return fail("malformed-request", "Apply requires the exact detached protocol-2 approved plan.");
+    if (!isPlainObject(plan) || !keys(plan, planKeys) || plan.schemaVersion !== 2 || !digest(plan.planDigest) || !digest(plan.projectRevision) || !digest(plan.buildId) || !isPlainObject(plan.candidate) || !isPlainObject(plan.workingProject) || !active(plan.expectedActive) || !(plan.expectedRevision === null || digest(plan.expectedRevision)) || !Number.isSafeInteger(plan.storeGeneration) || Number(plan.storeGeneration) < 0 || !validateReleaseToolchain(plan.toolchain) || !(plan.assetLock === null || validateAssetReferenceLock(plan.assetLock)) || ![plan.selection, plan.changes, plan.checks, plan.affected, plan.publication].every(Array.isArray)) return fail("malformed-request", "Apply requires the exact detached protocol-2 approved plan.");
   }
   if (value.operation === "discard" && (!Number.isSafeInteger(value.expectedStageGeneration) || Number(value.expectedStageGeneration) < 1)) return fail("malformed-request", "Discard requires the exact visible stage generation.");
   return value as unknown as SiteProjectApiRequest;
@@ -71,12 +71,12 @@ export function createSiteProjectApiService(dependencies: SiteProjectApiDependen
         if (dependencies.isWorkingCurrent && !await dependencies.isWorkingCurrent(approved.workingProject, approved.workingPrecondition)) return fail("conflict", "Working generations changed after review.");
         const fresh = await plan(approved.workingProject, approved.workingPrecondition, approved.selection, approved.expectedRevision, approved.expectedActive);
         if ("ok" in fresh) return fresh;
-        if (fresh.planDigest !== planDigest) return fail("conflict", "Approval is stale; review current candidate, Media, toolchain and base again.");
+        if (fresh.planDigest !== planDigest) return fail("conflict", "Approval is stale; review current candidate, Assets, toolchain and base again.");
         if (fresh.checks.some(({ severity }) => severity === "blocking")) return fail("compile-blocked", "Candidate release checks are blocking.", fresh.checks);
-        if (fresh.mediaLock && (!dependencies.mediaStore || !await checkMediaLockPreconditions(fresh.mediaLock, dependencies.mediaStore))) return fail("conflict", "Media changed after approval validation.");
+        if (fresh.assetLock && (!dependencies.assetStore || !await checkAssetLockPreconditions(fresh.assetLock, dependencies.assetStore))) return fail("conflict", "Assets changed after approval validation.");
         if (dependencies.isWorkingCurrent && !await dependencies.isWorkingCurrent(approved.workingProject, approved.workingPrecondition)) return fail("conflict", "Working generations changed while staging.");
-        const stage: StagedRelease = { schemaVersion: 2, projectId: fresh.candidate.id, revision: fresh.projectRevision, buildId: fresh.buildId, mediaLock: fresh.mediaLock, toolchain: fresh.toolchain, planDigest, publication: fresh.publication };
-        const result = await dependencies.projectStore.apply({ project: fresh.candidate, stage, expectedRevision: fresh.expectedRevision, expectedActive: fresh.expectedActive, expectedGeneration: fresh.storeGeneration, verifyApproval: async () => (!fresh.mediaLock || (!!dependencies.mediaStore && await checkMediaLockPreconditions(fresh.mediaLock, dependencies.mediaStore))) && (!dependencies.isWorkingCurrent || await dependencies.isWorkingCurrent(approved.workingProject, approved.workingPrecondition)) });
+        const stage: StagedRelease = { schemaVersion: 2, projectId: fresh.candidate.id, revision: fresh.projectRevision, buildId: fresh.buildId, assetLock: fresh.assetLock, toolchain: fresh.toolchain, planDigest, publication: fresh.publication };
+        const result = await dependencies.projectStore.apply({ project: fresh.candidate, stage, expectedRevision: fresh.expectedRevision, expectedActive: fresh.expectedActive, expectedGeneration: fresh.storeGeneration, verifyApproval: async () => (!fresh.assetLock || (!!dependencies.assetStore && await checkAssetLockPreconditions(fresh.assetLock, dependencies.assetStore))) && (!dependencies.isWorkingCurrent || await dependencies.isWorkingCurrent(approved.workingProject, approved.workingPrecondition)) });
         if (result.status !== "ok") return adapterFailure(result);
         const retained = await dependencies.projectStore.getStage({ projectId: stage.projectId, buildId: stage.buildId });
         return retained.status === "ok" ? ok({ ...result.value, staged: retained.value }) : adapterFailure(retained);
@@ -88,7 +88,7 @@ export function createSiteProjectApiService(dependencies: SiteProjectApiDependen
         const staged = await dependencies.projectStore.getStage(request); if (staged.status !== "ok") return adapterFailure(staged);
         if (releaseJson(staged.value.toolchain) !== releaseJson(dependencies.toolchain)) return fail("unavailable", "Pinned toolchain is unavailable; do not compile this stage with a different toolchain.");
         const stored = await dependencies.projectStore.get({ projectId: request.projectId, revision: staged.value.revision }); if (stored.status !== "ok") return adapterFailure(stored);
-        const compilation = await compiler(stored.value.project, { componentCatalog: dependencies.componentCatalog, policy: "release", ...(staged.value.mediaLock ? { mediaLock: staged.value.mediaLock } : {}) });
+        const compilation = await compiler(stored.value.project, { componentCatalog: dependencies.componentCatalog, policy: "release", ...(staged.value.assetLock ? { assetLock: staged.value.assetLock } : {}) });
         if (compilation.status === "blocked") return fail("compile-blocked", "Pinned candidate compilation failed.", compilation.diagnostics);
         const result = await dependencies.buildStore.complete({ stage: staged.value, build: compilation.build });
         return result.status === "ok" ? ok(result.value) : adapterFailure(result);

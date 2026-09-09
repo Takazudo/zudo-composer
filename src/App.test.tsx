@@ -14,7 +14,7 @@ const hosts: TemporaryWorkspaceProviders[] = [];
 async function renderApp() {
   const project = await createTemporaryWorkspaceProviders();
   hosts.push(project);
-  const integration = createProductionProviderIntegration({ createProviders: project.createProviders, mediaProvider: null });
+  const integration = createProductionProviderIntegration({ createProviders: project.createProviders, assetProvider: null });
   // Seeding writes real files, which is slower than the queries below wait for.
   // The workspace being ready is a precondition of these assertions, not one of
   // the things they are testing.
@@ -41,7 +41,7 @@ describe('App', () => {
     const host = await createTemporaryWorkspaceProviders();
     hosts.push(host);
     vi.stubGlobal('crypto', webcrypto);
-    const integration = createProductionProviderIntegration({ project: null, createProviders: host.createProviders, mediaProvider: null });
+    const integration = createProductionProviderIntegration({ project: null, createProviders: host.createProviders, assetProvider: null });
     return { host, integration };
   }
 
@@ -55,7 +55,7 @@ describe('App', () => {
     fireEvent.input(within(dialog).getByLabelText('Project name'), { target: { value: '  First site  ' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
     await screen.findByRole('heading', { name: 'Sitemaps' });
-    const reopened = createProductionProviderIntegration({ project: null, createProviders: host.createProviders, mediaProvider: null });
+    const reopened = createProductionProviderIntegration({ project: null, createProviders: host.createProviders, assetProvider: null });
     const snapshot = await reopened.getCurrentSiteProject();
     expect(snapshot).toMatchObject({ status: 'ready', project: { name: 'First site' } });
     if (snapshot.status !== 'ready') throw snapshot.error;
@@ -108,7 +108,7 @@ describe('App', () => {
     const { host } = await emptyHost();
     const invalid = createEmptySiteProject('Invalid');
     invalid.activeSitemap.recordId = 'missing';
-    render(<App integration={createProductionProviderIntegration({ project: invalid, sourceRevision: '0'.repeat(64), createProviders: host.createProviders, mediaProvider: null })} />);
+    render(<App integration={createProductionProviderIntegration({ project: invalid, sourceRevision: '0'.repeat(64), createProviders: host.createProviders, assetProvider: null })} />);
     await screen.findByText('The activated SiteProject is invalid. Fix the configured source, then retry opening.');
     expect(screen.queryByRole('button', { name: 'Create project' })).not.toBeInTheDocument();
     cleanup();
@@ -125,7 +125,7 @@ describe('App', () => {
   it('keeps an explicitly activated source on the existing workspace path', async () => {
     const { host } = await emptyHost();
     const project = createEmptySiteProject('Activated');
-    const integration = createProductionProviderIntegration({ project, sourceRevision: await computeSiteProjectRevision(project), createProviders: host.createProviders, mediaProvider: null });
+    const integration = createProductionProviderIntegration({ project, sourceRevision: await computeSiteProjectRevision(project), createProviders: host.createProviders, assetProvider: null });
     render(<App integration={integration} />);
     await screen.findByRole('heading', { name: GREETING });
     expect(screen.queryByRole('button', { name: 'Create project' })).not.toBeInTheDocument();
@@ -140,7 +140,7 @@ describe('App', () => {
     ['/content', 'tree', 'Content', 'Content'],
     ['/mapping', 'heading', 'Mappings', 'Mappings'],
     ['/sitemapper', 'heading', 'Sitemaps', 'Sitemaps'],
-    ['/media', 'heading', 'Media', 'Media'],
+    ['/assets', 'heading', 'Assets', 'Assets'],
   ])('mounts the real product on direct refresh at %s', async (route, role, name, railLabel) => {
     window.history.replaceState(null, '', route);
     await renderApp();
@@ -164,13 +164,13 @@ describe('App', () => {
     expect(document.querySelectorAll('.cms-rail__item svg')).toHaveLength(8);
   });
 
-  it('keeps the production Media state truthful without probing a provider', async () => {
+  it('keeps the production Assets state truthful without probing a provider', async () => {
     const request = vi.fn();
     vi.stubGlobal('fetch', request);
-    window.history.replaceState(null, '', '/media');
+    window.history.replaceState(null, '', '/assets');
     await renderApp();
 
-    expect(await screen.findByRole('heading', { name: 'Media' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Assets' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /upload/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /new folder/i })).toBeDisabled();
     expect(request).not.toHaveBeenCalled();

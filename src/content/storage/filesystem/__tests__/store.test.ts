@@ -90,18 +90,18 @@ describe("Rich Content transactions on the filesystem", () => {
     expect((await pointer(root)).generation).toBe(settled);
   });
 
-  it("round trips nested object/list/choice/media values and rejects schema edits invalidating existing data", async () => {
+  it("round trips nested object/list/choice/asset values and rejects schema edits invalidating existing data", async () => {
     const { store } = await setup();
     const rich: ContentFieldDefinition = { id: "details", key: "details", label: "Details", required: true, kind: "object", fields: [
       { id: "choices", key: "choices", label: "Choices", required: true, kind: "list", item: { kind: "choice", options: [{ value: "a", label: "A" }] } },
-      { id: "image", key: "image", label: "Image", required: false, kind: "media-use", use: "image" },
+      { id: "image", key: "image", label: "Image", required: false, kind: "asset-use", use: "image" },
     ] };
     const schema = model();
     schema.document.fields.push(rich);
     await store.putModel(schema);
 
     const saved = entry("a");
-    saved.values.details = { choices: ["a", "a"], image: { kind: "image", asset: { providerId: "media-files", assetId: "asset" }, alt: "A", decorative: false, caption: "B" } };
+    saved.values.details = { choices: ["a", "a"], image: { kind: "image", asset: { providerId: "asset-files", assetId: "asset" }, alt: "A", decorative: false, caption: "B" } };
     await store.putEntry(saved);
 
     const snapshot = await store.readAll();

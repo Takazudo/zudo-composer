@@ -2,8 +2,8 @@
 
 SiteProject is the canonical four-domain JSON graph: provider-qualified,
 provider-scoped
-Compositions, Content models/entries, Mappings, and Sitemaps. Media remains global
-and separate. Release inputs include an exact Media lock without adding a fifth
+Compositions, Content models/entries, Mappings, and Sitemaps. Assets remain global
+and separate. Release inputs include an exact Assets lock without adding a fifth
 project provider domain.
 
 The current local release API is **protocol 2**. There are no protocol-1 readers,
@@ -13,20 +13,20 @@ layout is refused and preserved for explicit operator inspection/reset.
 ## Review, stage, build, activate
 
 1. `plan` constructs a detached delivery candidate, real Changes, Checks and
-   Affected identities, publication reconciliation instructions, exact Media
+   Affected identities, publication reconciliation instructions, exact Assets
    pins, toolchain identity, and `planDigest`.
 2. `apply` recomputes the plan, verifies approval and preconditions, then stages
    immutable project/build inputs. It **does not activate** or overwrite an old
    project revision. A conflicting approval requires a fresh review.
 3. `build` reads only staged inputs and writes immutable output keyed by
-   `buildId`. It **does not activate**. Later workspace edits and current Media
+   `buildId`. It **does not activate**. Later workspace edits and current Assets
    replacements are not re-resolved into the staged candidate.
 4. `activate` verifies every completed output digest and CAS-selects the exact
    `{projectId, revision, buildId}` identity. Unbuilt, partial, missing, corrupt,
    or conflicting targets cannot become active. It does not compile again.
 
 There is one pointer, `active.json`, containing exactly those three identity
-fields. Previous revisions, completed builds, and copied Media bytes remain
+fields. Previous revisions, completed builds, and copied Assets bytes remain
 available after later staging, building, activation, or failures. `discard`
 removes only an uncompleted stage from the visible stage catalog; it cannot
 discard active or completed release dependencies. No permanent release GC is
@@ -41,15 +41,15 @@ overwrite a newer reconciled lifecycle.
 
 `projectRevision` is SHA-256 of canonical four-domain SiteProject UTF-8 JSON,
 including its trailing newline. `buildId` is SHA-256 of canonical JSON containing
-`projectRevision`, sorted `mediaLock`, and `toolchain`. Thus unchanged project JSON
-with a new Media version gets a different build ID. Completion digests bind the
+`projectRevision`, sorted `assetLock`, and `toolchain`. Thus unchanged project JSON
+with a new Assets version gets a different build ID. Completion digests bind the
 active identity and all output-file digests.
 
-The Media lock contains provider/asset/version/checksum/MIME/size/immutable URL,
+The Assets lock contains provider/asset/version/checksum/MIME/size/immutable URL,
 captured metadata revision/head, and the persisted catalog token. Builds copy and
-checksum/signature/size-verify exact retained versions; they do not copy all Media
-files or fetch latest. Each build's `media-sha256-…` file maps to its pin's
-`/uploaded-media/sha256-…` URL for a later explicit artifact exporter.
+checksum/signature/size-verify exact retained versions; they do not copy all Assets
+files or fetch latest. Each build's `asset-sha256-…` file maps to its pin's
+`/uploaded-assets/sha256-…` URL for a later explicit artifact exporter.
 
 The local toolchain records the component pack as a package, because that is
 what it is: `packSpecifier` is the configured `pack` value, `packSource` is the
@@ -80,7 +80,7 @@ revision and not the working entry's lifecycle flag alone.
 
 The resulting candidate is validated again. Missing/unpublished dependencies,
 incoming references to removed entries, incompatible baseline values after schema
-edits, unresolved Media, and route/materialization failures produce blocking
+edits, unresolved Assets, and route/materialization failures produce blocking
 Checks. Planning may return `ok:true` with blocking Checks so a review UI can
 show them; apply never stages such a plan.
 
@@ -95,11 +95,11 @@ release still selected; retrying activation is safe and can retry reconciliation
 ## Provider-neutral services and preconditions
 
 `createSiteProjectApiService` takes project/build adapters, SHA-256 function,
-component catalog, exact toolchain, optional versioned Media store, optional
+component catalog, exact toolchain, optional versioned Assets store, optional
 working-generation guard, and optional publication reconciliation adapter.
 
 `planDigest` binds working snapshot and explicit `workingPrecondition` token, delivery candidate, selected transitions,
-project head, active identity, storage generation, exact Media metadata, toolchain,
+project head, active identity, storage generation, exact Assets metadata, toolchain,
 Changes/Checks/Affected and reconciliation generations. Apply repeats all checks;
 the adapter runs its final approval callback under the release transaction lock
 before installing the stage catalog. Exact committed approval receipts make
@@ -209,7 +209,7 @@ heads.json                       stage order/incarnations, heads, generation, re
 active.json                      sole active project/revision/buildId triple
 projects/PROJECT/REVISION.json    immutable canonical project
 stages/BUILD_ID.json              immutable lock/toolchain/publication inputs
-builds/BUILD_ID/                  immutable build.json, stage.json, modules, Media
+builds/BUILD_ID/                  immutable build.json, stage.json, modules, Assets
 builds/BUILD_ID/complete.json     terminal file manifest/completion digest
 ```
 
@@ -232,7 +232,7 @@ receipt. Heads validation checks exclusive visible/discarded sets,
 generation order, exact project heads, complete approval coverage, immutable
 stage identities and retained active references before any receipt shortcut.
 Durable partial stage/build files can be retried
-with the same inputs. A valid already-copied Media destination is verified by
+with the same inputs. A valid already-copied Assets destination is verified by
 path, size, signature/MIME and digest before any source reader is consulted, so
 retry can complete while that source is unavailable. Corrupt destinations block.
 Completed
@@ -260,12 +260,12 @@ approved plan — apply is idempotent by `planDigest`.
 Preserve the old root before any explicit clean reset.
 
 Focused API/store/CLI tests cover selection, digests/CAS, interrupted writes,
-immutable Media copies, completion corruption, symlinks and concurrent writers.
+immutable Assets copies, completion corruption, symlinks and concurrent writers.
 The integration owner runs `site-project:boundary`, full CI/artifact gates and
 the guarded `test:browser:site-project` lane. Vite development
 delivery resolves `/site` only from the currently activated, completed local
 release. It verifies the active project/revision/build triple and serves only that
-build's copied checksum-addressed Media bytes; missing or corrupt release state is
+build's copied checksum-addressed Assets bytes; missing or corrupt release state is
 unavailable and never falls back to a working draft. In contrast,
 `/website-preview` flushes and compiles the current live authoring snapshot. A release
 is stamped with the toolchain that built it, so after a component-pack swap an already

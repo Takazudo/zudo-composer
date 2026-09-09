@@ -44,7 +44,10 @@ it("refreshes rail models only for Content/workspace while summary hints update 
 it("gives percentage-height editors a definite route slot without clipping long pages", () => {
   const shellStyles = readFileSync("src/app/shell.css", "utf8");
   const route = shellStyles.match(/\.cms-route-content\s*\{([^}]+)\}/)?.[1];
-  expect(route).toMatch(/(?:^|;)\s*height:\s*100%\s*;/);
+  expect(route).toMatch(/(?:^|;)\s*flex:\s*1 1 0\s*;/);
+  expect(route).toMatch(/(?:^|;)\s*min-height:\s*0\s*;/);
+  expect(shellStyles).toMatch(/\.cms-shell-main\s*\{[^}]*display:\s*flex/);
+  expect(shellStyles).toMatch(/\.cms-shell-main\s*>\s*:not\(\.cms-route-content\)\s*\{[^}]*flex:\s*0 0 auto/);
   expect(route).not.toMatch(/overflow\s*:\s*(hidden|clip)/);
   expect(shellStyles).toMatch(/\.cms-shell-main\s*\{[^}]*overflow:\s*auto/);
 });
@@ -55,7 +58,7 @@ function readyCounts(): WorkspaceCounts {
     mappings: { status: "ok", value: { mappings: 3, blockedMappings: 0 } },
     sitemaps: { status: "ok", value: { sitemaps: 2, pages: 9, unassignedPages: 0 } },
     content: { status: "ok", value: { models: 2, entries: 5, incompleteEntries: 0 } },
-    media: { status: "absent" },
+    assets: { status: "absent" },
   };
 }
 
@@ -200,7 +203,7 @@ describe("Shell chrome", () => {
   it.each([
     ["/", "Overview"],
     ["/content", "Content"],
-    ["/media", "Media"],
+    ["/assets", "Assets"],
     ["/composer", "Compositions"],
     ["/mapping", "Mappings"],
     ["/sitemapper", "Sitemaps"],
@@ -248,7 +251,7 @@ describe("Shell chrome", () => {
       expect(screen.getByRole("link", { name: "Compositions" }).querySelector(".cms-rail__count")).toHaveTextContent("6");
     });
     expect(screen.getByRole("link", { name: "Content" }).querySelector(".cms-rail__count")).toHaveTextContent("2");
-    expect(screen.getByRole("link", { name: "Media" }).querySelector(".cms-rail__count")).toBeNull();
+    expect(screen.getByRole("link", { name: "Assets" }).querySelector(".cms-rail__count")).toBeNull();
   });
 });
 

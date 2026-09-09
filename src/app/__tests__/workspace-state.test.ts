@@ -8,7 +8,7 @@ import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../test/workspace-providers";
 import { createSaveQueue } from "../../shared/persistence/save-queue";
-import type { MediaFileProvider } from "../../media";
+import type { AssetFileProvider } from "../../assets";
 import { notifyPersistenceChange } from "../../shared/persistence-generation";
 
 const revision = "a".repeat(64);
@@ -25,7 +25,7 @@ async function host(): Promise<TemporaryWorkspaceProviders> {
 }
 
 function options(current: TemporaryWorkspaceProviders) {
-  return { project: sample(), sourceRevision: revision, createProviders: current.createProviders, mediaProvider: null };
+  return { project: sample(), sourceRevision: revision, createProviders: current.createProviders, assetProvider: null };
 }
 
 function deferred() { let resolve!: () => void; const promise = new Promise<void>((yes) => { resolve = yes; }); return { promise, resolve }; }
@@ -50,10 +50,10 @@ describe("workspace save and capture lifetime", () => {
 
   it("keeps failed detached handles actionable and blocks every capture until retry succeeds", async () => {
     const sessions = createWorkspaceSaveRegistry(); let failed = true;
-    const handle = sessions.register({ feature: "Media", providerId: "files", recordId: "asset" }, { flush: async () => { if (failed) throw new Error("upload failed"); }, retry: () => { failed = false; } });
+    const handle = sessions.register({ feature: "Asset", providerId: "files", recordId: "asset" }, { flush: async () => { if (failed) throw new Error("upload failed"); }, retry: () => { failed = false; } });
     handle.detach();
     const read = vi.fn();
-    expect(await captureWorkspaceSnapshot("one", sessions, [{ id: "media", token: async () => 0, read }])).toMatchObject({ status: "save-failed", failures: [{ feature: "Media", recordId: "asset", error: { message: "upload failed" } }] });
+    expect(await captureWorkspaceSnapshot("one", sessions, [{ id: "asset", token: async () => 0, read }])).toMatchObject({ status: "save-failed", failures: [{ feature: "Asset", recordId: "asset", error: { message: "upload failed" } }] });
     expect(read).not.toHaveBeenCalled();
     handle.retry();
     expect(await sessions.flush()).toMatchObject({ status: "ready" });
@@ -85,8 +85,8 @@ describe("durable mutable workspace", () => {
 
   it("keeps B edits after captured A, source activation/reload, and rejected A reconciliation", async () => {
     const opts = options(await host());
-    const media = { descriptor: { id: "files" }, store: { mutationToken: async () => "media-token", snapshot: async () => ({ schemaVersion: 2, mutationToken: "media-token", records: [], folders: [] }) } } as unknown as MediaFileProvider;
-    const current = createProductionProviderIntegration({ ...opts, mediaProvider: media });
+    const asset = { descriptor: { id: "files" }, store: { mutationToken: async () => "asset-token", snapshot: async () => ({ schemaVersion: 1, mutationToken: "asset-token", records: [], folders: [] }) } } as unknown as AssetFileProvider;
+    const current = createProductionProviderIntegration({ ...opts, assetProvider: asset });
     const approved = await current.captureWorkspace();
     expect(approved.status).toBe("ready"); if (approved.status !== "ready") return;
     const loaded = await current.compositionProviders[0]!.store.get("services-page");
@@ -119,16 +119,16 @@ describe("durable mutable workspace", () => {
 
   it("dispatches project subscribers across domains and narrows metadata subscribers", async () => {
     const current = createProductionProviderIntegration(options(await host()));
-    const all = vi.fn(), metadata = vi.fn(), attachments = vi.fn(), mediaUsage = vi.fn();
-    const stops = [current.subscribeChanges(all), current.subscribeChanges(metadata, ["workspace"]), current.mappingAttachmentService.subscribe!(attachments), subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, mediaUsage)];
+    const all = vi.fn(), metadata = vi.fn(), attachments = vi.fn(), assetUsage = vi.fn();
+    const stops = [current.subscribeChanges(all), current.subscribeChanges(metadata, ["workspace"]), current.mappingAttachmentService.subscribe!(attachments), subscribeAuthoringPersistenceChanges(PROJECT_USAGE_CHANNELS, assetUsage)];
     try {
-      for (const channel of [...AUTHORING_PERSISTENCE_CHANNELS, "media"]) {
-        all.mockClear(); metadata.mockClear(); attachments.mockClear(); mediaUsage.mockClear();
+      for (const channel of [...AUTHORING_PERSISTENCE_CHANNELS, "assets"]) {
+        all.mockClear(); metadata.mockClear(); attachments.mockClear(); assetUsage.mockClear();
         notifyPersistenceChange(channel);
         expect(all).toHaveBeenCalledWith(channel);
         expect(metadata).toHaveBeenCalledTimes(channel === "workspace" ? 1 : 0);
-        expect(attachments).toHaveBeenCalledTimes(channel === "media" ? 0 : 1);
-        expect(mediaUsage).toHaveBeenCalledTimes(channel === "media" ? 0 : 1);
+        expect(attachments).toHaveBeenCalledTimes(channel === "assets" ? 0 : 1);
+        expect(assetUsage).toHaveBeenCalledTimes(channel === "assets" ? 0 : 1);
       }
       all.mockClear(); notifyPersistenceChange("unrelated"); expect(all).not.toHaveBeenCalled();
     } finally { stops.forEach((stop) => stop()); }
@@ -164,10 +164,10 @@ describe("durable mutable workspace", () => {
     expect(await project.storage.missingDirectories(current.workspace.id!)).toEqual([]);
   });
 
-  it("reports the absent Media capability instead of declaring a complete release capture", async () => {
+  it("reports the absent Asset capability instead of declaring a complete release capture", async () => {
     const current = createProductionProviderIntegration(options(await host()));
     expect(await current.getCurrentSiteProject()).toMatchObject({ status: "ready" });
-    expect(await current.captureWorkspace()).toMatchObject({ status: "unavailable", source: "capabilities", error: { message: expect.stringContaining("Media is unavailable") } });
+    expect(await current.captureWorkspace()).toMatchObject({ status: "unavailable", source: "capabilities", error: { message: expect.stringContaining("Assets are unavailable") } });
   });
 
   it("refuses a ready workspace whose authoring directories were removed outside the application", async () => {

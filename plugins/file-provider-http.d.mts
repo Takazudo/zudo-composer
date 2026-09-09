@@ -41,8 +41,8 @@ export function validateRequestHead(
   req: DevRequest,
   endpoint: string,
   capability: string,
-  acceptedMediaTypes?: Set<string>,
-  unsupportedMediaTypeMessage?: string,
+  acceptedAssetTypes?: Set<string>,
+  unsupportedAssetTypeMessage?: string,
 ): DevResponse | undefined;
 export function isDeadResponse(req: IncomingMessage, res: ServerResponse): boolean;
 export function readBody(req: IncomingMessage, maxBodyBytes: number): Promise<string>;

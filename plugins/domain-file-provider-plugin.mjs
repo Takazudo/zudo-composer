@@ -5,7 +5,7 @@
 // the virtual configuration module the browser reads, request-body limits, and
 // the middleware registration. A domain contributes a descriptor — where its
 // records live, which Node entry to load, and its operation table — and nothing
-// else. Composer and Media keep their own endpoints; they predate this factory
+// else. Composer and Assets keep their own endpoints; they predate this factory
 // and carry request shapes it does not model.
 //
 // In a production build no capability is minted, the virtual module evaluates

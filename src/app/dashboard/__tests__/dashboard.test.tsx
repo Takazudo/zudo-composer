@@ -17,7 +17,7 @@ interface Payload {
 function readyCounts(overrides: Partial<WorkspaceCounts> = {}): WorkspaceCounts {
   return {
     content: { status: "ok", value: { models: 2, entries: 78, incompleteEntries: 3 } },
-    media: { status: "ok", value: { assets: 14, bytes: 8_598_323, byType: { "image/png": 11, "application/pdf": 3 } } },
+    assets: { status: "ok", value: { assets: 14, bytes: 8_598_323, byType: { "image/png": 11, "application/pdf": 3 } } },
     compositions: { status: "ok", value: { compositions: 6, patterns: 2, globalTemplates: 1 } },
     mappings: { status: "ok", value: { mappings: 3, blockedMappings: 1 } },
     sitemaps: { status: "ok", value: { sitemaps: 2, pages: 19, unassignedPages: 4 } },
@@ -109,7 +109,7 @@ function emptyWorkspace(): Payload {
   return {
     counts: {
       content: { status: "ok", value: { models: 0, entries: 0, incompleteEntries: 0 } },
-      media: { status: "absent" },
+      assets: { status: "absent" },
       compositions: { status: "ok", value: { compositions: 0, patterns: 0, globalTemplates: 0 } },
       mappings: { status: "ok", value: { mappings: 0, blockedMappings: 0 } },
       sitemaps: { status: "ok", value: { sitemaps: 0, pages: 0, unassignedPages: 0 } },
@@ -146,7 +146,7 @@ describe("Dashboard", () => {
   it.each(["summary rejection", "unavailable sources"])("keeps every Retry busy through a deferred %s retry and permits another attempt after failure", async (failure) => {
     const degraded = ready({
       counts: readyCounts({ sitemaps: { status: "unavailable", error: "Read failed." } }),
-      recent: readyRecent({ unavailable: [{ source: "media", error: "Read failed." }] }),
+      recent: readyRecent({ unavailable: [{ source: "assets", error: "Read failed." }] }),
       attention: readyAttention({ content: { status: "unavailable", error: "Read failed." } }),
     });
     function deferred() {
@@ -205,13 +205,13 @@ describe("Dashboard", () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
 
     const cards = within(await screen.findByRole("region", { name: "Workspace status" })).getAllByRole("link");
-    expect(cards.map((card) => card.getAttribute("href"))).toEqual(["/content", "/media", "/composer", "/mapping", "/sitemapper"]);
+    expect(cards.map((card) => card.getAttribute("href"))).toEqual(["/content", "/assets", "/composer", "/mapping", "/sitemapper"]);
 
     expect(within(cards[0]).getByText("78")).toBeInTheDocument();
     expect(within(cards[0]).getByText("entries")).toBeInTheDocument();
     expect(within(cards[0]).getByText("2 models")).toBeInTheDocument();
     expect(within(cards[0]).getByText("3 incomplete")).toBeInTheDocument();
-    expect(within(cards[1]).getByText("11 images · 3 PDFs · 8.2 MB")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("11 images · 3 documents · 8.2 MB")).toBeInTheDocument();
     expect(within(cards[2]).getByText("2 patterns · 1 global template")).toBeInTheDocument();
     expect(within(cards[3]).getByText("1 blocked")).toBeInTheDocument();
     expect(within(cards[4]).getByText("4 unassigned")).toBeInTheDocument();
@@ -220,26 +220,26 @@ describe("Dashboard", () => {
   it("offers the quick actions the workspace can actually serve", async () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
 
-    expect(await screen.findByRole("link", { name: "Upload media" })).toHaveAttribute("href", "/media");
+    expect(await screen.findByRole("link", { name: "Upload assets" })).toHaveAttribute("href", "/assets");
     expect(screen.getByRole("link", { name: "New entry" })).toHaveAttribute("href", "/content");
     // Built through `route-intents`, never hand-rolled.
     expect(screen.getByRole("link", { name: "New composition" })).toHaveAttribute("href", "/composer?new=1");
   });
 
-  it("hides the upload action while no Media provider is configured", async () => {
-    const payload = ready({ counts: readyCounts({ media: { status: "absent" } }) });
+  it("hides the upload action while no Asset provider is configured", async () => {
+    const payload = ready({ counts: readyCounts({ assets: { status: "absent" } }) });
     render(<Dashboard summary={fakeSummary(payload).summary} />);
 
     await screen.findByRole("region", { name: "Workspace status" });
-    expect(screen.queryByRole("link", { name: "Upload media" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Upload assets" })).not.toBeInTheDocument();
   });
 
-  it("hides the upload action while the Media provider has failed", async () => {
-    const payload = ready({ counts: readyCounts({ media: { status: "unavailable", error: "The Media database is blocked." } }) });
+  it("hides the upload action while the Asset provider has failed", async () => {
+    const payload = ready({ counts: readyCounts({ assets: { status: "unavailable", error: "The Asset database is blocked." } }) });
     render(<Dashboard summary={fakeSummary(payload).summary} />);
 
     await screen.findByRole("region", { name: "Workspace status" });
-    expect(screen.queryByRole("link", { name: "Upload media" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Upload assets" })).not.toBeInTheDocument();
   });
 
   it("follows each recent record to the deep link the read model built", async () => {
@@ -298,14 +298,14 @@ describe("Dashboard", () => {
 
   it("says which sources are missing from the recent list and from the attention check", async () => {
     const degraded = ready({
-      recent: readyRecent({ unavailable: [{ source: "media", error: "The Media database is blocked." }] }),
+      recent: readyRecent({ unavailable: [{ source: "assets", error: "The Asset database is blocked." }] }),
       attention: readyAttention({ content: { status: "unavailable", error: "Content could not be read." } }),
     });
     const { summary, refresh } = fakeSummary(degraded, ready());
     render(<Dashboard summary={summary} />);
 
     const recent = await screen.findByRole("region", { name: "Recent activity" });
-    expect(within(recent).getByText("Records from Media are not in this list.")).toBeInTheDocument();
+    expect(within(recent).getByText("Records from Assets are not in this list.")).toBeInTheDocument();
     const attention = screen.getByRole("region", { name: "Needs attention" });
     expect(within(attention).getByText("Content could not be checked.")).toBeInTheDocument();
     expect(within(attention).queryByRole("link", { name: "Review Article 41" })).not.toBeInTheDocument();
@@ -334,7 +334,7 @@ describe("Dashboard", () => {
     expect(screen.getByRole("link", { name: "New composition" })).toHaveAttribute("href", "/composer?new=1");
   });
 
-  it("reports the newest write and the Media provider state on the storage card", async () => {
+  it("reports the newest write and the Asset provider state on the storage card", async () => {
     render(<Dashboard summary={fakeSummary(ready()).summary} />);
 
     const storage = await screen.findByRole("region", { name: "Storage" });
@@ -343,8 +343,8 @@ describe("Dashboard", () => {
     expect(within(storage).getByText("12 min ago")).toBeInTheDocument();
   });
 
-  it("shows an informational chip with no Retry action for an absent Media provider", async () => {
-    const payload = ready({ counts: readyCounts({ media: { status: "absent" } }) });
+  it("shows an informational chip with no Retry action for an absent Asset provider", async () => {
+    const payload = ready({ counts: readyCounts({ assets: { status: "absent" } }) });
     render(<Dashboard summary={fakeSummary(payload).summary} />);
 
     const stats = await screen.findByRole("region", { name: "Workspace status" });
@@ -355,12 +355,12 @@ describe("Dashboard", () => {
     expect(within(storage).getByText("Not connected")).toBeInTheDocument();
   });
 
-  it("never calls a failed Media store 'not connected', and offers Retry from the stat card only", async () => {
-    const payload = ready({ counts: readyCounts({ media: { status: "unavailable", error: "The Media database is blocked." } }) });
+  it("never calls a failed Asset store 'not connected', and offers Retry from the stat card only", async () => {
+    const payload = ready({ counts: readyCounts({ assets: { status: "unavailable", error: "The Asset database is blocked." } }) });
     render(<Dashboard summary={fakeSummary(payload).summary} />);
 
     const stats = await screen.findByRole("region", { name: "Workspace status" });
-    expect(within(stats).getByText("Unavailable · The Media database is blocked.")).toBeInTheDocument();
+    expect(within(stats).getByText("Unavailable · The Asset database is blocked.")).toBeInTheDocument();
     expect(within(stats).getByRole("button", { name: "Retry" })).toBeInTheDocument();
 
     const storage = screen.getByRole("region", { name: "Storage" });

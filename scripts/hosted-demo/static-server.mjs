@@ -6,6 +6,7 @@
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
+import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition, assetMimeTypeForExtension } from "../../src/assets/model/asset-kinds.mjs";
 
 const MIME_BY_EXTENSION = new Map([
   [".css", "text/css; charset=utf-8"],
@@ -38,7 +39,7 @@ function acceptsHtml(request) {
 function isSpaNavigation(pathname, request) {
   // Unknown immutable uploads must stay 404 even if a browser sends a broad
   // Accept header. Asset URLs with a suffix are also never HTML fallbacks.
-  return acceptsHtml(request) && !pathname.startsWith("/uploaded-media/") && !extname(pathname);
+  return acceptsHtml(request) && !pathname.startsWith("/uploaded-assets/") && !extname(pathname);
 }
 
 /**
@@ -90,11 +91,22 @@ export async function startHostedDemoStaticServer({ directory, host = "127.0.0.1
         return;
       }
       const body = await readFile(filePath);
-      response.writeHead(200, {
-        "Content-Type": mimeType(filePath),
+      const asset = ASSET_CHECKSUM_URL_PATTERN.test(pathname);
+      const assetMimeType = asset ? assetMimeTypeForExtension(pathname.slice(pathname.lastIndexOf(".") + 1)) : undefined;
+      const checksum = asset ? pathname.slice("/uploaded-assets/sha256-".length, pathname.lastIndexOf(".")) : undefined;
+      /** @type {Record<string, string | number>} */
+      const headers = {
+        "Content-Type": assetMimeType ?? mimeType(filePath),
         "Content-Length": body.byteLength,
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": asset ? ASSET_IMMUTABLE_CACHE_CONTROL : "no-store",
+        "X-Content-Type-Options": ASSET_NOSNIFF,
+      };
+      if (asset && assetMimeType !== undefined && checksum !== undefined) {
+        const disposition = assetContentDisposition(assetMimeType, checksum);
+        if (disposition !== undefined) headers["Content-Disposition"] = disposition;
+      }
+      response.writeHead(200, {
+        ...headers,
       });
       if (request.method === "HEAD") response.end();
       else response.end(body);

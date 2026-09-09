@@ -42,7 +42,7 @@ export const CONTENT_FIELD_KIND_PRESENTATIONS: readonly ContentFieldKindPresenta
   { kind: "reference-list", label: "References", explanation: "A unique, optionally ordered list of related Entries.", icon: LinkIcon },
   { kind: "object", label: "Object", explanation: "A named group of nested structured fields.", icon: CollectionIcon },
   { kind: "list", label: "List", explanation: "A repeatable list whose items share one schema.", icon: ListIcon },
-  { kind: "media-use", label: "Media use", explanation: "An Image, Link, or Card with per-use accessible text.", icon: CollectionIcon },
+  { kind: "asset-use", label: "Asset use", explanation: "An Image, Link, or Card with per-use accessible text.", icon: CollectionIcon },
 ] as const;
 
 const FALLBACK_PRESENTATION = CONTENT_FIELD_KIND_PRESENTATIONS[0]!;

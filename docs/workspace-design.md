@@ -133,18 +133,18 @@ Use the CSS guidance from `accessibility/touch-target-sizing.mdx` and
 `states-and-transitions/hover-focus-active-states.mdx` in the CSS Wisdom docs
 for touch targets and distinct hover/focus states.
 
-## Content and Media snapshot boundary
+## Content and Assets snapshot boundary
 
-Content media-use values carry a stable provider-qualified
+Content asset-use values carry a stable provider-qualified
 `{providerId, assetId}` identity. Working records never persist a byte version:
 replacing an asset should update draft previews without rewriting Content.
-Release capture reads one validated Media snapshot, resolves each active asset
+Release capture reads one validated Assets snapshot, resolves each active asset
 head to an exact `{providerId, assetId, versionId}`, verifies retained bytes,
-builds a deterministic pin manifest, and rechecks the durable Media mutation
+builds a deterministic pin manifest, and rechecks the durable Assets mutation
 token. A changed token invalidates the capture; an older exact pin stays valid
 and immutable.
 
-Content and Media stores each expose durable mutation tokens from their
+Content and Assets stores each expose durable mutation tokens from their
 persistence boundary. Notifications are refresh hints only. A coherent
 cross-domain capture reads snapshots and checks the persisted tokens again;
 missing providers or changed tokens produce unavailable/changed outcomes and
@@ -154,8 +154,8 @@ same protocol to Composition, Mapping, and Sitemap stores.
 The current authoring transaction boundary is one Content provider. Complete
 provider-qualified graph reads are supported, but a relation write requiring
 multiple provider transactions fails before the first write. Rich Content
-kinds require explicit supported Mapping projections (object field, Media text/
-asset, reference identity/list or route link), never silent stringification. Content and Media
+kinds require explicit supported Mapping projections (object field, Asset text/
+asset, reference identity/list or route link), never silent stringification. Content and Assets
 schemas fail through their typed recovery paths; there are no compatibility
 readers or migrations.
 
@@ -192,13 +192,13 @@ to reset it, supply a valid project to `workspace.create`.
 `updateMetadata(expectedToken, {name?, activeSitemap?})` persists changes with a
 metadata transaction precondition. `getCurrentSiteProject()` composes that
 metadata with a coherent four-provider capture, so active Sitemap selection is
-real authoring data. It deliberately does not require Media for ordinary live
-project preview. `captureWorkspace()` additionally requires Media and returns
+real authoring data. It deliberately does not require Assets for ordinary live
+project preview. `captureWorkspace()` additionally requires Assets and returns
 `{status: "ready", project, capture}` or explicit `changed`, `unavailable`, or
 `save-failed` outcomes. `capture.values` includes the metadata, domain snapshots
-and Media snapshot under `workspace`, `compositions:<logical-id>`,
+and Assets snapshot under `workspace`, `compositions:<logical-id>`,
 `content:<logical-id>`, `mappings:<logical-id>`, `sitemaps:<logical-id>` and
-`media:<provider-id>`; Media is not a fifth SiteProject provider.
+`assets:<provider-id>`; Assets are not a fifth SiteProject provider.
 
 Feature controllers register with the application-owned `integration.sessions`:
 
@@ -218,7 +218,7 @@ void queue.close();
 behind an active write. Closed queues retain error state and support flush/retry.
 The registry retains failed detached handles and reports feature/provider/record
 details. Its barrier retries if session generations change during flushing.
-Later feature UI integrations must register all debounced saves and Media
+Later feature UI integrations must register all debounced saves and Assets
 operations; an unregistered in-memory edit cannot be observed by storage.
 Replacement integrations share the same registry, so outstanding old-workspace
 handles and failures remain reachable after a workspace switch too.
@@ -228,7 +228,7 @@ Composition, Mapping and Sitemap stores implement optional `snapshot()` and
 from one transaction; every committed record mutation, including
 seed/delete/clear, advances the token in the same transaction. Abort preserves
 both, clear never resets it, and safe-integer exhaustion fails closed. Content's
-`readAll()` and Media's `snapshot()` supply their existing durable tokens.
+`readAll()` and Assets' `snapshot()` supply their existing durable tokens.
 Filesystem Composition uses validated, sorted canonical content SHA-256
 fingerprints, repeated reads and bounded conflict detection, including external
 same-inode edits. This is a content precondition, not a filesystem transaction;
@@ -268,7 +268,7 @@ workspace record and the selection pointer can never disagree after a crash.
 Scoping is a *directory* prefix: each of the four authoring domain roots gains one
 `workspace-v1-<id>/` subdirectory. Scoping per domain root rather than
 re-rooting the CMS tree is what keeps a host's independently configured
-`compositionsDir`/`contentDir`/`mappingsDir`/`sitemapsDir` meaningful. Media is
+`compositionsDir`/`contentDir`/`mappingsDir`/`sitemapsDir` meaningful. Assets are
 not scoped: no workspace owns its bytes. Workspace ids are filenames, so they
 are held to the record-id rule — lower-case and case-stable — which keeps two
 workspaces from colliding on a case-insensitive filesystem.
@@ -304,7 +304,7 @@ The complete permitted inventory:
 | Outline slug/count preferences | `src/components/outline-tree/prefs.ts` |
 | Composer canvas viewport | `src/features/composer/app/viewport.ts` |
 | Composer provider preference | `src/features/composer/routing/provider-preference.ts` (adapter in `src/features/composer/app/production-composer-app.tsx`; the coordinator guards both read and write) |
-| Media grid/list view | `src/features/media/media-app.tsx` |
+| Assets grid/list view | `src/features/assets/assets-app.tsx` |
 
 Anything not listed here is a violation. `scripts/check-headless-boundary.mjs`
 enforces the boundary directly: no `localStorage`, `sessionStorage` or IndexedDB
@@ -317,7 +317,7 @@ is not storage and is unaffected.
 
 ## Generic workspace shell
 
-The shell owns Overview, Content, Media, Compositions, Mappings, Sitemaps,
+The shell owns Overview, Content, Assets, Compositions, Mappings, Sitemaps,
 Review & release and Website preview. Content navigation reads the complete
 provider-qualified catalog, resolves each model's declarative views and renders
 collections and singletons in the same dashed nested list. Failed sources remain
@@ -353,7 +353,7 @@ so the host updates navigation without remounting that editor.
 `useWorkspace()` exposes the current integration, `navigate`, `reset`, `open`,
 busy state and visible failure. Feature factories consume `integration.sessions`
 as described above. Current Mapping and Content controllers, Composition queues
-and pending props, Sitemap queues and debounced props, and Media upload batches
+and pending props, Sitemap queues and debounced props, and Assets upload batches
 register live flush handles. Detaching presentation retains pending writes and
 failures. Shell navigation and browser traversal await this shared barrier before
 changing route. A document-level listener covers body-portaled menu links too.

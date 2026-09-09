@@ -19,5 +19,5 @@
     "jsxImportSource": "preact",
     "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src", "packages/image-editor/src"]
 }

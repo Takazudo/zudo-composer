@@ -175,6 +175,30 @@
   width: min(57.5rem, calc(100vw - var(--sp-4)));
 }
 
+/* Full-screen surfaces keep the same modal/focus contract as other sizes. */
+.cms-dialog--full {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.cms-dialog--full[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.cms-dialog--full > .cms-dialog__panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100dvh;
+}
+
 .cms-dialog::backdrop {
   background: transparent;
 }

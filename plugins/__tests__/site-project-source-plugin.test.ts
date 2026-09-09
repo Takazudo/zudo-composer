@@ -11,13 +11,13 @@ const toolchain = { compiler: "compiler/2", componentPack: { packId: "pack", pac
 describe("siteProjectSourcePlugin", () => {
   it("serializes the activated release without leaking any local reader marker", async () => {
     const identity = { projectId: "demo", revision: "e".repeat(64), buildId: "f".repeat(64) };
-    const readDevRelease = vi.fn().mockResolvedValue({ project: { id: "demo", marker: "activated-only" }, release: { identity, build: { projectId: "demo" }, completionDigest: "d".repeat(64), files: { "build.json": "1".repeat(64) }, stage: { mediaLock: null, toolchain } } });
+    const readDevRelease = vi.fn().mockResolvedValue({ project: { id: "demo", marker: "activated-only" }, release: { identity, build: { projectId: "demo" }, completionDigest: "d".repeat(64), files: { "build.json": "1".repeat(64) }, stage: { assetLock: null, toolchain } } });
     const plugin = siteProjectSourcePlugin({ readDevRelease });
     expect(hookHandler(plugin.resolveId).call(strictFixture({}), SITE_PROJECT_SOURCE_ID, undefined, { isEntry: false })).toBe(RESOLVED_SITE_PROJECT_SOURCE_ID);
     const source = await hookHandler(plugin.load).call(strictFixture({}), RESOLVED_SITE_PROJECT_SOURCE_ID);
     expect(source).toContain('"activated-only"');
     expect(source).toContain(`siteProjectRevision = "${identity.revision}"`);
-    for (const forbidden of [".zudo-site-project", "virtual:site-project-source", "node:fs", "node:path", "readActivatedSiteProject", "readActivatedSiteRelease", "readActivatedSiteMedia"]) {
+    for (const forbidden of [".zudo-site-project", "virtual:site-project-source", "node:fs", "node:path", "readActivatedSiteProject", "readActivatedSiteRelease", "readActivatedSiteAssets"]) {
       expect(source).not.toContain(forbidden);
     }
     expect(source).toContain("deliverySource");
@@ -37,8 +37,8 @@ describe("siteProjectSourcePlugin", () => {
     watcher.add = vi.fn(); watcher.unwatch = vi.fn();
     const invalidateModule = vi.fn(); const send = vi.fn(); const reloadModule = vi.fn();
     const identity = { projectId: "demo", revision: "a".repeat(64), buildId: "c".repeat(64) };
-    const files = { "build.json": "1".repeat(64), "stage.json": "2".repeat(64), "module-0000.mjs": "3".repeat(64), [`media-sha256-${"4".repeat(64)}.png`]: "4".repeat(64) };
-    const readDevRelease = vi.fn().mockResolvedValue({ project: { id: "demo" }, release: { identity, build: { projectId: "demo" }, completionDigest: "d".repeat(64), files, stage: { mediaLock: null, toolchain } } });
+    const files = { "build.json": "1".repeat(64), "stage.json": "2".repeat(64), "module-0000.mjs": "3".repeat(64), [`asset-sha256-${"4".repeat(64)}.png`]: "4".repeat(64) };
+    const readDevRelease = vi.fn().mockResolvedValue({ project: { id: "demo" }, release: { identity, build: { projectId: "demo" }, completionDigest: "d".repeat(64), files, stage: { assetLock: null, toolchain } } });
     const plugin = siteProjectSourcePlugin({ readDevRelease, workspaceRoot: "/repo" });
     (plugin.configureServer as (server: unknown) => void)({
       watcher,
@@ -47,7 +47,7 @@ describe("siteProjectSourcePlugin", () => {
     });
     expect(watcher.add).toHaveBeenCalledWith("/repo/.zudo-site-project");
     await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith(`/repo/.zudo-site-project/projects/demo/${identity.revision}.json`));
-    for (const name of ["stage.json", "build.json", "complete.json", "module-0000.mjs", `media-sha256-${"4".repeat(64)}.png`]) expect(watcher.add).toHaveBeenCalledWith(`/repo/.zudo-site-project/builds/${identity.buildId}/${name}`);
+    for (const name of ["stage.json", "build.json", "complete.json", "module-0000.mjs", `asset-sha256-${"4".repeat(64)}.png`]) expect(watcher.add).toHaveBeenCalledWith(`/repo/.zudo-site-project/builds/${identity.buildId}/${name}`);
     const source = await hookHandler(plugin.load).call(strictFixture({}), RESOLVED_SITE_PROJECT_SOURCE_ID);
     expect(source).toContain('"id":"demo"');
     expect(source).toContain(`siteProjectRevision = "${identity.revision}"`);
@@ -62,7 +62,7 @@ describe("siteProjectSourcePlugin", () => {
     const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
     const send = vi.fn();
     const identity = { projectId: "ordered", revision: "6".repeat(64), buildId: "7".repeat(64) };
-    const readDevRelease = vi.fn().mockResolvedValue({ project: { id: identity.projectId }, release: { identity, build: {}, completionDigest: "8".repeat(64), files: { "build.json": "9".repeat(64) }, stage: { mediaLock: null, toolchain } } });
+    const readDevRelease = vi.fn().mockResolvedValue({ project: { id: identity.projectId }, release: { identity, build: {}, completionDigest: "8".repeat(64), files: { "build.json": "9".repeat(64) }, stage: { assetLock: null, toolchain } } });
     const plugin = siteProjectSourcePlugin({ readDevRelease, workspaceRoot: "/repo" });
     (plugin.configureServer as (server: unknown) => void)({ watcher, moduleGraph: { getModuleById: vi.fn(() => ({ id: RESOLVED_SITE_PROJECT_SOURCE_ID, file: null })), invalidateModule: vi.fn() }, ws: { send } });
     await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith("/repo/.zudo-site-project/active.json"));
@@ -75,7 +75,7 @@ describe("siteProjectSourcePlugin", () => {
     const invalidateModule = vi.fn().mockImplementationOnce(() => { throw new Error("graph busy"); });
     const send = vi.fn();
     const identity = { projectId: "retry", revision: "a".repeat(64), buildId: "b".repeat(64) };
-    const readDevRelease = vi.fn().mockResolvedValue({ project: { id: identity.projectId }, release: { identity, build: {}, completionDigest: "c".repeat(64), files: { "build.json": "d".repeat(64) }, stage: { mediaLock: null, toolchain } } });
+    const readDevRelease = vi.fn().mockResolvedValue({ project: { id: identity.projectId }, release: { identity, build: {}, completionDigest: "c".repeat(64), files: { "build.json": "d".repeat(64) }, stage: { assetLock: null, toolchain } } });
     const plugin = siteProjectSourcePlugin({ readDevRelease, workspaceRoot: "/repo" });
     (plugin.configureServer as (server: unknown) => void)({ watcher, moduleGraph: { getModuleById: vi.fn(() => ({ id: RESOLVED_SITE_PROJECT_SOURCE_ID, file: null })), invalidateModule }, ws: { send } });
     await vi.waitFor(() => expect(watcher.add).toHaveBeenCalledWith("/repo/.zudo-site-project/active.json"));
@@ -87,7 +87,7 @@ describe("siteProjectSourcePlugin", () => {
   it("retains verified watches across bounded transient retries and converges after recovery", async () => {
     const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
     const send = vi.fn(), oldIdentity = { projectId: "old", revision: "1".repeat(64), buildId: "1".repeat(64) }, nextIdentity = { projectId: "next", revision: "2".repeat(64), buildId: "2".repeat(64) };
-    const loaded = (identity: typeof oldIdentity) => ({ project: { id: identity.projectId }, release: { identity, files: { "build.json": identity.buildId, "module-0000.mjs": identity.buildId }, stage: { mediaLock: null, toolchain } } });
+    const loaded = (identity: typeof oldIdentity) => ({ project: { id: identity.projectId }, release: { identity, files: { "build.json": identity.buildId, "module-0000.mjs": identity.buildId }, stage: { assetLock: null, toolchain } } });
     const readDevRelease = vi.fn().mockResolvedValue(loaded(oldIdentity));
     const plugin = siteProjectSourcePlugin({ readDevRelease, workspaceRoot: "/repo" });
     (plugin.configureServer as (server: unknown) => void)({ watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send } });
@@ -165,7 +165,7 @@ describe("siteProjectSourcePlugin", () => {
     const loaded = (name: string, digit: string): Loaded => {
       const project = { ...loadSampleSiteProject(activeSiteProjectValidationContext), id: name };
       const identity = { projectId: name, revision: digit.repeat(64), buildId: digit.repeat(64) };
-      return { project, release: { identity, completionDigest: digit.repeat(64), build: { projectId: name, activeSitemap: project.activeSitemap, navigation: { primary: [], footer: [], diagnostics: [] }, routes: [], modules: [] }, files: { "build.json": digit.repeat(64), "module-0000.mjs": digit.repeat(64) }, stage: { ...identity, schemaVersion: 2, planDigest: digit.repeat(64), publication: [], mediaLock: null, toolchain } } };
+      return { project, release: { identity, completionDigest: digit.repeat(64), build: { projectId: name, activeSitemap: project.activeSitemap, navigation: { primary: [], footer: [], diagnostics: [] }, routes: [], modules: [] }, files: { "build.json": digit.repeat(64), "module-0000.mjs": digit.repeat(64) }, stage: { ...identity, schemaVersion: 2, planDigest: digit.repeat(64), publication: [], assetLock: null, toolchain } } };
     };
     deferred[0]!.resolve(loaded("stale", "1"));
     await vi.waitFor(() => expect(deferred).toHaveLength(2));
@@ -185,17 +185,25 @@ describe("siteProjectSourcePlugin", () => {
 
   it("gives active pins precedence, delegates unpinned authoring bytes, and fails release-read errors closed", async () => {
     let mode: "one" | "two" | "missing" | "error" = "one";
-    const readDevMedia = vi.fn(async () => mode === "missing" ? null : mode === "error" ? Promise.reject(new Error("digest")) : ({ bytes: Uint8Array.from([mode === "one" ? 1 : 2]), mediaType: "image/png" as const, identity: { projectId: "demo", revision: "a".repeat(64), buildId: "b".repeat(64) } }));
-    const plugin = siteProjectSourcePlugin({ readDevRelease: async () => null, readDevMedia, workspaceRoot: "/repo" });
+    const readDevAsset = vi.fn(async (path: string) => mode === "missing" ? null : mode === "error" ? Promise.reject(new Error("digest")) : path.endsWith(".zip") ? ({ bytes: Uint8Array.from([5]), mimeType: "application/zip" as const, identity: { projectId: "demo", revision: "a".repeat(64), buildId: "b".repeat(64) } }) : ({ bytes: Uint8Array.from([mode === "one" ? 1 : 2]), mimeType: "image/png" as const, identity: { projectId: "demo", revision: "a".repeat(64), buildId: "b".repeat(64) } }));
+    const plugin = siteProjectSourcePlugin({ readDevRelease: async () => null, readDevAsset, workspaceRoot: "/repo" });
     let middleware!: (req: { url: string }, res: Record<string, unknown>, next: () => void) => Promise<void>;
     const watcher = Object.assign(new EventEmitter(), { add: vi.fn(), unwatch: vi.fn() });
     (plugin.configureServer as (server: unknown) => void)({ watcher, moduleGraph: { getModuleById: vi.fn() }, ws: { send: vi.fn() }, middlewares: { use: (value: typeof middleware) => { middleware = value; } } });
-    const pathname = `/uploaded-media/sha256-${"a".repeat(64)}.png`;
-    const call = async (live = true) => { const end = vi.fn(), setHeader = vi.fn(), res = { statusCode: 0, end, setHeader }; const next = vi.fn(() => { res.statusCode = live ? 200 : 404; end(live ? Uint8Array.from([9]) : "Media not found."); }); await middleware({ url: pathname }, res, next); return { res, next, end, setHeader }; };
+    const pathname = `/uploaded-assets/sha256-${"a".repeat(64)}.png`;
+    const call = async (live = true, method?: string, path = pathname) => { const end = vi.fn(), setHeader = vi.fn(), res = { statusCode: 0, end, setHeader }; const next = vi.fn(() => { res.statusCode = live ? 200 : 404; end(live ? Uint8Array.from([9]) : "Assets not found."); }); await middleware({ url: path, ...(method === undefined ? {} : { method }) }, res, next); return { res, next, end, setHeader }; };
     const active = await call(); expect(Array.from(active.end.mock.calls[0]![0])).toEqual([1]); expect(active.next).not.toHaveBeenCalled();
+    expect(active.setHeader).toHaveBeenCalledWith("X-Content-Type-Options", "nosniff");
     mode = "two"; const switched = await call(); expect(Array.from(switched.end.mock.calls[0]![0])).toEqual([2]); expect(switched.next).not.toHaveBeenCalled();
     mode = "missing"; const live = await call(); expect(live.res.statusCode).toBe(200); expect(Array.from(live.end.mock.calls[0]![0])).toEqual([9]); expect(live.next).toHaveBeenCalledTimes(1);
     const absent = await call(false); expect(absent.res.statusCode).toBe(404); expect(absent.next).toHaveBeenCalledTimes(1);
     mode = "error"; const error = await call(); expect(error.res.statusCode).toBe(503); expect(error.next).not.toHaveBeenCalled();
+    mode = "one";
+    const zipPath = `/uploaded-assets/sha256-${"c".repeat(64)}.zip`;
+    const zip = await call(true, "GET", zipPath);
+    expect(zip.setHeader).toHaveBeenCalledWith("Content-Disposition", `attachment; filename="${"c".repeat(64)}.zip"`);
+    const head = await call(true, "HEAD", zipPath);
+    expect(head.end).toHaveBeenCalledWith();
+    expect(head.setHeader.mock.calls).toEqual(zip.setHeader.mock.calls);
   });
 });

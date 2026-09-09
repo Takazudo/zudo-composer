@@ -1,0 +1,32 @@
+.zie-editor { color: #e8e8e8; background: #222; font: 14px/1.5 system-ui, sans-serif; display: flex; flex-direction: column; height: 100%; max-height: 100%; min-height: 0; overflow: hidden; container-type: inline-size; }
+.zie-editor * { box-sizing: border-box; }
+.zie-editor button, .zie-editor input, .zie-editor select { font: inherit; color: inherit; background: #333; border: 1px solid #777; border-radius: 4px; padding: 6px 10px; min-height: 36px; }
+.zie-editor button { cursor: pointer; }
+.zie-editor input[type="number"], .zie-editor select { width: 100%; }
+.zie-editor input[type="range"] { width: 100%; padding-inline: 0; }
+.zie-editor input[type="checkbox"] { min-height: auto; }
+.zie-editor button:disabled, .zie-editor fieldset:disabled { opacity: .5; cursor: default; }
+.zie-editor :focus-visible { outline: 3px solid #85c7ff; outline-offset: 2px; }
+.zie-editor button[aria-pressed="true"] { border-color: #85c7ff; background: #234563; }
+.zie-toolbar, .zie-footer, .zie-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px; }
+.zie-toolbar { flex: none; margin: 0; border: 0; border-bottom: 1px solid #555; }
+.zie-footer { flex: none; background: #222; border-top: 1px solid #555; justify-content: flex-end; z-index: 2; }
+.zie-body { display: grid; grid-template-columns: minmax(0, 1fr) 260px; grid-template-rows: minmax(0, 1fr); flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.zie-stage-column { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.zie-stage-column > .zie-row { flex: none; }
+.zie-stage { flex: 1; min-height: 240px; min-width: 0; overflow: hidden; position: relative; background: repeating-conic-gradient(#383838 0% 25%, #303030 0% 50%) 0 0 / 16px 16px; touch-action: none; }
+.zie-image { position: absolute; left: 50%; top: 50%; transform-origin: center; }
+.zie-canvas { display: block; width: 100%; height: 100%; }
+.zie-crop-overlay { position: absolute; inset: 0; pointer-events: none; }
+.zie-crop-selection { position: absolute; border: 1px solid white; box-shadow: 0 0 0 10000px rgb(0 0 0 / .6); pointer-events: auto; cursor: move; touch-action: none; }
+.zie-editor .zie-crop-handle { position: absolute; transform: translate(-50%, -50%); width: 24px; height: 24px; min-height: 24px; padding: 0; border: 2px solid #222; border-radius: 2px; background: white; cursor: crosshair; touch-action: none; }
+.zie-inspector { min-width: 0; min-height: 0; overflow: auto; margin: 0; padding: 16px; border: 0; border-left: 1px solid #555; }
+.zie-controls { display: flex; flex-direction: column; gap: 12px; }
+.zie-tone { display: grid; grid-template-columns: minmax(0, 1fr) 72px; gap: 8px; align-items: center; }
+.zie-tone button { grid-column: 1 / -1; }
+.zie-dimensions { border-top: 1px solid #555; padding-top: 12px; }
+.zie-status, .zie-error { flex: none; padding: 4px 12px; margin: 0; }
+.zie-error { color: #ffc3bd; }
+@media (hover: hover) { .zie-editor button:enabled:hover { background: #4b4b4b; } }
+@container (max-width: 759px) { .zie-body { display: flex; flex-direction: column; } .zie-stage-column { flex: none; } .zie-stage { flex: none; height: clamp(200px, 34vh, 320px); min-height: 200px; } .zie-inspector { flex: none; overflow: visible; border-left: 0; border-top: 1px solid #555; } }
+@media (max-width: 759px) { .zie-body { display: flex; flex-direction: column; } .zie-stage-column { flex: none; } .zie-stage { flex: none; height: clamp(200px, 34vh, 320px); min-height: 200px; } .zie-inspector { flex: none; overflow: visible; border-left: 0; border-top: 1px solid #555; } }

@@ -1,0 +1,11 @@
+{
+  "name": "@zudo-composer/image-editor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/worker/client.ts",
+    "./ui": "./src/ui/index.ts"
+  }
+}

@@ -13,8 +13,8 @@ import type { SiteProjectApiDependencies, SiteProjectApiService } from "../../..
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 
-function harness(concurrentChecks = false, makeService?: (callbacks: Pick<SiteProjectApiDependencies, "isWorkingCurrent" | "reconcilePublication">) => SiteProjectApiService, mediaStoreRoot?: string) {
-  const plugin = releaseApiPlugin({ mediaStoreRoot });
+function harness(concurrentChecks = false, makeService?: (callbacks: Pick<SiteProjectApiDependencies, "isWorkingCurrent" | "reconcilePublication">) => SiteProjectApiService, assetsStoreRoot?: string) {
+  const plugin = releaseApiPlugin({ assetsStoreRoot });
   (plugin.configResolved as (value: unknown) => void)({ command: "serve" });
   const source = (plugin.load as (id: string) => string)("\0virtual:release-config");
   const config = JSON.parse(source.slice("export default ".length, -1));
@@ -39,24 +39,24 @@ function harness(concurrentChecks = false, makeService?: (callbacks: Pick<SitePr
   return { plugin, request, client, events, requestId, service, bind, httpServer };
 }
 describe("local release capability bridge", () => {
-  it("production review and pinned build read bytes from the explicit isolated Media root", async () => {
-    const context = await fixture({ media: true });
-    const asset = await context.media!.upload({ fileName: "isolated.png", declaredMediaType: "image/png", bytes: PNG });
+  it("production review and pinned build read bytes from the explicit isolated Assets root", async () => {
+    const context = await fixture({ assets: true });
+    const asset = await context.assets!.upload({ fileName: "isolated.png", declaredMimeType: "image/png", bytes: PNG });
     const value = project();
-    value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-media/asset-${asset.id}`;
-    const service = createLocalSiteProjectApiService({ pack, testRoot: context.testRoot, mediaStoreRoot: context.mediaRoot,
+    value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = `/uploaded-assets/asset-${asset.id}`;
+    const service = createLocalSiteProjectApiService({ pack, testRoot: context.testRoot, assetsStoreRoot: context.assetRoot,
       toolchain: { ...toolchain, componentPack: value.componentPack } });
     const plan = await review(service, value, { selection: value.providers.content.flatMap((provider) => provider.entries.map((entry) => ({
       ref: { providerId: provider.id, modelId: entry.modelId, recordId: entry.id }, action: "publish",
     }))) });
-    expect(plan.mediaLock!.pins[0]!.checksum).toBe(asset.document.versions[0]!.checksum);
+    expect(plan.assetLock!.pins[0]!.checksum).toBe(asset.document.versions[0]!.checksum);
     const applied = await call<{ buildId: string }>(service, "apply", { plan });
     await call(service, "build", { projectId: value.id, buildId: applied.buildId });
-    expect(await readFile(join(context.testRoot, "builds", applied.buildId, `media-${plan.mediaLock!.pins[0]!.url.split("/").at(-1)}`))).toEqual(Buffer.from(PNG));
+    expect(await readFile(join(context.testRoot, "builds", applied.buildId, `asset-${plan.assetLock!.pins[0]!.url.split("/").at(-1)}`))).toEqual(Buffer.from(PNG));
   });
   it("refuses an activated release whose toolchain is not the installed one", async () => {
     const context = await fixture(), value = project();
-    const service = createLocalSiteProjectApiService({ pack, testRoot: context.testRoot, mediaStoreRoot: context.mediaRoot,
+    const service = createLocalSiteProjectApiService({ pack, testRoot: context.testRoot, assetsStoreRoot: context.assetRoot,
       toolchain: { ...toolchain, componentPack: value.componentPack } });
     const plan = await review(service, value);
     const applied = await call<{ buildId: string }>(service, "apply", { plan });
@@ -69,15 +69,15 @@ describe("local release capability bridge", () => {
     await expect(readActivatedSiteRelease({ testRoot: context.testRoot, toolchain: { ...stamped, installedPackDigest: "f".repeat(64) } }))
       .rejects.toThrow("Activated release toolchain does not match the current installed runtime.");
   });
-  it("passes the isolated Media root to the release service without exposing a client path", async () => {
-    const mediaStoreRoot = "/tmp/release-bridge-isolated/media";
-    const h = harness(false, undefined, mediaStoreRoot);
+  it("passes the isolated Assets root to the release service without exposing a client path", async () => {
+    const assetsStoreRoot = "/tmp/release-bridge-isolated/assets";
+    const h = harness(false, undefined, assetsStoreRoot);
     const { done } = await h.request();
     await vi.waitFor(() => expect(h.client.send).toHaveBeenCalled());
-    expect(h.service.mock.calls[0]![0]).toMatchObject({ mediaStoreRoot });
-    expect((h.plugin.load as (id: string) => string)("\0virtual:release-config")).not.toContain(mediaStoreRoot);
+    expect(h.service.mock.calls[0]![0]).toMatchObject({ assetsStoreRoot });
+    expect((h.plugin.load as (id: string) => string)("\0virtual:release-config")).not.toContain(assetsStoreRoot);
     h.client.socket.emit("close"); await done;
-    expect(() => releaseApiPlugin({ mediaStoreRoot: "relative" })).toThrow("absolute resolved");
+    expect(() => releaseApiPlugin({ assetsStoreRoot: "relative" })).toThrow("absolute resolved");
   });
   it.each(["late-settle", "disconnect", "dispose"])("quarantines timed-out A against a separate activation process until %s", async (finish) => {
     const context = await fixture(), a = project(), b = { ...project(), name: "B" }, sa = stageFor(a), sb = stageFor(b);

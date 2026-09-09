@@ -6,7 +6,7 @@ import type { ContentEntryRecord, ContentModelRecord } from "../../content/model
 import type { ContentModelSummary } from "../../content/library";
 import type { MappingCatalogEntry, MappingRecord } from "../../mapping";
 import { MAPPING_SCHEMA_VERSION } from "../../mapping";
-import type { MediaSummary } from "../../media";
+import type { AssetSummary } from "../../assets";
 import { SITEMAP_SCHEMA_VERSION, type SitemapNode } from "../../sitemapper/model";
 import type { SitemapRecord } from "../../sitemapper/library";
 import type { ProductionProviderIntegration } from "../provider-integration";
@@ -14,7 +14,7 @@ import {
   createWorkspaceSummary,
   type WorkspaceCounts,
   type WorkspaceInitializationOutcome,
-  type WorkspaceMediaSource,
+  type WorkspaceAssetSource,
   type WorkspaceSource,
   type WorkspaceSummaryIntegration,
 } from "../workspace-summary";
@@ -26,7 +26,7 @@ function value<T>(source: WorkspaceSource<T>): T {
   return (source as { status: "ok"; value: T }).value;
 }
 
-function mediaValue<T>(source: WorkspaceMediaSource<T>): T {
+function assetValue<T>(source: WorkspaceAssetSource<T>): T {
   expect(source.status).toBe("ok");
   return (source as { status: "ok"; value: T }).value;
 }
@@ -95,9 +95,9 @@ function sitemapRecord(id: string, updatedAt: string, root: SitemapNode[]): Site
   return { id, createdAt: AT(1), updatedAt, document: { schemaVersion: SITEMAP_SCHEMA_VERSION, navigation: { primary: [], footer: [] }, id, name: `Sitemap ${id}`, root } };
 }
 
-function mediaSummary(id: string, updatedAt: string, mediaType: MediaSummary["mediaType"], byteLength: number): MediaSummary {
-  return { id, fileName: `${id}.file`, mediaType, byteLength, checksum: "a".repeat(64), createdAt: AT(1), updatedAt,
-    revision: 1, folderId: null, note: "", state: "active", versionId: "a".repeat(64), url: "/uploaded-media/fixture", authoringUrl: `/uploaded-media/asset-${id}` };
+function assetSummary(id: string, updatedAt: string, mimeType: AssetSummary["mimeType"], byteLength: number): AssetSummary {
+  return { id, fileName: `${id}.file`, mimeType, byteLength, checksum: "a".repeat(64), createdAt: AT(1), updatedAt,
+    revision: 1, folderId: null, note: "", state: "active", versionId: "a".repeat(64), url: "/uploaded-assets/fixture", authoringUrl: `/uploaded-assets/asset-${id}` };
 }
 
 const emptyCatalog: ComponentCatalog = {
@@ -118,7 +118,7 @@ interface FakeOptions {
   entries?: Readonly<Record<string, { count: number; entries: readonly ContentEntryRecord[]; diagnostics: readonly { entryId: string; message: string }[] }>>;
   sitemaps?: readonly SitemapRecord[] | Error;
   sitemapsWithoutReadAll?: boolean;
-  media?: readonly MediaSummary[] | Error | null;
+  assets?: readonly AssetSummary[] | Error | null;
 }
 
 function settle<T>(source: T | Error): Promise<T> {
@@ -132,7 +132,7 @@ function createFakeIntegration(options: FakeOptions = {}) {
   const mappings = options.mappings ?? [];
   const models = options.models ?? [];
   const sitemaps = options.sitemaps ?? [];
-  const media = options.media === undefined ? [] : options.media;
+  const assets = options.assets === undefined ? [] : options.assets;
   const knownCompositions = new Set(options.compositionRecords ?? ["hero"]);
   const scanEntries = vi.fn(async (modelId: string) => {
     const found = options.entries?.[modelId] ?? { count: 0, entries: [], diagnostics: [] };
@@ -182,7 +182,7 @@ function createFakeIntegration(options: FakeOptions = {}) {
       resolve: async (ref) => (knownCompositions.has(ref.recordId) ? { status: "resolved", record: compositionRecord(ref.recordId) } : { status: "not-found" }),
     },
     sitemapProvider: { descriptor: { id: "sitemap-filesystem" }, store: sitemapStore },
-    mediaProvider: media === null ? undefined : { descriptor: { id: "media-files" }, store: { list: () => settle(media) } },
+    assetProvider: assets === null ? undefined : { descriptor: { id: "asset-files" }, store: { list: () => settle(assets) } },
   };
   return { integration, initialize, retry, scanEntries };
 }
@@ -191,11 +191,11 @@ describe("createWorkspaceSummary — contract", () => {
   it.each([
     ["compositions:files", ["compositions", "mappings"]],
     ["content", ["content", "mappings"]],
-    ["mapping", ["mappings"]], ["sitemapper", ["sitemaps"]], ["media", ["media"]],
-    ["workspace", ["compositions", "mappings", "sitemaps", "content", "media"]],
+    ["mapping", ["mappings"]], ["sitemapper", ["sitemaps"]], ["assets", ["assets"]],
+    ["workspace", ["compositions", "mappings", "sitemaps", "content", "assets"]],
     ["sessions", []],
   ] as const)("invalidates only dependent summary reads after %s", async (channel, affected) => {
-    const { integration } = createFakeIntegration({ media: [] });
+    const { integration } = createFakeIntegration({ assets: [] });
     let changed!: (channel?: string) => void;
     integration.subscribeChanges = (listener) => { changed = listener; return () => {}; };
     const reads = {
@@ -203,7 +203,7 @@ describe("createWorkspaceSummary — contract", () => {
       mappings: vi.spyOn(integration.mappingCatalog, "list"),
       sitemaps: vi.spyOn(integration.sitemapProvider.store, "readAll"),
       content: vi.spyOn(integration.contentProvider.store, "listModels"),
-      media: vi.spyOn(integration.mediaProvider!.store, "list"),
+      assets: vi.spyOn(integration.assetProvider!.store, "list"),
     };
     const summary = createWorkspaceSummary(integration);
     await summary.counts();
@@ -214,19 +214,19 @@ describe("createWorkspaceSummary — contract", () => {
   });
 
   it("does not restore an obsolete pending source after a domain hint", async () => {
-    const { integration } = createFakeIntegration({ media: [] });
+    const { integration } = createFakeIntegration({ assets: [] });
     let changed!: (channel?: string) => void;
     integration.subscribeChanges = (listener) => { changed = listener; return () => {}; };
-    let finish!: (value: readonly MediaSummary[]) => void;
-    const list = vi.spyOn(integration.mediaProvider!.store, "list")
+    let finish!: (value: readonly AssetSummary[]) => void;
+    const list = vi.spyOn(integration.assetProvider!.store, "list")
       .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
-      .mockResolvedValue([mediaSummary("current", AT(1), "image/png", 10)]);
+      .mockResolvedValue([assetSummary("current", AT(1), "image/png", 10)]);
     const summary = createWorkspaceSummary(integration);
     const old = summary.counts();
-    changed("media");
-    expect(await summary.counts()).toMatchObject({ media: { value: { assets: 1 } } });
+    changed("assets");
+    expect(await summary.counts()).toMatchObject({ assets: { value: { assets: 1 } } });
     finish([]); await old;
-    expect(await summary.counts()).toMatchObject({ media: { value: { assets: 1 } } });
+    expect(await summary.counts()).toMatchObject({ assets: { value: { assets: 1 } } });
     expect(list).toHaveBeenCalledTimes(2); summary.dispose?.();
   });
 
@@ -235,8 +235,8 @@ describe("createWorkspaceSummary — contract", () => {
     expect(accept).toBeTypeOf("function");
   });
 
-  it("keeps every domain but Media structurally incapable of an absent status", () => {
-    // Media alone may answer "absent" (no provider configured); this is a
+  it("keeps every domain but Asset structurally incapable of an absent status", () => {
+    // Asset alone may answer "absent" (no provider configured); this is a
     // compile-time check that the other four domains cannot.
     // @ts-expect-error compositions is a plain WorkspaceSource — it has no "absent" status.
     const badCompositions: WorkspaceCounts["compositions"] = { status: "absent" };
@@ -246,9 +246,9 @@ describe("createWorkspaceSummary — contract", () => {
     const badSitemaps: WorkspaceCounts["sitemaps"] = { status: "absent" };
     // @ts-expect-error content is a plain WorkspaceSource — it has no "absent" status.
     const badContent: WorkspaceCounts["content"] = { status: "absent" };
-    const okMedia: WorkspaceCounts["media"] = { status: "absent" };
+    const okAsset: WorkspaceCounts["assets"] = { status: "absent" };
 
-    expect(okMedia).toEqual({ status: "absent" });
+    expect(okAsset).toEqual({ status: "absent" });
     void [badCompositions, badMappings, badSitemaps, badContent];
   });
 });
@@ -262,7 +262,7 @@ describe("createWorkspaceSummary — counts", () => {
       models: [contentModel("journal", AT(7))],
       entries: { journal: { count: 2, entries: [contentEntry("first", AT(8), { heading: "First" }), contentEntry("second", AT(9), { heading: "" })], diagnostics: [{ entryId: "second", message: "Heading is required." }] } },
       sitemaps: [sitemapRecord("studio", AT(10), [sitemapNode("home", "Home", { kind: "composition", ref: { providerId: "files", recordId: "hero" } }, [sitemapNode("drafts", "Drafts", { kind: "unassigned" })])])],
-      media: [mediaSummary("hero-image", AT(11), "image/png", 2048), mediaSummary("brochure", AT(1), "application/pdf", 4096), mediaSummary("logo", AT(2), "image/png", 512)],
+      assets: [assetSummary("hero-image", AT(11), "image/png", 2048), assetSummary("brochure", AT(1), "application/pdf", 4096), assetSummary("logo", AT(2), "image/png", 512)],
     });
     const summary = createWorkspaceSummary(integration);
     const counts = await summary.counts();
@@ -271,7 +271,7 @@ describe("createWorkspaceSummary — counts", () => {
     expect(value(counts.mappings)).toEqual({ mappings: 2, blockedMappings: 1 });
     expect(value(counts.sitemaps)).toEqual({ sitemaps: 1, pages: 2, unassignedPages: 1 });
     expect(value(counts.content)).toEqual({ models: 1, entries: 2, incompleteEntries: 1 });
-    expect(mediaValue(counts.media)).toEqual({ assets: 3, bytes: 6656, byType: { "image/png": 2, "application/pdf": 1 } });
+    expect(assetValue(counts.assets)).toEqual({ assets: 3, bytes: 6656, byType: { "image/png": 2, "application/pdf": 1 } });
   });
 
   it("reads sitemaps record by record when the provider is not a collection store", async () => {
@@ -282,16 +282,16 @@ describe("createWorkspaceSummary — counts", () => {
     expect(value((await createWorkspaceSummary(integration).counts()).sitemaps)).toEqual({ sitemaps: 1, pages: 1, unassignedPages: 1 });
   });
 
-  it("reports a missing Media provider as absent rather than zero assets or unavailable", async () => {
-    const { integration } = createFakeIntegration({ media: null });
+  it("reports a missing Asset provider as absent rather than zero assets or unavailable", async () => {
+    const { integration } = createFakeIntegration({ assets: null });
     const counts = await createWorkspaceSummary(integration).counts();
-    expect(counts.media).toEqual({ status: "absent" });
+    expect(counts.assets).toEqual({ status: "absent" });
   });
 
-  it("reports a Media provider whose store rejects as unavailable, not absent", async () => {
-    const { integration } = createFakeIntegration({ media: new Error("The Media database is blocked.") });
+  it("reports an Assets provider whose store rejects as unavailable, not absent", async () => {
+    const { integration } = createFakeIntegration({ assets: new Error("The Asset database is blocked.") });
     const counts = await createWorkspaceSummary(integration).counts();
-    expect(counts.media).toEqual({ status: "unavailable", error: "The Media database is blocked." });
+    expect(counts.assets).toEqual({ status: "unavailable", error: "The Asset database is blocked." });
   });
 });
 
@@ -304,14 +304,14 @@ describe("createWorkspaceSummary — recent", () => {
       models: [contentModel("journal", AT(7))],
       entries: { journal: { count: 1, entries: [contentEntry("first", AT(4), { heading: "  First article  " })], diagnostics: [] } },
       sitemaps: [sitemapRecord("studio", AT(9), [sitemapNode("home", "Home", { kind: "unassigned" })])],
-      media: [mediaSummary("hero-image", AT(8), "image/png", 10)],
+      assets: [assetSummary("hero-image", AT(8), "image/png", 10)],
     });
     const { records, unavailable } = await createWorkspaceSummary(integration).recent();
 
     expect(unavailable).toEqual([]);
     expect(records.map(({ kind, id }) => `${kind}:${id}`)).toEqual([
       "sitemap:studio",
-      "media:hero-image",
+      "asset:hero-image",
       "content-model:journal",
       "mapping:journal",
       "composition:hero",
@@ -319,7 +319,7 @@ describe("createWorkspaceSummary — recent", () => {
     ]);
     expect(records.map(({ href }) => href)).toEqual([
       "/sitemapper?provider=sitemap-filesystem&sitemap=studio",
-      "/media?provider=media-files&asset=hero-image",
+      "/assets?provider=asset-files&asset=hero-image",
       "/content?provider=content-filesystem&model=journal",
       "/mapping?provider=mapping-filesystem&mapping=journal",
       "/composer",
@@ -332,35 +332,35 @@ describe("createWorkspaceSummary — recent", () => {
     const { integration } = createFakeIntegration({
       compositions: [compositionSummary("hero", AT(5)), compositionSummary("nav", AT(4))],
       mappings: new Error("Mapping storage is unavailable."),
-      media: null,
+      assets: null,
     });
     const { records, unavailable } = await createWorkspaceSummary(integration).recent(1);
 
     expect(records.map(({ id }) => id)).toEqual(["hero"]);
-    // An absent Media provider is skipped rather than reported: it is the
+    // An absent Asset provider is skipped rather than reported: it is the
     // ordinary dev answer, not a source that failed to be read.
     expect(unavailable).toEqual([{ source: "mappings", error: "Mapping storage is unavailable." }]);
   });
 
-  it("skips an absent Media source instead of listing it as unavailable", async () => {
+  it("skips an absent Asset source instead of listing it as unavailable", async () => {
     const { integration } = createFakeIntegration({
       compositions: [compositionSummary("hero", AT(5))],
-      media: null,
+      assets: null,
     });
     const { unavailable } = await createWorkspaceSummary(integration).recent();
     expect(unavailable).toEqual([]);
   });
 
-  it("lists a Media source that failed to be read as unavailable, unlike an absent one", async () => {
-    const { integration } = createFakeIntegration({ media: new Error("The Media database is blocked.") });
+  it("lists the Assets source that failed to be read as unavailable, unlike an absent one", async () => {
+    const { integration } = createFakeIntegration({ assets: new Error("The Asset database is blocked.") });
     const { unavailable } = await createWorkspaceSummary(integration).recent();
-    expect(unavailable).toEqual([{ source: "media", error: "The Media database is blocked." }]);
+    expect(unavailable).toEqual([{ source: "assets", error: "The Asset database is blocked." }]);
   });
 
   it("keeps the newest record first at any limit, across sources", async () => {
     const { integration } = createFakeIntegration({
       compositions: [compositionSummary("hero", AT(5))],
-      media: [mediaSummary("hero-image", AT(8), "image/png", 10)],
+      assets: [assetSummary("hero-image", AT(8), "image/png", 10)],
       sitemaps: [sitemapRecord("studio", AT(9), [])],
     });
     const summary = createWorkspaceSummary(integration);
@@ -426,7 +426,7 @@ describe("createWorkspaceSummary — resilience and lifecycle", () => {
       mappingRecords: { journal: mappingRecord("journal") },
       models: [contentModel("journal", AT(7))],
       sitemaps: new Error("Sitemap storage is unavailable."),
-      media: [mediaSummary("hero-image", AT(8), "image/png", 10)],
+      assets: [assetSummary("hero-image", AT(8), "image/png", 10)],
     });
     const counts = await createWorkspaceSummary(integration).counts();
 
@@ -434,20 +434,20 @@ describe("createWorkspaceSummary — resilience and lifecycle", () => {
     expect(counts.sitemaps).toEqual({ status: "unavailable", error: "Sitemap storage is unavailable." });
     expect(value(counts.mappings)).toEqual({ mappings: 1, blockedMappings: 0 });
     expect(value(counts.content)).toEqual({ models: 1, entries: 0, incompleteEntries: 0 });
-    expect(mediaValue(counts.media)).toEqual({ assets: 1, bytes: 10, byType: { "image/png": 1 } });
+    expect(assetValue(counts.assets)).toEqual({ assets: 1, bytes: 10, byType: { "image/png": 1 } });
   });
 
-  it("keeps Media readable when provider initialization fails", async () => {
+  it("keeps Asset readable when provider initialization fails", async () => {
     const { integration, initialize } = createFakeIntegration({
       initialize: async () => ({ status: "error", error: new Error("The active SiteProject could not be initialized.") }),
-      media: [mediaSummary("hero-image", AT(8), "image/png", 10)],
+      assets: [assetSummary("hero-image", AT(8), "image/png", 10)],
     });
     const counts = await createWorkspaceSummary(integration).counts();
 
     for (const source of [counts.compositions, counts.mappings, counts.sitemaps, counts.content]) {
       expect(source).toEqual({ status: "unavailable", error: "The active SiteProject could not be initialized." });
     }
-    expect(mediaValue(counts.media)).toEqual({ assets: 1, bytes: 10, byType: { "image/png": 1 } });
+    expect(assetValue(counts.assets)).toEqual({ assets: 1, bytes: 10, byType: { "image/png": 1 } });
     expect(initialize).toHaveBeenCalledTimes(1);
   });
 

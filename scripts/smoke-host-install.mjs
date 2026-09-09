@@ -45,7 +45,7 @@ const HOST_NAME = "zudo-composer-install-smoke-host";
 const SITEMAP_NAME = "Install smoke sitemap";
 
 /** Routes the README promises a host. Each must answer the shell, not a 404. */
-const ROUTES = ["/", "/composer", "/content", "/mapping", "/sitemapper", "/media"];
+const ROUTES = ["/", "/composer", "/content", "/mapping", "/sitemapper", "/assets"];
 
 /**
  * Directories a host agrees zudo-composer may write into. `node_modules` is the
@@ -193,8 +193,8 @@ try {
 
   step("writing a bare host project that has never seen this repository");
   const toolPackage = /** @type {ToolPackage} */ (JSON.parse(await readFile(join(root, "package.json"), "utf8")));
-  for (const directory of ["styles", "components", "public/uploaded-media",
-    "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/media"]) {
+  for (const directory of ["styles", "components", "public/uploaded-assets",
+    "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/assets"]) {
     await mkdir(join(hostRoot, directory), { recursive: true });
   }
   // `fixtures/self-host` is the reference shape; only its package name is
@@ -239,8 +239,50 @@ try {
     throw new Error(`The installed dev server could not resolve its own dependencies:\n${server.output()}`);
   }
 
+  step("resolving editor source aliases through the installed launcher");
+  const { stdout: editorJson } = await run(process.execPath, ["--input-type=module", "-e", `
+    import { createRequire } from 'node:module';
+    import { realpath } from 'node:fs/promises';
+    import { dirname, resolve } from 'node:path';
+    import { pathToFileURL } from 'node:url';
+    const require = createRequire(resolve('package.json'));
+    const toolRoot = await realpath(dirname(require.resolve('zudo-composer/package.json')));
+    const { resolveComposerDevConfig } = await import(pathToFileURL(resolve(toolRoot, 'server/dev-server.mjs')));
+    const { inlineConfig } = await resolveComposerDevConfig({workspaceRoot:process.cwd()});
+    const entries = ['@zudo-composer/image-editor', '@zudo-composer/image-editor/worker'].map(name => {
+      const alias = inlineConfig.resolve.alias.find(alias => alias.find.test(name));
+      if (!alias || !alias.replacement.startsWith(toolRoot + '/packages/image-editor/src/')) throw new Error('Editor alias escaped installed tool');
+      return '/@fs' + alias.replacement;
+    });
+    console.log(JSON.stringify({toolRoot, entries}));
+  `], hostRoot);
+  const editor = JSON.parse(editorJson.trim().split("\n").at(-1) ?? "");
+  for (const entry of editor.entries) {
+    const response = await fetch(`${ORIGIN}${entry}`);
+    if (!response.ok || !(await response.text()).includes("export")) throw new Error(`Installed editor transform failed: ${entry}`);
+  }
+
   step("authoring one record through the browser");
   browser = await chromium.launch();
+  const editorPage = await browser.newPage();
+  await editorPage.goto(ORIGIN);
+  const workerResponse = editorPage.waitForResponse(response => response.url().includes('/packages/image-editor/src/worker/worker.ts'), {timeout:30_000});
+  await editorPage.evaluate(async (entries) => {
+    const core = await import(/* @vite-ignore */ entries[0]);
+    const { createImageEditorClient } = await import(/* @vite-ignore */ entries[1]);
+    const service = createImageEditorClient();
+    try {
+      const source = {width:2,height:2,data:new Uint8ClampedArray(16).fill(255)};
+      await service.registerSource(source);
+      const result = await service.renderFull(core.createEditDoc(source));
+      if (result.width !== 2 || result.data.length !== 16 || result.data[0] !== 255) throw new Error('Installed worker render failed');
+    } finally { service.dispose(); }
+  }, editor.entries);
+  const servedWorker = await workerResponse;
+  const workerPath = decodeURIComponent(new URL(servedWorker.url()).pathname);
+  const workerFile = await realpath(workerPath.startsWith('/@fs/') ? workerPath.slice('/@fs'.length) : resolve(hostRoot, `.${workerPath}`));
+  if (!servedWorker.ok() || workerFile !== join(editor.toolRoot, 'packages/image-editor/src/worker/worker.ts')) throw new Error(`Worker escaped installed tool graph: ${servedWorker.url()}`);
+  await editorPage.close();
   const authoring = await browser.newContext();
   await authorOneSitemap(await authoring.newPage());
   await authoring.close();

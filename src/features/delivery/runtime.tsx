@@ -1,3 +1,4 @@
+import { renderAssetDownloadMarkdown } from "../../components/asset-download-markdown";
 import { resolveComponentNode, type ComponentManifest, type JsonObject, type JsonValue, type TrustedComponentPack } from "@zudo-composer/component-contract";
 import { Component, h, type ComponentChildren, type JSX } from "preact";
 import type { CompositionDocument, CompositionNode } from "../../composer/model/types";
@@ -79,7 +80,7 @@ interface RuntimeNodeProps {
 
 function RuntimeInvocation({ runtime, props }: { runtime: ReturnType<typeof resolveComponentNode> extends infer T ? T : never; props: Record<string, unknown> }): ComponentChildren {
   if (runtime.status !== "resolved") return null;
-  return runtime.runtime.adapters?.render ? runtime.runtime.adapters.render(props) as ComponentChildren : h(runtime.runtime.component as never, props);
+  return renderAssetDownloadMarkdown(runtime.definition, props, (chunk) => runtime.runtime.adapters?.render ? runtime.runtime.adapters.render(chunk) as ComponentChildren : h(runtime.runtime.component as never, chunk));
 }
 
 function RuntimeNode({ node, owner, pack, outlet, report, basePath }: RuntimeNodeProps): JSX.Element {

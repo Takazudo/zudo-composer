@@ -19,14 +19,14 @@ import { ContentPreviewPane } from "./content-preview-pane";
 import { createContentAuthoringController, type ContentAuthoringController, type ContentAuthoringState, type ContentSaveStatus, type ContentWorkMode } from "./controller";
 import { contentEntryLabel, contentEntryTitleField } from "./presentation";
 import type { ContentPreviewSource } from "./preview-source";
-import type { ContentMediaPickerRenderer } from "./structured-field-editor";
+import type { ContentAssetPickerRenderer } from "./structured-field-editor";
 
 export interface ContentRouteContentProps {
   provider: ContentProvider;
   controller?: ContentAuthoringController;
   componentProvider?: ComposerComponentProvider;
   createPreviewSource?: () => ContentPreviewSource;
-  renderMediaPicker?: ContentMediaPickerRenderer;
+  renderAssetPicker?: ContentAssetPickerRenderer;
   loadActivatedBaseline?: () => Promise<readonly ContentSnapshot[]>;
 }
 
@@ -73,9 +73,9 @@ function contentHref(providerId: string, modelId: string, entryId?: string, view
  * published through `useEditorStatus` rather than drawn here, because autosave
  * remains authoritative and the app chrome owns where its state is shown.
  */
-export function ContentApp({ provider, controller: supplied, componentProvider, createPreviewSource, renderMediaPicker, loadActivatedBaseline }: ContentRouteContentProps): JSX.Element {
+export function ContentApp({ provider, controller: supplied, componentProvider, createPreviewSource, renderAssetPicker, loadActivatedBaseline }: ContentRouteContentProps): JSX.Element {
   const integration = useWorkspace()?.integration;
-  const controller = useMemo(() => supplied ?? createContentAuthoringController(provider, { providers: integration?.contentProviders, mediaProvider: integration?.mediaProvider, loadActivatedBaseline }), [integration, loadActivatedBaseline, provider, supplied]);
+  const controller = useMemo(() => supplied ?? createContentAuthoringController(provider, { providers: integration?.contentProviders, assetProvider: integration?.assetProvider, loadActivatedBaseline }), [integration, loadActivatedBaseline, provider, supplied]);
   const [state, setState] = useState<ContentAuthoringState>(controller.state);
   const [actionError, setError] = useState<string | null>(null);
   const [intentError, setIntentError] = useState<string | null>(null);
@@ -408,7 +408,7 @@ export function ContentApp({ provider, controller: supplied, componentProvider, 
               ) : relationshipsMode ? (
                 <ContentRelationshipsView state={state} />
               ) : state.entry ? (
-                <div class="sg-content-entry-workspace"><PaneTabs label="Entry workspace" class="sg-content-entry-tabs" tabs={entryTabs} activeId={activeEntryTab} onSelect={(id) => { setDeepSelection(null); if (id.startsWith("view:")) { controller.selectView(id.slice(5)); setEntryTab("fields"); } else { controller.selectView(null); setEntryTab(id as "fields" | "raw" | "used-by"); } }} />{entryTab === "raw" ? <ContentRawView model={state.model} entry={state.entry} /> : entryTab === "used-by" ? <ContentUsedByView state={state} controller={controller} /> : <ContentEntryAuthor state={state} controller={controller} run={run} renderMediaPicker={renderMediaPicker} />}</div>
+                <div class="sg-content-entry-workspace"><PaneTabs label="Entry workspace" class="sg-content-entry-tabs" tabs={entryTabs} activeId={activeEntryTab} onSelect={(id) => { setDeepSelection(null); if (id.startsWith("view:")) { controller.selectView(id.slice(5)); setEntryTab("fields"); } else { controller.selectView(null); setEntryTab(id as "fields" | "raw" | "used-by"); } }} />{entryTab === "raw" ? <ContentRawView model={state.model} entry={state.entry} /> : entryTab === "used-by" ? <ContentUsedByView state={state} controller={controller} /> : <ContentEntryAuthor state={state} controller={controller} run={run} renderAssetPicker={renderAssetPicker} />}</div>
               ) : (
                 <ContentEntriesWorkspace state={state} controller={controller} run={run} />
               )}

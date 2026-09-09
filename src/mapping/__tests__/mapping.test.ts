@@ -110,15 +110,15 @@ describe("Mapping model and resolver", () => {
     expect(referenceSort).toMatchObject({ status: "blocked", diagnostics: [{ code: "unsupported-query-field", fieldId: "related" }] });
   });
 
-  it("projects structured, media, reference, and explicit route-link values without object coercion", () => {
+  it("projects structured, asset, reference, and explicit route-link values without object coercion", () => {
     const richField = { id: "meta", key: "meta", label: "Meta", required: false, kind: "object" as const, fields: [{ id: "label", key: "label", label: "Label", required: false, kind: "text" as const }] };
     const richEntry = { ...entry({}), values: { meta: { label: "Exact" } } };
     expect(projectContentValue({ field: richField, entry: richEntry, projection: { kind: "object-field", fieldIds: ["label"] }, providerId: "content" })).toEqual({ status: "projected", value: "Exact" });
     expect(projectContentValue({ field: richField, entry: richEntry, projection: { kind: "value" }, providerId: "content" })).toEqual({ status: "projected", value: { label: "Exact" } });
-    const mediaField = { id: "image", key: "image", label: "Image", required: false, kind: "media-use" as const, use: "image" as const };
-    const mediaEntry = { ...entry({}), values: { image: { kind: "image", asset: { providerId: "media-files", assetId: "hero" }, alt: "Hero", decorative: false, caption: "Caption" } } };
-    expect(projectContentValue({ field: mediaField, entry: mediaEntry, projection: { kind: "media-asset-ref" }, providerId: "content" })).toEqual({ status: "projected", value: { providerId: "media-files", assetId: "hero" } });
-    expect(projectContentValue({ field: mediaField, entry: mediaEntry, projection: { kind: "media-text", field: "alt" }, providerId: "content" })).toEqual({ status: "projected", value: "Hero" });
+    const assetField = { id: "image", key: "image", label: "Image", required: false, kind: "asset-use" as const, use: "image" as const };
+    const assetEntry = { ...entry({}), values: { image: { kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "Hero", decorative: false, caption: "Caption" } } };
+    expect(projectContentValue({ field: assetField, entry: assetEntry, projection: { kind: "asset-ref" }, providerId: "content" })).toEqual({ status: "projected", value: { providerId: "asset-files", assetId: "hero" } });
+    expect(projectContentValue({ field: assetField, entry: assetEntry, projection: { kind: "asset-text", field: "alt" }, providerId: "content" })).toEqual({ status: "projected", value: "Hero" });
     const referenceField = { id: "related", key: "related", label: "Related", required: false, kind: "reference" as const, target: { providerId: "content", recordId: "articles" } };
     const referenceEntry = { ...entry({}), values: { related: { providerId: "content", modelId: "articles", recordId: "next" } } };
     expect(projectContentValue({ field: referenceField, entry: referenceEntry, projection: { kind: "route-link" }, providerId: "content" }).status).toBe("route-context-unavailable");
@@ -127,15 +127,15 @@ describe("Mapping model and resolver", () => {
     expect(validateMappingSourceProjection({ kind: "object-field", fieldIds: [] })).toBe(false);
     expect(validateMappingSourceProjection({ kind: "route-link", fallback: "/fake" })).toBe(false);
   });
-  it("resolves and evaluates persisted structured, media, reference, and route-link projections", async () => {
+  it("resolves and evaluates persisted structured, asset, reference, and route-link projections", async () => {
     const cases = [
       {
         field: { id: "source", key: "source", label: "Source", required: true, kind: "object" as const, fields: [{ id: "label", key: "label", label: "Label", required: true, kind: "text" as const }] },
         projection: { kind: "object-field" as const, fieldIds: ["label"] }, value: { label: "Structured" }, expected: "Structured",
       },
       {
-        field: { id: "source", key: "source", label: "Source", required: true, kind: "media-use" as const, use: "image" as const },
-        projection: { kind: "media-text" as const, field: "alt" as const }, value: { kind: "image", asset: { providerId: "media-files", assetId: "hero" }, alt: "Media", decorative: false, caption: "" }, expected: "Media",
+        field: { id: "source", key: "source", label: "Source", required: true, kind: "asset-use" as const, use: "image" as const },
+        projection: { kind: "asset-text" as const, field: "alt" as const }, value: { kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "Asset", decorative: false, caption: "" }, expected: "Asset",
       },
       {
         field: { id: "source", key: "source", label: "Source", required: true, kind: "reference" as const, target: { providerId: "content", recordId: "articles" } },

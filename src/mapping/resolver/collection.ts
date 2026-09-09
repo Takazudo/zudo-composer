@@ -103,5 +103,5 @@ export function evaluateCollectionQuery(options: {
 }
 
 export function isScalarQueryField(field: ContentFieldDefinition): boolean {
-  return !["object", "list", "media-use", "reference", "reference-list"].includes(field.kind);
+  return !["object", "list", "asset-use", "reference", "reference-list"].includes(field.kind);
 }

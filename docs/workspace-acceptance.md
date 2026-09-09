@@ -29,11 +29,11 @@ the canvas action, and root/non-root toolbar targets.
 | Composition | Real installed component cards, device choice, enlarged preview, provider-safe iframe, shared chooser/history | `composer-undo-redo.pw.ts`, `provider-proof.pw.ts`: actual rendered-card signal, iframe dialog, Escape, existing component/CSS/WASM/export proof |
 | Mapping | Explicit projections and materialization; published/draft policy, filters/sort/limit, pins and effective records | `mapping.pw.ts`: saved pin order and real repeated latest-News output; field/target drift repair remains covered |
 | Sitemap | Canvas and outline retained alongside Routes and Navigation; stable independent menus and ancestor-qualified routes | `outline-tree.responsive.pw.ts` asserts geometry and exact insertion |
-| Media | Real global bytes, logical folders, metadata, immutable replacement/history, usage-aware trash/restore | `media-upload.pw.ts`: signature/checksum bytes, old URL still serves old bytes, stable asset ID and changed immutable version, exact release lock; inspect per-use labels and folder states |
+| Assets | Real global bytes, logical folders, metadata, immutable replacement/history, usage-aware trash/restore | `assets-upload.pw.ts`: signature/checksum bytes, old URL still serves old bytes, stable asset ID and changed immutable version, exact release lock; inspect per-use labels and folder states |
 | Review | Changes/Checks/Affected, explicit Content selection, local-only apply/build/activate, staged identity independent of newer drafts | `site-project-acceptance.pw.ts`: staged candidate identity stays independent of a newer working draft across local activation and reload |
-| States | Empty/no-match, loading, error, unavailable and stale-target messages are not editable success | `workspace-states.pw.ts`, responsive source: refused workspace provider, delayed/rejected Media, recovery, no-match, unavailable provider URL; existing unit suites cover blank schemas and incomplete reference diagnostics |
+| States | Empty/no-match, loading, error, unavailable and stale-target messages are not editable success | `workspace-states.pw.ts`, responsive source: refused workspace provider, delayed/rejected Assets, recovery, no-match, unavailable provider URL; existing unit suites cover blank schemas and incomplete reference diagnostics |
 
-Every module remains navigable: Overview, Content, Media, Compositions,
+Every module remains navigable: Overview, Content, Assets, Compositions,
 Mappings, Sitemaps, Review & release, and the separate Website preview chooser.
 
 ## Viewport and interaction matrix
@@ -79,8 +79,8 @@ a workspace from the validated bundled source through the real workspace
 service, which writes it to the host's filesystem exactly as authoring does.
 They do not depend on an activated release and do not bypass initialization
 failures.
-Media uploads are additive, uniquely named test assets; immutable versions are
-not permanently purged. Existing reversible Media cleanup stays in its Media
+Asset uploads are additive, uniquely named test assets; immutable versions are
+not permanently purged. Existing reversible asset cleanup stays in its Assets
 suite. The manager's test worktree/root must remain disposable. Never point the
 activation journey at an operator's persistent release root.
 
