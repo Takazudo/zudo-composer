@@ -62,6 +62,21 @@ export function Dialog({
   const triggerRef = useRef<HTMLElement | null>(null);
   const titleId = `cms-dialog-title-${useId()}`;
 
+  // Only a real unmount runs this cleanup; an `open` change keeps the
+  // close-while-mounted path below responsible for restoring focus.
+  useLayoutEffect(() => () => {
+    const trigger = triggerRef.current;
+    triggerRef.current = null;
+    const dialog = dialogRef.current;
+    // Cleanup runs before Preact removes the element. Release native modal
+    // inertness first, otherwise the opener cannot receive focus yet.
+    if (dialog?.open) {
+      if (typeof dialog.close === "function") dialog.close();
+      else dialog.removeAttribute("open");
+    }
+    if (trigger?.isConnected) trigger.focus();
+  }, []);
+
   // Open/close the element, and bracket it with focus bookkeeping: capture the
   // opener before `showModal()` moves focus, restore it after the body has
   // been removed from the DOM (a synchronous restore before that would be
@@ -90,7 +105,7 @@ export function Dialog({
     }
     const trigger = triggerRef.current;
     triggerRef.current = null;
-    trigger?.focus();
+    if (trigger?.isConnected) trigger.focus();
     // Deliberately keyed on `open` alone: this runs once per opening, and
     // re-running it would steal focus back from wherever the user moved it.
   }, [open]);

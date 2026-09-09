@@ -36,6 +36,29 @@ function DialogHarness({ onClose, withInitialFocus = false, ...props }: HarnessP
   );
 }
 
+function ConditionalDialogHarness(): JSX.Element {
+  const [stage, setStage] = useState<"closed" | "A" | "B">("closed");
+  const [hasTrigger, setHasTrigger] = useState(true);
+  return (
+    <div>
+      {hasTrigger && <button type="button" onClick={() => setStage("A")}>Open conditional</button>}
+      <button type="button" onClick={() => setHasTrigger(false)}>Remove trigger</button>
+      {stage !== "closed" && (
+        <Dialog key={stage} open title={`Conditional ${stage}`} onClose={() => setStage("closed")}>
+          <button type="button" onClick={() => setStage("B")}>Replace dialog</button>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+function openConditionalDialog(): { trigger: HTMLElement; dialog: HTMLElement } {
+  const trigger = screen.getByRole("button", { name: "Open conditional" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  return { trigger, dialog: screen.getByRole("dialog", { name: "Conditional A" }) };
+}
+
 function openDialog(): HTMLElement {
   const trigger = screen.getByRole("button", { name: "Export" });
   trigger.focus();
@@ -155,5 +178,80 @@ describe("Dialog", () => {
     const dialog = screen.getByRole("dialog", { name: "Unsaved work" });
     expect(dialog).not.toHaveAttribute("aria-labelledby");
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+  });
+
+  it.each(["Escape", "header", "backdrop"])("restores focus when %s conditionally unmounts the dialog", (dismiss) => {
+    render(<ConditionalDialogHarness />);
+    const { trigger, dialog } = openConditionalDialog();
+    const restore = vi.spyOn(trigger, "focus");
+    if (dismiss === "Escape") fireEvent.keyDown(dialog, { key: "Escape" });
+    else if (dismiss === "header") fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    else fireEvent.click(dialog);
+    expect(dialog).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(restore).toHaveBeenCalledOnce();
+  });
+
+  it("closes the dialog before restoring focus so native modal inertness is released", () => {
+    render(<ConditionalDialogHarness />);
+    const { trigger, dialog } = openConditionalDialog();
+    const focus = trigger.focus;
+    const restore = vi.spyOn(trigger, "focus").mockImplementation(() => {
+      // Model the native modal's blocked background focus, which the shared
+      // jsdom showModal shim cannot reproduce.
+      if (!(dialog as HTMLDialogElement).open) focus.call(trigger);
+    });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(restore).toHaveBeenCalledOnce();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("restores focus on conditional unmount without native showModal support", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal")!;
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: undefined });
+    try {
+      render(<ConditionalDialogHarness />);
+      const { trigger, dialog } = openConditionalDialog();
+      expect(dialog).toHaveAttribute("open");
+      fireEvent.keyDown(dialog, { key: "Escape" });
+      expect(dialog).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    } finally {
+      Object.defineProperty(HTMLDialogElement.prototype, "showModal", descriptor);
+    }
+  });
+
+  it("focuses the replacement and preserves the original opener across a same-commit replacement", () => {
+    render(<ConditionalDialogHarness />);
+    const { trigger, dialog } = openConditionalDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Replace dialog" }));
+    const replacement = screen.getByRole("dialog", { name: "Conditional B" });
+    expect(dialog).not.toBeInTheDocument();
+    expect(replacement.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(replacement, { key: "Escape" });
+    expect(trigger).toHaveFocus();
+  });
+
+  it("does not attempt to focus a detached opener on conditional unmount", () => {
+    render(<ConditionalDialogHarness />);
+    const { trigger, dialog } = openConditionalDialog();
+    const restore = vi.spyOn(trigger, "focus");
+    fireEvent.click(screen.getByRole("button", { name: "Remove trigger" }));
+    expect(trigger.isConnected).toBe(false);
+    expect(() => fireEvent.keyDown(dialog, { key: "Escape" })).not.toThrow();
+    expect(restore).not.toHaveBeenCalled();
+    expect(dialog).not.toBeInTheDocument();
+  });
+
+  it("restores exactly once on open=false and never again when subsequently unmounted", () => {
+    const view = render(<DialogHarness />);
+    const dialog = openDialog();
+    const trigger = screen.getByRole("button", { name: "Export" });
+    const restore = vi.spyOn(trigger, "focus");
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(trigger).toHaveFocus();
+    expect(restore).toHaveBeenCalledOnce();
+    view.unmount();
+    expect(restore).toHaveBeenCalledOnce();
   });
 });
