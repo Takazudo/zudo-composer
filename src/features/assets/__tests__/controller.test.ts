@@ -225,4 +225,70 @@ describe("versioned Asset controller", () => {
     expect(controller.capability("replace")).toBe(false);
     expect(() => controller.upload(new File([PNG], "x.png"), null)).toThrow("unavailable");
   });
+
+  it("saves an edited replacement with the captured MIME, identity and revision precondition", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 1, 2, 3]);
+    const original = await filesystem.upload({ fileName: "hero.jpeg", declaredMimeType: "image/jpeg", bytes: JPEG });
+    const replacementCalls: { id: string; file: Blob; expectedRevision: number }[] = [];
+    const store = new Proxy(provider.store, { get(target, property, receiver) {
+      if (property === "replace") return (id: string, file: Blob, precondition: { expectedRevision: number }) => { replacementCalls.push({ id, file, expectedRevision: precondition.expectedRevision }); return target.replace(id, file, precondition); };
+      return Reflect.get(target, property, receiver);
+    } });
+    const controller = createAssetLibraryController({ ...provider, store: store as typeof provider.store }); await controller.initialize();
+    const captured = controller.state.records[0]!;
+    const saved = await controller.saveEditedImage(captured, new Blob([JPEG], { type: "image/jpeg" }), { mode: "replace" });
+    expect(saved.id).toBe(original.id);
+    expect(replacementCalls[0]).toMatchObject({ id: original.id, file: { name: "hero.jpg", type: "image/jpeg" }, expectedRevision: captured.revision });
+    expect(controller.state.records[0]).toMatchObject({ id: original.id, revision: captured.revision + 1, mimeType: "image/jpeg" });
+  });
+
+  it("saves a copy in the captured folder with one normalized edited extension", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 1, 2, 3]);
+    const original = await filesystem.upload({ fileName: "hero.jpeg", declaredMimeType: "image/jpeg", bytes: JPEG, note: "Keep this note" });
+    const folder = await filesystem.createFolder({ name: "Pictures", parentId: null }, await filesystem.mutationToken());
+    await filesystem.updateMetadata(original.id, { folderId: folder.id }, { expectedRevision: original.revision });
+    const uploadCalls: { file: Blob & { name: string }; folderId?: string | null; note?: string }[] = [];
+    const store = new Proxy(provider.store, { get(target, property, receiver) {
+      if (property === "upload") return (file: Blob & { name: string }, options: { folderId?: string | null; note?: string }) => { uploadCalls.push({ file, folderId: options.folderId, note: options.note }); return target.upload(file, options); };
+      return Reflect.get(target, property, receiver);
+    } });
+    const controller = createAssetLibraryController({ ...provider, store: store as typeof provider.store }); await controller.initialize();
+    const captured = controller.state.records[0]!;
+    const saved = await controller.saveEditedImage(captured, new Blob([JPEG], { type: "image/jpeg" }), { mode: "copy" });
+    expect(saved.id).not.toBe(captured.id);
+    expect(uploadCalls[0]).toMatchObject({ file: { name: "hero (edited).jpg", type: "image/jpeg" }, folderId: folder.id, note: "Keep this note" });
+    expect(controller.state.records.find(({ id }) => id === saved.id)).toMatchObject({ fileName: "hero (edited).jpg", folderId: folder.id, note: "Keep this note" });
+  });
+
+  it("does not advertise or attempt Save as copy when upload is absent", async () => {
+    const { provider, filesystem } = await providerFixture();
+    await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
+    const store = new Proxy(provider.store, { get(target, property, receiver) {
+      if (property === "upload") return undefined;
+      return Reflect.get(target, property, receiver);
+    } }) as typeof provider.store;
+    const controller = createAssetLibraryController({ ...provider, store }); await controller.initialize();
+    const captured = controller.state.records[0]!;
+    expect(controller.canSaveEditedImageCopy()).toBe(false);
+    await expect(controller.saveEditedImage(captured, new Blob([PNG], { type: "image/png" }), { mode: "copy" })).rejects.toThrow("unavailable");
+  });
+
+  it("retains the captured editor revision on conflict and blocks uncertain retry", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const original = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
+    const controller = createAssetLibraryController(provider); await controller.initialize();
+    const captured = controller.state.records[0]!;
+    await filesystem.updateMetadata(original.id, { note: "Other tab" }, { expectedRevision: captured.revision });
+    const replace = vi.spyOn(provider.store, "replace");
+    await expect(controller.saveEditedImage(captured, new Blob([PNG], { type: "image/png" }), { mode: "replace" })).rejects.toMatchObject({ code: "conflict" });
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(controller.state.uncertain).toBe(false);
+    const uncertain = vi.spyOn(provider.store, "replace").mockRejectedValueOnce(Object.assign(new Error("Unknown acknowledgement"), { code: "commit-uncertain" }));
+    const current = controller.state.records[0]!;
+    await expect(controller.saveEditedImage(current, new Blob([PNG], { type: "image/png" }), { mode: "replace" })).rejects.toMatchObject({ code: "commit-uncertain" });
+    await expect(controller.saveEditedImage(current, new Blob([PNG], { type: "image/png" }), { mode: "replace" })).rejects.toThrow("Reload authoritative");
+    expect(uncertain).toHaveBeenCalledTimes(2);
+  });
 });
