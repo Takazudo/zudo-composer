@@ -119,6 +119,11 @@ const patternCatalog: ReuseCatalogOutcome = {
 };
 
 describe("ComposerChooser — modal behavior", () => {
+  it("uses the full-screen dialog size", () => {
+    render(<ComposerChooser {...baseProps()} />);
+    expect(screen.getByRole("dialog")).toHaveClass("cms-dialog--full");
+  });
+
   it("shows as an open, labelled dialog with an accessible title", () => {
     const props = baseProps();
     render(<ComposerChooser {...props} />);
@@ -431,6 +436,10 @@ describe("ComposerChooser — live preview pane (issue #254)", () => {
     };
     expect(message.type).toBe("render");
     expect(message.document.root[0]!.componentId).toBe(FIXTURE_IDS.box);
+    const previewTitle = screen.getByRole("heading", { name: "Box", level: 3 });
+    expect(previewTitle.closest(".sg-composer-chooser-preview-stage")).toBeNull();
+    expect(previewTitle.parentElement?.querySelector(".sg-composer-chooser-preview-description"))
+      .toHaveTextContent(fixtureCatalog.find((entry) => entry.id === FIXTURE_IDS.box)!.description);
     // Non-interactive: the preview never enters "edit" session mode.
     expect(message.session.mode).toBe("preview");
     expect(screen.queryByText(/Hover or focus a component/)).not.toBeInTheDocument();
@@ -450,6 +459,7 @@ describe("ComposerChooser — live preview pane (issue #254)", () => {
     expect(harness.posts).toHaveLength(1);
     const message = harness.posts[0]!.message as { document: { root: { componentId: string }[] } };
     expect(message.document.root[0]!.componentId).toBe(FIXTURE_IDS.text);
+    expect(screen.getByRole("heading", { name: "Text", level: 3 })).toBeInTheDocument();
   });
 
   it("is sticky: the previewed entry survives mouseleave, and is only replaced by the NEXT hover/focus", () => {
@@ -468,6 +478,7 @@ describe("ComposerChooser — live preview pane (issue #254)", () => {
 
     fireEvent.mouseLeave(boxCard);
     expect(harness.posts).toHaveLength(1); // no clear-on-leave
+    expect(screen.getByRole("heading", { name: "Box", level: 3 })).toBeInTheDocument();
 
     fireEvent.mouseEnter(screen.getByRole("button", { name: /^Button/ }));
     expect(harness.posts).toHaveLength(2);

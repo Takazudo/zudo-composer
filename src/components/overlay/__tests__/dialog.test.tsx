@@ -167,9 +167,12 @@ describe("Dialog", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it("carries the wide size as a modifier class", () => {
-    render(<DialogHarness size="wide" />);
-    expect(openDialog().className).toContain("cms-dialog--wide");
+  it.each(["wide", "full"] as const)("carries the %s size as a modifier class and restores focus", (size) => {
+    render(<DialogHarness size={size} />);
+    const dialog = openDialog();
+    expect(dialog.className).toContain(`cms-dialog--${size}`);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.getByRole("button", { name: "Export" })).toHaveFocus();
   });
 
   it("can hide the close button and take its name from a label instead of a title", () => {
