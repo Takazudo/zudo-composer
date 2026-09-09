@@ -67,6 +67,11 @@ export async function startHostedDemoStaticServer({ directory, host = "127.0.0.1
         response.end("Bad URL");
         return;
       }
+      if (pathname === "/_headers") {
+        response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        response.end("Not found");
+        return;
+      }
       let filePath = isSafePath(root, pathname);
       if (filePath) {
         try {

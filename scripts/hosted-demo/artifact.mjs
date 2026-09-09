@@ -4,9 +4,32 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, extname, join, normalize, resolve, sep } from "node:path";
-import { ASSET_CHECKSUM_URL_PATTERN, assetMimeTypeForExtension } from "../../src/assets/model/asset-kinds.mjs";
+import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition, assetMimeTypeForExtension } from "../../src/assets/model/asset-kinds.mjs";
 
 export const HOSTED_DEMO_MANIFEST = "hosted-demo-manifest.json";
+
+// Cloudflare consumes this deployment configuration instead of serving it.
+export const HOSTED_DEMO_HEADERS = "_headers";
+
+/** @param {Array<{ path: string, byteLength: number }>} files @returns {string} */
+export function hostedAssetHeaders(files) {
+  return [...files].sort((a, b) => a.path.localeCompare(b.path)).map(({ path, byteLength }) => {
+    assert.ok(Number.isSafeInteger(byteLength) && byteLength > 0, `Invalid asset byte length: ${path}`);
+    assert.ok(ASSET_CHECKSUM_URL_PATTERN.test(`/${path}`), `Invalid hosted asset path: ${path}`);
+    const mime = assetMimeTypeForExtension(path.slice(path.lastIndexOf(".") + 1));
+    assert.ok(mime, `Missing asset MIME: ${path}`);
+    const checksum = path.slice("uploaded-assets/sha256-".length, path.lastIndexOf("."));
+    const disposition = assetContentDisposition(mime, checksum);
+    return [
+      `/${path}`,
+      `  Content-Type: ${mime}`,
+      `  Content-Length: ${byteLength}`,
+      `  Cache-Control: ${ASSET_IMMUTABLE_CACHE_CONTROL}`,
+      `  X-Content-Type-Options: ${ASSET_NOSNIFF}`,
+      ...(disposition ? [`  Content-Disposition: ${disposition}`] : []),
+    ].join("\n");
+  }).join("\n\n") + "\n";
+}
 
 const MIME_BY_EXTENSION = new Map([
   [".css", "text/css"],
@@ -80,6 +103,7 @@ export function sha256(bytes) {
 
 /** @param {string} path @returns {string} */
 export function expectedMime(path) {
+  if (path === HOSTED_DEMO_HEADERS) return "text/plain";
   if (path.startsWith("uploaded-assets/")) {
     const mime = ASSET_CHECKSUM_URL_PATTERN.test(`/${path}`) ? assetMimeTypeForExtension(path.slice(path.lastIndexOf(".") + 1)) : undefined;
     assert.ok(mime, `No hosted demo asset MIME contract for ${path}`);
@@ -171,6 +195,8 @@ export async function verifyHostedDemoArtifact({ directory, expectedSourceRevisi
   assert.equal(assets.length, 6, "Hosted artifact must include exactly six seeded assets");
   for (const path of assets) assert.ok(ASSET_CHECKSUM_URL_PATTERN.test(`/${path}`), `Invalid hosted asset path: ${path}`);
 
+  assert.equal(await readFile(join(root, HOSTED_DEMO_HEADERS), "utf8"), hostedAssetHeaders(await Promise.all(assets.map(async (path) => ({ path, byteLength: (await readFile(join(root, path))).byteLength })))), "Hosted asset header rules must match the bundled asset contract");
+
   // Preserve the ordinary dist check's preview boundary. The full application
   // bundle may contain host-only labels, so inspect only the preview entry's
   // static graph for those markers.
@@ -211,6 +237,6 @@ export async function verifyHostedDemoArtifact({ directory, expectedSourceRevisi
   return {
     root,
     manifest,
-    files: found.sort().map((path) => ({ path, sha256: manifest.assets[path], mime: expectedMime(path) })),
+    files: found.filter((path) => path !== HOSTED_DEMO_HEADERS).sort().map((path) => ({ path, sha256: manifest.assets[path], mime: expectedMime(path) })),
   };
 }
