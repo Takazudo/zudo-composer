@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { AssetRecord } from "../../src/assets";
+import type { AssetRecord } from "../../src/assets/model/types";
 import { ensureDevWorkspace } from "./workspace-bootstrap";
 
 async function imageBytes(page: Page, type: string, width = 800, height = 600): Promise<Buffer> {
