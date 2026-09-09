@@ -276,6 +276,10 @@ test.describe("hosted demo", () => {
     await expect(page.locator(".cms-composition-card")).toHaveCount(6);
     await expect(page.getByText("Rendered preview", { exact: true }).first()).toBeVisible();
 
+    await page.goto("/composer?provider=files&composition=about-page", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("textbox", { name: "Composition name", exact: true })).toHaveValue("About page");
+    await expect.poll(() => page.locator(".sg-composer-preview-iframe").boundingBox().then((box) => box?.height ?? 0)).toBeGreaterThan(400);
+
     await page.goto("/composer?provider=files&composition=home-page", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("textbox", { name: "Composition name", exact: true })).toHaveValue("Home page");
     await page.getByRole("treeitem", { name: /Hero.*Clear ideas/ }).click();

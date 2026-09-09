@@ -1,6 +1,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 import "../../test-support/cleanup";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/preact";
 import { ComposerWorkspace } from "../composer-workspace";
@@ -8,6 +9,16 @@ import { ComposerWorkspace } from "../composer-workspace";
 const BACK = { href: "/composer#/", label: "Back to Compositions" };
 
 describe("ComposerWorkspace", () => {
+  it("keeps the banner in flow and pins the canvas to the second grid row", () => {
+    const styles = readFileSync("src/features/composer/styles.css", "utf8");
+    const bannerRule = styles.match(/\.sg-composer-main__banner\s*\{([^}]*)\}/u)?.[1];
+    const canvasRule = styles.match(/\.sg-composer-main\s*>\s*:not\(\.sg-composer-main__banner\)\s*\{([^}]*)\}/u)?.[1];
+
+    expect(styles).not.toMatch(/\.sg-composer-main__banner[^{}]*\{[^}]*display\s*:\s*none/u);
+    expect(bannerRule).toMatch(/(?:^|;)\s*grid-row\s*:\s*1\s*;/u);
+    expect(canvasRule).toMatch(/(?:^|;)\s*grid-row\s*:\s*2\s*;/u);
+  });
+
   it("renders the shared editor chrome: back link, title, and both rail separators", () => {
     render(<ComposerWorkspace back={BACK} title={<span>Product overview</span>} />);
     expect(screen.getByRole("link", { name: "Back to Compositions" })).toBeInTheDocument();
