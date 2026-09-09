@@ -364,7 +364,8 @@
  * loading/error states shown before it mounts.
  * -------------------------------------------------------------------------- */
 .sg-assets-image-editor-dialog > div { min-block-size: 0; }
-.sg-assets-image-editor-dialog > div > :nth-child(2) { display: flex; min-block-size: 0; padding: 0; overflow: hidden; }
+.sg-assets-image-editor-dialog > div > :nth-child(2) { display: flex; min-block-size: 0; min-inline-size: 0; padding: 0; overflow: hidden; }
+.sg-assets-image-editor-dialog > div > :nth-child(2) > :only-child { flex: 1 1 auto; min-block-size: 0; min-inline-size: 0; inline-size: 100%; }
 .sg-assets-image-editor-dialog .sg-assets-image-editor-loading,
 .sg-assets-image-editor-dialog .sg-assets-image-editor-error { display: grid; place-items: center; flex: 1; min-block-size: 0; padding: var(--sp-4); text-align: center; }
 .sg-assets-image-editor-dialog .sg-assets-image-editor-loading p,
