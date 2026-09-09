@@ -1,7 +1,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource preact */
 import "../../../test-support/cleanup";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "preact/test-utils";
 import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { useState } from "preact/hooks";
@@ -11,6 +11,7 @@ import { VIRTUAL_ROOT_SLOT_ID } from "../../../../../composer/browser";
 import type { CompositionDocument, InsertionTarget, ReuseCatalogOutcome } from "../../../../../composer/browser";
 import { createComposerComponentProvider } from "../../../component-provider";
 import type { ComposerPreviewLocation } from "../../../preview";
+import { activeComponentProvider } from "../../../active-pack";
 import { ComposerChooser } from "../composer-chooser";
 import { CHOOSER_PREVIEW_PLACEHOLDER_ID } from "../chooser-preview-host";
 import {
@@ -521,5 +522,98 @@ describe("ComposerChooser — live preview pane (issue #254)", () => {
     fireEvent.mouseEnter(screen.getByRole("button", { name: /^Box/ }));
     const message = harness.posts[0]!.message as { document: { root: { slots: Record<string, unknown> }[] } };
     expect(message.document.root[0]!.slots).toEqual({});
+  });
+});
+
+
+describe("chooser card and list views", () => {
+  beforeEach(() => localStorage.removeItem("zudo-composer.chooser.view"));
+  afterEach(() => { vi.restoreAllMocks(); localStorage.removeItem("zudo-composer.chooser.view"); });
+
+  it("defaults to cards and persists list across mounts", () => {
+    const first = render(<ComposerChooser {...baseProps()} />);
+    expect(screen.getByRole("radio", { name: "Cards" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(screen.getByRole("radio", { name: "List" }));
+    expect(first.container.querySelector(".sg-composer-chooser-grid")).toBeNull();
+    expect(localStorage.getItem("zudo-composer.chooser.view")).toBe("list");
+    first.unmount();
+    render(<ComposerChooser {...baseProps()} />);
+    expect(screen.getByRole("radio", { name: "List" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("defaults invalid storage to cards and tolerates denied reads and writes", () => {
+    localStorage.setItem("zudo-composer.chooser.view", "unknown");
+    const first = render(<ComposerChooser {...baseProps()} />);
+    expect(screen.getByRole("radio", { name: "Cards" })).toHaveAttribute("aria-checked", "true");
+    first.unmount();
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("denied"); });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied"); });
+    render(<ComposerChooser {...baseProps()} />);
+    expect(screen.getByRole("radio", { name: "Cards" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(screen.getByRole("radio", { name: "List" }));
+    expect(screen.getByRole("radio", { name: "List" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("keeps exact result names and truthful counts in both views", () => {
+    render(<ComposerChooser {...baseProps({ target: rootTarget, document: fixtureDocument([]), componentProvider: activeComponentProvider, manifest: activeComponentProvider.catalog, entries: activeComponentProvider.manifest.components })} />);
+    for (const view of ["Cards", "List", "Cards"]) {
+      fireEvent.click(screen.getByRole("radio", { name: view }));
+      for (const entry of activeComponentProvider.manifest.components) expect(screen.getAllByRole("button", { name: entry.title, exact: true })).toHaveLength(1);
+      expect(screen.getByText("12 of 12 components")).toBeInTheDocument();
+    }
+  });
+
+  it("preserves search, category, target, and sticky preview across toggles and empty states", () => {
+    const supplied = baseProps();
+    render(<ComposerChooser {...supplied} />);
+    fireEvent.click(screen.getByRole("button", { name: "Content", exact: true }));
+    fireEvent.input(screen.getByRole("searchbox"), { target: { value: "Box" } });
+    fireEvent.focus(screen.getByRole("button", { name: "Box", exact: true }));
+    const heading = screen.getByRole("dialog").getAttribute("aria-labelledby");
+    fireEvent.click(screen.getByRole("radio", { name: "List" }));
+    expect(screen.getByRole("searchbox")).toHaveValue("Box");
+    expect(screen.getByRole("button", { name: "Content", exact: true })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: "Box", exact: true })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveAttribute("aria-labelledby", heading);
+    fireEvent.input(screen.getByRole("searchbox"), { target: { value: "no matches" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+    expect(screen.getByText("0 of 6 components")).toBeInTheDocument();
+    expect(screen.getByText("No matching components")).toBeInTheDocument();
+    fireEvent.input(screen.getByRole("searchbox"), { target: { value: "Box" } });
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Enter" });
+    expect(supplied.onAdd).toHaveBeenCalledWith(rightTarget, FIXTURE_IDS.box);
+  });
+
+  it("routes search arrows to scoped results and updates the sticky preview in either view", () => {
+    render(<ComposerChooser {...baseProps()} />);
+    for (const view of ["Cards", "List"]) {
+      fireEvent.click(screen.getByRole("radio", { name: view }));
+      fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
+      expect(screen.getByRole("button", { name: "Split Layout", exact: true })).toHaveFocus();
+      expect(screen.getByRole("heading", { name: "Split Layout", exact: true })).toBeInTheDocument();
+      fireEvent.mouseEnter(screen.getByRole("button", { name: "Box", exact: true }));
+      fireEvent.mouseLeave(screen.getByRole("button", { name: "Box", exact: true }));
+      expect(screen.getByRole("heading", { name: "Box", exact: true })).toBeInTheDocument();
+      fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowUp" });
+      expect(screen.getByRole("button", { name: "Button", exact: true })).toHaveFocus();
+    }
+  });
+
+  it("unmounts all thumbnails on list, Patterns, and close", async () => {
+    const supplied = baseProps();
+    const { container, rerender } = render(<ComposerChooser {...supplied} />);
+    const thumbs = () => container.querySelectorAll(".sg-composer-chooser-thumb iframe");
+    await waitFor(() => expect(thumbs()).toHaveLength(4));
+    fireEvent.click(screen.getByRole("radio", { name: "List" }));
+    expect(thumbs()).toHaveLength(0);
+    fireEvent.click(screen.getByRole("radio", { name: "Cards" }));
+    await waitFor(() => expect(thumbs()).toHaveLength(4));
+    fireEvent.click(screen.getByRole("button", { name: "Patterns", exact: true }));
+    expect(thumbs()).toHaveLength(0);
+    expect(screen.queryByRole("radiogroup", { name: "Component view" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Components", exact: true }));
+    await waitFor(() => expect(thumbs()).toHaveLength(4));
+    rerender(<ComposerChooser {...supplied} open={false} />);
+    expect(thumbs()).toHaveLength(0);
   });
 });

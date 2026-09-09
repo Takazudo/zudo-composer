@@ -39,7 +39,7 @@ export function useMediaResolvedPreviewSnapshot(snapshot: ComposerPreviewSnapsho
   useEffect(() => {
     if (!snapshot || !hasManaged) return;
     let active = true;
-    void resolvePreviewMediaSnapshot(snapshot, catalog, resolver).then((result) => { if (active) setResolved({ source: snapshot, generation, value: result.status === "ready" ? result.snapshot : null, ...(result.status === "blocked" ? { error: result.message } : {}) }); });
+    void resolvePreviewMediaSnapshot(snapshot, catalog, resolver).then((result) => { if (active) setResolved({ source: snapshot, generation, value: result.status === "ready" ? result.snapshot : null, ...(result.status === "blocked" ? { error: result.message } : {}) }); }, (reason: unknown) => { if (active) setResolved({ source: snapshot, generation, value: null, error: reason instanceof Error ? reason.message : "Preview media could not be resolved." }); });
     return () => { active = false; };
   }, [snapshot, catalog, resolver, generation, hasManaged]);
   if (!hasManaged) return { snapshot, loading: false, error: undefined };
