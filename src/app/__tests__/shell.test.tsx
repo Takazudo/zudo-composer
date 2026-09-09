@@ -44,7 +44,10 @@ it("refreshes rail models only for Content/workspace while summary hints update 
 it("gives percentage-height editors a definite route slot without clipping long pages", () => {
   const shellStyles = readFileSync("src/app/shell.css", "utf8");
   const route = shellStyles.match(/\.cms-route-content\s*\{([^}]+)\}/)?.[1];
-  expect(route).toMatch(/(?:^|;)\s*height:\s*100%\s*;/);
+  expect(route).toMatch(/(?:^|;)\s*flex:\s*1 1 0\s*;/);
+  expect(route).toMatch(/(?:^|;)\s*min-height:\s*0\s*;/);
+  expect(shellStyles).toMatch(/\.cms-shell-main\s*\{[^}]*display:\s*flex/);
+  expect(shellStyles).toMatch(/\.cms-shell-main\s*>\s*:not\(\.cms-route-content\)\s*\{[^}]*flex:\s*0 0 auto/);
   expect(route).not.toMatch(/overflow\s*:\s*(hidden|clip)/);
   expect(shellStyles).toMatch(/\.cms-shell-main\s*\{[^}]*overflow:\s*auto/);
 });
