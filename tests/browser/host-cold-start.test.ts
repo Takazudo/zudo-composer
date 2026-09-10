@@ -388,37 +388,120 @@ interface ProcessResult {
   timedOut: boolean;
 }
 
-function terminateProcessTree(child: ChildProcess): void {
+const SUBPROCESS_TIMEOUT_MS = 20_000;
+const TERMINATION_GRACE_MS = 750;
+
+function signalRunner(child: ChildProcess, signal: NodeJS.Signals): void {
   if (child.pid === undefined) return;
   if (process.platform === "win32") {
-    child.kill("SIGKILL");
+    try { child.kill(signal); }
+    catch { /* The runner may have exited before escalation. */ }
     return;
   }
-  try { process.kill(-child.pid, "SIGKILL"); }
-  catch { child.kill("SIGKILL"); }
+  try { process.kill(-child.pid, signal); }
+  catch {
+    try { child.kill(signal); }
+    catch { /* The runner may have exited before escalation. */ }
+  }
 }
 
-function runPlaywrightSubprocess(configPath: string, markerPath: string, args: string[] = []): Promise<ProcessResult> {
+function signalPid(pid: number, signal: NodeJS.Signals): void {
+  try { process.kill(pid, signal); }
+  catch { /* The fixture server may have exited with the runner. */ }
+}
+
+function pidIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+async function waitForPidExit(pid: number, timeoutMs = TERMINATION_GRACE_MS): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (pidIsAlive(pid)) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return false;
+    await new Promise((resolveWait) => setTimeout(resolveWait, Math.min(50, remaining)));
+  }
+  return true;
+}
+
+async function readFixturePid(serverPidPath: string): Promise<number | null> {
+  try {
+    const pid = Number((await readFile(serverPidPath, "utf8")).trim());
+    return Number.isSafeInteger(pid) && pid > 1 && pid !== process.pid ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+async function waitForFixturePid(serverPidPath: string, timeoutMs = 5_000): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const pid = await readFixturePid(serverPidPath);
+    if (pid !== null) return pid;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  throw new Error(`The lifecycle fixture did not publish its server PID at ${serverPidPath}.`);
+}
+
+async function terminateFixtureServer(serverPidPath: string): Promise<void> {
+  const pid = await waitForFixturePid(serverPidPath, TERMINATION_GRACE_MS).catch(() => null);
+  if (pid === null) return;
+  signalPid(pid, "SIGTERM");
+  if (await waitForPidExit(pid)) return;
+  signalPid(pid, "SIGKILL");
+  await waitForPidExit(pid);
+}
+
+async function terminateProcessTree(child: ChildProcess, serverPidPath: string): Promise<void> {
+  signalRunner(child, "SIGTERM");
+  const serverTermination = terminateFixtureServer(serverPidPath);
+  await new Promise((resolveWait) => setTimeout(resolveWait, TERMINATION_GRACE_MS));
+  signalRunner(child, "SIGKILL");
+  await serverTermination;
+}
+
+interface SubprocessOptions {
+  timeoutMs?: number;
+  environment?: Record<string, string>;
+}
+
+async function runPlaywrightSubprocess(
+  configPath: string,
+  markerPath: string,
+  serverPidPath: string,
+  args: string[] = [],
+  options: SubprocessOptions = {},
+): Promise<ProcessResult> {
+  await rm(serverPidPath, { force: true });
   const cliPath = resolve(process.cwd(), "node_modules/@playwright/test/cli.js");
   return new Promise((resolveResult, rejectResult) => {
     const child = spawn(process.execPath, [cliPath, "test", "--config", configPath, ...args], {
       cwd: process.cwd(),
       detached: process.platform !== "win32",
-      env: { ...process.env, COLD_START_MARKER: markerPath },
+      env: { ...process.env, ...options.environment, COLD_START_MARKER: markerPath },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
     let settled = false;
+    let termination: Promise<void> | undefined;
+    const timeoutMs = options.timeoutMs ?? SUBPROCESS_TIMEOUT_MS;
     const timer = setTimeout(() => {
       timedOut = true;
-      terminateProcessTree(child);
-    }, 20_000);
-    const finish = (result: ProcessResult) => {
+      termination = terminateProcessTree(child, serverPidPath);
+    }, timeoutMs);
+    const finish = async (result: ProcessResult) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (timedOut) await (termination ?? terminateProcessTree(child, serverPidPath));
+      else await terminateFixtureServer(serverPidPath);
       resolveResult(result);
     };
     child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
@@ -427,17 +510,18 @@ function runPlaywrightSubprocess(configPath: string, markerPath: string, args: s
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      rejectResult(error);
+      void terminateFixtureServer(serverPidPath).finally(() => rejectResult(error));
     });
-    child.once("close", (code, signal) => finish({ code, signal, stdout, stderr, timedOut }));
+    child.once("close", (code, signal) => { void finish({ code, signal, stdout, stderr, timedOut }); });
   });
 }
 
 async function availablePort(): Promise<number> {
+  // Keep this isolated fixture on loopback without WSL's 127.0.0.1 forwarding.
   const server = createServer();
   await new Promise<void>((resolveListen, rejectListen) => {
     server.once("error", rejectListen);
-    server.listen(0, "127.0.0.1", () => resolveListen());
+    server.listen(0, "127.0.0.2", () => resolveListen());
   });
   const address = server.address();
   if (address === null || typeof address === "string") {
@@ -449,21 +533,24 @@ async function availablePort(): Promise<number> {
   return port;
 }
 
-async function writeLifecycleFixture(root: string, port: number): Promise<{ configPath: string; markerPath: string; baseURL: string }> {
+async function writeLifecycleFixture(root: string, port: number): Promise<{ configPath: string; markerPath: string; baseURL: string; serverPidPath: string }> {
   const markerPath = join(root, "setup-markers.jsonl");
   const serverPath = join(root, "server.mjs");
+  const serverPidPath = join(root, "server.pid");
   const setupPath = join(root, "global-setup.mjs");
   const beforeFailurePath = join(root, "01-before-failure.pw.mjs");
   const afterFailurePath = join(root, "02-after-failure.pw.mjs");
   const configPath = join(root, "playwright.config.mjs");
   const playwrightTestModule = resolve(process.cwd(), "node_modules/@playwright/test/index.mjs");
-  const baseURL = `http://127.0.0.1:${port}`;
+  const baseURL = `http://127.0.0.2:${port}`;
   await writeFile(serverPath, `import { createServer } from "node:http";
+import { writeFileSync } from "node:fs";
+writeFileSync(${JSON.stringify(serverPidPath)}, String(process.pid) + "\\n");
 const server = createServer((request, response) => {
   if (request.url === "/ready") { response.writeHead(200); response.end("ready"); return; }
   response.writeHead(404); response.end();
 });
-server.listen(${port}, "127.0.0.1");
+server.listen(${port}, "127.0.0.2");
 for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, () => server.close(() => process.exit(0)));
 `);
   await writeFile(setupPath, `import { appendFile } from "node:fs/promises";
@@ -472,6 +559,7 @@ export default async function setup(config) {
   if (urls.length === 0 || urls.some((url) => url !== urls[0])) throw new Error("inconsistent baseURL");
   const response = await fetch(new URL("/ready", urls[0]));
   if (!response.ok) throw new Error("webServer was not ready");
+  if (process.env.COLD_START_HANG === "1") await new Promise(() => {});
   await appendFile(process.env.COLD_START_MARKER, JSON.stringify({ baseURL: urls[0] }) + "\\n");
 }
 `);
@@ -503,7 +591,7 @@ export default defineConfig({
 });
 `);
   await appendFile(markerPath, "");
-  return { configPath, markerPath, baseURL };
+  return { configPath, markerPath, baseURL, serverPidPath };
 }
 
 describe("host global setup lifecycle", () => {
@@ -511,7 +599,7 @@ describe("host global setup lifecycle", () => {
     const root = await mkdtemp(join(tmpdir(), "zudo-composer-host-cold-start-lifecycle-"));
     try {
       const fixture = await writeLifecycleFixture(root, await availablePort());
-      const first = await runPlaywrightSubprocess(fixture.configPath, fixture.markerPath);
+      const first = await runPlaywrightSubprocess(fixture.configPath, fixture.markerPath, fixture.serverPidPath);
       expect(first.timedOut, `${first.stdout}\n${first.stderr}`).toBe(false);
       expect(first.code).not.toBe(0);
       expect(`${first.stdout}\n${first.stderr}`).toContain("intentional lifecycle failure");
@@ -520,7 +608,7 @@ describe("host global setup lifecycle", () => {
       expect(firstMarkers).toHaveLength(1);
       expect(JSON.parse(firstMarkers[0]!).baseURL).toBe(fixture.baseURL);
 
-      const second = await runPlaywrightSubprocess(fixture.configPath, fixture.markerPath, ["--grep", "later test after worker replacement"]);
+      const second = await runPlaywrightSubprocess(fixture.configPath, fixture.markerPath, fixture.serverPidPath, ["--grep", "later test after worker replacement"]);
       expect(second.timedOut, `${second.stdout}\n${second.stderr}`).toBe(false);
       expect(second.code).toBe(0);
       const secondMarkers = (await readFile(fixture.markerPath, "utf8")).trim().split("\n").filter(Boolean);
@@ -530,6 +618,30 @@ describe("host global setup lifecycle", () => {
       await rm(root, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("escalates timeout cleanup and stops a detached fixture webServer", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zudo-composer-host-cold-start-timeout-"));
+    let serverPidPath: string | undefined;
+    let subprocess: Promise<ProcessResult> | undefined;
+    let serverPid: number | undefined;
+    try {
+      const fixture = await writeLifecycleFixture(root, await availablePort());
+      serverPidPath = fixture.serverPidPath;
+      subprocess = runPlaywrightSubprocess(fixture.configPath, fixture.markerPath, fixture.serverPidPath, [], {
+        timeoutMs: 2_000,
+        environment: { COLD_START_HANG: "1" },
+      });
+      serverPid = await waitForFixturePid(fixture.serverPidPath);
+      const result = await subprocess;
+      expect(result.timedOut).toBe(true);
+      expect(await waitForPidExit(serverPid, 2_000)).toBe(true);
+      expect(pidIsAlive(serverPid)).toBe(false);
+    } finally {
+      if (serverPidPath) await terminateFixtureServer(serverPidPath);
+      await subprocess?.catch(() => undefined);
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 15_000);
 
   it("registers the real host config's setup module without changing its lane timeout policy", async () => {
     const config = await readFile(resolve(process.cwd(), "playwright.host.config.ts"), "utf8");
