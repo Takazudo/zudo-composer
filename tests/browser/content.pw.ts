@@ -1,7 +1,8 @@
 // Content-authoring browser coverage: the journeys that start by authoring
 // Content, and the shared responsive/theme/focus seams the Content panes own.
 // Mapping-owned coverage lives in `mapping.pw.ts`.
-import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { test } from "./host-test";
+import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { watchRuntimeFailures } from "../runtime-failures";
 
 const PRODUCT_LINKS = ["Compositions", "Content", "Mappings", "Sitemaps", "Assets"] as const;
@@ -208,9 +209,19 @@ function saveStatus(page: Page): Locator {
   return page.locator(".cms-topbar__status");
 }
 
-test("Content directory, Raw storage, and field-qualified usage links stay model-first", async ({ page }) => {
+test("Content directory, Raw storage, and field-qualified usage links stay model-first", async ({ page, documentReady }) => {
+  test.setTimeout(63_000);
   const failures = watchRuntimeFailures(page);
-  await page.goto("/content");
+  await documentReady({
+    id: "content-213",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/content", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("heading", { name: "All models", exact: true })).toBeVisible({ timeout: remainingMs() });
+      await expect(contentTree(page).getByRole("treeitem", { name: /^Journal articles/ })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "All models", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Journal articles.*Project files/ })).toBeVisible();
 
@@ -221,7 +232,13 @@ test("Content directory, Raw storage, and field-qualified usage links stay model
   const fieldId = (await heading.getAttribute("id"))!.replace(/^content-entry-/, "");
   const selected = new URL(page.url());
   selected.searchParams.set("field", fieldId);
-  await page.goto(selected.toString());
+  await documentReady({
+    id: "content-224",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto(selected.toString(), { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("textbox", { name: "Heading", exact: true })).toBeFocused({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(page.getByRole("textbox", { name: "Heading", exact: true })).toBeFocused();
 
   await page.getByRole("tab", { name: "Raw", exact: true }).click();
@@ -250,12 +267,18 @@ async function openRowMenu(page: Page, name: string) {
   await contentNav(page).getByRole("button", { name: `More actions for ${name}` }).click();
 }
 
-test("same-context Content to Mapping to Composer preview to Sitemapper journey", async ({ page }) => {
+test("same-context Content to Mapping to Composer preview to Sitemapper journey", async ({ page, documentReady }) => {
   test.setTimeout(120_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  await page.goto("/content");
+  await documentReady({
+    id: "content-258",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/content", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(contentTree(page).getByRole("treeitem", { name: /^About content/ })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   // The navigator IS the library: a model is a category and its Entries hang
   // off it, so choosing what to author takes two clicks from the bare route.
   const about = contentTree(page).getByRole("treeitem", { name: /^About content/ });
@@ -272,29 +295,65 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   // Opening a record is a deep link the author can copy.
   await expect(page).toHaveURL(/\/content\?provider=content-filesystem&model=about-content&entry=about-entry$/);
 
-  await page.goto("/mapping");
+  await documentReady({
+    id: "content-275",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/mapping", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Mappings", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
   // The card's composite name became a row: three bindings and Ready are two
   // columns now, and opening the record is a real navigation to its own URL.
   const aboutMapping = mappingRow(page, "About page mapping");
   await expect(aboutMapping.getByRole("cell").filter({ hasText: /^3$/ })).toHaveCount(1);
   await expect(aboutMapping.getByText("Ready", { exact: true })).toBeVisible();
-  await aboutMapping.getByRole("link", { name: "About page mapping", exact: true }).click();
+  await documentReady({
+    id: "content-282",
+    kind: "route-action",
+    transition: ({ remainingMs }) => aboutMapping.getByRole("link", { name: "About page mapping", exact: true }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue("About page mapping", { timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(page).toHaveURL(/\/mapping\?provider=.*&mapping=about-page-mapping/);
   await selectOptionMatching(page.getByRole("combobox", { name: "Sample Entry" }), /Browser journey studio.*about-entry/);
   const mappingFrame = page.frameLocator('iframe[title="Resolved Mapping preview"]');
   await expect(mappingFrame.getByRole("heading", { name: "Browser journey studio", exact: true })).toBeVisible();
 
-  await page.goto("/composer");
-  await page.getByRole("link", { name: "About page", exact: true }).click();
+  await documentReady({
+    id: "content-288",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/composer", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Compositions", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
+  await documentReady({
+    id: "content-289",
+    kind: "route-action",
+    transition: ({ remainingMs }) => page.getByRole("link", { name: "About page", exact: true }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.frameLocator('iframe[title="Composer preview canvas"]').getByRole("heading", { name: "Static about heading", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   const composerFrame = page.frameLocator('iframe[title="Composer preview canvas"]');
   await expect(composerFrame.getByRole("heading", { name: "Static about heading", exact: true })).toBeVisible();
 
-  await page.goto("/sitemapper");
+  await documentReady({
+    id: "content-293",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/sitemapper", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   const sampleRow = sitemapRow(page, "Sample Studio sitemap");
   await expect(sampleRow).toHaveCount(1);
   await expect(sampleRow.getByRole("cell").filter({ hasText: /^5$/ })).toHaveCount(1);
-  await sampleRow.getByRole("link", { name: "Sample Studio sitemap", exact: true }).click();
+  await documentReady({
+    id: "content-297",
+    kind: "route-action",
+    transition: ({ remainingMs }) => sampleRow.getByRole("link", { name: "Sample Studio sitemap", exact: true }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Sample Studio sitemap", { timeout: remainingMs() }),
+    settle: "shell",
+  });
   // Opening a Sitemap is a real navigation to the record's own URL, and the
   // editor chrome names the record it loaded.
   await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
@@ -307,14 +366,26 @@ test("same-context Content to Mapping to Composer preview to Sitemapper journey"
   expect(failures).toEqual([]);
 });
 
-test("Content models, Mapping editing, and Sitemapper routes survive one browser journey", async ({ page }, testInfo) => {
-  test.setTimeout(180_000);
+test("Content models, Mapping editing, and Sitemapper routes survive one browser journey", async ({ page, documentReady }, testInfo) => {
+  test.setTimeout(317_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  await page.goto("/content");
+  await documentReady({
+    id: "content-315",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/content", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(contentTree(page)).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(contentTree(page)).toBeVisible();
-  await page.reload();
+  await documentReady({
+    id: "content-317",
+    kind: "reload",
+    transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(contentTree(page)).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(contentTree(page)).toBeVisible();
   await contentTree(page).getByRole("treeitem", { name: /^Journal articles/ }).click();
   // Entry | Schema replaces the per-model Entries / Model fields buttons.
@@ -402,7 +473,13 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // regex spanning them would depend on how they happen to be concatenated.
   const journalRow = contentTree(page).getByRole("treeitem", { name: /^Browser Journal articles/ });
   await expect(journalRow).toContainText("(26)");
-  await page.reload();
+  await documentReady({
+    id: "content-405",
+    kind: "reload",
+    transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(contentTree(page).getByRole("treeitem", { name: /^Browser Journal articles/ })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   // The reload lands on the record's own URL, so the model reopens itself.
   await expect(journalRow).toBeVisible();
   // A further page is one trailing row inside the tree, not a button beside it.
@@ -433,7 +510,13 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // authors it — the Entry's own deep link. The retired IndexedDB store could
   // be written from the page; reaching around this one would prove less than
   // driving the editor that owns the write.
-  await page.goto("/content?provider=content-filesystem&model=journal-articles&entry=article-first-question");
+  await documentReady({
+    id: "content-436",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/content?provider=content-filesystem&model=journal-articles&entry=article-first-question", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("textbox", { name: "Heading", exact: true })).toHaveValue("Start with the question", { timeout: remainingMs() }),
+    settle: "shell",
+  });
   // The deep link resolves in two steps, so wait for the Entry itself: a bare
   // `fill` can otherwise land on the previous record's form, and the status
   // chip already reads "Saved" at that moment and proves nothing.
@@ -443,13 +526,31 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   await expect(page.getByLabel("Review date")).toHaveValue("2026-02-28");
   await expect(saveStatus(page)).toContainText("Saved");
 
-  await page.goto("/mapping");
+  await documentReady({
+    id: "content-446",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/mapping", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Mappings", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "Mappings" })).toBeVisible();
-  await page.reload();
+  await documentReady({
+    id: "content-448",
+    kind: "reload",
+    transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(mappingRow(page, COLLECTION_MAPPING)).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   const journalMapping = mappingRow(page, COLLECTION_MAPPING);
   await expect(journalMapping.getByRole("cell").filter({ hasText: /^4$/ })).toHaveCount(1);
   await expect(journalMapping.getByText("Ready", { exact: true })).toBeVisible();
-  await journalMapping.getByRole("link", { name: COLLECTION_MAPPING, exact: true }).click();
+  await documentReady({
+    id: "content-452",
+    kind: "route-action",
+    transition: ({ remainingMs }) => journalMapping.getByRole("link", { name: COLLECTION_MAPPING, exact: true }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(COLLECTION_MAPPING, { timeout: remainingMs() }),
+    settle: "shell",
+  });
   const mappingFrame = page.frameLocator('iframe[title="Resolved Mapping preview"]');
   await selectEntry(page, /Start with the question.*article-first-question/);
   await expect(mappingFrame.getByRole("heading", { name: "Start with the question" })).toBeVisible();
@@ -563,31 +664,73 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
 
   // A record is its own URL since #171, so a reload lands back in the editor
   // rather than on the library.
-  await page.reload();
+  await documentReady({
+    id: "content-566",
+    kind: "reload",
+    transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(COLLECTION_MAPPING, { timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(COLLECTION_MAPPING);
   await expectCollectionQuery();
 
-  await page.getByRole("link", { name: "Back to Mappings" }).click();
+  await documentReady({
+    id: "content-570",
+    kind: "route-action",
+    transition: ({ remainingMs }) => page.getByRole("link", { name: "Back to Mappings" }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Mappings", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   await page.getByRole("button", { name: "New mapping" }).click();
   const createMappingDialog = page.getByRole("dialog", { name: "Create mapping" });
   await createMappingDialog.getByRole("textbox", { name: "Name" }).fill(SINGLE_MAPPING);
   await selectOptionMatching(createMappingDialog.getByRole("combobox", { name: "Content model" }), /Browser Site settings · single/);
-  await createMappingDialog.getByRole("button", { name: "Create" }).click();
+  await documentReady({
+    id: "content-575",
+    kind: "route-action",
+    transition: ({ remainingMs }) => createMappingDialog.getByRole("button", { name: "Create" }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(SINGLE_MAPPING, { timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(SINGLE_MAPPING);
   await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
 
-  await page.goto("/composer");
-  await page.getByRole("link", { name: "Journal entry page", exact: true }).click();
+  await documentReady({
+    id: "content-579",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/composer", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Compositions", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
+  await documentReady({
+    id: "content-580",
+    kind: "route-action",
+    transition: ({ remainingMs }) => page.getByRole("link", { name: "Journal entry page", exact: true }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.frameLocator('iframe[title="Composer preview canvas"]').getByRole("heading", { name: "Static journal heading", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   const composerFrame = page.frameLocator('iframe[title="Composer preview canvas"]');
   await expect(composerFrame.getByRole("heading", { name: "Static journal heading", exact: true })).toBeVisible();
   await expect(composerFrame.getByRole("heading", { name: "Map the moving parts", exact: true })).toHaveCount(0);
 
-  await page.goto("/sitemapper");
+  await documentReady({
+    id: "content-585",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/sitemapper", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "New sitemap" }).click();
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await createSitemapDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Mapping journey");
-  await createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click();
+  await documentReady({
+    id: "content-590",
+    kind: "route-action",
+    transition: ({ remainingMs }) => createSitemapDialog.getByRole("button", { name: "Create sitemap" }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.locator(".cms-editor__toolbar").getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Mapping journey", { timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
 
   // Issue #165 moved the Sitemapper onto `OutlineTree` and `EditorChrome`: the
@@ -677,10 +820,22 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   // Leaving the record is a real navigation now, so the assignment has to be
   // on disk before it happens rather than sitting in the debounced queue.
   await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
-  await page.getByRole("link", { name: "Back to Sitemaps" }).click();
+  await documentReady({
+    id: "content-680",
+    kind: "route-action",
+    transition: ({ remainingMs }) => page.getByRole("link", { name: "Back to Sitemaps" }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   const journeyRow = sitemapRow(page, "Mapping journey");
   await expect(journeyRow.getByRole("cell").filter({ hasText: /^1$/ })).toHaveCount(1);
-  await journeyRow.getByRole("link", { name: "Mapping journey", exact: true }).click();
+  await documentReady({
+    id: "content-683",
+    kind: "route-action",
+    transition: ({ remainingMs }) => journeyRow.getByRole("link", { name: "Mapping journey", exact: true }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.locator(".cms-editor__toolbar").getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Mapping journey", { timeout: remainingMs() }),
+    settle: "shell",
+  });
   const reopened = page.getByRole("region", { name: "Inspector" });
   await page.getByRole("tree", { name: "Pages" }).getByRole("treeitem", { name: /^Home\b/ }).click();
   await expect(reopened.locator(".cms-pane__header .cms-chip")).toHaveText("Composition");
@@ -691,10 +846,17 @@ test("Content models, Mapping editing, and Sitemapper routes survive one browser
   expect(failures).toEqual([]);
 });
 
-test("authoring workspaces retain responsive, theme, focus, and navigation seams", async ({ page }, testInfo) => {
+test("authoring workspaces retain responsive, theme, focus, and navigation seams", async ({ page, documentReady }, testInfo) => {
+  test.setTimeout(54_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/content");
+  await documentReady({
+    id: "content-697",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/content", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(contentTree(page).getByRole("treeitem", { name: new RegExp(`^${RENAMED_JOURNAL_MODEL}`) })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   await contentTree(page).getByRole("treeitem", { name: new RegExp(`^${RENAMED_JOURNAL_MODEL}`) }).click();
   // Three regions of the shared chrome, not three floating cards: they share a
   // top edge, sit inside the viewport, and never overlap.
@@ -806,8 +968,20 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
   expect(milliseconds(motion.animation)).toBeLessThanOrEqual(0.01);
   expect(milliseconds(motion.transition)).toBeLessThanOrEqual(0.01);
 
-  await page.goto("/mapping");
-  await mappingRow(page, COLLECTION_MAPPING).getByRole("link", { name: COLLECTION_MAPPING, exact: true }).click();
+  await documentReady({
+    id: "content-809",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/mapping", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Mappings", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
+  await documentReady({
+    id: "content-810",
+    kind: "route-action",
+    transition: ({ remainingMs }) => mappingRow(page, COLLECTION_MAPPING).getByRole("link", { name: COLLECTION_MAPPING, exact: true }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue(COLLECTION_MAPPING, { timeout: remainingMs() }),
+    settle: "shell",
+  });
   // `EditorChrome` replaced the route's own tablist with the shared pane
   // switch, and the Mapping editor names its three panes Fields / Bindings /
   // Inspector. Scoped to the group, which is the habit the other two editors
@@ -836,11 +1010,23 @@ test("authoring workspaces retain responsive, theme, focus, and navigation seams
     await screenshot(page, testInfo, `mapping-narrow-${theme}`);
   }
 
-  await page.goto("/sitemapper");
+  await documentReady({
+    id: "content-839",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/sitemapper", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   await page.getByRole("button", { name: "New sitemap" }).click();
   const responsiveDialog = page.getByRole("dialog", { name: "Create sitemap" });
   await responsiveDialog.getByRole("textbox", { name: "Sitemap name" }).fill("Responsive panels");
-  await responsiveDialog.getByRole("button", { name: "Create sitemap" }).click();
+  await documentReady({
+    id: "content-843",
+    kind: "route-action",
+    transition: ({ remainingMs }) => responsiveDialog.getByRole("button", { name: "Create sitemap" }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.locator(".cms-editor__toolbar").getByRole("textbox", { name: "Sitemap name" })).toHaveValue("Responsive panels", { timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(page).toHaveURL(/\/sitemapper\?provider=sitemap-filesystem&sitemap=/);
   // `EditorChrome` replaced the Sitemapper's own tablist with the shared pane
   // switch, and the editor renames the three panes. Scoped to the group rather

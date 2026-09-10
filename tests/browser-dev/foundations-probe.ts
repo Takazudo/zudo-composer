@@ -14,6 +14,10 @@
  * service; it never bypasses unavailable initialization to fake a listing.
  * This does not activate a release. Activation remains in the guarded
  * SiteProject lane with its disposable local release root.
+ *
+ * The foundations probe keeps its existing per-route E60 paint-and-busy
+ * contract. Host document readiness is a separate installed-host policy; this
+ * helper initializes an empty dev workspace inside each test journey.
  */
 
 import { expect } from "@playwright/test";
@@ -28,7 +32,8 @@ export type FoundationRoute = (typeof ROUTES)[number];
  * `/composer` pulls the whole component pack, and `optimizeDeps.exclude` keeps
  * the provider out of Vite's prebundle, so its first dev-lane load is hundreds
  * of unbundled module requests. That is a dev-server cost, not a defect, and it
- * only ever delays a pass.
+ * only ever delays a pass. The existing route paint-and-busy contract remains
+ * E60 and is separate from the host lane's per-document readiness policy.
  */
 const READY_TIMEOUT_MS = 60_000;
 

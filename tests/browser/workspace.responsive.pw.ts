@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { test } from "./host-test";
+import { expect, type Page } from "@playwright/test";
 
 export const WORKSPACE_WIDTHS = [1440, 1100, 761, 760, 390] as const;
 const modules = [
@@ -16,13 +17,21 @@ async function noOverflow(page: Page) {
 }
 
 for (const width of WORKSPACE_WIDTHS) for (const theme of ["light", "dark"] as const) {
-  test(`workspace modules ${width}px ${theme}, reduced motion and navigation focus`, async ({ page }, info) => {
+  test(`workspace modules ${width}px ${theme}, reduced motion and navigation focus`, async ({ page, documentReady }, info) => {
     test.setTimeout(180_000);
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
     const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
     for (const [path, heading] of modules) {
-      await page.goto(path);
+      await documentReady({
+        id: "workspace-25", kind: "goto",
+        transition: ({ remainingMs }) => page.goto(path, { timeout: remainingMs() }),
+        ready: async ({ remainingMs }) => {
+          if (path === "/content") await expect(page.getByRole("region", { name: "Editor", exact: true })).toBeVisible({ timeout: remainingMs() });
+          else await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible({ timeout: remainingMs() });
+        },
+        settle: "shell",
+      });
       if (path === "/content") await expect(page.getByRole("region", { name: "Editor", exact: true })).toBeVisible();
       else await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
       await page.getByRole("button", { name: /^Theme:/ }).click();
@@ -41,7 +50,16 @@ for (const width of WORKSPACE_WIDTHS) for (const theme of ["light", "dark"] as c
       } else {
         const collapse = page.getByRole("button", { name: "Collapse sidebar", exact: true });
         await collapse.click(); await expect(page.locator(".app-shell")).toHaveAttribute("data-rail", "collapsed");
-        await page.reload(); await expect(page.locator(".app-shell")).toHaveAttribute("data-rail", "collapsed");
+        await documentReady({
+          id: "workspace-44", kind: "reload",
+          transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+          ready: async ({ remainingMs }) => {
+            if (path === "/content") await expect(page.getByRole("region", { name: "Editor", exact: true })).toBeVisible({ timeout: remainingMs() });
+            else await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible({ timeout: remainingMs() });
+            await expect(page.locator(".app-shell")).toHaveAttribute("data-rail", "collapsed", { timeout: remainingMs() });
+          },
+          settle: "shell",
+        }); await expect(page.locator(".app-shell")).toHaveAttribute("data-rail", "collapsed");
         await page.getByRole("button", { name: "Expand sidebar", exact: true }).click();
         for (const name of navigationNames) await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name, exact: true })).toBeVisible();
       }
@@ -52,25 +70,55 @@ for (const width of WORKSPACE_WIDTHS) for (const theme of ["light", "dark"] as c
   });
 }
 
-test("release capabilities and stale targets remain truthful instead of silently selecting another record", async ({ page }) => {
+test("release capabilities and stale targets remain truthful instead of silently selecting another record", async ({ page, documentReady }) => {
   // Review offers its actions only over a direct loopback connection to the
   // local development server. This lane is an installed host running exactly
   // that, so the actions are live; the "Static read-only mode" wording belongs
   // to a served-without-a-server case no supported lane produces any more.
-  await page.goto("/review");
+  await documentReady({
+    id: "workspace-60", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/review", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("heading", { name: "Review & release", exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await expect(page.getByText(/Static read-only mode/)).toHaveCount(0);
   for (const name of ["Run release checks", "Apply / stage exact candidate", "Build staged candidate", "Activate locally"]) await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
-  await page.goto("/assets?provider=asset-files&asset=missing-browser-asset");
+  await documentReady({
+    id: "workspace-63", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/assets?provider=asset-files&asset=missing-browser-asset", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("alert").first()).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await expect(page.getByRole("alert").first()).toBeVisible();
-  await page.goto("/content?provider=unknown-provider&model=missing");
+  await documentReady({
+    id: "workspace-65", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/content?provider=unknown-provider&model=missing", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("heading", { name: "Invalid workspace link", exact: true })).toBeVisible({ timeout: remainingMs() });
+      await expect(page.getByRole("alert")).toContainText("unavailable", { timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "Invalid workspace link" })).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("unavailable");
 });
 
-test("coarse navigation controls are real touch targets", async ({ page }, info) => {
+test("coarse navigation controls are real touch targets", async ({ page, documentReady }, info) => {
   // Desktop runs the same source for geometry; coarse proves the real pointer query.
   const coarse = info.project.name === "coarse";
-  await page.setViewportSize({ width: 390, height: 844 }); await page.goto("/");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await documentReady({
+    id: "workspace-73", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening)\.$/, exact: true }).first()).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(coarse);
   const trigger = page.getByRole("button", { name: "Expand navigation", exact: true });
   if (coarse) await trigger.tap(); else await trigger.click();

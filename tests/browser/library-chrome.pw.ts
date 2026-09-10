@@ -28,7 +28,8 @@
  * means.
  */
 
-import { expect, test } from "@playwright/test";
+import { test, type DocumentReady } from "./host-test";
+import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 import { watchRuntimeFailures } from "../runtime-failures";
 
@@ -38,16 +39,23 @@ function sitemapRow(page: Page, name: string): Locator {
   return page.getByRole("row").filter({ has: page.getByRole("link", { name, exact: true }) });
 }
 
-async function openSitemapLibrary(page: Page): Promise<void> {
+async function openSitemapLibrary(page: Page, documentReady: DocumentReady): Promise<void> {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/sitemapper");
+  await documentReady({
+    id: "library-chrome-sitemapper", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/sitemapper", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
   await expect(sitemapRow(page, SAMPLE_SITEMAP)).toHaveCount(1);
 }
 
-test("a row menu opens outside the library table's scrollport, unclipped", async ({ page }) => {
+test("a row menu opens outside the library table's scrollport, unclipped", async ({ page, documentReady }) => {
   const failures = watchRuntimeFailures(page);
-  await openSitemapLibrary(page);
+  await openSitemapLibrary(page, documentReady);
 
   // The wrapper is the sticky header's scrollport, so it clips its content
   // whether or not the table currently overflows. If that ever stops being
@@ -106,9 +114,9 @@ test("a row menu opens outside the library table's scrollport, unclipped", async
   expect(failures).toEqual([]);
 });
 
-test("focus returns to the trigger when a menu or a dialog closes", async ({ page }) => {
+test("focus returns to the trigger when a menu or a dialog closes", async ({ page, documentReady }) => {
   const failures = watchRuntimeFailures(page);
-  await openSitemapLibrary(page);
+  await openSitemapLibrary(page, documentReady);
 
   const newSitemap = page.getByRole("button", { name: "New sitemap" });
   await newSitemap.click();

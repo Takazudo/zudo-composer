@@ -1,4 +1,5 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { test } from "./host-test";
+import { expect, type Locator } from "@playwright/test";
 import { watchRuntimeFailures } from "../runtime-failures";
 
 /**
@@ -18,15 +19,27 @@ async function treeRowAction(structure: Locator, action: string): Promise<void> 
 }
 
 
-test("Composer composes, edits, and recovers through toolbar and canvas history", async ({ page }) => {
+test("Composer composes, edits, and recovers through toolbar and canvas history", async ({ page, documentReady }) => {
   test.setTimeout(120_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  await page.goto("/composer");
+  await documentReady({
+    id: "composer-26",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/composer", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Compositions", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
   // A library row's name is the link that opens it.
-  await page.getByRole("link", { name: "About page", exact: true }).click();
+  await documentReady({
+    id: "composer-27",
+    kind: "route-action",
+    transition: ({ remainingMs }) => page.getByRole("link", { name: "About page", exact: true }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.frameLocator('iframe[title="Composer preview canvas"]').getByRole("heading", { name: "Static about heading", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
 
   // The editor toolbar has no role of its own, so it is scoped by class: "Undo"
   // and "Add component" both also exist inside the canvas iframe and the rails.
@@ -148,13 +161,25 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
   expect(failures).toEqual([]);
 });
 
-test("Hero structured actions persist, render, export, and undo structural edits", async ({ page }) => {
+test("Hero structured actions persist, render, export, and undo structural edits", async ({ page, documentReady }) => {
   test.setTimeout(120_000);
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  await page.goto("/composer");
-  await page.getByRole("link", { name: "About page", exact: true }).click();
+  await documentReady({
+    id: "composer-156",
+    kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/composer", { timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.getByRole("heading", { name: "Compositions", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
+  await documentReady({
+    id: "composer-157",
+    kind: "route-action",
+    transition: ({ remainingMs }) => page.getByRole("link", { name: "About page", exact: true }).click({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(page.frameLocator('iframe[title="Composer preview canvas"]').getByRole("heading", { name: "Static about heading", exact: true })).toBeVisible({ timeout: remainingMs() }),
+    settle: "shell",
+  });
   const structure = page.locator(".cms-editor__region--nav");
   await treeRowAction(structure, "Add component to the document");
   const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
@@ -205,7 +230,13 @@ test("Hero structured actions persist, render, export, and undo structural edits
   await expect(hero.getByRole("link")).toHaveText([/^Contact us/, /^Read docs/]);
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
 
-  await page.reload();
+  await documentReady({
+    id: "composer-208",
+    kind: "reload",
+    transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+    ready: ({ remainingMs }) => expect(canvas.getByRole("region", { name: "Hero" }).getByRole("link")).toHaveText([/^Contact us/, /^Read docs/], { timeout: remainingMs() }),
+    settle: "shell",
+  });
   await expect(canvas.getByRole("region", { name: "Hero" }).getByRole("link")).toHaveText([/^Contact us/, /^Read docs/]);
   expect(failures).toEqual([]);
 });
