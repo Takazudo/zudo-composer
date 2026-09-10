@@ -17,6 +17,7 @@ export default defineConfig({
   testDir: "./tests/browser",
   testMatch: "**/*.pw.ts",
   outputDir: "./test-results/playwright-host",
+  globalSetup: "./tests/host-cold-start.setup.ts",
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -54,6 +55,9 @@ export default defineConfig({
     // that a missing asset stays a 404 instead of becoming HTML. Playwright's
     // readiness probe sends no such header, so it polls Vite's own client
     // module — served by the dev server itself, and 200 as soon as it listens.
+    // That listener readiness only means the server can answer; global setup
+    // separately measures the cold `/content` application gate through heading
+    // visibility and busy-state settlement before any host spec runs.
     url: "http://127.0.0.1:4173/@vite/client",
     reuseExistingServer: false,
     timeout: 60_000,
