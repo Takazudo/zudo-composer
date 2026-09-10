@@ -43,3 +43,12 @@ prefers OffscreenCanvas and supports injected canvas/ImageData factories for
 node tests; HTML canvas is the fallback. JPEG flattens onto white; JPEG/WebP
 quality defaults to 0.9. MIME fallback, null blobs and byte overflow are typed
 errors; callers retain the editing session and do not silently reduce quality.
+
+GIF remains outside the current editor contract: the Assets gate rejects
+`image/gif` before fetching or decoding. Native canvas has no animated GIF
+encoder (a direct `image/gif` request falls back to PNG), while the core
+`encode` function independently rejects that unsupported MIME before calling
+canvas, so an animated source is never silently flattened. The future model
+selected in [`docs/gif-editing-assessment.md`](../../docs/gif-editing-assessment.md)
+is an explicitly acknowledged frame-0 conversion to still PNG, deferred to a
+separate implementation epic.
