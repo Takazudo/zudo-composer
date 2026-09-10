@@ -48,7 +48,7 @@ GIF remains outside the current editor contract: the Assets gate rejects
 `image/gif` before fetching or decoding. Native canvas has no animated GIF
 encoder (a direct `image/gif` request falls back to PNG), while the core
 `encode` function independently rejects that unsupported MIME before calling
-canvas, so an animated source is never silently flattened. The future model
-selected in [`docs/gif-editing-assessment.md`](../../docs/gif-editing-assessment.md)
-is an explicitly acknowledged frame-0 conversion to still PNG, deferred to a
-separate implementation epic.
+canvas, so an animated source is never silently flattened. The
+[GIF assessment](../../docs/gif-editing-assessment.md) concludes that GIF
+editing and GIF-to-still conversion are outside the product scope; no
+implementation is planned. Existing GIF assets remain usable without editing.

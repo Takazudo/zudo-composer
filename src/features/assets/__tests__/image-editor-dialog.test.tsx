@@ -55,7 +55,7 @@ describe("Assets image editor dialog", () => {
     const onClose = vi.fn();
     render(<ImageEditorDialog record={record({ mimeType: "image/gif" })} dimensions={dimensions()} onSave={vi.fn()} onClose={onClose} />);
     const dialog = await screen.findByRole("dialog", { name: /Edit image/ });
-    expect(within(dialog).getByRole("alert")).toHaveTextContent("GIF editing is not supported yet");
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("GIF editing is not supported");
     expect(fetch).not.toHaveBeenCalled();
     expect(createImageBitmap).not.toHaveBeenCalled();
     expect(screen.queryByTestId("editor")).toBeNull();

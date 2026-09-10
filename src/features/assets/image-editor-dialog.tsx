@@ -187,7 +187,7 @@ export function ImageEditorDialog({ record, dimensions, previewUrl, canSaveCopy 
   const [phase, setPhase] = useState<EditorPhase>(mimeType ? "loading" : "error");
   const [bitmap, setBitmap] = useState<ImageBitmap | null>(null);
   const bitmapRef = useRef<ImageBitmap | null>(null);
-  const [error, setError] = useState(mimeType ? "" : record.mimeType === "image/gif" ? "GIF editing is not supported yet" : "This file type cannot be edited.");
+  const [error, setError] = useState(mimeType ? "" : record.mimeType === "image/gif" ? "GIF editing is not supported" : "This file type cannot be edited.");
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [closing, setClosing] = useState(false);
@@ -240,7 +240,7 @@ export function ImageEditorDialog({ record, dimensions, previewUrl, canSaveCopy 
     setClosing(false);
     setBitmap(null);
     setPhase(mimeType ? "loading" : "error");
-    setError(mimeType ? "" : record.mimeType === "image/gif" ? "GIF editing is not supported yet" : "This file type cannot be edited.");
+    setError(mimeType ? "" : record.mimeType === "image/gif" ? "GIF editing is not supported" : "This file type cannot be edited.");
     setSaving(false);
     savingRef.current = false;
     if (!mimeType) return () => { abort.abort(); };
