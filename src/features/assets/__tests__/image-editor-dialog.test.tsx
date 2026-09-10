@@ -57,6 +57,8 @@ describe("Assets image editor dialog", () => {
     const dialog = await screen.findByRole("dialog", { name: /Edit image/ });
     expect(within(dialog).getByRole("alert")).toHaveTextContent("GIF editing is not supported yet");
     expect(fetch).not.toHaveBeenCalled();
+    expect(createImageBitmap).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("editor")).toBeNull();
   });
 
   it("refuses a cached over-ceiling image before fetch", async () => {
