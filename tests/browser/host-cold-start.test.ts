@@ -390,6 +390,7 @@ interface ProcessResult {
 
 const SUBPROCESS_TIMEOUT_MS = 20_000;
 const TERMINATION_GRACE_MS = 750;
+const LIFECYCLE_LOOPBACK_HOST = process.platform === "linux" ? "127.0.0.2" : "127.0.0.1";
 
 function signalRunner(child: ChildProcess, signal: NodeJS.Signals): void {
   if (child.pid === undefined) return;
@@ -467,6 +468,8 @@ async function terminateProcessTree(child: ChildProcess, serverPidPath: string):
 
 interface SubprocessOptions {
   timeoutMs?: number;
+  startupTimeoutMs?: number;
+  timeoutReadyPath?: string;
   environment?: Record<string, string>;
 }
 
@@ -478,6 +481,7 @@ async function runPlaywrightSubprocess(
   options: SubprocessOptions = {},
 ): Promise<ProcessResult> {
   await rm(serverPidPath, { force: true });
+  if (options.timeoutReadyPath) await rm(options.timeoutReadyPath, { force: true });
   const cliPath = resolve(process.cwd(), "node_modules/@playwright/test/cli.js");
   return new Promise((resolveResult, rejectResult) => {
     const child = spawn(process.execPath, [cliPath, "test", "--config", configPath, ...args], {
@@ -492,15 +496,46 @@ async function runPlaywrightSubprocess(
     let settled = false;
     let termination: Promise<void> | undefined;
     const timeoutMs = options.timeoutMs ?? SUBPROCESS_TIMEOUT_MS;
-    const timer = setTimeout(() => {
-      timedOut = true;
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    let startupTimer: ReturnType<typeof setTimeout> | undefined;
+    let readinessTimer: ReturnType<typeof setTimeout> | undefined;
+    const triggerTermination = (isTimeout: boolean) => {
+      if (settled || termination) return;
+      timedOut ||= isTimeout;
       termination = terminateProcessTree(child, serverPidPath);
-    }, timeoutMs);
+    };
+    const armTimeout = () => {
+      if (settled || termination) return;
+      if (startupTimer) clearTimeout(startupTimer);
+      timeoutTimer = setTimeout(() => triggerTermination(true), timeoutMs);
+    };
+    if (options.timeoutReadyPath) {
+      const startupDeadline = Date.now() + (options.startupTimeoutMs ?? SUBPROCESS_TIMEOUT_MS);
+      startupTimer = setTimeout(() => triggerTermination(false), options.startupTimeoutMs ?? SUBPROCESS_TIMEOUT_MS);
+      const waitForReady = async () => {
+        if (settled || termination) return;
+        try {
+          await readFile(options.timeoutReadyPath!, "utf8");
+          armTimeout();
+          return;
+        } catch { /* The setup marker has not been written yet. */ }
+        if (Date.now() >= startupDeadline) {
+          triggerTermination(false);
+          return;
+        }
+        readinessTimer = setTimeout(() => { void waitForReady(); }, 50);
+      };
+      void waitForReady();
+    } else {
+      timeoutTimer = setTimeout(() => triggerTermination(true), timeoutMs);
+    }
     const finish = async (result: ProcessResult) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
-      if (timedOut) await (termination ?? terminateProcessTree(child, serverPidPath));
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (startupTimer) clearTimeout(startupTimer);
+      if (readinessTimer) clearTimeout(readinessTimer);
+      if (termination) await termination;
       else await terminateFixtureServer(serverPidPath);
       resolveResult(result);
     };
@@ -509,19 +544,22 @@ async function runPlaywrightSubprocess(
     child.once("error", (error) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
-      void terminateFixtureServer(serverPidPath).finally(() => rejectResult(error));
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (startupTimer) clearTimeout(startupTimer);
+      if (readinessTimer) clearTimeout(readinessTimer);
+      void (termination ?? terminateFixtureServer(serverPidPath)).finally(() => rejectResult(error));
     });
     child.once("close", (code, signal) => { void finish({ code, signal, stdout, stderr, timedOut }); });
   });
 }
 
 async function availablePort(): Promise<number> {
-  // Keep this isolated fixture on loopback without WSL's 127.0.0.1 forwarding.
+  // Linux uses a second loopback address to avoid WSL's 127.0.0.1 forwarding;
+  // other platforms retain the standard loopback address.
   const server = createServer();
   await new Promise<void>((resolveListen, rejectListen) => {
     server.once("error", rejectListen);
-    server.listen(0, "127.0.0.2", () => resolveListen());
+    server.listen(0, LIFECYCLE_LOOPBACK_HOST, () => resolveListen());
   });
   const address = server.address();
   if (address === null || typeof address === "string") {
@@ -533,16 +571,17 @@ async function availablePort(): Promise<number> {
   return port;
 }
 
-async function writeLifecycleFixture(root: string, port: number): Promise<{ configPath: string; markerPath: string; baseURL: string; serverPidPath: string }> {
+async function writeLifecycleFixture(root: string, port: number): Promise<{ configPath: string; markerPath: string; baseURL: string; serverPidPath: string; hangMarkerPath: string }> {
   const markerPath = join(root, "setup-markers.jsonl");
   const serverPath = join(root, "server.mjs");
   const serverPidPath = join(root, "server.pid");
+  const hangMarkerPath = join(root, "setup-hang.marker");
   const setupPath = join(root, "global-setup.mjs");
   const beforeFailurePath = join(root, "01-before-failure.pw.mjs");
   const afterFailurePath = join(root, "02-after-failure.pw.mjs");
   const configPath = join(root, "playwright.config.mjs");
   const playwrightTestModule = resolve(process.cwd(), "node_modules/@playwright/test/index.mjs");
-  const baseURL = `http://127.0.0.2:${port}`;
+  const baseURL = `http://${LIFECYCLE_LOOPBACK_HOST}:${port}`;
   await writeFile(serverPath, `import { createServer } from "node:http";
 import { writeFileSync } from "node:fs";
 writeFileSync(${JSON.stringify(serverPidPath)}, String(process.pid) + "\\n");
@@ -550,7 +589,7 @@ const server = createServer((request, response) => {
   if (request.url === "/ready") { response.writeHead(200); response.end("ready"); return; }
   response.writeHead(404); response.end();
 });
-server.listen(${port}, "127.0.0.2");
+server.listen(${port}, ${JSON.stringify(LIFECYCLE_LOOPBACK_HOST)});
 for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, () => server.close(() => process.exit(0)));
 `);
   await writeFile(setupPath, `import { appendFile } from "node:fs/promises";
@@ -559,7 +598,10 @@ export default async function setup(config) {
   if (urls.length === 0 || urls.some((url) => url !== urls[0])) throw new Error("inconsistent baseURL");
   const response = await fetch(new URL("/ready", urls[0]));
   if (!response.ok) throw new Error("webServer was not ready");
-  if (process.env.COLD_START_HANG === "1") await new Promise(() => {});
+  if (process.env.COLD_START_HANG === "1") {
+    await appendFile(process.env.COLD_START_HANG_MARKER, "ready\\n");
+    await new Promise(() => {});
+  }
   await appendFile(process.env.COLD_START_MARKER, JSON.stringify({ baseURL: urls[0] }) + "\\n");
 }
 `);
@@ -591,7 +633,7 @@ export default defineConfig({
 });
 `);
   await appendFile(markerPath, "");
-  return { configPath, markerPath, baseURL, serverPidPath };
+  return { configPath, markerPath, baseURL, serverPidPath, hangMarkerPath };
 }
 
 describe("host global setup lifecycle", () => {
@@ -629,7 +671,9 @@ describe("host global setup lifecycle", () => {
       serverPidPath = fixture.serverPidPath;
       subprocess = runPlaywrightSubprocess(fixture.configPath, fixture.markerPath, fixture.serverPidPath, [], {
         timeoutMs: 2_000,
-        environment: { COLD_START_HANG: "1" },
+        startupTimeoutMs: 20_000,
+        timeoutReadyPath: fixture.hangMarkerPath,
+        environment: { COLD_START_HANG: "1", COLD_START_HANG_MARKER: fixture.hangMarkerPath },
       });
       serverPid = await waitForFixturePid(fixture.serverPidPath);
       const result = await subprocess;
@@ -641,7 +685,7 @@ describe("host global setup lifecycle", () => {
       await subprocess?.catch(() => undefined);
       await rm(root, { recursive: true, force: true });
     }
-  }, 15_000);
+  }, 35_000);
 
   it("registers the real host config's setup module without changing its lane timeout policy", async () => {
     const config = await readFile(resolve(process.cwd(), "playwright.host.config.ts"), "utf8");
