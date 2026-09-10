@@ -146,13 +146,11 @@ async function activateSampleProject(hostRoot) {
 /**
  * One spec file, one host project.
  *
- * Each Playwright invocation owns one fresh server and therefore one global
- * cold-start gate. Explicitly grouped named specs share that invocation and
- * gate; a filtered later test in the same invocation does too. The desktop and
- * coarse projects, fresh pages, reloads, and a worker replacement after a test
- * failure do not create another gate. The canonical runner starts a new
- * invocation/server for each target, which is the boundary at which setup runs
- * again.
+ * Each target invocation owns a fresh server and host project. Explicitly
+ * grouped named specs share that host state. The automatic host fixture checks
+ * every adopted document transition in its own test: fresh pages, later routes,
+ * reloads, desktop/coarse projects and replacement workers all receive the
+ * same bounded semantic-readiness policy. Listener readiness is separate.
  *
  * Authored state used to be per browser CONTEXT — an IndexedDB database that
  * Playwright discarded with the page. It is a directory tree now, shared by

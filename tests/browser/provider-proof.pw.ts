@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
+import { test } from "./host-test";
+import { expect, type Locator, type Page, type Response } from "@playwright/test";
 import { watchRuntimeFailures } from "../runtime-failures";
 
 /**
@@ -45,7 +46,7 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 }
 
-test("real provider composes, highlights, persists, exports, and stays responsive", async ({ page }) => {
+test("real provider composes, highlights, persists, exports, and stays responsive", async ({ page, documentReady }) => {
   const failures = watchRuntimeFailures(page);
   const focusedAssets: Response[] = [];
   page.on("response", (response) => {
@@ -53,7 +54,14 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   });
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/composer");
+  await documentReady({
+    id: "provider-56", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/composer", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("heading", { name: "Compositions", exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "Compositions" })).toBeVisible();
   await page.getByRole("link", { name: "About page", exact: true }).click();
   // The shared editor toolbar carries no role of its own, so it is scoped by
@@ -112,7 +120,14 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   await expect(exportDialog).toContainText('from "@zudo-sg/ui"');
   await exportDialog.getByRole("button", { name: "Close" }).click();
 
-  await page.reload();
+  await documentReady({
+    id: "provider-115", kind: "reload",
+    transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(structure.getByRole("treeitem", { name: /^ProseMd/ })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await structure.getByRole("treeitem", { name: /^ProseMd/ }).click();
   await expect(page.getByRole("textbox", { name: "Markdown" })).toHaveValue(persistedMarkdown);
 
@@ -171,10 +186,17 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   expect(failures).toEqual([]);
 });
 
-test("clean Sitemapper assigns and resolves the seeded About page catalog entry", async ({ page }) => {
+test("clean Sitemapper assigns and resolves the seeded About page catalog entry", async ({ page, documentReady }) => {
   const failures = watchRuntimeFailures(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/sitemapper");
+  await documentReady({
+    id: "provider-177", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/sitemapper", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "New sitemap" }).click();
   const createSitemapDialog = page.getByRole("dialog", { name: "Create sitemap" });
@@ -212,12 +234,26 @@ test("clean Sitemapper assigns and resolves the seeded About page catalog entry"
   expect(failures).toEqual([]);
 });
 
-test("direct preview route is isolated and refreshable", async ({ page }) => {
+test("direct preview route is isolated and refreshable", async ({ page, documentReady }) => {
   const failures = watchRuntimeFailures(page);
-  await page.goto("/composer/preview");
+  await documentReady({
+    id: "provider-217", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/composer/preview", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByText("This is the Composer's preview canvas. It only renders inside the Composer.", { exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "none",
+  });
   await expect(page.getByRole("navigation", { name: "Main navigation" })).toHaveCount(0);
   await expect(page.locator("#app")).toBeAttached();
-  await page.reload();
+  await documentReady({
+    id: "provider-220", kind: "reload",
+    transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByText("This is the Composer's preview canvas. It only renders inside the Composer.", { exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "none",
+  });
   await expect(page.getByRole("navigation", { name: "Main navigation" })).toHaveCount(0);
   await expect(page.locator("#app")).toBeAttached();
   expect(failures).toEqual([]);

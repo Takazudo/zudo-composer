@@ -2,9 +2,9 @@ import type { Page } from "@playwright/test";
 const prepared = new WeakSet<Page>();
 /** Test-owned fixture setup only. Dev without an activated release is
  * unavailable; the hidden initial `/`, dynamic imports, initialization, and
- * reload below are one test-owned dev cold window. A global preflight would
- * initialize this empty workspace before the tests can assert `Open workspace`,
- * invalidating the empty-workspace scenarios. Initialize an explicit validated
+ * reload below are one test-owned dev cold window, measured in R0b. Keep this
+ * initialization inside the test so empty-workspace scenarios can still assert
+ * `Open workspace`. Initialize an explicit validated
  * source through the real workspace service, which writes it to the host's
  * filesystem exactly as authoring does. This is not a production fallback or a
  * storage mock.
