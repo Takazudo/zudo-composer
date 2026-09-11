@@ -1,7 +1,8 @@
 // Mapping browser coverage: focused Mapping evaluation and drift repair, plus
 // the direct-preview isolation that the Mapping preview iframe depends on.
 // Content-owned coverage lives in `content.pw.ts`.
-import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
+import { test } from "./host-test";
+import { expect, type Locator, type Page, type Response } from "@playwright/test";
 import { watchRuntimeFailures } from "../runtime-failures";
 
 const JOURNAL_MAPPING = "/mapping?provider=mapping-filesystem&mapping=journal-entry-mapping";
@@ -25,9 +26,18 @@ function blockedRows(page: Page): Locator {
   return page.locator('.cms-mapping-status[data-status="blocked"]');
 }
 
-test("provider-qualified Journal Mapping evaluates each seeded Entry", async ({ page }) => {
+test("provider-qualified Journal Mapping evaluates each seeded Entry", async ({ page, documentReady }) => {
   const failures = watchRuntimeFailures(page);
-  await page.goto("/mapping");
+  await documentReady({
+    id: "mapping-30", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/mapping", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("row").filter({ hasText: "Journal entry mapping" })).toContainText("Journal articles", { timeout: remainingMs() });
+      await expect(page.getByRole("row").filter({ hasText: "Journal entry mapping" })).toContainText("Journal entry page", { timeout: remainingMs() });
+      await expect(page.getByRole("row").filter({ hasText: "Journal entry mapping" }).getByText("Ready", { exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
 
   // The library row is a real deep link, so opening a Mapping is a navigation.
   const row = page.getByRole("row").filter({ hasText: "Journal entry mapping" });
@@ -59,9 +69,18 @@ test("provider-qualified Journal Mapping evaluates each seeded Entry", async ({ 
   expect(failures).toEqual([]);
 });
 
-test("collection query settings and ordered pins survive a Mapping reload", async ({ page }) => {
+test("collection query settings and ordered pins survive a Mapping reload", async ({ page, documentReady }) => {
   const failures = watchRuntimeFailures(page);
-  await page.goto(JOURNAL_MAPPING);
+  await documentReady({
+    id: "mapping-64", kind: "goto",
+    transition: ({ remainingMs }) => page.goto(JOURNAL_MAPPING, { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("combobox", { name: "Mapping mode" })).toHaveValue("collection", { timeout: remainingMs() });
+      await expect(page.getByText("Effective records", { exact: true })).toBeVisible({ timeout: remainingMs() });
+      await expect(page.locator(".cms-mapping-query__result li")).toHaveCount(3, { timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
 
   await expect(page.getByRole("combobox", { name: "Mapping mode" })).toHaveValue("collection");
   await expect(page.getByText("Effective records", { exact: true })).toBeVisible();
@@ -77,16 +96,30 @@ test("collection query settings and ordered pins survive a Mapping reload", asyn
   await pins.getByRole("button", { name: "Save pins" }).click();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.locator(".cms-topbar__status")).toHaveAttribute("data-state", "saved");
-  await page.reload();
+  await documentReady({
+    id: "mapping-80", kind: "reload",
+    transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.locator(".cms-mapping-query__pins li").first()).toContainText("article-", { timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
 
   await expect(page.locator(".cms-mapping-query__pins li").first()).toContainText("article-");
   await expect(page.locator(".cms-mapping-query__result li")).toHaveCount(3);
   expect(failures).toEqual([]);
 });
 
-test("focused Mapping source and target drift remains visible and can be repaired", async ({ page }) => {
+test("focused Mapping source and target drift remains visible and can be repaired", async ({ page, documentReady }) => {
   const failures = watchRuntimeFailures(page);
-  await page.goto(JOURNAL_MAPPING);
+  await documentReady({
+    id: "mapping-89", kind: "goto",
+    transition: ({ remainingMs }) => page.goto(JOURNAL_MAPPING, { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue("Journal entry mapping", { timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await expect(page.getByRole("textbox", { name: "Mapping name" })).toHaveValue("Journal entry mapping");
 
   // A model with none of these fields: every binding breaks, and every binding
@@ -113,9 +146,16 @@ test("focused Mapping source and target drift remains visible and can be repaire
   expect(failures).toEqual([]);
 });
 
-test("an unbound target binds from its chip's compatible-source menu", async ({ page }) => {
+test("an unbound target binds from its chip's compatible-source menu", async ({ page, documentReady }) => {
   const failures = watchRuntimeFailures(page);
-  await page.goto(JOURNAL_MAPPING);
+  await documentReady({
+    id: "mapping-118", kind: "goto",
+    transition: ({ remainingMs }) => page.goto(JOURNAL_MAPPING, { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("button", { name: /^Bind SectionHeading\.eyebrow/ })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
 
   // `SectionHeading.eyebrow` is the one text prop of the heading node that the
   // seeded Mapping leaves alone.
@@ -135,15 +175,29 @@ test("an unbound target binds from its chip's compatible-source menu", async ({ 
   expect(failures).toEqual([]);
 });
 
-test("direct preview is refreshable and isolated from every host product", async ({ page }) => {
+test("direct preview is refreshable and isolated from every host product", async ({ page, documentReady }) => {
   const failures = watchRuntimeFailures(page);
   const responses: Response[] = [];
   page.on("response", (response) => responses.push(response));
-  await page.goto("/composer/preview");
+  await documentReady({
+    id: "mapping-142", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/composer/preview", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByText("This is the Composer's preview canvas. It only renders inside the Composer.", { exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "none",
+  });
   await expect(page.locator("#app")).toBeAttached();
   await expect(page.getByRole("navigation", { name: "Main navigation" })).toHaveCount(0);
   await expect(page.locator(".app-shell, .cms-rail, .cms-topbar, .sg-content-app, .cms-mapping-root, .sg-sitemapper-root")).toHaveCount(0);
-  await page.reload();
+  await documentReady({
+    id: "mapping-146", kind: "reload",
+    transition: ({ remainingMs }) => page.reload({ timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByText("This is the Composer's preview canvas. It only renders inside the Composer.", { exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "none",
+  });
   await expect(page.locator("#app")).toBeAttached();
   await expect(page.getByText(/Content authoring|Mappings|Sitemaps/)).toHaveCount(0);
   const previewDocuments = responses.filter((response) => response.request().isNavigationRequest() && new URL(response.url()).pathname === "/composer/preview");

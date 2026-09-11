@@ -33,6 +33,6 @@ export function ResizePanel({ editor, source }: { editor: EditorState; source: S
     <label><input type="checkbox" checked={locked} onChange={e => { setLocked(e.currentTarget.checked); setLockedRatio(editor.doc.resize.width / editor.doc.resize.height); }} />Lock aspect ratio</label>
     <div class="zie-row">{[0.5, 1, 2].map(scale => <button type="button" key={scale} onClick={() => preset(scale)}>{scale * 100}%</button>)}</div>
     {(draft.width !== undefined || draft.height !== undefined) && <p>Requested output: {draft.width ?? editor.doc.resize.width} × {draft.height ?? editor.doc.resize.height}</p>}
-    <p>Normal resampling does not create new detail. ML upscaling is planned separately.</p>
+    <p>Resampling does not create new detail. ML upscaling is not available in this editor.</p>
   </div>;
 }

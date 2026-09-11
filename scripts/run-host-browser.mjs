@@ -146,6 +146,12 @@ async function activateSampleProject(hostRoot) {
 /**
  * One spec file, one host project.
  *
+ * Each target invocation owns a fresh server and host project. Explicitly
+ * grouped named specs share that host state. The automatic host fixture checks
+ * every adopted document transition in its own test: fresh pages, later routes,
+ * reloads, desktop/coarse projects and replacement workers all receive the
+ * same bounded semantic-readiness policy. Listener readiness is separate.
+ *
  * Authored state used to be per browser CONTEXT — an IndexedDB database that
  * Playwright discarded with the page. It is a directory tree now, shared by
  * every spec the same server answers, so one spec's renames and binding edits
