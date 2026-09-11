@@ -181,7 +181,7 @@ local ext4 mirror and is the source of every result below.
 
 ### Time — ms per upscale (measured; median of 5 cached repetitions per pair)
 
-| Candidate | Cached inference, range of the 6 per-pair medians | All measured reps | Warmup range |
+| Candidate | Cached inference, range of per-pair medians | All measured reps | Warmup range |
 | --- | --- | --- | --- |
 | Lanczos3 2× / 4× (12 pairs) | 707–731 | 706–764 | 711–782 |
 | ESRGAN Slim 2× | 15,171–19,268 | 14,938–24,753 | 14,985–18,135 |
@@ -295,7 +295,7 @@ Slim adds blocky texture.
 
 ## Network and offline audit
 
-All 51 U1b launches contacted only the localhost harness; zero requests
+All 51 benchmark browser launches contacted only the localhost harness; zero requests
 occurred during inference, in every bench row and every offline row. Offline
 after load succeeded for every candidate:
 
@@ -347,7 +347,7 @@ persistence roots but says nothing about a model cache elsewhere.
 | Yes — ship Swin2SR as opt-in | 77 MB per scale, ~134 s per 512² output on the measured path, model load consuming ~96% of the 512 MiB budget and killed once by the watchdog, 16 MP not achievable, and PSNR losses on text/alpha. Its SSIM gains (10/14) are the only positive signal and are inconclusive on their own. |
 | Yes — ship Swin2SR but WebGPU/multi-thread only | Unmeasured on this machine (no WebGPU adapter, not cross-origin isolated). Shipping on an unmeasured path violates the epic's own rule; cross-origin isolation is also a host-project header change this tool cannot impose. |
 | No — permanent exclusion (GIF precedent, [#468](https://github.com/Takazudo/zudo-composer/issues/468)) | GIF was closed on product scope. Here the measured candidate set is two families, both on degraded paths, with structural gains visible on 10/14 SSIM rows; the small-CNN family and the accelerated backends are untested, not failed. Closing permanently would overstate the evidence. |
-| Lazy CDN-loaded runtime + weights, no npm dependency | Sidesteps the one-WASM dist assertion but not quality, speed or memory. Adds third-party code execution with origin privileges, CSP/CORS/offline-completeness policy and network metadata leakage (UD packaging table). Not a fix for the measured problems. |
+| Lazy CDN-loaded runtime + weights, no npm dependency | Sidesteps the one-WASM dist assertion but not quality, speed or memory. Adds third-party code execution with origin privileges, CSP/CORS/offline-completeness policy and network metadata leakage. Not a fix for the measured problems. |
 | Host-supplied optional model pack | Requires a new external package contract and absent/present-pack smoke gates; the editor's private workspace manifest cannot implement it. Deferred until a candidate is worth packaging. |
 | Hosted/server-side upscaling | Out of scope: this repository claims no hosted API, persistence or authentication, and user images must never leave the machine. |
 | Convert and run FSRCNN / ESPCN / Real-ESRGAN general-x4v3 before deciding | New conversion work with unverified provenance, outside the epic's bounded adapter pass. Recorded as a reopen path, not a decision input. |
