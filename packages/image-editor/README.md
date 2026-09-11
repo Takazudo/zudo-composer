@@ -18,6 +18,8 @@ reduction and normalized Lanczos3 expansion use premultiplied alpha and bounded
 row scratch; mixed-axis jobs use each axis's kernel. Brightness/contrast use a
 256-entry LUT. Hue/saturation rotate/scale YIQ chroma. Neutral tone is byte exact.
 These conventional filters cannot recover missing image detail.
+ML-assisted upscaling was assessed and is not included; see
+[docs/ml-upscaling-assessment.md](../../docs/ml-upscaling-assessment.md).
 
 `createImageEditorClient()` from `./worker` owns one resident source and worker.
 Await `registerSource(rgba, optionalId)`, then request `renderPreview(doc)` or
