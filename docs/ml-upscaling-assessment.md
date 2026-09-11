@@ -7,7 +7,7 @@ path; no implementation issue is scheduled.
 
 Both measured candidates were rejected on their own evidence: UpscalerJS
 ESRGAN Slim scored below Lanczos3 on every PSNR row measured, and Swin2SR
-classical SR was mixed on quality, about 190× slower than Lanczos3 at 2×, 77
+classical SR was mixed on quality, about 180–215× slower than Lanczos3 at 2×, 77
 MB per scale, and had a model-load memory footprint within about 20 MiB of
 the 512 MiB budget that crossed it once and killed the browser. The measuring
 machine was not quiet during timed runs and WebGPU/multi-thread WASM were
@@ -191,7 +191,8 @@ local ext4 mirror and is the source of every result below.
 
 At the 512² output size, compared with Lanczos3's cached medians (estimated
 ratios): ESRGAN Slim is about 21–27× slower at 2× and about 9–13× slower at
-4×; Swin2SR is about 190–240× slower at 2× and about 50–55× slower at 4×.
+4×; Swin2SR is about 180–215× slower at 2× (five uncontaminated pairs) and
+about 50–55× slower at 4×.
 Lanczos3's own time includes cooperative `setTimeout(0)` yields, so it is
 scheduling-dominated rather than kernel-dominated.
 
@@ -199,7 +200,7 @@ A concurrent Playwright run from an unrelated project overlapped part of the
 Swin2SR 2× benchmark. The Swin2SR 2× alpha-2x cell is contaminated (posted
 median 172,601 ms reflects contention, not the candidate); over the five
 uncontaminated Swin2SR 2× pairs the per-pair medians are 133,209–153,060 ms,
-which does not change the "about 190× slower" conclusion. Quality metrics
+giving the "about 180–215× slower" estimate above. Quality metrics
 were unaffected (bit-identical across repetitions).
 
 ### Cold vs cached (measured; 5 cold launches after 1 discarded)
