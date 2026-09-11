@@ -186,7 +186,7 @@ local ext4 mirror and is the source of every result below.
 | Lanczos3 2× / 4× (12 pairs) | 707–731 | 706–764 | 711–782 |
 | ESRGAN Slim 2× | 15,171–19,268 | 14,938–24,753 | 14,985–18,135 |
 | ESRGAN Slim 4× | 6,325–9,424 | 6,101–11,348 | 7,090–11,170 |
-| Swin2SR 2× | 133,209–172,601 | 129,783–189,182 | 131,450–153,313 |
+| Swin2SR 2× (excl. contaminated alpha-2x) | 133,209–153,060 | 129,783–162,786 | 131,450–153,313 |
 | Swin2SR 4× | 35,738–39,204 | 33,378–51,804 | 33,351–49,441 |
 
 At the 512² output size, compared with Lanczos3's cached medians (estimated
@@ -197,11 +197,16 @@ Lanczos3's own time includes cooperative `setTimeout(0)` yields, so it is
 scheduling-dominated rather than kernel-dominated.
 
 A concurrent Playwright run from an unrelated project overlapped part of the
-Swin2SR 2× benchmark. The Swin2SR 2× alpha-2x cell is contaminated (posted
-median 172,601 ms reflects contention, not the candidate); over the five
-uncontaminated Swin2SR 2× pairs the per-pair medians are 133,209–153,060 ms,
-giving the "about 180–215× slower" estimate above. Quality metrics
-were unaffected (bit-identical across repetitions).
+Swin2SR 2× benchmark, contaminating the Swin2SR 2× alpha-2x cell. Its posted
+median of 172,601 ms (all reps 133,589–189,182 ms) reflects contention, not
+the candidate, per the
+[U1b timing correction](https://github.com/Takazudo/zudo-composer/issues/471#issuecomment-5640917482).
+The Swin2SR 2× row above excludes that cell: per-pair medians over the
+remaining five pairs are 133,209–153,060 ms, and all reps are
+129,783–162,786 ms, giving the "about 180–215× slower" estimate above.
+Quality, memory, download and offline results are unaffected (the alpha-2x
+quality metrics were bit-identical across all 5 repetitions). The cell was
+not re-run on a quiet machine.
 
 ### Cold vs cached (measured; 5 cold launches after 1 discarded)
 
@@ -358,7 +363,8 @@ persistence roots but says nothing about a model cache elsewhere.
 
 - The measuring machine was not quiet: other sessions ran `vitest`, `tsc` and
   `workerd` during timed runs, and one project's Playwright run overlapped
-  part of the Swin2SR 2× benchmark.
+  part of the Swin2SR 2× benchmark, contaminating the Swin2SR 2× alpha-2x
+  timing cell. That cell was not re-run on a quiet machine.
 - WebGPU and multi-threaded WASM were unavailable/unmeasured on this machine.
 - GPU device allocations and native allocation ownership are not captured by
   RSS.
