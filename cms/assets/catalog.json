@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "mutationToken": "bc028e060fac9f490b1d7815d8be568222a8e5fcca52ea56ee328a27b3faf15b",
+  "mutationToken": "8537ce985c1d172f9f31d5e616fdbd8c937034a0c9f5571a599613d1434e20a9",
   "records": [
     {
       "id": "assets-b9033527-b1cc-42ad-9f58-5b7075acc23b",
@@ -148,6 +148,131 @@
             "byteLength": 185,
             "url": "/uploaded-assets/sha256-0e44e3a01233931024a8f1161657823d7ac0bbc9cbcffbf300d48811926ecd35.zip",
             "createdAt": "2026-09-09T19:18:30.375Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-ed333ee2-bede-47da-b461-b2401a1255b7",
+      "revision": 1,
+      "createdAt": "2026-09-12T05:38:19.195Z",
+      "updatedAt": "2026-09-12T05:38:19.195Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-ed333ee2-bede-47da-b461-b2401a1255b7",
+        "fileName": "studio-workbench.webp",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "af74def4ba9314c9c8c8e71dd8a46a68b3efe38d5a2ad50dd6f9fa336427a0be",
+        "versions": [
+          {
+            "id": "af74def4ba9314c9c8c8e71dd8a46a68b3efe38d5a2ad50dd6f9fa336427a0be",
+            "checksum": "af74def4ba9314c9c8c8e71dd8a46a68b3efe38d5a2ad50dd6f9fa336427a0be",
+            "mimeType": "image/webp",
+            "byteLength": 41422,
+            "url": "/uploaded-assets/sha256-af74def4ba9314c9c8c8e71dd8a46a68b3efe38d5a2ad50dd6f9fa336427a0be.webp",
+            "createdAt": "2026-09-12T05:38:19.195Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-ab5ea8e7-b3ff-4a3a-bcaf-012ae675ad2f",
+      "revision": 1,
+      "createdAt": "2026-09-12T05:38:19.249Z",
+      "updatedAt": "2026-09-12T05:38:19.249Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-ab5ea8e7-b3ff-4a3a-bcaf-012ae675ad2f",
+        "fileName": "studio-wall.webp",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "1989ec467fed4722154de8be04a07a41dc939f37eb4393fb86aa3380db0e57f3",
+        "versions": [
+          {
+            "id": "1989ec467fed4722154de8be04a07a41dc939f37eb4393fb86aa3380db0e57f3",
+            "checksum": "1989ec467fed4722154de8be04a07a41dc939f37eb4393fb86aa3380db0e57f3",
+            "mimeType": "image/webp",
+            "byteLength": 39880,
+            "url": "/uploaded-assets/sha256-1989ec467fed4722154de8be04a07a41dc939f37eb4393fb86aa3380db0e57f3.webp",
+            "createdAt": "2026-09-12T05:38:19.249Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-4bff0545-5320-44fe-875d-743e8d7aa477",
+      "revision": 1,
+      "createdAt": "2026-09-12T05:38:19.303Z",
+      "updatedAt": "2026-09-12T05:38:19.303Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-4bff0545-5320-44fe-875d-743e8d7aa477",
+        "fileName": "studio-review.webp",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "e050310c87452cd6282a89b1bbe3bfad4d91a27b844edc3aa7914135e1a35a5d",
+        "versions": [
+          {
+            "id": "e050310c87452cd6282a89b1bbe3bfad4d91a27b844edc3aa7914135e1a35a5d",
+            "checksum": "e050310c87452cd6282a89b1bbe3bfad4d91a27b844edc3aa7914135e1a35a5d",
+            "mimeType": "image/webp",
+            "byteLength": 48260,
+            "url": "/uploaded-assets/sha256-e050310c87452cd6282a89b1bbe3bfad4d91a27b844edc3aa7914135e1a35a5d.webp",
+            "createdAt": "2026-09-12T05:38:19.303Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-97a5da88-868c-4757-b97a-923ad81862e1",
+      "revision": 1,
+      "createdAt": "2026-09-12T05:38:19.358Z",
+      "updatedAt": "2026-09-12T05:38:19.358Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-97a5da88-868c-4757-b97a-923ad81862e1",
+        "fileName": "journal-question.webp",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "14cafb407b4dd0273646c3221d38497da6571588a3a2cbcecaec5a98cdea5f3d",
+        "versions": [
+          {
+            "id": "14cafb407b4dd0273646c3221d38497da6571588a3a2cbcecaec5a98cdea5f3d",
+            "checksum": "14cafb407b4dd0273646c3221d38497da6571588a3a2cbcecaec5a98cdea5f3d",
+            "mimeType": "image/webp",
+            "byteLength": 25222,
+            "url": "/uploaded-assets/sha256-14cafb407b4dd0273646c3221d38497da6571588a3a2cbcecaec5a98cdea5f3d.webp",
+            "createdAt": "2026-09-12T05:38:19.358Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-79f81185-bdd3-4c75-bdea-cf01578c6ba7",
+      "revision": 1,
+      "createdAt": "2026-09-12T05:38:19.409Z",
+      "updatedAt": "2026-09-12T05:38:19.409Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-79f81185-bdd3-4c75-bdea-cf01578c6ba7",
+        "fileName": "journal-map.webp",
+        "folderId": null,
+        "note": "Demo illustration supplied by zudo-composer.",
+        "state": "active",
+        "currentVersionId": "645fca7ce0242a099e00718d9e0639e0a51242916c1a32f5a89963e770a8a670",
+        "versions": [
+          {
+            "id": "645fca7ce0242a099e00718d9e0639e0a51242916c1a32f5a89963e770a8a670",
+            "checksum": "645fca7ce0242a099e00718d9e0639e0a51242916c1a32f5a89963e770a8a670",
+            "mimeType": "image/webp",
+            "byteLength": 32940,
+            "url": "/uploaded-assets/sha256-645fca7ce0242a099e00718d9e0639e0a51242916c1a32f5a89963e770a8a670.webp",
+            "createdAt": "2026-09-12T05:38:19.409Z"
           }
         ]
       }

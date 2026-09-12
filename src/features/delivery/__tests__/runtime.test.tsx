@@ -57,7 +57,7 @@ describe("trusted delivery runtime", () => {
     route.composition.document.root[0]!.id = "site-frame-stack";
     render(<DeliveryRuntime composition={route.composition} pack={activeComponentProvider.pack} />);
     expect(screen.getByRole("heading", { name: "A studio built around useful clarity" })).toBeInTheDocument();
-    expect(screen.getByText(/Work made visible/)).toBeInTheDocument();
+    expect(screen.getByText(/Who we are/)).toBeInTheDocument();
   });
 
   it("isolates adapter and component throws and blocks opaque/invalid nodes", async () => {
