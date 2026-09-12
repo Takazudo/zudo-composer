@@ -10,6 +10,7 @@ import {
   ContactForm,
   Header,
   Newsletter,
+  GalleryImage,
   ProductCard,
   ProductGallery,
   RelatedProducts,
@@ -190,8 +191,8 @@ describe("newsletter and contact mocks", () => {
 
 describe("gallery and related strip", () => {
   it("moves the gallery selection with arrow keys", () => {
-    render(<ProductGallery src1="/a" alt1="A" src2="/b" alt2="B" src3="/c" alt3="C" />);
-    const main = () => document.querySelector<HTMLImageElement>("img")!.getAttribute("src");
+    render(<ProductGallery images={["/a", "/b", "/c"].map((src) => <GalleryImage key={src} src={src} alt={src} />)} />);
+    const main = () => document.querySelector<HTMLImageElement>("img:not([hidden])")!.getAttribute("src");
     const first = screen.getByRole("button", { name: "Show image 1 of 3" });
     expect(main()).toBe("/a");
     fireEvent.keyDown(first, { key: "ArrowRight" });

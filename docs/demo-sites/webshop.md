@@ -262,7 +262,8 @@ asset pass can pin them. Every component has `defaults` for every field.
 | Id | Purpose | Props | Slots |
 | --- | --- | --- | --- |
 | `shop.product-hero` | Split: gallery left (`lg`), copy right | `ratio: select[1/1\|3/2]` | `media` · single · [`shop.product-gallery`]; `copy` · many · any |
-| `shop.product-gallery` | Main image + thumbnails (only when ≥ 2 sources); arrow keys move selection | `src1: text`, `alt1: text`, `src2: text`, `alt2: text`, `src3: text`, `alt3: text` (empty string = absent) | — |
+| `shop.product-gallery` | Main image + thumbnails (only when ≥ 2 images); arrow keys move selection. Images are child nodes because the Assets pass pins only props named `src`/`href`/`poster`/`url` | — | `images` · Images · many · [`shop.gallery-image`] |
+| `shop.gallery-image` | One square image; registers with the gallery, shown when selected; empty `src` renders nothing | `src: text`, `alt: text` | — |
 | `shop.spec-table` | Two-column rows in mono; empty pairs skipped | `spec1Label … spec6Label: text`, `spec1Value … spec6Value: text` | — |
 | `shop.add-to-cart` | Quantity stepper + primary button; disabled when `sold-out`; writes the store; inline "Added" confirmation for 2 s | `slug: text`, `name: text`, `price: number`, `currency: text`, `src: text`, `availability: select[in-stock\|low-stock\|sold-out]`, `maxQuantity: number` (default 10) | — |
 | `shop.related-products` | List host without toolbar; each card hides itself when `slug` = current route's last segment; shows at most `limit` visible | `heading: text`, `limit: number` (default 3) | `items` · many · [`shop.product-card`] |
@@ -284,8 +285,8 @@ Field kinds are `src/content/model/types.ts` kinds.
 | `description` | markdown | 2–3 short paragraphs |
 | `price` | number | in `currency` units, 2 decimals |
 | `currency` | text | `USD` on every entry (guarded by the currency test) |
-| `availability` | choice `in-stock` / `low-stock` / `sold-out` | drives badge + add-to-cart |
-| `stockLabel` | choice `In stock` / `Only a few left` / `Sold out` / `Ships in 2 weeks` | display text |
+| `availability` | text `in-stock` / `low-stock` / `sold-out` | drives badge + add-to-cart; text, not choice, because a choice cannot bind to a `select` prop (#510) |
+| `stockLabel` | text `In stock` / `Only a few left` / `Sold out` / `Ships in 2 weeks` | display text (text for the same reason) |
 | `tags` | list<text> | 1–3 tags; `contains` queries |
 | `spec` | object { `material`, `dimensions`, `weight`, `origin`, `care`, `warranty` } each text | rendered by `shop.spec-table` |
 | `image1` | object { `src`: url, `alt`: text } | required; `/uploaded-assets/asset-<id>` |
@@ -334,8 +335,8 @@ Products (id · name · category · price · availability · featured):
 
 Bindings on `product-card` and `product-page` (projection → transform → prop):
 `name value→identity→name` / `heading`; `slug value→prefix "/products/"→href`;
-`image1 object-field[src]→identity→src` and `[alt]→alt` (gallery: `src1`,
-`src2` from `image2`); `price value→number`; `currency value→text`;
+`image1 object-field[src]→identity→src` and `[alt]→alt` (gallery: one
+`shop.gallery-image` child per image field); `price value→number`; `currency value→text`;
 `availability value→select`; `stockLabel value→text`; `category
 reference-id→select category` (options are the category record ids);
 `featured value→boolean`; `subtitle`, `description value→markdown`; spec

@@ -6,6 +6,7 @@ import {
   CartSummary,
   CheckoutForm,
   ContactForm,
+  GalleryImage,
   Newsletter,
   ProductCard,
   ProductGallery,
@@ -30,17 +31,16 @@ describe("product detail rendering", () => {
     expect(html).toContain("<p>C</p>");
   });
 
-  it("renders one gallery image without thumbnails", () => {
-    const html = render(<ProductGallery src1="/a" alt1="A" src2="" alt2="" src3="" alt3="" />);
+  it("renders gallery image children before any registration, without thumbnails", () => {
+    const html = render(<ProductGallery images={[<GalleryImage src="/a" alt="A" />, <GalleryImage src="" alt="" />]} />);
     expect(html).toContain('src="/a"');
+    expect(html.match(/<img/g)).toHaveLength(1);
     expect(html).not.toContain("Show image");
   });
 
-  it("renders thumbnails for two or more images, first selected", () => {
-    const html = render(<ProductGallery src1="/a" alt1="A" src2="/b" alt2="B" src3="" alt3="" />);
-    expect(html).toContain('aria-label="Show image 1 of 2"');
-    expect(html).toContain('aria-label="Show image 2 of 2"');
-    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
+  it("shows a gallery image outside a gallery", () => {
+    expect(render(<GalleryImage src="/a" alt="A" />)).toContain('alt="A"');
+    expect(render(<GalleryImage src="" alt="A" />)).toBe("");
   });
 
   it("renders spec rows in mono and skips empty pairs", () => {

@@ -31,6 +31,7 @@ const SHIPPED = [
   "shop.faq-item",
   "shop.product-hero",
   "shop.product-gallery",
+  "shop.gallery-image",
   "shop.spec-table",
   "shop.add-to-cart",
   "shop.related-products",
@@ -75,5 +76,6 @@ describe("demo-webshop", () => {
     expect(slot("shop.footer", "nav")).toMatchObject({ cardinality: "many", accepts: ["shop.nav-link"] });
     expect(slot("shop.related-products", "items")).toMatchObject({ cardinality: "many", accepts: ["shop.product-card"] });
     expect(slot("shop.product-hero", "media")).toMatchObject({ cardinality: "single", accepts: ["shop.product-gallery"] });
+    expect(slot("shop.product-gallery", "images")).toMatchObject({ cardinality: "many", accepts: ["shop.gallery-image"] });
   });
 });
