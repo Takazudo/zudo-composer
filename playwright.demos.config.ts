@@ -26,7 +26,9 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
   },
   webServer: {
-    command: `pnpm --filter demo-${name} dev --port ${PORT} --strict-port`,
+    // Pin the bind address the probe uses: on the Linux CI runner Node resolves
+    // `localhost` to `::1`, so a default bind never answers on 127.0.0.1.
+    command: `pnpm --filter demo-${name} dev --host 127.0.0.1 --port ${PORT} --strict-port`,
     // The shell middleware answers only requests that accept `text/html`, so
     // readiness polls Vite's own client module instead — served by the dev
     // server itself, and 200 as soon as it listens (same probe as the host
