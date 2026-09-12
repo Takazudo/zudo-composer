@@ -7,7 +7,14 @@ const site = defineSite({ id: "demo-webshop", name: "Demo Webshop", componentPac
 
 const home = site.page({
   name: "Home",
-  root: [node("shop.hello", { text: "Hello from the demo webshop. Catalog, product pages and a mock checkout arrive in later tasks." }, {}, "home-hello")],
+  root: [
+    node(
+      "shop.section-heading",
+      { eyebrow: "Nightjar Supply", heading: "Objects for quiet work", intro: "The catalog, product pages and a mock checkout arrive in later tasks.", as: "h1" },
+      {},
+      "home-heading",
+    ),
+  ],
 });
 
 const homeRoute = { title: "Home", page: home };

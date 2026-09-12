@@ -1,10 +1,110 @@
 /* The host's base stylesheet: Tailwind v4 with NO default theme. Every utility
-   a component uses comes from the `shop-` token namespace declared here. */
+   a component uses comes from the `shop-` token namespace declared here, so
+   `p-4`, `rounded-lg` or `shadow-md` generate nothing. Tokens and their only
+   permitted uses: docs/demo-sites/webshop.md § 3. */
 @import "tailwindcss/preflight";
 @import "tailwindcss/utilities";
 
-@source "../components";
-
-@theme {
-  --color-shop-accent: oklch(55% 0.16 30);
+/* Raw tier: prefix-first, never utilities. */
+:root {
+  --shop-palette-gray-0: oklch(0.14 0.005 70);
+  --shop-palette-gray-1: oklch(0.18 0.005 70);
+  --shop-palette-gray-2: oklch(0.23 0.006 70);
+  --shop-palette-gray-3: oklch(0.32 0.006 70);
+  --shop-palette-gray-4: oklch(0.5 0.008 70);
+  --shop-palette-gray-5: oklch(0.66 0.008 70);
+  --shop-palette-gray-6: oklch(0.84 0.008 70);
+  --shop-palette-gray-7: oklch(0.96 0.006 70);
+  --shop-palette-brass-3: oklch(0.78 0.13 85);
+  --shop-palette-brass-4: oklch(0.7 0.13 85);
+  --shop-palette-brass-5: oklch(0.58 0.12 85);
+  --shop-palette-green-4: oklch(0.72 0.14 150);
+  --shop-palette-red-4: oklch(0.66 0.18 25);
 }
+
+/* Semantic tier. Font sizes use Tailwind v4's `--text-*` namespace (the spec's
+   `--font-size-shop-*`), which is what generates `text-shop-caption` etc. */
+@theme {
+  --color-shop-bg: var(--shop-palette-gray-0);
+  --color-shop-surface: var(--shop-palette-gray-1);
+  --color-shop-surface-2: var(--shop-palette-gray-2);
+  --color-shop-border: var(--shop-palette-gray-3);
+  --color-shop-faint: var(--shop-palette-gray-4);
+  --color-shop-muted: var(--shop-palette-gray-5);
+  --color-shop-fg: var(--shop-palette-gray-6);
+  --color-shop-fg-strong: var(--shop-palette-gray-7);
+  --color-shop-link: var(--shop-palette-gray-7);
+  --color-shop-inverse-bg: var(--shop-palette-gray-7);
+  --color-shop-inverse-fg: var(--shop-palette-gray-0);
+  --color-shop-price: var(--shop-palette-gray-7);
+  --color-shop-accent: var(--shop-palette-brass-4);
+  --color-shop-accent-fg: var(--shop-palette-gray-0);
+  --color-shop-focus: var(--shop-palette-brass-3);
+  --color-shop-success: var(--shop-palette-green-4);
+  --color-shop-danger: var(--shop-palette-red-4);
+
+  --spacing-shop-hsp-xs: 0.5rem;
+  --spacing-shop-hsp-sm: 0.75rem;
+  --spacing-shop-hsp-md: 1.25rem;
+  --spacing-shop-hsp-lg: 2rem;
+  --spacing-shop-hsp-xl: 3rem;
+  --spacing-shop-hsp-2xl: 5rem;
+  --spacing-shop-vsp-xs: 0.5rem;
+  --spacing-shop-vsp-sm: 0.75rem;
+  --spacing-shop-vsp-md: 1.5rem;
+  --spacing-shop-vsp-lg: 3rem;
+  --spacing-shop-vsp-xl: 5rem;
+  --spacing-shop-vsp-2xl: 8rem;
+  --spacing-shop-control-h: 2.75rem;
+  --spacing-shop-nav-h: 3.5rem;
+
+  --text-shop-caption: 0.75rem;
+  --text-shop-caption--line-height: 1.5;
+  --text-shop-body: 0.9375rem;
+  --text-shop-body--line-height: 1.6;
+  --text-shop-lead: 1.125rem;
+  --text-shop-lead--line-height: 1.6;
+  --text-shop-h3: 1.125rem;
+  --text-shop-h3--line-height: 1.35;
+  --text-shop-h2: 1.5rem;
+  --text-shop-h2--line-height: 1.25;
+  --text-shop-h1: 2.25rem;
+  --text-shop-h1--line-height: 1.15;
+  --text-shop-display: 3.5rem;
+  --text-shop-display--line-height: 1.02;
+
+  --font-shop-sans: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  --font-shop-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-weight-shop-normal: 400;
+  --font-weight-shop-semibold: 600;
+  --tracking-shop-caps: 0.08em;
+  --tracking-shop-tight: -0.01em;
+
+  --radius-shop-dot: 9999px;
+  --shadow-shop-drawer: -24px 0 48px oklch(0 0 0 / 0.55);
+  --container-shop-page: 80rem;
+  --container-shop-prose: 40rem;
+
+  --breakpoint-shop-sm: 40rem;
+  --breakpoint-shop-md: 48rem;
+  --breakpoint-shop-lg: 64rem;
+  --breakpoint-shop-xl: 80rem;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-shop-bg);
+    color: var(--color-shop-fg);
+    font-family: var(--font-shop-sans);
+    font-size: var(--text-shop-body);
+    line-height: var(--text-shop-body--line-height);
+  }
+
+  /* The accent's only unbounded use (§ 3): a 2px focus ring, offset 2px. */
+  :where(a, button, input, select, textarea, summary):focus-visible {
+    outline: 2px solid var(--color-shop-focus);
+    outline-offset: 2px;
+  }
+}
+
+@source "../components";
