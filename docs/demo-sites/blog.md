@@ -19,9 +19,11 @@ Rules are 1px hairlines; images are full-measure rectangles with captions.
 ## 2. Non-negotiables
 
 1. Accent (`blog-accent`, oxblood) in chrome ≤ 1 element per viewport (the
-   active tag chip, the current nav item underline, or the comment-form
-   button) — never two at once. Prose links are also accent (underline), but
-   prose links are text, not chrome, and are excluded from this count.
+   current nav item underline, the drop cap, or the comment-form button) —
+   never two at once. The active tag chip is neutral (`blog-surface-2` fill,
+   `blog-fg-strong` text) because `/articles` already shows the nav
+   underline. Prose links are also accent (underline), but prose links are
+   text, not chrome, and are excluded from this count.
 2. Hover on prose links = `text-blog-fg-strong` with the underline kept;
    hover on chrome links (nav, card titles, tags) = underline appears, colour
    unchanged. No background fills on hover, no accent hover.
@@ -78,14 +80,14 @@ The brand ramp and the accent ramp are the same oxblood ramp.
 | --- | --- | --- |
 | `--color-blog-bg` | gray-0 | page, header, footer |
 | `--color-blog-surface` | gray-1 | inputs, inline code, callout, comment body ground |
-| `--color-blog-surface-2` | gray-2 | active tag chip background (with `blog-accent` text — this is the chip's accent use) |
+| `--color-blog-surface-2` | gray-2 | active tag chip background (with `blog-fg-strong` text — the chip spends no accent) |
 | `--color-blog-border` | gray-3 | every hairline: header bottom, card top rules, footer top, input border, blockquote bar |
 | `--color-blog-faint` | gray-4 | placeholders, disabled |
 | `--color-blog-muted` | gray-5 | eyebrows, dates, bylines, tags at rest, reading time |
 | `--color-blog-fg` | gray-6 | body, intros, comments |
 | `--color-blog-fg-strong` | gray-7 | titles, nav, card titles, primary button fill |
 | `--color-blog-link` | oxblood-4 | prose links only (underline `currentColor`, offset 3px); hover `blog-fg-strong` |
-| `--color-blog-accent` | oxblood-4 | *scarce* chrome — active tag chip text, current nav underline, drop cap on article first paragraph |
+| `--color-blog-accent` | oxblood-4 | *scarce* chrome — current nav underline, drop cap on article first paragraph (from `lg` up) |
 | `--color-blog-accent-strong` | oxblood-5 | primary button hover, focus ring |
 | `--color-blog-accent-soft` | oxblood-1 | callout background |
 | `--color-blog-focus` | oxblood-5 | `:focus-visible` 2px outline |
@@ -300,7 +302,7 @@ Every mock shows `blog.demo-note`.
 
 | Interaction | Behaviour |
 | --- | --- |
-| Tag filter | Chips on `/articles`: All / Craft / Attention / Tools (single select); cards hide when none of `tag1…3` matches; the active chip is the viewport's accent chrome element; state in `?tag=` |
+| Tag filter | Chips on `/articles`: All / Craft / Attention / Tools (single select); cards hide when none of `tag1…3` matches; the active chip is neutral (`blog-surface-2` fill, `aria-pressed`) so the header's nav underline stays the viewport's one accent chrome element; state in `?tag=` |
 | Comment form | Name (required), email (format), comment (≥ 10 chars) → 600 ms disabled → a new `blog.comment` appears at the end of the list for this page session; success text "Posted locally — this demo keeps nothing." |
 | Newsletter | Email format → 600 ms → success text |
 | Reading time | `ceil(bodyLength / 1100)` minutes, rendered "6 min read" in the byline |
@@ -342,7 +344,9 @@ state; no 404 page is authored.
 
 - Accent chrome elements per viewport: ≤ 1 (current nav underline in the
   first viewport; the drop cap in the second; the comment button in the last).
-  Prose links are accent text and excluded.
+  Prose links are accent text and excluded. Below `lg` the drop cap reaches the
+  first viewport beside the nav underline, so it is `blog-fg-strong` there and
+  takes the accent only from `lg` up.
 - Radius declarations: 1 (byline avatar) in the header viewport; 1 (author
   card avatar) further down; 0 elsewhere.
 - Box shadows: 0 site-wide.

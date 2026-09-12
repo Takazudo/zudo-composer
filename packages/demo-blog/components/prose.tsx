@@ -97,7 +97,7 @@ export function renderInline(text: string): ComponentChildren[] {
   return output;
 }
 
-const DROP_CAP = "first-letter:float-left first-letter:mr-blog-hsp-xs first-letter:font-blog-semibold first-letter:text-blog-drop-cap first-letter:text-blog-accent";
+const DROP_CAP = "first-letter:float-left first-letter:mr-blog-hsp-xs first-letter:font-blog-semibold first-letter:text-blog-drop-cap first-letter:text-blog-fg-strong blog-lg:first-letter:text-blog-accent";
 
 function renderBlock(block: Block, key: number, dropCap: boolean): JSX.Element {
   switch (block.kind) {

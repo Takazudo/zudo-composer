@@ -477,6 +477,7 @@
  */
 @media (pointer: coarse) {
   .cms-tree { --tree-row: 44px; --tree-cat-row: 44px; }
+  .cms-tree__toolbar .cms-btn { min-width: 44px; }
   .cms-tree-toggle { width: 44px; height: 44px; }
   .cms-tree-add__btn { width: 32px; height: 32px; }
   .cms-tree-add-root { min-height: 44px; }
