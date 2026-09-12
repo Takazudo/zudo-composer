@@ -10,13 +10,12 @@
   "scripts": {
     "dev": "zudo-composer dev",
     "generate": "zudo-composer generate",
-    "seed": "demo-tools seed",
+    "seed": "zudo-composer assets import images-src/manifest.json && zudo-composer seed",
     "build:site": "pnpm -w demo:build-site webshop",
     "test": "pnpm -w test packages/demo-webshop"
   },
   "devDependencies": {
     "@zudo-composer/component-contract": "workspace:*",
-    "demo-tools": "workspace:*",
     "preact": "^10.29.8",
     "preact-render-to-string": "^6.6.6",
     "zudo-composer": "workspace:*"

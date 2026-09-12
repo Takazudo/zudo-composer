@@ -63,11 +63,11 @@ export default defineConfig({
         },
       },
       {
-        // The demo host packages and their authoring helper. They are hosts, not
-        // the app: no jsdom, no `src/test` setup and none of the app project's
-        // `virtual:*` aliases, which a pack must never depend on. Their specs
-        // spawn `zudo-composer release` and import the packs' `.tsx` sidecars,
-        // hence the server project's JSX runtime and timeout.
+        // The demo host packages are hosts, not the app: no jsdom, no
+        // `src/test` setup and none of the app project's `virtual:*` aliases,
+        // which a pack must never depend on. Their specs spawn installed
+        // `zudo-composer` commands and import the packs' `.tsx` sidecars, hence
+        // the server project's JSX runtime and timeout.
         oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
         test: {
           name: 'demos',

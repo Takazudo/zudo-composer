@@ -24,7 +24,7 @@ describe("entry values keyed by field key", () => {
 
 describe("readAssetUrls", () => {
   it("maps each active asset's file name to its canonical authoring URL", () => {
-    const root = mkdtempSync(join(tmpdir(), "demo-tools-assets-"));
+    const root = mkdtempSync(join(tmpdir(), "authoring-assets-"));
     try {
       const assets = join(root, "media-store");
       mkdirSync(assets, { recursive: true });

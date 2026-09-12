@@ -42,8 +42,19 @@ assert.ok(browserRunner.includes("mkdtemp"), "browser runner must create an isol
 assert.ok(browserRunner.includes("ZUDO_SITE_PROJECT_ROOT"), "browser runner must pass the isolated root to CLI and Vite");
 assert.match(browserRunner, /\[join\(root, "bin\/zudo-composer\.mjs"\), "seed", "--from", /, "browser runner must activate its committed fixture through the installed seed command");
 assert.match(read("scripts/run-host-browser.mjs"), /\[join\(root, "bin\/zudo-composer\.mjs"\), "seed"\]/, "host browser runner must use the installed seed command");
-assert.match(read("packages/demo-tools/src/seed.ts"), /\[resolveComposerBin\(root\), "seed"\]/, "demo seeding must use the installed seed command");
-for (const file of ["scripts/run-site-project-browser.mjs", "scripts/run-host-browser.mjs", "packages/demo-tools/src/seed.ts"]) {
+const demoSeedCommand = "zudo-composer assets import images-src/manifest.json && zudo-composer seed";
+const demoHosts = readdirSync(join(root, "packages"), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name.startsWith("demo-"))
+  .map((entry) => entry.name)
+  .filter((name) => existsSync(join(root, "packages", name, "package.json"))
+    && ["ts", "mts", "js", "mjs", "cts", "cjs"].some((extension) => existsSync(join(root, "packages", name, `zudo-composer.config.${extension}`))))
+  .sort();
+assert.ok(demoHosts.length > 0, "at least one demo host must use the installed seed commands");
+for (const name of demoHosts) {
+  const file = `packages/${name}/package.json`;
+  assert.equal(readJson(file).scripts?.seed, demoSeedCommand, `${file} must use the installed asset-import and seed commands`);
+}
+for (const file of ["scripts/run-site-project-browser.mjs", "scripts/run-host-browser.mjs"]) {
   assert.doesNotMatch(read(file), /operation:\s*["'](?:plan|apply|build|activate)["']/, "release orchestration must remain in the seed service");
 }
 assert.ok(browserRunner.includes("env: { ...process.env, ...environment }"), "browser runner must preserve the parent process environment");

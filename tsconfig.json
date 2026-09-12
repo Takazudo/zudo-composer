@@ -11,7 +11,6 @@
     { "path": "./tests/browser/tsconfig.json" },
     { "path": "./tsconfig.plugin-declarations.json" },
     { "path": "./tsconfig.scripts.json" },
-    { "path": "./packages/demo-tools" },
     { "path": "./packages/demo-webshop" },
     { "path": "./packages/demo-landing" },
     { "path": "./packages/demo-blog" }

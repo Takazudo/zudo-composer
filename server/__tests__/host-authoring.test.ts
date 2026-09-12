@@ -6,12 +6,27 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { readAssetUrls } from "zudo-composer/authoring";
 import { loadHostContext } from "zudo-composer/vite";
-import { seedAssets } from "../../packages/demo-tools/src/seed";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const execute = promisify(execFile);
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+
+async function importAssets(host: string, manifestPath = "images-src/manifest.json"): Promise<{ added: number; skipped: number }> {
+  const bin = join(host, "node_modules/zudo-composer/bin/zudo-composer.mjs");
+  try {
+    const result = await execute(process.execPath, [bin, "assets", "import", manifestPath], { cwd: host, encoding: "utf8", timeout: 25_000 });
+    const response = JSON.parse(result.stdout) as { ok?: boolean; result?: { added: number; skipped: number } };
+    if (response.ok !== true || !response.result) throw new Error("The assets CLI did not return import counts.");
+    return response.result;
+  } catch (error: unknown) {
+    const failure = error as { code?: unknown; stderr?: unknown; stdout?: unknown; message?: string };
+    if (failure.code !== undefined) {
+      throw new Error(`assets import exited ${String(failure.code)}: ${String(failure.stderr || failure.stdout || failure.message || "")}`, { cause: error });
+    }
+    throw error;
+  }
+}
 
 async function hostFixture(settings: { dataDir?: string; assetsDir?: string }, manifestPath: string) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "host-authoring-")));
@@ -53,10 +68,10 @@ describe("host authoring through public entries", () => {
   ])("uses $assetsDirectory for importing, lookup, and byte-stable JSX generation", async ({ settings, assetsDirectory, manifestPath }) => {
     const { host } = await hostFixture(settings, manifestPath);
     const defaultManifest = manifestPath === "images-src/manifest.json" ? undefined : manifestPath;
-    expect(await seedAssets(host, defaultManifest)).toEqual({ added: 1, skipped: 0 });
+    expect(await importAssets(host, defaultManifest)).toEqual({ added: 1, skipped: 0 });
     const catalogPath = join(host, assetsDirectory, "catalog.json");
     const before = await readFile(catalogPath, "utf8");
-    expect(await seedAssets(host, defaultManifest)).toEqual({ added: 0, skipped: 1 });
+    expect(await importAssets(host, defaultManifest)).toEqual({ added: 0, skipped: 1 });
     expect(await readFile(catalogPath, "utf8")).toBe(before);
     const { composerConfig } = await loadHostContext({ workspaceRoot: host });
     expect(composerConfig.paths.assets).toBe(join(host, assetsDirectory));
@@ -98,7 +113,7 @@ export default site;
   it("surfaces public importer rejection without creating an asset store", async () => {
     const { host } = await hostFixture({ assetsDir: "media/library" }, "images-src/manifest.json");
     await writeFile(join(host, "images-src/manifest.json"), JSON.stringify([{ file: "missing.txt" }]));
-    await expect(seedAssets(host)).rejects.toThrow(/assets import exited 2:.*not-found/su);
+    await expect(importAssets(host)).rejects.toThrow(/assets import exited 2:.*not-found/su);
     await expect(readdir(join(host, "media"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
