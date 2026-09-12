@@ -56,9 +56,8 @@ export function ArticleList({ chips = false, columns = "2", mode = "all", emptyT
           <div class="mb-blog-vsp-md flex flex-wrap items-center gap-blog-hsp-xs" role="group" aria-label="Filter by tag">
             {chipOptions.map(({ value, label }) => {
               const active = value === activeTag;
-              // "All" is the resting state and shares its viewport with the header's
-              // accent nav underline, so only a chosen tag spends the accent budget.
-              const activeClass = value ? "bg-blog-surface-2 text-blog-accent" : "bg-blog-surface-2 text-blog-fg-strong";
+              // The header's current-nav underline already spends this viewport's one accent.
+              const activeClass = "bg-blog-surface-2 text-blog-fg-strong";
               return (
                 <button
                   key={value || "all"}
