@@ -14,6 +14,7 @@ export default tseslint.config(
       'coverage',
       'worktrees/**',
       '.vite/**',
+      '**/.zudo-site-project/**',
       '.artifacts/**',
       'test-results/**',
       'playwright-report/**',

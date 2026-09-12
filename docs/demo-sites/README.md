@@ -60,7 +60,7 @@ Rules that fall out of the tool's contract, and that the package tests assert:
 ```sh
 corepack pnpm --filter demo-webshop generate
 corepack pnpm --filter demo-webshop seed
-corepack pnpm --filter demo-webshop dev -- --port 4181
+corepack pnpm --filter demo-webshop dev --port 4181
 ```
 
 1. **generate** (`demo-tools generate`) imports `site-project.ts`, builds the
