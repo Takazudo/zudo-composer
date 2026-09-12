@@ -104,6 +104,7 @@ export function resolveSiteProjectLocalRoot(workspaceRoot, configured) {
  * warmed up. Test sources are excluded because no route imports them.
  */
 export function resolveAppWarmupFiles() {
+  // The static visitor entry lives under server/site-build/client, outside this tree.
   const sourceRoot = resolve(APP_ROOT, "src");
   const sourceRootPath = sourceRoot.split(sep).join("/");
   const sourceFiles = globSync("**/*.{ts,tsx,css}", {
@@ -112,7 +113,7 @@ export function resolveAppWarmupFiles() {
       const normalized = file.split(sep).join("/");
       const relativePath = normalized.startsWith(`${sourceRootPath}/`) ? normalized.slice(sourceRootPath.length + 1) : normalized;
       const segments = relativePath.split("/");
-      return segments.includes("__tests__") || segments[0] === "hosted-demo" || segments[0] === "site-static";
+      return segments.includes("__tests__") || segments[0] === "hosted-demo";
     },
   })
     .map((file) => resolve(sourceRoot, file))

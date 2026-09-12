@@ -65,7 +65,7 @@ for (const name of DEMOS) {
     const seeded = await run(pnpm, ["--filter", `demo-${name}`, "seed"], { env: environment });
     if (seeded.status !== 0) throw new Error(`Seeding demo-${name} exited ${seeded.status}.`);
 
-    const routesResult = await run(process.execPath, ["--import", "tsx", "scripts/site-static/print-routes.ts", packageRoot, assetsStoreRoot], { env: environment, capture: true });
+    const routesResult = await run(process.execPath, ["--import", "tsx", "server/site-build/print-routes.ts", packageRoot, assetsStoreRoot], { env: environment, capture: true });
     if (routesResult.status !== 0) throw new Error(`Route discovery for demo-${name} exited ${routesResult.status}.`);
     /** @type {string[]} */
     const routes = JSON.parse(routesResult.stdout);

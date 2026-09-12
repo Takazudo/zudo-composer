@@ -232,7 +232,7 @@ the way a release does: validation, an exact-version Assets lock from the
 host's `cms/assets` store and `policy: "release"`. It never reads `.zudo-site-project/`, so no
 seed or activation is needed, and a blocked project fails the build. The
 compiled project and build plan are baked into `virtual:site-static-project`.
-The entry `src/site-static/main.tsx` mounts `SiteDelivery` with a `static`
+The entry `server/site-build/client/main.tsx` mounts `SiteDelivery` with a `static`
 source at `basePath "/"`. It renders from `location.pathname` and handles clicks
 on compiled routes with `pushState`.
 
@@ -245,6 +245,11 @@ uploaded-assets/      pinned asset versions (sha256-….ext) + the host's public
 _headers              Cloudflare rules: /assets/* immutable; per-file rules for pinned assets
 site-manifest.json    not listed in itself
 ```
+
+Public files are read directly from the host's resolved `publicAssetsDir`,
+preserving nested paths under `uploaded-assets/`. A public file sharing a
+release pin's path must have identical bytes. Public checksum files receive
+the same header rules even when no page references them.
 
 ```json
 {
@@ -282,14 +287,14 @@ global-template nodes. Nav links are static props or `route-link` projections;
 the components compute active state from `location.pathname`. Href prefixing is
 a no-op at `/`, and `/uploaded-assets/` stays canonical. `/site` and
 `/website-preview` keep the full tool chrome unchanged. The page's only tool CSS
-is `src/site-static/styles.css`, which uses no authoring-app tokens.
+is `server/site-build/client/styles.css`, which uses no authoring-app tokens.
 
 **No `zudo-composer build-site` subcommand.** The build depends on this repository
-(`vite.site-static.config.ts` and `src/site-static/` are excluded from the published
-`files`, and the manifest stamps this checkout's git SHA). Shipping it would
-mean supporting static deployment for installed hosts, which the tool does not
-claim. `server/cli/run.mjs` therefore stays `dev` + `release`, and the root
-`demo:build-site` script is the one entry point.
+(`vite.site-static.config.ts` is excluded from the published `files`, and the
+manifest stamps this checkout's git SHA). The compiler, artifact helpers and
+visitor entry ship under `server/site-build/`; `zudo-composer/site-build` exposes
+the compiler and artifact API. `server/cli/run.mjs` still offers `dev` + `release`,
+and the root `demo:build-site` script is the one build entry point.
 
 ## Lists
 
