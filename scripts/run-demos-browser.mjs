@@ -161,10 +161,10 @@ for (const name of DEMOS) {
   const packageRoot = join(root, "packages", `demo-${name}`);
   const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-demos-browser-")));
   const disposableHostRoot = join(packageRoot, ".zudo-composer-demos-browser");
-  const disposableCmsRoot = join(disposableHostRoot, basename(temporaryRoot), "cms");
+  const disposableHostRunRoot = join(disposableHostRoot, basename(temporaryRoot));
+  const disposableCmsRoot = join(disposableHostRunRoot, "cms");
   const disposableReleaseRoot = join(temporaryRoot, "release");
   try {
-    await rm(disposableHostRoot, { recursive: true, force: true });
     await cp(join(packageRoot, "cms"), disposableCmsRoot, { recursive: true });
     const assetsStoreRoot = join(disposableCmsRoot, "assets");
     const environment = isolatedEnvironment(packageRoot, disposableCmsRoot, assetsStoreRoot, disposableReleaseRoot);
@@ -184,7 +184,7 @@ for (const name of DEMOS) {
     const tested = await run(pnpm, ["exec", "playwright", "test", "--config", "playwright.demos.config.ts"], { env: playwrightEnv });
     if (tested.status !== 0) failed = true;
   } finally {
-    await rm(disposableHostRoot, { recursive: true, force: true });
+    await rm(disposableHostRunRoot, { recursive: true, force: true });
     await rm(temporaryRoot, { recursive: true, force: true });
   }
 }
