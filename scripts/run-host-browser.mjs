@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 
 /** @typedef {import("node:child_process").SpawnOptions} SpawnOptions */
 /** @typedef {{status: number | null, signal: NodeJS.Signals | null, stdout: string, stderr: string}} RunResult */
-/** @typedef {{dependencies: Record<string, string>, peerDependencies: Record<string, string>}} PackageManifest */
+/** @typedef {{devDependencies: Record<string, string>, peerDependencies: Record<string, string>}} PackageManifest */
 /** @typedef {import("../src/site-project/api/types.ts").SiteProjectApiRequest} SiteProjectApiRequest */
 /** @typedef {import("../src/site-project/api/types.ts").SiteProjectApiResponse} SiteProjectApiResponse */
 /** @typedef {import("../src/site-project/api/types.ts").ReleasePlan} ReleasePlan */
@@ -89,7 +89,7 @@ function createHostFixture(parent) {
     scripts: { dev: "zudo-composer dev" },
     devDependencies: {
       "zudo-composer": "workspace:*",
-      [packPackage]: manifest.dependencies[packPackage],
+      [packPackage]: manifest.devDependencies[packPackage],
       preact: manifest.peerDependencies.preact,
     },
   }, null, 2)}\n`);
