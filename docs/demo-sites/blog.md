@@ -86,7 +86,7 @@ The brand ramp and the accent ramp are the same oxblood ramp.
 | `--color-blog-fg` | gray-6 | body, intros, comments |
 | `--color-blog-fg-strong` | gray-7 | titles, nav, card titles, primary button fill |
 | `--color-blog-link` | oxblood-4 | prose links only (underline `currentColor`, offset 3px); hover `blog-fg-strong` |
-| `--color-blog-accent` | oxblood-4 | *scarce* chrome — current nav underline, drop cap on article first paragraph |
+| `--color-blog-accent` | oxblood-4 | *scarce* chrome — current nav underline, drop cap on article first paragraph (from `lg` up) |
 | `--color-blog-accent-strong` | oxblood-5 | primary button hover, focus ring |
 | `--color-blog-accent-soft` | oxblood-1 | callout background |
 | `--color-blog-focus` | oxblood-5 | `:focus-visible` 2px outline |
@@ -343,7 +343,9 @@ state; no 404 page is authored.
 
 - Accent chrome elements per viewport: ≤ 1 (current nav underline in the
   first viewport; the drop cap in the second; the comment button in the last).
-  Prose links are accent text and excluded.
+  Prose links are accent text and excluded. Below `lg` the drop cap reaches the
+  first viewport beside the nav underline, so it is `blog-fg-strong` there and
+  takes the accent only from `lg` up.
 - Radius declarations: 1 (byline avatar) in the header viewport; 1 (author
   card avatar) further down; 0 elsewhere.
 - Box shadows: 0 site-wide.
