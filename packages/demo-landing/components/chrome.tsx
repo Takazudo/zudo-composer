@@ -74,13 +74,13 @@ export interface HeaderProps {
 export function Header({ brand, brandHref, nav, action }: HeaderProps) {
   return (
     <header class="sticky top-0 z-10 border-b border-land-border bg-land-bg">
-      <div class="mx-auto flex min-h-land-nav-h w-full max-w-land-page flex-wrap items-center gap-x-land-hsp-lg gap-y-land-vsp-xs px-land-hsp-md land-lg:px-land-hsp-xl">
+      <div class="mx-auto flex min-h-land-nav-h w-full max-w-land-page flex-wrap items-center gap-x-land-hsp-lg gap-y-land-vsp-xs px-land-hsp-md py-land-vsp-xs land-md:py-[0] land-lg:px-land-hsp-xl">
         <a href={brandHref || "/"} class="flex items-center gap-land-hsp-xs text-land-h3 text-land-fg-strong">
           <OrreryMark class="size-land-icon" />
           <span>{brand}</span>
         </a>
-        <nav aria-label="Primary" class="flex flex-1 flex-wrap items-center gap-x-land-hsp-md">{nav}</nav>
-        <div class="flex items-center">{action}</div>
+        <nav aria-label="Primary" class="order-last flex w-full items-center gap-x-land-hsp-md land-md:order-none land-md:w-auto land-md:flex-1">{nav}</nav>
+        <div class="ml-auto flex items-center land-md:ml-[0]">{action}</div>
       </div>
     </header>
   );
