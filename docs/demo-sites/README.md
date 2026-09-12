@@ -221,8 +221,9 @@ at `/`, with no authoring routes and no tool chrome.
 ```sh
 corepack pnpm demo:build-site webshop            # or landing / blog / a host directory
 corepack pnpm --filter demo-webshop build:site   # the same, from the package
-corepack pnpm site-static:verify packages/demo-webshop/dist-site [git-sha]
+corepack pnpm site-static:verify packages/demo-webshop/dist-site [expected-host-revision]
 zudo-composer build-site --root /absolute/path/to/host
+zudo-composer build-site --root /absolute/path/to/host --source-revision <host-revision>
 zudo-composer build-site --root /absolute/path/to/host --print-routes
 zudo-composer build-site --verify /absolute/path/to/dist-site
 ```
@@ -263,7 +264,8 @@ the same header rules even when no page references them.
 {
   "schemaVersion": 1,
   "projectId": "demo-webshop",
-  "sourceRevision": "<40-hex git HEAD at build time>",
+  "tool": { "name": "zudo-composer", "version": "0.0.0" },
+  "sourceRevision": "<optional caller-supplied host revision>",
   "projectSourceRevision": "<sha256 of canonical site-project.json>",
   "routes": ["/", "…every compiled sitemap pathname"],
   "files": { "<relative path>": "<sha256>" }
@@ -279,7 +281,19 @@ The verifier rejects:
 - a symlink
 - server or filesystem markers (`node:fs`, `.zudo-site-project`, …) in HTML, JS or CSS
 
-It takes an optional expected git SHA for CI.
+`tool` comes from the installed tool's `package.json`: `name`, `version`, and
+the package's `gitHead` if one is present. The static builder performs no Git
+lookup. `sourceRevision` is the exact nonempty `--source-revision` value,
+defaulting to a nonempty `GITHUB_SHA`; the key is absent when neither is given.
+It identifies the host's source and may use any revision system.
+`projectSourceRevision` remains the SHA-256 of the canonical SiteProject data.
+
+Verification compares any supplied expected host revision exactly, including
+failing when the manifest omits it. The build command uses its resolved revision
+as the expected value when verifying, also in `--verify` and `--print-routes`
+modes. CI explicitly verifies each artifact against its expected Git SHA. The
+hosted composer demo records the same tool identity and still requires a full
+40-hex Git SHA; the three production site targets retain that requirement too.
 
 **Serving.** Routes are client-side, and only `index.html` exists. So the
 server must answer every unknown path with `index.html` (Cloudflare Workers
@@ -306,10 +320,8 @@ directory's routes. A missing or invalid artifact exits unsuccessfully.
 
 The compiler, artifact helpers, Vite configuration and visitor entry ship under
 `server/site-build/`; `zudo-composer/site-build` retains the compiler and artifact
-API. The manifest currently still stamps the tool checkout's git HEAD, so a
-packed installation without that Git checkout cannot yet finish a new build.
-Artifact inspection has no Git requirement. The independent source revision
-work will remove that remaining installed-build limitation.
+API, including the `SiteManifest` and `ToolIdentity` types. Both building and
+artifact inspection work in a host without a Git checkout.
 
 ## Lists
 

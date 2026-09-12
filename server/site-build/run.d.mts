@@ -8,6 +8,10 @@ export interface BuildSiteOptions {
   printRoutes?: boolean;
   /** Absolute resolved artifact directory to verify without building. */
   verifyDirectory?: string;
+  /** Host revision to record or verify exactly; defaults to GITHUB_SHA, absent otherwise. */
+  sourceRevision?: string;
+  /** Environment for host config and the GITHUB_SHA default; defaults to process.env. */
+  env?: Record<string, string | undefined>;
 }
 
 export function runSiteBuild(

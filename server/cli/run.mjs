@@ -37,6 +37,9 @@ build-site options:
   --print-routes   Verify an existing artifact and print its routes as JSON.
   --verify <dir>   Verify this artifact instead of building (relative to cwd).
                   Combine with --print-routes to print this artifact's routes.
+  --source-revision <revision>
+                  Host revision to record or verify exactly (default: GITHUB_SHA
+                  when nonempty; omitted otherwise).
 `;
 
 /**
@@ -70,6 +73,10 @@ export function parseArguments(argv) {
         const directory = value();
         if (directory === undefined) return { error: "--verify requires a directory." };
         options.verifyDirectory = resolve(directory);
+      } else if (argument === "--source-revision") {
+        const revision = value();
+        if (revision === undefined || revision.trim() === "") return { error: "--source-revision requires a nonempty revision." };
+        options.sourceRevision = revision;
       } else return { error: `Unknown build-site option "${argument}".` };
     } else if (argument === "--strict-port") options.strictPort = true;
     else if (argument === "--host") options.host = value() ?? true;
@@ -147,11 +154,12 @@ export async function runComposerCli(argv, deps = {}) {
     return;
   }
   if (parsed.command === "build-site") {
-    const { workspaceRoot, printRoutes, verifyDirectory } = parsed.options;
+    const { workspaceRoot, printRoutes, verifyDirectory, sourceRevision } = parsed.options;
     const args = [BUILD_SITE_ENTRY_PATH];
     if (workspaceRoot !== undefined) args.push("--root", workspaceRoot);
     if (printRoutes) args.push("--print-routes");
     if (verifyDirectory !== undefined) args.push("--verify", verifyDirectory);
+    if (sourceRevision !== undefined) args.push("--source-revision", sourceRevision);
     spawnSupervised({
       command: proc.execPath,
       args,

@@ -194,6 +194,8 @@ for (const required of [
   'server/site-build/vite-config.ts',
   'server/site-build/run.mjs',
   'server/site-build/run.d.mts',
+  'server/site-build/source-revision.mjs',
+  'server/site-build/source-revision.d.mts',
   'server/site-build/print-routes.ts',
   'server/site-build/client/main.tsx',
   'server/site-build/client/styles.css',

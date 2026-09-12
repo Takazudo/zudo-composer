@@ -1,5 +1,5 @@
 import * as authoring from "zudo-composer/authoring";
-import { compileStaticSite, type StaticSiteCompilation, type SiteManifest } from "zudo-composer/site-build";
+import { compileStaticSite, createSiteManifest, type StaticSiteCompilation, type SiteManifest, type ToolIdentity } from "zudo-composer/site-build";
 import { loadHostContext, type HostContext, type ResolvedComponentPack } from "zudo-composer/vite";
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -9,6 +9,10 @@ export type CompilationReturn = Assert<Equal<Awaited<ReturnType<typeof compileSt
 export type ContextReturn = Assert<Equal<Awaited<ReturnType<typeof loadHostContext>>, HostContext>>;
 export type PackIdentity = Assert<Equal<HostContext["packIdentity"], ResolvedComponentPack>>;
 export type ValidationIsTyped = Assert<Equal<ReturnType<typeof authoring.validateSiteProject>["ok"], boolean>>;
+export type ManifestToolIdentity = Assert<Equal<SiteManifest["tool"], ToolIdentity>>;
+export type OptionalHostRevision = Assert<Equal<SiteManifest["sourceRevision"], string | undefined>>;
+export type OptionalToolGitHead = Assert<Equal<ToolIdentity["gitHead"], string | undefined>>;
+export type ManifestOptions = Assert<Equal<Parameters<typeof createSiteManifest>[0]["sourceRevision"], string | undefined>>;
 
 export async function consumer(root: string): Promise<SiteManifest["routes"]> {
   const context = await loadHostContext({ workspaceRoot: root });

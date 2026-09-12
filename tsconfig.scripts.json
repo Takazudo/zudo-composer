@@ -42,6 +42,7 @@
     "server/site-build/artifact.mjs",
     "server/site-build/assets.ts",
     "server/site-build/run.mjs",
+    "server/site-build/source-revision.mjs",
     "server/cli/run.mjs",
     "server/cli/build-site-entry.mjs",
     "server/site-build/print-routes.ts",

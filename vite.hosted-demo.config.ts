@@ -14,6 +14,7 @@ import sample from "./src/hosted-demo/sample-project.json";
 import { prepareDemoAsset } from "./scripts/hosted-demo/prepare";
 import { ASSET_AUTHORING_URL_PATTERN, ASSET_CHECKSUM_URL_SOURCE, ASSET_CONTENT_TYPE_BY_EXTENSION, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_KINDS, ASSET_NOSNIFF } from "./src/assets/model/asset-kinds.mjs";
 import { HOSTED_DEMO_HEADERS } from "./scripts/hosted-demo/artifact.mjs";
+import { readToolIdentity } from "./server/site-build/artifact.mjs";
 import { hostedAssetHeaders } from "./src/assets/model/asset-kinds.mjs";
 const root = import.meta.dirname;
 const pack = componentPackPlugin({ workspaceRoot: root, pack: hostConfig.pack });
@@ -54,7 +55,7 @@ const demo: Plugin = {
     }
     await walk(output);
     const sourceRevision = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-    await writeFile(resolve(output, "hosted-demo-manifest.json"), JSON.stringify({ schemaVersion: 1, sourceRevision, projectSourceRevision: createHash("sha256").update(serializeSiteProject(sample as SiteProject)).digest("hex"), mode: "disposable-hosted-demo", assets }, null, 2) + "\n");
+    await writeFile(resolve(output, "hosted-demo-manifest.json"), JSON.stringify({ schemaVersion: 1, tool: await readToolIdentity(), sourceRevision, projectSourceRevision: createHash("sha256").update(serializeSiteProject(sample as SiteProject)).digest("hex"), mode: "disposable-hosted-demo", assets }, null, 2) + "\n");
   },
 };
 export default defineConfig({ base: "/", publicDir: false, build: { outDir: "dist-hosted-demo" }, plugins: [demo, pack, hostStylesPlugin({ stylesPath: resolve(root, "styles/base.css"), styles: hostConfig.styles, configPath: resolve(root, "zudo-composer.config.ts") }), tailwindPlugin(), preact()] });

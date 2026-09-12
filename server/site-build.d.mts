@@ -617,13 +617,13 @@ declare function siteHeaders(pinned: Array<{
 }>): string;
 /**
  * Hash every file of a finished build (except the manifest itself).
- * @param {{ directory: string, projectId: string, sourceRevision: string, projectSourceRevision: string, routes: string[] }} options
+ * @param {{ directory: string, projectId: string, sourceRevision?: string, projectSourceRevision: string, routes: string[] }} options
  * @returns {Promise<SiteManifest>}
  */
 declare function createSiteManifest({ directory, projectId, sourceRevision, projectSourceRevision, routes }: {
     directory: string;
     projectId: string;
-    sourceRevision: string;
+    sourceRevision?: string;
     projectSourceRevision: string;
     routes: string[];
 }): Promise<SiteManifest>;
@@ -638,14 +638,20 @@ declare function verifySiteStaticArtifact({ directory, expectedSourceRevision }:
 }): Promise<SiteManifest>;
 declare const SITE_MANIFEST: "site-manifest.json";
 declare const SITE_HEADERS: "_headers";
+type ToolIdentity = {
+    name: string;
+    version: string;
+    gitHead?: string;
+};
 type SiteManifest = {
     schemaVersion: 1;
     projectId: string;
-    sourceRevision: string;
+    tool: ToolIdentity;
+    sourceRevision?: string;
     projectSourceRevision: string;
     routes: string[];
     files: Record<string, string>;
 };
 
 export { SITE_HEADERS, SITE_MANIFEST, compileStaticSite, createSiteManifest, siteHeaders, verifySiteStaticArtifact };
-export type { SiteManifest, StaticSiteCompilation };
+export type { SiteManifest, StaticSiteCompilation, ToolIdentity };

@@ -5,12 +5,14 @@ import { resolve } from "node:path";
 import { APP_ROOT, resolveWorkspaceRoot, validateRootOverride } from "../../plugins/roots.mjs";
 import { createModuleEvaluator } from "../module-evaluator.mjs";
 import { verifySiteStaticArtifact } from "../site-build.mjs";
+import { resolveSiteSourceRevision } from "./source-revision.mjs";
 
 /**
  * @param {import("./run.d.mts").BuildSiteOptions} [options]
  * @param {{build?: (config: import("vite").InlineConfig) => Promise<unknown>}} [deps]
  */
 export async function runSiteBuild(options = {}, deps = {}) {
+  const sourceRevision = resolveSiteSourceRevision(options.sourceRevision, options.env);
   const workspaceRoot = resolveWorkspaceRoot(options.workspaceRoot);
   const directory = validateRootOverride(options.verifyDirectory, "Verification directory") ?? resolve(workspaceRoot, "dist-site");
   if (options.verifyDirectory === undefined && !options.printRoutes) {
@@ -22,10 +24,10 @@ export async function runSiteBuild(options = {}, deps = {}) {
     /** @type {import("vite").InlineConfig} */
     let config;
     try {
-      const { resolveStaticSiteConfig } = /** @type {{resolveStaticSiteConfig: (options: {workspaceRoot: string}) => Promise<import("vite").InlineConfig>}} */ (
+      const { resolveStaticSiteConfig } = /** @type {typeof import("./vite-config.js")} */ (
         await createModuleEvaluator(APP_ROOT)(resolve(APP_ROOT, "server/site-build/vite-config.ts"))
       );
-      config = await resolveStaticSiteConfig({ workspaceRoot });
+      config = await resolveStaticSiteConfig({ workspaceRoot, sourceRevision, env: options.env });
     } finally {
       // Remove only our temporary default, including on evaluation failure.
       // Vite must still see an unset/empty value to honor the host's .env
@@ -38,5 +40,5 @@ export async function runSiteBuild(options = {}, deps = {}) {
     const build = deps.build ?? (await import("vite")).build;
     await build(config);
   }
-  return verifySiteStaticArtifact({ directory });
+  return verifySiteStaticArtifact({ directory, expectedSourceRevision: sourceRevision });
 }

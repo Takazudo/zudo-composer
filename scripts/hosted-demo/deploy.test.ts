@@ -34,6 +34,7 @@ const artifactVerifier = async ({ directory }: { directory: string }) => ({
   root: directory,
   manifest: {
     schemaVersion: 1,
+    tool: { name: "zudo-composer", version: "0.0.0" },
     sourceRevision: SOURCE_REVISION,
     projectSourceRevision: PROJECT_REVISION,
     mode: "disposable-hosted-demo",
@@ -79,7 +80,7 @@ function fakeRunner(options: { uploadOutput?: string; failAfterAccept?: boolean 
 
 const siteArtifactVerifier = async ({ directory }: { directory: string }) => ({
   root: directory,
-  manifest: { schemaVersion: 1, projectId: "demo-webshop", sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, routes: ["/", "/about"], files: {} },
+  manifest: { schemaVersion: 1, projectId: "demo-webshop", tool: { name: "zudo-composer", version: "0.0.0" }, sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, routes: ["/", "/about"], files: {} },
   files: [],
 });
 

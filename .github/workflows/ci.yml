@@ -93,6 +93,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # demo:build-site both builds and verifies the manifest (scripts/build-site-static.mjs).
       - run: pnpm demo:build-site ${{ matrix.site }}
+      - run: pnpm site-static:verify "packages/demo-${{ matrix.site }}/dist-site" "${{ github.sha }}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: demo-site-${{ matrix.site }}-${{ github.sha }}
