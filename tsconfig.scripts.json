@@ -38,7 +38,9 @@
     "scripts/hosted-demo/deploy.mjs",
     "scripts/hosted-demo/live-check.mjs",
     "scripts/hosted-demo/workflow-guard.mjs",
-    "scripts/site-static/artifact.mjs",
+    "server/site-build/artifact.mjs",
+    "scripts/build-public-entries.mjs",
+    "scripts/verify-public-install.mjs",
     "scripts/check-site-static.mjs",
     "scripts/build-site-static.mjs",
     "scripts/boundary-source.d.mts"

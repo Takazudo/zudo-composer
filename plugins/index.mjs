@@ -10,3 +10,7 @@ export { default as componentPackPlugin, COMPONENT_PACK_ID } from "./component-p
 export { default as hostStylesPlugin, HOST_STYLES_ID } from "./host-styles-plugin.mjs";
 export { assertPackSourcesResolvable, resolveComponentPack } from "./component-pack.mjs";
 export { APP_ROOT, appModuleId, fsModuleId, resolveWorkspaceRoot } from "./roots.mjs";
+export { loadHostContext } from "../server/host-context.mjs";
+
+/** @typedef {import("./component-pack.mjs").ResolvedComponentPack} ResolvedComponentPack The resolved pack identity returned as HostContext.packIdentity. */
+/** @typedef {import("../server/host-context.mjs").HostContext} HostContext */

@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { HOSTED_DEMO_LIVE_ROUTES, verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
-import { HOSTED_DEMO_HEADERS, hostedAssetHeaders, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
+import { HOSTED_DEMO_HEADERS, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
 import { TARGETS } from "./targets.mjs";
-import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, siteHeaders } from "../site-static/artifact.mjs";
-import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
+import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, siteHeaders } from "../../server/site-build/artifact.mjs";
+import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition, hostedAssetHeaders } from "../../src/assets/model/asset-kinds.mjs";
 
 const SOURCE_REVISION = "c".repeat(40);
 const PROJECT_REVISION = "d".repeat(64);

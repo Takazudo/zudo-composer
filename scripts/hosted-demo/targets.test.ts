@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createSiteManifest, SITE_HEADERS, SITE_MANIFEST, siteHeaders } from "../site-static/artifact.mjs";
+import { createSiteManifest, SITE_HEADERS, SITE_MANIFEST, siteHeaders } from "../../server/site-build/artifact.mjs";
 import { DEFAULT_TARGET_KEY, HOSTED_DEMO_LIVE_ROUTES, TARGET_KEYS, TARGETS, resolveTarget } from "./targets.mjs";
 
 const directories: string[] = [];
