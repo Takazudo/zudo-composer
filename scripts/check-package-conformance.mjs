@@ -191,6 +191,7 @@ for (const packed of rootPackedPaths) {
   assert(!/\.test\./u.test(packed), `packed archive exposes a test file: ${packed}`);
   assert(!packed.startsWith('src/test/'), `packed archive exposes test helpers: ${packed}`);
   assert(!packed.startsWith('fixtures/'), `packed archive exposes the host fixture: ${packed}`);
+  assert(!packed.startsWith('packages/demo-'), `packed archive exposes a demo host package: ${packed}`);
   assert(!packed.startsWith('tests/'), `packed archive exposes browser tests: ${packed}`);
   assert(!/^playwright[.a-z-]*\.config\.ts$/u.test(packed), `packed archive exposes Playwright configuration: ${packed}`);
   assert(!packed.startsWith('scripts/'), `packed archive exposes repository scripts: ${packed}`);

@@ -1,0 +1,10 @@
+/* The host's base stylesheet: Tailwind v4 with NO default theme. Every utility
+   a component uses comes from the `blog-` token namespace declared here. */
+@import "tailwindcss/preflight";
+@import "tailwindcss/utilities";
+
+@source "../components";
+
+@theme {
+  --color-blog-accent: oklch(55% 0.16 150);
+}
