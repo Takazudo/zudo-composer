@@ -5,7 +5,7 @@ import { Markdown, parseBlocks } from "../components/markdown";
 import { isActivePath } from "../components/nav-link";
 import { formatPrice } from "../components/price-tag";
 
-const item = (name: string, price: number, category = "desk", featured = false, tags: string[] = []): GridItemData => ({ name, price, category, featured, tags });
+const item = (name: string, price: number, category = "desk", featured = false, tags: string[] = []): GridItemData => ({ slug: name.toLowerCase(), name, price, category, featured, tags });
 
 describe("computeGridView", () => {
   const items = [["a", item("Beta", 30, "desk", false, ["brass"])], ["b", item("Alpha", 10, "light", true)], ["c", item("Gamma", 20, "carry", true)]] as const;

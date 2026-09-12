@@ -1,8 +1,8 @@
 import { defineComponent } from "@zudo-composer/component-contract";
 import type { ComponentChildren } from "preact";
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { GridRegistryContext, GridViewContext, type GridRegistry } from "./grid-context";
-import { SHOP_SORTS, computeGridView, type GridItemData, type ShopSort } from "./grid-view";
+import { useEffect, useState } from "preact/hooks";
+import { GridRegistryContext, GridViewContext, useGridRegistry } from "./grid-context";
+import { SHOP_SORTS, computeGridView, type ShopSort } from "./grid-view";
 import { Pagination } from "./pagination";
 import { CAPS, CONTROL } from "./tone";
 
@@ -53,34 +53,12 @@ function writeQuery(state: ToolbarState, defaultSort: ShopSort): void {
   history.replaceState(history.state, "", `${location.pathname}${query ? `?${query}` : ""}${location.hash}`);
 }
 
-function useRegistry() {
-  const [items, setItems] = useState<ReadonlyMap<string, GridItemData>>(new Map());
-  const sequence = useRef(new Map<string, number>());
-  const registry = useMemo<GridRegistry>(() => ({
-    register(id, data) {
-      if (!sequence.current.has(id)) sequence.current.set(id, sequence.current.size === 0 ? 0 : Math.max(...sequence.current.values()) + 1);
-      setItems((previous) => new Map(previous).set(id, data));
-    },
-    unregister(id) {
-      sequence.current.delete(id);
-      setItems((previous) => {
-        const next = new Map(previous);
-        next.delete(id);
-        return next;
-      });
-    },
-  }), []);
-  // Natural order is first-registration order, i.e. the DOM (= Mapping query) order.
-  const ordered = [...items].sort(([a], [b]) => (sequence.current.get(a) ?? 0) - (sequence.current.get(b) ?? 0));
-  return { registry, ordered };
-}
-
 function label(category: string): string {
   return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
 export function ProductGrid({ toolbar = true, chips = true, pageSize = 8, defaultSort = "featured", emptyText = "No products match.", items }: ProductGridProps) {
-  const { registry, ordered } = useRegistry();
+  const { registry, ordered } = useGridRegistry();
   const [state, setState] = useState<ToolbarState>({ categories: [], sort: defaultSort, search: "", page: 1 });
   const [searchInput, setSearchInput] = useState("");
   const [urlReady, setUrlReady] = useState(false);

@@ -6,3 +6,7 @@ export const PRIMARY_CTA =
 export const SECONDARY_CTA = `inline-flex items-center h-shop-control-h px-shop-hsp-md border border-shop-border text-shop-fg-strong text-shop-body ${HOVER_INVERT}`;
 export const CONTROL =
   "h-shop-control-h px-shop-hsp-sm border border-shop-border bg-shop-surface text-shop-fg-strong text-shop-body placeholder:text-shop-faint";
+export const DISABLED_CTA =
+  "inline-flex items-center justify-center h-shop-control-h px-shop-hsp-md border border-shop-border bg-shop-surface text-shop-faint text-shop-body cursor-not-allowed";
+export const FIELD_LABEL = "text-shop-caption text-shop-muted";
+export const FIELD_ERROR = "text-shop-caption text-shop-danger";

@@ -37,7 +37,7 @@ export function ProductCard({
   tag2 = "",
   tag3 = "",
 }: ProductCardProps) {
-  const view = useGridItem({ name, price, category, featured, tags: [tag1, tag2, tag3].filter((tag) => tag !== "") });
+  const view = useGridItem({ slug, name, price, category, featured, tags: [tag1, tag2, tag3].filter((tag) => tag !== "") });
   return (
     <a
       href={href}

@@ -3,6 +3,7 @@ export type ShopSort = "featured" | "price-asc" | "price-desc" | "name";
 export const SHOP_SORTS: readonly ShopSort[] = ["featured", "price-asc", "price-desc", "name"];
 
 export interface GridItemData {
+  readonly slug: string;
   readonly name: string;
   readonly price: number;
   readonly category: string;
@@ -64,4 +65,19 @@ export function computeGridView(items: readonly (readonly [string, GridItemData]
   matches.forEach(({ id }, position) => views.set(id, { hidden: position < start || position >= start + pageSize, order: position }));
   const categories = [...new Set(items.map(([, data]) => data.category).filter((category) => category !== ""))];
   return { items: views, matchCount: matches.length, page, pageCount, categories };
+}
+
+/**
+ * Related strip: natural (query) order, the current product hidden, and at
+ * most `limit` of the rest visible.
+ */
+export function computeRelatedView(items: readonly (readonly [string, GridItemData])[], currentSlug: string, limit: number): ReadonlyMap<string, GridItemView> {
+  const views = new Map<string, GridItemView>();
+  let shown = 0;
+  items.forEach(([id, data], order) => {
+    const visible = (currentSlug === "" || data.slug !== currentSlug) && shown < limit;
+    if (visible) shown += 1;
+    views.set(id, { hidden: !visible, order });
+  });
+  return views;
 }
