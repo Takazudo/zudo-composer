@@ -79,7 +79,7 @@ needed, click a demo thumbnail to inspect it, then click **Preview**.
 `packages/demo-webshop`, `packages/demo-landing` and `packages/demo-blog` are
 three complete host projects, each with its own component pack and Tailwind
 theme, kept as workspace members so the tool is exercised the way a real host
-exercises it. `packages/demo-tools` is the private seeding helper they share.
+exercises it. Each host runs the installed `zudo-composer` commands directly.
 Full authoring and gate-wiring details are in
 [`docs/demo-sites/README.md`](./docs/demo-sites/README.md).
 

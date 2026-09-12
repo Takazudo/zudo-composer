@@ -6,8 +6,8 @@
 // not regenerate the ledger to accept new coupling. Line numbers deliberately
 // are not identities, so unrelated edits do not churn the ledger.
 //
-// With no arguments, discover demo-* (including the transitional demo-tools)
-// and any package under packages/ or fixtures/ with a host config or a direct
+// With no arguments, discover demo-* and any package under packages/ or
+// fixtures/ with a host config or a direct
 // tool dependency. This includes fixtures/self-host outside pnpm's workspace.
 // --root <repository> --host <directory> (repeatable) --ledger <json> also let
 // the installed/generated-host gates scan isolated consumer trees. Only these

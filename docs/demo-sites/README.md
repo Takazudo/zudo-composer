@@ -13,9 +13,8 @@ published package.
 | `packages/demo-landing` | `zc-demo-landing.zudolab.dev` | `land-` | 4182 |
 | `packages/demo-blog` | `zc-demo-blog.zudolab.dev` | `blog-` | 4183 |
 
-`packages/demo-tools` is the private seeding helper every demo depends on. It is
-not a host; the generation and authoring commands are provided by the installed
-`zudo-composer` tool.
+Generation, asset import, and release commands are provided directly by the
+installed `zudo-composer` tool in each host.
 
 ## What a demo package is
 
@@ -70,13 +69,14 @@ corepack pnpm --filter demo-webshop dev --port 4181
    canonical JSON (sorted keys, compact, trailing newline — the same form as
    `src/test/site-project-fixture.json`). Validation failures list the
    diagnostics and write nothing.
-2. **seed** (`demo-tools seed`) runs two idempotent steps:
-   - `seedAssets`: uploads every `images-src/manifest.json` entry into
-     `cms/assets` through the filesystem Assets store, skipping any file whose
-     name and checksum already exist — active, trashed or historical — so an
-     author's edits are never undone.
-   - `seedRelease`: activates `site-project.json` through
-     `zudo-composer release` (see below).
+2. **seed** (`zudo-composer assets import images-src/manifest.json &&
+   zudo-composer seed`) runs two idempotent installed commands:
+   - `zudo-composer assets import images-src/manifest.json` uploads every
+     manifest entry into `cms/assets` through the filesystem Assets store,
+     skipping any file whose name and checksum already exist — active, trashed
+     or historical — so an author's edits are never undone.
+   - `zudo-composer seed` activates `site-project.json` through the installed
+     release protocol (see below).
 3. **dev** boots the authoring server rooted at the package. `/site` delivers
    the activated release, `/composer` and the other authoring routes edit the
    host's CMS data. Several children may boot demos concurrently, so always pass
@@ -86,16 +86,14 @@ Ordinary Assets edits under `pnpm dev` dirty `cms/assets/catalog.json`. That is
 by design, as the root README says of the repository's own dogfood store: the
 Assets store is the one CMS directory a host commits.
 
-## How `zudo-composer release` is used
+## How `zudo-composer seed` is used
 
 On-disk CMS records are a transactional pointer format, so the demos never
-write them. `seedRelease(packageRoot)` spawns the installed bin —
-`node_modules/zudo-composer/bin/zudo-composer.mjs release`, resolved from the
-package's own `package.json` — **with cwd set to the package root**, because
-`release` has no `--root`: the host is resolved from the working directory and
-only `ZUDO_ASSETS_STORE_ROOT` is env-overridable. Each call is one JSON request
-on stdin and one canonical JSON response on stdout, in the sequence
-`scripts/run-site-project-browser.mjs` drives:
+write them. `zudo-composer seed` runs the installed bin from the package root,
+loads the committed `site-project.json`, and owns the release protocol. The
+host is resolved from the working directory; `ZUDO_ASSETS_STORE_ROOT` may point
+the asset step at a disposable store. The command performs the following
+sequence, which `scripts/run-site-project-browser.mjs` also exercises:
 
 1. `list` — read the project's current head revision and the active triple;
    both are CAS preconditions the store compares verbatim.
@@ -173,10 +171,10 @@ export default site;
 
 ## Gate wiring
 
-- **TypeScript.** Each demo package and `packages/demo-tools` has its own
-  `tsconfig.json` (Preact JSX, Bundler resolution) referenced from the root
-  `tsconfig.json`; `tsconfig.app.json` deliberately includes only `src` and the
-  image editor. Every `packages/demo-*/zudo-composer.config.ts` is named in
+- **TypeScript.** Each demo package has its own `tsconfig.json` (Preact JSX,
+  Bundler resolution) referenced from the root `tsconfig.json`;
+  `tsconfig.app.json` deliberately includes only `src` and the image editor.
+  Every `packages/demo-*/zudo-composer.config.ts` is named in
   `tsconfig.host-config.json`, the one program that resolves
   `zudo-composer/config` the way a host does.
 - **Vitest.** A third project, `demos`, collects
@@ -197,7 +195,7 @@ export default site;
 ## Browser lane
 
 `pnpm test:browser:demos` (`scripts/run-demos-browser.mjs`) seeds each demo
-package's release in place — `pnpm --filter demo-<name> seed`, with
+package's release in place — `pnpm --dir packages/demo-<name> seed`, with
 `ZUDO_ASSETS_STORE_ROOT` pointed at a disposable copy of the package's
 committed `cms/assets` store so the release step never dirties it — boots that
 package's own `zudo-composer dev` on port 4176, and crawls every route

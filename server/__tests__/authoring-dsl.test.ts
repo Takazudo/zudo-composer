@@ -15,24 +15,24 @@ const Grid = ({ items }: GridProps) => items;
 const Card = ({ title }: CardProps) => title;
 
 const componentPack = defineComponentPack({
-  packId: "demo-tools-test",
+  packId: "authoring-test",
   packVersion: "1.0.0",
   components: [
     defineComponent<FrameProps>()(Frame, {
       id: "t.frame", schemaVersion: 1, title: "Frame", category: "Layout", description: "",
-      source: { module: "demo-tools-test/components", exportKind: "named", exportName: "Frame" },
+      source: { module: "authoring-test/components", exportKind: "named", exportName: "Frame" },
       defaults: {}, fields: [],
       slots: [{ id: "content", prop: "children", label: "Content", cardinality: "many" }],
     }),
     defineComponent<GridProps>()(Grid, {
       id: "t.grid", schemaVersion: 1, title: "Grid", category: "Layout", description: "",
-      source: { module: "demo-tools-test/components", exportKind: "named", exportName: "Grid" },
+      source: { module: "authoring-test/components", exportKind: "named", exportName: "Grid" },
       defaults: {}, fields: [],
       slots: [{ id: "items", prop: "items", label: "Items", cardinality: "many", accepts: ["t.card"] }],
     }),
     defineComponent<CardProps>()(Card, {
       id: "t.card", schemaVersion: 1, title: "Card", category: "Content", description: "",
-      source: { module: "demo-tools-test/components", exportKind: "named", exportName: "Card" },
+      source: { module: "authoring-test/components", exportKind: "named", exportName: "Card" },
       defaults: { title: "Card", summary: "", href: "" },
       fields: [
         { prop: "title", label: "Title", schema: { type: "string" }, editor: { kind: "text" } },

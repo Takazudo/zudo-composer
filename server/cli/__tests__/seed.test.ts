@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { seedRelease } from "../../../packages/demo-tools/src/seed";
 import { APP_ROOT } from "../../../plugins/roots.mjs";
 import type { SeedSiteProjectResult } from "../../site-project-local/seed";
 
@@ -69,9 +68,11 @@ describe("installed seed command", () => {
     const active = JSON.parse(first.stdout) as SeedSiteProjectResult;
     expect(active).toMatchObject({ projectId: JSON.parse(source).id, status: "activated", revision: expect.stringMatching(/^[a-f0-9]{64}$/), buildId: expect.stringMatching(/^[a-f0-9]{64}$/) });
     const before = await releaseFiles(releaseRoot);
-    // This is the actual demo wrapper calling the installed verb, not an API
-    // request mock. It must see the same release and leave every file intact.
-    expect(await seedRelease(host, { env })).toEqual({ ...active, status: "unchanged" });
+    // A repeated invocation of the installed verb must see the same release and
+    // leave every file intact; host scripts call this command directly.
+    const unchanged = await cli(host, ["seed"], env);
+    expect(unchanged.stderr).toBe("");
+    expect(JSON.parse(unchanged.stdout)).toEqual({ ...active, status: "unchanged" });
     expect(await releaseFiles(releaseRoot)).toEqual(before);
 
     const updated = { ...JSON.parse(source), name: "Explicit committed source" };
