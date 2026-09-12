@@ -9,9 +9,9 @@ published package.
 
 | Package | Site | Token namespace | One-off dev port |
 | --- | --- | --- | --- |
-| `packages/demo-webshop` | `demo-shop.zudolab.dev` | `shop-` | 4181 |
-| `packages/demo-landing` | `demo-landing.zudolab.dev` | `land-` | 4182 |
-| `packages/demo-blog` | `demo-blog.zudolab.dev` | `blog-` | 4183 |
+| `packages/demo-webshop` | `zc-demo-shop.zudolab.dev` | `shop-` | 4181 |
+| `packages/demo-landing` | `zc-demo-landing.zudolab.dev` | `land-` | 4182 |
+| `packages/demo-blog` | `zc-demo-blog.zudolab.dev` | `blog-` | 4183 |
 
 `packages/demo-tools` is the private helper every demo depends on. It is not a
 host; it is this repository's authoring, generation and seeding tooling, and it

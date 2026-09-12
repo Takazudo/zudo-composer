@@ -62,9 +62,9 @@ Cloudflare Workers, each on its own custom domain:
 | Target key      | Worker                        | Config file                       | Domain                       | Artifact directory                    |
 | ---------------- | ------------------------------ | ---------------------------------- | ----------------------------- | -------------------------------------- |
 | `zudo-composer`  | `zudo-composer`                | `wrangler.jsonc`                   | `zudo-composer.zudolab.dev`  | `dist-hosted-demo`                     |
-| `webshop`        | `zudo-composer-demo-shop`      | `wrangler.demo-shop.jsonc`         | `demo-shop.zudolab.dev`      | `packages/demo-webshop/dist-site`      |
-| `landing`        | `zudo-composer-demo-landing`   | `wrangler.demo-landing.jsonc`      | `demo-landing.zudolab.dev`   | `packages/demo-landing/dist-site`      |
-| `blog`           | `zudo-composer-demo-blog`      | `wrangler.demo-blog.jsonc`         | `demo-blog.zudolab.dev`      | `packages/demo-blog/dist-site`         |
+| `webshop`        | `zudo-composer-demo-shop`      | `wrangler.demo-shop.jsonc`         | `zc-demo-shop.zudolab.dev`      | `packages/demo-webshop/dist-site`      |
+| `landing`        | `zudo-composer-demo-landing`   | `wrangler.demo-landing.jsonc`      | `zc-demo-landing.zudolab.dev`   | `packages/demo-landing/dist-site`      |
+| `blog`           | `zudo-composer-demo-blog`      | `wrangler.demo-blog.jsonc`         | `zc-demo-blog.zudolab.dev`      | `packages/demo-blog/dist-site`         |
 
 `scripts/hosted-demo/targets.mjs` is the single place naming these four rows
 and each target's artifact-verification shape. The `zudo-composer` target
@@ -122,6 +122,46 @@ verified artifact with a unique run tag. Activation is requested only for the
 version ID returned by that upload (`versions deploy <id>@100 --yes`). A missing
 upload ID stops before activation. A command failure after Cloudflare accepts
 the replacement still has the known ID available for the ownership check.
+
+### First rollout of a new target
+
+A target whose Worker has never been uploaded has no deployments and no
+rollback target, so the versioned path above cannot bootstrap it: `wrangler
+deployments list` fails with Cloudflare error `10007`, and `wrangler versions
+upload` would not bind the config's `routes` entry even if it succeeded —
+triggers are applied by `wrangler deploy`, not by a version upload.
+
+`deploy.mjs` therefore detects that exact state and creates the first
+deployment with a plain `wrangler deploy` against the verified artifact, which
+creates the script, uploads the assets and binds the custom domain in one call.
+Detection is narrow: *both* `deployments list` and `versions list` must report
+the script missing. A Worker that answers one and not the other is an
+unexplained state and still fails before any mutation. The first version
+carries no rollout tag (`wrangler deploy` takes neither `--tag` nor
+`--message`), and its active version ID is read back from Cloudflare rather
+than parsed from command output.
+
+Nothing is rolled back when live verification fails on a first deployment —
+the only prior state is "the Worker does not exist", which a rollback cannot
+restore. The job fails red with the created version named, and the next run
+takes the ordinary versioned path against it.
+
+### Cloudflare API token scope
+
+The token in `CLOUDFLARE_API_TOKEN` must be able to create a Worker, upload
+static assets, and bind a custom domain in the `zudolab.dev` zone:
+
+| Scope                                  | Why                                                        |
+| --------------------------------------- | ----------------------------------------------------------- |
+| Account › Workers Scripts › Edit        | create/update each Worker and upload its assets             |
+| Account › Account Settings › Read       | `wrangler whoami`, the preflight's first call               |
+| Zone › Workers Routes › Edit            | attach `*.zudolab.dev` custom domains to a Worker           |
+| Zone › DNS › Edit                       | the CNAME record a custom domain creates                    |
+| Zone › Zone › Read                      | resolve the zone behind each domain                         |
+
+Zone scopes are needed only on `zudolab.dev`. A custom domain cannot be bound
+while a conflicting DNS record for the same hostname already exists — Wrangler
+creates the record itself.
 
 After activation, the live checker fetches the manifest, every emitted asset,
 and every route over bounded HTTPS requests — the fixed authoring/sample list

@@ -229,7 +229,7 @@ describe("static demo site live verification (a non-default target)", () => {
     const mock = mockSiteFetch(fixture);
     const target = TARGETS.webshop;
     const proof = await verifyLiveDeployment({
-      baseUrl: "https://demo-shop.zudolab.dev",
+      baseUrl: "https://zc-demo-shop.zudolab.dev",
       artifactDirectory: fixture.root,
       expectedSourceRevision: SOURCE_REVISION,
       fetchImpl: mock.fetchImpl,

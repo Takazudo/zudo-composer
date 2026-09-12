@@ -108,9 +108,9 @@ the 12-component runtime/CSS/WASM proof to make a gate pass.
 The installed tool and ordinary local workflow remain local-first. Issue 414
 adds one disposable static sample at `https://zudo-composer.zudolab.dev`; issue
 504 extends the same trusted-run pipeline to three further static demo
-websites built from committed SiteProject content: `demo-shop.zudolab.dev`
-(`packages/demo-webshop`), `demo-landing.zudolab.dev`
-(`packages/demo-landing`) and `demo-blog.zudolab.dev` (`packages/demo-blog`).
+websites built from committed SiteProject content: `zc-demo-shop.zudolab.dev`
+(`packages/demo-webshop`), `zc-demo-landing.zudolab.dev`
+(`packages/demo-landing`) and `zc-demo-blog.zudolab.dev` (`packages/demo-blog`).
 None of this adds hosted persistence, a hosted API, authentication, arbitrary
 host project access or deployment support for installed applications. Each
 target is its own Worker with its own custom-domain binding, configured in
@@ -138,7 +138,12 @@ Pull-request validation has no Cloudflare secrets, and production uses only
 the existing deployment secrets after its trusted-run gates, with a
 concurrency group per target so one target's rollout never blocks another's.
 Missing credentials, stale `main`, missing rollback state, split traffic or a
-source mismatch fail before mutation, for every target.
+source mismatch fail before mutation, for every target. The one exception is a
+target whose Worker does not exist yet: when both `deployments list` and
+`versions list` report it missing, the first rollout is created with a plain
+`wrangler deploy` — the only call that binds the config's custom domain — and
+has no rollback target by definition. Any other missing-state combination still
+fails closed.
 
 Live checks cover the manifest, every emitted asset and every route with
 bounded HTTPS requests — the hosted composer demo's fixed authoring/sample

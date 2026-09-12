@@ -75,6 +75,38 @@ function fakeRunner(options: { uploadOutput?: string; failAfterAccept?: boolean 
   return { calls, runner, get activeVersion() { return activeVersion; }, set activeVersion(value: string) { activeVersion = value; } };
 }
 
+const siteArtifactVerifier = async ({ directory }: { directory: string }) => ({
+  root: directory,
+  manifest: { schemaVersion: 1, projectId: "demo-webshop", sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, routes: ["/", "/about"], files: {} },
+  files: [],
+});
+
+/** A Worker Cloudflare has never seen: both listings fail until `deploy` creates it. */
+function firstDeployRunner(options: { versionsListExists?: boolean } = {}) {
+  const notFound = () => new Error("wrangler deployments list failed with exit 1:\nA request to the Cloudflare API failed. Worker not found. [code: 10007]");
+  let exists = false;
+  const calls: string[][] = [];
+  const runner = async (_file: string, args: string[]) => {
+    calls.push(args);
+    if (args[0] === "whoami") return { stdout: "", stderr: "" };
+    if (args[0] === "deploy" && args.includes("--dry-run")) return { stdout: "", stderr: "" };
+    if (args[0] === "deploy") {
+      exists = true;
+      return { stdout: `Current Version ID: ${NEW_VERSION}\n`, stderr: "" };
+    }
+    if (args[0] === "deployments" && args[1] === "list") {
+      if (!exists) throw notFound();
+      return { stdout: JSON.stringify([deployment(NEW_VERSION, NEW_DEPLOYMENT, "2026-09-12T08:00:00Z")]), stderr: "" };
+    }
+    if (args[0] === "versions" && args[1] === "list") {
+      if (!exists && !options.versionsListExists) throw notFound();
+      return { stdout: JSON.stringify([{ id: NEW_VERSION }]), stderr: "" };
+    }
+    throw new Error(`Unexpected Wrangler command: ${args.join(" ")}`);
+  };
+  return { calls, runner };
+}
+
 describe("hosted demo deployment guard", () => {
   it("requires both Cloudflare credentials and never prints a token", () => {
     expect(deploymentCredentialState({})).toBe("absent");
@@ -247,11 +279,6 @@ describe("hosted demo deployment guard", () => {
     const target = TARGETS.webshop;
     const fake = fakeRunner();
     const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: [], assets: [] }));
-    const siteArtifactVerifier = async ({ directory }: { directory: string }) => ({
-      root: directory,
-      manifest: { schemaVersion: 1, projectId: "demo-webshop", sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, routes: ["/", "/about"], files: {} },
-      files: [],
-    });
     const result = await deployHostedDemo({
       target,
       environment: ENVIRONMENT,
@@ -263,7 +290,7 @@ describe("hosted demo deployment guard", () => {
     });
     expect(result.deployedVersionId).toBe(NEW_VERSION);
     expect(liveVerifier).toHaveBeenCalledWith({
-      baseUrl: "https://demo-shop.zudolab.dev",
+      baseUrl: "https://zc-demo-shop.zudolab.dev",
       artifactDirectory: target.artifactDirectory,
       expectedSourceRevision: SOURCE_REVISION,
     });
@@ -273,6 +300,59 @@ describe("hosted demo deployment guard", () => {
     expect(upload).toEqual(expect.arrayContaining(["--config", "wrangler.demo-shop.jsonc", "--name", "zudo-composer-demo-shop"]));
     expect(activate).toEqual(expect.arrayContaining(["--name", "zudo-composer-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
     expect(rollback).toEqual(expect.arrayContaining(["--name", "zudo-composer-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
+  });
+
+  it("creates a never-deployed target with wrangler deploy, binding its custom domain", async () => {
+    const target = TARGETS.webshop;
+    const fake = firstDeployRunner();
+    const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: ["/"], assets: [] }));
+    const result = await deployHostedDemo({
+      target,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier,
+      retryDelaysMs: [],
+      delayImpl: async () => {},
+    });
+    expect(result.deployedVersionId).toBe(NEW_VERSION);
+    expect(result.preflight.state).toEqual({ firstDeploy: true });
+    expect(liveVerifier).toHaveBeenCalledWith({
+      baseUrl: "https://zc-demo-shop.zudolab.dev",
+      artifactDirectory: target.artifactDirectory,
+      expectedSourceRevision: SOURCE_REVISION,
+    });
+    // `versions upload` never applies a config's routes, so the bootstrap must be
+    // a plain `deploy` — and there is nothing to roll back from "no Worker".
+    const create = fake.calls.find((args) => args[0] === "deploy" && !args.includes("--dry-run"));
+    expect(create).toEqual(expect.arrayContaining(["--config", "wrangler.demo-shop.jsonc", "--name", "zudo-composer-demo-shop", "--assets", target.artifactDirectory]));
+    expect(fake.calls.some((args) => args[0] === "versions" && args[1] === "upload")).toBe(false);
+    expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
+  });
+
+  it("leaves a failed first deployment in place and says why no rollback happened", async () => {
+    const fake = firstDeployRunner();
+    await expect(deployHostedDemo({
+      target: TARGETS.webshop,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier: async () => { throw new Error("live route mismatch"); },
+      retryDelaysMs: [],
+    })).rejects.toThrow(new RegExp(`live route mismatch; first zudo-composer-demo-shop deployment ${NEW_VERSION} stays active`));
+    expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
+  });
+
+  it("refuses to treat a half-missing Worker as a first deployment", async () => {
+    const fake = firstDeployRunner({ versionsListExists: true });
+    await expect(deployHostedDemo({
+      target: TARGETS.webshop,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      retryDelaysMs: [],
+    })).rejects.toThrow(/code: 10007/);
+    expect(fake.calls.some((args) => args[0] === "deploy" && !args.includes("--dry-run"))).toBe(false);
   });
 
   it("rejects a webshop artifact directory that differs from its Wrangler config", async () => {

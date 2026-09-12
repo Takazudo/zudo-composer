@@ -1,6 +1,6 @@
 # Webshop demo — Nightjar Supply
 
-Package `packages/demo-webshop`, domain `demo-shop.zudolab.dev`, token
+Package `packages/demo-webshop`, domain `zc-demo-shop.zudolab.dev`, token
 namespace `shop-`, component id prefix `shop.`. Lists follow
 [README § Lists](./README.md#lists). Spacing axes and ladder pairing follow
 `src/styles/README.md`; the `@theme` mechanism is the one in
@@ -391,7 +391,7 @@ Category tiles reuse the first product image of each category
 
 ## 10. Chrome and 404
 
-On `demo-shop.zudolab.dev` the pack's own `shop.header` and `shop.footer`
+On `zc-demo-shop.zudolab.dev` the pack's own `shop.header` and `shop.footer`
 (nodes of the `site-frame` global template) are the only chrome; the tool
 renders just the skip link, `<main id="main-content">` and the not-found
 state. Nav links are static `shop.nav-link` props (labels + hrefs); the
