@@ -4,7 +4,7 @@
 // The commands are deliberately asymmetric. `dev` boots Vite in
 // this process — the server object is what has to be closed to release the
 // port, so there is nothing to gain from a child. `release` is the JSON-stdin
-// SiteProject release API. `release` and the one-shot `build-site` run in
+// SiteProject release API. `release`, `seed` and the one-shot `build-site` run in
 // child processes, supervised by `spawnSupervised`.
 
 import { constants as osConstants } from "node:os";
@@ -17,6 +17,7 @@ export const CLOSE_GRACE_MS = 2000;
 
 export const RELEASE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/release-entry.mjs");
 export const BUILD_SITE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/build-site-entry.mjs");
+export const SEED_ENTRY_PATH = resolve(APP_ROOT, "server/cli/seed-entry.mjs");
 
 export const USAGE = `Usage: zudo-composer <command> [options]
 
@@ -25,12 +26,19 @@ Commands:
   release     Run the SiteProject release API (one JSON request on stdin, one
               canonical JSON response on stdout).
   build-site  Build and verify the host's static website in dist-site.
+  seed        Publish and activate a committed SiteProject; print its release
+              identity and status (activated or unchanged) as JSON.
 
 dev options:
   --root <dir>     Host project root (default: the current directory).
   --port <number>  Port to listen on (0 picks a free one).
   --host [addr]    Expose the server; bare --host listens on all addresses.
   --strict-port    Fail instead of moving to the next free port.
+
+seed options:
+  --root <dir>     Host project root (default: the current directory).
+  --from <file>    Committed project JSON (relative to cwd; default:
+                  site-project.json under the host project root).
 
 build-site options:
   --root <dir>     Host project root (default: the current directory).
@@ -50,9 +58,9 @@ export function parseArguments(argv) {
   const [command, ...rest] = argv;
   if (command === undefined || command === "--help" || command === "-h" || command === "help") return { command: "help" };
   if (command === "release") return { command: "release", rest };
-  if (command !== "dev" && command !== "build-site") return { error: `Unknown command "${command}".` };
+  if (command !== "dev" && command !== "build-site" && command !== "seed") return { error: `Unknown command "${command}".` };
 
-  /** @type {Record<string, unknown> & import("../site-build/run.d.mts").BuildSiteOptions} */
+  /** @type {Record<string, unknown> & import("../site-build/run.d.mts").BuildSiteOptions & import("./run.d.mts").SeedOptions} */
   const options = {};
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
@@ -67,6 +75,11 @@ export function parseArguments(argv) {
       const root = value();
       if (root === undefined) return { error: "--root requires a directory." };
       options.workspaceRoot = resolve(root);
+    } else if (command === "seed") {
+      if (argument !== "--from") return { error: `Unknown seed option "${argument}".` };
+      const from = value();
+      if (from === undefined) return { error: "--from requires a file." };
+      options.from = resolve(from);
     } else if (command === "build-site") {
       if (argument === "--print-routes") options.printRoutes = true;
       else if (argument === "--verify") {
@@ -165,6 +178,22 @@ export async function runComposerCli(argv, deps = {}) {
       args,
       label: "the static website builder",
       entryPath: BUILD_SITE_ENTRY_PATH,
+      ...(deps.spawn ? { spawn: deps.spawn } : {}),
+      ...(deps.exists ? { exists: deps.exists } : {}),
+      proc,
+    });
+    return;
+  }
+  if (parsed.command === "seed") {
+    const { workspaceRoot, from } = parsed.options;
+    const args = [SEED_ENTRY_PATH];
+    if (workspaceRoot !== undefined) args.push("--root", workspaceRoot);
+    if (from !== undefined) args.push("--from", from);
+    spawnSupervised({
+      command: proc.execPath,
+      args,
+      label: "the SiteProject seed command",
+      entryPath: SEED_ENTRY_PATH,
       ...(deps.spawn ? { spawn: deps.spawn } : {}),
       ...(deps.exists ? { exists: deps.exists } : {}),
       proc,

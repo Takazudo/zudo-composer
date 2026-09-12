@@ -2,9 +2,8 @@
 //
 // Assets go straight into the package's `cms/assets` through the tool's own
 // filesystem store, preserving whatever an author already uploaded. The
-// release goes through `zudo-composer release` — the same JSON-stdin sequence
-// `scripts/run-site-project-browser.mjs` drives — because on-disk CMS records
-// are a transactional pointer format and are never written by hand.
+// release goes through `zudo-composer seed`, which owns the release protocol
+// and its CAS preconditions. On-disk CMS records are never written by hand.
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -14,9 +13,6 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { assetAuthoringUrl, assetMimeTypeForExtension } from "../../../src/assets/model";
 import { createFilesystemAssetStore } from "../../../src/assets/storage/filesystem/store";
-import type { ReleasePlan, SiteProjectActiveSelection, SiteProjectApiRequest, SiteProjectApiResponse, SiteProjectListEntry } from "../../../src/site-project/api/types";
-import type { SiteProject } from "../../../src/site-project/model/types";
-import { readSiteProjectFile } from "./generate";
 
 export const ASSET_MANIFEST_FILE = "images-src/manifest.json";
 
@@ -90,52 +86,15 @@ export function resolveComposerBin(packageRoot: string): string {
   return join(dirname(manifestPath), "bin/zudo-composer.mjs");
 }
 
-export interface ReleaseCall {
-  (request: SiteProjectApiRequest): Promise<unknown>;
-}
+export interface SeedReleaseResult { projectId: string; revision: string; buildId: string; status: "activated" | "unchanged" }
 
-/** One JSON request in, one canonical JSON response out, with cwd = the package root. */
-export function createReleaseCall(packageRoot: string, env?: NodeJS.ProcessEnv): ReleaseCall {
-  const bin = resolveComposerBin(packageRoot);
-  return async (request) => {
-    const result = await run(process.execPath, [bin, "release"], { cwd: packageRoot, input: `${JSON.stringify(request)}\n`, env });
-    if (result.status !== 0) throw new Error(`${request.operation} exited ${result.status}: ${result.stderr || result.stdout}`);
-    let response: SiteProjectApiResponse;
-    try { response = JSON.parse(result.stdout) as SiteProjectApiResponse; }
-    catch (error) { throw new Error(`${request.operation} did not return one JSON response: ${result.stdout}`, { cause: error }); }
-    if (!response.ok) throw new Error(`${request.operation} was rejected: ${JSON.stringify(response.error)}`);
-    return response.result;
-  };
-}
-
-export interface SeedReleaseResult { projectId: string; revision: string; buildId: string }
-
-/**
- * plan → apply → build → activate, publishing every content entry. Re-running
- * against an already-activated package replaces the active triple (the CAS
- * precondition is the current one), so a regenerated aggregate can be re-seeded.
- */
-export async function seedRelease(packageRoot: string, options: { project?: SiteProject; call?: ReleaseCall } = {}): Promise<SeedReleaseResult> {
+/** Seed the committed project through the installed tool's command. */
+export async function seedRelease(packageRoot: string, options: { env?: NodeJS.ProcessEnv } = {}): Promise<SeedReleaseResult> {
   const root = resolve(packageRoot);
-  const call = options.call ?? createReleaseCall(root);
-  const project = options.project ?? await readSiteProjectFile(root);
-  // Both preconditions are CAS values the store compares verbatim: the
-  // project's current head (null before the first apply) and the active triple.
-  const state = (await call({ protocolVersion: 2, operation: "list" })) as { projects: readonly SiteProjectListEntry[]; active: SiteProjectActiveSelection | null };
-  const expectedRevision = state.projects.find((entry) => entry.projectId === project.id)?.head ?? null;
-  const expectedActive = state.active;
-  const plan = (await call({
-    protocolVersion: 2,
-    operation: "plan",
-    project,
-    workingPrecondition: null,
-    selection: project.providers.content.flatMap((provider) => provider.entries.map((entry) => ({ ref: { providerId: provider.id, modelId: entry.modelId, recordId: entry.id }, action: "publish" as const }))),
-    expectedRevision,
-    expectedActive,
-  })) as ReleasePlan;
-  const applied = (await call({ protocolVersion: 2, operation: "apply", plan })) as { revision: string; buildId: string };
-  if (typeof applied.revision !== "string" || !/^[a-f0-9]{64}$/u.test(applied.revision)) throw new Error("The release CLI did not return a revision digest.");
-  await call({ protocolVersion: 2, operation: "build", projectId: project.id, buildId: applied.buildId });
-  await call({ protocolVersion: 2, operation: "activate", projectId: project.id, revision: applied.revision, buildId: applied.buildId, expectedActive });
-  return { projectId: project.id, revision: applied.revision, buildId: applied.buildId };
+  const result = await run(process.execPath, [resolveComposerBin(root), "seed"], { cwd: root, input: "", env: options.env });
+  if (result.status !== 0) throw new Error(`seed exited ${result.status}: ${result.stderr || result.stdout}`);
+  const response = JSON.parse(result.stdout) as SeedReleaseResult;
+  if (typeof response.projectId !== "string" || !/^[a-f0-9]{64}$/u.test(response.revision) || !/^[a-f0-9]{64}$/u.test(response.buildId)
+    || !["activated", "unchanged"].includes(response.status)) throw new Error("The seed CLI did not return a release identity and status.");
+  return response;
 }

@@ -4,10 +4,8 @@ import { createComponentCatalog } from "../../../../src/composer/model/types";
 import { compileSiteProject } from "../../../../src/site-project/compiler";
 import { canonicalStringifyJson } from "../../../../src/site-project/model/canonical";
 import { validateSiteProject } from "../../../../src/site-project/model/validation";
-import type { SiteProjectApiRequest } from "../../../../src/site-project/api/types";
 import { defineSite, entryRef, node, slugify } from "../authoring";
 import { renderSiteProject } from "../generate";
-import { seedRelease } from "../seed";
 
 interface FrameProps { children?: unknown }
 interface GridProps { items?: unknown }
@@ -140,36 +138,5 @@ describe("defineSite", () => {
     expect(() => site.entry(model, { id: "thing", values: { nope: "x" } })).toThrow('Model "things" has no field "nope"');
     expect(() => site.attach({} as never, { nodeId: "nowhere", slotId: "items" })).toThrow('No declared composition contains node "nowhere"');
     expect(() => site.toSiteProject()).toThrow("has no sitemap");
-  });
-});
-
-describe("seedRelease", () => {
-  it("drives list → plan → apply → build → activate with the store's CAS values", async () => {
-    const { site } = authorSite();
-    const project = site.toSiteProject();
-    const requests: SiteProjectApiRequest[] = [];
-    const revision = "a".repeat(64);
-    const buildId = "b".repeat(64);
-    const active = { projectId: project.id, revision: "c".repeat(64), buildId: "d".repeat(64) };
-    const call = async (request: SiteProjectApiRequest): Promise<unknown> => {
-      requests.push(request);
-      switch (request.operation) {
-        case "list": return { projects: [{ projectId: project.id, head: active.revision }], active };
-        case "plan": return { schemaVersion: 2, planDigest: "plan" };
-        case "apply": return { revision, buildId };
-        default: return {};
-      }
-    };
-    const result = await seedRelease("/nowhere", { project, call });
-    expect(result).toEqual({ projectId: project.id, revision, buildId });
-    expect(requests.map((request) => request.operation)).toEqual(["list", "plan", "apply", "build", "activate"]);
-    const plan = requests[1] as Extract<SiteProjectApiRequest, { operation: "plan" }>;
-    expect(plan.expectedRevision).toBe(active.revision);
-    expect(plan.expectedActive).toEqual(active);
-    expect(plan.selection).toEqual([
-      { ref: { providerId: "content-filesystem", modelId: "articles", recordId: "articles-first-post" }, action: "publish" },
-      { ref: { providerId: "content-filesystem", modelId: "articles", recordId: "articles-second-post" }, action: "publish" },
-    ]);
-    expect(requests[4]).toEqual({ protocolVersion: 2, operation: "activate", projectId: project.id, revision, buildId, expectedActive: active });
   });
 });

@@ -3,7 +3,7 @@
 //   generate       site-project.ts → site-project.json
 //   seed           seed-assets, then seed-release
 //   seed-assets    images-src/manifest.json → cms/assets
-//   seed-release   site-project.json → an activated `zudo-composer release`
+//   seed-release   site-project.json → `zudo-composer seed`
 
 import { resolve } from "node:path";
 import { generateSiteProject } from "./generate";
@@ -23,7 +23,7 @@ export async function runDemoTools(argv: readonly string[], cwd = process.cwd())
   };
   const release = async () => {
     const result = await seedRelease(packageRoot);
-    console.log(`Release: activated ${result.projectId} revision ${result.revision.slice(0, 12)} build ${result.buildId.slice(0, 12)}.`);
+    console.log(`Release: ${result.status} ${result.projectId} revision ${result.revision.slice(0, 12)} build ${result.buildId.slice(0, 12)}.`);
   };
   switch (command) {
     case "generate": {

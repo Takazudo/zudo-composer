@@ -40,8 +40,12 @@ assert.ok(runtimeFailures.includes("requestfailed"), "the shared watcher must wa
 assert.ok(runtimeFailures.includes('message.type() !== "error"'), "the shared watcher must watch console errors");
 assert.ok(browserRunner.includes("mkdtemp"), "browser runner must create an isolated local-project root");
 assert.ok(browserRunner.includes("ZUDO_SITE_PROJECT_ROOT"), "browser runner must pass the isolated root to CLI and Vite");
-assert.ok(browserRunner.includes('operation: "apply"'), "browser runner must apply through the JSON CLI");
-assert.ok(browserRunner.includes('operation: "activate"'), "browser runner must activate through the JSON CLI");
+assert.match(browserRunner, /\[join\(root, "bin\/zudo-composer\.mjs"\), "seed", "--from", /, "browser runner must activate its committed fixture through the installed seed command");
+assert.match(read("scripts/run-host-browser.mjs"), /\[join\(root, "bin\/zudo-composer\.mjs"\), "seed"\]/, "host browser runner must use the installed seed command");
+assert.match(read("packages/demo-tools/src/seed.ts"), /\[resolveComposerBin\(root\), "seed"\]/, "demo seeding must use the installed seed command");
+for (const file of ["scripts/run-site-project-browser.mjs", "scripts/run-host-browser.mjs", "packages/demo-tools/src/seed.ts"]) {
+  assert.doesNotMatch(read(file), /operation:\s*["'](?:plan|apply|build|activate)["']/, "release orchestration must remain in the seed service");
+}
 assert.ok(browserRunner.includes("env: { ...process.env, ...environment }"), "browser runner must preserve the parent process environment");
 assert.ok(browserConfig.includes("reuseExistingServer: false"), "isolated dev browser config must own its server");
 assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must use one deterministic worker");
