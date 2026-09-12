@@ -12,11 +12,11 @@ describe("resolveAppWarmupFiles()", () => {
     expect(files.every((file) => statSync(file).isFile())).toBe(true);
     expect(files).toContain(resolve(APP_ROOT, APP_ENTRY));
 
-    for (const excludedTree of ["src/__tests__", "src/hosted-demo", "src/site-static"]) {
-      expect(files.some((file) => {
-        const relativePath = relative(APP_ROOT, file).split(sep).join("/");
-        return relativePath === excludedTree || relativePath.startsWith(`${excludedTree}/`);
-      })).toBe(false);
+    const relativePaths = files.map((file) => relative(APP_ROOT, file).split(sep).join("/"));
+    expect(relativePaths.some((file) => file.split("/").includes("__tests__"))).toBe(false);
+
+    for (const excludedTree of ["src/hosted-demo", "src/site-static"]) {
+      expect(relativePaths.some((file) => file === excludedTree || file.startsWith(`${excludedTree}/`))).toBe(false);
     }
   });
 });
