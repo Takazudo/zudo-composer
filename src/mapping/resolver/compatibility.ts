@@ -19,9 +19,9 @@ function isIdentityCompatible(source: ContentFieldKind, target: MappingTargetKin
     case "text": return isStringProducingSource(source);
     case "select": {
       switch (source) {
-        case "text": case "slug": return true;
+        case "text": case "slug": case "choice": return true;
         case "long-text": case "markdown": case "number": case "boolean": case "date": case "color": case "url": return false;
-        case "choice": case "reference": case "reference-list": case "object": case "list": case "asset-use": return false;
+        case "reference": case "reference-list": case "object": case "list": case "asset-use": return false;
         default: return assertNever(source, "Content field");
       }
     }
@@ -64,7 +64,7 @@ export function isMappingCompatible(source: ContentFieldKind, target: MappingTar
 }
 
 export const MAPPING_COMPATIBILITY_MATRIX: Readonly<Record<MappingTransform["kind"], readonly string[]>> = {
-  identity: ["text|long-text|markdown|slug|url|date -> text", "text|slug -> select", "color -> color|text", "number -> number", "boolean -> boolean"],
+  identity: ["text|long-text|markdown|slug|url|date -> text", "text|slug|choice -> select", "color -> color|text", "number -> number", "boolean -> boolean"],
   "date-medium": ["date -> text"],
   "truncate-160": ["string-producing -> text"],
   prefix: ["string-producing -> text"],

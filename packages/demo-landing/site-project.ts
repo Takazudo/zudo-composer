@@ -167,8 +167,6 @@ const faq = site.model({
     { key: "question", kind: "text" },
     { key: "answer", kind: "markdown" },
     { key: "topic", kind: "choice", options: [{ value: "general", label: "General" }, { value: "billing", label: "Billing" }, { value: "security", label: "Security" }] },
-    // The mapping resolver admits only text/slug onto a select prop, not choice (tool gap), so the item's topic is bound from this mirror.
-    { key: "topicKey", kind: "text", label: "Topic key (mirrors topic)" },
     { key: "order", kind: "number" },
   ],
 });
@@ -183,7 +181,7 @@ const FAQ: [id: string, topic: string, question: string, answer: string][] = [
   ["faq-cancel", "billing", "Can I cancel at any time?", "Yes. Cancel from the billing page and your plan runs to the end of the period you paid for. Export your data first if you want a copy."],
   ["faq-data", "security", "Where is our data stored?", "In the EU or the US — you choose when you create the workspace. Event details are encrypted at rest, and Org adds SSO and an audit log."],
 ];
-FAQ.forEach(([id, topic, question, answer], index) => site.entry(faq, { id, values: { question, answer, topic, topicKey: topic, order: index + 1 } }));
+FAQ.forEach(([id, topic, question, answer], index) => site.entry(faq, { id, values: { question, answer, topic, order: index + 1 } }));
 
 const about = site.model({
   name: "About",
@@ -248,7 +246,7 @@ const testimonialMapping = site.mapping({
 const faqItem = site.page({ name: "FAQ item", root: [node("land.faq-item", {}, {}, "faq-item")] });
 const faqBindings = [
   ...["question", "answer", "order"].map((field) => ({ field, nodeId: "faq-item", prop: field })),
-  { field: "topicKey", nodeId: "faq-item", prop: "topic" },
+  { field: "topic", nodeId: "faq-item", prop: "topic" },
 ];
 const faqMapping = site.mapping({
   name: "FAQ item",
