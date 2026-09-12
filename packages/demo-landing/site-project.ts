@@ -1,7 +1,7 @@
 // The authored Orrery site (docs/demo-sites/landing.md). `pnpm generate` turns
 // this into `site-project.json`; the tests fail when the two disagree.
-import { defineSite, node, type JsonObject, type Page } from "demo-tools";
-import type { SiteProject } from "zudo-composer/site-project";
+import { defineSite, node } from "zudo-composer/authoring";
+import type { JsonObject, Page, SiteProject } from "zudo-composer/site-project";
 import { componentPack } from "./components/pack";
 
 const site = defineSite({ id: "demo-landing", name: "Orrery", componentPack }) satisfies { toSiteProject(): SiteProject };

@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@zudo-composer/component-contract": "workspace:*",
-    "tsx": "^4.20.5"
+    "vite": "^8.2.2",
+    "zudo-composer": "workspace:*"
   }
 }

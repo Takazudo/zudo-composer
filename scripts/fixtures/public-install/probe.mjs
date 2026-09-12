@@ -6,13 +6,13 @@ import * as authoring from "zudo-composer/authoring";
 import * as siteBuild from "zudo-composer/site-build";
 import { loadHostContext } from "zudo-composer/vite";
 
-assert.deepEqual(Object.keys(authoring).sort(), ["assetAuthoringUrl", "assetMimeTypeForExtension", "canonicalStringifyJson", "createFilesystemAssetStore", "validateSiteProject"]);
+assert.deepEqual(Object.keys(authoring).sort(), ["COMPOSITION_PROVIDER_ID", "CONTENT_PROVIDER_ID", "DEFAULT_TIMESTAMP", "MAPPING_PROVIDER_ID", "SITEMAP_PROVIDER_ID", "assetAuthoringUrl", "assetMimeTypeForExtension", "canonicalStringifyJson", "createFilesystemAssetStore", "defineSite", "entryRef", "node", "readAssetUrls", "slugify", "validateSiteProject"]);
 assert.deepEqual(Object.keys(siteBuild).sort(), ["SITE_HEADERS", "SITE_MANIFEST", "compileStaticSite", "createSiteManifest", "siteHeaders", "verifySiteStaticArtifact"]);
 assert.equal(authoring.assetAuthoringUrl("proof"), "/uploaded-assets/asset-proof");
 assert.equal(authoring.assetMimeTypeForExtension("PDF"), "application/pdf");
 assert.equal(authoring.canonicalStringifyJson({ z: 1, a: [2] }), '{"a":[2],"z":1}\n');
 
-const { pack, packIdentity, workspaceRoot } = await loadHostContext({ workspaceRoot: process.cwd() });
+const { composerConfig, pack, packIdentity, workspaceRoot } = await loadHostContext({ workspaceRoot: process.cwd() });
 assert.equal(workspaceRoot, process.cwd());
 assert.equal(packIdentity.packageRoot, process.cwd());
 assert.equal(packIdentity.specifier, "public-entry-host/components");
@@ -22,23 +22,13 @@ const record = await store.upload({ fileName: "proof.txt", declaredMimeType: "te
 assert.equal((await store.snapshot()).records[0].id, record.id);
 assert.equal((await (await authoring.createFilesystemAssetStore({ assetsStoreRoot })).snapshot()).records[0].id, record.id);
 
-const timestamp = "2026-09-12T00:00:00.000Z";
-const project = {
-  schemaVersion: 2, id: "installed-proof", name: "Installed proof",
-  componentPack: { contractVersion: pack.manifest.contractVersion, packId: pack.manifest.packId, packVersion: pack.manifest.packVersion },
-  providers: {
-    compositions: [{ id: "files", records: [{ id: "home", createdAt: timestamp, updatedAt: timestamp, document: {
-      schemaVersion: 2, id: "home", name: "Home", root: [{ id: "banner", componentId: "proof.banner", componentVersion: 1, props: { headline: "Packed site" }, slots: {} }],
-    } }] }],
-    content: [{ id: "content-filesystem", models: [], entries: [] }],
-    mappings: [{ id: "mapping-filesystem", records: [] }],
-    sitemaps: [{ id: "sitemap-filesystem", records: [{ id: "main", createdAt: timestamp, updatedAt: timestamp, document: {
-      schemaVersion: 3, id: "main", name: "Main", navigation: { primary: [], footer: [] },
-      root: [{ id: "home", title: "Home", source: { kind: "composition", ref: { providerId: "files", recordId: "home" } }, children: [] }],
-    } }] }],
-  },
-  activeSitemap: { providerId: "sitemap-filesystem", recordId: "main" }, collectionAttachments: [],
-};
+assert.deepEqual(authoring.readAssetUrls(composerConfig), { "proof.txt": authoring.assetAuthoringUrl(record.id) });
+assert.equal(authoring.slugify("Packed site"), "packed-site");
+const site = authoring.defineSite({ id: "installed-proof", name: "Installed proof", componentPack: pack });
+const home = site.page({ id: "home", name: "Home", root: [authoring.node("proof.banner", { headline: "Packed site" }, {}, "banner")] });
+site.sitemap({ id: "main", name: "Main", root: { id: "home", title: "Home", page: home } });
+const project = site.toSiteProject();
+assert.equal(home.record.createdAt, authoring.DEFAULT_TIMESTAMP);
 const validation = authoring.validateSiteProject(project, { componentPack: pack.manifest });
 assert.equal(validation.ok, true, JSON.stringify(validation.diagnostics));
 assert.equal(authoring.validateSiteProject({}, { componentPack: pack.manifest }).ok, false);

@@ -6,8 +6,31 @@
 // internal: hosts author records and call the API, not construct tool services.
 // Nested supporting types remain in the generated declaration graph and can be
 // addressed through these records; being reachable does not make them named
-// public exports. DSL inputs/handles belong to the authoring entry when its
-// implementation moves out of demo-tools, not to this record-only entry.
+// public exports. This type-only entry also names the authoring DSL's inputs
+// and handles; its runtime functions live at `zudo-composer/authoring`.
+export type {
+  Attachment,
+  BindingInput,
+  CollectionModeInput,
+  Entry,
+  EntryInput,
+  FieldInput,
+  Mapping,
+  MappingInput,
+  Model,
+  ModelInput,
+  NavigationRef,
+  NodeInput,
+  Page,
+  PageInput,
+  RouteInput,
+  RouteSource,
+  Site,
+  SiteOptions,
+  SitemapInput,
+  Template,
+  TemplateInput,
+} from "../../src/site-project/authoring.js";
 export type {
   SiteProject,
   SiteProjectCollectionAttachment,

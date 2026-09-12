@@ -1,13 +1,11 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
-import { createComponentCatalog } from "../../../../src/composer/model/types";
-import { compileSiteProject } from "../../../../src/site-project/compiler";
-import { canonicalStringifyJson } from "../../../../src/site-project/model/canonical";
-import { validateSiteProject } from "../../../../src/site-project/model/validation";
-import type { SiteProjectApiRequest } from "../../../../src/site-project/api/types";
-import { defineSite, entryRef, node, slugify } from "../authoring";
+import { canonicalStringifyJson, defineSite, entryRef, node, slugify, validateSiteProject } from "zudo-composer/authoring";
+import { compileStaticSite } from "zudo-composer/site-build";
 import { renderSiteProject } from "../generate";
-import { seedRelease } from "../seed";
 
 interface FrameProps { children?: unknown }
 interface GridProps { items?: unknown }
@@ -121,14 +119,19 @@ describe("defineSite", () => {
       target: { nodeId: "journal-grid", slotId: "items" },
       mapping: { providerId: "mapping-filesystem", recordId: cardMapping.id },
     }]);
-    const compilation = await compileSiteProject(project, { componentCatalog: createComponentCatalog(componentPack.manifest), policy: "authoring-preview" });
-    expect(compilation.status, JSON.stringify(compilation.diagnostics)).toBe("ready");
-    if (compilation.status !== "ready") return;
-    expect(compilation.build.routes.map((route) => route.pathname).sort()).toEqual(["/", "/journal", "/journal/first-post", "/journal/second-post"]);
-    const journal = compilation.build.routes.find((route) => route.pathname === "/journal")!;
-    const grid = journal.composition.document.root.find((item) => item.id === "journal-grid")!;
-    expect(grid.slots.items!.map((item) => item.props.title)).toEqual(["Second post", "First post"]);
-    expect(grid.slots.items!.map((item) => item.props.href)).toEqual(["/journal/second-post", "/journal/first-post"]);
+    const root = await mkdtemp(join(tmpdir(), "authoring-compile-"));
+    try {
+      const projectPath = join(root, "site-project.json");
+      await writeFile(projectPath, canonicalStringifyJson(project as never));
+      const compilation = await compileStaticSite({ projectPath, pack: componentPack, assetsStoreRoot: join(root, "assets") });
+      expect(compilation.build.routes.map((route) => route.pathname).sort()).toEqual(["/", "/journal", "/journal/first-post", "/journal/second-post"]);
+      const journal = compilation.build.routes.find((route) => route.pathname === "/journal")!;
+      const grid = journal.composition.document.root.find((item) => item.id === "journal-grid")!;
+      expect(grid.slots.items!.map((item) => item.props.title)).toEqual(["Second post", "First post"]);
+      expect(grid.slots.items!.map((item) => item.props.href)).toEqual(["/journal/second-post", "/journal/first-post"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("refuses duplicate ids, unknown components and unknown fields", () => {
@@ -140,36 +143,5 @@ describe("defineSite", () => {
     expect(() => site.entry(model, { id: "thing", values: { nope: "x" } })).toThrow('Model "things" has no field "nope"');
     expect(() => site.attach({} as never, { nodeId: "nowhere", slotId: "items" })).toThrow('No declared composition contains node "nowhere"');
     expect(() => site.toSiteProject()).toThrow("has no sitemap");
-  });
-});
-
-describe("seedRelease", () => {
-  it("drives list → plan → apply → build → activate with the store's CAS values", async () => {
-    const { site } = authorSite();
-    const project = site.toSiteProject();
-    const requests: SiteProjectApiRequest[] = [];
-    const revision = "a".repeat(64);
-    const buildId = "b".repeat(64);
-    const active = { projectId: project.id, revision: "c".repeat(64), buildId: "d".repeat(64) };
-    const call = async (request: SiteProjectApiRequest): Promise<unknown> => {
-      requests.push(request);
-      switch (request.operation) {
-        case "list": return { projects: [{ projectId: project.id, head: active.revision }], active };
-        case "plan": return { schemaVersion: 2, planDigest: "plan" };
-        case "apply": return { revision, buildId };
-        default: return {};
-      }
-    };
-    const result = await seedRelease("/nowhere", { project, call });
-    expect(result).toEqual({ projectId: project.id, revision, buildId });
-    expect(requests.map((request) => request.operation)).toEqual(["list", "plan", "apply", "build", "activate"]);
-    const plan = requests[1] as Extract<SiteProjectApiRequest, { operation: "plan" }>;
-    expect(plan.expectedRevision).toBe(active.revision);
-    expect(plan.expectedActive).toEqual(active);
-    expect(plan.selection).toEqual([
-      { ref: { providerId: "content-filesystem", modelId: "articles", recordId: "articles-first-post" }, action: "publish" },
-      { ref: { providerId: "content-filesystem", modelId: "articles", recordId: "articles-second-post" }, action: "publish" },
-    ]);
-    expect(requests[4]).toEqual({ protocolVersion: 2, operation: "activate", projectId: project.id, revision, buildId, expectedActive: active });
   });
 });

@@ -4,7 +4,7 @@ import { loadHostContext, type HostContext, type ResolvedComponentPack } from "z
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
-export type AuthoringExports = Assert<Equal<keyof typeof authoring, "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "validateSiteProject">>;
+export type AuthoringExports = Assert<Equal<keyof typeof authoring, "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "defineSite" | "entryRef" | "node" | "readAssetUrls" | "slugify" | "validateSiteProject">>;
 export type CompilationReturn = Assert<Equal<Awaited<ReturnType<typeof compileStaticSite>>, StaticSiteCompilation>>;
 export type ContextReturn = Assert<Equal<Awaited<ReturnType<typeof loadHostContext>>, HostContext>>;
 export type PackIdentity = Assert<Equal<HostContext["packIdentity"], ResolvedComponentPack>>;

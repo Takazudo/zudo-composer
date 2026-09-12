@@ -8,10 +8,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { canonicalStringifyJson } from "../../../src/site-project/model/canonical";
-import { validateSiteProject } from "../../../src/site-project/model/validation";
-import type { SiteProject, SiteProjectDiagnostic } from "../../../src/site-project/model/types";
-import type { Site } from "./authoring";
+import { canonicalStringifyJson, validateSiteProject } from "zudo-composer/authoring";
+import type { Site, SiteProject, SiteProjectDiagnostic } from "zudo-composer/site-project";
 
 export const SITE_SOURCE_FILE = "site-project.ts";
 export const SITE_OUTPUT_FILE = "site-project.json";
@@ -28,7 +26,7 @@ function isSite(value: unknown): value is Site {
 
 /** Import a package's `site-project.ts` and return its default-exported site. */
 export async function loadSite(packageRoot: string): Promise<Site> {
-  const module = (await import(pathToFileURL(resolve(packageRoot, SITE_SOURCE_FILE)).href)) as { default?: unknown };
+  const module = (await import(/* @vite-ignore */ pathToFileURL(resolve(packageRoot, SITE_SOURCE_FILE)).href)) as { default?: unknown };
   if (!isSite(module.default)) throw new SiteProjectGenerationError(`${SITE_SOURCE_FILE} must default-export a site built with defineSite().`);
   return module.default;
 }

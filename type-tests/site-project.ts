@@ -1,8 +1,29 @@
 // This small demo is also copied into an installed host outside the repository.
 // Every tool import must resolve through a published bare specifier.
-import type { validateSiteProject } from "zudo-composer/authoring";
+import { defineSite, entryRef, node, type validateSiteProject } from "zudo-composer/authoring";
 import type { StaticSiteCompilation } from "zudo-composer/site-build";
 import type {
+  Attachment,
+  BindingInput,
+  CollectionModeInput,
+  Entry,
+  EntryInput,
+  FieldInput,
+  Mapping,
+  MappingInput,
+  Model,
+  ModelInput,
+  NavigationRef,
+  NodeInput,
+  Page,
+  PageInput,
+  RouteInput,
+  RouteSource,
+  Site,
+  SiteOptions,
+  SitemapInput,
+  Template,
+  TemplateInput,
   CompositionNode,
   CompositionRecord,
   ContentEntryRecord,
@@ -117,3 +138,51 @@ import type { SiteProjectStoreAdapter } from "zudo-composer/site-project";
 // @ts-expect-error Shipped implementation sources are not an exported subpath.
 import type { SiteProject as PrivateProject } from "zudo-composer/src/site-project/model/types";
 export type RejectedInternalImports = [SiteProjectStoreAdapter, PrivateProject];
+
+// The DSL's named inputs and handles keep their relationship to both runtime
+// functions and portable records across independently generated subpaths.
+export type AuthoringRelationships = [
+  Assert<Equal<Parameters<typeof defineSite>[0], SiteOptions>>,
+  Assert<Equal<ReturnType<typeof defineSite>, Site>>,
+  Assert<Equal<ReturnType<typeof node>, NodeInput>>,
+  Assert<Equal<Parameters<typeof entryRef>[0], Entry>>,
+  Assert<Equal<Parameters<Site["template"]>[0], TemplateInput>>,
+  Assert<Equal<ReturnType<Site["template"]>, Template>>,
+  Assert<Equal<Parameters<Site["page"]>[0], PageInput>>,
+  Assert<Equal<ReturnType<Site["page"]>, Page>>,
+  Assert<Equal<Parameters<Site["model"]>[0], ModelInput>>,
+  Assert<Equal<ModelInput["fields"][number], FieldInput>>,
+  Assert<Equal<ReturnType<Site["model"]>, Model>>,
+  Assert<Equal<Parameters<Site["entry"]>[1], EntryInput>>,
+  Assert<Equal<ReturnType<Site["entry"]>, Entry>>,
+  Assert<Equal<Parameters<Site["mapping"]>[0], MappingInput>>,
+  Assert<Equal<MappingInput["bindings"][number], BindingInput>>,
+  Assert<Equal<Extract<MappingInput["mode"], { kind: "collection" }>, CollectionModeInput>>,
+  Assert<Equal<ReturnType<Site["mapping"]>, Mapping>>,
+  Assert<Equal<ReturnType<Site["attach"]>, Attachment>>,
+  Assert<Equal<Parameters<Site["sitemap"]>[0], SitemapInput>>,
+  Assert<Equal<SitemapInput["root"], RouteInput>>,
+  Assert<Equal<NavigationRef["route"], RouteInput>>,
+  Assert<RouteInput extends RouteSource ? true : false>,
+  Assert<Equal<ReturnType<Site["toSiteProject"]>, SiteProject>>,
+  Assert<Equal<Template["record"], CompositionRecord>>,
+  Assert<Equal<Page["record"], CompositionRecord>>,
+  Assert<Equal<Model["record"], ContentModelRecord>>,
+  Assert<Equal<Entry["record"], ContentEntryRecord>>,
+  Assert<Equal<Mapping["record"], MappingRecord>>,
+  Assert<Equal<Attachment["record"], SiteProjectCollectionAttachment>>,
+];
+
+export function authorProject(options: SiteOptions): SiteProject {
+  const site = defineSite(options);
+  const home = site.page({ name: "Home", root: [node("proof.banner", { headline: "Typed authoring" })] });
+  site.sitemap({ name: "Routes", root: { title: "Home", page: home } });
+  return site.toSiteProject();
+}
+
+// @ts-expect-error A site must explicitly identify its component pack.
+defineSite({ id: "missing-pack", name: "Invalid" });
+// @ts-expect-error Node props must contain JSON values.
+node("proof.banner", { headline: undefined });
+// @ts-expect-error A reference requires the complete authoring entry handle.
+entryRef({ id: "only-an-id" });

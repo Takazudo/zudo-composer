@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// The TypeScript sources are run through tsx's loader: every demo package's
-// `site-project.ts` is TypeScript with Preact JSX in its pack, and this tool
-// imports the repository's own `src/` for validation and the Assets store.
-import { register } from "tsx/esm/api";
+// Evaluate the CLI and the host's TypeScript/TSX graph with the same Preact
+// runtime as the tool's module evaluator, independently of host tsconfig.
+import { runnerImport } from "vite";
 
-register();
-const { runDemoTools } = await import("../src/cli.ts");
-process.exitCode = await runDemoTools(process.argv.slice(2));
+await runnerImport(new URL("../src/cli-entry.ts", import.meta.url).href, {
+  configFile: false,
+  root: process.cwd(),
+  resolve: { dedupe: ["preact"] },
+  oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
+});

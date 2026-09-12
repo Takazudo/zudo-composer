@@ -1,34 +1,33 @@
-// The TypeScript authoring surface behind every demo package's `site-project.ts`.
+// The TypeScript authoring DSL exposed by `zudo-composer/authoring`.
 //
-// A demo site is a whole SiteProject aggregate — compositions, content models
+// A site is a whole SiteProject aggregate — compositions, content models
 // and entries, mappings, collection attachments and one sitemap — and writing
 // that aggregate by hand means repeating record envelopes, provider ids and
 // field ids everywhere. This module derives all of that: records take their
 // ids from names, content entries are keyed by field KEY rather than field id,
 // and every provider is the tool's filesystem provider for that domain.
 //
-// It produces the same shape `src/test/site-project-fixture.json` has, so the
-// tool's own validator, compiler and release CLI accept the output unchanged.
+// The tool's validator, compiler and release CLI consume its output directly.
 
 import type { ComponentPackManifest, JsonValue, TrustedComponentPack } from "@zudo-composer/component-contract";
-import type { CompositionRecord } from "../../../src/composer/library/types";
-import type { CompositionNode, GlobalTemplateOutlet } from "../../../src/composer/model/types";
+import type { CompositionRecord } from "../composer/library/types";
+import type { CompositionNode, GlobalTemplateOutlet, JsonObject } from "../composer/model/types";
 import type {
   ContentEntryRecord,
   ContentFieldDefinition,
   ContentModelRecord,
   ContentValueSchema,
-} from "../../../src/content/model/types";
+} from "../content/model/types";
 import type {
   MappingBinding,
   MappingCollectionQuery,
   MappingRecord,
   MappingSourceProjection,
   MappingTransform,
-} from "../../../src/mapping/model/types";
-import type { SitemapRecord } from "../../../src/sitemapper/library/types";
-import type { SitemapNavigationItem, SitemapNode } from "../../../src/sitemapper/model/types";
-import type { SiteProject, SiteProjectCollectionAttachment } from "../../../src/site-project/model/types";
+} from "../mapping/model/types";
+import type { SitemapRecord } from "../sitemapper/library/types";
+import type { SitemapNavigationItem, SitemapNode } from "../sitemapper/model/types";
+import type { SiteProject, SiteProjectCollectionAttachment } from "./model/types";
 
 export const COMPOSITION_PROVIDER_ID = "files";
 export const CONTENT_PROVIDER_ID = "content-filesystem";
@@ -37,8 +36,6 @@ export const SITEMAP_PROVIDER_ID = "sitemap-filesystem";
 
 /** Every generated record carries one fixed timestamp so regeneration is byte-stable. */
 export const DEFAULT_TIMESTAMP = "2026-09-12T00:00:00.000Z";
-
-export type JsonObject = { [key: string]: JsonValue };
 
 /** `Product card` → `product-card`; matches the tool's safe record-id pattern. */
 export function slugify(name: string): string {
