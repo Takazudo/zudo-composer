@@ -18,3 +18,4 @@ coverage/
 /cms/assets/.*.tmp
 
 /dist-hosted-demo/
+dist-site/
