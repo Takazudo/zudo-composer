@@ -41,7 +41,7 @@ try {
   const dataRoot = join(temporaryRoot, "data");
   await Promise.all([mkdir(releaseRoot), mkdir(assetsRoot), mkdir(dataRoot)]);
   const environment = { ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_ASSETS_STORE_ROOT: assetsRoot, ZUDO_DATA_ROOT: dataRoot };
-  const seeded = await run(process.execPath, [join(root, "bin/zudo-composer.mjs"), "seed", "--from", join(root, "src/test/site-project-fixture.json")], {
+  const seeded = await run(process.execPath, [join(root, "bin/zudo-composer.mjs"), "seed", "--from", join(root, "packages/demo-studio/site-project.json")], {
     env: { ...process.env, ...environment },
   });
   if (seeded.status !== 0) throw new Error(`seed exited ${seeded.status}: ${seeded.stderr || seeded.stdout}`);

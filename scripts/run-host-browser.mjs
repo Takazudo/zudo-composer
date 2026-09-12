@@ -70,7 +70,7 @@ function createHostFixture(parent) {
   for (const file of ["zudo-composer.config.ts", "styles/base.css"]) {
     cpSync(join(root, "fixtures/host", file), join(hostRoot, file));
   }
-  cpSync(join(root, "src/test/site-project-fixture.json"), join(hostRoot, "site-project.json"));
+  cpSync(join(root, "packages/demo-studio/site-project.json"), join(hostRoot, "site-project.json"));
   // The manifest is generated rather than copied, because a release attests how
   // its pack was installed and therefore reads the pack's dependency spec out of
   // the HOST manifest. The spec is taken from this package's own manifest so the
