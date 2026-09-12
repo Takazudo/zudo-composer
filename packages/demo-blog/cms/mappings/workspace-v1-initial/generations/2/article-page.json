@@ -1,0 +1,350 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "article-page-tag1-eyebrow",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-tag1",
+        "target": {
+          "nodeId": "article-header",
+          "prop": "eyebrow"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-title-title",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-title",
+        "target": {
+          "nodeId": "article-header",
+          "prop": "title"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-intro-intro",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-intro",
+        "target": {
+          "nodeId": "article-header",
+          "prop": "intro"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-authorname-authorname",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-author-name",
+        "target": {
+          "nodeId": "article-header",
+          "prop": "authorName"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-author-authorhref",
+        "projection": {
+          "kind": "route-link"
+        },
+        "sourceFieldId": "articles-author",
+        "target": {
+          "nodeId": "article-header",
+          "prop": "authorHref"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-authoravatar-src",
+        "projection": {
+          "fieldIds": [
+            "articles-author-avatar-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "articles-author-avatar",
+        "target": {
+          "nodeId": "article-avatar",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-authoravatar-alt",
+        "projection": {
+          "fieldIds": [
+            "articles-author-avatar-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "articles-author-avatar",
+        "target": {
+          "nodeId": "article-avatar",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-date-date",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-date",
+        "target": {
+          "nodeId": "article-header",
+          "prop": "date"
+        },
+        "transform": {
+          "kind": "date-medium"
+        }
+      },
+      {
+        "id": "article-page-bodylength-bodylength",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-body-length",
+        "target": {
+          "nodeId": "article-header",
+          "prop": "bodyLength"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-cover-src",
+        "projection": {
+          "fieldIds": [
+            "articles-cover-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "articles-cover",
+        "target": {
+          "nodeId": "article-header",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-cover-alt",
+        "projection": {
+          "fieldIds": [
+            "articles-cover-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "articles-cover",
+        "target": {
+          "nodeId": "article-header",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-cover-caption",
+        "projection": {
+          "fieldIds": [
+            "articles-cover-caption"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "articles-cover",
+        "target": {
+          "nodeId": "article-header",
+          "prop": "caption"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-body-markdown",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-body",
+        "target": {
+          "nodeId": "article-body",
+          "prop": "markdown"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-tag1-tag1",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-tag1",
+        "target": {
+          "nodeId": "article-tags",
+          "prop": "tag1"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-tag2-tag2",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-tag2",
+        "target": {
+          "nodeId": "article-tags",
+          "prop": "tag2"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-tag3-tag3",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-tag3",
+        "target": {
+          "nodeId": "article-tags",
+          "prop": "tag3"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-authorname-name",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-author-name",
+        "target": {
+          "nodeId": "article-author",
+          "prop": "name"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-author-href",
+        "projection": {
+          "kind": "route-link"
+        },
+        "sourceFieldId": "articles-author",
+        "target": {
+          "nodeId": "article-author",
+          "prop": "href"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-authorbio-bio",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-author-bio",
+        "target": {
+          "nodeId": "article-author",
+          "prop": "bio"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-author-card-src",
+        "projection": {
+          "fieldIds": [
+            "articles-author-avatar-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "articles-author-avatar",
+        "target": {
+          "nodeId": "article-author",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-page-author-card-alt",
+        "projection": {
+          "fieldIds": [
+            "articles-author-avatar-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "articles-author-avatar",
+        "target": {
+          "nodeId": "article-author",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "article-page"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "articles"
+    },
+    "id": "article-page",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "desc",
+            "fieldId": "articles-date"
+          }
+        ]
+      }
+    },
+    "name": "Article page",
+    "schemaVersion": 2
+  },
+  "id": "article-page",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

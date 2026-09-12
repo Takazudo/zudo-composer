@@ -1,0 +1,139 @@
+{
+  "id": "site-frame",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "site-frame",
+    "name": "Site frame",
+    "publication": {
+      "kind": "global-template",
+      "outlet": {
+        "id": "site-frame-outlet",
+        "label": "Main content",
+        "target": {
+          "parentId": "frame-main",
+          "slotId": "content"
+        }
+      }
+    },
+    "root": [
+      {
+        "componentId": "blog.header",
+        "componentVersion": 1,
+        "id": "frame-header",
+        "props": {
+          "brand": "Margin Notes",
+          "brandHref": "/"
+        },
+        "slots": {
+          "nav": [
+            {
+              "componentId": "blog.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-blog-nav-link-1",
+              "props": {
+                "href": "/articles",
+                "label": "Articles"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "blog.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-blog-nav-link-2",
+              "props": {
+                "href": "/craft",
+                "label": "Craft"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "blog.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-blog-nav-link-3",
+              "props": {
+                "href": "/attention",
+                "label": "Attention"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "blog.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-blog-nav-link-4",
+              "props": {
+                "href": "/tools",
+                "label": "Tools"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "blog.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-blog-nav-link-5",
+              "props": {
+                "href": "/about",
+                "label": "About"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "blog.container",
+        "componentVersion": 1,
+        "id": "frame-main",
+        "props": {
+          "width": "page"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.footer",
+        "componentVersion": 1,
+        "id": "frame-footer",
+        "props": {
+          "creditHref": "https://zudo-composer.zudolab.dev",
+          "creditLabel": "Built with zudo-composer",
+          "smallPrint": "Margin Notes is a two-author journal about working with attention: short essays on craft, focus and the tools that hold up."
+        },
+        "slots": {
+          "nav": [
+            {
+              "componentId": "blog.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-blog-nav-link-6",
+              "props": {
+                "href": "/about",
+                "label": "About"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "blog.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-blog-nav-link-7",
+              "props": {
+                "href": "/authors",
+                "label": "Authors"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "blog.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-blog-nav-link-8",
+              "props": {
+                "href": "/newsletter",
+                "label": "Newsletter"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

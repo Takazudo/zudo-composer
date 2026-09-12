@@ -1,0 +1,95 @@
+{
+  "id": "home",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "home",
+    "name": "Home",
+    "root": [
+      {
+        "componentId": "blog.home-hero",
+        "componentVersion": 1,
+        "id": "home-hero",
+        "props": {
+          "heading": "Notes from the margin",
+          "lead": "Short essays on craft, focus and the tools that hold up — written slowly, by two people who would rather do one thing well.",
+          "linkHref": "/about",
+          "linkLabel": "About the journal"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.section",
+        "componentVersion": 1,
+        "id": "home-latest-section",
+        "props": {
+          "rule": true
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "blog.section-heading",
+              "componentVersion": 1,
+              "id": "home-latest-heading",
+              "props": {
+                "as": "h2",
+                "eyebrow": "Latest",
+                "heading": "Recent essays"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "blog.article-list",
+              "componentVersion": 1,
+              "id": "home-latest",
+              "props": {
+                "chips": false,
+                "columns": "2",
+                "mode": "all"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "blog.section",
+        "componentVersion": 1,
+        "id": "home-newsletter-section",
+        "props": {
+          "rule": true
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "blog.newsletter",
+              "componentVersion": 1,
+              "id": "home-newsletter",
+              "props": {
+                "buttonLabel": "Subscribe",
+                "heading": "The Sunday note",
+                "lead": "One short letter a week with the newest essay and one thing worth reading slowly. Nothing else.",
+                "successText": "Subscribed locally — this demo keeps nothing."
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "blog.demo-note",
+        "componentVersion": 1,
+        "id": "home-demo-note",
+        "props": {
+          "text": "Demo — no data is sent."
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

@@ -1,0 +1,216 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "description": "Twelve objects for quiet work.",
+    "fields": [
+      {
+        "id": "products-name",
+        "key": "name",
+        "kind": "text",
+        "label": "Name",
+        "required": true
+      },
+      {
+        "id": "products-slug",
+        "key": "slug",
+        "kind": "slug",
+        "label": "Slug",
+        "required": true
+      },
+      {
+        "id": "products-subtitle",
+        "key": "subtitle",
+        "kind": "text",
+        "label": "Subtitle",
+        "required": true
+      },
+      {
+        "id": "products-description",
+        "key": "description",
+        "kind": "markdown",
+        "label": "Description",
+        "required": true
+      },
+      {
+        "id": "products-price",
+        "key": "price",
+        "kind": "number",
+        "label": "Price",
+        "required": true
+      },
+      {
+        "id": "products-currency",
+        "key": "currency",
+        "kind": "text",
+        "label": "Currency",
+        "required": true
+      },
+      {
+        "id": "products-availability",
+        "key": "availability",
+        "kind": "text",
+        "label": "Availability",
+        "required": true
+      },
+      {
+        "id": "products-stock-label",
+        "key": "stockLabel",
+        "kind": "text",
+        "label": "Stock label",
+        "required": true
+      },
+      {
+        "id": "products-tags",
+        "item": {
+          "kind": "text"
+        },
+        "key": "tags",
+        "kind": "list",
+        "label": "Tags",
+        "required": true
+      },
+      {
+        "id": "products-tag1",
+        "key": "tag1",
+        "kind": "text",
+        "label": "Tag1",
+        "required": false
+      },
+      {
+        "id": "products-tag2",
+        "key": "tag2",
+        "kind": "text",
+        "label": "Tag2",
+        "required": false
+      },
+      {
+        "id": "products-tag3",
+        "key": "tag3",
+        "kind": "text",
+        "label": "Tag3",
+        "required": false
+      },
+      {
+        "fields": [
+          {
+            "id": "products-spec-material",
+            "key": "material",
+            "kind": "text",
+            "label": "Material",
+            "required": true
+          },
+          {
+            "id": "products-spec-dimensions",
+            "key": "dimensions",
+            "kind": "text",
+            "label": "Dimensions",
+            "required": true
+          },
+          {
+            "id": "products-spec-weight",
+            "key": "weight",
+            "kind": "text",
+            "label": "Weight",
+            "required": true
+          },
+          {
+            "id": "products-spec-origin",
+            "key": "origin",
+            "kind": "text",
+            "label": "Origin",
+            "required": true
+          },
+          {
+            "id": "products-spec-care",
+            "key": "care",
+            "kind": "text",
+            "label": "Care",
+            "required": true
+          },
+          {
+            "id": "products-spec-warranty",
+            "key": "warranty",
+            "kind": "text",
+            "label": "Warranty",
+            "required": true
+          }
+        ],
+        "id": "products-spec",
+        "key": "spec",
+        "kind": "object",
+        "label": "Spec",
+        "required": true
+      },
+      {
+        "fields": [
+          {
+            "id": "products-image1-src",
+            "key": "src",
+            "kind": "url",
+            "label": "Src",
+            "required": true
+          },
+          {
+            "id": "products-image1-alt",
+            "key": "alt",
+            "kind": "text",
+            "label": "Alt",
+            "required": true
+          }
+        ],
+        "id": "products-image1",
+        "key": "image1",
+        "kind": "object",
+        "label": "Image1",
+        "required": true
+      },
+      {
+        "fields": [
+          {
+            "id": "products-image2-src",
+            "key": "src",
+            "kind": "url",
+            "label": "Src",
+            "required": true
+          },
+          {
+            "id": "products-image2-alt",
+            "key": "alt",
+            "kind": "text",
+            "label": "Alt",
+            "required": true
+          }
+        ],
+        "id": "products-image2",
+        "key": "image2",
+        "kind": "object",
+        "label": "Image2",
+        "required": false
+      },
+      {
+        "id": "products-featured",
+        "key": "featured",
+        "kind": "boolean",
+        "label": "Featured",
+        "required": true
+      },
+      {
+        "id": "products-category",
+        "key": "category",
+        "kind": "reference",
+        "label": "Category",
+        "required": true,
+        "target": {
+          "providerId": "content-filesystem",
+          "recordId": "categories"
+        }
+      }
+    ],
+    "id": "products",
+    "kind": "collection",
+    "name": "Products",
+    "schemaVersion": 1
+  },
+  "id": "products",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

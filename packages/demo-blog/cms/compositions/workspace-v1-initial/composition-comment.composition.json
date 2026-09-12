@@ -1,0 +1,19 @@
+{
+  "id": "comment",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "comment",
+    "name": "Comment",
+    "root": [
+      {
+        "componentId": "blog.comment",
+        "componentVersion": 1,
+        "id": "comment",
+        "props": {},
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "testimonial-jonah",
+  "lifecycle": "published",
+  "modelId": "testimonials",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "testimonials-avatar": {
+      "testimonials-avatar-alt": "Abstract geometric avatar on a cobalt disc",
+      "testimonials-avatar-src": "/uploaded-assets/asset-assets-97c31942-4c4e-4da3-a8d0-c7b0777b29fb"
+    },
+    "testimonials-name": "Jonah Reyes",
+    "testimonials-order": 2,
+    "testimonials-quote": "Focus blocks are the feature I didn't know I needed. Orrery keeps my mornings clear, and meetings land in the afternoon without anyone asking.",
+    "testimonials-role": "Staff engineer, Tessera"
+  }
+}

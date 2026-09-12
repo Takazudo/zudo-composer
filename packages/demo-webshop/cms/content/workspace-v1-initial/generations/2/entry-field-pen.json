@@ -1,0 +1,49 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "field-pen",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "low-stock",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "desk"
+    },
+    "products-currency": "USD",
+    "products-description": "A short fountain pen turned from aircraft aluminium and finished in a matte black anodise that will not show fingerprints. Capped, it fits a shirt pocket; posted, it balances like a full-size pen.\n\nThe steel nib is a medium-fine that writes wet enough for good paper and dry enough for cheap paper. It takes standard international cartridges or the included converter, so you are never far from ink.\n\nThe cap threads on in one and a half turns and seals well enough to leave in a bag for a month without drying out.",
+    "products-featured": true,
+    "products-image1": {
+      "products-image1-alt": "Matte black aluminium fountain pen, capped",
+      "products-image1-src": "/uploaded-assets/asset-assets-58a10ab3-1341-4693-bd6a-ca94c766fd4f"
+    },
+    "products-image2": {
+      "products-image2-alt": "The pen uncapped, showing its steel nib",
+      "products-image2-src": "/uploaded-assets/asset-assets-3e8d2ee4-42db-4b78-9374-3c715606f1e6"
+    },
+    "products-name": "Field Pen",
+    "products-price": 42,
+    "products-slug": "field-pen",
+    "products-spec": {
+      "products-spec-care": "Flush with cool water between ink colours",
+      "products-spec-dimensions": "118 mm capped, 145 mm posted, 12 mm diameter",
+      "products-spec-material": "6061 aluminium body; stainless steel nib",
+      "products-spec-origin": "Machined in Taichung, Taiwan",
+      "products-spec-warranty": "Two years; nibs replaced free for the first year",
+      "products-spec-weight": "22 g"
+    },
+    "products-stock-label": "Only a few left",
+    "products-subtitle": "A machined aluminium fountain pen that posts, clips and travels.",
+    "products-tag1": "pen",
+    "products-tag2": "writing",
+    "products-tag3": "aluminium",
+    "products-tags": [
+      "pen",
+      "writing",
+      "aluminium"
+    ]
+  }
+}

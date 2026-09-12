@@ -1,0 +1,38 @@
+{
+  "id": "tag-attention",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "tag-attention",
+    "name": "Tag attention",
+    "root": [
+      {
+        "componentId": "blog.page-heading",
+        "componentVersion": 1,
+        "id": "tag-attention-heading",
+        "props": {
+          "eyebrow": "Tag",
+          "heading": "Attention",
+          "intro": "Where attention goes, and the small daily habits that protect it."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.article-list",
+        "componentVersion": 1,
+        "id": "tag-attention-list",
+        "props": {
+          "chips": false,
+          "columns": "2",
+          "mode": "all"
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

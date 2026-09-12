@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-trial",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "Solo is free for as long as you like. Studio comes with a **14-day trial**, and no card is needed to start it.",
+    "faq-order": 4,
+    "faq-question": "Is there a free trial?",
+    "faq-topic": "billing"
+  }
+}

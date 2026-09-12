@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-1",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "No. Nightjar Supply is a demo site built with [zudo-composer](https://github.com/Takazudo/zudo-composer). Nothing is for sale, nothing ships and no payment is ever taken.",
+    "faq-order": 1,
+    "faq-question": "Is this a real shop?"
+  }
+}

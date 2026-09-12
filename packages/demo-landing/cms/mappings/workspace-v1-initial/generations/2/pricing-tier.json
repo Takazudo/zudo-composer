@@ -1,0 +1,245 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "pricing-tier-name-name",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-name",
+        "target": {
+          "nodeId": "tier",
+          "prop": "name"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-tagline-tagline",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-tagline",
+        "target": {
+          "nodeId": "tier",
+          "prop": "tagline"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-currency-currency",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-currency",
+        "target": {
+          "nodeId": "tier",
+          "prop": "currency"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-ctalabel-ctalabel",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-cta-label",
+        "target": {
+          "nodeId": "tier",
+          "prop": "ctaLabel"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-ctahref-ctahref",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-cta-href",
+        "target": {
+          "nodeId": "tier",
+          "prop": "ctaHref"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-pricemonthly-pricemonthly",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-price-monthly",
+        "target": {
+          "nodeId": "tier",
+          "prop": "priceMonthly"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-priceyearly-priceyearly",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-price-yearly",
+        "target": {
+          "nodeId": "tier",
+          "prop": "priceYearly"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-popular-popular",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-popular",
+        "target": {
+          "nodeId": "tier",
+          "prop": "popular"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-order-order",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-order",
+        "target": {
+          "nodeId": "tier",
+          "prop": "order"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-feature1-feature1",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-feature1",
+        "target": {
+          "nodeId": "tier",
+          "prop": "feature1"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-feature2-feature2",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-feature2",
+        "target": {
+          "nodeId": "tier",
+          "prop": "feature2"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-feature3-feature3",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-feature3",
+        "target": {
+          "nodeId": "tier",
+          "prop": "feature3"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-feature4-feature4",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-feature4",
+        "target": {
+          "nodeId": "tier",
+          "prop": "feature4"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-feature5-feature5",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-feature5",
+        "target": {
+          "nodeId": "tier",
+          "prop": "feature5"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "pricing-tier-feature6-feature6",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "tiers-feature6",
+        "target": {
+          "nodeId": "tier",
+          "prop": "feature6"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "pricing-tier"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "tiers"
+    },
+    "id": "pricing-tier",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "asc",
+            "fieldId": "tiers-order"
+          }
+        ]
+      }
+    },
+    "name": "Pricing tier",
+    "schemaVersion": 2
+  },
+  "id": "pricing-tier",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

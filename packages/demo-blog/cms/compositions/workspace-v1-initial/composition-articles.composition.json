@@ -1,0 +1,43 @@
+{
+  "id": "articles",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "articles",
+    "name": "Articles",
+    "root": [
+      {
+        "componentId": "blog.page-heading",
+        "componentVersion": 1,
+        "id": "articles-heading",
+        "props": {
+          "eyebrow": "Archive",
+          "heading": "All articles",
+          "intro": "Every essay, newest first. Filter by the thread you are following."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.article-list",
+        "componentVersion": 1,
+        "id": "articles-all",
+        "props": {
+          "chips": true,
+          "columns": "3",
+          "mode": "all",
+          "tagOptions": [
+            "craft",
+            "attention",
+            "tools"
+          ]
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

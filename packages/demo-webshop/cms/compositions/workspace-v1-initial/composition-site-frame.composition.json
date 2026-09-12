@@ -1,0 +1,170 @@
+{
+  "id": "site-frame",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "site-frame",
+    "name": "Site frame",
+    "publication": {
+      "kind": "global-template",
+      "outlet": {
+        "id": "site-frame-outlet",
+        "label": "Main content",
+        "target": {
+          "parentId": "frame-main",
+          "slotId": "content"
+        }
+      }
+    },
+    "root": [
+      {
+        "componentId": "shop.header",
+        "componentVersion": 1,
+        "id": "frame-header",
+        "props": {
+          "brand": "Nightjar Supply",
+          "brandHref": "/"
+        },
+        "slots": {
+          "actions": [
+            {
+              "componentId": "shop.cart-button",
+              "componentVersion": 1,
+              "id": "site-frame-shop-cart-button-6",
+              "props": {
+                "href": "/cart",
+                "label": "Cart"
+              },
+              "slots": {}
+            }
+          ],
+          "nav": [
+            {
+              "componentId": "shop.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-shop-nav-link-1",
+              "props": {
+                "exact": false,
+                "href": "/desk",
+                "label": "Desk"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-shop-nav-link-2",
+              "props": {
+                "exact": false,
+                "href": "/carry",
+                "label": "Carry"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-shop-nav-link-3",
+              "props": {
+                "exact": false,
+                "href": "/light",
+                "label": "Light"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-shop-nav-link-4",
+              "props": {
+                "exact": false,
+                "href": "/products",
+                "label": "All products"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-shop-nav-link-5",
+              "props": {
+                "exact": false,
+                "href": "/about",
+                "label": "About"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "shop.container",
+        "componentVersion": 1,
+        "id": "frame-main",
+        "props": {
+          "width": "page"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.footer",
+        "componentVersion": 1,
+        "id": "frame-footer",
+        "props": {
+          "creditHref": "https://github.com/Takazudo/zudo-composer",
+          "creditLabel": "Built with zudo-composer",
+          "smallPrint": "Nightjar Supply is a demo shop. Nothing here is for sale, and no data you enter is sent anywhere."
+        },
+        "slots": {
+          "nav": [
+            {
+              "componentId": "shop.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-shop-nav-link-7",
+              "props": {
+                "exact": false,
+                "href": "/about",
+                "label": "About"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-shop-nav-link-8",
+              "props": {
+                "exact": false,
+                "href": "/faq",
+                "label": "FAQ"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-shop-nav-link-9",
+              "props": {
+                "exact": false,
+                "href": "/cart",
+                "label": "Cart"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-shop-nav-link-10",
+              "props": {
+                "exact": false,
+                "href": "/checkout",
+                "label": "Checkout"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "id": "about-page",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "about-page",
+    "name": "About page",
+    "root": [
+      {
+        "componentId": "shop.section-heading",
+        "componentVersion": 1,
+        "id": "about-heading",
+        "props": {
+          "as": "h1",
+          "eyebrow": "Nightjar Supply",
+          "heading": "",
+          "intro": ""
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.split",
+        "componentVersion": 1,
+        "id": "about-page-shop-split-1",
+        "props": {
+          "ratio": "1/1"
+        },
+        "slots": {
+          "left": [
+            {
+              "componentId": "shop.image",
+              "componentVersion": 1,
+              "id": "about-page-shop-image-2",
+              "props": {
+                "alt": "A dark workbench at night with a small lit brass lamp, a closed notebook and a pen",
+                "aspect": "4/3",
+                "caption": "The bench where the shop began.",
+                "src": "/uploaded-assets/asset-assets-b8badec4-c972-48f8-9944-b44d671723cc"
+              },
+              "slots": {}
+            }
+          ],
+          "right": [
+            {
+              "componentId": "shop.prose",
+              "componentVersion": 1,
+              "id": "about-body",
+              "props": {},
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "shop.section",
+        "componentVersion": 1,
+        "id": "about-contact",
+        "props": {
+          "tone": "bg"
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "shop.contact-form",
+              "componentVersion": 1,
+              "id": "about-page-shop-contact-form-3",
+              "props": {
+                "heading": "Write to us",
+                "successText": "Thanks — in a real shop we would reply within two days."
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

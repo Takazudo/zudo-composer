@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "comment-04",
+  "lifecycle": "published",
+  "modelId": "comments",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "comments-article": {
+      "modelId": "articles",
+      "providerId": "content-filesystem",
+      "recordId": "article-sharpen-before-you-cut"
+    },
+    "comments-article-slug": "sharpen-before-you-cut",
+    "comments-body": "The Friday card box for dull edges is a lovely idea. Fixing things mid-task always costs me twice.",
+    "comments-date": "2026-03-22",
+    "comments-name": "Marco",
+    "comments-order": 4
+  }
+}

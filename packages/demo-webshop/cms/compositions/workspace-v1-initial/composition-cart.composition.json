@@ -1,0 +1,59 @@
+{
+  "id": "cart",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "cart",
+    "name": "Cart",
+    "root": [
+      {
+        "componentId": "shop.section-heading",
+        "componentVersion": 1,
+        "id": "cart-shop-section-heading-1",
+        "props": {
+          "as": "h1",
+          "eyebrow": "",
+          "heading": "Your cart",
+          "intro": ""
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.cart-page",
+        "componentVersion": 1,
+        "id": "cart-shop-cart-page-2",
+        "props": {
+          "emptyHref": "/products",
+          "emptyText": "Your cart is empty. The shelves are not."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.cart-summary",
+        "componentVersion": 1,
+        "id": "cart-shop-cart-summary-3",
+        "props": {
+          "checkoutHref": "/checkout",
+          "currency": "USD",
+          "readOnly": false,
+          "shipping": 8
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.demo-note",
+        "componentVersion": 1,
+        "id": "cart-shop-demo-note-4",
+        "props": {
+          "text": "Demo — no data is sent."
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

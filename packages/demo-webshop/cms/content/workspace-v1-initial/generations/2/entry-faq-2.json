@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-2",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "The checkout form checks what you type, waits a moment and shows a made-up order number. Your cart is then emptied. **No data leaves your browser.**",
+    "faq-order": 2,
+    "faq-question": "What happens when I check out?"
+  }
+}

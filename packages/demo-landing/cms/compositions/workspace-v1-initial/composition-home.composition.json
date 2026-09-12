@@ -1,0 +1,381 @@
+{
+  "id": "home",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "home",
+    "name": "Home",
+    "root": [
+      {
+        "componentId": "land.hero",
+        "componentVersion": 1,
+        "id": "home-hero",
+        "props": {
+          "alt": "Stylised calendar app window with a week grid and one highlighted block",
+          "emphasis": "one view",
+          "eyebrow": "Team scheduling",
+          "heading": "Every moving part of your week, in one view",
+          "lead": "Orrery puts your team's meetings, focus time and deadlines on one calendar, so planning the week takes minutes instead of a meeting about meetings.",
+          "primaryHref": "#signup",
+          "primaryLabel": "Start free",
+          "secondaryHref": "/pricing",
+          "secondaryLabel": "See pricing",
+          "src": "/uploaded-assets/asset-assets-465686d0-7f71-43d2-ae46-d8e56a175a30"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "land.logo-strip",
+        "componentVersion": 1,
+        "id": "home-land-logo-strip-1",
+        "props": {
+          "caption": "Teams planning with Orrery",
+          "count": 6
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "home-land-section-2",
+        "props": {
+          "anchor": "features",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.section-heading",
+              "componentVersion": 1,
+              "id": "home-land-section-heading-3",
+              "props": {
+                "align": "center",
+                "as": "h2",
+                "eyebrow": "Views",
+                "heading": "Three views, one calendar",
+                "intro": "Zoom from today's agenda to the quarter without switching tools or losing your place."
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.feature-grid",
+              "componentVersion": 1,
+              "id": "home-land-feature-grid-4",
+              "props": {
+                "columns": "3"
+              },
+              "slots": {
+                "items": [
+                  {
+                    "componentId": "land.feature-item",
+                    "componentVersion": 1,
+                    "id": "home-land-feature-item-5",
+                    "props": {
+                      "body": "One timeline that zooms. Drag a block from the week view into next month and everyone sees it move.",
+                      "emphasis": true,
+                      "icon": "calendar",
+                      "title": "Day, week and month"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.feature-item",
+                    "componentVersion": 1,
+                    "id": "home-land-feature-item-6",
+                    "props": {
+                      "body": "Stack your team's calendars side by side and spot the one hour on Thursday when all six of you are free.",
+                      "emphasis": false,
+                      "icon": "people",
+                      "title": "Everyone at a glance"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.feature-item",
+                    "componentVersion": 1,
+                    "id": "home-land-feature-item-7",
+                    "props": {
+                      "body": "Protected blocks turn busy for everyone else, so deep work stops losing to the next invite.",
+                      "emphasis": false,
+                      "icon": "clock",
+                      "title": "Focus time that holds"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "home-land-section-8",
+        "props": {
+          "anchor": "how",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.section-heading",
+              "componentVersion": 1,
+              "id": "home-land-section-heading-9",
+              "props": {
+                "align": "center",
+                "as": "h2",
+                "eyebrow": "Setup",
+                "heading": "How it works",
+                "intro": "Most teams are planning their first week within fifteen minutes."
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.steps-row",
+              "componentVersion": 1,
+              "id": "home-land-steps-row-10",
+              "props": {},
+              "slots": {
+                "steps": [
+                  {
+                    "componentId": "land.step",
+                    "componentVersion": 1,
+                    "id": "home-land-step-11",
+                    "props": {
+                      "body": "Sign in with Google or Microsoft. Orrery reads your existing events; nothing is copied or moved.",
+                      "number": 1,
+                      "title": "Connect your calendars"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.step",
+                    "componentVersion": 1,
+                    "id": "home-land-step-12",
+                    "props": {
+                      "body": "Set focus hours, working days and the meetings that repeat. Orrery learns the shape of your week.",
+                      "number": 2,
+                      "title": "Mark what matters"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.step",
+                    "componentVersion": 1,
+                    "id": "home-land-step-13",
+                    "props": {
+                      "body": "Open the week view together, move a few blocks, and every calendar underneath updates at once.",
+                      "number": 3,
+                      "title": "Plan on Monday, done by 9:15"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "home-land-section-14",
+        "props": {
+          "anchor": "",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.image",
+              "componentVersion": 1,
+              "id": "home-land-image-15",
+              "props": {
+                "alt": "Three overlapping cards for day, week and month views connected by arrows",
+                "aspect": "16/10",
+                "src": "/uploaded-assets/asset-assets-c0782606-10cc-42f1-a223-ff461548f313"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "home-land-section-16",
+        "props": {
+          "anchor": "pricing",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.section-heading",
+              "componentVersion": 1,
+              "id": "home-land-section-heading-17",
+              "props": {
+                "align": "center",
+                "as": "h2",
+                "eyebrow": "Pricing",
+                "heading": "Simple pricing",
+                "intro": "Start free on your own. Bring your team when the week gets crowded."
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.pricing-table",
+              "componentVersion": 1,
+              "id": "home-pricing",
+              "props": {
+                "currency": "USD",
+                "defaultBilling": "monthly",
+                "yearlyNote": "Save 20% when billed yearly"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "home-land-section-18",
+        "props": {
+          "anchor": "",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.stats",
+              "componentVersion": 1,
+              "id": "home-land-stats-19",
+              "props": {
+                "stat1Label": "saved per person each week",
+                "stat1Value": "4 hrs",
+                "stat2Label": "teams planning every Monday",
+                "stat2Value": "12,000",
+                "stat3Label": "of meetings start on time",
+                "stat3Value": "98%"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "home-land-section-20",
+        "props": {
+          "anchor": "",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.section-heading",
+              "componentVersion": 1,
+              "id": "home-land-section-heading-21",
+              "props": {
+                "align": "center",
+                "as": "h2",
+                "eyebrow": "Customers",
+                "heading": "What teams say",
+                "intro": ""
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.testimonials",
+              "componentVersion": 1,
+              "id": "home-testimonials",
+              "props": {},
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.cta-band",
+        "componentVersion": 1,
+        "id": "home-land-cta-band-22",
+        "props": {
+          "buttonHref": "/#signup",
+          "buttonLabel": "Start free",
+          "heading": "Plan next week in ten minutes",
+          "lead": "Free for one person, forever. No card needed."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "home-land-section-23",
+        "props": {
+          "anchor": "faq",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.section-heading",
+              "componentVersion": 1,
+              "id": "home-land-section-heading-24",
+              "props": {
+                "align": "center",
+                "as": "h2",
+                "eyebrow": "FAQ",
+                "heading": "Questions",
+                "intro": ""
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.faq-accordion",
+              "componentVersion": 1,
+              "id": "home-faq",
+              "props": {
+                "allowMultiple": false
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "home-land-section-25",
+        "props": {
+          "anchor": "signup",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.signup-form",
+              "componentVersion": 1,
+              "id": "home-land-signup-form-26",
+              "props": {
+                "buttonLabel": "Create my calendar",
+                "heading": "Start free",
+                "lead": "Tell us where to send your invite. Solo is free; you can add your team later.",
+                "successHeading": "Check your inbox",
+                "successText": "Check your inbox — in this demo, nothing was sent."
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "id": "initial",
+  "mutationToken": 1,
+  "status": "ready",
+  "metadata": {
+    "activeSitemap": {
+      "providerId": "sitemap-filesystem",
+      "recordId": "nightjar-supply-sitemap"
+    },
+    "collectionAttachments": [
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "home"
+        },
+        "id": "featured-product-cards-home-featured-items",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "featured-product-cards"
+        },
+        "order": 0,
+        "target": {
+          "nodeId": "home-featured",
+          "slotId": "items"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "home"
+        },
+        "id": "category-tile-shelves-items",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "category-tile"
+        },
+        "order": 1,
+        "target": {
+          "nodeId": "shelves",
+          "slotId": "items"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "catalog"
+        },
+        "id": "catalog-cards",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "product-card"
+        },
+        "order": 2,
+        "target": {
+          "nodeId": "catalog",
+          "slotId": "items"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "cat-desk"
+        },
+        "id": "desk-cards",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "desk-product-cards"
+        },
+        "order": 3,
+        "target": {
+          "nodeId": "desk",
+          "slotId": "items"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "cat-carry"
+        },
+        "id": "carry-cards",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "carry-product-cards"
+        },
+        "order": 4,
+        "target": {
+          "nodeId": "carry",
+          "slotId": "items"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "cat-light"
+        },
+        "id": "light-cards",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "light-product-cards"
+        },
+        "order": 5,
+        "target": {
+          "nodeId": "light",
+          "slotId": "items"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "product-page"
+        },
+        "id": "related-cards",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "related-product-cards"
+        },
+        "order": 6,
+        "target": {
+          "nodeId": "product-related",
+          "slotId": "items"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "faq-page"
+        },
+        "id": "faq-items",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "faq-item"
+        },
+        "order": 7,
+        "target": {
+          "nodeId": "faq-list",
+          "slotId": "items"
+        }
+      }
+    ],
+    "componentPack": {
+      "contractVersion": 2,
+      "packId": "demo-webshop",
+      "packVersion": "1.0.0"
+    },
+    "id": "demo-webshop",
+    "name": "Nightjar Supply",
+    "providers": {
+      "compositions": [
+        {
+          "id": "files"
+        }
+      ],
+      "content": [
+        {
+          "id": "content-filesystem"
+        }
+      ],
+      "mappings": [
+        {
+          "id": "mapping-filesystem"
+        }
+      ],
+      "sitemaps": [
+        {
+          "id": "sitemap-filesystem"
+        }
+      ]
+    },
+    "schemaVersion": 2
+  },
+  "baselineRevision": "6bac93e340a28b9ad253d12278b76ede0808bd57dd4b2ca0d09e3d9fd3f71746"
+}

@@ -1,0 +1,38 @@
+{
+  "id": "tag-tools",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "tag-tools",
+    "name": "Tag tools",
+    "root": [
+      {
+        "componentId": "blog.page-heading",
+        "componentVersion": 1,
+        "id": "tag-tools-heading",
+        "props": {
+          "eyebrow": "Tag",
+          "heading": "Tools",
+          "intro": "Choosing, maintaining and repairing the things we work with."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.article-list",
+        "componentVersion": 1,
+        "id": "tag-tools-list",
+        "props": {
+          "chips": false,
+          "columns": "2",
+          "mode": "all"
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

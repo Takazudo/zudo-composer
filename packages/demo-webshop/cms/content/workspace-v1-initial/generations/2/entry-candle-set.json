@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "candle-set",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "in-stock",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "light"
+    },
+    "products-currency": "USD",
+    "products-description": "Three pillar candles poured from a blend of rapeseed and beeswax, in 7, 10 and 13 cm heights. They are unscented, so they sit quietly beside dinner and do not argue with coffee.\n\nThe wax burns clean and slowly, about 40 hours for the tallest. Cotton wicks are pre-trimmed and stay centred to the end.\n\nThey arrive wrapped in paper, not plastic, in a box you can keep them in between evenings.",
+    "products-featured": false,
+    "products-image1": {
+      "products-image1-alt": "Three ivory pillar candles of different heights",
+      "products-image1-src": "/uploaded-assets/asset-assets-29940c85-15d2-4c6e-bcce-2233d97bb497"
+    },
+    "products-name": "Candle Set",
+    "products-price": 28,
+    "products-slug": "candle-set",
+    "products-spec": {
+      "products-spec-care": "Trim wicks to 5 mm; never leave burning unattended",
+      "products-spec-dimensions": "60 mm diameter; 70, 100 and 130 mm tall",
+      "products-spec-material": "Rapeseed and beeswax blend; cotton wicks",
+      "products-spec-origin": "Poured in Ghent, Belgium",
+      "products-spec-warranty": "Replaced if a wick fails",
+      "products-spec-weight": "780 g the set"
+    },
+    "products-stock-label": "In stock",
+    "products-subtitle": "Three unscented ivory pillars in three heights.",
+    "products-tag1": "candle",
+    "products-tag2": "wax",
+    "products-tag3": "evening",
+    "products-tags": [
+      "candle",
+      "wax",
+      "evening"
+    ]
+  }
+}

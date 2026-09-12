@@ -1,0 +1,122 @@
+{
+  "id": "about-page",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "about-page",
+    "name": "About page",
+    "root": [
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "about-page-land-section-1",
+        "props": {
+          "anchor": "",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.section-heading",
+              "componentVersion": 1,
+              "id": "about-heading",
+              "props": {
+                "align": "start",
+                "as": "h1",
+                "eyebrow": "About",
+                "heading": "About Orrery",
+                "intro": ""
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.split",
+              "componentVersion": 1,
+              "id": "about-page-land-split-2",
+              "props": {
+                "ratio": "1/1",
+                "reverse": false
+              },
+              "slots": {
+                "copy": [
+                  {
+                    "componentId": "land.prose",
+                    "componentVersion": 1,
+                    "id": "about-body",
+                    "props": {
+                      "markdown": ""
+                    },
+                    "slots": {}
+                  }
+                ],
+                "media": [
+                  {
+                    "componentId": "land.image",
+                    "componentVersion": 1,
+                    "id": "about-page-land-image-3",
+                    "props": {
+                      "alt": "Four abstract figures around a table beneath a large wall calendar",
+                      "aspect": "4/3",
+                      "src": "/uploaded-assets/asset-assets-55d857f5-fce8-4c86-827e-1de0a811a209"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "about-page-land-section-4",
+        "props": {
+          "anchor": "contact",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.section-heading",
+              "componentVersion": 1,
+              "id": "about-page-land-section-heading-5",
+              "props": {
+                "align": "center",
+                "as": "h2",
+                "eyebrow": "Contact",
+                "heading": "Contact",
+                "intro": "Questions about Org, a partnership or a bug? We answer within one working day."
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.contact-form",
+              "componentVersion": 1,
+              "id": "about-page-land-contact-form-6",
+              "props": {
+                "heading": "Write to us",
+                "successText": "Thanks — in this demo, your message was not sent anywhere."
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.demo-note",
+              "componentVersion": 1,
+              "id": "about-page-land-demo-note-7",
+              "props": {
+                "text": "Demo — no data is sent."
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

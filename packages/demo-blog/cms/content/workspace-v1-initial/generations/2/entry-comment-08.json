@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "comment-08",
+  "lifecycle": "published",
+  "modelId": "comments",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "comments-article": {
+      "modelId": "articles",
+      "providerId": "content-filesystem",
+      "recordId": "article-why-drafts-should-look-unfinished"
+    },
+    "comments-article-slug": "why-drafts-should-look-unfinished",
+    "comments-body": "We started sharing wireframes in pencil after reading this, and the feedback moved from button colours to whether the page should exist at all. Exactly right.",
+    "comments-date": "2026-05-08",
+    "comments-name": "Dev",
+    "comments-order": 8
+  }
+}

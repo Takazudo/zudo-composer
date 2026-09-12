@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "comment-10",
+  "lifecycle": "published",
+  "modelId": "comments",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "comments-article": {
+      "modelId": "articles",
+      "providerId": "content-filesystem",
+      "recordId": "article-the-quiet-hour"
+    },
+    "comments-article-slug": "the-quiet-hour",
+    "comments-body": "No agenda is the hard part. I keep trying to turn it into planning time and it stops working immediately, just as you say.",
+    "comments-date": "2026-05-25",
+    "comments-name": "Tom",
+    "comments-order": 10
+  }
+}

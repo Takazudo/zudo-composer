@@ -1,0 +1,47 @@
+{
+  "id": "cat-desk",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "cat-desk",
+    "name": "Desk shelf",
+    "root": [
+      {
+        "componentId": "shop.hero",
+        "componentVersion": 1,
+        "id": "cat-desk-shop-hero-1",
+        "props": {
+          "alt": "Charcoal linen A5 notebook with a black elastic band",
+          "eyebrow": "Shelf",
+          "heading": "Desk",
+          "lead": "Paper, brass and stone for the surface you work on. Tools that stay where you put them and get better with handling.",
+          "primaryHref": "#",
+          "primaryLabel": "",
+          "secondaryHref": "#",
+          "secondaryLabel": "",
+          "src": "/uploaded-assets/asset-assets-449340b8-78fd-4646-97e1-20cbb6949a87",
+          "variant": "compact"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.product-grid",
+        "componentVersion": 1,
+        "id": "desk",
+        "props": {
+          "chips": false,
+          "defaultSort": "featured",
+          "emptyText": "Nothing on the desk shelf matches.",
+          "pageSize": 8,
+          "toolbar": true
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}
