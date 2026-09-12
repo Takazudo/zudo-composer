@@ -1,10 +1,139 @@
 /* The host's base stylesheet: Tailwind v4 with NO default theme. Every utility
-   a component uses comes from the `land-` token namespace declared here. */
+   a component uses comes from the `land-` token namespace declared here
+   (docs/demo-sites/landing.md § 3). No base `--spacing` exists, so numeric
+   spacing utilities (`p-4`, `gap-2`) generate nothing. */
 @import "tailwindcss/preflight";
 @import "tailwindcss/utilities";
 
 @source "../components";
 
+/* Raw tier: one grey ramp and one cobalt ramp. Components never read these. */
+:root {
+  --land-palette-gray-0: oklch(0.995 0.002 250);
+  --land-palette-gray-1: oklch(0.975 0.004 250);
+  --land-palette-gray-2: oklch(0.935 0.006 250);
+  --land-palette-gray-3: oklch(0.865 0.008 250);
+  --land-palette-gray-4: oklch(0.62 0.012 250);
+  --land-palette-gray-5: oklch(0.48 0.015 250);
+  --land-palette-gray-6: oklch(0.26 0.02 250);
+  --land-palette-gray-7: oklch(0.16 0.02 250);
+  --land-palette-cobalt-1: oklch(0.95 0.03 262);
+  --land-palette-cobalt-4: oklch(0.52 0.22 262);
+  --land-palette-cobalt-5: oklch(0.44 0.2 262);
+  --land-palette-green-4: oklch(0.6 0.15 150);
+  --land-palette-red-4: oklch(0.55 0.19 25);
+}
+
 @theme {
-  --color-land-accent: oklch(55% 0.16 250);
+  --color-land-bg: var(--land-palette-gray-0);
+  --color-land-surface: var(--land-palette-gray-1);
+  --color-land-surface-2: var(--land-palette-gray-2);
+  --color-land-border: var(--land-palette-gray-3);
+  --color-land-faint: var(--land-palette-gray-4);
+  --color-land-muted: var(--land-palette-gray-5);
+  --color-land-fg: var(--land-palette-gray-6);
+  --color-land-fg-strong: var(--land-palette-gray-7);
+  --color-land-link: var(--land-palette-gray-7);
+  --color-land-accent: var(--land-palette-cobalt-4);
+  --color-land-accent-strong: var(--land-palette-cobalt-5);
+  --color-land-accent-soft: var(--land-palette-cobalt-1);
+  --color-land-accent-fg: oklch(0.99 0 0);
+  --color-land-focus: var(--land-palette-cobalt-5);
+  --color-land-success: var(--land-palette-green-4);
+  --color-land-danger: var(--land-palette-red-4);
+
+  --spacing-0: 0;
+  --spacing-land-hsp-xs: 0.5rem;
+  --spacing-land-hsp-sm: 1rem;
+  --spacing-land-hsp-md: 1.5rem;
+  --spacing-land-hsp-lg: 2.5rem;
+  --spacing-land-hsp-xl: 4rem;
+  --spacing-land-hsp-2xl: 6rem;
+  --spacing-land-vsp-xs: 0.5rem;
+  --spacing-land-vsp-sm: 1rem;
+  --spacing-land-vsp-md: 2rem;
+  --spacing-land-vsp-lg: 4rem;
+  --spacing-land-vsp-xl: 6rem;
+  --spacing-land-vsp-2xl: 9rem;
+  --spacing-land-control-h: 3rem;
+  --spacing-land-control-h-lg: 3.5rem;
+  --spacing-land-nav-h: 4rem;
+  /* Fixed object sizes, not a spacing ladder. */
+  --spacing-land-icon: 1.25rem;
+  --spacing-land-chip: 2.75rem;
+  --spacing-land-avatar: 3rem;
+  --spacing-land-wordmark: 1.75rem;
+
+  /* Tailwind's `text-*` namespace carries the spec's `font-size-land-*` scale;
+     the `-compact` rungs are the sizes used below `land-md`. */
+  --text-land-caption: 0.875rem;
+  --text-land-caption--line-height: 1.5;
+  --text-land-caption--font-weight: 500;
+  --text-land-body: 1.0625rem;
+  --text-land-body--line-height: 1.65;
+  --text-land-lead: 1.25rem;
+  --text-land-lead--line-height: 1.55;
+  --text-land-h3: 1.375rem;
+  --text-land-h3--line-height: 1.3;
+  --text-land-h3--font-weight: 600;
+  --text-land-h2: 2.25rem;
+  --text-land-h2--line-height: 1.15;
+  --text-land-h2--font-weight: 600;
+  --text-land-h2-compact: 1.75rem;
+  --text-land-h2-compact--line-height: 1.15;
+  --text-land-h2-compact--font-weight: 600;
+  --text-land-h1: 3rem;
+  --text-land-h1--line-height: 1.08;
+  --text-land-h1--font-weight: 700;
+  --text-land-h1-compact: 2.25rem;
+  --text-land-h1-compact--line-height: 1.08;
+  --text-land-h1-compact--font-weight: 700;
+  --text-land-display: 4.5rem;
+  --text-land-display--line-height: 1;
+  --text-land-display--font-weight: 700;
+  --text-land-display-compact: 2.75rem;
+  --text-land-display-compact--line-height: 1;
+  --text-land-display-compact--font-weight: 700;
+  --text-land-price: 3rem;
+  --text-land-price--line-height: 1;
+  --text-land-price--font-weight: 700;
+
+  --font-land-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-weight-land-normal: 400;
+  --font-weight-land-medium: 500;
+  --font-weight-land-semibold: 600;
+  --font-weight-land-bold: 700;
+  --tracking-land-tight: -0.02em;
+  --tracking-land-caps: 0.06em;
+
+  --radius-land-md: 0.75rem;
+  --radius-land-pill: 9999px;
+  --shadow-land-hero: 0 24px 64px -24px oklch(0.15 0.02 262 / 0.35);
+
+  --container-land-page: 72rem;
+  --container-land-narrow: 44rem;
+
+  --breakpoint-land-sm: 40rem;
+  --breakpoint-land-md: 48rem;
+  --breakpoint-land-lg: 64rem;
+  --breakpoint-land-xl: 80rem;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-land-bg);
+    color: var(--color-land-fg);
+    font-family: var(--font-land-sans);
+    font-size: 100%;
+  }
+
+  body {
+    font-size: var(--text-land-body);
+    line-height: var(--text-land-body--line-height);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-land-focus);
+    outline-offset: 2px;
+  }
 }
