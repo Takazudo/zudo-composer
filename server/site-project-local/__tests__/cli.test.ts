@@ -34,7 +34,7 @@ function runThrowing(input: string): Promise<{ status: number | null; stdout: st
 describe("SiteProject CLI framing", () => {
   it("executes the real protocol-2 plan/stage/build/activate CLI without implicit activation", async () => {
     const parent = await mkdtemp(join(tmpdir(), "release-cli-")); roots.push(parent);
-    const project = JSON.parse(await readFile(resolve(process.cwd(), "src/test/site-project-fixture.json"), "utf8")) as SiteProject;
+    const project = JSON.parse(await readFile(resolve(process.cwd(), "packages/demo-studio/site-project.json"), "utf8")) as SiteProject;
     const invoke = (request: object) => new Promise<{ code: number | null; response: { ok: boolean; result: unknown } }>((done, fail) => {
       const child = spawn(process.execPath, ["--import", "tsx", resolve(process.cwd(), "server/site-project-local/cli.ts")], { env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: join(parent, "release") }, stdio: ["pipe", "pipe", "pipe"] }); let stdout = "", stderr = "";
       child.stdout.on("data", (chunk) => { stdout += String(chunk); }); child.stderr.on("data", (chunk) => { stderr += String(chunk); }); child.on("error", fail); child.on("close", (code) => { if (stderr) return fail(new Error(stderr)); done({ code, response: JSON.parse(stdout) }); }); child.stdin.end(JSON.stringify({ protocolVersion: 2, ...request }));

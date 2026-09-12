@@ -1,5 +1,5 @@
 import { assets as bundledAsset } from "virtual:hosted-demo-seed";
-import sample from "./sample-project.json";
+import sample from "../../packages/demo-studio/site-project.json";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "../app/provider-integration";
 import { computeSiteProjectRevision } from "../app/empty-site-project";
 import { validateSiteProject, type SiteProject } from "../site-project";

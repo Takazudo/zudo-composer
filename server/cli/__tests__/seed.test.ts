@@ -39,7 +39,7 @@ async function installedHost() {
     name: "seed-installed-host", version: "0.0.0", private: true, type: "module",
     devDependencies: { "zudo-composer": manifest.version, "@zudo-sg/ui": manifest.devDependencies["@zudo-sg/ui"], preact: manifest.peerDependencies.preact },
   }));
-  const source = await readFile(join(APP_ROOT, "src/test/site-project-fixture.json"), "utf8");
+  const source = await readFile(join(APP_ROOT, "packages/demo-studio/site-project.json"), "utf8");
   const env = { ...process.env };
   for (const name of ["ZUDO_SITE_PROJECT_ROOT", "ZUDO_ASSETS_STORE_ROOT", "ZUDO_DATA_ROOT"]) delete env[name];
   const bin = join(tool, "bin/zudo-composer.mjs");

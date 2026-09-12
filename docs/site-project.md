@@ -257,14 +257,14 @@ JSON
 ```
 
 For an initial release, explicitly select the intended entries. This example
-deliberately selects **all entries in the bundled synthetic sample**; normal
+deliberately selects **all entries in the repository's generated studio sample**; normal
 editorial releases should name only the entries being approved. Use the actual
 head revision and active triple from `list` for subsequent reviews.
 
 ```sh
 node --input-type=module <<'NODE' | corepack pnpm site-project:api > release-plan.json
 import { readFileSync } from 'node:fs';
-const project = JSON.parse(readFileSync('src/test/site-project-fixture.json', 'utf8'));
+const project = JSON.parse(readFileSync('packages/demo-studio/site-project.json', 'utf8'));
 const selection = project.providers.content.flatMap(p => p.entries.map(e => ({
   ref: { providerId: p.id, modelId: e.modelId, recordId: e.id }, action: 'publish'
 })));

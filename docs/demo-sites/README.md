@@ -70,7 +70,7 @@ corepack pnpm dev --port 4181
    SiteProject aggregate, validates it against the package's pack manifest with
    the tool's own `validateSiteProject`, and writes `site-project.json` as
    canonical JSON (sorted keys, compact, trailing newline — the same form as
-   `src/test/site-project-fixture.json`). Validation failures list the
+   `packages/demo-studio/site-project.json`). Validation failures list the
    diagnostics and write nothing.
 2. **seed** (`zudo-composer assets import images-src/manifest.json &&
    zudo-composer seed`) runs two idempotent installed commands:

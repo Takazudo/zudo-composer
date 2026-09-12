@@ -37,6 +37,7 @@ describe("final browser acceptance source contract", () => {
   });
   it("isolates release and Assets beneath one cleaned temporary parent for child processes only", () => {
     const runner = read("scripts/run-site-project-browser.mjs");
+    expect(runner).toContain('"seed", "--from", join(root, "packages/demo-studio/site-project.json")');
     expect(runner).toContain('join(temporaryRoot, "release")');
     expect(runner).toContain('join(temporaryRoot, "assets")');
     expect(runner).toContain('join(temporaryRoot, "data")');
@@ -82,7 +83,7 @@ describe("final browser acceptance source contract", () => {
       expect(runner).not.toMatch(/process\.env\.\w+\s*=/);
       // The installed seed command owns the release protocol; this fixture
       // supplies committed input and invokes it in its disposable host.
-      expect(runner).toContain('cpSync(join(root, "src/test/site-project-fixture.json"), join(hostRoot, "site-project.json"))');
+      expect(runner).toContain('cpSync(join(root, "packages/demo-studio/site-project.json"), join(hostRoot, "site-project.json"))');
       expect(runner).toContain('[join(root, "bin/zudo-composer.mjs"), "seed"], { cwd: hostRoot }');
       for (const operation of ["plan", "apply", "build", "activate"]) expect(runner).not.toContain(`operation: "${operation}"`);
     } finally { rmSync(parent, { recursive: true, force: true }); }

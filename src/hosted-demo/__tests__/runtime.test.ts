@@ -6,7 +6,9 @@ import { createProductionProviderIntegration } from "../../app/provider-integrat
 import { computeSiteProjectRevision } from "../../app/empty-site-project";
 import { validateSiteProject } from "../../site-project";
 import { activeSiteProjectValidationContext } from "../../app/site-project-manifest";
-import sample from "../sample-project.json";
+import sample from "../../../packages/demo-studio/site-project.json";
+import { loadSampleSiteProject } from "../../test/site-project-fixture";
+import { siteProject } from "virtual:site-project-source";
 import { createDemoWorkspaceProviders } from "../workspaces";
 import { createDemoAsset } from "../assets";
 import { prepareDemoAsset } from "../../../scripts/hosted-demo/prepare";
@@ -17,6 +19,15 @@ const project = validated.project;
 async function assets() { const seed = await prepareDemoAsset(resolve("cms/assets")); return createDemoAsset({ snapshot: seed.snapshot, bytes: Object.fromEntries(seed.files.map((f) => [f.fileName.match(/sha256-([a-f0-9]+)/)![1]!, f.source])) }); }
 async function integration() { return createProductionProviderIntegration({ project, sourceRevision: await computeSiteProjectRevision(project), createProviders: createDemoWorkspaceProviders(), assetProvider: (await assets()).provider }); }
 describe("disposable hosted runtime", () => {
+  it("shares the generated studio project with the detached test seed and virtual source", async () => {
+    const fixture = loadSampleSiteProject(activeSiteProjectValidationContext);
+    expect(fixture).toEqual(project);
+    expect(siteProject).toEqual(project);
+    expect(await computeSiteProjectRevision(fixture)).toBe(await computeSiteProjectRevision(project));
+    fixture.name = "A test's private edit";
+    expect(loadSampleSiteProject(activeSiteProjectValidationContext)).toEqual(project);
+    expect(sample.name).toBe("Sample Studio");
+  });
   it("initializes all real domain contracts, captures coherently and isolates/reset realms", async () => {
     const a = await integration(); const b = await integration();
     expect(await a.initialization.initialize()).toEqual({ status: "ready" });

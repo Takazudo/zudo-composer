@@ -28,7 +28,7 @@ async function installedHost() {
   const manifest = JSON.parse(await readFile(join(APP_ROOT, "package.json"), "utf8"));
   await writeFile(join(host, "package.json"), JSON.stringify({ name: "ready-workspace-host", type: "module", devDependencies: { "@zudo-sg/ui": manifest.devDependencies["@zudo-sg/ui"], preact: manifest.peerDependencies.preact } }));
   await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "@zudo-sg/ui/composer-pack", dataDir: "data/cms", contentDir: "editor/content", assetsDir: "library/assets" });\n');
-  const source = await readFile(join(APP_ROOT, "src/test/site-project-fixture.json"), "utf8");
+  const source = await readFile(join(APP_ROOT, "packages/demo-studio/site-project.json"), "utf8");
   const env = { ...process.env, ZUDO_SITE_PROJECT_ROOT: join(root, "unused-release-override"), ZUDO_ASSETS_STORE_ROOT: join(root, "unused-assets-override") };
   for (const key of Object.keys(env)) if (key.startsWith("ZUDO_COMPOSER_")) delete env[key as keyof typeof env];
   const invoke = (cwd: string, args: string[]) => run(process.execPath, [join(tool, "bin/zudo-composer.mjs"), "seed", "--ready-workspace", ...args], { cwd, env, encoding: "utf8", timeout: 25_000 });
