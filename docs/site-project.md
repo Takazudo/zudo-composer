@@ -69,6 +69,59 @@ completed registry last and refuses destination collisions; an I/O failure may
 leave partial generated destinations requiring inspection and a fresh output
 tree, and is always a nonzero error.
 
+### Regenerating committed hosts
+
+For this repository's hosts, `site-project.ts` is authored source.
+`site-project.json`, the four ready CMS domain trees, and the workspace registry
+are generated material that happens to be tracked. Keep changes to content in
+the source file; never fix generated records or their digests by hand.
+
+From the repository root:
+
+```sh
+corepack pnpm cms:regenerate
+corepack pnpm cms:check
+```
+
+The check is also part of `corepack pnpm check`. It discovers source-bearing
+hosts under `packages/` and `fixtures/`, including a future `demo-studio`, and
+requires previously registered hosts to remain present. It runs the installed
+`zudo-composer generate --check`, then `seed --ready-workspace --output` in fresh
+staging. Every directory (including empty directories), filename and byte digest
+must match the producer. Extra generations, stale JSX, missing files and
+untracked files inside managed trees fail. The current registry reader and all
+four domain readers open copies of the committed records; incompatible schemas
+fail even if a file's transactional digest was updated to match. Reader repairs
+cannot alter committed files or conceal differences.
+
+Regeneration evaluates `site-project.ts` with installed `generate` in a
+disposable copy, then seeds fresh output using the original host's pack and
+Assets. It prepares and checks every host before replacing anything.
+`scripts/cms-fixtures.json` is automatically generated directory ownership,
+not a digest baseline. Old ownership comes from Git HEAD so moved or obsolete
+generated trees can be removed without decoding their old format. New hosts
+with absent or already-current generated trees register automatically.
+
+Stop authoring and preserve local CMS edits separately before regeneration.
+Only trees matching Git HEAD or fresh producer output may be replaced; edited,
+untracked, ignored, symlinked or overlapping destinations are refused.
+Assets, public uploads, other workspaces, release state and unrelated host files
+remain outside replacement. Identical reruns do not rewrite files. If a prior
+run's generated output has not been committed, commit or preserve that output
+before changing source again. Interrupted filesystem publication can leave
+partial output: inspect it and restore the generated trees from the committed
+baseline before retrying, while retaining any authored changes separately.
+
+For a clean break to a record schema or workspace layout, update the writers
+and current readers together, run both commands above, and commit **all hosts,
+their aggregate JSON, and ownership metadata in the same PR**. The same rule
+applies when compiler or pack bytes change a build identity without changing
+the aggregate. Do not exempt an old identity, add old-schema readers, or add
+migrations. Generated consumer repositories must use the new tool's installed
+`generate` and fresh-output `seed --ready-workspace` commands to replace their
+provisional generated data as part of adopting the break; this repository gate
+cannot update external repositories.
+
 ## Review, stage, build, activate
 
 1. `plan` constructs a detached delivery candidate, real Changes, Checks and

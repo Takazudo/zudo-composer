@@ -52,8 +52,27 @@ nothing in this repository claims them.
 There are no users or persisted production data. Prefer one clear current
 schema and destructively replace provisional application routes, storage/source
 layouts, and file-provider formats when needed. Do not add migrations,
-redirects, aliases, legacy fallbacks, compatibility shims, or compatibility
-fixtures.
+redirects, aliases, legacy fallbacks, compatibility shims, or fixtures for old
+schemas.
+
+The demo hosts' `site-project.ts` files are authored source. Their tracked
+`site-project.json` and ready CMS records are generated material and current
+reader compatibility fixtures; never edit them by hand. A storage format,
+workspace layout, compiler, component pack, or authored source change must
+regenerate **every host atomically in the same PR** with
+`corepack pnpm cms:regenerate`, then pass `corepack pnpm cms:check` (also part
+of `corepack pnpm check`). The command discovers hosts on disk, including new
+demo hosts, and uses the installed `generate` and `seed --ready-workspace`
+commands. A changed build identity requires regeneration, even when the
+SiteProject JSON did not change; do not exempt a baseline or relax readers.
+
+Run regeneration with authoring stopped and preserve local CMS edits first.
+It replaces only known generated trees that match Git HEAD or the newly
+produced bytes, and preserves Assets and unrelated host state. Commit the
+generated ownership file `scripts/cms-fixtures.json` with all generated host
+files. Old records need not pass new readers before explicit regeneration;
+there are still no migrations for consumer repositories. See the
+[clean-break procedure](docs/site-project.md#regenerating-committed-hosts).
 
 This authority applies only to this project's current state. It does not permit
 destructive changes to unrelated repositories, user files, hosting resources,
