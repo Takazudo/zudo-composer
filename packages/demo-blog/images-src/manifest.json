@@ -1,0 +1,62 @@
+[
+  {
+    "file": "cover-half-finished-list.webp",
+    "alt": "A handwritten to-do list with half its items crossed out and a pencil across it",
+    "use": "article 1 cover",
+    "aspect": "16:10"
+  },
+  {
+    "file": "cover-sharpen.webp",
+    "alt": "A wet whetstone beside a chisel on a wooden bench",
+    "use": "article 2 cover",
+    "aspect": "16:10"
+  },
+  {
+    "file": "cover-one-thing.webp",
+    "alt": "A bare wooden desk with one closed notebook in the centre",
+    "use": "article 3 cover",
+    "aspect": "16:10"
+  },
+  {
+    "file": "cover-notes-survive.webp",
+    "alt": "A stack of index cards in a binder clip with one card pulled out",
+    "use": "article 4 cover",
+    "aspect": "16:10"
+  },
+  {
+    "file": "cover-unfinished-drafts.webp",
+    "alt": "Pencil sketch pages with erasing marks and margin notes, fanned out",
+    "use": "article 5 cover",
+    "aspect": "16:10"
+  },
+  {
+    "file": "cover-quiet-hour.webp",
+    "alt": "An empty chair beside a window at dawn with a steaming cup on the sill",
+    "use": "article 6 cover",
+    "aspect": "16:10"
+  },
+  {
+    "file": "cover-repairable-tools.webp",
+    "alt": "A fountain pen disassembled into parts on a cloth beside a small screwdriver",
+    "use": "article 7 cover",
+    "aspect": "16:10"
+  },
+  {
+    "file": "cover-reading-slowly.webp",
+    "alt": "An open book with a ribbon bookmark and folded reading glasses on the page",
+    "use": "article 8 cover",
+    "aspect": "16:10"
+  },
+  {
+    "file": "avatar-mina-okafor.webp",
+    "alt": "Abstract painterly avatar in ochre and cream",
+    "use": "author avatar",
+    "aspect": "1:1"
+  },
+  {
+    "file": "avatar-teodor-lindqvist.webp",
+    "alt": "Abstract painterly avatar in slate blue and cream",
+    "use": "author avatar",
+    "aspect": "1:1"
+  }
+]
