@@ -13,6 +13,7 @@ import {
   rolloutIdentity,
   sortDeploymentsNewestFirst,
 } from "./deploy.mjs";
+import { TARGETS } from "./targets.mjs";
 
 const SOURCE_REVISION = "a".repeat(40);
 const PROJECT_REVISION = "b".repeat(64);
@@ -240,5 +241,47 @@ describe("hosted demo deployment guard", () => {
       retryDelaysMs: [],
     })).rejects.toThrow(/Refusing automatic rollback/);
     expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
+  });
+
+  it("deploys a non-default target against its own Worker, config and domain", async () => {
+    const target = TARGETS.webshop;
+    const fake = fakeRunner();
+    const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: [], assets: [] }));
+    const siteArtifactVerifier = async ({ directory }: { directory: string }) => ({
+      root: directory,
+      manifest: { schemaVersion: 1, projectId: "demo-webshop", sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, routes: ["/", "/about"], files: {} },
+      files: [],
+    });
+    const result = await deployHostedDemo({
+      target,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier,
+      retryDelaysMs: [],
+      delayImpl: async () => {},
+    });
+    expect(result.deployedVersionId).toBe(NEW_VERSION);
+    expect(liveVerifier).toHaveBeenCalledWith({
+      baseUrl: "https://demo-shop.zudolab.dev",
+      artifactDirectory: target.artifactDirectory,
+      expectedSourceRevision: SOURCE_REVISION,
+    });
+    const upload = fake.calls.find((args) => args[0] === "versions" && args[1] === "upload");
+    const activate = fake.calls.find((args) => args[0] === "versions" && args[1] === "deploy");
+    const rollback = fake.calls.find((args) => args[0] === "deployments" && args[1] === "list");
+    expect(upload).toEqual(expect.arrayContaining(["--config", "wrangler.demo-shop.jsonc", "--name", "zudo-composer-demo-shop"]));
+    expect(activate).toEqual(expect.arrayContaining(["--name", "zudo-composer-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
+    expect(rollback).toEqual(expect.arrayContaining(["--name", "zudo-composer-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
+  });
+
+  it("rejects a webshop artifact directory that differs from its Wrangler config", async () => {
+    await expect(preflightDeployment({
+      target: TARGETS.webshop,
+      artifactDirectory: join(TARGETS.webshop.artifactDirectory, "other"),
+      environment: ENVIRONMENT,
+      runner: vi.fn(),
+      artifactVerifier: async ({ directory }: { directory: string }) => ({ root: directory, manifest: {}, files: [] }),
+    })).rejects.toThrow(/zudo-composer-demo-shop deployment must verify and upload/);
   });
 });

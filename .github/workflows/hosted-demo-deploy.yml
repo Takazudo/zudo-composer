@@ -23,10 +23,6 @@ permissions:
   contents: read
   actions: read
 
-concurrency:
-  group: hosted-demo-production
-  cancel-in-progress: false
-
 jobs:
   deploy:
     # A workflow_run can be emitted for a PR or a fork even when the workflow
@@ -41,6 +37,27 @@ jobs:
        github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # One production deploy at a time per target; the four targets are
+    # independent Workers/domains and may roll out concurrently with each other.
+    concurrency:
+      group: hosted-demo-production-${{ matrix.target }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: zudo-composer
+            artifact_name: hosted-demo
+            dist_dir: dist-hosted-demo
+          - target: webshop
+            artifact_name: demo-site-webshop
+            dist_dir: packages/demo-webshop/dist-site
+          - target: landing
+            artifact_name: demo-site-landing
+            dist_dir: packages/demo-landing/dist-site
+          - target: blog
+            artifact_name: demo-site-blog
+            dist_dir: packages/demo-blog/dist-site
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -98,23 +115,26 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Download exact hosted-demo artifact from trusted CI run
+      - name: Download exact ${{ matrix.target }} artifact from trusted CI run
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: hosted-demo-${{ steps.trust.outputs.sha }}
-          path: dist-hosted-demo
+          name: ${{ matrix.artifact_name }}-${{ steps.trust.outputs.sha }}
+          path: ${{ matrix.dist_dir }}
           repository: ${{ github.repository }}
           run-id: ${{ steps.trust.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify downloaded artifact bytes and source identity
-        run: pnpm hosted-demo:verify dist-hosted-demo "${EXPECTED_SHA}"
+        run: pnpm hosted-demo:verify "${DIST_DIR}" "${EXPECTED_SHA}"
         env:
+          HOSTED_DEMO_TARGET: ${{ matrix.target }}
+          DIST_DIR: ${{ matrix.dist_dir }}
           EXPECTED_SHA: ${{ steps.trust.outputs.sha }}
 
-      - name: Deploy and verify hosted demo
+      - name: Deploy and verify ${{ matrix.target }}
         run: pnpm hosted-demo:deploy
         env:
+          HOSTED_DEMO_TARGET: ${{ matrix.target }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -5,15 +5,18 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
-import { verifyHostedDemoArtifact } from "./artifact.mjs";
-import { LIVE_ORIGIN, verifyLiveWithRetries } from "./live-check.mjs";
+import { verifyLiveWithRetries } from "./live-check.mjs";
+import { DEFAULT_TARGET_KEY, resolveTarget } from "./targets.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("../../", import.meta.url)));
-export const WORKER_NAME = "zudo-composer";
-export const CONFIG_PATH = "wrangler.jsonc";
+const DEFAULT_TARGET = resolveTarget(DEFAULT_TARGET_KEY);
+// Back-compat single-target exports: these always describe the default
+// (zudo-composer) target. Multi-target callers pass an explicit `target`.
+export const WORKER_NAME = DEFAULT_TARGET.workerName;
+export const CONFIG_PATH = DEFAULT_TARGET.configPath;
 export const WRANGLER_BIN = resolve(root, "node_modules/.bin/wrangler");
-export const ARTIFACT_DIRECTORY = resolve(root, "dist-hosted-demo");
+export const ARTIFACT_DIRECTORY = DEFAULT_TARGET.artifactDirectory;
 export const DEPLOYMENT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 const VERSION_ID_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 
@@ -171,21 +174,23 @@ export function parseUploadedVersionId(output) {
 // code uses the upload-specific name and never infers an active version.
 export const parseDeployedVersionId = parseUploadedVersionId;
 
-/** @param {{ environment?: Record<string, string | undefined>, runner?: typeof runCommand }} [options] */
-async function listDeployments(options = {}) {
-  const result = await runWrangler(["deployments", "list", "--name", WORKER_NAME, "--config", CONFIG_PATH, "--json"], options);
+/** @typedef {import("./targets.mjs").DeployTarget} DeployTarget */
+
+/** @param {DeployTarget} target @param {{ environment?: Record<string, string | undefined>, runner?: typeof runCommand }} [options] */
+async function listDeployments(target, options = {}) {
+  const result = await runWrangler(["deployments", "list", "--name", target.workerName, "--config", target.configPath, "--json"], options);
   return records(parseWranglerJson(result.stdout), "Cloudflare deployments");
 }
 
-/** @param {{ environment?: Record<string, string | undefined>, runner?: typeof runCommand }} [options] */
-async function listVersions(options = {}) {
-  const result = await runWrangler(["versions", "list", "--name", WORKER_NAME, "--config", CONFIG_PATH, "--json"], options);
+/** @param {DeployTarget} target @param {{ environment?: Record<string, string | undefined>, runner?: typeof runCommand }} [options] */
+async function listVersions(target, options = {}) {
+  const result = await runWrangler(["versions", "list", "--name", target.workerName, "--config", target.configPath, "--json"], options);
   return records(parseWranglerJson(result.stdout), "Cloudflare versions");
 }
 
-/** @param {{ environment?: Record<string, string | undefined>, runner?: typeof runCommand }} [options] */
-async function currentDeployment(options = {}) {
-  const deployments = await listDeployments(options);
+/** @param {DeployTarget} target @param {{ environment?: Record<string, string | undefined>, runner?: typeof runCommand }} [options] */
+async function currentDeployment(target, options = {}) {
+  const deployments = await listDeployments(target, options);
   const sorted = sortDeploymentsNewestFirst(deployments);
   assert.ok(sorted.length > 0, "Cloudflare returned no active deployment after upload");
   const activeVersionId = singleVersionId(sorted[0]);
@@ -209,23 +214,24 @@ function assertCapturedActive(current, expected) {
 }
 
 /**
- * @param {{ artifactDirectory: string, expectedSourceRevision?: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, artifactVerifier?: typeof verifyHostedDemoArtifact }} options
+ * @param {{ target?: DeployTarget, artifactDirectory?: string, expectedSourceRevision?: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, artifactVerifier?: import("./targets.mjs").ArtifactVerifier }} [options]
  */
-export async function preflightDeployment({ artifactDirectory, expectedSourceRevision, environment = process.env, runner = runCommand, artifactVerifier = verifyHostedDemoArtifact }) {
+export async function preflightDeployment({ target = DEFAULT_TARGET, artifactDirectory = target.artifactDirectory, expectedSourceRevision, environment = process.env, runner = runCommand, artifactVerifier = target.verifyArtifact } = {}) {
   const resolvedArtifactDirectory = resolve(artifactDirectory);
+  const expectedArtifactDirectory = resolve(target.artifactDirectory);
   assert.equal(
     resolvedArtifactDirectory,
-    ARTIFACT_DIRECTORY,
-    `Hosted deployment must verify and upload ${ARTIFACT_DIRECTORY}; received ${resolvedArtifactDirectory}`,
+    expectedArtifactDirectory,
+    `${target.workerName} deployment must verify and upload ${expectedArtifactDirectory}; received ${resolvedArtifactDirectory}`,
   );
   const credentials = requireDeploymentCredentials(environment);
   const artifact = await artifactVerifier({ directory: resolvedArtifactDirectory, expectedSourceRevision });
-  assert.equal(typeof artifact.root, "string", "Hosted artifact verifier must return its checked directory");
-  assert.equal(resolve(artifact.root), resolvedArtifactDirectory, "Hosted artifact verifier checked a different directory");
-  await runWrangler(["whoami", "--config", CONFIG_PATH], { environment, runner });
+  assert.equal(typeof artifact.root, "string", `${target.workerName} artifact verifier must return its checked directory`);
+  assert.equal(resolve(artifact.root), resolvedArtifactDirectory, `${target.workerName} artifact verifier checked a different directory`);
+  await runWrangler(["whoami", "--config", target.configPath], { environment, runner });
   const [deployments, versions] = await Promise.all([
-    listDeployments({ environment, runner }),
-    listVersions({ environment, runner }),
+    listDeployments(target, { environment, runner }),
+    listVersions(target, { environment, runner }),
   ]);
   const state = captureDeploymentState({ deployments, versions });
   await runWrangler([
@@ -233,21 +239,21 @@ export async function preflightDeployment({ artifactDirectory, expectedSourceRev
     "--dry-run",
     "--no-bundle",
     "--config",
-    CONFIG_PATH,
+    target.configPath,
     "--assets",
     resolvedArtifactDirectory,
   ], { environment, runner });
-  return { artifact, artifactDirectory: resolvedArtifactDirectory, state, credentials };
+  return { artifact, artifactDirectory: resolvedArtifactDirectory, state, credentials, target };
 }
 
 /**
- * @param {{ expectedVersionId: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, retryDelaysMs?: number[], delayImpl?: (milliseconds: number) => Promise<void> }} options
+ * @param {{ target?: DeployTarget, expectedVersionId: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, retryDelaysMs?: number[], delayImpl?: (milliseconds: number) => Promise<void> }} options
  */
-export async function waitForVersion({ expectedVersionId, environment, runner, retryDelaysMs = DEPLOYMENT_RETRY_DELAYS_MS, delayImpl = (milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)) }) {
+export async function waitForVersion({ target = DEFAULT_TARGET, expectedVersionId, environment, runner, retryDelaysMs = DEPLOYMENT_RETRY_DELAYS_MS, delayImpl = (milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)) }) {
   let lastError;
   for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
     try {
-      const current = await currentDeployment({ environment, runner });
+      const current = await currentDeployment(target, { environment, runner });
       if (current.activeVersionId === expectedVersionId) return current;
       lastError = new Error(`Cloudflare is serving ${current.activeVersionId}; expected ${expectedVersionId}`);
     } catch (error) {
@@ -277,20 +283,23 @@ function asError(value) {
  * and rollback only when the still-active version is this invocation's upload.
  * A smoke failure always remains a failed command even when rollback succeeds.
  *
- * @param {{ artifactDirectory?: string, expectedSourceRevision?: string, baseUrl?: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, artifactVerifier?: typeof verifyHostedDemoArtifact, liveVerifier?: typeof verifyLiveWithRetries, retryDelaysMs?: number[], delayImpl?: (milliseconds: number) => Promise<void> }} [options]
+ * @param {{ target?: DeployTarget, artifactDirectory?: string, expectedSourceRevision?: string, baseUrl?: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, artifactVerifier?: import("./targets.mjs").ArtifactVerifier, liveVerifier?: typeof verifyLiveWithRetries, retryDelaysMs?: number[], delayImpl?: (milliseconds: number) => Promise<void> }} [options]
  */
 export async function deployHostedDemo({
-  artifactDirectory = ARTIFACT_DIRECTORY,
+  target = DEFAULT_TARGET,
+  artifactDirectory = target.artifactDirectory,
   expectedSourceRevision,
-  baseUrl = LIVE_ORIGIN,
+  baseUrl = `https://${target.domain}`,
   environment = process.env,
   runner = runCommand,
-  artifactVerifier = verifyHostedDemoArtifact,
-  liveVerifier = verifyLiveWithRetries,
+  artifactVerifier = target.verifyArtifact,
+  // Bind this invocation's target into the shared live verifier so callers
+  // that override `liveVerifier` (tests) keep the plain three-key call below.
+  liveVerifier = (liveOptions) => verifyLiveWithRetries({ ...liveOptions, manifestFileName: target.manifestFileName, artifactVerifier: target.verifyArtifact, liveRoutes: target.liveRoutes }),
   retryDelaysMs = DEPLOYMENT_RETRY_DELAYS_MS,
   delayImpl = (milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)),
 } = {}) {
-  const preflight = await preflightDeployment({ artifactDirectory, expectedSourceRevision, environment, runner, artifactVerifier });
+  const preflight = await preflightDeployment({ target, artifactDirectory, expectedSourceRevision, environment, runner, artifactVerifier });
   console.log(`Captured active deployment ${preflight.state.activeDeploymentId} (version ${preflight.state.activeVersionId}); rollback target ${preflight.state.rollbackVersionId}.`);
 
   let deployedVersionId;
@@ -305,9 +314,9 @@ export async function deployHostedDemo({
       "upload",
       "--no-bundle",
       "--config",
-      CONFIG_PATH,
+      target.configPath,
       "--name",
-      WORKER_NAME,
+      target.workerName,
       "--tag",
       rollout.tag,
       "--message",
@@ -317,49 +326,49 @@ export async function deployHostedDemo({
     ], { environment, runner });
     deployedVersionId = parseUploadedVersionId(`${uploadResult.stdout}\n${uploadResult.stderr}`);
     assert.ok(deployedVersionId, "Wrangler versions upload did not return a version ID; refusing to activate an unknown upload");
-    assertCapturedActive(await currentDeployment({ environment, runner }), preflight.state);
+    assertCapturedActive(await currentDeployment(target, { environment, runner }), preflight.state);
 
     // Set ownership before invoking the command. Wrangler can return a
     // non-zero exit after Cloudflare accepted the replacement, so the catch
     // path must still be able to prove and recover this exact version.
-    assertCapturedActive(await currentDeployment({ environment, runner }), preflight.state);
+    assertCapturedActive(await currentDeployment(target, { environment, runner }), preflight.state);
     activationAttempted = true;
     await runWrangler([
       "versions",
       "deploy",
       `${deployedVersionId}@100`,
       "--name",
-      WORKER_NAME,
+      target.workerName,
       "--config",
-      CONFIG_PATH,
+      target.configPath,
       "--message",
       rollout.message,
       "--yes",
     ], { environment, runner });
-    await waitForVersion({ expectedVersionId: deployedVersionId, environment, runner, retryDelaysMs, delayImpl });
-    console.log(`Uploaded ${WORKER_NAME} version ${deployedVersionId}; beginning bounded live verification at ${baseUrl}.`);
+    await waitForVersion({ target, expectedVersionId: deployedVersionId, environment, runner, retryDelaysMs, delayImpl });
+    console.log(`Uploaded ${target.workerName} version ${deployedVersionId}; beginning bounded live verification at ${baseUrl}.`);
     const proof = await liveVerifier({ baseUrl, artifactDirectory: preflight.artifactDirectory, expectedSourceRevision: preflight.artifact.manifest.sourceRevision });
-    console.log(`Hosted demo live verification passed for version ${deployedVersionId}: ${proof.routes.length} routes and ${proof.assets.length} assets.`);
+    console.log(`${target.workerName} live verification passed for version ${deployedVersionId}: ${proof.routes.length} routes and ${proof.assets.length} assets.`);
     return { preflight, deployedVersionId, proof };
   } catch (error) {
     const failure = asError(error);
     if (!deployedVersionId || !activationAttempted) throw failure;
 
     try {
-      const current = await currentDeployment({ environment, runner });
+      const current = await currentDeployment(target, { environment, runner });
       assert.equal(current.activeVersionId, deployedVersionId, `Refusing automatic rollback: production now serves ${current.activeVersionId}, not this rollout ${deployedVersionId}`);
       await runWrangler([
         "rollback",
         preflight.state.rollbackVersionId,
         "--config",
-        CONFIG_PATH,
+        target.configPath,
         "--name",
-        WORKER_NAME,
+        target.workerName,
         "--message",
         `automatic hosted demo rollback after failed ${deployedVersionId}`,
         "--yes",
       ], { environment, runner });
-      await waitForVersion({ expectedVersionId: preflight.state.rollbackVersionId, environment, runner, retryDelaysMs, delayImpl });
+      await waitForVersion({ target, expectedVersionId: preflight.state.rollbackVersionId, environment, runner, retryDelaysMs, delayImpl });
       throw new Error(`${failure.message}; automatic rollback to ${preflight.state.rollbackVersionId} completed and was verified`, { cause: error });
     } catch (rollbackError) {
       const rollbackFailure = asError(rollbackError);
@@ -389,9 +398,11 @@ function parseArguments(argv) {
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const options = parseArguments(process.argv.slice(2));
+  const target = resolveTarget(options.target ?? process.env.HOSTED_DEMO_TARGET ?? DEFAULT_TARGET_KEY);
   await deployHostedDemo({
+    target,
     artifactDirectory: options.artifact ?? process.env.HOSTED_DEMO_ARTIFACT,
     expectedSourceRevision: options.expected_sha ?? process.env.HOSTED_DEMO_EXPECTED_SHA,
-    baseUrl: options.base_url ?? process.env.HOSTED_DEMO_BASE_URL ?? LIVE_ORIGIN,
+    baseUrl: options.base_url ?? process.env.HOSTED_DEMO_BASE_URL,
   });
 }

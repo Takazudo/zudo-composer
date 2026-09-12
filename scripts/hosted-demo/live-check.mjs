@@ -4,20 +4,19 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { HOSTED_DEMO_MANIFEST, sha256, verifyHostedDemoArtifact } from "./artifact.mjs";
-import { SPA_ROUTES } from "../routes.mjs";
+import { DEFAULT_TARGET_KEY, HOSTED_DEMO_LIVE_ROUTES, resolveTarget } from "./targets.mjs";
 import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
 
-export const LIVE_ORIGIN = "https://zudo-composer.zudolab.dev";
+const DEFAULT_TARGET = resolveTarget(DEFAULT_TARGET_KEY);
+export const LIVE_ORIGIN = `https://${DEFAULT_TARGET.domain}`;
 export const HTTP_TIMEOUT_MS = 10_000;
 export const LIVE_CHECK_TIMEOUT_MS = 120_000;
 // A deploy can take a short time to reach every edge. Keep retries bounded so
 // a broken production rollout cannot hold the workflow indefinitely.
 export const LIVE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
-export const HOSTED_DEMO_LIVE_ROUTES = [
-  ...SPA_ROUTES,
-  "/review",
-  "/website-preview",
-];
+// Re-exported for back-compat: the fixed route list belongs to the default
+// (zudo-composer) target; other targets read their routes from their manifest.
+export { HOSTED_DEMO_LIVE_ROUTES };
 
 /** @param {Response} response @returns {string} */
 export function responseMime(response) {
@@ -74,7 +73,7 @@ export function verifyNavigationHtml(bytes, expectedSha256) {
 }
 
 /**
- * @param {{ baseUrl: string, artifactDirectory: string, expectedSourceRevision?: string, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response>, requestTimeoutMs?: number, overallTimeoutMs?: number }} options
+ * @param {{ baseUrl: string, artifactDirectory: string, expectedSourceRevision?: string, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response>, requestTimeoutMs?: number, overallTimeoutMs?: number, manifestFileName?: string, artifactVerifier?: import("./targets.mjs").ArtifactVerifier, liveRoutes?: (manifest: Record<string, unknown>) => string[] }} options
  */
 export async function verifyLiveDeployment({
   baseUrl,
@@ -83,24 +82,27 @@ export async function verifyLiveDeployment({
   fetchImpl = globalThis.fetch,
   requestTimeoutMs = HTTP_TIMEOUT_MS,
   overallTimeoutMs = LIVE_CHECK_TIMEOUT_MS,
+  manifestFileName = HOSTED_DEMO_MANIFEST,
+  artifactVerifier = verifyHostedDemoArtifact,
+  liveRoutes = () => HOSTED_DEMO_LIVE_ROUTES,
 }) {
   assert.equal(typeof fetchImpl, "function", "A fetch implementation is required for live verification");
-  const artifact = await verifyHostedDemoArtifact({ directory: artifactDirectory, expectedSourceRevision });
+  const artifact = await artifactVerifier({ directory: artifactDirectory, expectedSourceRevision });
   const origin = new URL(baseUrl);
   assert.ok(origin.protocol === "https:" || origin.hostname === "127.0.0.1" || origin.hostname === "localhost", "Live verification requires HTTPS or loopback");
   const sourceRevision = artifact.manifest.sourceRevision;
   const deadlineAt = Date.now() + overallTimeoutMs;
 
-  const manifestUrl = cacheBusted(new URL(`/${HOSTED_DEMO_MANIFEST}`, origin), sourceRevision);
+  const manifestUrl = cacheBusted(new URL(`/${manifestFileName}`, origin), sourceRevision);
   const manifestResponse = await fetchWithTimeout(fetchImpl, manifestUrl, requestTimeoutMs, { accept: "application/json" }, deadlineAt);
-  assert.ok(manifestResponse.ok, `/${HOSTED_DEMO_MANIFEST}: expected HTTP 2xx, received ${manifestResponse.status}`);
-  assert.equal(responseMime(manifestResponse), "application/json", `/${HOSTED_DEMO_MANIFEST}: expected application/json, received ${responseMime(manifestResponse) || "no Content-Type"}`);
+  assert.ok(manifestResponse.ok, `/${manifestFileName}: expected HTTP 2xx, received ${manifestResponse.status}`);
+  assert.equal(responseMime(manifestResponse), "application/json", `/${manifestFileName}: expected application/json, received ${responseMime(manifestResponse) || "no Content-Type"}`);
   const remoteManifest = JSON.parse(await manifestResponse.text());
-  assert.deepEqual(remoteManifest, artifact.manifest, "Live hosted-demo manifest does not match the downloaded artifact");
+  assert.deepEqual(remoteManifest, artifact.manifest, "Live deployment manifest does not match the downloaded artifact");
 
   const index = artifact.files.find((file) => file.path === "index.html");
-  assert.ok(index, "Hosted artifact must include index.html");
-  const routeResults = await Promise.all(HOSTED_DEMO_LIVE_ROUTES.map(async (route) => {
+  assert.ok(index, "Deploy artifact must include index.html");
+  const routeResults = await Promise.all(liveRoutes(artifact.manifest).map(async (route) => {
     const response = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(route, origin), sourceRevision), requestTimeoutMs, {
       accept: "text/html",
       "sec-fetch-mode": "navigate",
@@ -189,14 +191,18 @@ function parseArguments(argv) {
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const options = parseArguments(process.argv.slice(2));
-  const baseUrl = options.base_url ?? process.env.HOSTED_DEMO_BASE_URL ?? LIVE_ORIGIN;
-  const artifactDirectory = options.artifact ?? process.env.HOSTED_DEMO_ARTIFACT ?? "dist-hosted-demo";
+  const target = resolveTarget(options.target ?? process.env.HOSTED_DEMO_TARGET ?? DEFAULT_TARGET_KEY);
+  const baseUrl = options.base_url ?? process.env.HOSTED_DEMO_BASE_URL ?? `https://${target.domain}`;
+  const artifactDirectory = options.artifact ?? process.env.HOSTED_DEMO_ARTIFACT ?? target.artifactDirectory;
   const expectedSourceRevision = options.expected_sha ?? process.env.HOSTED_DEMO_EXPECTED_SHA;
   const proof = await verifyLiveWithRetries({
     baseUrl,
     artifactDirectory,
     expectedSourceRevision,
-    onRetry: ({ attempt, delayMs, error }) => console.warn(`Hosted demo live check attempt ${attempt} failed (${error.message}); retrying in ${delayMs}ms.`),
+    manifestFileName: target.manifestFileName,
+    artifactVerifier: target.verifyArtifact,
+    liveRoutes: target.liveRoutes,
+    onRetry: ({ attempt, delayMs, error }) => console.warn(`${target.workerName} live check attempt ${attempt} failed (${error.message}); retrying in ${delayMs}ms.`),
   });
-  console.log(`Hosted demo live check passed at ${baseUrl}: ${proof.routes.length} routes and ${proof.assets.length} assets matched source ${proof.manifest.sourceRevision}.`);
+  console.log(`${target.workerName} live check passed at ${baseUrl}: ${proof.routes.length} routes and ${proof.assets.length} assets matched source ${proof.manifest.sourceRevision}.`);
 }

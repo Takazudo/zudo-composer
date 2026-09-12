@@ -71,3 +71,30 @@ jobs:
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  demo-sites-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        site: [webshop, landing, blog]
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # demo:build-site both builds and verifies the manifest (scripts/build-site-static.mjs).
+      - run: pnpm demo:build-site ${{ matrix.site }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: demo-site-${{ matrix.site }}-${{ github.sha }}
+          path: packages/demo-${{ matrix.site }}/dist-site
+          if-no-files-found: error
+          retention-days: 7
