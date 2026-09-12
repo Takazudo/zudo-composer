@@ -1,12 +1,14 @@
 // @ts-check
 // A bounded Node/type proof. No browser, dev server or application build: the
-// consumer lives outside the repository and imports only installed subpaths.
+// consumer lives outside the repository and imports installed public subpaths.
+// Release portability additionally exercises the private production reader.
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+import { verifyReleasePortability } from "./verify-release-portability.mjs";
 
 const execFile = promisify(execFileCallback);
 const root = resolve(import.meta.dirname, "..");
@@ -30,6 +32,7 @@ async function pnpm(args, cwd) {
 
 try {
   await mkdir(host);
+  await mkdir(join(host, "components"));
   await mkdir(packs);
   /** @type {Record<string, string>} */
   const tarballs = {};
@@ -42,13 +45,13 @@ try {
   }
   await writeFile(join(host, "package.json"), JSON.stringify({
     name: "public-entry-host", private: true, version: "0.0.0", type: "module", packageManager: toolPackage.packageManager,
-    exports: { "./components": "./pack.mjs" },
+    exports: { "./components": "./components/pack.mjs" },
     dependencies: { ...tarballs, preact: toolPackage.peerDependencies.preact ?? toolPackage.devDependencies.preact ?? toolPackage.dependencies.preact },
     devDependencies: { typescript: toolPackage.devDependencies.typescript, "@types/node": toolPackage.devDependencies["@types/node"] },
   }, null, 2));
   await writeFile(join(host, "pnpm-workspace.yaml"), `packages: []\nstrictPeerDependencies: true\noverrides:\n  zudo-composer: '${tarballs["zudo-composer"]}'\n  '@zudo-composer/component-contract': '${tarballs["@zudo-composer/component-contract"]}'\n`);
   await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "public-entry-host/components" });\n');
-  await writeFile(join(host, "pack.mjs"), `import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
+  await writeFile(join(host, "components/pack.mjs"), `import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
 export function Banner() { return null; }
 export const componentPack = defineComponentPack({ packId: "public-entry-host", packVersion: "1.0.0", components: [defineComponent()(Banner, {
   id: "proof.banner", schemaVersion: 1, title: "Banner", category: "Proof", description: "Installed entry proof",
@@ -64,6 +67,7 @@ export const componentPack = defineComponentPack({ packId: "public-entry-host", 
   console.log(probe.stdout.trim());
   await pnpm(["exec", "tsc", "--ignoreConfig", "--noEmit", "--strict", "--module", "ESNext", "--moduleResolution", "Bundler", "--target", "ES2023", "types.mts"], host);
   console.log("Packed public declarations passed: strict consumer typecheck with no repository aliases.");
+  await verifyReleasePortability({ checkoutRoot: root, hostRoot: host });
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }
