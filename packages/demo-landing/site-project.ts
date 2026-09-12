@@ -133,7 +133,7 @@ const testimonials = site.model({
 });
 const avatarSrc = testimonials.fieldId("avatar") + "-src";
 const avatarAlt = testimonials.fieldId("avatar") + "-alt";
-const avatar = (src: string, alt: string) => ({ [avatarSrc]: src, [avatarAlt]: alt });
+const avatar = (src: string, alt: string) => ({ src, alt });
 
 site.entry(testimonials, {
   id: "testimonial-mara",

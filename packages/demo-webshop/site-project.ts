@@ -107,13 +107,7 @@ const about = site.model({
   ],
 });
 
-/** Object values are stored by nested field id, not by key. */
-function objectValue(model: Model, key: string, values: Record<string, string>): JsonObject {
-  const parent = model.fieldId(key);
-  return Object.fromEntries(Object.entries(values).map(([child, value]) => [`${parent}-${child}`, value]));
-}
-
-const imageValue = (model: Model, key: string, name: ImageName, alt: string) => objectValue(model, key, { src: assetUrl(name), alt });
+const imageValue = (name: ImageName, alt: string): JsonObject => ({ src: assetUrl(name), alt });
 
 // ---------------------------------------------------------------- categories
 
@@ -152,7 +146,7 @@ for (const category of [
       order: category.order,
       intro: category.intro,
       caption: category.caption,
-      image: imageValue(categories, "image", category.image[0], category.image[1]),
+      image: imageValue(category.image[0], category.image[1]),
     },
   });
 }
@@ -462,9 +456,9 @@ for (const product of PRODUCTS) {
       tag1,
       tag2,
       tag3,
-      spec: objectValue(products, "spec", product.spec),
-      image1: imageValue(products, "image1", ...product.image1),
-      ...(product.image2 ? { image2: imageValue(products, "image2", ...product.image2) } : {}),
+      spec: { ...product.spec },
+      image1: imageValue(...product.image1),
+      ...(product.image2 ? { image2: imageValue(...product.image2) } : {}),
       featured: product.featured,
       category: entryRef(categoryEntries[product.category]!),
     },

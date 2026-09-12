@@ -53,24 +53,67 @@ Verification for the deployment/acceptance lane:
 
 Deployment gates must validate this exact artifact before publishing its bytes.
 
+## Four deploy targets, one pipeline
+
+The trusted-run deploy pipeline (`scripts/hosted-demo/deploy.mjs`,
+`live-check.mjs` and `scripts/check-hosted-demo.mjs`) deploys four independent
+Cloudflare Workers, each on its own custom domain:
+
+| Target key      | Worker                        | Config file                       | Domain                       | Artifact directory                    |
+| ---------------- | ------------------------------ | ---------------------------------- | ----------------------------- | -------------------------------------- |
+| `zudo-composer`  | `zudo-composer`                | `wrangler.jsonc`                   | `zudo-composer.zudolab.dev`  | `dist-hosted-demo`                     |
+| `webshop`        | `zudo-composer-demo-shop`      | `wrangler.demo-shop.jsonc`         | `demo-shop.zudolab.dev`      | `packages/demo-webshop/dist-site`      |
+| `landing`        | `zudo-composer-demo-landing`   | `wrangler.demo-landing.jsonc`      | `demo-landing.zudolab.dev`   | `packages/demo-landing/dist-site`      |
+| `blog`           | `zudo-composer-demo-blog`      | `wrangler.demo-blog.jsonc`         | `demo-blog.zudolab.dev`      | `packages/demo-blog/dist-site`         |
+
+`scripts/hosted-demo/targets.mjs` is the single place naming these four rows
+and each target's artifact-verification shape. The `zudo-composer` target
+verifies `dist-hosted-demo` against the hosted-demo manifest contract above;
+the other three verify a `dist-site` directory (built by `pnpm demo:build-site
+<webshop|landing|blog>`, see [`docs/demo-sites/README.md`](./demo-sites/README.md))
+against the static-site manifest contract in
+[`scripts/site-static/artifact.mjs`](../scripts/site-static/artifact.mjs) —
+`site-manifest.json` instead of `hosted-demo-manifest.json`, and a live route
+list read from that manifest's own `routes` array instead of the fixed
+authoring/sample list. `deploy.mjs`'s `preflightDeployment`/`deployHostedDemo`
+and `live-check.mjs`'s `verifyLiveDeployment`/`verifyLiveWithRetries` take an
+optional `target` (or the lower-level `manifestFileName`/`artifactVerifier`/
+`liveRoutes` a target supplies); every default falls back to the
+`zudo-composer` target, so existing single-target calls are unchanged.
+`scripts/hosted-demo/workflow-guard.mjs` needed no target parameter at all —
+its trusted-run checks (successful same-repo `main` CI run, fresh `main` head)
+never touch an artifact, a Worker name or a Cloudflare config, so the same
+guard step runs unmodified for every target.
+
+Target selection for the CLIs is the `HOSTED_DEMO_TARGET` environment variable
+(default `zudo-composer`): `HOSTED_DEMO_TARGET=webshop pnpm hosted-demo:verify`
+and `HOSTED_DEMO_TARGET=webshop pnpm hosted-demo:deploy` operate on the
+webshop's Worker, config and artifact directory instead.
+
 ## Production rollout
 
-The production workflow is `.github/workflows/hosted-demo-deploy.yml`. A
-successful `main` run of `CI` is its only automatic trigger. It downloads the
-artifact whose name contains that run's full commit SHA, verifies the artifact
-again, and passes the same `dist-hosted-demo` directory to Wrangler. The
-workflow is serialized so two production changes cannot overlap. A manual run
-requires both `run_id` and `sha` for a successful same-repository `main` CI run;
-the guard is loaded from a fresh trusted `main` checkout before the selected
-artifact checkout is used.
+The production workflow is `.github/workflows/hosted-demo-deploy.yml`, run as
+a matrix of the four targets above. A successful `main` run of `CI` is its
+only automatic trigger. Each matrix leg downloads the artifact whose name
+contains that target's prefix (`hosted-demo-` or `demo-site-<name>-`) and that
+run's full commit SHA, verifies the artifact again, and passes the matching
+directory to Wrangler. Each target has its own concurrency group
+(`hosted-demo-production-<target>`), so two rollouts of the *same* target
+cannot overlap, but the four targets can roll out concurrently with each
+other. A manual run requires both `run_id` and `sha` for a successful
+same-repository `main` CI run; the guard is loaded from a fresh trusted `main`
+checkout before the selected artifact checkout is used, once per matrix leg.
 
 The deploy step requires both `CLOUDFLARE_ACCOUNT_ID` and a Cloudflare API
 token. It fails visibly when either is absent or partial. Local Wrangler OAuth
 sessions are useful for read-only checks and must never be copied into GitHub
-secrets. The checked-in [`wrangler.jsonc`](../wrangler.jsonc) keeps the
-`zudo-composer` Worker, `workers_dev: false`, `preview_urls: false`, and the
-existing `zudo-composer.zudolab.dev` custom-domain binding. The compatibility
-date is pinned in that file; no account ID or credential is committed.
+secrets. The checked-in [`wrangler.jsonc`](../wrangler.jsonc),
+[`wrangler.demo-shop.jsonc`](../wrangler.demo-shop.jsonc),
+[`wrangler.demo-landing.jsonc`](../wrangler.demo-landing.jsonc) and
+[`wrangler.demo-blog.jsonc`](../wrangler.demo-blog.jsonc) each keep
+`workers_dev: false`, `preview_urls: false`, and that target's own
+custom-domain binding. The compatibility date is pinned in each file; no
+account ID or credential is committed to any of them.
 
 Before any upload, the workflow runs `wrangler deploy --dry-run`, checks the
 active deployment and its single 100% version, and records that exact version as
@@ -81,7 +124,9 @@ upload ID stops before activation. A command failure after Cloudflare accepts
 the replacement still has the known ID available for the ownership check.
 
 After activation, the live checker fetches the manifest, every emitted asset,
-and every authoring/sample route over bounded HTTPS requests. Navigation route
+and every route over bounded HTTPS requests — the fixed authoring/sample list
+for `zudo-composer`, or that target's own manifest `routes` for the three
+static sites. Navigation route
 requests send `Accept: text/html` and `Sec-Fetch-Mode: navigate`; asset requests
 do not receive navigation headers. Responses must match the downloaded
 manifest's bytes, checksums and MIME types. Cloudflare Web Analytics can inject
@@ -98,12 +143,17 @@ is visible. If production no longer serves the owned version, the workflow
 refuses rollback and fails red for manual intervention.
 
 For manual recovery, inspect the deployment notes and use the captured version
-ID with Wrangler, for example:
+ID with Wrangler and that target's own Worker name and config file, for
+example:
 
 ```sh
 corepack pnpm exec wrangler rollback <captured-version-id> \
   --name zudo-composer --config wrangler.jsonc --yes
+
+corepack pnpm exec wrangler rollback <captured-version-id> \
+  --name zudo-composer-demo-shop --config wrangler.demo-shop.jsonc --yes
 ```
 
-Never use an older list entry as an inferred rollback target and never deploy a
-directory other than the verified `dist-hosted-demo` artifact.
+Never use an older list entry as an inferred rollback target and never deploy
+a directory other than the verified artifact for that exact target (see the
+table above).
