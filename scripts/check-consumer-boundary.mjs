@@ -30,6 +30,14 @@ const ignoredDirectories = new Set([
   '.vite', '.artifacts', 'coverage', 'test-results', 'playwright-report',
 ]);
 const dependencySections = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+// In-repository authoring uses these package workspaces. Packed-host lanes
+// replace them with tarballs; this allowance never applies to host source,
+// overrides, external hosts, arbitrary workspaces or file/link dependencies.
+const authoringPackages = new Map([
+  ['zudo-composer', 'package.json'],
+  ['@zudo-composer/component-contract', 'packages/component-contract/package.json'],
+  ['@zudo-composer/fixture-themeset', 'packages/fixture-themeset/package.json'],
+]);
 const rules = new Set([
   'outside-host-path', 'outside-host-import', 'dependency-protocol', 'workspace-command',
   'repository-import', 'undeclared-package', 'computed-import', 'outside-host-symlink',
@@ -88,6 +96,16 @@ export function scanConsumerHost({ root, hostRoot }) {
   const manifest = object(JSON.parse(readFileSync(path.join(hostRoot, 'package.json'), 'utf8')));
   const dependencies = new Set(dependencySections.flatMap((section) => Object.keys(object(manifest[section]))));
   if (typeof manifest.name === 'string') dependencies.add(manifest.name);
+  const authoringHost = /^packages\/demo-[^/]+$/.test(host) || ['fixtures/host', 'fixtures/themeset-host'].includes(host);
+  const authoringDependencies = new Set();
+  if (authoringHost && !outside(realpathSync(root), realpathSync(hostRoot)) && existsSync(path.join(root, 'package.json'))
+    && object(JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))).name === 'zudo-composer') {
+    for (const [name, relativeManifest] of authoringPackages) {
+      const target = path.join(root, relativeManifest);
+      if (existsSync(target) && !outside(realpathSync(root), realpathSync(target))
+        && object(JSON.parse(readFileSync(target, 'utf8'))).name === name) authoringDependencies.add(name);
+    }
+  }
   /** @type {Map<string, Violation>} */
   const violations = new Map();
   /** @param {string} file @param {string} rule @param {string} detail */
@@ -323,6 +341,9 @@ export function scanConsumerHost({ root, hostRoot }) {
     function visit(value, keys) {
       if (typeof value === 'string') {
         const context = keys.join('.');
+        if (file === path.join(hostRoot, 'package.json') && keys.length === 2
+          && ['dependencies', 'devDependencies'].includes(keys[0])
+          && value === 'workspace:*' && authoringDependencies.has(keys[1])) return;
         if (keys[0] === 'imports' && path.basename(file) === 'package.json') moduleReference(file, value, context);
         else if (keys[0] === 'scripts' && path.basename(file) === 'package.json') commands(file, value, context);
         else if (!protocol(file, value, context) && /^\.\.(?:[\\/]|$)/.test(value)) localPath(file, value, context);

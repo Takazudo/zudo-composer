@@ -166,6 +166,48 @@ describe('consumer boundary import direction', () => {
 });
 
 describe('consumer boundary protocols and commands', () => {
+  it('admits verified first-party workspace dependencies only for in-repository authoring', () => {
+    const host = fixture({ devDependencies: { 'zudo-composer': 'workspace:*', '@zudo-composer/component-contract': 'workspace:*' } });
+    host.write('package.json', '{"name":"zudo-composer"}', host.root);
+    host.write('packages/component-contract/package.json', '{"name":"@zudo-composer/component-contract"}', host.root);
+    host.write('entry.ts', "import 'zudo-composer/authoring';");
+    expect(host.scan()).toEqual([]);
+
+    // The identical manifest is not an installable external/generated host.
+    expect(scanConsumerHost({ root: host.hostRoot, hostRoot: '.' }).filter((entry) => entry.rule === 'dependency-protocol')).toHaveLength(2);
+    host.write('entry.ts', "import 'workspace:*'; import '../../../src/private';");
+    expect(host.scan().map((entry) => entry.rule)).toEqual(expect.arrayContaining(['dependency-protocol', 'outside-host-import']));
+  });
+
+  it('requires the actual first-party package identity and never accepts the provider as a workspace', () => {
+    const host = fixture({ dependencies: { '@zudo-composer/component-contract': 'workspace:*', '@zudo-sg/ui': 'workspace:*' } });
+    host.write('package.json', '{"name":"zudo-composer"}', host.root);
+    expect(host.scan()).toHaveLength(2);
+    host.write('packages/component-contract/package.json', '{"name":"wrong-package"}', host.root);
+    expect(host.scan()).toHaveLength(2);
+    host.write('packages/component-contract/package.json', '{"name":"@zudo-composer/component-contract"}', host.root);
+    expect(host.scan()).toEqual([expect.objectContaining({ detail: 'dependencies.@zudo-sg/ui: workspace:*' })]);
+    host.write('package.json', '{"name":"consumer"}', host.root);
+    expect(host.scan()).toHaveLength(2);
+  });
+
+  it('does not extend the authoring allowance to alternate protocols, overrides or nested manifests', () => {
+    const host = fixture({ dependencies: { 'zudo-composer': 'workspace:^', '@zudo-composer/component-contract': 'file:../component-contract' }, pnpm: { overrides: { 'zudo-composer': 'workspace:*' } } });
+    host.write('package.json', '{"name":"zudo-composer"}', host.root);
+    host.write('nested/package.json', '{"dependencies":{"zudo-composer":"workspace:*"}}');
+    expect(host.scan().filter((entry) => entry.rule === 'dependency-protocol')).toHaveLength(4);
+  });
+
+  it('does not trust a first-party package manifest linked outside the repository', () => {
+    const host = fixture({ dependencies: { '@zudo-composer/component-contract': 'workspace:*' } });
+    const external = fixture();
+    host.write('package.json', '{"name":"zudo-composer"}', host.root);
+    external.write('contract.json', '{"name":"@zudo-composer/component-contract"}', external.root);
+    mkdirSync(join(host.root, 'packages/component-contract'), { recursive: true });
+    symlinkSync(join(external.root, 'contract.json'), join(host.root, 'packages/component-contract/package.json'));
+    expect(host.scan()).toEqual([expect.objectContaining({ rule: 'dependency-protocol' })]);
+  });
+
   it.each(['workspace:*', 'file:../../tool', 'link:../tool'])('rejects dependency protocol %s in every manifest dependency section', (value) => {
     for (const section of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
       const host = fixture({ [section]: { 'new-package': value } });
