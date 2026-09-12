@@ -20,6 +20,7 @@ export default tseslint.config(
       'server/authoring.d.mts',
       'server/site-build.mjs',
       'server/site-build.d.mts',
+      'server/site-project.d.mts',
       '.vite/**',
       '.artifacts/**',
       'test-results/**',

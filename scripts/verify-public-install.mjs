@@ -56,14 +56,18 @@ export const componentPack = defineComponentPack({ packId: "public-entry-host", 
   defaults: { headline: "Banner" }, fields: [{ prop: "headline", label: "Headline", schema: { type: "string" }, editor: { kind: "text" } }],
 })] });\n`);
   for (const file of ["probe.mjs", "types.mts"]) await copyFile(join(root, "scripts/fixtures/public-install", file), join(host, file));
+  await copyFile(join(root, "type-tests/site-project.ts"), join(host, "site-project.ts"));
   await pnpm(["install"], host);
   await pnpm(["install", "--frozen-lockfile"], host);
   const lock = await readFile(join(host, "pnpm-lock.yaml"), "utf8");
   assert.ok(!lock.includes("@zudo-sg/ui"), "An installed host must not receive the repository's demo provider");
   const probe = await execFile(process.execPath, [join(host, "probe.mjs")], { cwd: host, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
   console.log(probe.stdout.trim());
-  await pnpm(["exec", "tsc", "--ignoreConfig", "--noEmit", "--strict", "--module", "ESNext", "--moduleResolution", "Bundler", "--target", "ES2023", "types.mts"], host);
-  console.log("Packed public declarations passed: strict consumer typecheck with no repository aliases.");
+  await pnpm(["exec", "tsc", "--ignoreConfig", "--noEmit", "--strict", "--verbatimModuleSyntax", "--module", "ESNext", "--moduleResolution", "Bundler", "--target", "ES2023", "types.mts", "site-project.ts"], host);
+  // The generated Node entries also support a NodeNext consumer. The Vite
+  // plugin's existing declaration graph is checked in Bundler mode above.
+  await pnpm(["exec", "tsc", "--ignoreConfig", "--noEmit", "--strict", "--verbatimModuleSyntax", "--types", "node", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2023", "site-project.ts"], host);
+  console.log("Packed public declarations passed: strict Bundler consumer and NodeNext SiteProject demo, with no repository aliases.");
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

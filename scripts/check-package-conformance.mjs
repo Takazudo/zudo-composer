@@ -129,6 +129,7 @@ const expectedRootExports = {
   './vite': { types: './plugins/index.d.mts', default: './plugins/index.mjs' },
   './authoring': { types: './server/authoring.d.mts', default: './server/authoring.mjs' },
   './site-build': { types: './server/site-build.d.mts', default: './server/site-build.mjs' },
+  './site-project': { types: './server/site-project.d.mts' },
   './styles': './src/style.css',
   './package.json': './package.json',
 };
@@ -164,6 +165,7 @@ for (const required of [
   'server/host-context.mjs',
   'server/public/authoring.mts',
   'server/public/site-build.mts',
+  'server/public/site-project.mts',
   'server/site-build/compile.ts',
   'server/site-build/artifact.mjs',
   'server/site-build/assets.ts',

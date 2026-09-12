@@ -13,6 +13,8 @@ import ts from "typescript";
 const root = resolve(import.meta.dirname, "..");
 const check = process.argv.includes("--check");
 const entries = { authoring: "server/public/authoring.mts", "site-build": "server/public/site-build.mts" };
+// A type-only subpath has no default runtime export or empty JavaScript stub.
+const declarationEntries = { ...entries, "site-project": "server/public/site-project.mts" };
 const temporary = await mkdtemp(join(tmpdir(), "zudo-composer-public-build-"));
 const generated = join(temporary, "output");
 const declarations = join(temporary, "types");
@@ -78,7 +80,7 @@ try {
     await mkdir(dirname(destination), { recursive: true });
     await writeFile(destination, source.text);
   }
-  for (const [name, entry] of Object.entries(entries)) {
+  for (const [name, entry] of Object.entries(declarationEntries)) {
     const bundle = await rollup({
       input: join(declarations, entry.replace(/\.mts$/, ".d.mts")),
       // Preserve the consumer's contract and other installed package identities.
@@ -92,8 +94,9 @@ try {
     await writeFile(outputPath, (await readFile(outputPath, "utf8")).replace(/[\t ]+$/gm, ""));
   }
   const outputs = await filesUnder(generated);
-  for (const name of Object.keys(entries)) {
-    for (const extension of ["mjs", "d.mts"]) assert.ok(outputs.includes(join(generated, `${name}.${extension}`)), `Missing public output: ${name}.${extension}`);
+  for (const name of Object.keys(declarationEntries)) {
+    const extensions = Object.hasOwn(entries, name) ? ["mjs", "d.mts"] : ["d.mts"];
+    for (const extension of extensions) assert.ok(outputs.includes(join(generated, `${name}.${extension}`)), `Missing public output: ${name}.${extension}`);
   }
   if (check) {
     for (const output of outputs) {
