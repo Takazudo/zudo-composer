@@ -832,7 +832,14 @@ function generateJsx(document, manifest, options = {}) {
 		for (const prop of Object.keys(node.props).sort()) pushScalar(prop);
 		const namedAttrLines = [];
 		const structuralChildBlocks = [];
-		for (const slotId of orderedSlotIds(node, entry)) {
+		const slotNode = linkedOutlet?.target.parentId === node.id ? {
+			...node,
+			slots: {
+				[linkedOutlet.target.slotId]: [],
+				...node.slots
+			}
+		} : node;
+		for (const slotId of orderedSlotIds(slotNode, entry)) {
 			const slot = entry.slots.find((s) => s.id === slotId);
 			if (!slot) continue;
 			const children = node.slots[slotId] ?? [];
