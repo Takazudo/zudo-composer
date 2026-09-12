@@ -2,7 +2,7 @@ import { resolveImageEditorAliases } from './plugins/image-editor-aliases.mjs';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
-import tailwindcss from '@tailwindcss/vite';
+import tailwindPlugin from './plugins/tailwind-plugin.mjs';
 import composerFileProviderPlugin from './plugins/composer-file-provider-plugin.mjs';
 import siteProjectSourcePlugin from './plugins/site-project-source-plugin.mjs';
 import releaseApiPlugin from './plugins/release-api-plugin';
@@ -113,7 +113,7 @@ export default defineConfig({
         sitemapperDomainProvider({ sitemapsRoot: domainRoots.sitemaps }),
       ],
     }),
-    tailwindcss(),
+    tailwindPlugin(),
     preact(),
   ],
 });

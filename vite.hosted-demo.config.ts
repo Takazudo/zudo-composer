@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import preact from "@preact/preset-vite";
-import tailwindcss from "@tailwindcss/vite";
+import tailwindPlugin from "./plugins/tailwind-plugin.mjs";
 import componentPackPlugin from "./plugins/component-pack-plugin.mjs";
 import hostStylesPlugin from "./plugins/host-styles-plugin.mjs";
 import hostConfig from "./zudo-composer.config";
@@ -56,4 +56,4 @@ const demo: Plugin = {
     await writeFile(resolve(output, "hosted-demo-manifest.json"), JSON.stringify({ schemaVersion: 1, sourceRevision, projectSourceRevision: createHash("sha256").update(serializeSiteProject(sample as SiteProject)).digest("hex"), mode: "disposable-hosted-demo", assets }, null, 2) + "\n");
   },
 };
-export default defineConfig({ base: "/", publicDir: false, build: { outDir: "dist-hosted-demo" }, plugins: [demo, pack, hostStylesPlugin({ stylesPath: resolve(root, "styles/base.css"), styles: hostConfig.styles, configPath: resolve(root, "zudo-composer.config.ts") }), tailwindcss(), preact()] });
+export default defineConfig({ base: "/", publicDir: false, build: { outDir: "dist-hosted-demo" }, plugins: [demo, pack, hostStylesPlugin({ stylesPath: resolve(root, "styles/base.css"), styles: hostConfig.styles, configPath: resolve(root, "zudo-composer.config.ts") }), tailwindPlugin(), preact()] });
