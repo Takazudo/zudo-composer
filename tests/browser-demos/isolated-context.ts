@@ -14,10 +14,10 @@ export interface DemosLaneContext {
 /**
  * Fail before Playwright or the dev server starts unless the canonical runner
  * (`scripts/run-demos-browser.mjs`) supplied one demo name, its computed
- * route list and a disposable Assets store copy. A demo's own CMS content,
- * mappings, sitemaps and release state are gitignored and reseeded in place;
- * the Assets store is the one CMS directory this repository commits, so it is
- * the only one that needs a foreign root to keep the lane from touching it.
+ * route list and a disposable Assets store copy. The runner also confines the
+ * committed CMS domains and workspace registry before this guard is reached;
+ * keeping the Assets root explicit here lets the Playwright config reject a
+ * direct launch without reproducing the runner's host-relative settings.
  */
 export function requireDemosLaneContext(environment: NodeJS.ProcessEnv): DemosLaneContext {
   const fail = (): never => {

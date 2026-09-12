@@ -1,4 +1,5 @@
 .zudo-site-project/
+.zudo-composer-demos-browser/
 dist-site/
 cms/assets/.mutation.lock
 .upload-*.stage

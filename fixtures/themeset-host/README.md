@@ -13,5 +13,5 @@ pack is rejected by a server validating against the other.
 Run it the same way:
 
 ```
-corepack pnpm --filter @zudo-composer/fixture-themeset-host dev
+corepack pnpm dev
 ```
