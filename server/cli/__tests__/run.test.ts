@@ -59,6 +59,14 @@ describe("parseArguments", () => {
     expect(parseArguments(["build-site", "--from", "project.json"])).toEqual({ error: 'Unknown build-site option "--from".' });
   });
 
+  it("parses the ready workspace mode and its optional fresh output tree", () => {
+    expect(parseArguments(["seed", "--output", "fresh tree", "--ready-workspace", "--root", "host"]))
+      .toEqual({ command: "seed", options: { outputRoot: resolve("fresh tree"), readyWorkspace: true, workspaceRoot: resolve("host") } });
+    expect(parseArguments(["seed", "--output", "fresh"])).toEqual({ error: "--output requires --ready-workspace." });
+    expect(parseArguments(["seed", "--ready-workspace", "--output"])).toEqual({ error: "--output requires a directory." });
+    expect(parseArguments(["dev", "--ready-workspace"])).toHaveProperty("error");
+  });
+
   it("reads build-site paths relative to the caller and allows verification with route printing", () => {
     expect(parseArguments(["build-site"])).toEqual({ command: "build-site", options: {} });
     expect(parseArguments(["build-site", "--root", "host/..", "--print-routes", "--verify", "artifact"]))
@@ -147,6 +155,13 @@ seed options:
   --root <dir>     Host project root (default: the current directory).
   --from <file>    Committed project JSON (relative to cwd; default:
                   site-project.json under the host project root).
+  --ready-workspace
+                  Produce a selected, complete, reproducible CMS workspace.
+                  Uses a disposable release; no host activation is needed.
+                  Identical output is unchanged; different existing state fails.
+  --output <dir>  With --ready-workspace, use this fresh output tree (relative
+                  to cwd), preserving the host's configured relative layout.
+                  Print release identity, status, directories and file digests.
 
 build-site options:
   --root <dir>     Host project root (default: the current directory).
@@ -234,6 +249,14 @@ assets import options:
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
     child.emit("exit", 1, null);
     expect(proc.exits).toEqual([1]);
+  });
+
+  it("forwards ready generation and fresh output through the supervised seed child", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    await runComposerCli(["seed", "--ready-workspace", "--output", "fresh tree"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [SEED_ENTRY_PATH, "--ready-workspace", "--output", resolve("fresh tree")], { stdio: "inherit" });
   });
 
   it("refuses a missing seed entry and rejects invalid seed flags before spawning", async () => {

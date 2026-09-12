@@ -15,6 +15,10 @@ export interface SeedOptions {
   workspaceRoot?: string;
   /** Absolute resolved JSON source; defaults to site-project.json in the host root. */
   from?: string;
+  /** Produce a reproducible selected CMS workspace through the seed service. */
+  readyWorkspace?: boolean;
+  /** Absolute output tree for --ready-workspace; default is the host root. */
+  outputRoot?: string;
 }
 
 export type ParsedComposerCommand =

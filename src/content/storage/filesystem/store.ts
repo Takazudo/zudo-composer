@@ -16,6 +16,7 @@ export class FilesystemContentStore extends TransactionalContentStore {
       phases: PHASES,
       ...(options.operations === undefined ? {} : { operations: options.operations }),
       ...(options.randomToken === undefined ? {} : { randomToken: options.randomToken }),
+      ...(options.newMutationToken === undefined ? {} : { newMutationToken: options.newMutationToken }),
     });
     return this.fromRecords(records, options.now);
   }

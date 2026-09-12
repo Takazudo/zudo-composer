@@ -1,4 +1,4 @@
-import type { SafeRootFilesystemOperations } from "../../../shared/node-fs";
+import type { RecordMutationTokenSource, SafeRootFilesystemOperations } from "../../../shared/node-fs";
 import { SITEMAP_SCHEMA_VERSION } from "../../model";
 
 /** Pointer/generation protocol version owned by the transactional record store. */
@@ -30,4 +30,6 @@ export interface FilesystemSitemapStoreOptions {
   operations?: Partial<SafeRootFilesystemOperations>;
   /** Test-only random source seam; values must contain only URL-safe characters. */
   randomToken?: () => string;
+  /** Only isolated reproducible workspace generation overrides live random tokens. */
+  newMutationToken?: RecordMutationTokenSource;
 }
