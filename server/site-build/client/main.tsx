@@ -1,9 +1,9 @@
-// Static website build entry (vite.site-static.config.ts); never imported by the installed local tool.
+// Visitor entry for static site builds; separate from the authoring application.
 import { render } from "preact";
 import { build, project } from "virtual:site-static-project";
-import { activeComponentProvider } from "../features/composer/active-pack";
-import { SiteDelivery } from "../features/delivery/site-delivery";
-import type { DeliverySourceContract } from "../features/delivery/source";
+import { activeComponentProvider } from "../../../src/features/composer/active-pack";
+import { SiteDelivery } from "../../../src/features/delivery/site-delivery";
+import type { DeliverySourceContract } from "../../../src/features/delivery/source";
 import "virtual:zudo-composer-host-styles";
 import "./styles.css";
 

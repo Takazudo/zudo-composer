@@ -39,6 +39,8 @@
     "scripts/hosted-demo/live-check.mjs",
     "scripts/hosted-demo/workflow-guard.mjs",
     "server/site-build/artifact.mjs",
+    "server/site-build/assets.ts",
+    "server/site-build/print-routes.ts",
     "scripts/build-public-entries.mjs",
     "scripts/verify-public-install.mjs",
     "scripts/check-site-static.mjs",

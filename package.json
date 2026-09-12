@@ -73,8 +73,7 @@
     "!**/type-tests",
     "!**/*.test.*",
     "!src/test",
-    "!src/hosted-demo",
-    "!src/site-static"
+    "!src/hosted-demo"
   ],
   "engines": {
     "node": "^22.13.0 || >=24.0.0"

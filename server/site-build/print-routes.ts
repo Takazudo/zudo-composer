@@ -3,8 +3,8 @@
 // `site-project.json` the way a release does — using the lane's own
 // disposable Assets store copy — and prints its route pathnames as JSON.
 import { resolve } from "node:path";
-import { loadHostContext } from "../../server/host-context.mjs";
-import { compileStaticSite } from "../../server/site-build.mjs";
+import { loadHostContext } from "../host-context.mjs";
+import { compileStaticSite } from "../site-build.mjs";
 
 const [packageRoot, assetsStoreRoot] = process.argv.slice(2);
 if (!packageRoot || !assetsStoreRoot) {

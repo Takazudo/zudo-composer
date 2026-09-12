@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, siteHeaders, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
+import { collectStaticSiteAssets } from "../../server/site-build/assets";
 
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
@@ -28,6 +29,67 @@ async function site(files: Record<string, string | Uint8Array> = {}): Promise<st
   await writeFile(join(directory, SITE_MANIFEST), JSON.stringify(manifest));
   return directory;
 }
+
+async function uploads(files: Record<string, string | Uint8Array>, relativeRoot = "public/uploaded-assets"): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "site-public-assets-"));
+  directories.push(directory);
+  const publicAssets = join(directory, relativeRoot);
+  await mkdir(publicAssets, { recursive: true });
+  for (const [path, bytes] of Object.entries(files)) {
+    await mkdir(join(publicAssets, path, ".."), { recursive: true });
+    await writeFile(join(publicAssets, path), bytes);
+  }
+  return publicAssets;
+}
+
+describe("static site public assets", () => {
+  it.each(["public/uploaded-assets", "public/library"])("copies exact public bytes directly from the resolved %s directory", async (relativeRoot) => {
+    const bytes = Buffer.from([0x00, 0xff, 0x80, 0x0d, 0x0a]);
+    const publicAssets = await uploads({ "nested/logo.png": bytes, ".gitkeep": "", "nested/.gitkeep": "" }, relativeRoot);
+    const assets = await collectStaticSiteAssets({ assetFiles: [], publicAssets });
+    expect(assets.files).toEqual([{ fileName: "uploaded-assets/nested/logo.png", source: bytes }]);
+    expect(assets.headers).toBe(siteHeaders([]));
+  });
+
+  it("retains release pins when the public directory is absent", async () => {
+    const publicAssets = join(await uploads({}), "missing");
+    const assetFiles = [{ fileName: PIN_PATH, source: PIN_BYTES }];
+    const assets = await collectStaticSiteAssets({ assetFiles, publicAssets });
+    expect(assets.files).toEqual(assetFiles);
+    expect(assets.headers).toBe(siteHeaders([{ path: PIN_PATH, byteLength: PIN_BYTES.byteLength }]));
+  });
+
+  it("deduplicates identical public and release bytes but rejects conflicting claims", async () => {
+    const publicAssets = await uploads({ [PIN_PATH.slice("uploaded-assets/".length)]: PIN_BYTES });
+    const assetFiles = [{ fileName: PIN_PATH, source: PIN_BYTES }];
+    const assets = await collectStaticSiteAssets({ assetFiles, publicAssets });
+    expect(assets.files).toEqual(assetFiles);
+    expect(assets.headers).toBe(siteHeaders([{ path: PIN_PATH, byteLength: PIN_BYTES.byteLength }]));
+
+    await writeFile(join(publicAssets, PIN_PATH.slice("uploaded-assets/".length)), "stale public copy");
+    await expect(collectStaticSiteAssets({ assetFiles, publicAssets })).rejects.toThrow(`Two different files claim ${PIN_PATH}.`);
+  });
+
+  it("includes unreferenced public checksum assets in the artifact and header rules", async () => {
+    const publicBytes = Buffer.from("committed download\n");
+    const publicName = `sha256-${createHash("sha256").update(publicBytes).digest("hex")}.txt`;
+    const publicAssets = await uploads({ [publicName]: publicBytes });
+    const assets = await collectStaticSiteAssets({ assetFiles: [{ fileName: PIN_PATH, source: PIN_BYTES }], publicAssets });
+    const directory = await site({ ...Object.fromEntries(assets.files.map(({ fileName, source }) => [fileName, source])), [SITE_HEADERS]: assets.headers });
+    const manifest = await verifySiteStaticArtifact({ directory });
+    expect(manifest.files[`uploaded-assets/${publicName}`]).toBe(createHash("sha256").update(publicBytes).digest("hex"));
+    expect(await readFile(join(directory, "uploaded-assets", publicName))).toEqual(publicBytes);
+    expect(assets.headers).toContain(`/uploaded-assets/${publicName}\n  Content-Type: text/plain`);
+  });
+
+  it("keeps rejecting stale public bytes under a checksum name even without a release collision", async () => {
+    const publicName = `sha256-${"0".repeat(64)}.png`;
+    const publicAssets = await uploads({ [publicName]: "stale public bytes" });
+    const assets = await collectStaticSiteAssets({ assetFiles: [{ fileName: PIN_PATH, source: PIN_BYTES }], publicAssets });
+    const directory = await site({ ...Object.fromEntries(assets.files.map(({ fileName, source }) => [fileName, source])), [SITE_HEADERS]: assets.headers });
+    await expect(verifySiteStaticArtifact({ directory })).rejects.toThrow(`Pinned asset name does not match its bytes: uploaded-assets/${publicName}`);
+  });
+});
 
 describe("static site artifact", () => {
   it("describes every file, the routes and both revisions", async () => {
