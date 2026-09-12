@@ -3,7 +3,7 @@
 // host project's node_modules the package directory and the host project
 // directory are different places, and no single Vite root satisfies both.
 
-import { realpathSync } from "node:fs";
+import { globSync, realpathSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 
@@ -104,14 +104,14 @@ export function resolveSiteProjectLocalRoot(workspaceRoot, configured) {
  * warmed up. Test sources are excluded because no route imports them.
  */
 export function resolveAppWarmupFiles() {
-  return [
-    resolve(APP_ROOT, APP_ENTRY),
-    resolve(APP_ROOT, "src/**/*.{ts,tsx,css}"),
-    `!${resolve(APP_ROOT, "src/**/__tests__/**")}`,
-    // Entries built only by their own Vite configs; their virtual modules never exist here.
-    `!${resolve(APP_ROOT, "src/hosted-demo/**")}`,
-    `!${resolve(APP_ROOT, "src/site-static/**")}`,
-  ];
+  const sourceRoot = resolve(APP_ROOT, "src");
+  const sourceFiles = globSync("**/*.{ts,tsx,css}", {
+    cwd: sourceRoot,
+    exclude: ["**/__tests__/**", "hosted-demo/**", "site-static/**"],
+  })
+    .map((file) => resolve(sourceRoot, file))
+    .filter((file) => statSync(file).isFile());
+  return [...new Set([resolve(APP_ROOT, APP_ENTRY), ...sourceFiles])];
 }
 
 /**
