@@ -18,6 +18,13 @@ export const CONFIG_PATH = DEFAULT_TARGET.configPath;
 export const WRANGLER_BIN = resolve(root, "node_modules/.bin/wrangler");
 export const ARTIFACT_DIRECTORY = DEFAULT_TARGET.artifactDirectory;
 export const DEPLOYMENT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
+// A first rollout is also waiting on a hostname that did not exist a moment
+// ago: the same call creates the custom domain's DNS records, and a resolver
+// that answers with AAAA before A makes the first fetch fail outright on an
+// IPv4-only runner. Measured: the ordinary ~7s live-check budget expired before
+// zc-demo-*.zudolab.dev resolved on every path. Later rollouts never need this.
+export const FIRST_DEPLOY_LIVE_RETRY_DELAYS_MS = [5_000, 10_000, 20_000, 30_000, 30_000, 30_000];
+export const FIRST_DEPLOY_LIVE_TIMEOUT_MS = 240_000;
 const VERSION_ID_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 
 /** @param {Record<string, string | undefined>} environment @returns {"absent" | "partial" | "complete"} */
@@ -337,7 +344,7 @@ function asError(value) {
  * fails red with the created version named, and the next run takes the ordinary
  * versioned path against it.
  *
- * @param {{ preflight: Awaited<ReturnType<typeof preflightDeployment>>, target: DeployTarget, baseUrl: string, environment: Record<string, string | undefined>, runner: typeof runCommand, liveVerifier: (options: { baseUrl: string, artifactDirectory: string, expectedSourceRevision: string }) => Promise<{ routes: unknown[], assets: unknown[], manifest: unknown }> }} options
+ * @param {{ preflight: Awaited<ReturnType<typeof preflightDeployment>>, target: DeployTarget, baseUrl: string, environment: Record<string, string | undefined>, runner: typeof runCommand, liveVerifier: (options: { baseUrl: string, artifactDirectory: string, expectedSourceRevision: string, retryDelaysMs?: number[], overallTimeoutMs?: number }) => Promise<{ routes: unknown[], assets: unknown[], manifest: unknown }> }} options
  */
 async function createFirstDeployment({ preflight, target, baseUrl, environment, runner, liveVerifier }) {
   console.log(`${target.workerName} has no deployments on Cloudflare; creating its first one and binding ${target.domain}.`);
@@ -354,7 +361,13 @@ async function createFirstDeployment({ preflight, target, baseUrl, environment, 
   const created = await currentDeployment(target, { environment, runner });
   const deployedVersionId = created.activeVersionId;
   console.log(`Created ${target.workerName} version ${deployedVersionId}; beginning bounded live verification at ${baseUrl}.`);
-  const proof = await liveVerifier({ baseUrl, artifactDirectory: preflight.artifactDirectory, expectedSourceRevision: preflight.artifact.manifest.sourceRevision }).catch((error) => {
+  const proof = await liveVerifier({
+    baseUrl,
+    artifactDirectory: preflight.artifactDirectory,
+    expectedSourceRevision: preflight.artifact.manifest.sourceRevision,
+    retryDelaysMs: FIRST_DEPLOY_LIVE_RETRY_DELAYS_MS,
+    overallTimeoutMs: FIRST_DEPLOY_LIVE_TIMEOUT_MS,
+  }).catch((error) => {
     const failure = asError(error);
     throw new Error(`${failure.message}; first ${target.workerName} deployment ${deployedVersionId} stays active — there is no earlier version to roll back to`, { cause: error });
   });

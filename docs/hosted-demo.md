@@ -141,6 +141,12 @@ carries no rollout tag (`wrangler deploy` takes neither `--tag` nor
 `--message`), and its active version ID is read back from Cloudflare rather
 than parsed from command output.
 
+A first deployment's live check also gets a longer budget (about two minutes of
+retries instead of seven seconds): it is waiting on a hostname this very call
+created, and a resolver that answers with AAAA before A makes the first fetch
+fail outright on an IPv4-only runner. Later rollouts keep the short budget —
+their domain already resolves.
+
 Nothing is rolled back when live verification fails on a first deployment —
 the only prior state is "the Worker does not exist", which a rollback cannot
 restore. The job fails red with the created version named, and the next run

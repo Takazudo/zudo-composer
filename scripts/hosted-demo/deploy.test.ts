@@ -7,6 +7,8 @@ import {
   captureDeploymentState,
   deployHostedDemo,
   deploymentCredentialState,
+  FIRST_DEPLOY_LIVE_RETRY_DELAYS_MS,
+  FIRST_DEPLOY_LIVE_TIMEOUT_MS,
   parseUploadedVersionId,
   preflightDeployment,
   requireDeploymentCredentials,
@@ -317,10 +319,14 @@ describe("hosted demo deployment guard", () => {
     });
     expect(result.deployedVersionId).toBe(NEW_VERSION);
     expect(result.preflight.state).toEqual({ firstDeploy: true });
+    // A brand-new hostname gets a longer live-check budget than a rollout onto an
+    // existing domain, whose DNS is already in place.
     expect(liveVerifier).toHaveBeenCalledWith({
       baseUrl: "https://zc-demo-shop.zudolab.dev",
       artifactDirectory: target.artifactDirectory,
       expectedSourceRevision: SOURCE_REVISION,
+      retryDelaysMs: FIRST_DEPLOY_LIVE_RETRY_DELAYS_MS,
+      overallTimeoutMs: FIRST_DEPLOY_LIVE_TIMEOUT_MS,
     });
     // `versions upload` never applies a config's routes, so the bootstrap must be
     // a plain `deploy` — and there is nothing to roll back from "no Worker".
