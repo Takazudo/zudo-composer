@@ -1,0 +1,65 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "description": "",
+    "fields": [
+      {
+        "id": "testimonials-quote",
+        "key": "quote",
+        "kind": "long-text",
+        "label": "Quote",
+        "required": true
+      },
+      {
+        "id": "testimonials-name",
+        "key": "name",
+        "kind": "text",
+        "label": "Name",
+        "required": true
+      },
+      {
+        "id": "testimonials-role",
+        "key": "role",
+        "kind": "text",
+        "label": "Role",
+        "required": true
+      },
+      {
+        "fields": [
+          {
+            "id": "testimonials-avatar-src",
+            "key": "src",
+            "kind": "url",
+            "label": "Image URL",
+            "required": true
+          },
+          {
+            "id": "testimonials-avatar-alt",
+            "key": "alt",
+            "kind": "text",
+            "label": "Alt text",
+            "required": true
+          }
+        ],
+        "id": "testimonials-avatar",
+        "key": "avatar",
+        "kind": "object",
+        "label": "Avatar",
+        "required": true
+      },
+      {
+        "id": "testimonials-order",
+        "key": "order",
+        "kind": "number",
+        "label": "Order",
+        "required": true
+      }
+    ],
+    "id": "testimonials",
+    "kind": "collection",
+    "name": "Testimonials",
+    "schemaVersion": 1
+  },
+  "id": "testimonials",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

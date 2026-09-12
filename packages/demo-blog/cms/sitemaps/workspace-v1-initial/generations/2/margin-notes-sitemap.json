@@ -1,0 +1,233 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "margin-notes-sitemap",
+    "name": "Margin Notes sitemap",
+    "navigation": {
+      "footer": [
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "about"
+          },
+          "id": "nav-about",
+          "label": "About",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "authors"
+          },
+          "id": "nav-authors",
+          "label": "Authors",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "newsletter"
+          },
+          "id": "nav-newsletter",
+          "label": "Newsletter",
+          "visible": true
+        }
+      ],
+      "primary": [
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "articles"
+          },
+          "id": "nav-articles",
+          "label": "Articles",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "tag-craft"
+          },
+          "id": "nav-tag-craft",
+          "label": "Craft",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "tag-attention"
+          },
+          "id": "nav-tag-attention",
+          "label": "Attention",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "tag-tools"
+          },
+          "id": "nav-tag-tools",
+          "label": "Tools",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "about"
+          },
+          "id": "nav-about",
+          "label": "About",
+          "visible": true
+        }
+      ]
+    },
+    "root": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "children": [],
+                "id": "article",
+                "source": {
+                  "kind": "mapping",
+                  "ref": {
+                    "providerId": "mapping-filesystem",
+                    "recordId": "article-page"
+                  },
+                  "route": {
+                    "fieldId": "articles-slug",
+                    "kind": "entry-field",
+                    "titleFieldId": "articles-title"
+                  }
+                },
+                "title": "Article"
+              }
+            ],
+            "id": "articles",
+            "slug": "articles",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "articles"
+              }
+            },
+            "title": "Articles"
+          },
+          {
+            "children": [],
+            "id": "tag-craft",
+            "slug": "craft",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "tag-craft"
+              }
+            },
+            "title": "Craft"
+          },
+          {
+            "children": [],
+            "id": "tag-attention",
+            "slug": "attention",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "tag-attention"
+              }
+            },
+            "title": "Attention"
+          },
+          {
+            "children": [],
+            "id": "tag-tools",
+            "slug": "tools",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "tag-tools"
+              }
+            },
+            "title": "Tools"
+          },
+          {
+            "children": [
+              {
+                "children": [],
+                "id": "author",
+                "source": {
+                  "kind": "mapping",
+                  "ref": {
+                    "providerId": "mapping-filesystem",
+                    "recordId": "author-page"
+                  },
+                  "route": {
+                    "fieldId": "authors-slug",
+                    "kind": "entry-field",
+                    "titleFieldId": "authors-name"
+                  }
+                },
+                "title": "Author"
+              }
+            ],
+            "id": "authors",
+            "slug": "authors",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "authors"
+              }
+            },
+            "title": "Authors"
+          },
+          {
+            "children": [],
+            "id": "about",
+            "slug": "about",
+            "source": {
+              "kind": "mapping",
+              "ref": {
+                "providerId": "mapping-filesystem",
+                "recordId": "about-page"
+              },
+              "route": {
+                "kind": "single"
+              }
+            },
+            "title": "About"
+          },
+          {
+            "children": [],
+            "id": "newsletter",
+            "slug": "newsletter",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "newsletter"
+              }
+            },
+            "title": "Newsletter"
+          }
+        ],
+        "id": "home",
+        "source": {
+          "kind": "composition",
+          "ref": {
+            "providerId": "files",
+            "recordId": "home"
+          }
+        },
+        "title": "Home"
+      }
+    ],
+    "schemaVersion": 3
+  },
+  "id": "margin-notes-sitemap",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

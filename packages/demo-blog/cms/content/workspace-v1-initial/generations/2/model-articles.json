@@ -1,0 +1,186 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "description": "Essays. tag1–3 and the author* fields are written by site-project.ts from `tags` and `author` so components can receive them as scalar props.",
+    "fields": [
+      {
+        "id": "articles-title",
+        "key": "title",
+        "kind": "text",
+        "label": "Title",
+        "required": true
+      },
+      {
+        "id": "articles-slug",
+        "key": "slug",
+        "kind": "slug",
+        "label": "Slug",
+        "required": true
+      },
+      {
+        "id": "articles-intro",
+        "key": "intro",
+        "kind": "long-text",
+        "label": "Intro",
+        "required": true
+      },
+      {
+        "fields": [
+          {
+            "id": "articles-cover-src",
+            "key": "src",
+            "kind": "url",
+            "label": "Src",
+            "required": true
+          },
+          {
+            "id": "articles-cover-alt",
+            "key": "alt",
+            "kind": "text",
+            "label": "Alt",
+            "required": true
+          },
+          {
+            "id": "articles-cover-caption",
+            "key": "caption",
+            "kind": "text",
+            "label": "Caption",
+            "required": true
+          }
+        ],
+        "id": "articles-cover",
+        "key": "cover",
+        "kind": "object",
+        "label": "Cover",
+        "required": true
+      },
+      {
+        "id": "articles-body",
+        "key": "body",
+        "kind": "markdown",
+        "label": "Body",
+        "required": true
+      },
+      {
+        "id": "articles-body-length",
+        "key": "bodyLength",
+        "kind": "number",
+        "label": "Body length (characters)",
+        "required": true
+      },
+      {
+        "id": "articles-date",
+        "key": "date",
+        "kind": "date",
+        "label": "Date",
+        "required": true
+      },
+      {
+        "id": "articles-author",
+        "key": "author",
+        "kind": "reference",
+        "label": "Author",
+        "required": true,
+        "target": {
+          "providerId": "content-filesystem",
+          "recordId": "authors"
+        }
+      },
+      {
+        "id": "articles-tags",
+        "item": {
+          "kind": "choice",
+          "options": [
+            {
+              "label": "Craft",
+              "value": "craft"
+            },
+            {
+              "label": "Attention",
+              "value": "attention"
+            },
+            {
+              "label": "Tools",
+              "value": "tools"
+            }
+          ]
+        },
+        "key": "tags",
+        "kind": "list",
+        "label": "Tags",
+        "required": true
+      },
+      {
+        "id": "articles-tag1",
+        "key": "tag1",
+        "kind": "text",
+        "label": "Tag 1",
+        "required": true
+      },
+      {
+        "id": "articles-tag2",
+        "key": "tag2",
+        "kind": "text",
+        "label": "Tag 2",
+        "required": false
+      },
+      {
+        "id": "articles-tag3",
+        "key": "tag3",
+        "kind": "text",
+        "label": "Tag 3",
+        "required": false
+      },
+      {
+        "id": "articles-author-name",
+        "key": "authorName",
+        "kind": "text",
+        "label": "Author name",
+        "required": true
+      },
+      {
+        "id": "articles-author-bio",
+        "key": "authorBio",
+        "kind": "long-text",
+        "label": "Author bio",
+        "required": true
+      },
+      {
+        "fields": [
+          {
+            "id": "articles-author-avatar-src",
+            "key": "src",
+            "kind": "url",
+            "label": "Src",
+            "required": true
+          },
+          {
+            "id": "articles-author-avatar-alt",
+            "key": "alt",
+            "kind": "text",
+            "label": "Alt",
+            "required": true
+          }
+        ],
+        "id": "articles-author-avatar",
+        "key": "authorAvatar",
+        "kind": "object",
+        "label": "Author avatar",
+        "required": true
+      },
+      {
+        "id": "articles-author-slug",
+        "key": "authorSlug",
+        "kind": "slug",
+        "label": "Author slug",
+        "required": true
+      }
+    ],
+    "id": "articles",
+    "kind": "collection",
+    "name": "Articles",
+    "schemaVersion": 1
+  },
+  "id": "articles",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

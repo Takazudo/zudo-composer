@@ -1,0 +1,404 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "product-page-name-heading",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-name",
+        "target": {
+          "nodeId": "product-heading",
+          "prop": "heading"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-category-eyebrow",
+        "projection": {
+          "kind": "reference-id"
+        },
+        "sourceFieldId": "products-category",
+        "target": {
+          "nodeId": "product-heading",
+          "prop": "eyebrow"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-subtitle-intro",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-subtitle",
+        "target": {
+          "nodeId": "product-heading",
+          "prop": "intro"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-image1-src",
+        "projection": {
+          "fieldIds": [
+            "products-image1-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-image1",
+        "target": {
+          "nodeId": "product-image-1",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-image1-alt",
+        "projection": {
+          "fieldIds": [
+            "products-image1-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-image1",
+        "target": {
+          "nodeId": "product-image-1",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-image2-src",
+        "projection": {
+          "fieldIds": [
+            "products-image2-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-image2",
+        "target": {
+          "nodeId": "product-image-2",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-image2-alt",
+        "projection": {
+          "fieldIds": [
+            "products-image2-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-image2",
+        "target": {
+          "nodeId": "product-image-2",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-price-price",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-price",
+        "target": {
+          "nodeId": "product-price",
+          "prop": "price"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-currency-currency",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-currency",
+        "target": {
+          "nodeId": "product-price",
+          "prop": "currency"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-availability-availability",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-availability",
+        "target": {
+          "nodeId": "product-status",
+          "prop": "availability"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-stocklabel-label",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-stock-label",
+        "target": {
+          "nodeId": "product-status",
+          "prop": "label"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-cart-slug",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-slug",
+        "target": {
+          "nodeId": "product-cart",
+          "prop": "slug"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-cart-name",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-name",
+        "target": {
+          "nodeId": "product-cart",
+          "prop": "name"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-cart-price",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-price",
+        "target": {
+          "nodeId": "product-cart",
+          "prop": "price"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-cart-currency",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-currency",
+        "target": {
+          "nodeId": "product-cart",
+          "prop": "currency"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-cart-availability",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-availability",
+        "target": {
+          "nodeId": "product-cart",
+          "prop": "availability"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-cart-src",
+        "projection": {
+          "fieldIds": [
+            "products-image1-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-image1",
+        "target": {
+          "nodeId": "product-cart",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-description-markdown",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-description",
+        "target": {
+          "nodeId": "product-description",
+          "prop": "markdown"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-spec-material",
+        "projection": {
+          "fieldIds": [
+            "products-spec-material"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-spec",
+        "target": {
+          "nodeId": "product-spec",
+          "prop": "spec1Value"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-spec-dimensions",
+        "projection": {
+          "fieldIds": [
+            "products-spec-dimensions"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-spec",
+        "target": {
+          "nodeId": "product-spec",
+          "prop": "spec2Value"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-spec-weight",
+        "projection": {
+          "fieldIds": [
+            "products-spec-weight"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-spec",
+        "target": {
+          "nodeId": "product-spec",
+          "prop": "spec3Value"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-spec-origin",
+        "projection": {
+          "fieldIds": [
+            "products-spec-origin"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-spec",
+        "target": {
+          "nodeId": "product-spec",
+          "prop": "spec4Value"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-spec-care",
+        "projection": {
+          "fieldIds": [
+            "products-spec-care"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-spec",
+        "target": {
+          "nodeId": "product-spec",
+          "prop": "spec5Value"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "product-page-spec-warranty",
+        "projection": {
+          "fieldIds": [
+            "products-spec-warranty"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-spec",
+        "target": {
+          "nodeId": "product-spec",
+          "prop": "spec6Value"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "product-page"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "products"
+    },
+    "id": "product-page",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "asc",
+            "fieldId": "products-name"
+          }
+        ]
+      }
+    },
+    "name": "Product page",
+    "schemaVersion": 2
+  },
+  "id": "product-page",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

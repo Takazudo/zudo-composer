@@ -1,0 +1,58 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "description": "The journal's two writers.",
+    "fields": [
+      {
+        "id": "authors-name",
+        "key": "name",
+        "kind": "text",
+        "label": "Name",
+        "required": true
+      },
+      {
+        "id": "authors-slug",
+        "key": "slug",
+        "kind": "slug",
+        "label": "Slug",
+        "required": true
+      },
+      {
+        "id": "authors-bio",
+        "key": "bio",
+        "kind": "long-text",
+        "label": "Bio",
+        "required": true
+      },
+      {
+        "fields": [
+          {
+            "id": "authors-avatar-src",
+            "key": "src",
+            "kind": "url",
+            "label": "Src",
+            "required": true
+          },
+          {
+            "id": "authors-avatar-alt",
+            "key": "alt",
+            "kind": "text",
+            "label": "Alt",
+            "required": true
+          }
+        ],
+        "id": "authors-avatar",
+        "key": "avatar",
+        "kind": "object",
+        "label": "Avatar",
+        "required": true
+      }
+    ],
+    "id": "authors",
+    "kind": "collection",
+    "name": "Authors",
+    "schemaVersion": 1
+  },
+  "id": "authors",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

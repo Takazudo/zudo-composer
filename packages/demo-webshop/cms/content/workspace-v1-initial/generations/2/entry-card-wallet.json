@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "card-wallet",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "in-stock",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "carry"
+    },
+    "products-currency": "USD",
+    "products-description": "A slim card wallet cut from black full-grain leather and stitched with waxed linen thread. It holds up to six cards and a folded note, and it still slips into a front pocket without a bulge.\n\nThe leather is vegetable tanned, so it darkens and takes a polish with use rather than cracking. Edges are burnished by hand.\n\nWe make it in one size because we tried three and everyone chose this one.",
+    "products-featured": false,
+    "products-image1": {
+      "products-image1-alt": "Slim black leather card wallet",
+      "products-image1-src": "/uploaded-assets/asset-assets-eba643be-cd55-48f9-b7ce-7290ce2062d0"
+    },
+    "products-name": "Card Wallet",
+    "products-price": 58,
+    "products-slug": "card-wallet",
+    "products-spec": {
+      "products-spec-care": "Condition twice a year with a neutral balm",
+      "products-spec-dimensions": "105 × 75 × 6 mm",
+      "products-spec-material": "Vegetable-tanned full-grain leather; waxed linen thread",
+      "products-spec-origin": "Stitched in Florence, Italy",
+      "products-spec-warranty": "Five years on stitching",
+      "products-spec-weight": "38 g"
+    },
+    "products-stock-label": "In stock",
+    "products-subtitle": "Two pockets, one fold of leather, six cards at most.",
+    "products-tag1": "leather",
+    "products-tag2": "wallet",
+    "products-tag3": "everyday",
+    "products-tags": [
+      "leather",
+      "wallet",
+      "everyday"
+    ]
+  }
+}

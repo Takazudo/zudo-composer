@@ -1,0 +1,19 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "testimonial-mara",
+  "lifecycle": "published",
+  "modelId": "testimonials",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "testimonials-avatar": {
+      "testimonials-avatar-alt": "Abstract geometric avatar in grey with a cobalt collar",
+      "testimonials-avatar-src": "/uploaded-assets/asset-assets-dc0233ae-9bc8-4a34-b641-e29785e46143"
+    },
+    "testimonials-name": "Mara Lind",
+    "testimonials-order": 1,
+    "testimonials-quote": "We used to spend Monday morning arguing about when to meet. Now the week is already on one screen when we sit down, and the argument never starts.",
+    "testimonials-role": "Operations lead, Quarto"
+  }
+}

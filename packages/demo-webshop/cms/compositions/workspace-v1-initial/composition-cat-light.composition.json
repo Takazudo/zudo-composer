@@ -1,0 +1,47 @@
+{
+  "id": "cat-light",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "cat-light",
+    "name": "Light shelf",
+    "root": [
+      {
+        "componentId": "shop.hero",
+        "componentVersion": 1,
+        "id": "cat-light-shop-hero-1",
+        "props": {
+          "alt": "Small lit brass oil lamp with a glass chimney",
+          "eyebrow": "Shelf",
+          "heading": "Light",
+          "lead": "Low, warm light for late work. A lamp for the desk, a torch for the pocket, candles for the evening after.",
+          "primaryHref": "#",
+          "primaryLabel": "",
+          "secondaryHref": "#",
+          "secondaryLabel": "",
+          "src": "/uploaded-assets/asset-assets-7e6a524b-3b9a-4f89-a763-6949cd5c84bc",
+          "variant": "compact"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.product-grid",
+        "componentVersion": 1,
+        "id": "light",
+        "props": {
+          "chips": false,
+          "defaultSort": "featured",
+          "emptyText": "Nothing on the light shelf matches.",
+          "pageSize": 8,
+          "toolbar": true
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

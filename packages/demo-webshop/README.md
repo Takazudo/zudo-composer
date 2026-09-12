@@ -11,18 +11,31 @@ and the reasoning behind it are in
 Run these commands from this package directory:
 
 ```sh
-corepack pnpm generate                         # site-project.ts -> site-project.json
-corepack pnpm --filter demo-webshop seed       # images-src -> cms/assets, then an activated release
 corepack pnpm --filter demo-webshop dev --port 4181
 ```
 
-`generate` is the only way `site-project.json` changes; `zudo-composer generate --check`
-reports when the committed JSON is stale. `seed` runs `zudo-composer release` from
-this directory, so the release state lands in `.zudo-site-project/` and the
-published CMS records in `cms/{compositions,content,mappings,sitemaps}/` — all
-gitignored, all regenerable. Ordinary Assets edits under `pnpm dev` dirty
-`cms/assets/catalog.json`; that is by design, as it is for the root dogfood
-store.
+The committed `initial` workspace opens populated without a seeding step or
+an activated release. `site-project.ts` is the authored source of truth;
+`site-project.json` and `cms/{compositions,content,mappings,sitemaps,workspaces}`
+are generated material that happens to be tracked. Do not edit those generated
+files by hand. `generate` produces the JSON; `zudo-composer generate --check`
+reports stale committed JSON. The installed
+`zudo-composer seed --ready-workspace` produces the CMS through the canonical
+stores and workspace registry. See the [ready-workspace guide](../../docs/site-project.md#committed-ready-workspace)
+for fresh-output regeneration and unchanged reruns.
+
+For an explicit source update and local website release:
+
+```sh
+corepack pnpm generate   # site-project.ts -> site-project.json
+corepack pnpm --filter demo-webshop seed       # images-src -> cms/assets, then an activated release
+```
+
+`seed` imports Assets and activates a local website release in the ignored
+`.zudo-site-project/` directory; it is needed for `/site` delivery. The Assets
+catalog and retained versions remain committed under `cms/assets`, with exact
+checksum-named delivery copies under `public/uploaded-assets`. Ordinary Assets
+edits under `pnpm dev` dirty the catalog by design.
 
 The authored site is **Nightjar Supply** (`docs/demo-sites/webshop.md`): twelve
 products on three shelves (Desk, Carry, Light), a catalog with filter / sort /

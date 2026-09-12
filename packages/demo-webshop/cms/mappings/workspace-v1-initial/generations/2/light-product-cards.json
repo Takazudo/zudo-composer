@@ -1,0 +1,248 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "light-product-cards-name-name",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-name",
+        "target": {
+          "nodeId": "card",
+          "prop": "name"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-slug-href",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-slug",
+        "target": {
+          "nodeId": "card",
+          "prop": "href"
+        },
+        "transform": {
+          "kind": "prefix",
+          "prefix": "/products/"
+        }
+      },
+      {
+        "id": "light-product-cards-slug-slug",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-slug",
+        "target": {
+          "nodeId": "card",
+          "prop": "slug"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-image1-src",
+        "projection": {
+          "fieldIds": [
+            "products-image1-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-image1",
+        "target": {
+          "nodeId": "card",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-image1-alt",
+        "projection": {
+          "fieldIds": [
+            "products-image1-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "products-image1",
+        "target": {
+          "nodeId": "card",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-price-price",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-price",
+        "target": {
+          "nodeId": "card",
+          "prop": "price"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-currency-currency",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-currency",
+        "target": {
+          "nodeId": "card",
+          "prop": "currency"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-category-category",
+        "projection": {
+          "kind": "reference-id"
+        },
+        "sourceFieldId": "products-category",
+        "target": {
+          "nodeId": "card",
+          "prop": "category"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-availability-availability",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-availability",
+        "target": {
+          "nodeId": "card",
+          "prop": "availability"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-stocklabel-stocklabel",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-stock-label",
+        "target": {
+          "nodeId": "card",
+          "prop": "stockLabel"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-featured-featured",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-featured",
+        "target": {
+          "nodeId": "card",
+          "prop": "featured"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-tag1-tag1",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-tag1",
+        "target": {
+          "nodeId": "card",
+          "prop": "tag1"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-tag2-tag2",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-tag2",
+        "target": {
+          "nodeId": "card",
+          "prop": "tag2"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "light-product-cards-tag3-tag3",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "products-tag3",
+        "target": {
+          "nodeId": "card",
+          "prop": "tag3"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "product-card"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "products"
+    },
+    "id": "light-product-cards",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [
+          {
+            "fieldId": "products-category",
+            "operator": "equals",
+            "value": {
+              "modelId": "categories",
+              "providerId": "content-filesystem",
+              "recordId": "light"
+            }
+          }
+        ],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "asc",
+            "fieldId": "products-name"
+          }
+        ]
+      }
+    },
+    "name": "Light product cards",
+    "schemaVersion": 2
+  },
+  "id": "light-product-cards",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

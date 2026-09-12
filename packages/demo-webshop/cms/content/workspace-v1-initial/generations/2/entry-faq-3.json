@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-3",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "In your browser's local storage, under one key. Clear your site data and the cart is gone. There is no account and no server-side basket.",
+    "faq-order": 3,
+    "faq-question": "Where is my cart kept?"
+  }
+}

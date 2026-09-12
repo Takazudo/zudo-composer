@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "key-loop",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "low-stock",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "carry"
+    },
+    "products-currency": "USD",
+    "products-description": "A short loop of black bridle leather riveted around a blackened steel split ring. It hangs from a belt loop or a bag strap and keeps your keys from scratching everything else in the pocket.\n\nThe ring opens with a thumbnail and holds up to eight keys. The rivet is solid copper, peened by hand, and will not work loose.\n\nA small thing, but the one you touch most days.",
+    "products-featured": false,
+    "products-image1": {
+      "products-image1-alt": "Black leather key loop with a dark steel ring",
+      "products-image1-src": "/uploaded-assets/asset-assets-728d3d8d-1951-4baf-b65f-4f231afc24be"
+    },
+    "products-name": "Key Loop",
+    "products-price": 22,
+    "products-slug": "key-loop",
+    "products-spec": {
+      "products-spec-care": "Condition the leather when it looks dry",
+      "products-spec-dimensions": "95 × 18 mm, ring 25 mm",
+      "products-spec-material": "Bridle leather; blackened steel; copper rivet",
+      "products-spec-origin": "Made in Walsall, England",
+      "products-spec-warranty": "Five years",
+      "products-spec-weight": "18 g"
+    },
+    "products-stock-label": "Only a few left",
+    "products-subtitle": "A leather loop and a blackened ring that keep keys quiet.",
+    "products-tag1": "leather",
+    "products-tag2": "keys",
+    "products-tag3": "everyday",
+    "products-tags": [
+      "leather",
+      "keys",
+      "everyday"
+    ]
+  }
+}

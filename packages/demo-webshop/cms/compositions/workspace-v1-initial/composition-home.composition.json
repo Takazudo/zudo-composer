@@ -1,0 +1,128 @@
+{
+  "id": "home",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "home",
+    "name": "Home",
+    "root": [
+      {
+        "componentId": "shop.hero",
+        "componentVersion": 1,
+        "id": "home-shop-hero-1",
+        "props": {
+          "alt": "A dark workbench at night with a small lit brass lamp, a closed notebook and a pen",
+          "eyebrow": "Nightjar Supply",
+          "heading": "Objects for *quiet* work",
+          "lead": "Twelve desk tools, carry goods and small lights, chosen for the hours after everyone else has gone home.",
+          "primaryHref": "/products",
+          "primaryLabel": "Shop all",
+          "secondaryHref": "/about",
+          "secondaryLabel": "About",
+          "src": "/uploaded-assets/asset-assets-b8badec4-c972-48f8-9944-b44d671723cc",
+          "variant": "display"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.section",
+        "componentVersion": 1,
+        "id": "home-new",
+        "props": {
+          "tone": "bg"
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "shop.section-heading",
+              "componentVersion": 1,
+              "id": "home-shop-section-heading-2",
+              "props": {
+                "as": "h2",
+                "eyebrow": "Featured",
+                "heading": "New this season",
+                "intro": ""
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.product-grid",
+              "componentVersion": 1,
+              "id": "home-featured",
+              "props": {
+                "chips": false,
+                "defaultSort": "featured",
+                "emptyText": "Nothing new this week.",
+                "pageSize": 4,
+                "toolbar": false
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "shop.section",
+        "componentVersion": 1,
+        "id": "home-shelves",
+        "props": {
+          "tone": "bg"
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "shop.section-heading",
+              "componentVersion": 1,
+              "id": "home-shop-section-heading-3",
+              "props": {
+                "as": "h2",
+                "eyebrow": "Browse",
+                "heading": "Three shelves",
+                "intro": "Four objects on each: for the desk, for the walk, and for the light after dark."
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.grid",
+              "componentVersion": 1,
+              "id": "shelves",
+              "props": {
+                "columns": "3",
+                "gap": "lg"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "shop.section",
+        "componentVersion": 1,
+        "id": "home-letters",
+        "props": {
+          "tone": "surface"
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "shop.newsletter",
+              "componentVersion": 1,
+              "id": "home-shop-newsletter-4",
+              "props": {
+                "buttonLabel": "Subscribe",
+                "heading": "Letters from the shelf",
+                "lead": "One short note when something new arrives. Nothing else, and never shared."
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

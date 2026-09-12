@@ -1,0 +1,59 @@
+{
+  "id": "author-page",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "author-page",
+    "name": "Author page",
+    "root": [
+      {
+        "componentId": "blog.author-card",
+        "componentVersion": 1,
+        "id": "author-hero",
+        "props": {
+          "variant": "hero"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.section",
+        "componentVersion": 1,
+        "id": "author-articles-section",
+        "props": {
+          "rule": true
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "blog.section-heading",
+              "componentVersion": 1,
+              "id": "author-articles-heading",
+              "props": {
+                "as": "h2",
+                "eyebrow": "",
+                "heading": "Essays"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "blog.article-list",
+              "componentVersion": 1,
+              "id": "author-articles",
+              "props": {
+                "chips": false,
+                "columns": "2",
+                "mode": "by-route-author"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

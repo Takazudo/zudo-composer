@@ -1,0 +1,112 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "author-cards-name-name",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "authors-name",
+        "target": {
+          "nodeId": "author-card",
+          "prop": "name"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "author-cards-slug-href",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "authors-slug",
+        "target": {
+          "nodeId": "author-card",
+          "prop": "href"
+        },
+        "transform": {
+          "kind": "prefix",
+          "prefix": "/authors/"
+        }
+      },
+      {
+        "id": "author-cards-bio-bio",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "authors-bio",
+        "target": {
+          "nodeId": "author-card",
+          "prop": "bio"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "author-cards-avatar-src",
+        "projection": {
+          "fieldIds": [
+            "authors-avatar-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "authors-avatar",
+        "target": {
+          "nodeId": "author-card",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "author-cards-avatar-alt",
+        "projection": {
+          "fieldIds": [
+            "authors-avatar-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "authors-avatar",
+        "target": {
+          "nodeId": "author-card",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "author-card"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "authors"
+    },
+    "id": "author-cards",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "asc",
+            "fieldId": "authors-name"
+          }
+        ]
+      }
+    },
+    "name": "Author cards",
+    "schemaVersion": 2
+  },
+  "id": "author-cards",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

@@ -1,0 +1,38 @@
+{
+  "id": "tag-craft",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "tag-craft",
+    "name": "Tag craft",
+    "root": [
+      {
+        "componentId": "blog.page-heading",
+        "componentVersion": 1,
+        "id": "tag-craft-heading",
+        "props": {
+          "eyebrow": "Tag",
+          "heading": "Craft",
+          "intro": "How good work gets made: sharpening, drafting and reading with a pencil."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.article-list",
+        "componentVersion": 1,
+        "id": "tag-craft-list",
+        "props": {
+          "chips": false,
+          "columns": "2",
+          "mode": "all"
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

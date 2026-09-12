@@ -1,0 +1,65 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "about-page-heading-heading",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "about-heading",
+        "target": {
+          "nodeId": "about-heading",
+          "prop": "heading"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "about-page-intro-intro",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "about-intro",
+        "target": {
+          "nodeId": "about-heading",
+          "prop": "intro"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "about-page-body-markdown",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "about-body",
+        "target": {
+          "nodeId": "about-body",
+          "prop": "markdown"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "about-page"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "about"
+    },
+    "id": "about-page",
+    "mode": {
+      "kind": "single"
+    },
+    "name": "About page",
+    "schemaVersion": 2
+  },
+  "id": "about-page",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

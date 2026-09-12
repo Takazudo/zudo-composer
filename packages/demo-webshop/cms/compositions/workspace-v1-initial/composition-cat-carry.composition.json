@@ -1,0 +1,47 @@
+{
+  "id": "cat-carry",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "cat-carry",
+    "name": "Carry shelf",
+    "root": [
+      {
+        "componentId": "shop.hero",
+        "componentVersion": 1,
+        "id": "cat-carry-shop-hero-1",
+        "props": {
+          "alt": "Small black waxed-canvas sling pouch",
+          "eyebrow": "Shelf",
+          "heading": "Carry",
+          "lead": "Small goods for the walk between places. Waxed canvas, full-grain leather and nothing that rattles.",
+          "primaryHref": "#",
+          "primaryLabel": "",
+          "secondaryHref": "#",
+          "secondaryLabel": "",
+          "src": "/uploaded-assets/asset-assets-27d2cd6e-0874-455b-91a5-784bf79c8d14",
+          "variant": "compact"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.product-grid",
+        "componentVersion": 1,
+        "id": "carry",
+        "props": {
+          "chips": false,
+          "defaultSort": "featured",
+          "emptyText": "Nothing on the carry shelf matches.",
+          "pageSize": 8,
+          "toolbar": true
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

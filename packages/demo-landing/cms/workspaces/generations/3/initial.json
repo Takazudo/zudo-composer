@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "id": "initial",
+  "mutationToken": 1,
+  "status": "ready",
+  "metadata": {
+    "activeSitemap": {
+      "providerId": "sitemap-filesystem",
+      "recordId": "demo-landing-sitemap"
+    },
+    "collectionAttachments": [
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "home"
+        },
+        "id": "home-tiers",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "pricing-tier"
+        },
+        "order": 0,
+        "target": {
+          "nodeId": "home-pricing",
+          "slotId": "tiers"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "pricing"
+        },
+        "id": "pricing-tiers",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "pricing-tier"
+        },
+        "order": 1,
+        "target": {
+          "nodeId": "pricing-table",
+          "slotId": "tiers"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "home"
+        },
+        "id": "home-testimonials",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "testimonial"
+        },
+        "order": 2,
+        "target": {
+          "nodeId": "home-testimonials",
+          "slotId": "testimonials"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "home"
+        },
+        "id": "home-faq",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "faq-item"
+        },
+        "order": 3,
+        "target": {
+          "nodeId": "home-faq",
+          "slotId": "items"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "pricing"
+        },
+        "id": "pricing-faq",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "billing-faq-item"
+        },
+        "order": 4,
+        "target": {
+          "nodeId": "pricing-faq",
+          "slotId": "items"
+        }
+      }
+    ],
+    "componentPack": {
+      "contractVersion": 2,
+      "packId": "demo-landing",
+      "packVersion": "1.0.0"
+    },
+    "id": "demo-landing",
+    "name": "Orrery",
+    "providers": {
+      "compositions": [
+        {
+          "id": "files"
+        }
+      ],
+      "content": [
+        {
+          "id": "content-filesystem"
+        }
+      ],
+      "mappings": [
+        {
+          "id": "mapping-filesystem"
+        }
+      ],
+      "sitemaps": [
+        {
+          "id": "sitemap-filesystem"
+        }
+      ]
+    },
+    "schemaVersion": 2
+  },
+  "baselineRevision": "bc7df831f660215e244843184f3a6b7ad8da483e519fd0b776ecabecd976c152"
+}
