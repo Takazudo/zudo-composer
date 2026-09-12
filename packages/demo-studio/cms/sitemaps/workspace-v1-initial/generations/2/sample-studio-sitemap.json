@@ -1,0 +1,163 @@
+{
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "document": {
+    "id": "sample-studio-sitemap",
+    "name": "Sample Studio sitemap",
+    "navigation": {
+      "footer": [
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "home-node"
+          },
+          "id": "nav-home-node",
+          "label": "Home",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "about-node"
+          },
+          "id": "nav-about-node",
+          "label": "About",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "services-node"
+          },
+          "id": "nav-services-node",
+          "label": "Services",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "journal-node"
+          },
+          "id": "nav-journal-node",
+          "label": "Journal",
+          "visible": true
+        }
+      ],
+      "primary": [
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "home-node"
+          },
+          "id": "nav-home-node",
+          "label": "Home",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "about-node"
+          },
+          "id": "nav-about-node",
+          "label": "About",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "services-node"
+          },
+          "id": "nav-services-node",
+          "label": "Services",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "journal-node"
+          },
+          "id": "nav-journal-node",
+          "label": "Journal",
+          "visible": true
+        }
+      ]
+    },
+    "root": [
+      {
+        "children": [
+          {
+            "children": [],
+            "id": "about-node",
+            "slug": "about",
+            "source": {
+              "kind": "mapping",
+              "ref": {
+                "providerId": "mapping-filesystem",
+                "recordId": "about-page-mapping"
+              },
+              "route": {
+                "kind": "single"
+              }
+            },
+            "title": "About"
+          },
+          {
+            "children": [],
+            "id": "services-node",
+            "slug": "services",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "services-page"
+              }
+            },
+            "title": "Services"
+          },
+          {
+            "children": [
+              {
+                "children": [],
+                "id": "journal-entry-node",
+                "source": {
+                  "kind": "mapping",
+                  "ref": {
+                    "providerId": "mapping-filesystem",
+                    "recordId": "journal-entry-mapping"
+                  },
+                  "route": {
+                    "fieldId": "article-slug-field",
+                    "kind": "entry-field",
+                    "titleFieldId": "article-heading-field"
+                  }
+                },
+                "title": "Journal entry"
+              }
+            ],
+            "id": "journal-node",
+            "slug": "journal",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "journal-index-page"
+              }
+            },
+            "title": "Journal"
+          }
+        ],
+        "id": "home-node",
+        "source": {
+          "kind": "composition",
+          "ref": {
+            "providerId": "files",
+            "recordId": "home-page"
+          }
+        },
+        "title": "Home"
+      }
+    ],
+    "schemaVersion": 3
+  },
+  "id": "sample-studio-sitemap",
+  "updatedAt": "2026-08-31T00:00:00.000Z"
+}

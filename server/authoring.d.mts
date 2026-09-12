@@ -566,6 +566,8 @@ interface Page {
     record: CompositionRecord;
 }
 type FieldInput = {
+    /** Stable persisted identity; omitted ids derive from the model and field key. */
+    id?: string;
     key: string;
     label?: string;
     required?: boolean;
@@ -700,6 +702,11 @@ interface SiteOptions {
         manifest: ComponentPackManifest;
     };
     timestamp?: string;
+    /**
+     * Order only the aggregate's composition records by ID; defaults to declaration
+     * order. Other record collections and all document sequences keep their order.
+     */
+    compositionOrder?: "id";
 }
 interface Site {
     readonly id: string;

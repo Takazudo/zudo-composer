@@ -1,0 +1,49 @@
+{
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "document": {
+    "description": "",
+    "fields": [
+      {
+        "id": "article-heading-field",
+        "key": "heading",
+        "kind": "text",
+        "label": "Heading",
+        "required": true
+      },
+      {
+        "id": "article-intro-field",
+        "key": "intro",
+        "kind": "long-text",
+        "label": "Introduction",
+        "required": true
+      },
+      {
+        "id": "article-date-field",
+        "key": "publishedOn",
+        "kind": "date",
+        "label": "Published on",
+        "required": true
+      },
+      {
+        "id": "article-body-field",
+        "key": "body",
+        "kind": "markdown",
+        "label": "Body",
+        "required": true
+      },
+      {
+        "id": "article-slug-field",
+        "key": "slug",
+        "kind": "slug",
+        "label": "Slug",
+        "required": true
+      }
+    ],
+    "id": "journal-articles",
+    "kind": "collection",
+    "name": "Journal articles",
+    "schemaVersion": 1
+  },
+  "id": "journal-articles",
+  "updatedAt": "2026-08-31T00:00:00.000Z"
+}

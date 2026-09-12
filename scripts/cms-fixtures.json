@@ -15,6 +15,13 @@
       "cms/sitemaps/workspace-v1-initial",
       "cms/workspaces"
     ],
+    "packages/demo-studio": [
+      "cms/compositions/workspace-v1-initial",
+      "cms/content/workspace-v1-initial",
+      "cms/mappings/workspace-v1-initial",
+      "cms/sitemaps/workspace-v1-initial",
+      "cms/workspaces"
+    ],
     "packages/demo-webshop": [
       "cms/compositions/workspace-v1-initial",
       "cms/content/workspace-v1-initial",
