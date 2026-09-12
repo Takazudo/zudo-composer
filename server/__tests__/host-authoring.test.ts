@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -22,16 +22,6 @@ async function hostFixture(settings: { dataDir?: string; assetsDir?: string }, m
   await symlink(repositoryRoot, join(modules, "zudo-composer"), "dir");
   await symlink(join(repositoryRoot, "node_modules/preact"), join(modules, "preact"), "dir");
   await symlink(join(repositoryRoot, "packages/component-contract"), join(modules, "@zudo-composer/component-contract"), "dir");
-  // Copy the transitional CLI below node_modules, without its source workspace.
-  // Dependencies reuse the frozen install; the manager owns the fresh pack gate.
-  const demoTools = join(modules, "demo-tools");
-  for (const name of ["package.json", "bin", "src", "tsconfig.json"]) {
-    await cp(join(repositoryRoot, "packages/demo-tools", name), join(demoTools, name), { recursive: true,
-      filter: (path) => !path.includes("__tests__"),
-    });
-  }
-  await mkdir(join(demoTools, "node_modules"));
-  await symlink(join(repositoryRoot, "node_modules/vite"), join(demoTools, "node_modules/vite"), "dir");
   await writeFile(join(host, "package.json"), JSON.stringify({ name: "authoring-host", type: "module", exports: { "./components": "./components.tsx" } }));
   // A bare tsx register() would honor this React setting and fail without React.
   await writeFile(join(host, "tsconfig.json"), JSON.stringify({ compilerOptions: { jsx: "react-jsx", jsxImportSource: "react" } }));
@@ -53,7 +43,7 @@ export const componentPack = defineComponentPack({ packId: "authoring-host", pac
   await mkdir(join(sourceRoot, "nested"), { recursive: true });
   await writeFile(join(sourceRoot, "nested/example.txt"), "Authoring source bytes\n");
   await writeFile(join(host, manifestPath), JSON.stringify([{ file: "nested/example.txt", alt: "Configured source" }]));
-  return { root, host, demoTools };
+  return { root, host };
 }
 
 describe("host authoring through public entries", () => {
@@ -61,7 +51,7 @@ describe("host authoring through public entries", () => {
     { settings: { dataDir: "content-store" }, assetsDirectory: "content-store/assets", manifestPath: "images-src/manifest.json" },
     { settings: { dataDir: "content-store", assetsDir: "media/library" }, assetsDirectory: "media/library", manifestPath: "source-images/seed.json" },
   ])("uses $assetsDirectory for importing, lookup, and byte-stable JSX generation", async ({ settings, assetsDirectory, manifestPath }) => {
-    const { host, demoTools } = await hostFixture(settings, manifestPath);
+    const { host } = await hostFixture(settings, manifestPath);
     const defaultManifest = manifestPath === "images-src/manifest.json" ? undefined : manifestPath;
     expect(await seedAssets(host, defaultManifest)).toEqual({ added: 1, skipped: 0 });
     const catalogPath = join(host, assetsDirectory, "catalog.json");
@@ -89,7 +79,7 @@ const home = site.page({ name: "Home", root: [node("host.title", { title: urls["
 site.sitemap({ name: "Routes", root: { title: "Home", page: home } });
 export default site;
 `);
-    const bin = join(demoTools, "bin/demo-tools.mjs");
+    const bin = join(host, "node_modules/zudo-composer/bin/zudo-composer.mjs");
     const generated = await execute(process.execPath, [bin, "generate"], { cwd: host, timeout: 25_000 });
     expect(generated.stdout).toContain("Wrote");
     expect(generated.stderr).toBe("");
@@ -97,6 +87,12 @@ export default site;
     const rerun = await execute(process.execPath, [bin, "generate"], { cwd: host, timeout: 25_000 });
     expect(rerun.stdout).toContain("Unchanged");
     expect(await readFile(join(host, "site-project.json"))).toEqual(first);
+    const checked = await execute(process.execPath, [bin, "generate", "--check"], { cwd: host, timeout: 25_000 });
+    expect(checked.stdout).toContain("Current");
+    expect(checked.stderr).toBe("");
+    await writeFile(join(host, "site-project.json"), "stale\n");
+    await expect(execute(process.execPath, [bin, "generate", "--check"], { cwd: host, timeout: 25_000 }))
+      .rejects.toMatchObject({ code: 1, stderr: expect.stringMatching(/site-project\.json.*stale/su) });
   });
 
   it("surfaces public importer rejection without creating an asset store", async () => {

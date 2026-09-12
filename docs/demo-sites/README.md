@@ -13,9 +13,9 @@ published package.
 | `packages/demo-landing` | `zc-demo-landing.zudolab.dev` | `land-` | 4182 |
 | `packages/demo-blog` | `zc-demo-blog.zudolab.dev` | `blog-` | 4183 |
 
-`packages/demo-tools` is the private helper every demo depends on. It is not a
-host; it is this repository's authoring, generation and seeding tooling, and it
-imports the tool's own `src/` directly.
+`packages/demo-tools` is the private seeding helper every demo depends on. It is
+not a host; the generation and authoring commands are provided by the installed
+`zudo-composer` tool.
 
 ## What a demo package is
 
@@ -31,12 +31,12 @@ packages/demo-<name>/
 │   ├── pack.ts                defineComponentPack({ packId: "demo-<name>", ... })
 │   └── *.tsx                  the host's own Preact components
 ├── styles/base.css            Tailwind preflight + utilities, one @theme namespace, @source "../components"
-├── site-project.ts            the authored site, written with demo-tools
-├── site-project.json          generated from site-project.ts; committed; guarded by a test
+├── site-project.ts            the authored site, written with zudo-composer/authoring
+├── site-project.json          generated from site-project.ts; committed; guarded by the CLI
 ├── images-src/manifest.json   source images to seed into the Assets store
 ├── cms/assets/                the committed Assets store (catalog.json + versions/)
 ├── public/uploaded-assets/    publicAssetsDir (kept with .gitkeep)
-├── __tests__/                 currency test, pack assertions, component render tests
+├── __tests__/                 pack assertions, component render tests, site-compile checks
 └── README.md
 ```
 
@@ -50,8 +50,9 @@ Rules that fall out of the tool's contract, and that the package tests assert:
   `tailwindcss/utilities` are imported, so every utility a component uses must
   come from a token in the package's own `@theme` block. Tokens live in one
   namespace per demo (`--color-shop-*`, `--color-land-*`, `--color-blog-*`).
-- `site-project.json` is never edited by hand. `pnpm generate` is the only
-  writer; the package test fails while the committed file is stale.
+- `site-project.json` is never edited by hand. `zudo-composer generate` is the
+  only writer; `zudo-composer generate --check` fails while the committed file
+  is stale or missing.
 - Every setting except `pack` keeps its default, so `cms/` is `dataDir` and
   `public/uploaded-assets` is `publicAssetsDir`, exactly as in a fresh host.
 
@@ -63,7 +64,7 @@ corepack pnpm --filter demo-webshop seed
 corepack pnpm --filter demo-webshop dev --port 4181
 ```
 
-1. **generate** (`demo-tools generate`) imports `site-project.ts`, builds the
+1. **generate** (`zudo-composer generate`) imports `site-project.ts`, builds the
    SiteProject aggregate, validates it against the package's pack manifest with
    the tool's own `validateSiteProject`, and writes `site-project.json` as
    canonical JSON (sorted keys, compact, trailing newline — the same form as
@@ -111,10 +112,10 @@ is gitignored and regenerable by re-running `seed`. Re-seeding an already
 activated package replaces the active release rather than failing. The full
 protocol is documented in [`docs/site-project.md`](../site-project.md).
 
-## Authoring with `demo-tools`
+## Authoring with `zudo-composer`
 
 ```ts
-import { defineSite, node } from "demo-tools";
+import { defineSite, node } from "zudo-composer/authoring";
 import { componentPack } from "./components/pack";
 
 const site = defineSite({ id: "demo-blog", name: "Demo Blog", componentPack });
@@ -167,8 +168,8 @@ export default site;
 - `route: "entry-field"` on a mapping route gives one page per entry, addressed
   by that field (a `slug`) and titled by `titleField` (defaults to the model's
   first `text` field).
-- `assertSiteProjectCurrent(packageRoot)` is the currency test; each demo's
-  `__tests__/site-project.test.tsx` calls it.
+- `zudo-composer generate --check` is the currency guard; run it from the host
+  root or pass `--root <dir>`.
 
 ## Gate wiring
 
@@ -423,8 +424,9 @@ the demos do not wait for it).
 
 Lists inside an entry (tags, spec rows, feature bullets) that must reach a
 component are flattened at authoring time into fixed scalar fields (`tag1`,
-`tag2`, `tag3`; `spec1Label` / `spec1Value` …) — the demo-tools generator owns
-that flattening, and the Content model keeps the real `list` / `object` field
+`tag2`, `tag3`; `spec1Label` / `spec1Value` …) — the `site-project.ts`
+authoring source owns that flattening, and the Content model keeps the real
+`list` / `object` field
 for querying (`contains`) and for editors.
 
 ### Standard shapes used by every demo

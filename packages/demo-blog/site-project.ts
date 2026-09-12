@@ -1,5 +1,6 @@
-// The authored Margin Notes site (docs/demo-sites/blog.md). `pnpm generate`
-// turns this into `site-project.json`; the tests fail when the two disagree.
+// The authored Margin Notes site (docs/demo-sites/blog.md). `zudo-composer generate`
+// turns this into `site-project.json`; `zudo-composer generate --check` reports
+// when the committed output disagrees.
 // Article bodies live in content/articles/<slug>.md; images are looked up by
 // file name in the configured Assets store (`pnpm seed` fills it).
 import { readFileSync } from "node:fs";

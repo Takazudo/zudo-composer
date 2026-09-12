@@ -79,8 +79,8 @@ needed, click a demo thumbnail to inspect it, then click **Preview**.
 `packages/demo-webshop`, `packages/demo-landing` and `packages/demo-blog` are
 three complete host projects, each with its own component pack and Tailwind
 theme, kept as workspace members so the tool is exercised the way a real host
-exercises it. `packages/demo-tools` is the private authoring/seeding helper
-they share. Full authoring and gate-wiring details are in
+exercises it. `packages/demo-tools` is the private seeding helper they share.
+Full authoring and gate-wiring details are in
 [`docs/demo-sites/README.md`](./docs/demo-sites/README.md).
 
 | Package | Site | Hosted domain | Local dev port |
@@ -135,8 +135,11 @@ export default defineComposerConfig({
 { "scripts": { "dev": "zudo-composer dev" } }
 ```
 
-Hosts with a committed `site-project.json` can run `zudo-composer build-site`
-to build and verify `dist-site`, or pass `--root <dir>` from another directory.
+Hosts with an authored `site-project.ts` can run `zudo-composer generate` to
+write its canonical `site-project.json`; `zudo-composer generate --check`
+verifies that committed output is current. Hosts with a committed
+`site-project.json` can run `zudo-composer build-site` to build and verify
+`dist-site`, or pass `--root <dir>` from another directory.
 `build-site --print-routes` verifies an existing `dist-site` and prints its
 manifest routes as JSON; `build-site --verify <dir>` verifies another artifact
 without building. Each manifest records the installed tool's package name and

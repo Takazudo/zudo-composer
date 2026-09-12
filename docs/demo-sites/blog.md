@@ -242,11 +242,11 @@ Kinds as in the other docs. Image props are `text` named `src`.
 | `intro` | long-text | 1–2 sentences |
 | `cover` | object { `src`: url, `alt`: text, `caption`: text } | required |
 | `body` | markdown | 400–800 words |
-| `bodyLength` | number | character count, written by demo-tools for reading time |
+| `bodyLength` | number | character count, written by the `site-project.ts` authoring source for reading time |
 | `date` | date | `YYYY-MM-DD`; `date-medium` for display |
 | `author` | reference → authors | required |
 | `tags` | list<text> | 1–3 of `craft` / `attention` / `tools`; flattened to `tag1…3` |
-| `authorName`, `authorBio`, `authorAvatar` (object { src, alt }), `authorSlug` | text / long-text / object / slug | denormalised copies written by demo-tools from the referenced author so the article page can render `blog.author-card` and the card can filter by author (see § 7) |
+| `authorName`, `authorBio`, `authorAvatar` (object { src, alt }), `authorSlug` | text / long-text / object / slug | denormalised copies written by the `site-project.ts` authoring source from the referenced author so the article page can render `blog.author-card` and the card can filter by author (see § 7) |
 
 **authors** (collection) — 2 entries: `name` text, `slug` slug, `bio`
 long-text, `avatar` object { `src` url, `alt` text }.

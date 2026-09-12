@@ -179,6 +179,8 @@ for (const required of [
   'server/cli/run.mjs',
   'server/cli/release-entry.mjs',
   'server/cli/build-site-entry.mjs',
+  'server/cli/generate-entry.mjs',
+  'server/cli/generate.ts',
   'server/cli/run.d.mts',
   'server/module-evaluator.mjs',
   'server/config/index.ts',

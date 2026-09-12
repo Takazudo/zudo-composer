@@ -8,8 +8,10 @@ package's own `exports` self-reference), its Tailwind token namespace
 and the reasoning behind it are in
 [`docs/demo-sites/README.md`](../../docs/demo-sites/README.md).
 
+Run these commands from this package directory:
+
 ```sh
-corepack pnpm --filter demo-blog generate   # site-project.ts -> site-project.json
+corepack pnpm generate                      # site-project.ts -> site-project.json
 corepack pnpm --filter demo-blog seed       # images-src -> cms/assets, then an activated release
 corepack pnpm --filter demo-blog dev --port 4183
 ```
@@ -19,8 +21,8 @@ The eight essays are Markdown files in `content/articles/<slug>.md`, read by
 `/uploaded-assets/asset-<id>` URLs from the committed `cms/assets` catalog, so
 seed the assets before generating on a fresh store.
 
-`generate` is the only way `site-project.json` changes; the package test fails
-while the committed JSON is stale. `seed` runs `zudo-composer release` from
+`generate` is the only way `site-project.json` changes; `zudo-composer generate --check`
+reports when the committed JSON is stale. `seed` runs `zudo-composer release` from
 this directory, so the release state lands in `.zudo-site-project/` and the
 published CMS records in `cms/{compositions,content,mappings,sitemaps}/` — all
 gitignored, all regenerable. Ordinary Assets edits under `pnpm dev` dirty
