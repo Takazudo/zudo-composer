@@ -1,5 +1,6 @@
 // The authored site. `pnpm generate` turns this into `site-project.json`;
-// the tests fail when the two disagree.
+// the tests fail when the two disagree. The full Orrery site is authored in a
+// later task; until then the home route shows the pack's hero.
 import { defineSite, node } from "demo-tools";
 import { componentPack } from "./components/pack";
 
@@ -7,7 +8,7 @@ const site = defineSite({ id: "demo-landing", name: "Demo Landing", componentPac
 
 const home = site.page({
   name: "Home",
-  root: [node("land.hello", { text: "Hello from the demo landing page. Pricing and a mock signup arrive in later tasks." }, {}, "home-hello")],
+  root: [node("land.hero", {}, {}, "home-hero")],
 });
 
 const homeRoute = { title: "Home", page: home };
