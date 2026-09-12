@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { DEMOS_LANE_DIRECTORY } from "../../scripts/demos-lane-paths.mjs";
 
 export const DEMOS_LANE_NAMES = ["webshop", "landing", "blog"] as const;
 export type DemosLaneName = (typeof DEMOS_LANE_NAMES)[number];
@@ -31,7 +32,7 @@ export function requireDemosLaneContext(environment: NodeJS.ProcessEnv): DemosLa
   const runRoot = dirname(cmsRoot);
   const hostRoot = realpathSync(resolve(import.meta.dirname, "../../packages", `demo-${name}`));
   if (basename(assetsStoreRoot) !== "assets" || basename(cmsRoot) !== "cms"
-    || dirname(runRoot) !== join(hostRoot, ".zudo-composer-demos-browser")
+    || dirname(runRoot) !== join(hostRoot, DEMOS_LANE_DIRECTORY)
     || !basename(runRoot).startsWith("zudo-composer-demos-browser-")) return fail();
   const releaseRoot = environment.ZUDO_SITE_PROJECT_ROOT;
   if (!releaseRoot || !isAbsolute(releaseRoot) || resolve(releaseRoot) !== releaseRoot

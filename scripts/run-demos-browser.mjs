@@ -19,6 +19,7 @@ import { basename, isAbsolute, join, posix, relative, resolve, sep } from "node:
 import { tmpdir } from "node:os";
 import { loadHostConfig } from "../server/host-context.mjs";
 import { resolveWorkspaceRegistryRoot } from "../plugins/workspace-domain-provider.mjs";
+import { DEMOS_LANE_DIRECTORY } from "./demos-lane-paths.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -160,7 +161,7 @@ let failed = false;
 for (const name of DEMOS) {
   const packageRoot = join(root, "packages", `demo-${name}`);
   const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-demos-browser-")));
-  const disposableHostRoot = join(packageRoot, ".zudo-composer-demos-browser");
+  const disposableHostRoot = join(packageRoot, DEMOS_LANE_DIRECTORY);
   const disposableHostRunRoot = join(disposableHostRoot, basename(temporaryRoot));
   const disposableCmsRoot = join(disposableHostRunRoot, "cms");
   const disposableReleaseRoot = join(temporaryRoot, "release");

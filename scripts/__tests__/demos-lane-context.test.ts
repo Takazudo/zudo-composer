@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { requireDemosLaneContext } from "../../tests/browser-demos/isolated-context";
+import { DEMOS_LANE_DIRECTORY } from "../demos-lane-paths.mjs";
 
 const hostRoot = realpathSync(resolve(import.meta.dirname, "../../packages/demo-webshop"));
 let temporaryRoot: string;
@@ -11,7 +12,7 @@ let environment: NodeJS.ProcessEnv;
 
 beforeEach(() => {
   temporaryRoot = realpathSync(mkdtempSync(join(tmpdir(), "zudo-composer-demos-browser-")));
-  runRoot = join(hostRoot, ".zudo-composer-demos-browser", basename(temporaryRoot));
+  runRoot = join(hostRoot, DEMOS_LANE_DIRECTORY, basename(temporaryRoot));
   const cmsRoot = join(runRoot, "cms");
   for (const path of [join(cmsRoot, "assets"), join(cmsRoot, "compositions"), join(temporaryRoot, "release")]) {
     mkdirSync(path, { recursive: true });
