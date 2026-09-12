@@ -33,6 +33,9 @@
       "types": "./server/site-build.d.mts",
       "default": "./server/site-build.mjs"
     },
+    "./site-project": {
+      "types": "./server/site-project.d.mts"
+    },
     "./styles": "./src/style.css",
     "./package.json": "./package.json"
   },
@@ -85,7 +88,8 @@
     "demo:images": "node scripts/demo/optimise-images.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
+    "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false && pnpm typecheck:public",
+    "typecheck:public": "tsc -p tsconfig.public-types.json --pretty false && node scripts/check-public-types.mjs",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json --pretty false",
     "test": "vitest run",
     "check": "pnpm public:check && pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm provider:boundary && pnpm test && pnpm build && pnpm dist:boundary",

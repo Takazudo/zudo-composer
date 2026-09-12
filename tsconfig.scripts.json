@@ -22,6 +22,7 @@
     "scripts/check-headless-boundary.mjs",
     "scripts/check-package-conformance.mjs",
     "scripts/check-provider-boundary.mjs",
+    "scripts/check-public-types.mjs",
     "scripts/check-site-project-boundary.mjs",
     "scripts/check-standalone-handoff.mjs",
     "scripts/routes.mjs",
