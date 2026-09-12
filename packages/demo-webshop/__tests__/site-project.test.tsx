@@ -29,6 +29,16 @@ const SHIPPED = [
   "shop.prose",
   "shop.faq-accordion",
   "shop.faq-item",
+  "shop.product-hero",
+  "shop.product-gallery",
+  "shop.spec-table",
+  "shop.add-to-cart",
+  "shop.related-products",
+  "shop.cart-page",
+  "shop.cart-summary",
+  "shop.checkout-form",
+  "shop.newsletter",
+  "shop.contact-form",
 ];
 
 describe("demo-webshop", () => {
@@ -42,7 +52,7 @@ describe("demo-webshop", () => {
     expect(project.providers.sitemaps[0]?.records[0]?.document.root[0]?.source).toEqual({ kind: "composition", ref: { providerId: "files", recordId: "home" } });
   });
 
-  it("registers every foundation component from the one self-reference module", () => {
+  it("registers every component from the one self-reference module", () => {
     const components = componentPack.manifest.components;
     expect(components.map((component) => component.id)).toEqual(SHIPPED);
     expect(new Set(components.map((component) => component.source.module))).toEqual(new Set(["demo-webshop/components"]));
@@ -63,5 +73,7 @@ describe("demo-webshop", () => {
     expect(slot("shop.header", "nav")).toMatchObject({ cardinality: "many", accepts: ["shop.nav-link"] });
     expect(slot("shop.header", "actions")).toMatchObject({ cardinality: "single", accepts: ["shop.cart-button"] });
     expect(slot("shop.footer", "nav")).toMatchObject({ cardinality: "many", accepts: ["shop.nav-link"] });
+    expect(slot("shop.related-products", "items")).toMatchObject({ cardinality: "many", accepts: ["shop.product-card"] });
+    expect(slot("shop.product-hero", "media")).toMatchObject({ cardinality: "single", accepts: ["shop.product-gallery"] });
   });
 });

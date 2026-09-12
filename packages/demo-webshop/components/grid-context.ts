@@ -1,5 +1,5 @@
 import { createContext } from "preact";
-import { useContext, useId, useLayoutEffect } from "preact/hooks";
+import { useContext, useId, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { GridItemData, GridItemView } from "./grid-view";
 
 export interface GridRegistry {
@@ -23,8 +23,30 @@ export function useGridItem(data: GridItemData): GridItemView & { managed: boole
   useLayoutEffect(() => {
     registry?.register(id, data);
     // `data` is a fresh object each render; its primitives are the real dependencies.
-  }, [registry, id, data.name, data.price, data.category, data.featured, tagsKey]);
+  }, [registry, id, data.slug, data.name, data.price, data.category, data.featured, tagsKey]);
   useLayoutEffect(() => () => registry?.unregister(id), [registry, id]);
   const view = views?.get(id);
   return view ? { ...view, managed: true } : { ...NATURAL, managed: false };
+}
+
+/** The list host's side: items register themselves; `ordered` is first-registration (= DOM = Mapping query) order. */
+export function useGridRegistry() {
+  const [items, setItems] = useState<ReadonlyMap<string, GridItemData>>(new Map());
+  const sequence = useRef(new Map<string, number>());
+  const registry = useMemo<GridRegistry>(() => ({
+    register(id, data) {
+      if (!sequence.current.has(id)) sequence.current.set(id, sequence.current.size === 0 ? 0 : Math.max(...sequence.current.values()) + 1);
+      setItems((previous) => new Map(previous).set(id, data));
+    },
+    unregister(id) {
+      sequence.current.delete(id);
+      setItems((previous) => {
+        const next = new Map(previous);
+        next.delete(id);
+        return next;
+      });
+    },
+  }), []);
+  const ordered = [...items].sort(([a], [b]) => (sequence.current.get(a) ?? 0) - (sequence.current.get(b) ?? 0));
+  return { registry, ordered };
 }
