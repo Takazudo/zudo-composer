@@ -108,6 +108,9 @@ export function resolveAppWarmupFiles() {
     resolve(APP_ROOT, APP_ENTRY),
     resolve(APP_ROOT, "src/**/*.{ts,tsx,css}"),
     `!${resolve(APP_ROOT, "src/**/__tests__/**")}`,
+    // Entries built only by their own Vite configs; their virtual modules never exist here.
+    `!${resolve(APP_ROOT, "src/hosted-demo/**")}`,
+    `!${resolve(APP_ROOT, "src/site-static/**")}`,
   ];
 }
 
