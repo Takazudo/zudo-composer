@@ -1,0 +1,23 @@
+{
+  "name": "demo-blog",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo Blog: a host project authored with zudo-composer and its own component pack.",
+  "exports": {
+    "./components": "./components/pack.ts"
+  },
+  "scripts": {
+    "dev": "zudo-composer dev",
+    "generate": "demo-tools generate",
+    "seed": "demo-tools seed",
+    "test": "pnpm -w test packages/demo-blog"
+  },
+  "devDependencies": {
+    "@zudo-composer/component-contract": "workspace:*",
+    "demo-tools": "workspace:*",
+    "preact": "^10.29.8",
+    "preact-render-to-string": "^6.6.6",
+    "zudo-composer": "workspace:*"
+  }
+}

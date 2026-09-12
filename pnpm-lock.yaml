@@ -133,6 +133,69 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@26.4.0)(jsdom@29.1.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12))
 
+  packages/demo-blog:
+    devDependencies:
+      '@zudo-composer/component-contract':
+        specifier: workspace:*
+        version: link:../component-contract
+      demo-tools:
+        specifier: workspace:*
+        version: link:../demo-tools
+      preact:
+        specifier: ^10.29.8
+        version: 10.29.8(preact-render-to-string@6.7.0)
+      preact-render-to-string:
+        specifier: ^6.6.6
+        version: 6.7.0(preact@10.29.8)
+      zudo-composer:
+        specifier: workspace:*
+        version: link:../..
+
+  packages/demo-landing:
+    devDependencies:
+      '@zudo-composer/component-contract':
+        specifier: workspace:*
+        version: link:../component-contract
+      demo-tools:
+        specifier: workspace:*
+        version: link:../demo-tools
+      preact:
+        specifier: ^10.29.8
+        version: 10.29.8(preact-render-to-string@6.7.0)
+      preact-render-to-string:
+        specifier: ^6.6.6
+        version: 6.7.0(preact@10.29.8)
+      zudo-composer:
+        specifier: workspace:*
+        version: link:../..
+
+  packages/demo-tools:
+    devDependencies:
+      '@zudo-composer/component-contract':
+        specifier: workspace:*
+        version: link:../component-contract
+      tsx:
+        specifier: ^4.20.5
+        version: 4.23.12
+
+  packages/demo-webshop:
+    devDependencies:
+      '@zudo-composer/component-contract':
+        specifier: workspace:*
+        version: link:../component-contract
+      demo-tools:
+        specifier: workspace:*
+        version: link:../demo-tools
+      preact:
+        specifier: ^10.29.8
+        version: 10.29.8(preact-render-to-string@6.7.0)
+      preact-render-to-string:
+        specifier: ^6.6.6
+        version: 6.7.0(preact@10.29.8)
+      zudo-composer:
+        specifier: workspace:*
+        version: link:../..
+
   packages/fixture-themeset:
     devDependencies:
       '@zudo-composer/component-contract':
