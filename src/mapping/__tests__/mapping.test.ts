@@ -44,7 +44,7 @@ describe("normative compatibility matrix", () => {
     if (transform.kind === "date-medium") return source === "date" && target === "text";
     if (transform.kind === "truncate-160" || transform.kind === "prefix") return string && target === "text";
     if (target === "text") return string;
-    if (target === "select") return source === "text" || source === "slug";
+    if (target === "select") return source === "text" || source === "slug" || source === "choice";
     if (target === "color") return source === "color";
     if (target === "number") return source === "number";
     return source === "boolean";
