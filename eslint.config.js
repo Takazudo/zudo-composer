@@ -11,6 +11,7 @@ export default tseslint.config(
       'dist-hosted-demo',
       '**/dist-site',
       '**/.zudo-site-project',
+      'packages/*/cms/{compositions,content,mappings,sitemaps,workspaces}/**',
       '**/dist',
       'coverage',
       'worktrees/**',
