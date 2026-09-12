@@ -1,7 +1,7 @@
 import { render } from "preact-render-to-string";
 import { describe, expect, it } from "vitest";
 import {
-  ArticleCard, ArticleHeader, ArticleList, AuthorCard, AuthorGrid, Callout, Comment, CommentForm, CommentList, Container, DemoNote,
+  ArticleCard, ArticleHeader, ArticleList, AuthorCard, AuthorGrid, Avatar, Callout, Comment, CommentForm, CommentList, Container, DemoNote,
   Footer, Header, HomeHero, NavLink, Newsletter, PageHeading, ProseBody, RelatedArticles, Section, SectionHeading, Stack, TagList,
   componentPack,
 } from "../components/pack";
@@ -10,7 +10,7 @@ import { isCurrentHref, readingMinutes } from "../components/runtime";
 
 const EXPECTED_IDS = [
   "blog.header", "blog.nav-link", "blog.footer", "blog.container", "blog.stack", "blog.section", "blog.section-heading", "blog.page-heading",
-  "blog.home-hero", "blog.callout", "blog.demo-note", "blog.article-list", "blog.article-card", "blog.article-header", "blog.prose-body",
+  "blog.home-hero", "blog.callout", "blog.demo-note", "blog.article-list", "blog.article-card", "blog.article-header", "blog.avatar", "blog.prose-body",
   "blog.tag-list", "blog.author-card", "blog.author-grid", "blog.related-articles", "blog.comment-list", "blog.comment",
   "blog.comment-form", "blog.newsletter",
 ];
@@ -30,6 +30,7 @@ describe("demo-blog pack manifest", () => {
     expect(slot("blog.related-articles")).toEqual([{ slotId: "articles", accepts: ["blog.article-card"], cardinality: "many" }]);
     expect(slot("blog.author-grid")).toEqual([{ slotId: "authors", accepts: ["blog.author-card"], cardinality: "many" }]);
     expect(slot("blog.comment-list")).toEqual([{ slotId: "comments", accepts: ["blog.comment"], cardinality: "many" }]);
+    expect(slot("blog.article-header")).toEqual([{ slotId: "avatar", accepts: ["blog.avatar"], cardinality: "single" }]);
     for (const id of ["blog.container", "blog.stack", "blog.section"]) expect(slot(id)).toEqual([{ slotId: "content", accepts: undefined, cardinality: "many" }]);
   });
 
@@ -38,6 +39,9 @@ describe("demo-blog pack manifest", () => {
     expect(card.fields.map((field) => field.prop)).toEqual(["title", "href", "intro", "date", "src", "alt", "tag1", "tag2", "tag3", "authorSlug", "slug"]);
     expect(card.fields.every((field) => field.schema.type === "string")).toBe(true);
     expect(byId.get("blog.article-header")!.fields.find((field) => field.prop === "bodyLength")?.schema.type).toBe("number");
+    // The release asset pass pins managed URLs only in props named src/href/poster/url, so no image prop may carry another name.
+    for (const component of byId.values()) expect(component.fields.map((field) => field.prop).filter((prop) => /src$/i.test(prop) && prop !== "src"), component.id).toEqual([]);
+    expect(byId.get("blog.avatar")!.fields.map((field) => field.prop)).toEqual(["src", "alt"]);
     expect(byId.get("blog.prose-body")!.fields[0]).toMatchObject({ prop: "markdown", editor: { kind: "text", multiline: true, mode: "markdown-source" } });
   });
 });
@@ -108,11 +112,12 @@ describe("demo-blog component rendering", () => {
   });
 
   it("renders the article header byline with avatar and reading time", () => {
-    const html = render(<ArticleHeader eyebrow="craft" title="Sharpen" authorName="Teodor Lindqvist" authorHref="/authors/teodor-lindqvist" authorAvatarSrc="/a.webp" authorAvatarAlt="Avatar" date="Mar 18, 2026" bodyLength={5000} src="/c.webp" alt="Cover" caption="Stone" />);
+    const html = render(<ArticleHeader eyebrow="craft" title="Sharpen" authorName="Teodor Lindqvist" authorHref="/authors/teodor-lindqvist" avatar={[<Avatar key="a" src="/a.webp" alt="Avatar" />]} date="Mar 18, 2026" bodyLength={5000} src="/c.webp" alt="Cover" caption="Stone" />);
     expect(html).toContain("5 min read");
     expect(html).toContain('href="/authors/teodor-lindqvist"');
-    expect(html).toContain("rounded-blog-avatar");
+    expect(html).toContain('<img class="size-blog-avatar-sm rounded-blog-avatar object-cover" src="/a.webp" alt="Avatar"/>');
     expect(html).toContain("<figcaption");
+    expect(render(<Avatar />)).toBe("");
     expect(readingMinutes(1100)).toBe(1);
     expect(readingMinutes(1101)).toBe(2);
     expect(readingMinutes(0)).toBe(0);

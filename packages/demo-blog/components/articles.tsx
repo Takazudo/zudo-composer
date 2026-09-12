@@ -126,16 +126,25 @@ export interface ArticleHeaderProps {
   intro?: string;
   authorName?: string;
   authorHref?: string;
-  authorAvatarSrc?: string;
-  authorAvatarAlt?: string;
   date?: string;
   bodyLength?: number;
   src?: string;
   alt?: string;
   caption?: string;
+  /** Byline avatar slot. A slot, not `authorAvatarSrc`, because the release asset pass pins managed URLs only in props named src/href/poster/url. */
+  avatar?: ComponentChildren;
 }
 
-export function ArticleHeader({ eyebrow = "", title = "Article title", intro = "", authorName = "", authorHref = "", authorAvatarSrc = "", authorAvatarAlt = "", date = "", bodyLength = 0, src = "", alt = "", caption = "" }: ArticleHeaderProps) {
+export interface AvatarProps {
+  src?: string;
+  alt?: string;
+}
+
+export function Avatar({ src = "", alt = "" }: AvatarProps) {
+  return src ? <img class="size-blog-avatar-sm rounded-blog-avatar object-cover" src={src} alt={alt} /> : null;
+}
+
+export function ArticleHeader({ eyebrow = "", title = "Article title", intro = "", authorName = "", authorHref = "", date = "", bodyLength = 0, src = "", alt = "", caption = "", avatar }: ArticleHeaderProps) {
   const minutes = readingMinutes(bodyLength);
   const meta = nonEmpty([date, minutes ? `${minutes} min read` : ""]);
   return (
@@ -146,7 +155,7 @@ export function ArticleHeader({ eyebrow = "", title = "Article title", intro = "
         {intro ? <p class="mt-blog-vsp-sm font-blog-serif text-blog-lead text-blog-fg">{intro}</p> : null}
         {authorName || meta.length ? (
           <div class="mt-blog-vsp-md flex items-center gap-blog-hsp-sm">
-            {authorAvatarSrc ? <img class="size-blog-avatar-sm rounded-blog-avatar object-cover" src={authorAvatarSrc} alt={authorAvatarAlt} /> : null}
+            {avatar}
             <p class={`${CAPTION} text-blog-muted`}>
               {authorName ? (authorHref ? <a class="text-blog-fg-strong hover:underline" href={authorHref}>{authorName}</a> : <span class="text-blog-fg-strong">{authorName}</span>) : null}
               {meta.map((part) => <span key={part}><span aria-hidden="true" class="px-blog-hsp-xs">·</span>{part}</span>)}

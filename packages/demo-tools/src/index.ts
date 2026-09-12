@@ -46,6 +46,7 @@ export {
   ASSET_MANIFEST_FILE,
   createReleaseCall,
   readAssetManifest,
+  readAssetUrls,
   resolveComposerBin,
   seedAssets,
   seedRelease,

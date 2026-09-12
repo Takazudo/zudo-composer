@@ -3,8 +3,8 @@
 // which Node and Vite both resolve without anything installed. Ids, props and
 // slots follow docs/demo-sites/blog.md § 5.
 import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
-import { ArticleCard, ArticleHeader, ArticleList, AuthorCard, AuthorGrid, RelatedArticles, TagList } from "./articles";
-import type { ArticleCardProps, ArticleHeaderProps, ArticleListProps, AuthorCardProps, AuthorGridProps, RelatedArticlesProps, TagListProps } from "./articles";
+import { ArticleCard, ArticleHeader, ArticleList, AuthorCard, AuthorGrid, Avatar, RelatedArticles, TagList } from "./articles";
+import type { ArticleCardProps, ArticleHeaderProps, ArticleListProps, AuthorCardProps, AuthorGridProps, AvatarProps, RelatedArticlesProps, TagListProps } from "./articles";
 import { Callout, Container, DemoNote, Footer, Header, HomeHero, NavLink, PageHeading, Section, SectionHeading, Stack } from "./chrome";
 import type { CalloutProps, ContainerProps, DemoNoteProps, FooterProps, HeaderProps, HomeHeroProps, NavLinkProps, PageHeadingProps, SectionHeadingProps, SectionProps, StackProps } from "./chrome";
 import { Comment, CommentForm, CommentList, Newsletter } from "./comments";
@@ -195,14 +195,26 @@ const articleHeader = defineComponent<ArticleHeaderProps>()(ArticleHeader, {
   category: "Articles",
   description: "Eyebrow, title, intro, byline with avatar, date and reading time, then the full-width cover.",
   source: source("ArticleHeader"),
-  defaults: { eyebrow: "", title: "Article title", intro: "", authorName: "", authorHref: "", authorAvatarSrc: "", authorAvatarAlt: "", date: "", bodyLength: 0, src: "", alt: "", caption: "" },
+  defaults: { eyebrow: "", title: "Article title", intro: "", authorName: "", authorHref: "", date: "", bodyLength: 0, src: "", alt: "", caption: "" },
   fields: [
     text("eyebrow", "Eyebrow"), inline("title", "Title"), multiline("intro", "Intro"),
-    text("authorName", "Author name"), text("authorHref", "Author link"), text("authorAvatarSrc", "Author avatar URL"), text("authorAvatarAlt", "Author avatar alt text"),
+    text("authorName", "Author name"), text("authorHref", "Author link"),
     text("date", "Date"), num("bodyLength", "Body length (characters)"),
     text("src", "Cover image URL"), text("alt", "Cover alt text"), text("caption", "Cover caption"),
   ],
+  slots: [{ id: "avatar", prop: "avatar", label: "Byline avatar", accepts: ["blog.avatar"], cardinality: "single" }],
   adapters: inlineEditor("title"),
+});
+
+const avatar = defineComponent<AvatarProps>()(Avatar, {
+  id: "blog.avatar",
+  schemaVersion: 1,
+  title: "Avatar",
+  category: "Articles",
+  description: "Small round byline avatar for the article header.",
+  source: source("Avatar"),
+  defaults: { src: "", alt: "" },
+  fields: [text("src", "Image URL"), text("alt", "Alt text")],
 });
 
 const proseBody = defineComponent<ProseBodyProps>()(ProseBody, {
@@ -310,17 +322,17 @@ export const componentPack = defineComponentPack({
   packVersion: "1.0.0",
   components: [
     header, navLink, footer, container, stack, section, sectionHeading, pageHeading, homeHero, callout, demoNote,
-    articleList, articleCard, articleHeader, proseBody, tagList, authorCard, authorGrid, relatedArticles,
+    articleList, articleCard, articleHeader, avatar, proseBody, tagList, authorCard, authorGrid, relatedArticles,
     commentList, comment, commentForm, newsletter,
   ],
 });
 
 export {
-  ArticleCard, ArticleHeader, ArticleList, AuthorCard, AuthorGrid, Callout, Comment, CommentForm, CommentList, Container, DemoNote,
+  ArticleCard, ArticleHeader, ArticleList, AuthorCard, AuthorGrid, Avatar, Callout, Comment, CommentForm, CommentList, Container, DemoNote,
   Footer, Header, HomeHero, NavLink, Newsletter, PageHeading, ProseBody, RelatedArticles, Section, SectionHeading, Stack, TagList,
 };
 export type {
-  ArticleCardProps, ArticleHeaderProps, ArticleListProps, AuthorCardProps, AuthorGridProps, CalloutProps, CommentFormProps, CommentListProps,
+  ArticleCardProps, ArticleHeaderProps, ArticleListProps, AuthorCardProps, AuthorGridProps, AvatarProps, CalloutProps, CommentFormProps, CommentListProps,
   CommentProps, ContainerProps, DemoNoteProps, FooterProps, HeaderProps, HomeHeroProps, NavLinkProps, NewsletterProps, PageHeadingProps,
   ProseBodyProps, RelatedArticlesProps, SectionHeadingProps, SectionProps, StackProps, TagListProps,
 };
