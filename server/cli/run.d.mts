@@ -5,6 +5,7 @@ import type { BuildSiteOptions } from "../site-build/run.mjs";
 
 export const RELEASE_ENTRY_PATH: string;
 export const BUILD_SITE_ENTRY_PATH: string;
+export const ASSETS_IMPORT_ENTRY_PATH: string;
 export const CLOSE_GRACE_MS: number;
 export const USAGE: string;
 
@@ -12,6 +13,7 @@ export type ParsedComposerCommand =
   | { command: "dev"; options: Record<string, unknown> }
   | { command: "release"; rest: string[] }
   | { command: "build-site"; options: BuildSiteOptions }
+  | { command: "assets-import"; options: { workspaceRoot?: string; manifest?: string } }
   | { command: "help" }
   | { error: string };
 

@@ -4,8 +4,8 @@
 // The commands are deliberately asymmetric. `dev` boots Vite in
 // this process — the server object is what has to be closed to release the
 // port, so there is nothing to gain from a child. `release` is the JSON-stdin
-// SiteProject release API. `release` and the one-shot `build-site` run in
-// child processes, supervised by `spawnSupervised`.
+// SiteProject release API. `release`, `assets import` and the one-shot
+// `build-site` run in child processes, supervised by `spawnSupervised`.
 
 import { constants as osConstants } from "node:os";
 import { resolve } from "node:path";
@@ -17,6 +17,7 @@ export const CLOSE_GRACE_MS = 2000;
 
 export const RELEASE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/release-entry.mjs");
 export const BUILD_SITE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/build-site-entry.mjs");
+export const ASSETS_IMPORT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/assets-import-entry.mjs");
 
 export const USAGE = `Usage: zudo-composer <command> [options]
 
@@ -25,6 +26,9 @@ Commands:
   release     Run the SiteProject release API (one JSON request on stdin, one
               canonical JSON response on stdout).
   build-site  Build and verify the host's static website in dist-site.
+  assets import [manifest]
+              Import a host asset manifest, or read { "manifest": "path" } on
+              stdin; write one canonical JSON response on stdout.
 
 dev options:
   --root <dir>     Host project root (default: the current directory).
@@ -40,6 +44,12 @@ build-site options:
   --source-revision <revision>
                   Host revision to record or verify exactly (default: GITHUB_SHA
                   when nonempty; omitted otherwise).
+
+assets import options:
+  --root <dir>     Host project root (default: the current directory).
+  <manifest>      JSON manifest path, relative to the host root or absolute.
+                  Files are relative to the manifest directory. The resolved
+                  host config selects the asset store; reruns preserve edits.
 `;
 
 /**
@@ -50,6 +60,7 @@ export function parseArguments(argv) {
   const [command, ...rest] = argv;
   if (command === undefined || command === "--help" || command === "-h" || command === "help") return { command: "help" };
   if (command === "release") return { command: "release", rest };
+  if (command === "assets") return parseAssetsImport(rest);
   if (command !== "dev" && command !== "build-site") return { error: `Unknown command "${command}".` };
 
   /** @type {Record<string, unknown> & import("../site-build/run.d.mts").BuildSiteOptions} */
@@ -87,6 +98,28 @@ export function parseArguments(argv) {
     } else return { error: `Unknown dev option "${argument}".` };
   }
   return { command, options };
+}
+
+/** @param {string[]} rest @returns {import("./run.d.mts").ParsedComposerCommand} */
+function parseAssetsImport(rest) {
+  const [verb, ...args] = rest;
+  if (verb === "--help" || verb === "-h") return { command: "help" };
+  if (verb !== "import") return { error: 'assets requires the "import" subcommand.' };
+  /** @type {{workspaceRoot?: string, manifest?: string}} */
+  const options = {};
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index];
+    if (argument === "--help" || argument === "-h") return { command: "help" };
+    if (argument === "--root") {
+      const root = args[++index];
+      if (root === undefined || root === "" || root.startsWith("-")) return { error: "--root requires a directory." };
+      options.workspaceRoot = resolve(root);
+    } else if (argument.startsWith("-")) return { error: `Unknown assets import option "${argument}".` };
+    else if (argument.trim() === "") return { error: "assets import requires a nonempty manifest path." };
+    else if (options.manifest !== undefined) return { error: "assets import accepts one manifest path." };
+    else options.manifest = argument;
+  }
+  return { command: "assets-import", options };
 }
 
 /**
@@ -147,6 +180,21 @@ export async function runComposerCli(argv, deps = {}) {
       args: [RELEASE_ENTRY_PATH, ...parsed.rest],
       label: "the SiteProject release API",
       entryPath: RELEASE_ENTRY_PATH,
+      ...(deps.spawn ? { spawn: deps.spawn } : {}),
+      ...(deps.exists ? { exists: deps.exists } : {}),
+      proc,
+    });
+    return;
+  }
+  if (parsed.command === "assets-import") {
+    const args = [ASSETS_IMPORT_ENTRY_PATH];
+    if (parsed.options.manifest !== undefined) args.push(parsed.options.manifest);
+    if (parsed.options.workspaceRoot !== undefined) args.push("--root", parsed.options.workspaceRoot);
+    spawnSupervised({
+      command: proc.execPath,
+      args,
+      label: "the Assets importer",
+      entryPath: ASSETS_IMPORT_ENTRY_PATH,
       ...(deps.spawn ? { spawn: deps.spawn } : {}),
       ...(deps.exists ? { exists: deps.exists } : {}),
       proc,
