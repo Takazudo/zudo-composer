@@ -105,9 +105,15 @@ export function resolveSiteProjectLocalRoot(workspaceRoot, configured) {
  */
 export function resolveAppWarmupFiles() {
   const sourceRoot = resolve(APP_ROOT, "src");
+  const sourceRootPath = sourceRoot.split(sep).join("/");
   const sourceFiles = globSync("**/*.{ts,tsx,css}", {
     cwd: sourceRoot,
-    exclude: ["**/__tests__/**", "hosted-demo/**", "site-static/**"],
+    exclude: (file) => {
+      const normalized = file.split(sep).join("/");
+      const relativePath = normalized.startsWith(`${sourceRootPath}/`) ? normalized.slice(sourceRootPath.length + 1) : normalized;
+      const segments = relativePath.split("/");
+      return segments.includes("__tests__") || segments[0] === "hosted-demo" || segments[0] === "site-static";
+    },
   })
     .map((file) => resolve(sourceRoot, file))
     .filter((file) => statSync(file).isFile());
