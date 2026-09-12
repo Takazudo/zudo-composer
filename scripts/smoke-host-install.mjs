@@ -33,7 +33,7 @@ import { chromium } from "@playwright/test";
 
 /** @typedef {import("node:child_process").ExecFileOptionsWithStringEncoding} ExecFileOptions */
 /** @typedef {import("@playwright/test").Page} Page */
-/** @typedef {{packageManager: string}} ToolPackage */
+/** @typedef {{packageManager: string, peerDependencies: {preact: string}}} ToolPackage */
 /** @typedef {{devDependencies: Record<string, string>}} HostManifest */
 
 const execFile = promisify(execFileCallback);
@@ -218,6 +218,7 @@ try {
     devDependencies: {
       "zudo-composer": `file:${tarballs["zudo-composer"]}`,
       "@zudo-composer/component-contract": `file:${tarballs["@zudo-composer/component-contract"]}`,
+      preact: toolPackage.peerDependencies.preact,
     },
   }, null, 2)}\n`);
   // This disposable host explicitly accepts the tool's SHA-pinned Git provider.
