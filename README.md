@@ -135,6 +135,13 @@ export default defineComposerConfig({
 { "scripts": { "dev": "zudo-composer dev" } }
 ```
 
+Hosts with a committed `site-project.json` can run `zudo-composer build-site`
+to build and verify `dist-site`, or pass `--root <dir>` from another directory.
+`build-site --print-routes` verifies an existing `dist-site` and prints its
+manifest routes as JSON; `build-site --verify <dir>` verifies another artifact
+without building. The [static build guide](docs/demo-sites/README.md#static-website-build)
+describes both modes and the current source revision requirement.
+
 ### Settings and host directory layout
 
 Every setting except `pack` has a default and is resolved host-root-relative;

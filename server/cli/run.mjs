@@ -1,11 +1,11 @@
 // @ts-check
 // `zudo-composer <command>`.
 //
-// Two subcommands, and they are deliberately asymmetric. `dev` boots Vite in
+// The commands are deliberately asymmetric. `dev` boots Vite in
 // this process — the server object is what has to be closed to release the
 // port, so there is nothing to gain from a child. `release` is the JSON-stdin
-// SiteProject release API and stays a child process, supervised by
-// `spawnSupervised`.
+// SiteProject release API. `release` and the one-shot `build-site` run in
+// child processes, supervised by `spawnSupervised`.
 
 import { constants as osConstants } from "node:os";
 import { resolve } from "node:path";
@@ -16,55 +16,70 @@ import { forwardedSignals, spawnSupervised } from "./supervise.mjs";
 export const CLOSE_GRACE_MS = 2000;
 
 export const RELEASE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/release-entry.mjs");
+export const BUILD_SITE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/build-site-entry.mjs");
 
 export const USAGE = `Usage: zudo-composer <command> [options]
 
 Commands:
-  dev     Start the authoring dev server, rooted at the current project.
-  release Run the SiteProject release API (one JSON request on stdin, one
-          canonical JSON response on stdout).
+  dev         Start the authoring dev server, rooted at the current project.
+  release     Run the SiteProject release API (one JSON request on stdin, one
+              canonical JSON response on stdout).
+  build-site  Build and verify the host's static website in dist-site.
 
 dev options:
   --root <dir>     Host project root (default: the current directory).
   --port <number>  Port to listen on (0 picks a free one).
   --host [addr]    Expose the server; bare --host listens on all addresses.
   --strict-port    Fail instead of moving to the next free port.
+
+build-site options:
+  --root <dir>     Host project root (default: the current directory).
+  --print-routes   Verify an existing artifact and print its routes as JSON.
+  --verify <dir>   Verify this artifact instead of building (relative to cwd).
+                  Combine with --print-routes to print this artifact's routes.
 `;
 
 /**
  * @param {string[]} argv
- * @returns {{command: "dev", options: Record<string, unknown>} | {command: "release", rest: string[]} | {command: "help"} | {error: string}}
+ * @returns {import("./run.d.mts").ParsedComposerCommand}
  */
 export function parseArguments(argv) {
   const [command, ...rest] = argv;
   if (command === undefined || command === "--help" || command === "-h" || command === "help") return { command: "help" };
   if (command === "release") return { command: "release", rest };
-  if (command !== "dev") return { error: `Unknown command "${command}".` };
+  if (command !== "dev" && command !== "build-site") return { error: `Unknown command "${command}".` };
 
-  /** @type {Record<string, unknown>} */
+  /** @type {Record<string, unknown> & import("../site-build/run.d.mts").BuildSiteOptions} */
   const options = {};
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
     const value = () => {
       const next = rest[index + 1];
-      if (next === undefined || next.startsWith("-")) return undefined;
+      if (next === undefined || next === "" || next.startsWith("-")) return undefined;
       index += 1;
       return next;
     };
     if (argument === "--help" || argument === "-h") return { command: "help" };
-    else if (argument === "--strict-port") options.strictPort = true;
-    else if (argument === "--host") options.host = value() ?? true;
     else if (argument === "--root") {
       const root = value();
       if (root === undefined) return { error: "--root requires a directory." };
       options.workspaceRoot = resolve(root);
-    } else if (argument === "--port") {
+    } else if (command === "build-site") {
+      if (argument === "--print-routes") options.printRoutes = true;
+      else if (argument === "--verify") {
+        const directory = value();
+        if (directory === undefined) return { error: "--verify requires a directory." };
+        options.verifyDirectory = resolve(directory);
+      } else return { error: `Unknown build-site option "${argument}".` };
+    } else if (argument === "--strict-port") options.strictPort = true;
+    else if (argument === "--host") options.host = value() ?? true;
+    else if (argument === "--port") {
       const port = value();
       if (port === undefined || !/^\d+$/.test(port)) return { error: "--port requires a number." };
       options.port = Number(port);
     } else return { error: `Unknown dev option "${argument}".` };
   }
-  return { command: "dev", options };
+  return { command, options };
 }
 
 /**
@@ -125,6 +140,23 @@ export async function runComposerCli(argv, deps = {}) {
       args: [RELEASE_ENTRY_PATH, ...parsed.rest],
       label: "the SiteProject release API",
       entryPath: RELEASE_ENTRY_PATH,
+      ...(deps.spawn ? { spawn: deps.spawn } : {}),
+      ...(deps.exists ? { exists: deps.exists } : {}),
+      proc,
+    });
+    return;
+  }
+  if (parsed.command === "build-site") {
+    const { workspaceRoot, printRoutes, verifyDirectory } = parsed.options;
+    const args = [BUILD_SITE_ENTRY_PATH];
+    if (workspaceRoot !== undefined) args.push("--root", workspaceRoot);
+    if (printRoutes) args.push("--print-routes");
+    if (verifyDirectory !== undefined) args.push("--verify", verifyDirectory);
+    spawnSupervised({
+      command: proc.execPath,
+      args,
+      label: "the static website builder",
+      entryPath: BUILD_SITE_ENTRY_PATH,
       ...(deps.spawn ? { spawn: deps.spawn } : {}),
       ...(deps.exists ? { exists: deps.exists } : {}),
       proc,

@@ -222,10 +222,18 @@ at `/`, with no authoring routes and no tool chrome.
 corepack pnpm demo:build-site webshop            # or landing / blog / a host directory
 corepack pnpm --filter demo-webshop build:site   # the same, from the package
 corepack pnpm site-static:verify packages/demo-webshop/dist-site [git-sha]
+zudo-composer build-site --root /absolute/path/to/host
+zudo-composer build-site --root /absolute/path/to/host --print-routes
+zudo-composer build-site --verify /absolute/path/to/dist-site
 ```
 
-`demo:build-site` runs `vite build --config vite.site-static.config.ts` with
-`ZUDO_HOST_ROOT=packages/demo-<name>`, then `scripts/check-site-static.mjs`.
+`demo:build-site` resolves the demo name or host directory and delegates to
+`zudo-composer build-site --root <host>`, which builds and verifies the artifact.
+The installed command defaults to the current host directory; a relative
+`--root` resolves from the caller's current directory. The shipped
+`server/site-build/vite-config.ts` roots Vite at that host and supplies the
+tool's absolute HTML input and visitor entry. The host's own `index.html` and
+Vite config are not build inputs.
 At config time the build loads the host's config and pack
 (`server/host-context.mjs`), then compiles the committed `site-project.json`
 the way a release does: validation, an exact-version Assets lock from the
@@ -289,12 +297,19 @@ a no-op at `/`, and `/uploaded-assets/` stays canonical. `/site` and
 `/website-preview` keep the full tool chrome unchanged. The page's only tool CSS
 is `server/site-build/client/styles.css`, which uses no authoring-app tokens.
 
-**No `zudo-composer build-site` subcommand.** The build depends on this repository
-(`vite.site-static.config.ts` is excluded from the published `files`, and the
-manifest stamps this checkout's git SHA). The compiler, artifact helpers and
-visitor entry ship under `server/site-build/`; `zudo-composer/site-build` exposes
-the compiler and artifact API. `server/cli/run.mjs` still offers `dev` + `release`,
-and the root `demo:build-site` script is the one build entry point.
+`--print-routes` requires an existing `<host>/dist-site` artifact. It verifies
+that artifact and prints only its manifest's route list as JSON, without
+recompiling the current project. `--verify <dir>` verifies an existing artifact
+without building or loading a host config; its relative path resolves from the
+caller's current directory. Combine it with `--print-routes` to inspect that
+directory's routes. A missing or invalid artifact exits unsuccessfully.
+
+The compiler, artifact helpers, Vite configuration and visitor entry ship under
+`server/site-build/`; `zudo-composer/site-build` retains the compiler and artifact
+API. The manifest currently still stamps the tool checkout's git HEAD, so a
+packed installation without that Git checkout cannot yet finish a new build.
+Artifact inspection has no Git requirement. The independent source revision
+work will remove that remaining installed-build limitation.
 
 ## Lists
 
