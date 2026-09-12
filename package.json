@@ -73,6 +73,7 @@
   "scripts": {
     "dev": "vite",
     "assets:seed-demo": "tsx scripts/seed-demo-assets.ts",
+    "demo:images": "node scripts/demo/optimise-images.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
@@ -128,14 +129,15 @@
     "@types/node": "^26.4.0",
     "@zudo-composer/component-contract": "workspace:*",
     "@zudo-composer/fixture-themeset": "workspace:*",
+    "@zudo-composer/image-editor": "workspace:*",
     "eslint": "^10.9.1",
     "jsdom": "^29.1.1",
     "preact-render-to-string": "^6.6.6",
+    "sharp": "^0.35.4",
     "tsx": "^4.20.5",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11",
-    "wrangler": "4.130.0",
-    "@zudo-composer/image-editor": "workspace:*"
+    "wrangler": "4.130.0"
   }
 }
