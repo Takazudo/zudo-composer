@@ -1,6 +1,157 @@
 {
   "schemaVersion": 1,
-  "mutationToken": "0000000000000000000000000000000000000000000000000000000000000000",
-  "records": [],
+  "mutationToken": "238b5012cd97cbcd22cf39c87207ff0c36a8ff7484eb741c08e5110598cdf0d9",
+  "records": [
+    {
+      "id": "assets-465686d0-7f71-43d2-ae46-d8e56a175a30",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:05:03.059Z",
+      "updatedAt": "2026-09-12T06:05:03.059Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-465686d0-7f71-43d2-ae46-d8e56a175a30",
+        "fileName": "land-hero-app.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "c768e0e2a3fdac6b0cf4b4e748001788267ae5274268090e8857f7fe4ebae8e5",
+        "versions": [
+          {
+            "id": "c768e0e2a3fdac6b0cf4b4e748001788267ae5274268090e8857f7fe4ebae8e5",
+            "checksum": "c768e0e2a3fdac6b0cf4b4e748001788267ae5274268090e8857f7fe4ebae8e5",
+            "mimeType": "image/webp",
+            "byteLength": 13670,
+            "url": "/uploaded-assets/sha256-c768e0e2a3fdac6b0cf4b4e748001788267ae5274268090e8857f7fe4ebae8e5.webp",
+            "createdAt": "2026-09-12T06:05:03.059Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-c0782606-10cc-42f1-a223-ff461548f313",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:05:03.082Z",
+      "updatedAt": "2026-09-12T06:05:03.082Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-c0782606-10cc-42f1-a223-ff461548f313",
+        "fileName": "land-workflow.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "3084fdd4ef8a8ae6c597bc624da1129a3125d363f2614e49b73e16d0f9a39b7f",
+        "versions": [
+          {
+            "id": "3084fdd4ef8a8ae6c597bc624da1129a3125d363f2614e49b73e16d0f9a39b7f",
+            "checksum": "3084fdd4ef8a8ae6c597bc624da1129a3125d363f2614e49b73e16d0f9a39b7f",
+            "mimeType": "image/webp",
+            "byteLength": 10194,
+            "url": "/uploaded-assets/sha256-3084fdd4ef8a8ae6c597bc624da1129a3125d363f2614e49b73e16d0f9a39b7f.webp",
+            "createdAt": "2026-09-12T06:05:03.082Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-55d857f5-fce8-4c86-827e-1de0a811a209",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:05:03.103Z",
+      "updatedAt": "2026-09-12T06:05:03.103Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-55d857f5-fce8-4c86-827e-1de0a811a209",
+        "fileName": "land-team.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "3d14f5776cfe51fba69be2272d231a7157d59bbf6feded2562714e2c8224a3ea",
+        "versions": [
+          {
+            "id": "3d14f5776cfe51fba69be2272d231a7157d59bbf6feded2562714e2c8224a3ea",
+            "checksum": "3d14f5776cfe51fba69be2272d231a7157d59bbf6feded2562714e2c8224a3ea",
+            "mimeType": "image/webp",
+            "byteLength": 11996,
+            "url": "/uploaded-assets/sha256-3d14f5776cfe51fba69be2272d231a7157d59bbf6feded2562714e2c8224a3ea.webp",
+            "createdAt": "2026-09-12T06:05:03.103Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-dc0233ae-9bc8-4a34-b641-e29785e46143",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:05:03.125Z",
+      "updatedAt": "2026-09-12T06:05:03.125Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-dc0233ae-9bc8-4a34-b641-e29785e46143",
+        "fileName": "avatar-mara.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "bba65fd12a25f14473a49388d58aa4561926b6804a4a4191060514837fb1bfeb",
+        "versions": [
+          {
+            "id": "bba65fd12a25f14473a49388d58aa4561926b6804a4a4191060514837fb1bfeb",
+            "checksum": "bba65fd12a25f14473a49388d58aa4561926b6804a4a4191060514837fb1bfeb",
+            "mimeType": "image/webp",
+            "byteLength": 3626,
+            "url": "/uploaded-assets/sha256-bba65fd12a25f14473a49388d58aa4561926b6804a4a4191060514837fb1bfeb.webp",
+            "createdAt": "2026-09-12T06:05:03.125Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-97c31942-4c4e-4da3-a8d0-c7b0777b29fb",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:05:03.147Z",
+      "updatedAt": "2026-09-12T06:05:03.147Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-97c31942-4c4e-4da3-a8d0-c7b0777b29fb",
+        "fileName": "avatar-jonah.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "1a3fa67e5906b6100b84c3e676a974f322f71998e4d10f49d71875d85b49cd4d",
+        "versions": [
+          {
+            "id": "1a3fa67e5906b6100b84c3e676a974f322f71998e4d10f49d71875d85b49cd4d",
+            "checksum": "1a3fa67e5906b6100b84c3e676a974f322f71998e4d10f49d71875d85b49cd4d",
+            "mimeType": "image/webp",
+            "byteLength": 6436,
+            "url": "/uploaded-assets/sha256-1a3fa67e5906b6100b84c3e676a974f322f71998e4d10f49d71875d85b49cd4d.webp",
+            "createdAt": "2026-09-12T06:05:03.147Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-ecb0692c-6286-4cd7-814b-f78f201357c4",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:05:03.169Z",
+      "updatedAt": "2026-09-12T06:05:03.169Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-ecb0692c-6286-4cd7-814b-f78f201357c4",
+        "fileName": "avatar-priya.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "4555da8f6f14393f510781a8da54f586110d4d1e96bd7c1c2912e0846e1af64e",
+        "versions": [
+          {
+            "id": "4555da8f6f14393f510781a8da54f586110d4d1e96bd7c1c2912e0846e1af64e",
+            "checksum": "4555da8f6f14393f510781a8da54f586110d4d1e96bd7c1c2912e0846e1af64e",
+            "mimeType": "image/webp",
+            "byteLength": 4346,
+            "url": "/uploaded-assets/sha256-4555da8f6f14393f510781a8da54f586110d4d1e96bd7c1c2912e0846e1af64e.webp",
+            "createdAt": "2026-09-12T06:05:03.169Z"
+          }
+        ]
+      }
+    }
+  ],
   "folders": []
 }
