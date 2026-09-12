@@ -35,9 +35,6 @@ importers:
       '@zudo-sg/ui':
         specifier: git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf
         version: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)
-      preact:
-        specifier: ^10.29.8
-        version: 10.29.8(preact-render-to-string@6.7.0)
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
@@ -81,6 +78,9 @@ importers:
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1
+      preact:
+        specifier: ^10.29.8
+        version: 10.29.8(preact-render-to-string@6.7.0)
       preact-render-to-string:
         specifier: ^6.6.6
         version: 6.7.0(preact@10.29.8)
@@ -108,6 +108,9 @@ importers:
       '@zudo-composer/component-contract':
         specifier: workspace:*
         version: link:../../packages/component-contract
+      preact:
+        specifier: ^10.29.8
+        version: 10.29.8(preact-render-to-string@6.7.0)
       zudo-composer:
         specifier: workspace:*
         version: link:../..
@@ -120,6 +123,9 @@ importers:
       '@zudo-composer/fixture-themeset':
         specifier: workspace:*
         version: link:../../packages/fixture-themeset
+      preact:
+        specifier: ^10.29.8
+        version: 10.29.8(preact-render-to-string@6.7.0)
       zudo-composer:
         specifier: workspace:*
         version: link:../..

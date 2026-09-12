@@ -107,7 +107,8 @@
     "site-static:verify": "node scripts/check-site-static.mjs"
   },
   "peerDependencies": {
-    "@zudo-composer/component-contract": "1.0.0"
+    "@zudo-composer/component-contract": "1.0.0",
+    "preact": "^10.29.8"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",
@@ -119,7 +120,6 @@
     "@preact/preset-vite": "^2.10.6",
     "@tailwindcss/vite": "^4.3.3",
     "@zudo-sg/ui": "git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf",
-    "preact": "^10.29.8",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.2",
     "zod": "^4.0.0"
@@ -136,6 +136,7 @@
     "@zudo-composer/image-editor": "workspace:*",
     "eslint": "^10.9.1",
     "jsdom": "^29.1.1",
+    "preact": "^10.29.8",
     "preact-render-to-string": "^6.6.6",
     "sharp": "^0.35.4",
     "tsx": "^4.20.5",
