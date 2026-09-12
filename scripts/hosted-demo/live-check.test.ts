@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { HOSTED_DEMO_LIVE_ROUTES, verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
 import { HOSTED_DEMO_HEADERS, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
 import { TARGETS } from "./targets.mjs";
-import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, siteHeaders } from "../../server/site-build/artifact.mjs";
+import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, readToolIdentity, siteHeaders } from "../../server/site-build/artifact.mjs";
 import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition, hostedAssetHeaders } from "../../src/assets/model/asset-kinds.mjs";
 
 const SOURCE_REVISION = "c".repeat(40);
@@ -33,7 +33,7 @@ async function writeArtifact() {
   files.set(HOSTED_DEMO_HEADERS, Buffer.from(hostedAssetHeaders([...files].filter(([path]) => path.startsWith("uploaded-assets/")).map(([path, bytes]) => ({ path, byteLength: bytes.byteLength })))));
   const assets = Object.fromEntries([...files].map(([path, content]) => [path, createHash("sha256").update(content).digest("hex")]));
   await Promise.all([...files].map(([path, content]) => writeFile(join(root, path), content)));
-  const manifest = { schemaVersion: 1, sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, mode: "disposable-hosted-demo", assets };
+  const manifest = { schemaVersion: 1, tool: await readToolIdentity(), sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, mode: "disposable-hosted-demo", assets };
   await writeFile(join(root, "hosted-demo-manifest.json"), JSON.stringify(manifest));
   return { root, manifest, files };
 }
@@ -80,6 +80,19 @@ afterEach(async () => {
 });
 
 describe("hosted demo live verification", () => {
+  it("requires the tool identity and full Git SHA while retaining exact trusted revision comparison", async () => {
+    const fixture = await writeArtifact();
+    fixtures.push(fixture.root);
+    const path = join(fixture.root, "hosted-demo-manifest.json");
+    for (const changes of [{ tool: undefined }, { tool: { name: "zudo-composer" } }, { sourceRevision: undefined }, { sourceRevision: "release-local" }]) {
+      await writeFile(path, JSON.stringify({ ...fixture.manifest, ...changes }));
+      await expect(verifyHostedDemoArtifact({ directory: fixture.root })).rejects.toThrow();
+    }
+    await writeFile(path, JSON.stringify(fixture.manifest));
+    await expect(verifyHostedDemoArtifact({ directory: fixture.root, expectedSourceRevision: "0".repeat(40) })).rejects.toThrow(/sourceRevision does not match/);
+    expect((await verifyHostedDemoArtifact({ directory: fixture.root, expectedSourceRevision: SOURCE_REVISION })).manifest.tool).toEqual(fixture.manifest.tool);
+  });
+
   it("checks the exact manifest, routes and assets and separates navigation headers", async () => {
     const fixture = await writeArtifact();
     fixtures.push(fixture.root);

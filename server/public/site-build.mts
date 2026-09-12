@@ -8,4 +8,5 @@ export {
   siteHeaders,
   verifySiteStaticArtifact,
   type SiteManifest,
+  type ToolIdentity,
 } from "../site-build/artifact.mjs";

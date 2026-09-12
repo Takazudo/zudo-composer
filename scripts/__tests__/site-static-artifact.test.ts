@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, siteHeaders, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
 import { collectStaticSiteAssets } from "../../server/site-build/assets";
+import { APP_ROOT } from "../../plugins/roots.mjs";
 
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
@@ -13,7 +14,7 @@ const PIN_BYTES = Buffer.from("pinned asset bytes");
 const PIN_PATH = `uploaded-assets/sha256-${createHash("sha256").update(PIN_BYTES).digest("hex")}.png`;
 const SOURCE_REVISION = "a".repeat(40);
 
-async function site(files: Record<string, string | Uint8Array> = {}): Promise<string> {
+async function site(files: Record<string, string | Uint8Array> = {}, revision: { sourceRevision?: string } = { sourceRevision: SOURCE_REVISION }): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "site-static-"));
   directories.push(directory);
   const all: Record<string, string | Uint8Array> = {
@@ -25,7 +26,7 @@ async function site(files: Record<string, string | Uint8Array> = {}): Promise<st
     ...files,
   };
   for (const [path, bytes] of Object.entries(all)) { await mkdir(join(directory, path, ".."), { recursive: true }); await writeFile(join(directory, path), bytes); }
-  const manifest = await createSiteManifest({ directory, projectId: "demo", sourceRevision: SOURCE_REVISION, projectSourceRevision: "b".repeat(64), routes: ["/", "/about"] });
+  const manifest = await createSiteManifest({ directory, projectId: "demo", ...revision, projectSourceRevision: "b".repeat(64), routes: ["/", "/about"] });
   await writeFile(join(directory, SITE_MANIFEST), JSON.stringify(manifest));
   return directory;
 }
@@ -92,12 +93,61 @@ describe("static site public assets", () => {
 });
 
 describe("static site artifact", () => {
-  it("describes every file, the routes and both revisions", async () => {
+  it("describes every file, the routes, installed tool identity and both revisions", async () => {
     const directory = await site();
     const manifest = await verifySiteStaticArtifact({ directory, expectedSourceRevision: SOURCE_REVISION });
     expect(Object.keys(manifest.files)).toEqual([SITE_HEADERS, "assets/index-abc.js", "index.html", PIN_PATH, "uploaded-assets/logo.svg"].sort());
     expect(manifest.routes).toEqual(["/", "/about"]);
     expect(manifest.projectId).toBe("demo");
+    const metadata = JSON.parse(await readFile(join(APP_ROOT, "package.json"), "utf8"));
+    expect(manifest.tool).toEqual({ name: metadata.name, version: metadata.version, ...(metadata.gitHead === undefined ? {} : { gitHead: metadata.gitHead }) });
+    expect(Object.keys(manifest).sort()).toEqual(["files", "projectId", "projectSourceRevision", "routes", "schemaVersion", "sourceRevision", "tool"]);
+  });
+
+  it("allows an absent or opaque host revision while preserving exact caller verification", async () => {
+    const directory = await site({}, {});
+    const manifest = await verifySiteStaticArtifact({ directory });
+    expect(manifest).not.toHaveProperty("sourceRevision");
+    await expect(verifySiteStaticArtifact({ directory, expectedSourceRevision: SOURCE_REVISION })).rejects.toThrow(/sourceRevision does not match/);
+
+    const sourceRevision = "release:2026-09-13/candidate-2";
+    const tagged = await site({}, { sourceRevision });
+    expect((await verifySiteStaticArtifact({ directory: tagged, expectedSourceRevision: sourceRevision })).sourceRevision).toBe(sourceRevision);
+    await expect(verifySiteStaticArtifact({ directory: tagged, expectedSourceRevision: `${sourceRevision}-changed` })).rejects.toThrow(/sourceRevision does not match/);
+  });
+
+  it.each([null, "", "  ", 40, {}, []])("rejects a present malformed host revision: %j", async (sourceRevision) => {
+    const directory = await site();
+    const manifest = JSON.parse(await readFile(join(directory, SITE_MANIFEST), "utf8"));
+    await writeFile(join(directory, SITE_MANIFEST), JSON.stringify({ ...manifest, sourceRevision }));
+    await expect(verifySiteStaticArtifact({ directory })).rejects.toThrow(/sourceRevision must be a nonempty string/);
+  });
+
+  it.each([
+    undefined, null, [], {}, { name: "zudo-composer" }, { name: "", version: "1.0.0" },
+    { name: "zudo-composer", version: 1 }, { name: "zudo-composer", version: " " },
+    { name: "zudo-composer", version: "1.0.0", gitHead: "short-sha" },
+    { name: "zudo-composer", version: "1.0.0", extra: "unknown" },
+  ])("rejects missing or malformed tool identity: %j", async (tool) => {
+    const directory = await site();
+    const manifest = JSON.parse(await readFile(join(directory, SITE_MANIFEST), "utf8"));
+    await writeFile(join(directory, SITE_MANIFEST), JSON.stringify({ ...manifest, tool }));
+    await expect(verifySiteStaticArtifact({ directory })).rejects.toThrow();
+  });
+
+  it("verifies an artifact from a different tool version with package gitHead without changing its recorded identity", async () => {
+    const directory = await site();
+    const manifest = JSON.parse(await readFile(join(directory, SITE_MANIFEST), "utf8"));
+    const tool = { name: "zudo-composer", version: "7.5.2", gitHead: "d".repeat(40) };
+    await writeFile(join(directory, SITE_MANIFEST), JSON.stringify({ ...manifest, tool }));
+    expect((await verifySiteStaticArtifact({ directory, expectedSourceRevision: SOURCE_REVISION })).tool).toEqual(tool);
+  });
+
+  it("rejects unknown manifest keys instead of silently accepting another schema", async () => {
+    const directory = await site();
+    const manifest = JSON.parse(await readFile(join(directory, SITE_MANIFEST), "utf8"));
+    await writeFile(join(directory, SITE_MANIFEST), JSON.stringify({ ...manifest, unexpected: true }));
+    await expect(verifySiteStaticArtifact({ directory })).rejects.toThrow();
   });
 
   it("gives hashed output and pinned assets immutable header rules", () => {

@@ -12,7 +12,7 @@ if ("error" in parsed) {
     const manifest = await runSiteBuild(parsed.options);
     process.stdout.write(parsed.options.printRoutes
       ? `${JSON.stringify(manifest.routes)}\n`
-      : `Static site verified: ${manifest.projectId}, ${Object.keys(manifest.files).length} files, ${manifest.routes.length} routes, source ${manifest.sourceRevision}.\n`);
+      : `Static site verified: ${manifest.projectId}, ${Object.keys(manifest.files).length} files, ${manifest.routes.length} routes, tool ${manifest.tool.name}@${manifest.tool.version}${manifest.sourceRevision === undefined ? "" : `, source ${manifest.sourceRevision}`}.\n`);
   } catch (error) {
     process.stderr.write(`[zudo-composer] build-site failed: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

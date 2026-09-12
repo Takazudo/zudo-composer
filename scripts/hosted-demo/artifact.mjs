@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, extname, join, normalize, resolve, sep } from "node:path";
 import { ASSET_CHECKSUM_URL_PATTERN, assetMimeTypeForExtension, hostedAssetHeaders } from "../../src/assets/model/asset-kinds.mjs";
+import { assertToolIdentity } from "../../server/site-build/artifact.mjs";
 
 export const HOSTED_DEMO_MANIFEST = "hosted-demo-manifest.json";
 
@@ -72,7 +73,7 @@ const FORBIDDEN_ARTIFACT_MARKERS = [
   "atomicDiscard",
 ];
 
-/** @typedef {{ schemaVersion: number, sourceRevision: string, projectSourceRevision: string, mode: string, assets: Record<string, string> }} HostedDemoManifest */
+/** @typedef {{ schemaVersion: number, tool: import("../../server/site-build/artifact.mjs").ToolIdentity, sourceRevision: string, projectSourceRevision: string, mode: string, assets: Record<string, string> }} HostedDemoManifest */
 /** @typedef {{ path: string, sha256: string, mime: string }} HostedDemoFile */
 /** @typedef {{ root: string, manifest: HostedDemoManifest, files: HostedDemoFile[] }} HostedDemoArtifact */
 
@@ -140,8 +141,9 @@ export async function verifyHostedDemoArtifact({ directory, expectedSourceRevisi
   const manifestPath = join(root, HOSTED_DEMO_MANIFEST);
   const manifest = /** @type {HostedDemoManifest} */ (JSON.parse(await readFile(manifestPath, "utf8")));
   assertRecord(manifest);
-  assert.deepEqual(Object.keys(manifest).sort(), ["assets", "mode", "projectSourceRevision", "schemaVersion", "sourceRevision"]);
+  assert.deepEqual(Object.keys(manifest).sort(), ["assets", "mode", "projectSourceRevision", "schemaVersion", "sourceRevision", "tool"]);
   assert.equal(manifest.schemaVersion, 1);
+  assertToolIdentity(manifest.tool);
   assert.equal(typeof manifest.sourceRevision, "string");
   assert.match(manifest.sourceRevision, /^[a-f0-9]{40}$/);
   if (expectedSourceRevision !== undefined) assert.equal(manifest.sourceRevision, expectedSourceRevision, "Hosted artifact sourceRevision does not match the trusted checkout");

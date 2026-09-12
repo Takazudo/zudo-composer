@@ -57,9 +57,18 @@ describe("parseArguments", () => {
     for (const argv of [["--verify"], ["--verify", "--print-routes"], ["--verify", ""]]) {
       expect(parseArguments(["build-site", ...argv])).toEqual({ error: "--verify requires a directory." });
     }
+    for (const argv of [["--source-revision"], ["--source-revision", "--print-routes"], ["--source-revision", ""], ["--source-revision", "  "]]) {
+      expect(parseArguments(["build-site", ...argv])).toEqual({ error: "--source-revision requires a nonempty revision." });
+    }
     for (const flag of ["--port", "--host", "--strict-port", "host-dir"]) {
       expect(parseArguments(["build-site", flag])).toEqual({ error: `Unknown build-site option "${flag}".` });
     }
+  });
+
+  it("preserves an explicit host revision verbatim and keeps the option scoped to build-site", () => {
+    const sourceRevision = "release:2026-09-13/candidate-2";
+    expect(parseArguments(["build-site", "--source-revision", sourceRevision])).toEqual({ command: "build-site", options: { sourceRevision } });
+    expect(parseArguments(["dev", "--source-revision", sourceRevision])).toEqual({ error: 'Unknown dev option "--source-revision".' });
   });
 
   it("reads the dev options", () => {
@@ -107,6 +116,9 @@ build-site options:
   --print-routes   Verify an existing artifact and print its routes as JSON.
   --verify <dir>   Verify this artifact instead of building (relative to cwd).
                   Combine with --print-routes to print this artifact's routes.
+  --source-revision <revision>
+                  Host revision to record or verify exactly (default: GITHUB_SHA
+                  when nonempty; omitted otherwise).
 `);
   });
 
@@ -135,8 +147,9 @@ build-site options:
     const proc = fakeProcess();
     const child = fakeChild();
     const spawn = vi.fn(() => child);
-    await runComposerCli(["build-site", "--root", "host", "--verify", "artifact", "--print-routes"], { proc, spawn: spawn as never, exists: () => true });
-    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [BUILD_SITE_ENTRY_PATH, "--root", resolve("host"), "--print-routes", "--verify", resolve("artifact")], { stdio: "inherit" });
+    const sourceRevision = "a".repeat(40);
+    await runComposerCli(["build-site", "--root", "host", "--verify", "artifact", "--print-routes", "--source-revision", sourceRevision], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [BUILD_SITE_ENTRY_PATH, "--root", resolve("host"), "--print-routes", "--verify", resolve("artifact"), "--source-revision", sourceRevision], { stdio: "inherit" });
     proc.emitter.emit("SIGTERM");
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
     child.emit("exit", 7, null);

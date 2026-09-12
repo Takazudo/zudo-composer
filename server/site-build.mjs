@@ -5,6 +5,7 @@ import { lstat, readFile, readdir } from "node:fs/promises";
 import { basename, join, normalize, resolve, sep } from "node:path";
 import { commonmarkLanguage } from "@codemirror/lang-markdown";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 //#region src/assets/references/resolver.ts
 function pinValue(pin) {
 	return {
@@ -3814,6 +3815,22 @@ async function compileStaticSite(options) {
 	};
 }
 //#endregion
+//#region plugins/roots.mjs
+/** The installed package directory. Never derived from `config.root`. */
+var APP_ROOT = resolve(fileURLToPath(import.meta.url), "../..");
+//#endregion
+//#region server/site-build/source-revision.mjs
+/** A host revision is an optional opaque identifier, not the tool's Git SHA.
+* @param {string | undefined} sourceRevision
+* @param {Record<string, string | undefined>} [env]
+* @returns {string | undefined}
+*/
+function resolveSiteSourceRevision(sourceRevision, env = process.env) {
+	const revision = sourceRevision === void 0 ? env.GITHUB_SHA || void 0 : sourceRevision;
+	assert.ok(revision === void 0 || typeof revision === "string" && revision.trim().length > 0, "Site sourceRevision must be a nonempty string when supplied");
+	return revision;
+}
+//#endregion
 //#region server/site-build/artifact.mjs
 var SITE_MANIFEST = "site-manifest.json";
 var SITE_HEADERS = "_headers";
@@ -3836,7 +3853,33 @@ var FORBIDDEN_ARTIFACT_MARKERS = [
 	"readActivatedSiteRelease",
 	"storage/filesystem"
 ];
-/** @typedef {{ schemaVersion: 1, projectId: string, sourceRevision: string, projectSourceRevision: string, routes: string[], files: Record<string, string> }} SiteManifest */
+/** @typedef {{ name: string, version: string, gitHead?: string }} ToolIdentity */
+/** @typedef {{ schemaVersion: 1, projectId: string, tool: ToolIdentity, sourceRevision?: string, projectSourceRevision: string, routes: string[], files: Record<string, string> }} SiteManifest */
+/** @param {unknown} value @returns {asserts value is ToolIdentity} */
+function assertToolIdentity(value) {
+	assert.ok(value && typeof value === "object" && !Array.isArray(value), "Manifest tool identity must be an object");
+	const tool = value;
+	assert.deepEqual(Object.keys(tool).sort(), Object.hasOwn(tool, "gitHead") ? [
+		"gitHead",
+		"name",
+		"version"
+	] : ["name", "version"]);
+	for (const key of ["name", "version"]) assert.ok(typeof tool[key] === "string" && tool[key].trim().length > 0, `Manifest tool identity must include ${key}`);
+	if (Object.hasOwn(tool, "gitHead")) assert.match(tool.gitHead, /^[a-f0-9]{40}$/);
+}
+/** Read the installed package's identity, never the host's enclosing Git tree.
+* @returns {Promise<ToolIdentity>}
+*/
+async function readToolIdentity() {
+	const metadata = JSON.parse(await readFile(resolve(APP_ROOT, "package.json"), "utf8"));
+	const tool = {
+		name: metadata.name,
+		version: metadata.version,
+		...Object.hasOwn(metadata, "gitHead") ? { gitHead: metadata.gitHead } : {}
+	};
+	assertToolIdentity(tool);
+	return tool;
+}
 /** @param {Uint8Array | string} bytes @returns {string} */
 function sha256(bytes) {
 	return createHash("sha256").update(bytes).digest("hex");
@@ -3877,17 +3920,20 @@ async function filesUnder(root) {
 }
 /**
 * Hash every file of a finished build (except the manifest itself).
-* @param {{ directory: string, projectId: string, sourceRevision: string, projectSourceRevision: string, routes: string[] }} options
+* @param {{ directory: string, projectId: string, sourceRevision?: string, projectSourceRevision: string, routes: string[] }} options
 * @returns {Promise<SiteManifest>}
 */
 async function createSiteManifest({ directory, projectId, sourceRevision, projectSourceRevision, routes }) {
+	const tool = await readToolIdentity();
+	resolveSiteSourceRevision(sourceRevision, {});
 	/** @type {Record<string, string>} */
 	const files = {};
 	for (const file of (await filesUnder(resolve(directory))).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0)) if (file.path !== "site-manifest.json") files[file.path] = sha256(await readFile(file.absolutePath));
 	return {
 		schemaVersion: 1,
 		projectId,
-		sourceRevision,
+		tool,
+		...sourceRevision === void 0 ? {} : { sourceRevision },
 		projectSourceRevision,
 		routes: [...routes],
 		files
@@ -3909,17 +3955,20 @@ async function verifySiteStaticArtifact({ directory, expectedSourceRevision }) {
 	assert.ok((await lstat(root)).isDirectory(), `Site artifact directory is missing: ${root}`);
 	const manifest = JSON.parse(await readFile(join(root, SITE_MANIFEST), "utf8"));
 	assert.ok(manifest && typeof manifest === "object" && !Array.isArray(manifest), "Site manifest must be an object");
-	assert.deepEqual(Object.keys(manifest).sort(), [
+	const keys = [
 		"files",
 		"projectId",
 		"projectSourceRevision",
 		"routes",
 		"schemaVersion",
-		"sourceRevision"
-	]);
+		"tool"
+	];
+	if (Object.hasOwn(manifest, "sourceRevision")) keys.push("sourceRevision");
+	assert.deepEqual(Object.keys(manifest).sort(), keys.sort());
 	assert.equal(manifest.schemaVersion, 1);
 	assert.ok(typeof manifest.projectId === "string" && manifest.projectId.length > 0, "Site manifest must name its project");
-	assert.match(manifest.sourceRevision, /^[a-f0-9]{40}$/);
+	assertToolIdentity(manifest.tool);
+	if (Object.hasOwn(manifest, "sourceRevision")) assert.ok(typeof manifest.sourceRevision === "string" && manifest.sourceRevision.trim().length > 0, "Site sourceRevision must be a nonempty string when supplied");
 	if (expectedSourceRevision !== void 0) assert.equal(manifest.sourceRevision, expectedSourceRevision, "Site artifact sourceRevision does not match the trusted checkout");
 	assert.match(manifest.projectSourceRevision, /^[a-f0-9]{64}$/);
 	assert.ok(Array.isArray(manifest.routes) && manifest.routes.includes("/"), "Site manifest routes must include /");

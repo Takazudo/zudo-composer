@@ -1,22 +1,24 @@
 import { normalizePath, type InlineConfig, type Plugin } from "vite";
 import { resolve } from "node:path";
-import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import preact from "@preact/preset-vite";
 import tailwindPlugin from "../../plugins/tailwind-plugin.mjs";
 import componentPackPlugin from "../../plugins/component-pack-plugin.mjs";
 import hostStylesPlugin from "../../plugins/host-styles-plugin.mjs";
 import { APP_HTML_PATH, rewriteAppEntry } from "../../plugins/composer-app-html.mjs";
-import { APP_ROOT, SITE_BUILD_ENTRY, resolveWorkspaceRoot } from "../../plugins/roots.mjs";
+import { SITE_BUILD_ENTRY, resolveWorkspaceRoot } from "../../plugins/roots.mjs";
 import { resolveComposerModules } from "../../plugins/module-resolution.mjs";
 import { loadHostContext } from "../host-context.mjs";
 import { compileStaticSite, SITE_MANIFEST, SITE_HEADERS, createSiteManifest } from "../site-build.mjs";
 import { collectStaticSiteAssets } from "./assets";
+import { resolveSiteSourceRevision } from "./source-revision.mjs";
+import type { BuildSiteOptions } from "./run.mjs";
 
 const STUBBED = ["virtual:composer-file-provider-config", "virtual:composer-domain-providers", "virtual:release-config", "virtual:site-project-source"];
 
 /** The shipped static builder owns its shell and visitor; the host owns the Vite root. */
-export async function resolveStaticSiteConfig(options: { workspaceRoot?: string; env?: Record<string, string | undefined> } = {}): Promise<InlineConfig> {
+export async function resolveStaticSiteConfig(options: Pick<BuildSiteOptions, "workspaceRoot" | "sourceRevision" | "env"> = {}): Promise<InlineConfig> {
+  const sourceRevision = resolveSiteSourceRevision(options.sourceRevision, options.env);
   const hostRoot = resolveWorkspaceRoot(options.workspaceRoot);
   const { composerConfig, pack } = await loadHostContext({ workspaceRoot: hostRoot, env: options.env });
   const { paths, settings, configPath } = composerConfig;
@@ -53,7 +55,6 @@ export async function resolveStaticSiteConfig(options: { workspaceRoot?: string;
       this.emitFile({ type: "asset", fileName: SITE_HEADERS, source: assets.headers });
     },
     async writeBundle() {
-      const sourceRevision = execFileSync("git", ["rev-parse", "HEAD"], { cwd: APP_ROOT, encoding: "utf8" }).trim();
       const manifest = await createSiteManifest({ directory: outDir, projectId: compiled.project.id, sourceRevision, projectSourceRevision: compiled.projectSourceRevision, routes: compiled.build.routes.map(({ pathname }) => pathname) });
       await writeFile(resolve(outDir, SITE_MANIFEST), JSON.stringify(manifest, null, 2) + "\n");
     },
