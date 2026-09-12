@@ -9,6 +9,8 @@ import { assetMimeTypeForExtension } from "../src/assets/model";
 export const demoFileNames = [
   "demo-sunrise.png", "demo-lagoon.png", "demo-orchard.png", "demo-twilight.png",
   "demo-guide.pdf", "demo-archive.zip",
+  // Sample Studio imagery, rendered by scripts/demo/optimise-images.mjs.
+  "studio-workbench.webp", "studio-wall.webp", "studio-review.webp", "journal-question.webp", "journal-map.webp",
 ] as const;
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 

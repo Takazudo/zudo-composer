@@ -27,21 +27,24 @@ describe("dogfood demo Assets seed", () => {
     const folder = await store.createFolder({ name: "Personal", parentId: null }, await store.mutationToken());
     const unrelated = await store.upload({ fileName: "personal.png", bytes: source, declaredMimeType: "image/png", folderId: folder.id, note: "Keep this note" });
     const sameName = await store.upload({ fileName: "demo-lagoon.png", bytes: source, declaredMimeType: "image/png" });
-    expect(await seedDemoAsset(root)).toEqual({ added: 6, skipped: 0 });
+    expect(await seedDemoAsset(root)).toEqual({ added: demoFileNames.length, skipped: 0 });
     const snapshot = await store.snapshot();
-    expect(snapshot.records).toHaveLength(8);
+    expect(snapshot.records).toHaveLength(demoFileNames.length + 2);
     expect(snapshot.records).toContainEqual(unrelated);
     expect(snapshot.records).toContainEqual(sameName);
     expect(snapshot.folders).toEqual([folder]);
     for (const record of snapshot.records.filter(({ id }) => ![unrelated.id, sameName.id].includes(id))) {
       expect(demoFileNames).toContain(record.document.fileName);
       const version = record.document.versions[0];
-      expect(version.byteLength).toBeLessThanOrEqual(60 * 1024);
+      expect(version.byteLength).toBeLessThanOrEqual(version.mimeType === "image/webp" ? 250 * 1024 : 60 * 1024);
       expect((await store.get(record.id)).status).toBe("loaded");
       const bytes = await readFile(join(root, "versions", version.url.split("/").at(-1)!));
       if (version.mimeType === "image/png") {
         expect(bytes.readUInt32BE(16)).toBe(480);
         expect(bytes.readUInt32BE(20)).toBe(320);
+      } else if (version.mimeType === "image/webp") {
+        expect(bytes.subarray(0, 4).toString()).toBe("RIFF");
+        expect(bytes.subarray(8, 12).toString()).toBe("WEBP");
       } else if (version.mimeType === "application/pdf") {
         expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
       } else {
@@ -50,7 +53,7 @@ describe("dogfood demo Assets seed", () => {
       }
     }
     const before = await files(root);
-    expect(await seedDemoAsset(root)).toEqual({ added: 0, skipped: 6 });
+    expect(await seedDemoAsset(root)).toEqual({ added: 0, skipped: demoFileNames.length });
     expect(await files(root)).toEqual(before);
   });
 
@@ -63,7 +66,7 @@ describe("dogfood demo Assets seed", () => {
     const bytes = await readFile(new URL("../demo-assets/demo-twilight.png", import.meta.url));
     await store.replace(second.id, { bytes }, { expectedRevision: second.revision });
     const before = await files(root);
-    expect(await seedDemoAsset(root)).toEqual({ added: 0, skipped: 6 });
+    expect(await seedDemoAsset(root)).toEqual({ added: 0, skipped: demoFileNames.length });
     expect(await files(root)).toEqual(before);
   });
 

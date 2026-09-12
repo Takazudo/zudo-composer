@@ -93,8 +93,10 @@ relationship for the external UI-provider dependency.
   contract:negative-scan`, and `corepack pnpm contract:external-install --
   --exact`.
 - Browser lanes: `corepack pnpm test:browser:host`, `corepack pnpm
-  test:browser:dev`, and `corepack pnpm test:browser:site-project`. Each owns one
-  machine-global port, so none may run concurrently, and no lane may rebuild.
+  test:browser:dev`, `corepack pnpm test:browser:site-project`, and `corepack
+  pnpm test:browser:demos` (port 4176, the three `packages/demo-*` hosts). Each
+  owns one machine-global port, so none may run concurrently, and no lane may
+  rebuild.
 - Host install: `corepack pnpm smoke:host-install`, the only proof that packs the
   package and installs it into a project outside this repository.
 
@@ -104,28 +106,46 @@ the 12-component runtime/CSS/WASM proof to make a gate pass.
 ## Scoped hosted demo exception
 
 The installed tool and ordinary local workflow remain local-first. Issue 414
-adds one disposable static sample at `https://zudo-composer.zudolab.dev`; it
-does not add hosted persistence, a hosted API, authentication, arbitrary host
-project access or deployment support for installed applications. The
-`zudo-composer` Worker and its existing custom-domain binding are configured in
-[`wrangler.jsonc`](./wrangler.jsonc).
+adds one disposable static sample at `https://zudo-composer.zudolab.dev`; issue
+504 extends the same trusted-run pipeline to three further static demo
+websites built from committed SiteProject content: `demo-shop.zudolab.dev`
+(`packages/demo-webshop`), `demo-landing.zudolab.dev`
+(`packages/demo-landing`) and `demo-blog.zudolab.dev` (`packages/demo-blog`).
+None of this adds hosted persistence, a hosted API, authentication, arbitrary
+host project access or deployment support for installed applications. Each
+target is its own Worker with its own custom-domain binding, configured in
+[`wrangler.jsonc`](./wrangler.jsonc) (`zudo-composer`),
+[`wrangler.demo-shop.jsonc`](./wrangler.demo-shop.jsonc),
+[`wrangler.demo-landing.jsonc`](./wrangler.demo-landing.jsonc) and
+[`wrangler.demo-blog.jsonc`](./wrangler.demo-blog.jsonc).
 
-The dedicated `dist-hosted-demo` artifact is built, checked against the ordinary
-filesystem/server/test boundary, browser-tested, and uploaded by CI under the
-exact source SHA. The independent production workflow accepts only a successful
-same-repository `main` CI run, verifies its run/SHA/artifact, performs a
-Wrangler dry run, captures the active single-version deployment, uploads the
-verified directory with Wrangler 4.130.0, and activates only the version ID
-returned by that upload. It has no pull-request artifact path. Pull-request
-validation has no Cloudflare secrets, and production uses only the existing
-deployment secrets after its trusted-run gates. Missing credentials, stale
-`main`, missing rollback state, split
-traffic or a source mismatch fail before mutation.
+The hosted composer demo's `dist-hosted-demo` artifact is built, checked
+against the ordinary filesystem/server/test boundary, browser-tested, and
+uploaded by CI under the exact source SHA; the three static demo sites are
+each built and manifest-verified by CI with `pnpm demo:build-site <name>` into
+`packages/demo-<name>/dist-site` and uploaded the same way. `scripts/hosted-demo/targets.mjs`
+is the one place naming each target's Worker, config file, artifact directory,
+domain and artifact contract; `deploy.mjs`, `live-check.mjs` and
+`check-hosted-demo.mjs` are generic over that target, while
+`workflow-guard.mjs`'s trusted-run checks needed no target parameter — they
+never touch an artifact or a Cloudflare config. The independent production
+workflow runs as a matrix of the four targets, each accepting only a
+successful same-repository `main` CI run, verifying its own run/SHA/artifact,
+performing a Wrangler dry run, capturing the active single-version deployment,
+uploading the verified directory with Wrangler 4.130.0, and activating only
+the version ID returned by that upload. It has no pull-request artifact path.
+Pull-request validation has no Cloudflare secrets, and production uses only
+the existing deployment secrets after its trusted-run gates, with a
+concurrency group per target so one target's rollout never blocks another's.
+Missing credentials, stale `main`, missing rollback state, split traffic or a
+source mismatch fail before mutation, for every target.
 
-Live checks cover the manifest, every emitted asset and all authoring/sample
-routes with bounded HTTPS requests. Automatic rollback is allowed only while
-the exact uploaded version remains active, and a rollback that succeeds still
-leaves the deployment workflow red. Local OAuth credentials are never copied to
+Live checks cover the manifest, every emitted asset and every route with
+bounded HTTPS requests — the hosted composer demo's fixed authoring/sample
+route list for that target, and each static site's own manifest route list for
+the other three. Automatic rollback is allowed only while the exact uploaded
+version remains active, and a rollback that succeeds still leaves the
+deployment workflow red. Local OAuth credentials are never copied to
 repository or workflow secrets.
 
 Do not claim a permanent target `main` SHA or a final CI URL before the Phase 3

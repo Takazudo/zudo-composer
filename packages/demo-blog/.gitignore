@@ -1,0 +1,12 @@
+# Authored CMS records are seeded from site-project.json; only the Assets store is committed.
+.zudo-site-project/
+cms/compositions/
+cms/content/
+cms/mappings/
+cms/sitemaps/
+cms/workspaces/
+cms/assets/.mutation.lock
+cms/assets/.upload-*.stage
+cms/assets/.*.tmp
+public/uploaded-assets/*
+!public/uploaded-assets/.gitkeep

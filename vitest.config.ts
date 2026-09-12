@@ -59,7 +59,22 @@ export default defineConfig({
           // blow past 20s while passing in isolation. Same reason the server project raises
           // its own timeout; the cost here is real I/O, not a hung promise.
           testTimeout: 60_000,
-          exclude: [...configDefaults.exclude, '**/worktrees/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts'],
+          exclude: [...configDefaults.exclude, '**/worktrees/**', 'server/**', 'packages/image-editor/src/__tests__/**/*.test.ts', 'packages/demo-*/**'],
+        },
+      },
+      {
+        // The demo host packages and their authoring helper. They are hosts, not
+        // the app: no jsdom, no `src/test` setup and none of the app project's
+        // `virtual:*` aliases, which a pack must never depend on. Their specs
+        // spawn `zudo-composer release` and import the packs' `.tsx` sidecars,
+        // hence the server project's JSX runtime and timeout.
+        oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
+        test: {
+          name: 'demos',
+          include: ['packages/demo-*/**/*.test.?(c|m)[jt]s?(x)'],
+          environment: 'node',
+          testTimeout: 60_000,
+          exclude: [...configDefaults.exclude, '**/worktrees/**'],
         },
       },
     ],

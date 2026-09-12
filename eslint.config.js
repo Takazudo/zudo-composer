@@ -9,6 +9,9 @@ export default tseslint.config(
     ignores: [
       'dist',
       'dist-hosted-demo',
+      '**/dist-site',
+      '**/.zudo-site-project',
+      'packages/*/cms/{compositions,content,mappings,sitemaps,workspaces}/**',
       '**/dist',
       'coverage',
       'worktrees/**',
@@ -19,7 +22,7 @@ export default tseslint.config(
     ],
   },
   {
-    files: ['bin/**/*.mjs', 'scripts/**/*.mjs', 'plugins/**/*.mjs', 'server/**/*.mjs'],
+    files: ['bin/**/*.mjs', 'scripts/**/*.mjs', 'plugins/**/*.mjs', 'server/**/*.mjs', 'packages/*/bin/**/*.mjs'],
     languageOptions: {
       globals: {
         URL: 'readonly',

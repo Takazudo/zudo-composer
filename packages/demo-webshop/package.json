@@ -1,0 +1,24 @@
+{
+  "name": "demo-webshop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo Webshop: a host project authored with zudo-composer and its own component pack.",
+  "exports": {
+    "./components": "./components/pack.ts"
+  },
+  "scripts": {
+    "dev": "zudo-composer dev",
+    "generate": "demo-tools generate",
+    "seed": "demo-tools seed",
+    "build:site": "pnpm -w demo:build-site webshop",
+    "test": "pnpm -w test packages/demo-webshop"
+  },
+  "devDependencies": {
+    "@zudo-composer/component-contract": "workspace:*",
+    "demo-tools": "workspace:*",
+    "preact": "^10.29.8",
+    "preact-render-to-string": "^6.6.6",
+    "zudo-composer": "workspace:*"
+  }
+}

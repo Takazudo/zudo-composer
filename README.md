@@ -74,6 +74,33 @@ From a fresh checkout, run `corepack pnpm install --frozen-lockfile`, then
 the dialog. Open **Assets** in the navigation (`/assets`), select **Grid** if
 needed, click a demo thumbnail to inspect it, then click **Preview**.
 
+## Demo host projects
+
+`packages/demo-webshop`, `packages/demo-landing` and `packages/demo-blog` are
+three complete host projects, each with its own component pack and Tailwind
+theme, kept as workspace members so the tool is exercised the way a real host
+exercises it. `packages/demo-tools` is the private authoring/seeding helper
+they share. Full authoring and gate-wiring details are in
+[`docs/demo-sites/README.md`](./docs/demo-sites/README.md).
+
+| Package | Site | Hosted domain | Local dev port |
+| --- | --- | --- | --- |
+| `packages/demo-webshop` | Nightjar Supply | `demo-shop.zudolab.dev` | 4181 |
+| `packages/demo-landing` | Orrery | `demo-landing.zudolab.dev` | 4182 |
+| `packages/demo-blog` | Margin Notes | `demo-blog.zudolab.dev` | 4183 |
+
+Run one locally:
+
+```sh
+corepack pnpm --filter demo-webshop seed   # idempotent: assets, then an activated release
+corepack pnpm --filter demo-webshop dev --port 4181
+```
+
+`/site` serves the activated release; `/composer` and the rest of the
+authoring routes edit that package's own CMS data under its `cms/`. The
+`test:browser:demos` lane above crawls all three the same way, on port 4176,
+one at a time.
+
 ## Installing into a host project
 
 `zudo-composer` is installed by the project it authors. There is no registry
@@ -296,6 +323,7 @@ corepack pnpm contract:external-install -- --exact
 corepack pnpm test:browser:host
 corepack pnpm test:browser:dev
 corepack pnpm test:browser:site-project
+corepack pnpm test:browser:demos
 ```
 
 Each lane owns one port and one server, so none of them may run concurrently:
@@ -305,6 +333,13 @@ Each lane owns one port and one server, so none of them may run concurrently:
 | `test:browser:host` | `zudo-composer dev`, rooted at a disposable host project | 4173 | `tests/browser`, minus the SiteProject spec |
 | `test:browser:dev` | this repository's own `pnpm dev` | 5173 | `tests/browser-dev` |
 | `test:browser:site-project` | this repository's own Vite, with a CLI-activated release | 4174 | `tests/browser/site-project-acceptance.pw.ts` |
+| `test:browser:demos` | `zudo-composer dev`, rooted at each `packages/demo-*` in turn | 4176 | `tests/browser-demos` |
+
+`test:browser:demos` seeds each demo host package's release in place — the
+committed `cms/assets` store gets a disposable copy for the run, so the lane
+never dirties it — boots `zudo-composer dev` for that one package, crawls
+every route the sitemap compiles to, and runs its one mock interaction (see
+[Demo host projects](#demo-host-projects)) before moving to the next demo.
 
 The host lane is the one that runs the package the way a host does — through its
 `bin`, against a project it has never seen. It activates the sample SiteProject

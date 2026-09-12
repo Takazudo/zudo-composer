@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { HOSTED_DEMO_LIVE_ROUTES, verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
 import { HOSTED_DEMO_HEADERS, hostedAssetHeaders, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
+import { TARGETS } from "./targets.mjs";
+import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, siteHeaders } from "../site-static/artifact.mjs";
 import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
 
 const SOURCE_REVISION = "c".repeat(40);
@@ -172,5 +174,72 @@ describe("hosted demo live verification", () => {
     });
     expect(proof.routes).toHaveLength(HOSTED_DEMO_LIVE_ROUTES.length);
     expect(retries).toEqual([{ attempt: 1, delayMs: 25 }]);
+  });
+});
+
+describe("static demo site live verification (a non-default target)", () => {
+  async function writeSiteArtifact() {
+    const root = await mkdtemp(join(tmpdir(), "site-static-live-check-"));
+    const indexHtml = Buffer.from("<!doctype html><html><body>site</body></html>\n");
+    const pinBytes = Buffer.from("pinned");
+    const pinPath = `uploaded-assets/sha256-${createHash("sha256").update(pinBytes).digest("hex")}.png`;
+    const files = new Map<string, Buffer>([
+      ["index.html", indexHtml],
+      ["assets/index-abc.js", Buffer.from("console.log('site');\n")],
+      [pinPath, pinBytes],
+    ]);
+    for (const [path, content] of files) {
+      await mkdir(join(root, path, ".."), { recursive: true });
+      await writeFile(join(root, path), content);
+    }
+    await writeFile(join(root, SITE_HEADERS), siteHeaders([{ path: pinPath, byteLength: pinBytes.byteLength }]));
+    const manifest = await createSiteManifest({ directory: root, projectId: "demo-webshop", sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, routes: ["/", "/about"] });
+    await writeFile(join(root, SITE_MANIFEST), JSON.stringify(manifest));
+    return { root, manifest, files };
+  }
+
+  function mockSiteFetch(fixture: Awaited<ReturnType<typeof writeSiteArtifact>>) {
+    const requests: string[] = [];
+    const fetchImpl = async (input: URL | RequestInfo) => {
+      const url = new URL(input.toString());
+      const path = url.pathname;
+      requests.push(path);
+      if (path === `/${SITE_MANIFEST}`) return response(JSON.stringify(fixture.manifest), "application/json");
+      if (fixture.manifest.routes.includes(path)) return response(fixture.files.get("index.html")!.toString(), "text/html");
+      const relative = path === "/" ? "index.html" : path.slice(1);
+      const bytes = fixture.files.get(relative);
+      if (!bytes) return response("missing", "text/plain", 404);
+      const asset = ASSET_CHECKSUM_URL_PATTERN.test(path);
+      const mime = asset ? expectedMime(relative) : relative.endsWith(".js") ? "text/javascript" : "text/html";
+      const checksum = asset ? relative.slice("uploaded-assets/sha256-".length, relative.lastIndexOf(".")) : undefined;
+      const headers = asset ? {
+        "content-length": String(bytes.byteLength),
+        "cache-control": ASSET_IMMUTABLE_CACHE_CONTROL,
+        "x-content-type-options": ASSET_NOSNIFF,
+        ...(checksum === undefined || assetContentDisposition(mime, checksum) === undefined ? {} : { "content-disposition": assetContentDisposition(mime, checksum)! }),
+      } : {};
+      return response(bytes, mime, 200, headers);
+    };
+    return { fetchImpl, requests };
+  }
+
+  it("verifies a static site target using its own manifest name, verifier and route list", async () => {
+    const fixture = await writeSiteArtifact();
+    fixtures.push(fixture.root);
+    const mock = mockSiteFetch(fixture);
+    const target = TARGETS.webshop;
+    const proof = await verifyLiveDeployment({
+      baseUrl: "https://demo-shop.zudolab.dev",
+      artifactDirectory: fixture.root,
+      expectedSourceRevision: SOURCE_REVISION,
+      fetchImpl: mock.fetchImpl,
+      manifestFileName: target.manifestFileName,
+      artifactVerifier: target.verifyArtifact,
+      liveRoutes: target.liveRoutes,
+    });
+    expect(proof.routes.map(({ path }) => path)).toEqual(["/", "/about"]);
+    expect(proof.assets.map(({ path }) => path).sort()).toEqual(["assets/index-abc.js", "index.html", [...fixture.files.keys()].find((path) => path.startsWith("uploaded-assets/"))].sort());
+    expect(mock.requests.some((path) => path === "/_headers")).toBe(false);
+    expect(mock.requests).toContain(`/${SITE_MANIFEST}`);
   });
 });
