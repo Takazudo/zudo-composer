@@ -44,12 +44,11 @@ export {
 } from "./generate";
 export {
   ASSET_MANIFEST_FILE,
-  createReleaseCall,
   readAssetManifest,
   readAssetUrls,
   resolveComposerBin,
   seedAssets,
   seedRelease,
 } from "./seed";
-export type { AssetManifestEntry, ReleaseCall, SeedReleaseResult } from "./seed";
+export type { AssetManifestEntry, SeedReleaseResult } from "./seed";
 export { assertSiteProjectCurrent } from "./test-helpers";

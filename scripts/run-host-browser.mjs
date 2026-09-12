@@ -4,7 +4,7 @@
 //
 // Builds one disposable host project under the OS temporary directory, activates
 // the sample SiteProject into it through the package's own `zudo-composer
-// release` CLI, runs the lane against `zudo-composer dev`, and removes the whole
+// seed` CLI, runs the lane against `zudo-composer dev`, and removes the whole
 // tree. Nothing the lane authors touches this repository, and nothing survives
 // the run.
 //
@@ -16,18 +16,13 @@
 
 import { spawn } from "node:child_process";
 import { cpSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 /** @typedef {import("node:child_process").SpawnOptions} SpawnOptions */
 /** @typedef {{status: number | null, signal: NodeJS.Signals | null, stdout: string, stderr: string}} RunResult */
 /** @typedef {{devDependencies: Record<string, string>, peerDependencies: Record<string, string>}} PackageManifest */
-/** @typedef {import("../src/site-project/api/types.ts").SiteProjectApiRequest} SiteProjectApiRequest */
-/** @typedef {import("../src/site-project/api/types.ts").SiteProjectApiResponse} SiteProjectApiResponse */
-/** @typedef {import("../src/site-project/api/types.ts").ReleasePlan} ReleasePlan */
-/** @typedef {import("../src/site-project/model/types.ts").SiteProject} SiteProject */
-/** @typedef {{revision: string, buildId: string}} ApplyResult */
 
 const root = resolve(import.meta.dirname, "..");
 // Extra arguments pass straight through to Playwright, so a single spec can be
@@ -75,6 +70,7 @@ function createHostFixture(parent) {
   for (const file of ["zudo-composer.config.ts", "styles/base.css"]) {
     cpSync(join(root, "fixtures/host", file), join(hostRoot, file));
   }
+  cpSync(join(root, "src/test/site-project-fixture.json"), join(hostRoot, "site-project.json"));
   // The manifest is generated rather than copied, because a release attests how
   // its pack was installed and therefore reads the pack's dependency spec out of
   // the HOST manifest. The spec is taken from this package's own manifest so the
@@ -96,52 +92,10 @@ function createHostFixture(parent) {
   return hostRoot;
 }
 
-/** One JSON request in, one canonical JSON response out, through the real bin. */
-/**
- * @param {SiteProjectApiRequest} request
- * @param {string} hostRoot
- * @returns {Promise<unknown>}
- */
-async function releaseCall(request, hostRoot) {
-  const result = await run(process.execPath, [join(root, "bin/zudo-composer.mjs"), "release"], {
-    cwd: hostRoot,
-    input: `${JSON.stringify(request)}\n`,
-  });
-  if (result.status !== 0) throw new Error(`${request.operation} exited ${result.status}: ${result.stderr || result.stdout}`);
-  /** @type {SiteProjectApiResponse} */
-  let response;
-  try { response = JSON.parse(result.stdout); }
-  catch (error) { throw new Error(`${request.operation} did not return one JSON response: ${result.stdout}`, { cause: error }); }
-  if (!response.ok) throw new Error(`${request.operation} was rejected: ${JSON.stringify(response.error)}`);
-  return response.result;
-}
-
 /** @param {string} hostRoot */
 async function activateSampleProject(hostRoot) {
-  const project = /** @type {SiteProject} */ (JSON.parse(await readFile(join(root, "src/test/site-project-fixture.json"), "utf8")));
-  const plan = /** @type {ReleasePlan} */ (await releaseCall({
-    protocolVersion: 2,
-    operation: "plan",
-    project,
-    workingPrecondition: null,
-    selection: project.providers.content.flatMap((provider) =>
-      provider.entries.map((entry) => ({ ref: { providerId: provider.id, modelId: entry.modelId, recordId: entry.id }, action: "publish" }))),
-    expectedRevision: null,
-    expectedActive: null,
-  }, hostRoot));
-  const applied = /** @type {ApplyResult} */ (await releaseCall({ protocolVersion: 2, operation: "apply", plan }, hostRoot));
-  if (typeof applied.revision !== "string" || !/^[a-f0-9]{64}$/u.test(applied.revision)) {
-    throw new Error("The release CLI did not return a revision digest.");
-  }
-  await releaseCall({ protocolVersion: 2, operation: "build", projectId: project.id, buildId: applied.buildId }, hostRoot);
-  await releaseCall({
-    protocolVersion: 2,
-    operation: "activate",
-    projectId: project.id,
-    revision: applied.revision,
-    buildId: applied.buildId,
-    expectedActive: null,
-  }, hostRoot);
+  const result = await run(process.execPath, [join(root, "bin/zudo-composer.mjs"), "seed"], { cwd: hostRoot });
+  if (result.status !== 0) throw new Error(`seed exited ${result.status}: ${result.stderr || result.stdout}`);
 }
 
 /**

@@ -6,14 +6,23 @@ import type { BuildSiteOptions } from "../site-build/run.mjs";
 export const RELEASE_ENTRY_PATH: string;
 export const BUILD_SITE_ENTRY_PATH: string;
 export const ASSETS_IMPORT_ENTRY_PATH: string;
+export const SEED_ENTRY_PATH: string;
 export const CLOSE_GRACE_MS: number;
 export const USAGE: string;
+
+export interface SeedOptions {
+  /** Absolute resolved host path; defaults to the current working directory. */
+  workspaceRoot?: string;
+  /** Absolute resolved JSON source; defaults to site-project.json in the host root. */
+  from?: string;
+}
 
 export type ParsedComposerCommand =
   | { command: "dev"; options: Record<string, unknown> }
   | { command: "release"; rest: string[] }
   | { command: "build-site"; options: BuildSiteOptions }
   | { command: "assets-import"; options: { workspaceRoot?: string; manifest?: string } }
+  | { command: "seed"; options: SeedOptions }
   | { command: "help" }
   | { error: string };
 
