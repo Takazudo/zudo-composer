@@ -57,7 +57,7 @@ export function NavLink({ label, href }: NavLinkProps) {
     <a
       href={href}
       aria-current={current ? "page" : undefined}
-      class="text-land-body text-land-fg-strong decoration-land-border underline-offset-4 hover:underline aria-[current=page]:underline aria-[current=page]:decoration-land-fg-strong"
+      class="inline-flex min-h-land-control-h items-center text-land-body text-land-fg-strong decoration-land-border underline-offset-4 hover:underline aria-[current=page]:underline aria-[current=page]:decoration-land-fg-strong"
     >
       {label}
     </a>

@@ -97,6 +97,7 @@
     "test:browser:dev": "node scripts/run-dev-browser.mjs",
     "test:browser:site-project": "node scripts/run-site-project-browser.mjs",
     "test:browser:hosted-demo": "node scripts/run-hosted-demo-browser.mjs",
+    "test:browser:demos": "node scripts/run-demos-browser.mjs",
     "build:hosted-demo": "vite build --config vite.hosted-demo.config.ts && node scripts/check-hosted-demo.mjs",
     "hosted-demo:verify": "node scripts/check-hosted-demo.mjs",
     "hosted-demo:live-check": "node scripts/hosted-demo/live-check.mjs",

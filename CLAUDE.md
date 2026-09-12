@@ -93,8 +93,10 @@ relationship for the external UI-provider dependency.
   contract:negative-scan`, and `corepack pnpm contract:external-install --
   --exact`.
 - Browser lanes: `corepack pnpm test:browser:host`, `corepack pnpm
-  test:browser:dev`, and `corepack pnpm test:browser:site-project`. Each owns one
-  machine-global port, so none may run concurrently, and no lane may rebuild.
+  test:browser:dev`, `corepack pnpm test:browser:site-project`, and `corepack
+  pnpm test:browser:demos` (port 4176, the three `packages/demo-*` hosts). Each
+  owns one machine-global port, so none may run concurrently, and no lane may
+  rebuild.
 - Host install: `corepack pnpm smoke:host-install`, the only proof that packs the
   package and installs it into a project outside this repository.
 

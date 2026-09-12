@@ -53,6 +53,7 @@ jobs:
       # This lane consumes the already-built artifact; it must stay after the
       # build/manifest checks and before the artifact is handed to production.
       - run: pnpm test:browser:hosted-demo
+      - run: pnpm test:browser:demos
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: hosted-demo-${{ github.sha }}
