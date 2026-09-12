@@ -42,7 +42,7 @@ export function NavLink({ label = "Link", href = "/" }: NavLinkProps) {
   return (
     <li>
       <a
-        class={`inline-block py-blog-vsp-xs ${CAPTION} text-blog-fg-strong ${current ? "underline decoration-blog-accent decoration-2 underline-offset-3" : "hover:underline"}`}
+        class={`inline-flex min-h-blog-control-h items-center ${CAPTION} text-blog-fg-strong ${current ? "underline decoration-blog-accent decoration-2 underline-offset-3" : "hover:underline"}`}
         href={href}
         aria-current={current ? "page" : undefined}
       >

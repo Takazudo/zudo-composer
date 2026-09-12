@@ -189,8 +189,29 @@ export default site;
   of the tarball; `scripts/check-package-conformance.mjs` now asserts it.
 - **Install.** The lockfile was regenerated once for the new workspace members;
   `corepack pnpm install --frozen-lockfile` must pass afterwards.
-- **Browser lanes** are not run by implementation tasks. The demos lane (port
-  4176) and the static build lane (4177) belong to later tasks in the epic.
+- **Browser lanes.** `test:browser:demos` (port 4176, `tests/browser-demos`) is
+  wired into CI after the other browser lanes — see "Browser lane" below. The
+  static build's own CI lane (port 4177) belongs to a later task in the epic.
+
+## Browser lane
+
+`pnpm test:browser:demos` (`scripts/run-demos-browser.mjs`) seeds each demo
+package's release in place — `pnpm --filter demo-<name> seed`, with
+`ZUDO_ASSETS_STORE_ROOT` pointed at a disposable copy of the package's
+committed `cms/assets` store so the release step never dirties it — boots that
+package's own `zudo-composer dev` on port 4176, and crawls every route
+`scripts/site-static/compile.ts`'s `compileStaticSite` compiles the package's
+`site-project.json` to (the same compiler the static build uses, so the route
+list can never drift from what a route actually resolves to). For each route
+it checks: 200 on direct navigation and after a reload, an `h1`, and zero
+console errors or failed requests across the whole crawl
+(`tests/runtime-failures.ts`). It also checks no horizontal overflow and a
+tappable (≥44px) primary nav at 375×812, and runs one mock interaction per
+demo: webshop adds a product to the cart and checks the header count; landing
+toggles yearly billing and checks a tier price changes; blog submits a
+comment and checks it appears with a success message. One demo at a time,
+like every other lane in this repository — this one owns port 4176 and none
+of the lanes may run concurrently.
 
 ## Static website build
 
