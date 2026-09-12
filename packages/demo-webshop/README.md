@@ -11,7 +11,7 @@ and the reasoning behind it are in
 Run these commands from this package directory:
 
 ```sh
-corepack pnpm --filter demo-webshop dev --port 4181
+corepack pnpm dev --port 4181
 ```
 
 The committed `initial` workspace opens populated without a seeding step or
@@ -28,7 +28,7 @@ For an explicit source update and local website release:
 
 ```sh
 corepack pnpm generate   # site-project.ts -> site-project.json
-corepack pnpm --filter demo-webshop seed       # images-src -> cms/assets, then an activated release
+corepack pnpm seed       # images-src -> cms/assets, then an activated release
 ```
 
 `seed` imports Assets and activates a local website release in the ignored

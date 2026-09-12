@@ -11,7 +11,7 @@ and the reasoning behind it are in
 Run these commands from this package directory:
 
 ```sh
-corepack pnpm --filter demo-blog dev --port 4183
+corepack pnpm dev --port 4183
 ```
 
 The eight essays are Markdown files in `content/articles/<slug>.md`, read by
@@ -33,7 +33,7 @@ For an explicit source update and local website release:
 
 ```sh
 corepack pnpm generate   # site-project.ts -> site-project.json
-corepack pnpm --filter demo-blog seed       # images-src -> cms/assets, then an activated release
+corepack pnpm seed       # images-src -> cms/assets, then an activated release
 ```
 
 `seed` imports Assets and activates a local website release in the ignored

@@ -11,13 +11,17 @@
     "dev": "zudo-composer dev",
     "generate": "zudo-composer generate",
     "seed": "zudo-composer assets import images-src/manifest.json && zudo-composer seed",
-    "build:site": "pnpm -w demo:build-site blog",
-    "test": "pnpm -w test packages/demo-blog"
+    "build:site": "zudo-composer build-site",
+    "test": "vitest run"
   },
   "devDependencies": {
+    "@testing-library/preact": "^3.2.4",
+    "@types/node": "^26.4.0",
     "@zudo-composer/component-contract": "workspace:*",
+    "jsdom": "^29.1.1",
     "preact": "^10.29.8",
     "preact-render-to-string": "^6.6.6",
+    "vitest": "^4.1.11",
     "zudo-composer": "workspace:*"
   }
 }

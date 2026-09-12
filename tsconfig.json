@@ -13,6 +13,7 @@
     { "path": "./tsconfig.scripts.json" },
     { "path": "./packages/demo-webshop" },
     { "path": "./packages/demo-landing" },
-    { "path": "./packages/demo-blog" }
+    { "path": "./packages/demo-blog" },
+    { "path": "./fixtures/self-host" }
   ]
 }

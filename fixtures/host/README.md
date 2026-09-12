@@ -6,7 +6,7 @@ rooted here, and authored CMS data is written beneath this directory rather than
 beneath the repository root.
 
 ```sh
-corepack pnpm --filter @zudo-composer/fixture-host dev
+corepack pnpm dev
 ```
 
 `cms/` and `public/` are the default data locations from

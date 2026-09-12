@@ -92,8 +92,9 @@ Full authoring and gate-wiring details are in
 Run one locally:
 
 ```sh
-corepack pnpm --filter demo-webshop seed   # idempotent: assets, then an activated release
-corepack pnpm --filter demo-webshop dev --port 4181
+cd packages/demo-webshop
+corepack pnpm seed   # idempotent: assets, then an activated release
+corepack pnpm dev --port 4181
 ```
 
 `/site` serves the activated release; `/composer` and the rest of the
@@ -349,11 +350,12 @@ Each lane owns one port and one server, so none of them may run concurrently:
 | `test:browser:site-project` | this repository's own Vite, with a CLI-activated release | 4174 | `tests/browser/site-project-acceptance.pw.ts` |
 | `test:browser:demos` | `zudo-composer dev`, rooted at each `packages/demo-*` in turn | 4176 | `tests/browser-demos` |
 
-`test:browser:demos` seeds each demo host package's release in place — the
-committed `cms/assets` store gets a disposable copy for the run, so the lane
-never dirties it — boots `zudo-composer dev` for that one package, crawls
-every route the sitemap compiles to, and runs its one mock interaction (see
-[Demo host projects](#demo-host-projects)) before moving to the next demo.
+`test:browser:demos` copies each demo host package's committed `cms/` tree to a
+disposable host-local root and seeds its release under a separate temporary
+root, so the lane never dirties committed CMS data or a developer's own
+release. It boots `zudo-composer dev` for that one package, crawls every route
+the sitemap compiles to, and runs its one mock interaction (see [Demo host
+projects](#demo-host-projects)) before moving to the next demo.
 
 The host lane is the one that runs the package the way a host does — through its
 `bin`, against a project it has never seen. It activates the sample SiteProject
