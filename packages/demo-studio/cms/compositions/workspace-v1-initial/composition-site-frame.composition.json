@@ -1,0 +1,47 @@
+{
+  "id": "site-frame",
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "updatedAt": "2026-08-31T00:00:00.000Z",
+  "document": {
+    "id": "site-frame",
+    "name": "Site frame",
+    "publication": {
+      "kind": "global-template",
+      "outlet": {
+        "id": "main-content",
+        "label": "Main content",
+        "target": {
+          "parentId": "site-frame-stack",
+          "slotId": "content"
+        }
+      }
+    },
+    "root": [
+      {
+        "componentId": "ui.container",
+        "componentVersion": 1,
+        "id": "site-frame-container",
+        "props": {},
+        "slots": {
+          "content": [
+            {
+              "componentId": "ui.stack",
+              "componentVersion": 1,
+              "id": "site-frame-stack",
+              "props": {
+                "align": "stretch",
+                "direction": "vertical",
+                "gap": "xl",
+                "justify": "start"
+              },
+              "slots": {
+                "content": []
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

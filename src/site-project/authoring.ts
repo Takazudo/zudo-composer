@@ -88,7 +88,13 @@ export interface Page {
 }
 
 export type FieldInput =
-  & { key: string; label?: string; required?: boolean }
+  & {
+    /** Stable persisted identity; omitted ids derive from the model and field key. */
+    id?: string;
+    key: string;
+    label?: string;
+    required?: boolean;
+  }
   & (
     | { kind: "text" | "long-text" | "markdown" | "number" | "boolean" | "date" | "slug" | "color" | "url" }
     | { kind: "choice"; options: { value: string; label: string }[] }
@@ -197,6 +203,11 @@ export interface SiteOptions {
   name: string;
   componentPack: TrustedComponentPack | { manifest: ComponentPackManifest };
   timestamp?: string;
+  /**
+   * Order only the aggregate's composition records by ID; defaults to declaration
+   * order. Other record collections and all document sequences keep their order.
+   */
+  compositionOrder?: "id";
 }
 
 export interface Site {
@@ -251,7 +262,7 @@ function kebabFromKey(key: string): string {
 }
 
 function buildField(modelId: string, input: FieldInput): ContentFieldDefinition {
-  const base = { id: `${modelId}-${kebabFromKey(input.key)}`, key: input.key, label: input.label ?? labelFromKey(input.key), required: input.required ?? true };
+  const base = { id: input.id ?? `${modelId}-${kebabFromKey(input.key)}`, key: input.key, label: input.label ?? labelFromKey(input.key), required: input.required ?? true };
   switch (input.kind) {
     case "choice": return { ...base, kind: "choice", options: input.options };
     case "reference": return { ...base, kind: "reference", target: { providerId: CONTENT_PROVIDER_ID, recordId: input.target.id } };
@@ -440,13 +451,15 @@ export function defineSite(options: SiteOptions): Site {
 
     toSiteProject() {
       if (!sitemap) throw new Error(`Site "${options.id}" has no sitemap.`);
+      const compositionRecords = [...compositions.values()];
+      if (options.compositionOrder === "id") compositionRecords.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
       return {
         schemaVersion: 2,
         id: options.id,
         name: options.name,
         componentPack: { contractVersion: manifest.contractVersion, packId: manifest.packId, packVersion: manifest.packVersion },
         providers: {
-          compositions: [{ id: COMPOSITION_PROVIDER_ID, records: [...compositions.values()] }],
+          compositions: [{ id: COMPOSITION_PROVIDER_ID, records: compositionRecords }],
           content: [{ id: CONTENT_PROVIDER_ID, models: [...models.values()], entries: [...entries.values()] }],
           mappings: [{ id: MAPPING_PROVIDER_ID, records: [...mappings.values()] }],
           sitemaps: [{ id: SITEMAP_PROVIDER_ID, records: [sitemap] }],

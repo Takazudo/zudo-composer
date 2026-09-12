@@ -1,0 +1,16 @@
+{
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "generation": 1,
+  "id": "article-moving-parts",
+  "lifecycle": "published",
+  "modelId": "journal-articles",
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-31T00:00:00.000Z",
+  "values": {
+    "article-body-field": "## Draw the relationships\n\nEvery project has more moving parts than anyone can hold in their head. There are people who approve things, systems that feed each other and deadlines that quietly depend on other deadlines. Most surprises come from a connection nobody drew.\n\nEarly in each engagement we make a simple map. We list the people, decisions and dependencies that can change the path of the work, then draw lines between them. The map does not need to be polished. It needs to make the next conversation easier.\n\n## A worked example\n\nA regional library network asked us to help launch a shared booking system for its meeting rooms. On paper the job was a form and a calendar. The team expected six weeks of work.\n\nWe spent the first two days on a map instead. Boxes for each branch, each approval step and each system that stored room data. Arrows for every handoff. Within an hour, three problems appeared that nobody had mentioned.\n\nTwo branches kept their room lists in a spreadsheet that only one person could edit. Evening bookings needed sign-off from a facilities team that was not in the project at all. And the payment system renewed its contract two weeks before the planned launch.\n\nNone of these were design problems, but each one could have stopped the launch. We circled them on the map and gave each one an owner. The facilities lead joined the weekly review. The spreadsheet moved into the shared system in week two. The launch date moved by one week, planned in advance rather than forced at the last minute.\n\n## Keep the map alive\n\nA map drawn once and filed away is only a record. We pin ours to the wall and update it at every review. When a box changes owner or an arrow disappears, we redraw it in front of the team.\n\nThe map also changes the tone of meetings. People stop defending their part of the project and start pointing at the drawing. \"This arrow looks fragile\" is an easier sentence to say than \"your team is late\".\n\nTry it on your next project. Take a large sheet of paper and give yourself twenty minutes. Draw every person and system that can say no, then draw how they connect. Circle anything that surprises you, and give each circle a name.",
+    "article-date-field": "2026-08-12",
+    "article-heading-field": "Map the moving parts",
+    "article-intro-field": "A lightweight map can reveal where timing, ownership, and information need attention.",
+    "article-slug-field": "map-the-moving-parts"
+  }
+}

@@ -1,0 +1,169 @@
+{
+  "id": "journal-index-page",
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "updatedAt": "2026-08-31T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "main-content",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "journal-index-page",
+    "name": "Journal index page",
+    "root": [
+      {
+        "componentId": "ui.section-heading",
+        "componentVersion": 1,
+        "id": "journal-index-heading",
+        "props": {
+          "as": "h1",
+          "eyebrow": "Journal",
+          "heading": "Working notes",
+          "intro": "Short essays on how we frame, map and review work, each drawn from a real kind of project."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "ui.auto-grid",
+        "componentVersion": 1,
+        "id": "journal-index-grid",
+        "props": {
+          "fill": false,
+          "gap": "md",
+          "min": "18rem"
+        },
+        "slots": {
+          "items": [
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "journal-index-card-question",
+              "props": {
+                "padding": "md",
+                "title": "Start with the question",
+                "variant": "default"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "journal-index-card-question-copy",
+                    "props": {
+                      "children": "Published on 5 August 2026. Before choosing a format or feature, name the question the work must answer."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.cta-button",
+                    "componentVersion": 1,
+                    "id": "journal-index-card-question-link",
+                    "props": {
+                      "arrow": true,
+                      "children": "Read Start with the question",
+                      "href": "/journal/start-with-the-question",
+                      "variant": "secondary"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            },
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "journal-index-card-parts",
+              "props": {
+                "padding": "md",
+                "title": "Map the moving parts",
+                "variant": "accent"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "journal-index-card-parts-copy",
+                    "props": {
+                      "children": "Published on 12 August 2026. A lightweight map can reveal where timing, ownership, and information need attention."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.cta-button",
+                    "componentVersion": 1,
+                    "id": "journal-index-card-parts-link",
+                    "props": {
+                      "arrow": true,
+                      "children": "Read Map the moving parts",
+                      "href": "/journal/map-the-moving-parts",
+                      "variant": "secondary"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            },
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "journal-index-card-loops",
+              "props": {
+                "padding": "md",
+                "title": "Review in small loops",
+                "variant": "muted"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "journal-index-card-loops-copy",
+                    "props": {
+                      "children": "Published on 19 August 2026. Small reviews turn abstract agreement into specific, timely feedback."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.cta-button",
+                    "componentVersion": 1,
+                    "id": "journal-index-card-loops-link",
+                    "props": {
+                      "arrow": true,
+                      "children": "Read Review in small loops",
+                      "href": "/journal/review-in-small-loops",
+                      "variant": "secondary"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "ui.callout",
+        "componentVersion": 1,
+        "id": "journal-index-callout",
+        "props": {
+          "title": "Get the notes",
+          "tone": "muted"
+        },
+        "slots": {
+          "body": [
+            {
+              "componentId": "ui.prose-p",
+              "componentVersion": 1,
+              "id": "journal-index-callout-copy",
+              "props": {
+                "children": "We publish one note every few weeks and share it with clients in our monthly project letter."
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

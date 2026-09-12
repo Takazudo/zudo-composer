@@ -1,0 +1,65 @@
+{
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "about-heading-binding",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "about-heading-field",
+        "target": {
+          "nodeId": "about-heading",
+          "prop": "heading"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "about-intro-binding",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "about-intro-field",
+        "target": {
+          "nodeId": "about-heading",
+          "prop": "intro"
+        },
+        "transform": {
+          "kind": "truncate-160"
+        }
+      },
+      {
+        "id": "about-body-binding",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "about-markdown-field",
+        "target": {
+          "nodeId": "about-body",
+          "prop": "markdown"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "about-page"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "about-content"
+    },
+    "id": "about-page-mapping",
+    "mode": {
+      "kind": "single"
+    },
+    "name": "About page mapping",
+    "schemaVersion": 2
+  },
+  "id": "about-page-mapping",
+  "updatedAt": "2026-08-31T00:00:00.000Z"
+}

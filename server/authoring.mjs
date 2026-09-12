@@ -51,7 +51,7 @@ function kebabFromKey(key) {
 }
 function buildField(modelId, input) {
 	const base = {
-		id: `${modelId}-${kebabFromKey(input.key)}`,
+		id: input.id ?? `${modelId}-${kebabFromKey(input.key)}`,
 		key: input.key,
 		label: input.label ?? labelFromKey(input.key),
 		required: input.required ?? true
@@ -369,6 +369,8 @@ function defineSite(options) {
 		},
 		toSiteProject() {
 			if (!sitemap) throw new Error(`Site "${options.id}" has no sitemap.`);
+			const compositionRecords = [...compositions.values()];
+			if (options.compositionOrder === "id") compositionRecords.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
 			return {
 				schemaVersion: 2,
 				id: options.id,
@@ -381,7 +383,7 @@ function defineSite(options) {
 				providers: {
 					compositions: [{
 						id: COMPOSITION_PROVIDER_ID,
-						records: [...compositions.values()]
+						records: compositionRecords
 					}],
 					content: [{
 						id: CONTENT_PROVIDER_ID,

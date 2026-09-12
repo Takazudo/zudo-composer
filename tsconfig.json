@@ -14,6 +14,7 @@
     { "path": "./packages/demo-webshop" },
     { "path": "./packages/demo-landing" },
     { "path": "./packages/demo-blog" },
+    { "path": "./packages/demo-studio" },
     { "path": "./fixtures/self-host" }
   ]
 }
