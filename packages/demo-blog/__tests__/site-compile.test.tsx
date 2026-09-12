@@ -7,7 +7,7 @@ import { renderToString } from "preact-render-to-string";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { CompositionNode } from "../../../src/composer/model/types";
 import type { SiteCompiledRoute } from "../../../src/site-project/compiler";
-import { compileStaticSite, type StaticSiteCompilation } from "../../../scripts/site-static/compile";
+import { compileStaticSite, type StaticSiteCompilation } from "zudo-composer/site-build";
 import { componentPack } from "../components/pack";
 
 const packageRoot = resolve(import.meta.dirname, "..");

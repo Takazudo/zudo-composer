@@ -25,6 +25,14 @@
       "types": "./plugins/index.d.mts",
       "default": "./plugins/index.mjs"
     },
+    "./authoring": {
+      "types": "./server/authoring.d.mts",
+      "default": "./server/authoring.mjs"
+    },
+    "./site-build": {
+      "types": "./server/site-build.d.mts",
+      "default": "./server/site-build.mjs"
+    },
     "./styles": "./src/style.css",
     "./package.json": "./package.json"
   },
@@ -80,7 +88,7 @@
     "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json --pretty false",
     "test": "vitest run",
-    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm provider:boundary && pnpm test && pnpm build && pnpm dist:boundary",
+    "check": "pnpm public:check && pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm provider:boundary && pnpm test && pnpm build && pnpm dist:boundary",
     "headless:negative-scan": "node scripts/check-headless-boundary.mjs",
     "contract:conformance": "node scripts/check-package-conformance.mjs",
     "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
@@ -104,10 +112,13 @@
     "hosted-demo:workflow-guard": "node scripts/hosted-demo/workflow-guard.mjs",
     "hosted-demo:deploy": "node scripts/hosted-demo/deploy.mjs",
     "demo:build-site": "node scripts/build-site-static.mjs",
-    "site-static:verify": "node scripts/check-site-static.mjs"
+    "site-static:verify": "node scripts/check-site-static.mjs",
+    "build:public": "node scripts/build-public-entries.mjs",
+    "public:check": "node scripts/build-public-entries.mjs --check",
+    "public:installed": "node scripts/verify-public-install.mjs"
   },
   "peerDependencies": {
-    "@zudo-composer/component-contract": "1.0.0"
+    "@zudo-composer/component-contract": "^1.0.0"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",
@@ -118,7 +129,6 @@
     "@lezer/highlight": "^1.2.3",
     "@preact/preset-vite": "^2.10.6",
     "@tailwindcss/vite": "^4.3.3",
-    "@zudo-sg/ui": "git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf",
     "preact": "^10.29.8",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.2",
@@ -134,9 +144,12 @@
     "@zudo-composer/component-contract": "workspace:*",
     "@zudo-composer/fixture-themeset": "workspace:*",
     "@zudo-composer/image-editor": "workspace:*",
+    "@zudo-sg/ui": "git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf",
     "eslint": "^10.9.1",
     "jsdom": "^29.1.1",
     "preact-render-to-string": "^6.6.6",
+    "rollup": "4.63.1",
+    "rollup-plugin-dts": "6.5.1",
     "sharp": "^0.35.4",
     "tsx": "^4.20.5",
     "typescript": "~6.0.3",

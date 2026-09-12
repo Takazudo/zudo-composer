@@ -105,9 +105,11 @@ const rootPackageJson = JSON.parse(await readFile(path.join(repositoryRoot, 'pac
 assert(rootPackageJson.private === undefined, 'the root package must stay publishable (no `private`)');
 assert(rootPackageJson.bin?.['zudo-composer'] === './bin/zudo-composer.mjs', 'the `zudo-composer` bin must point at ./bin/zudo-composer.mjs');
 assert(
-  rootPackageJson.peerDependencies?.['@zudo-composer/component-contract'] === '1.0.0',
-  'the contract must be a peerDependency so a host resolves one instance',
+  rootPackageJson.peerDependencies?.['@zudo-composer/component-contract'] === '^1.0.0',
+  'the contract must be a 1.x peer, supplied by the host from the exact handoff or a packed artifact',
 );
+assert(rootPackageJson.dependencies?.['@zudo-sg/ui'] === undefined, 'the demo provider must not be a runtime dependency');
+assert(rootPackageJson.devDependencies?.['@zudo-sg/ui'] !== undefined, 'the demo provider must remain a development dependency');
 
 // Dev-only for this repository, runtime-required for a host: the installed
 // launcher imports all four.
@@ -125,6 +127,8 @@ const expectedRootExports = {
   '.': { types: './server/dev-server.d.mts', default: './server/dev-server.mjs' },
   './config': { types: './server/config/define.d.mts', default: './server/config/define.mjs' },
   './vite': { types: './plugins/index.d.mts', default: './plugins/index.mjs' },
+  './authoring': { types: './server/authoring.d.mts', default: './server/authoring.mjs' },
+  './site-build': { types: './server/site-build.d.mts', default: './server/site-build.mjs' },
   './styles': './src/style.css',
   './package.json': './package.json',
 };
@@ -158,6 +162,10 @@ for (const required of [
   'server/config/index.ts',
   'server/site-project-local/toolchain-config.ts',
   'server/host-context.mjs',
+  'server/public/authoring.mts',
+  'server/public/site-build.mts',
+  'server/site-build/compile.ts',
+  'server/site-build/artifact.mjs',
   'plugins/component-pack.mjs',
   'plugins/component-pack-plugin.mjs',
   'plugins/host-styles-plugin.mjs',
@@ -217,3 +225,12 @@ assert(JSON.stringify(editorSources) === JSON.stringify(packedEditorSources), 'p
 assert(editorSources.every(name => rootPackageJson.files.includes(name)), 'editor runtime sources must be individually allowlisted');
 assert(rootPackageJson.devDependencies?.['@zudo-composer/image-editor'] === 'workspace:*', 'private editor must be a workspace devDependency');
 assert(!rootPackageJson.dependencies?.['@zudo-composer/image-editor'] && !rootPackageJson.peerDependencies?.['@zudo-composer/image-editor'], 'private editor must not be a runtime dependency');
+
+// File-list checks cannot prove a Node import graph. Exercise the public APIs
+// and declarations from tarballs in a host outside this workspace as well.
+try {
+  const result = await execFile(process.execPath, [path.join(repositoryRoot, 'scripts/verify-public-install.mjs')], { cwd: repositoryRoot, maxBuffer: 16 * 1024 * 1024 });
+  console.log(result.stdout.trim());
+} catch (error) {
+  fail(`packed public entry proof failed: ${error instanceof Error ? error.message : String(error)}`);
+}

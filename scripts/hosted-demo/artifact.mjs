@@ -4,32 +4,12 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, extname, join, normalize, resolve, sep } from "node:path";
-import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition, assetMimeTypeForExtension } from "../../src/assets/model/asset-kinds.mjs";
+import { ASSET_CHECKSUM_URL_PATTERN, assetMimeTypeForExtension, hostedAssetHeaders } from "../../src/assets/model/asset-kinds.mjs";
 
 export const HOSTED_DEMO_MANIFEST = "hosted-demo-manifest.json";
 
 // Cloudflare consumes this deployment configuration instead of serving it.
 export const HOSTED_DEMO_HEADERS = "_headers";
-
-/** @param {Array<{ path: string, byteLength: number }>} files @returns {string} */
-export function hostedAssetHeaders(files) {
-  return [...files].sort((a, b) => a.path.localeCompare(b.path)).map(({ path, byteLength }) => {
-    assert.ok(Number.isSafeInteger(byteLength) && byteLength > 0, `Invalid asset byte length: ${path}`);
-    assert.ok(ASSET_CHECKSUM_URL_PATTERN.test(`/${path}`), `Invalid hosted asset path: ${path}`);
-    const mime = assetMimeTypeForExtension(path.slice(path.lastIndexOf(".") + 1));
-    assert.ok(mime, `Missing asset MIME: ${path}`);
-    const checksum = path.slice("uploaded-assets/sha256-".length, path.lastIndexOf("."));
-    const disposition = assetContentDisposition(mime, checksum);
-    return [
-      `/${path}`,
-      `  Content-Type: ${mime}`,
-      `  Content-Length: ${byteLength}`,
-      `  Cache-Control: ${ASSET_IMMUTABLE_CACHE_CONTROL}`,
-      `  X-Content-Type-Options: ${ASSET_NOSNIFF}`,
-      ...(disposition ? [`  Content-Disposition: ${disposition}`] : []),
-    ].join("\n");
-  }).join("\n\n") + "\n";
-}
 
 const MIME_BY_EXTENSION = new Map([
   [".css", "text/css"],

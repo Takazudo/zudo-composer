@@ -1,6 +1,6 @@
 // @ts-check
 // `node scripts/check-site-static.mjs <dist-site dir> [expected git SHA]`
-import { verifySiteStaticArtifact } from "./site-static/artifact.mjs";
+import { verifySiteStaticArtifact } from "../server/site-build.mjs";
 
 const arguments_ = process.argv.slice(2);
 if (arguments_[0] === "--") arguments_.shift();

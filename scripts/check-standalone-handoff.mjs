@@ -34,12 +34,12 @@ assert.deepEqual(SITE_ROUTES, [
   "/site/journal/start-with-the-question",
 ]);
 assert.deepEqual(SPA_ROUTES, [...AUTHORING_ROUTES, ...SITE_ROUTES]);
-assert.equal(packageJson.dependencies["@zudo-sg/ui"], providerSpec);
+assert.equal(packageJson.devDependencies["@zudo-sg/ui"], providerSpec);
 // The contract is a peer of the published package and a workspace dev
 // dependency of this repository. Both halves are load-bearing: the peer keeps a
 // host on one contract instance, the dev spec keeps `workspace:*` out of what
 // ships.
-assert.equal(packageJson.peerDependencies["@zudo-composer/component-contract"], "1.0.0");
+assert.equal(packageJson.peerDependencies["@zudo-composer/component-contract"], "^1.0.0");
 assert.equal(packageJson.devDependencies["@zudo-composer/component-contract"], "workspace:*");
 assert.equal(packageJson.dependencies["@zudo-composer/component-contract"], undefined);
 assert.equal(contractHandoff.rootGitSpec, contractSpec);
@@ -248,7 +248,7 @@ for (const path of [
 assert.doesNotMatch(read("src/components/icons/index.ts"), /Composer\/styleguide/i, "icon ownership must remain standalone Composer/Sitemapper app chrome");
 
 for (const forbidden of ["workspace:", "file:", "link:", "path:", "packages/ui", "../zudo-sg"]) {
-  assert.ok(!packageJson.dependencies["@zudo-sg/ui"].includes(forbidden), `provider spec uses forbidden resolution: ${forbidden}`);
+  assert.ok(!packageJson.devDependencies["@zudo-sg/ui"].includes(forbidden), `provider spec uses forbidden resolution: ${forbidden}`);
 }
 
 console.log("Standalone handoff boundary passed: tool/host ownership framing, the bin/config/dataDir host contract, routes, provider/contract identities, and clean-break policy are locked.");

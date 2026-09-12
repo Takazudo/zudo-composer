@@ -7,8 +7,7 @@ import tailwindcss from "@tailwindcss/vite";
 import componentPackPlugin from "./plugins/component-pack-plugin.mjs";
 import hostStylesPlugin from "./plugins/host-styles-plugin.mjs";
 import { loadHostContext } from "./server/host-context.mjs";
-import { compileStaticSite } from "./scripts/site-static/compile";
-import { SITE_MANIFEST, SITE_HEADERS, createSiteManifest, siteHeaders } from "./scripts/site-static/artifact.mjs";
+import { compileStaticSite, SITE_MANIFEST, SITE_HEADERS, createSiteManifest, siteHeaders } from "./server/site-build.mjs";
 
 const root = import.meta.dirname;
 const STUBBED = ["virtual:composer-file-provider-config", "virtual:composer-domain-providers", "virtual:release-config", "virtual:site-project-source"];

@@ -6,8 +6,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { lstat, readdir, readFile } from "node:fs/promises";
 import { join, normalize, resolve, sep } from "node:path";
-import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL } from "../../src/assets/model/asset-kinds.mjs";
-import { hostedAssetHeaders } from "../hosted-demo/artifact.mjs";
+import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, hostedAssetHeaders } from "../../src/assets/model/asset-kinds.mjs";
 
 export const SITE_MANIFEST = "site-manifest.json";
 

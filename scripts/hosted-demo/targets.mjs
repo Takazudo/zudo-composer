@@ -10,7 +10,7 @@
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { HOSTED_DEMO_MANIFEST, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
-import { SITE_HEADERS, SITE_MANIFEST, verifySiteStaticArtifact } from "../site-static/artifact.mjs";
+import { SITE_HEADERS, SITE_MANIFEST, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
 import { SPA_ROUTES } from "../routes.mjs";
 
 const root = resolve(fileURLToPath(new URL("../../", import.meta.url)));

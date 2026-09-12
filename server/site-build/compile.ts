@@ -7,7 +7,8 @@ import { createFilesystemAssetStore } from "../../src/assets/storage/filesystem"
 import type { VersionedAssetStore } from "../../src/assets/library";
 import { captureSiteProjectAssetLock } from "../../src/site-project/assets/capture";
 import { compileSiteProject, type SiteBuildPlan } from "../../src/site-project/compiler";
-import { validateSiteProject, type SiteProject } from "../../src/site-project";
+import { validateSiteProject } from "../../src/site-project/model/validation";
+import type { SiteProject } from "../../src/site-project/model/types";
 import { serializeSiteProject } from "../../src/site-project/model/canonical";
 
 export interface StaticSiteCompilation {

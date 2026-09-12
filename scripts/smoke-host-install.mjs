@@ -220,10 +220,8 @@ try {
       "@zudo-composer/component-contract": `file:${tarballs["@zudo-composer/component-contract"]}`,
     },
   }, null, 2)}\n`);
-  // This disposable host explicitly accepts the tool's SHA-pinned Git provider.
-  // pnpm 11 blocks Git subdependencies by default; keep this host-local, never
-  // change the user's global settings. Build permissions stay package-specific.
-  await writeFile(join(hostRoot, "pnpm-workspace.yaml"), 'blockExoticSubdeps: false\nallowBuilds:\n  "@zudo-composer/component-contract": true\n  esbuild: true\n');
+  // Build permissions stay package-specific; this host needs no Git subdependency exception.
+  await writeFile(join(hostRoot, "pnpm-workspace.yaml"), 'allowBuilds:\n  "@zudo-composer/component-contract": true\n  esbuild: true\n');
 
   step("installing");
   await run(pnpm, ["install"], hostRoot);

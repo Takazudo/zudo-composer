@@ -200,7 +200,7 @@ package's release in place — `pnpm --filter demo-<name> seed`, with
 `ZUDO_ASSETS_STORE_ROOT` pointed at a disposable copy of the package's
 committed `cms/assets` store so the release step never dirties it — boots that
 package's own `zudo-composer dev` on port 4176, and crawls every route
-`scripts/site-static/compile.ts`'s `compileStaticSite` compiles the package's
+`server/site-build/compile.ts`'s `compileStaticSite` compiles the package's
 `site-project.json` to (the same compiler the static build uses, so the route
 list can never drift from what a route actually resolves to). For each route
 it checks: 200 on direct navigation and after a reload, an `h1`, and zero

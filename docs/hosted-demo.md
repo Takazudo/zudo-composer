@@ -72,7 +72,7 @@ verifies `dist-hosted-demo` against the hosted-demo manifest contract above;
 the other three verify a `dist-site` directory (built by `pnpm demo:build-site
 <webshop|landing|blog>`, see [`docs/demo-sites/README.md`](./demo-sites/README.md))
 against the static-site manifest contract in
-[`scripts/site-static/artifact.mjs`](../scripts/site-static/artifact.mjs) —
+[`server/site-build/artifact.mjs`](../server/site-build/artifact.mjs) —
 `site-manifest.json` instead of `hosted-demo-manifest.json`, and a live route
 list read from that manifest's own `routes` array instead of the fixed
 authoring/sample list. `deploy.mjs`'s `preflightDeployment`/`deployHostedDemo`

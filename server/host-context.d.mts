@@ -7,12 +7,14 @@ export function loadHostConfig(
   env?: Record<string, string | undefined>,
 ): Promise<ResolvedComposerConfig>;
 
-export function loadHostContext(options?: {
-  workspaceRoot?: string;
-  env?: Record<string, string | undefined>;
-}): Promise<{
+export interface HostContext {
   composerConfig: ResolvedComposerConfig;
   pack: TrustedComponentPack;
   packIdentity: ResolvedComponentPack;
   workspaceRoot: string;
-}>;
+}
+
+export function loadHostContext(options?: {
+  workspaceRoot?: string;
+  env?: Record<string, string | undefined>;
+}): Promise<HostContext>;
