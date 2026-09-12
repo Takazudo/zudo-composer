@@ -43,6 +43,13 @@ seed options:
   --root <dir>     Host project root (default: the current directory).
   --from <file>    Committed project JSON (relative to cwd; default:
                   site-project.json under the host project root).
+  --ready-workspace
+                  Produce a selected, complete, reproducible CMS workspace.
+                  Uses a disposable release; no host activation is needed.
+                  Identical output is unchanged; different existing state fails.
+  --output <dir>  With --ready-workspace, use this fresh output tree (relative
+                  to cwd), preserving the host's configured relative layout.
+                  Print release identity, status, directories and file digests.
 
 build-site options:
   --root <dir>     Host project root (default: the current directory).
@@ -87,10 +94,13 @@ export function parseArguments(argv) {
       if (root === undefined) return { error: "--root requires a directory." };
       options.workspaceRoot = resolve(root);
     } else if (command === "seed") {
-      if (argument !== "--from") return { error: `Unknown seed option "${argument}".` };
-      const from = value();
-      if (from === undefined) return { error: "--from requires a file." };
-      options.from = resolve(from);
+      if (argument === "--ready-workspace") options.readyWorkspace = true;
+      else if (argument === "--from" || argument === "--output") {
+        const path = value();
+        if (path === undefined) return { error: `${argument} requires ${argument === "--from" ? "a file" : "a directory"}.` };
+        if (argument === "--from") options.from = resolve(path);
+        else options.outputRoot = resolve(path);
+      } else return { error: `Unknown seed option "${argument}".` };
     } else if (command === "build-site") {
       if (argument === "--print-routes") options.printRoutes = true;
       else if (argument === "--verify") {
@@ -110,6 +120,7 @@ export function parseArguments(argv) {
       options.port = Number(port);
     } else return { error: `Unknown dev option "${argument}".` };
   }
+  if (command === "seed" && options.outputRoot !== undefined && !options.readyWorkspace) return { error: "--output requires --ready-workspace." };
   return { command, options };
 }
 
@@ -233,10 +244,12 @@ export async function runComposerCli(argv, deps = {}) {
     return;
   }
   if (parsed.command === "seed") {
-    const { workspaceRoot, from } = parsed.options;
+    const { workspaceRoot, from, readyWorkspace, outputRoot } = parsed.options;
     const args = [SEED_ENTRY_PATH];
     if (workspaceRoot !== undefined) args.push("--root", workspaceRoot);
     if (from !== undefined) args.push("--from", from);
+    if (readyWorkspace) args.push("--ready-workspace");
+    if (outputRoot !== undefined) args.push("--output", outputRoot);
     spawnSupervised({
       command: proc.execPath,
       args,

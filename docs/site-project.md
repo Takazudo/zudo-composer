@@ -10,6 +10,65 @@ The current local release API is **protocol 2**. There are no protocol-1 readers
 migrations, compatibility adapters, or second active-build pointer. An old local
 layout is refused and preserved for explicit operator inspection/reset.
 
+## Committed ready workspace
+
+`zudo-composer seed --ready-workspace` produces a reproducible, selected CMS
+workspace from the host's committed `site-project.json`. Import the host's Assets
+first when the project references them, then generate the workspace:
+
+```sh
+zudo-composer assets import images-src/manifest.json
+zudo-composer seed --ready-workspace
+```
+
+`--root <host>` selects the host config and pack. `--from <file>` selects another
+committed JSON file, relative to the caller's working directory. Domain paths
+come from that config, including a moved `dataDir` and explicit domain overrides;
+the global Assets store stays separate. This mode uses the existing seed
+publish/plan/apply/build/activate service in disposable staging, so all committed
+entries are published and blocking release checks fail before CMS publication.
+It does not create or require the host's `.zudo-site-project` directory. Plain
+`seed` still activates a host-local release for website delivery.
+
+The generated `initial` workspace is selected through the real registry
+`complete()` operation. Its ready record has the completed mutation token and
+has no `seed`, `requiresBeforeComplete`, or `seedCleanupPending`. Transactional
+writers compute every current-generation document digest. All four scoped
+domain directories are included, even when empty; an empty Composition
+directory contains `.gitkeep` so Git retains it. Normal development opens this
+selected workspace without creation options, even when the dev source reports
+`no-active`. A ready workspace supplies authoring data; website delivery still
+requires its own activated release.
+
+The command prints one JSON object with `projectId`, `revision`, `buildId`,
+`workspaceId`, `status` (`created` or `unchanged`), `directories`, and `files`.
+`directories` lists every generated directory, including empty ones; `files`
+lists `{ "path": "…", "digest": "<sha256>" }` for every generated file. Both
+inventories are sorted and relative to the output root. Commit the listed files
+with their source. Fresh generation uses deterministic, domain-scoped tokens
+derived from the release identity, format/schema, generation, prior token, and
+canonical records. Ordinary authoring stores continue to use random tokens.
+
+Rerunning with identical source, Assets, toolchain, and destination bytes returns
+`unchanged` without rewriting files. Existing authored, partial, or otherwise
+different destinations are refused and preserved. Generate source changes into
+a fresh output tree for review before replacing previously generated files:
+
+```sh
+zudo-composer seed --ready-workspace --output /tmp/my-site-ready-review
+```
+
+`--output` is relative to the caller's working directory and retains the host's
+configured relative directory layout. The source host still provides its config,
+pack, and Assets. This command and its exact inventory support repository
+regeneration/check commands through the installed CLI. No generation or registry
+JSON should be edited by hand. The producer owns the four `workspace-v1-initial` directories and the
+whole `<dataDir>/workspaces` registry; it refuses to merge another workspace into
+that registry. Run generation while authoring is stopped. Publication copies the
+completed registry last and refuses destination collisions; an I/O failure may
+leave partial generated destinations requiring inspection and a fresh output
+tree, and is always a nonzero error.
+
 ## Review, stage, build, activate
 
 1. `plan` constructs a detached delivery candidate, real Changes, Checks and

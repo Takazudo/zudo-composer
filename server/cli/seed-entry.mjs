@@ -18,13 +18,15 @@ if ("error" in parsed) {
     const { composerConfig, pack, packIdentity } = await loadHostContext(parsed.options);
     const source = parsed.options.from ?? resolve(composerConfig.workspaceRoot, "site-project.json");
     const project = JSON.parse(await readFile(source, "utf8"));
-    const { seedSiteProject } = /** @type {typeof import("../site-project-local/seed.js")} */ (
-      await createModuleEvaluator(APP_ROOT)(resolve(APP_ROOT, "server/site-project-local/seed.ts"))
-    );
-    const result = await seedSiteProject(project, {
-      pack, packIdentity, workspaceRoot: composerConfig.workspaceRoot,
-      assetsStoreRoot: validateAssetStoreRoot(process.env.ZUDO_ASSETS_STORE_ROOT) ?? composerConfig.paths.assets,
-    });
+    const evaluate = createModuleEvaluator(APP_ROOT);
+    const result = parsed.options.readyWorkspace
+      ? await (/** @type {typeof import("./ready-workspace.js")} */ (await evaluate(resolve(APP_ROOT, "server/cli/ready-workspace.ts"))))
+        .produceReadyWorkspace(project, { config: composerConfig, pack, packIdentity, outputRoot: parsed.options.outputRoot })
+      : await (/** @type {typeof import("../site-project-local/seed.js")} */ (await evaluate(resolve(APP_ROOT, "server/site-project-local/seed.ts"))))
+        .seedSiteProject(project, {
+          pack, packIdentity, workspaceRoot: composerConfig.workspaceRoot,
+          assetsStoreRoot: validateAssetStoreRoot(process.env.ZUDO_ASSETS_STORE_ROOT) ?? composerConfig.paths.assets,
+        });
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } catch (error) {
     process.stderr.write(`[zudo-composer] seed failed: ${error instanceof Error ? error.message : String(error)}\n`);

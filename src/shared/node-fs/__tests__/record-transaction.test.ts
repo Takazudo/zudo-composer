@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { MUTATION_LOCK_FILENAME } from "../mutation-lock";
-import { createTransactionalRecordStore, type RecordEnvelope } from "../record-transaction";
+import { createTransactionalRecordStore, type RecordEnvelope, type RecordMutationTokenSource } from "../record-transaction";
 
 type Operation = "initialize" | "snapshot" | "commit";
 
@@ -41,7 +41,7 @@ afterEach(async () => {
   await Promise.all(sandboxes.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
 });
 
-function store(root: string, operations?: Record<string, unknown>) {
+function store(root: string, operations?: Record<string, unknown>, newMutationToken?: RecordMutationTokenSource) {
   return createTransactionalRecordStore<Operation>({
     root,
     schemaVersion: 1,
@@ -51,6 +51,7 @@ function store(root: string, operations?: Record<string, unknown>) {
     recordLabel: "test record",
     now: () => "2026-09-01T00:00:00.000Z",
     phases: { initialize: "initialize", snapshot: "snapshot", commit: "commit" },
+    newMutationToken,
     ...(operations === undefined ? {} : { operations: operations as never }),
   });
 }
@@ -63,6 +64,44 @@ async function liveRecordFiles(root: string): Promise<string[]> {
 }
 
 describe("transactional record store", () => {
+  it("supplies ordered records and advancing schema/generation context to isolated token sources", async () => {
+    const seen: Parameters<RecordMutationTokenSource>[0][] = [];
+    const source: RecordMutationTokenSource = (next) => { seen.push(next); return String(next.generation).repeat(64); };
+    const written = await store(await sandbox(), undefined, source);
+    const records = [record("beta", "two"), record("alpha", "one")];
+    await written.commit(() => ({ records, result: null }));
+    const first = await written.snapshot();
+    await written.commit(() => ({ records, result: null }));
+    const second = await written.snapshot();
+    expect(seen).toEqual([
+      { schemaVersion: 1, generation: 1, previousMutationToken: "0".repeat(64), records: [...records].reverse() },
+      { schemaVersion: 1, generation: 2, previousMutationToken: first.mutationToken, records: [...records].reverse() },
+    ]);
+    expect(second.mutationToken).not.toBe(first.mutationToken);
+    const live = await store(written.root);
+    await live.commit(() => ({ records, result: null }));
+    expect((await live.snapshot()).mutationToken).not.toBe(second.mutationToken);
+  });
+
+  it.each(["invalid", "0".repeat(64), `${"a".repeat(64)}\n`])("refuses a malformed or nonadvancing token before staging: %s", async (token) => {
+    const root = await sandbox();
+    const written = await store(root, undefined, () => token);
+    await expect(written.commit(() => ({ records: [record("alpha", "one")], result: null })))
+      .rejects.toMatchObject({ code: "write-failed", message: expect.stringContaining("mutation token source") });
+    expect(await written.snapshot()).toMatchObject({ generation: 0, records: [] });
+    expect(await fs.readdir(join(root, "generations"))).toEqual([]);
+  });
+
+  it("preserves a committed generation when a constant source reuses its token", async () => {
+    const written = await store(await sandbox(), undefined, () => "a".repeat(64));
+    await written.commit(() => ({ records: [record("alpha", "one")], result: null }));
+    const before = await written.snapshot();
+    await expect(written.commit(() => ({ records: [record("alpha", "two")], result: null })))
+      .rejects.toMatchObject({ code: "write-failed", message: expect.stringContaining("mutation token source") });
+    expect(await written.snapshot()).toEqual(before);
+    expect(await fs.readdir(join(written.root, "generations"))).toEqual(["1"]);
+  });
+
   it("commits a multi-record transaction as one visible step", async () => {
     const root = await sandbox();
     const written = await store(root);
