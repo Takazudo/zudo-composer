@@ -26,7 +26,7 @@ import { APP_ROOT, resolveAppWarmupFiles, resolveFsAllow, resolvePublicDir, reso
 import { createModuleEvaluator } from "./module-evaluator.mjs";
 import { loadHostConfig } from "./host-context.mjs";
 
-import { resolveImageEditorAliases } from "../plugins/image-editor-aliases.mjs";
+import { resolveComposerModules } from "../plugins/module-resolution.mjs";
 
 export { loadHostConfig };
 
@@ -73,14 +73,7 @@ export async function resolveComposerDevConfig(options = {}) {
         // on a full-reload discovery round.
         entries: [resolve(APP_ROOT, APP_ENTRY_MODULE)],
       },
-      resolve: {
-        // Preact is a host peer. Resolve the app, optimizer and component pack
-        // through that one copy, including hooks and every public subpath.
-        // Let Preact's exports choose browser/ESM entries instead of pinning
-        // individual files or directories beside this package.
-        dedupe: ["preact"],
-        alias: resolveImageEditorAliases(),
-      },
+      resolve: resolveComposerModules(),
       server: {
         fs: { allow: [...resolveFsAllow(workspaceRoot), componentPack.identity.packageRoot] },
         watch: { ignored: resolveWatchIgnored([paths.data, paths.compositions, paths.content, paths.mappings, paths.sitemaps, paths.assets, paths.publicAssets, resolveSiteProjectLocalRoot(workspaceRoot)]) },
