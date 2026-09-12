@@ -18,7 +18,7 @@ import type { TrustedComponentPack } from "@zudo-composer/component-contract";
 import type { ResolvedComponentPack } from "../../plugins/component-pack.d.mts";
 import type { ReleaseToolchain } from "../../src/site-project/api/types";
 import { releaseJson } from "../../src/site-project/api/review";
-import { installedPackageDigest } from "./installed-identity";
+import { installedContractDigest, installedPackageDigest } from "./installed-identity";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
@@ -105,6 +105,6 @@ export async function resolveLocalReleaseToolchain(options: LocalReleaseToolchai
     // Realpath first: a package manager reaches an installed package through a
     // symlink, and the digest refuses to hash a link.
     installedPackDigest: await installedPackageDigest(await realpath(packRoot)),
-    contractDigest: await installedPackageDigest(await realpath(contractPackageRoot(import.meta.dirname))),
+    contractDigest: await installedContractDigest(await realpath(contractPackageRoot(import.meta.dirname))),
   };
 }

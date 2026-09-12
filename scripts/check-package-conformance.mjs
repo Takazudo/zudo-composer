@@ -5,6 +5,7 @@ import { access, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CONTRACT_IDENTITY_ENTRIES } from '../server/site-project-local/contract-entries.mjs';
 
 const execFile = promisify(execFileCallback);
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -47,7 +48,7 @@ const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
 assert(packageJson.name === '@zudo-composer/component-contract', 'package name changed');
 assert(packageJson.version === '1.0.0', 'contract package version must remain 1.0.0');
 assert(packageJson.sideEffects === false, 'contract package must remain side-effect free');
-assert(Array.isArray(packageJson.files) && packageJson.files.includes('dist'), 'package files must include dist');
+assert(JSON.stringify(packageJson.files) === JSON.stringify(CONTRACT_IDENTITY_ENTRIES.filter((entry) => entry !== 'package.json')), 'contract files must match the published release identity entries');
 assert(packageJson.dependencies === undefined || Object.keys(packageJson.dependencies).length === 0, 'generic contract must not have runtime dependencies');
 assert(packageJson.scripts?.prepare === 'pnpm run build', 'Git consumers must prepare from the package directory');
 
@@ -87,6 +88,24 @@ for (const output of [
 }
 assert([...packedPaths].every((entry) => !entry.startsWith('src/')), 'packed artifact must not expose TypeScript sources');
 assert([...packedPaths].every((entry) => !entry.endsWith('.test.ts')), 'packed artifact must not expose package tests');
+
+// Compare the exact published inputs release identity hashes, including new
+// dist chunks and declarations. Documentation is not a release identity input.
+/** @param {string} entry @returns {Promise<string[]>} */
+async function contractIdentityFiles(entry) {
+  if (entry === 'package.json') return [entry];
+  const files = [];
+  for (const child of await readdir(path.join(packageRoot, entry), { withFileTypes: true })) {
+    const name = `${entry}/${child.name}`;
+    assert(!child.isSymbolicLink(), `contract identity must not follow a link: ${name}`);
+    if (child.isDirectory()) files.push(...await contractIdentityFiles(name));
+    else { assert(child.isFile(), `contract identity contains a non-regular file: ${name}`); files.push(name); }
+  }
+  return files;
+}
+const contractIdentityPaths = (await Promise.all(CONTRACT_IDENTITY_ENTRIES.map(contractIdentityFiles))).flat().sort();
+const packedContractIdentityPaths = [...packedPaths].filter((entry) => CONTRACT_IDENTITY_ENTRIES.some((root) => entry === root || entry.startsWith(`${root}/`))).sort();
+assert(JSON.stringify(packedContractIdentityPaths) === JSON.stringify(contractIdentityPaths), 'packed contract release identity entries must match disk exactly');
 
 console.log(`Package conformance passed: ${packageJson.name}@${packageJson.version}`);
 
@@ -162,6 +181,7 @@ for (const required of [
   'server/module-evaluator.mjs',
   'server/config/index.ts',
   'server/site-project-local/toolchain-config.ts',
+  'server/site-project-local/contract-entries.mjs',
   'server/host-context.mjs',
   'server/public/authoring.mts',
   'server/public/site-build.mts',
@@ -178,29 +198,12 @@ for (const required of [
   'plugins/host-styles-plugin.mjs',
   'plugins/roots.mjs',
   'plugins/composer-app-html.mjs',
-  'packages/component-contract/src/index.ts',
 ]) {
   assert(rootPackedPaths.has(required), `packed archive omits the runtime file ${required}`);
 }
 
-// `compilerIdentity()` hashes every non-test source under the contract's `src`,
-// so the archive must carry exactly that set. The allowlist names those files
-// one by one — a directory entry would drag the colocated test in, because the
-// nested `package.json` makes the parent's negations stop applying inside it —
-// and naming files is only safe while something notices a new one.
-const contractSources = (await readdir(path.join(packageRoot, 'src')))
-  .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
-  .sort();
-const packedContractSources = [...rootPackedPaths]
-  .filter((entry) => entry.startsWith('packages/component-contract/src/'))
-  .map((entry) => entry.slice('packages/component-contract/src/'.length))
-  .sort();
-assert(
-  JSON.stringify(packedContractSources) === JSON.stringify(contractSources),
-  `packed contract sources drifted from disk: add the missing file to the root \`files\` allowlist (packed ${JSON.stringify(packedContractSources)}, on disk ${JSON.stringify(contractSources)})`,
-);
-
 for (const packed of rootPackedPaths) {
+  assert(!packed.startsWith('packages/component-contract/'), `packed tool must use its contract peer: ${packed}`);
   assert(!/(?:^|\/)__tests__\//u.test(packed), `packed archive exposes a test directory: ${packed}`);
   assert(!/(?:^|\/)type-tests\//u.test(packed), `packed archive exposes type tests: ${packed}`);
   assert(!/\.test\./u.test(packed), `packed archive exposes a test file: ${packed}`);

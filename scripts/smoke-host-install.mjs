@@ -11,7 +11,7 @@
 // it, keep the data across a restart, and still own that data once the tool is
 // removed again?
 //
-// Five claims, in order, each failing loudly on its own line:
+// Six claims, in order, each failing loudly on its own line:
 //   1. install   — the packed tarball resolves and installs from a bare host
 //   2. boot      — `zudo-composer dev` serves every documented route with NO
 //                  prerequisite sample activation
@@ -19,7 +19,9 @@
 //                  disk, under the host's own configured directories
 //   4. restart   — a restarted server and a FRESH browser context still see it,
 //                  which is what proves nothing hid in browser storage
-//   5. discard   — removing the tool leaves the CMS data behind, readable
+//   5. release   — activated releases validate across checkout/packed runtimes
+//                  in both directions, through the actual release CLI/reader
+//   6. discard   — removing the tool leaves the CMS data behind, readable
 //
 // It deliberately uses the host-self-reference pack shape: the host owns its
 // components, so the proof needs no second package and stays about zudo-composer.
@@ -30,6 +32,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 import { chromium } from "@playwright/test";
+import { verifyReleasePortability } from "./verify-release-portability.mjs";
 
 /** @typedef {import("node:child_process").ExecFileOptionsWithStringEncoding} ExecFileOptions */
 /** @typedef {import("@playwright/test").Page} Page */
@@ -226,6 +229,7 @@ try {
 
   step("installing");
   await run(pnpm, ["install"], hostRoot);
+  await run(pnpm, ["install", "--frozen-lockfile"], hostRoot);
   const installedTree = await tree(hostRoot);
 
   step("booting, with no sample activation of any kind");
@@ -294,11 +298,6 @@ try {
     throw new Error(`No file under ${sitemapsDirectory} carries the authored name.`);
   }
 
-  step("checking that every write landed inside the host's own directories");
-  const written = (await tree(hostRoot)).filter((path) => !installedTree.includes(path));
-  const escaped = written.filter((path) => !WRITABLE.includes(path.split("/")[0]));
-  if (escaped.length > 0) throw new Error(`Writes escaped the host's directories: ${escaped.join(", ")}`);
-
   step("restarting the server and reopening in a fresh browser context");
   await server.stop();
   server = await startHostServer(hostRoot);
@@ -310,9 +309,17 @@ try {
   await browser.close();
   browser = undefined;
 
-  step("removing the tool and confirming the host keeps its data");
   await server.stop();
   server = undefined;
+  step("releasing and validating activation across checkout and packed runtimes in both directions");
+  await verifyReleasePortability({ checkoutRoot: root, hostRoot });
+
+  step("checking that every write landed inside the host's own directories");
+  const written = (await tree(hostRoot)).filter((path) => !installedTree.includes(path));
+  const escaped = written.filter((path) => !WRITABLE.includes(path.split("/")[0]));
+  if (escaped.length > 0) throw new Error(`Writes escaped the host's directories: ${escaped.join(", ")}`);
+
+  step("removing the tool and confirming the host keeps its data");
   const manifest = /** @type {HostManifest} */ (JSON.parse(await readFile(join(hostRoot, "package.json"), "utf8")));
   delete manifest.devDependencies["zudo-composer"];
   await writeFile(join(hostRoot, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
