@@ -76,8 +76,8 @@ export function Stats(props: StatsProps) {
   ].filter(([value]) => value);
   return (
     <dl class="grid gap-land-vsp-md text-center land-md:grid-cols-3">
-      {stats.map(([value, label]) => (
-        <div key={value} class="flex flex-col-reverse gap-land-vsp-xs">
+      {stats.map(([value, label], index) => (
+        <div key={index} class="flex flex-col-reverse gap-land-vsp-xs">
           <dt class="text-land-body text-land-muted">{label}</dt>
           <dd class="text-land-price tracking-land-tight text-land-fg-strong tabular-nums">{value}</dd>
         </div>

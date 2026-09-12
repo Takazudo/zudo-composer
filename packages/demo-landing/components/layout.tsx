@@ -90,7 +90,7 @@ export function SectionHeading({ eyebrow, heading, intro, as, align }: SectionHe
 
 /** An `<img>` with an empty-source placeholder, so a fresh node never shows a broken image. */
 export function Picture({ src, alt, class: className }: { src: string; alt: string; class: string }) {
-  if (!src) return <div role="img" aria-label={alt || undefined} class={`bg-land-surface ${className}`} />;
+  if (!src) return alt ? <div role="img" aria-label={alt} class={`bg-land-surface ${className}`} /> : <div aria-hidden="true" class={`bg-land-surface ${className}`} />;
   return <img src={src} alt={alt} loading="lazy" class={`object-cover ${className}`} />;
 }
 

@@ -131,8 +131,8 @@ export function PricingTier(props: PricingTierProps) {
         <p class="text-land-caption text-land-muted">{yearly ? "per month, billed yearly" : "per month"}</p>
       </div>
       <ul class="flex flex-1 flex-col gap-land-vsp-xs">
-        {features.map((feature) => (
-          <li key={feature} class="flex items-start gap-land-hsp-xs text-land-body text-land-fg">
+        {features.map((feature, index) => (
+          <li key={index} class="flex items-start gap-land-hsp-xs text-land-body text-land-fg">
             <Icon name="check" class={`size-land-icon shrink-0 ${props.popular ? "text-land-accent" : "text-land-muted"}`} />
             <span>{feature}</span>
           </li>
