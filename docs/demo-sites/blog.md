@@ -21,8 +21,9 @@ Rules are 1px hairlines; images are full-measure rectangles with captions.
 1. Accent (`blog-accent`, oxblood) in chrome ≤ 1 element per viewport (the
    current nav item underline, the drop cap, or the comment-form button) —
    never two at once. The active tag chip is neutral (`blog-surface-2` fill,
-   `blog-fg-strong` text) because `/articles` already shows the nav underline. Prose links are also accent (underline), but
-   prose links are text, not chrome, and are excluded from this count.
+   `blog-fg-strong` text) because `/articles` already shows the nav
+   underline. Prose links are also accent (underline), but prose links are
+   text, not chrome, and are excluded from this count.
 2. Hover on prose links = `text-blog-fg-strong` with the underline kept;
    hover on chrome links (nav, card titles, tags) = underline appears, colour
    unchanged. No background fills on hover, no accent hover.
