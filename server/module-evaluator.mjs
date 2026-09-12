@@ -1,6 +1,6 @@
 // @ts-check
-// Evaluating the package's own TypeScript modules, and the host's config,
-// through Vite.
+// Evaluating tool-owned TypeScript and host-owned config/pack modules through
+// Vite, rooted at the owner of the entry being evaluated.
 //
 // Neither can be `import()`ed: they are TypeScript, and Node refuses to strip
 // types for anything under `node_modules` — which is exactly where an installed
@@ -14,9 +14,10 @@
 
 import { pathToFileURL } from "node:url";
 import { runnerImport } from "vite";
+import { resolveComposerModules } from "../plugins/module-resolution.mjs";
 
 /**
- * @param {string} root
+ * @param {string} root Host root for config/pack modules; APP_ROOT for tool modules.
  * @returns {(modulePath: string) => Promise<Record<string, unknown>>}
  */
 export function createModuleEvaluator(root) {
@@ -24,8 +25,9 @@ export function createModuleEvaluator(root) {
     const { module } = await runnerImport(pathToFileURL(modulePath).href, {
       configFile: false,
       root,
-      // No plugin pipeline runs here, so the JSX runtime the package's `.tsx`
-      // files expect has to be stated: the default would emit React imports.
+      resolve: resolveComposerModules(),
+      // The Preact preset does not run here, so state the JSX runtime for
+      // both tool and host `.tsx` modules; the default would import React.
       oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
     });
     return /** @type {Record<string, unknown>} */ (module);
