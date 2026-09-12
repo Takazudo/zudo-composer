@@ -323,7 +323,12 @@ export function generateJsx(
     // slot → structural children body.
     const namedAttrLines: string[][] = [];
     const structuralChildBlocks: string[][] = [];
-    for (const slotId of orderedSlotIds(node, entry)) {
+    // An empty declared slot may be absent from the stored slots object. Its
+    // linked outlet still needs an expression, in normal declaration order.
+    const slotNode = linkedOutlet?.target.parentId === node.id
+      ? { ...node, slots: { [linkedOutlet.target.slotId]: [], ...node.slots } }
+      : node;
+    for (const slotId of orderedSlotIds(slotNode, entry)) {
       const slot = entry.slots.find((s) => s.id === slotId);
       if (!slot) continue; // canExport guarantees no undeclared slots remain
       const children = node.slots[slotId] ?? [];
