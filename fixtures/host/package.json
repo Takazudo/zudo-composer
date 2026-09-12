@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@zudo-composer/component-contract": "workspace:*",
+    "preact": "^10.29.8",
     "zudo-composer": "workspace:*"
   }
 }

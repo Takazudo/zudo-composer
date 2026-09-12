@@ -8,9 +8,7 @@
 // therefore built here in JavaScript rather than read from a `vite.config.ts`:
 // an installed package has no config file at the host root to be found.
 
-import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { createServer } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import preact from "@preact/preset-vite";
@@ -41,54 +39,6 @@ export { loadHostConfig };
  * harmless when the package is not installed.
  */
 export const OPTIMIZE_DEPS_EXCLUDE = Object.freeze(["@takazudo/zfb-md-wasm"]);
-
-/**
- * The bare specifiers `@preact/preset-vite` puts into `optimizeDeps.include`.
- *
- * Vite resolves an `optimizeDeps.include` entry from the Vite root — the HOST
- * project — but preact is zudo-composer's own dependency and, in a real
- * install, is not reachable from there. Every entry then fails to resolve and
- * the host sees five startup warnings. It is invisible in this repository's own
- * fixtures, where a workspace install hoists preact to a directory the host
- * root can see.
- */
-const PREACT_OPTIMIZE_INCLUDE = Object.freeze([
-  ["preact", "."],
-  ["preact/jsx-runtime", "jsx-runtime"],
-  // preact ships one runtime directory and its `exports` maps both the
-  // production and the development specifier onto it.
-  ["preact/jsx-dev-runtime", "jsx-runtime"],
-  ["preact/debug", "debug"],
-  ["preact/devtools", "devtools"],
-]);
-
-/**
- * Exact-match aliases pinning those specifiers to the copy installed beside
- * this package, so the optimizer resolves them from where they actually are.
- *
- * Each replacement is the subpackage DIRECTORY rather than a resolved file:
- * `require.resolve` would pick the CommonJS `main`, while a directory lets
- * Vite read that directory's own `package.json` and take the browser/ESM
- * entry, which is what an unaliased resolution would have produced.
- *
- * The patterns are anchored, so `preact/hooks` and friends keep resolving
- * relative to the importing file and no prefix rewrite invents a path.
- */
-export function resolvePreactAliases(appRoot = APP_ROOT) {
-  let packageRoot;
-  try {
-    packageRoot = dirname(createRequire(resolve(appRoot, "package.json")).resolve("preact/package.json"));
-  } catch {
-    // No preact beside the package: nothing to pin, and the normal resolver
-    // will report the real problem when a module actually asks for it.
-    return [];
-  }
-  return PREACT_OPTIMIZE_INCLUDE.flatMap(([specifier, subdirectory]) => {
-    const replacement = resolve(packageRoot, subdirectory);
-    if (!existsSync(replacement)) return [];
-    return [{ find: new RegExp(`^${specifier.replace("/", "\\/")}$`), replacement }];
-  });
-}
 
 /**
  * The complete inline Vite config for a host-rooted dev server.
@@ -123,7 +73,14 @@ export async function resolveComposerDevConfig(options = {}) {
         // on a full-reload discovery round.
         entries: [resolve(APP_ROOT, APP_ENTRY_MODULE)],
       },
-      resolve: { alias: [...resolvePreactAliases(), ...resolveImageEditorAliases()] },
+      resolve: {
+        // Preact is a host peer. Resolve the app, optimizer and component pack
+        // through that one copy, including hooks and every public subpath.
+        // Let Preact's exports choose browser/ESM entries instead of pinning
+        // individual files or directories beside this package.
+        dedupe: ["preact"],
+        alias: resolveImageEditorAliases(),
+      },
       server: {
         fs: { allow: [...resolveFsAllow(workspaceRoot), componentPack.identity.packageRoot] },
         watch: { ignored: resolveWatchIgnored([paths.data, paths.compositions, paths.content, paths.mappings, paths.sitemaps, paths.assets, paths.publicAssets, resolveSiteProjectLocalRoot(workspaceRoot)]) },

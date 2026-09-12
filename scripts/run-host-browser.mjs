@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 
 /** @typedef {import("node:child_process").SpawnOptions} SpawnOptions */
 /** @typedef {{status: number | null, signal: NodeJS.Signals | null, stdout: string, stderr: string}} RunResult */
-/** @typedef {{dependencies: Record<string, string>}} PackageManifest */
+/** @typedef {{dependencies: Record<string, string>, peerDependencies: Record<string, string>}} PackageManifest */
 /** @typedef {import("../src/site-project/api/types.ts").SiteProjectApiRequest} SiteProjectApiRequest */
 /** @typedef {import("../src/site-project/api/types.ts").SiteProjectApiResponse} SiteProjectApiResponse */
 /** @typedef {import("../src/site-project/api/types.ts").ReleasePlan} ReleasePlan */
@@ -59,9 +59,8 @@ function run(command, args, { input, ...options } = {}) {
  * own static directory, its own `node_modules`, and the config and stylesheet
  * copied from `fixtures/host` so the two hosts cannot drift apart.
  *
- * The two symlinks are what an install produces. `zudo-composer` is the package
- * itself; `@zudo-sg` is separate because a component pack is resolved from the
- * HOST root — a host that names a pack owns that dependency.
+ * The symlinks are what an install produces. `zudo-composer` is the package
+ * itself; the component pack and Preact peer are resolved from the HOST root.
  */
 /** @param {string} parent */
 function createHostFixture(parent) {
@@ -72,6 +71,7 @@ function createHostFixture(parent) {
   }
   symlinkSync(root, join(hostRoot, "node_modules/zudo-composer"), "dir");
   symlinkSync(join(root, "node_modules/@zudo-sg"), join(hostRoot, "node_modules/@zudo-sg"), "dir");
+  symlinkSync(join(root, "node_modules/preact"), join(hostRoot, "node_modules/preact"), "dir");
   for (const file of ["zudo-composer.config.ts", "styles/base.css"]) {
     cpSync(join(root, "fixtures/host", file), join(hostRoot, file));
   }
@@ -90,6 +90,7 @@ function createHostFixture(parent) {
     devDependencies: {
       "zudo-composer": "workspace:*",
       [packPackage]: manifest.dependencies[packPackage],
+      preact: manifest.peerDependencies.preact,
     },
   }, null, 2)}\n`);
   return hostRoot;

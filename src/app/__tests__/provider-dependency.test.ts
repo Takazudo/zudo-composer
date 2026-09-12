@@ -36,6 +36,11 @@ describe("immutable UI provider dependency", () => {
     expect(pkg.dependencies["@zudo-composer/component-contract"]).toBeUndefined();
     expect(pkg.devDependencies["@zudo-composer/component-contract"]).toBe("workspace:*");
     expect(pkg.peerDependencies["@zudo-composer/component-contract"]).toBe("1.0.0");
+    // The host supplies the runtime shared by the tool and its component pack.
+    // Keeping a tool-owned dependency would allow a second physical copy.
+    expect(pkg.dependencies.preact).toBeUndefined();
+    expect(pkg.peerDependencies.preact).toBe("^10.29.8");
+    expect(pkg.devDependencies.preact).toBe(pkg.peerDependencies.preact);
     expect(pkg.dependencies["@zudo-sg/ui"]).not.toMatch(/(?:^|:)(?:file|link|path):|\.\.|packages\/ui/);
   });
 
