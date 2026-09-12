@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
-import { BUILD_SITE_ENTRY_PATH, RELEASE_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
+import { ASSETS_IMPORT_ENTRY_PATH, BUILD_SITE_ENTRY_PATH, RELEASE_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
 import { forwardedSignals, superviseChild } from "../supervise.mjs";
 
 function fakeProcess(platform = "linux") {
@@ -93,6 +93,18 @@ describe("parseArguments", () => {
   it("forwards every argument after `release` untouched", () => {
     expect(parseArguments(["release", "--anything", "-h"])).toEqual({ command: "release", rest: ["--anything", "-h"] });
   });
+
+  it("accepts a manifest relative to the host, or JSON stdin, with scoped asset options", () => {
+    expect(parseArguments(["assets", "import"])).toEqual({ command: "assets-import", options: {} });
+    expect(parseArguments(["assets", "import", "images-src/manifest.json", "--root", "host"]))
+      .toEqual({ command: "assets-import", options: { manifest: "images-src/manifest.json", workspaceRoot: resolve("host") } });
+    for (const argv of [["assets", "--help"], ["assets", "import", "-h"]]) expect(parseArguments(argv)).toEqual({ command: "help" });
+    for (const argv of [["assets"], ["assets", "list"]]) expect(parseArguments(argv)).toEqual({ error: 'assets requires the "import" subcommand.' });
+    expect(parseArguments(["assets", "import", "--root"])).toEqual({ error: "--root requires a directory." });
+    expect(parseArguments(["assets", "import", "a.json", "b.json"])).toEqual({ error: "assets import accepts one manifest path." });
+    expect(parseArguments(["assets", "import", "  "])).toEqual({ error: "assets import requires a nonempty manifest path." });
+    expect(parseArguments(["assets", "import", "--verify"])).toEqual({ error: 'Unknown assets import option "--verify".' });
+  });
 });
 
 describe("runComposerCli", () => {
@@ -104,6 +116,9 @@ Commands:
   release     Run the SiteProject release API (one JSON request on stdin, one
               canonical JSON response on stdout).
   build-site  Build and verify the host's static website in dist-site.
+  assets import [manifest]
+              Import a host asset manifest, or read { "manifest": "path" } on
+              stdin; write one canonical JSON response on stdout.
 
 dev options:
   --root <dir>     Host project root (default: the current directory).
@@ -119,6 +134,12 @@ build-site options:
   --source-revision <revision>
                   Host revision to record or verify exactly (default: GITHUB_SHA
                   when nonempty; omitted otherwise).
+
+assets import options:
+  --root <dir>     Host project root (default: the current directory).
+  <manifest>      JSON manifest path, relative to the host root or absolute.
+                  Files are relative to the manifest directory. The resolved
+                  host config selects the asset store; reruns preserve edits.
 `);
   });
 
@@ -154,6 +175,31 @@ build-site options:
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
     child.emit("exit", 7, null);
     expect(proc.exits).toEqual([7]);
+  });
+
+  it("supervises asset import and preserves the manifest path for resolution by the host", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    await runComposerCli(["assets", "import", "images-src/manifest.json", "--root", "host"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [ASSETS_IMPORT_ENTRY_PATH, "images-src/manifest.json", "--root", resolve("host")], { stdio: "inherit" });
+    proc.emitter.emit("SIGINT");
+    expect(child.kill).toHaveBeenCalledWith("SIGINT");
+    child.emit("exit", 2, null);
+    expect(proc.exits).toEqual([2]);
+  });
+
+  it("inherits JSON stdin for assets import and fails a partial install before spawn", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    await runComposerCli(["assets", "import"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [ASSETS_IMPORT_ENTRY_PATH], { stdio: "inherit" });
+    spawn.mockClear();
+    await runComposerCli(["assets", "import"], { proc, spawn: spawn as never, exists: () => false });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(proc.err.join("")).toContain(ASSETS_IMPORT_ENTRY_PATH);
+    expect(proc.exits).toEqual([1]);
   });
 
   it("does not start a missing builder or spawn for an invalid build-site option", async () => {

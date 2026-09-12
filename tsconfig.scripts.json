@@ -45,6 +45,7 @@
     "server/site-build/source-revision.mjs",
     "server/cli/run.mjs",
     "server/cli/build-site-entry.mjs",
+    "server/cli/assets-import-entry.mjs",
     "server/site-build/print-routes.ts",
     "scripts/build-public-entries.mjs",
     "scripts/verify-public-install.mjs",
