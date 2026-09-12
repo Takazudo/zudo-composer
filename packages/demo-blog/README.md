@@ -11,8 +11,13 @@ and the reasoning behind it are in
 ```sh
 corepack pnpm --filter demo-blog generate   # site-project.ts -> site-project.json
 corepack pnpm --filter demo-blog seed       # images-src -> cms/assets, then an activated release
-corepack pnpm --filter demo-blog dev -- --port 4183
+corepack pnpm --filter demo-blog dev --port 4183
 ```
+
+The eight essays are Markdown files in `content/articles/<slug>.md`, read by
+`site-project.ts`; images are referenced by file name and resolved to their
+`/uploaded-assets/asset-<id>` URLs from the committed `cms/assets` catalog, so
+seed the assets before generating on a fresh store.
 
 `generate` is the only way `site-project.json` changes; the package test fails
 while the committed JSON is stale. `seed` runs `zudo-composer release` from

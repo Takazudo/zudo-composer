@@ -343,7 +343,8 @@ export function defineSite(options: SiteOptions): Site {
       const id = input.id ?? deriveEntryId(model, input.values);
       assertNew(entries, id, "content entry");
       const values: Record<string, JsonValue> = {};
-      for (const [key, value] of Object.entries(input.values)) values[model.fieldId(key)] = value;
+      const fields = model.record.document.fields;
+      for (const [key, value] of Object.entries(input.values)) values[model.fieldId(key)] = valueByFieldId(fields.find((field) => field.key === key)!, value);
       const record: ContentEntryRecord = { schemaVersion: 1, id, modelId: model.id, ...envelope, values, lifecycle: input.lifecycle ?? "published", generation: 0 };
       entries.set(id, record);
       return { id, modelId: model.id, record };
@@ -470,6 +471,19 @@ function ownerOfNode(compositions: Map<string, CompositionRecord>, nodeId: strin
   if (owners.length === 1) return owners[0]!;
   if (owners.length === 0) throw new Error(`No declared composition contains node "${nodeId}"; declare the page before attaching to it.`);
   throw new Error(`Node "${nodeId}" exists in compositions ${owners.join(", ")}; pass the owner as target.composition.`);
+}
+
+/** Object values are stored keyed by nested field id; authors write them keyed by nested field key. */
+function valueByFieldId(schema: ContentValueSchema, value: JsonValue): JsonValue {
+  if (schema.kind === "list" && Array.isArray(value)) return value.map((item) => valueByFieldId(schema.item, item));
+  if (schema.kind !== "object" || value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const stored: Record<string, JsonValue> = {};
+  for (const [key, item] of Object.entries(value)) {
+    const field = schema.fields.find((candidate) => candidate.key === key);
+    if (!field) throw new Error(`Object field has no nested field "${key}".`);
+    stored[field.id] = valueByFieldId(field, item);
+  }
+  return stored;
 }
 
 /** The provider-qualified value a `reference` field stores (a `reference-list` stores an array of them). */

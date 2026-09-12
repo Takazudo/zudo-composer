@@ -8,10 +8,11 @@
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import { assetMimeTypeForExtension } from "../../../src/assets/model";
+import { assetAuthoringUrl, assetMimeTypeForExtension } from "../../../src/assets/model";
 import { createFilesystemAssetStore } from "../../../src/assets/storage/filesystem/store";
 import type { ReleasePlan, SiteProjectActiveSelection, SiteProjectApiRequest, SiteProjectApiResponse, SiteProjectListEntry } from "../../../src/site-project/api/types";
 import type { SiteProject } from "../../../src/site-project/model/types";
@@ -19,10 +20,27 @@ import { readSiteProjectFile } from "./generate";
 
 export const ASSET_MANIFEST_FILE = "images-src/manifest.json";
 
-/** One committed source file under `images-src/`, uploaded under its own file name. */
+/** One committed source file under `images-src/`, uploaded under its own file name; `alt` is the note when `note` is absent. */
 export interface AssetManifestEntry {
   file: string;
   note?: string;
+  alt?: string;
+}
+
+/**
+ * File name → canonical authoring URL (`/uploaded-assets/asset-<id>`) for every
+ * active asset in the package's committed store. Asset ids are minted at upload,
+ * so a `site-project.ts` looks its images up by file name instead of pinning ids.
+ */
+export function readAssetUrls(packageRoot: string): Record<string, string> {
+  const catalog = JSON.parse(readFileSync(resolve(packageRoot, "cms/assets/catalog.json"), "utf8")) as { records: { id: string; document: { fileName: string; state: "active" | "trash" } }[] };
+  const urls: Record<string, string> = {};
+  for (const record of catalog.records) {
+    if (record.document.state !== "active") continue;
+    if (urls[record.document.fileName]) throw new Error(`Two active assets are named ${record.document.fileName}.`);
+    urls[record.document.fileName] = assetAuthoringUrl(record.id);
+  }
+  return urls;
 }
 
 export async function readAssetManifest(packageRoot: string): Promise<AssetManifestEntry[]> {
@@ -45,7 +63,7 @@ export async function seedAssets(packageRoot: string, manifest: readonly AssetMa
     if (declaredMimeType === undefined) throw new Error(`No Assets MIME contract for seed file: ${entry.file}`);
     const snapshot = await store.snapshot();
     if (snapshot.records.some(({ document }) => document.fileName === fileName && document.versions.some((version) => version.checksum === checksum))) continue;
-    await store.upload({ fileName, bytes, declaredMimeType, note: entry.note ?? "", expectedMutationToken: snapshot.mutationToken });
+    await store.upload({ fileName, bytes, declaredMimeType, note: entry.note ?? entry.alt ?? "", expectedMutationToken: snapshot.mutationToken });
     added++;
   }
   return { added, skipped: manifest.length - added };

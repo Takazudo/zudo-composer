@@ -172,7 +172,7 @@ Newsletter; small print; credit "Built with zudo-composer").
 
 | Route | Node | Source | Sections top → bottom |
 | --- | --- | --- | --- |
-| `/` | `home` | composition | `blog.home-hero` (display line "Notes from the margin", lead, one inline link to `/about`) · `blog.article-list#latest` (filter chips off; attachment: articles sort `date` desc, limit 6) · `blog.section` › `blog.newsletter` · `blog.demo-note` |
+| `/` | `home` | composition | `blog.home-hero` (display line "Notes from the margin", lead, one inline link to `/about`) · `blog.article-list#latest` (filter chips off; attachment: all 8 articles sort `date` desc) · `blog.section` › `blog.newsletter` · `blog.demo-note` |
 | `/articles` | `articles` | composition | `blog.page-heading` (h1 "All articles") · `blog.article-list#all` (filter chips on: All / Craft / Attention / Tools; attachment: all articles sort `date` desc) |
 | `/articles/<slug>` ×8 | `article` (child of `articles`) | mapping `article-page`, route `entry-field` on `slug`, title `title` | `blog.article-header` (eyebrow = tag1, h1 title, intro, byline: avatar + author name → author route via `route-link`, date, reading time from `bodyLength`; cover below) · `blog.prose-body` (markdown) · `blog.tag-list` (tag1–3 → `/craft` …) · `blog.author-card` (mapped from the article's author fields: name, bio, avatar, href) · `blog.section` › `blog.section-heading` "Keep reading" › `blog.related-articles` (attachment: articles sort `date` desc, limit 4; card hides itself on its own route, shows 3) · `blog.section` › `blog.section-heading` "Comments" › `blog.comment-list` (attachment: all comments; each hides itself unless its `articleSlug` matches the route — § 7) · `blog.comment-form` · `blog.demo-note` |
 | `/craft` | `tag-craft` | composition | `blog.page-heading` (eyebrow "Tag", h1 "Craft", intro) · `blog.article-list#craft` (chips off; attachment: `tags contains "craft"`) |
@@ -212,7 +212,8 @@ Kinds as in the other docs. Image props are `text` named `src`.
 | --- | --- | --- | --- |
 | `blog.article-list` | List host; 1 / 2 / 3 columns; provides the tag-filter context and optional chips; `mode` adds a route rule every card applies (`by-route-author`: show only cards whose `authorSlug` equals the route's last segment; `exclude-route`: hide the card whose `slug` equals it); counts visible children | `chips: boolean`, `columns: select[1\|2\|3]`, `mode: select[all\|by-route-author\|exclude-route]`, `emptyText: text`, `tagOptions: list<text>` (chip labels; default craft, attention, tools) | `articles` · Articles · many · [`blog.article-card`] |
 | `blog.article-card` | Cover, date · tag, title, intro; subscribes to the list context; hides when the tag filter excludes its tags or the list's route rule excludes it | `title: text`, `href: text`, `intro: text (multiline)`, `date: text` (display), `src: text`, `alt: text`, `tag1: text`, `tag2: text`, `tag3: text`, `authorSlug: text`, `slug: text` | — |
-| `blog.article-header` | Eyebrow, h1, intro, byline, cover | `eyebrow: text`, `title: text` (inline), `intro: text (multiline)`, `authorName: text`, `authorHref: text`, `authorAvatarSrc: text`, `authorAvatarAlt: text`, `date: text`, `bodyLength: number` (characters; reading time = ceil(length / 1100) min), `src: text`, `alt: text`, `caption: text` | — |
+| `blog.article-header` | Eyebrow, h1, intro, byline, cover | `eyebrow: text`, `title: text` (inline), `intro: text (multiline)`, `authorName: text`, `authorHref: text`, `date: text`, `bodyLength: number` (characters; reading time = ceil(length / 1100) min), `src: text`, `alt: text`, `caption: text` | `avatar` · Byline avatar · single · [`blog.avatar`] |
+| `blog.avatar` | Small round byline avatar. A slot child rather than an `authorAvatarSrc` prop because the release asset pass pins managed URLs only in props named `src` / `href` / `poster` / `url` | `src: text`, `alt: text` | — |
 | `blog.prose-body` | Markdown → HTML at measure width (h2/h3, p, ul/ol, blockquote, code/pre, a, em/strong, hr, img with `figcaption` from title); first paragraph drop cap in accent when `dropCap` | `markdown: text (multiline, markdown-source)`, `dropCap: boolean` | — |
 | `blog.tag-list` | Sans caption tags linking to tag pages; empty strings skipped | `tag1: text`, `tag2: text`, `tag3: text`, `basePath: text` ("/") | — |
 | `blog.author-card` | Avatar + name + bio + link; `hero` variant is the author page header | `name: text`, `href: text`, `bio: text (multiline)`, `src: text`, `alt: text`, `variant: select[inline\|hero]` | — |
@@ -270,7 +271,7 @@ Articles (slug · title · author · tags · date):
 | Mapping | Model | Mode | Composition | Lands in |
 | --- | --- | --- | --- | --- |
 | `article-page` | articles | collection (sort `date` desc) | `article-page` (linked to the frame) | node `article` under `articles`, route `entry-field` on `slug`, title `title` → `/articles/<slug>` |
-| `article-card` | articles | collection | `article-card` (detached; root `blog.article-card`) | attachments `home-latest` (sort `date` desc, limit 6) → `home › blog.article-list#latest.articles`; `all-articles` → `/articles` list; `craft-cards` / `attention-cards` / `tools-cards` (`tags contains "<tag>"`) → tag pages; `related-cards` (sort `date` desc, limit 4) → `article-page › blog.related-articles.articles`; `author-cards` (all, sort `date` desc) → `author-page › blog.article-list#by-author.articles` |
+| `article-card` | articles | collection | `article-card` (detached; root `blog.article-card`) | attachments `home-latest` (sort `date` desc, all 8) → `home › blog.article-list#latest.articles`; `all-articles` → `/articles` list; `craft-cards` / `attention-cards` / `tools-cards` (`tags contains "<tag>"`) → tag pages; `related-cards` (sort `date` desc, limit 4) → `article-page › blog.related-articles.articles`; `author-cards` (all, sort `date` desc) → `author-page › blog.article-list#by-author.articles` |
 | `author-page` | authors | collection (sort `name`) | `author-page` (linked) | node `author` under `authors`, route `entry-field` on `slug`, title `name` → `/authors/<slug>` |
 | `author-card` | authors | collection (sort `name`) | `author-card` (detached; root `blog.author-card`) | `authors-grid` → `/authors › blog.author-grid.authors` |
 | `comment` | comments | collection (sort `order` asc, limit 100) | `comment` (detached; root `blog.comment`) | `article-comments` → `article-page › blog.comment-list.comments` |
@@ -281,8 +282,8 @@ Bindings: `title`, `intro value→identity`; `slug value→prefix "/articles/"�
 `[caption]→caption`; `body value→identity→markdown`; `bodyLength
 value→number`; `author route-link→identity→authorHref` (resolves to the
 author's `entry-field` route — this is why `/authors/<slug>` exists);
-`authorName`, `authorBio`, `authorAvatar[src|alt]`, `authorSlug` →
-denormalised text props; `tags` flattened to `tag1…3`; `articleSlug` on
+`authorName`, `authorBio`, `authorSlug` → denormalised text props;
+`authorAvatar[src|alt]` → the byline `blog.avatar` and the author card's `src`/`alt`; `tags` flattened to `tag1…3`; `articleSlug` on
 comments → `blog.comment.articleSlug`.
 
 Per-route comment filtering: a collection query's conditions are static per
