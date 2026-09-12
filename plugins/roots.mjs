@@ -9,6 +9,8 @@ import { dirname, isAbsolute, resolve, sep } from "node:path";
 
 /** The application entry every host boots, package-relative. */
 export const APP_ENTRY = "src/main.tsx";
+/** The static website visitor entry, package-relative. */
+export const SITE_BUILD_ENTRY = "server/site-build/client/main.tsx";
 
 /** The installed package directory. Never derived from `config.root`. */
 export const APP_ROOT = resolve(fileURLToPath(import.meta.url), "../..");

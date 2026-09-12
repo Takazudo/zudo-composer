@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { RELEASE_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
+import { resolve } from "node:path";
+import { BUILD_SITE_ENTRY_PATH, RELEASE_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
 import { forwardedSignals, superviseChild } from "../supervise.mjs";
 
 function fakeProcess(platform = "linux") {
@@ -38,8 +39,26 @@ function fakeChild() {
 
 describe("parseArguments", () => {
   it("treats no arguments and every help spelling as the usage request", () => {
-    for (const argv of [[], ["--help"], ["-h"], ["help"], ["dev", "--help"]]) {
+    for (const argv of [[], ["--help"], ["-h"], ["help"], ["dev", "--help"], ["build-site", "--help"], ["build-site", "-h"]]) {
       expect(parseArguments(argv)).toEqual({ command: "help" });
+    }
+  });
+
+  it("reads build-site paths relative to the caller and allows verification with route printing", () => {
+    expect(parseArguments(["build-site"])).toEqual({ command: "build-site", options: {} });
+    expect(parseArguments(["build-site", "--root", "host/..", "--print-routes", "--verify", "artifact"]))
+      .toEqual({ command: "build-site", options: { workspaceRoot: resolve("host/.."), printRoutes: true, verifyDirectory: resolve("artifact") } });
+  });
+
+  it("rejects build-site flags with missing paths, dev-only flags and positional arguments", () => {
+    for (const argv of [["--root"], ["--root", "--print-routes"], ["--root", ""]]) {
+      expect(parseArguments(["build-site", ...argv])).toEqual({ error: "--root requires a directory." });
+    }
+    for (const argv of [["--verify"], ["--verify", "--print-routes"], ["--verify", ""]]) {
+      expect(parseArguments(["build-site", ...argv])).toEqual({ error: "--verify requires a directory." });
+    }
+    for (const flag of ["--port", "--host", "--strict-port", "host-dir"]) {
+      expect(parseArguments(["build-site", flag])).toEqual({ error: `Unknown build-site option "${flag}".` });
     }
   });
 
@@ -68,6 +87,29 @@ describe("parseArguments", () => {
 });
 
 describe("runComposerCli", () => {
+  it("documents the build-site artifact modes in the exact usage text", () => {
+    expect(USAGE).toBe(`Usage: zudo-composer <command> [options]
+
+Commands:
+  dev         Start the authoring dev server, rooted at the current project.
+  release     Run the SiteProject release API (one JSON request on stdin, one
+              canonical JSON response on stdout).
+  build-site  Build and verify the host's static website in dist-site.
+
+dev options:
+  --root <dir>     Host project root (default: the current directory).
+  --port <number>  Port to listen on (0 picks a free one).
+  --host [addr]    Expose the server; bare --host listens on all addresses.
+  --strict-port    Fail instead of moving to the next free port.
+
+build-site options:
+  --root <dir>     Host project root (default: the current directory).
+  --print-routes   Verify an existing artifact and print its routes as JSON.
+  --verify <dir>   Verify this artifact instead of building (relative to cwd).
+                  Combine with --print-routes to print this artifact's routes.
+`);
+  });
+
   it("prints usage on stdout, and usage plus the reason on stderr for a bad command", async () => {
     const help = fakeProcess();
     await runComposerCli([], { proc: help });
@@ -87,6 +129,31 @@ describe("runComposerCli", () => {
     const spawn = vi.fn(() => child);
     await runComposerCli(["release", "--flag"], { proc, spawn: spawn as never, exists: () => true });
     expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [RELEASE_ENTRY_PATH, "--flag"], { stdio: "inherit" });
+  });
+
+  it("supervises the build-site child and passes normalized explicit paths", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    await runComposerCli(["build-site", "--root", "host", "--verify", "artifact", "--print-routes"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [BUILD_SITE_ENTRY_PATH, "--root", resolve("host"), "--print-routes", "--verify", resolve("artifact")], { stdio: "inherit" });
+    proc.emitter.emit("SIGTERM");
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    child.emit("exit", 7, null);
+    expect(proc.exits).toEqual([7]);
+  });
+
+  it("does not start a missing builder or spawn for an invalid build-site option", async () => {
+    const proc = fakeProcess();
+    const spawn = vi.fn();
+    await runComposerCli(["build-site"], { proc, spawn: spawn as never, exists: () => false });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(proc.err.join("")).toContain(BUILD_SITE_ENTRY_PATH);
+    expect(proc.exits).toEqual([1]);
+    const bad = fakeProcess();
+    await runComposerCli(["build-site", "--verify"], { proc: bad, spawn: spawn as never });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(bad.exitCode).toBe(1);
   });
 
   it("names the resolved absolute path when the package file is missing, and spawns nothing", async () => {
