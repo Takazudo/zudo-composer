@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "zudo-composer dev",
-    "generate": "demo-tools generate",
+    "generate": "zudo-composer generate",
     "seed": "demo-tools seed",
     "build:site": "pnpm -w demo:build-site landing",
     "test": "pnpm -w test packages/demo-landing"

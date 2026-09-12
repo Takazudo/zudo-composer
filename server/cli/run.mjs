@@ -4,7 +4,7 @@
 // The commands are deliberately asymmetric. `dev` boots Vite in
 // this process — the server object is what has to be closed to release the
 // port, so there is nothing to gain from a child. `release` is the JSON-stdin
-// SiteProject release API. `release`, `seed`, `assets import` and the one-shot
+// SiteProject release API. `release`, `seed`, `assets import`, `generate` and the one-shot
 // `build-site` run in child processes, supervised by `spawnSupervised`.
 
 import { constants as osConstants } from "node:os";
@@ -19,6 +19,7 @@ export const RELEASE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/release-entry.mj
 export const BUILD_SITE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/build-site-entry.mjs");
 export const ASSETS_IMPORT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/assets-import-entry.mjs");
 export const SEED_ENTRY_PATH = resolve(APP_ROOT, "server/cli/seed-entry.mjs");
+export const GENERATE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/generate-entry.mjs");
 
 export const USAGE = `Usage: zudo-composer <command> [options]
 
@@ -30,6 +31,7 @@ Commands:
   assets import [manifest]
               Import a host asset manifest, or read { "manifest": "path" } on
               stdin; write one canonical JSON response on stdout.
+  generate    Generate site-project.json from site-project.ts.
   seed        Publish and activate a committed SiteProject; print its release
               identity and status (activated or unchanged) as JSON.
 
@@ -65,6 +67,10 @@ assets import options:
   <manifest>      JSON manifest path, relative to the host root or absolute.
                   Files are relative to the manifest directory. The resolved
                   host config selects the asset store; reruns preserve edits.
+
+generate options:
+  --root <dir>     Host project root (default: the current directory).
+  --check          Verify site-project.json is current without writing it.
 `;
 
 /**
@@ -76,9 +82,9 @@ export function parseArguments(argv) {
   if (command === undefined || command === "--help" || command === "-h" || command === "help") return { command: "help" };
   if (command === "release") return { command: "release", rest };
   if (command === "assets") return parseAssetsImport(rest);
-  if (command !== "dev" && command !== "build-site" && command !== "seed") return { error: `Unknown command "${command}".` };
+  if (command !== "dev" && command !== "build-site" && command !== "seed" && command !== "generate") return { error: `Unknown command "${command}".` };
 
-  /** @type {Record<string, unknown> & import("../site-build/run.d.mts").BuildSiteOptions & import("./run.d.mts").SeedOptions} */
+  /** @type {Record<string, unknown> & import("../site-build/run.d.mts").BuildSiteOptions & import("./run.d.mts").SeedOptions & import("./run.d.mts").GenerateOptions} */
   const options = {};
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
@@ -112,6 +118,9 @@ export function parseArguments(argv) {
         if (revision === undefined || revision.trim() === "") return { error: "--source-revision requires a nonempty revision." };
         options.sourceRevision = revision;
       } else return { error: `Unknown build-site option "${argument}".` };
+    } else if (command === "generate") {
+      if (argument === "--check") options.check = true;
+      else return { error: `Unknown generate option "${argument}".` };
     } else if (argument === "--strict-port") options.strictPort = true;
     else if (argument === "--host") options.host = value() ?? true;
     else if (argument === "--port") {
@@ -255,6 +264,22 @@ export async function runComposerCli(argv, deps = {}) {
       args,
       label: "the SiteProject seed command",
       entryPath: SEED_ENTRY_PATH,
+      ...(deps.spawn ? { spawn: deps.spawn } : {}),
+      ...(deps.exists ? { exists: deps.exists } : {}),
+      proc,
+    });
+    return;
+  }
+  if (parsed.command === "generate") {
+    const { workspaceRoot, check } = parsed.options;
+    const args = [GENERATE_ENTRY_PATH];
+    if (workspaceRoot !== undefined) args.push("--root", workspaceRoot);
+    if (check) args.push("--check");
+    spawnSupervised({
+      command: proc.execPath,
+      args,
+      label: "the SiteProject generator",
+      entryPath: GENERATE_ENTRY_PATH,
       ...(deps.spawn ? { spawn: deps.spawn } : {}),
       ...(deps.exists ? { exists: deps.exists } : {}),
       proc,

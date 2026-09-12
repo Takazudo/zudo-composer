@@ -246,8 +246,8 @@ Kinds as in the webshop doc (`text`, `select[…]`, `number`, `boolean`,
 | `tagline` | text | |
 | `priceMonthly` | number | 0 / 12 / 29 |
 | `priceYearly` | number | per month when billed yearly: 0 / 10 / 24 |
-| `currency` | text | `USD` (currency test) |
-| `features` | list<text> | 4–6 bullets; flattened to `feature1…6` by demo-tools |
+| `currency` | text | `USD` in the generated aggregate |
+| `features` | list<text> | 4–6 bullets; flattened to `feature1…6` by the `site-project.ts` authoring source |
 | `ctaLabel` | text | "Start free" / "Start trial" / "Talk to us" |
 | `ctaHref` | text | `/#signup` or `/about` |
 | `popular` | boolean | exactly one true (Studio) |
@@ -276,7 +276,7 @@ entries.
 Bindings: `name`, `tagline`, `ctaLabel`, `ctaHref`, `currency` → `value →
 identity → text`; `priceMonthly`, `priceYearly`, `order` → `number`;
 `popular` → `boolean`; `features` flattened to `feature1…6` text fields by
-demo-tools; `avatar object-field[src] → src`, `[alt] → alt`; `topic value →
+the `site-project.ts` authoring source; `avatar object-field[src] → src`, `[alt] → alt`; `topic value →
 identity → select topic`. No `entry-field` routes exist on this site.
 
 ## 8. Mock interaction list

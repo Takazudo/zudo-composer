@@ -1,5 +1,5 @@
-// The authored site. `pnpm generate` turns this into `site-project.json`;
-// the tests fail when the two disagree.
+// The authored site. `zudo-composer generate` turns this into `site-project.json`;
+// `zudo-composer generate --check` reports when the committed output disagrees.
 import { defineSite, entryRef, node } from "zudo-composer/authoring";
 import type { BindingInput, Entry, JsonObject, Model, RouteInput } from "zudo-composer/site-project";
 import { componentPack } from "./components/pack";

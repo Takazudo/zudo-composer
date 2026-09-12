@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Authoring, generation and seeding helpers for the demo host packages under packages/demo-*.",
+  "description": "Seeding helpers for the demo host packages under packages/demo-*.",
   "bin": {
     "demo-tools": "./bin/demo-tools.mjs"
   },

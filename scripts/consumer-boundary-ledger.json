@@ -17,7 +17,6 @@
   {"host":"packages/demo-blog","file":"package.json","rule":"workspace-command","detail":"scripts.build:site: pnpm -w demo:build-site blog","count":1,"issue":543},
   {"host":"packages/demo-blog","file":"package.json","rule":"workspace-command","detail":"scripts.test: pnpm -w test packages/demo-blog","count":1,"issue":543},
   {"host":"packages/demo-blog","file":"README.md","rule":"workspace-command","detail":"command: pnpm --filter demo-blog dev --port 4183","count":1,"issue":543},
-  {"host":"packages/demo-blog","file":"README.md","rule":"workspace-command","detail":"command: pnpm --filter demo-blog generate","count":1,"issue":543},
   {"host":"packages/demo-blog","file":"README.md","rule":"workspace-command","detail":"command: pnpm --filter demo-blog seed","count":1,"issue":543},
   {"host":"packages/demo-landing","file":"__tests__/components.test.tsx","rule":"undeclared-package","detail":"import: vitest","count":1,"issue":543},
   {"host":"packages/demo-landing","file":"__tests__/forms.test.tsx","rule":"undeclared-package","detail":"import: @testing-library/preact","count":1,"issue":543},
@@ -30,12 +29,10 @@
   {"host":"packages/demo-landing","file":"package.json","rule":"workspace-command","detail":"scripts.build:site: pnpm -w demo:build-site landing","count":1,"issue":543},
   {"host":"packages/demo-landing","file":"package.json","rule":"workspace-command","detail":"scripts.test: pnpm -w test packages/demo-landing","count":1,"issue":543},
   {"host":"packages/demo-landing","file":"README.md","rule":"workspace-command","detail":"command: pnpm --filter demo-landing dev --port 4182","count":1,"issue":543},
-  {"host":"packages/demo-landing","file":"README.md","rule":"workspace-command","detail":"command: pnpm --filter demo-landing generate","count":1,"issue":543},
   {"host":"packages/demo-landing","file":"README.md","rule":"workspace-command","detail":"command: pnpm --filter demo-landing seed","count":1,"issue":543},
   {"host":"packages/demo-tools","file":"package.json","rule":"workspace-command","detail":"scripts.test: pnpm -w test packages/demo-tools","count":1,"issue":541},
   {"host":"packages/demo-tools","file":"src/__tests__/authoring.test.ts","rule":"undeclared-package","detail":"import: vitest","count":1,"issue":541},
   {"host":"packages/demo-tools","file":"src/__tests__/content-values.test.ts","rule":"undeclared-package","detail":"import: vitest","count":1,"issue":541},
-  {"host":"packages/demo-tools","file":"src/generate.ts","rule":"computed-import","detail":"dynamic import: pathToFileURL(resolve(packageRoot, SITE_SOURCE_FILE)).href","count":1,"issue":539},
   {"host":"packages/demo-webshop","file":"__tests__/cart-flow.test.tsx","rule":"undeclared-package","detail":"import: @testing-library/preact","count":1,"issue":543},
   {"host":"packages/demo-webshop","file":"__tests__/cart-flow.test.tsx","rule":"undeclared-package","detail":"import: vitest","count":1,"issue":543},
   {"host":"packages/demo-webshop","file":"__tests__/cart-store.test.ts","rule":"undeclared-package","detail":"import: vitest","count":1,"issue":543},
@@ -50,6 +47,5 @@
   {"host":"packages/demo-webshop","file":"package.json","rule":"workspace-command","detail":"scripts.build:site: pnpm -w demo:build-site webshop","count":1,"issue":543},
   {"host":"packages/demo-webshop","file":"package.json","rule":"workspace-command","detail":"scripts.test: pnpm -w test packages/demo-webshop","count":1,"issue":543},
   {"host":"packages/demo-webshop","file":"README.md","rule":"workspace-command","detail":"command: pnpm --filter demo-webshop dev --port 4181","count":1,"issue":543},
-  {"host":"packages/demo-webshop","file":"README.md","rule":"workspace-command","detail":"command: pnpm --filter demo-webshop generate","count":1,"issue":543},
   {"host":"packages/demo-webshop","file":"README.md","rule":"workspace-command","detail":"command: pnpm --filter demo-webshop seed","count":1,"issue":543}
 ]

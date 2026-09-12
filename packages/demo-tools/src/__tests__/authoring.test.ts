@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
 import { canonicalStringifyJson, defineSite, entryRef, node, slugify, validateSiteProject } from "zudo-composer/authoring";
 import { compileStaticSite } from "zudo-composer/site-build";
-import { renderSiteProject } from "../generate";
 
 interface FrameProps { children?: unknown }
 interface GridProps { items?: unknown }
@@ -103,7 +102,8 @@ describe("defineSite", () => {
     const { site } = authorSite();
     const validation = validateSiteProject(site.toSiteProject(), { componentPack: componentPack.manifest });
     expect(validation.ok, JSON.stringify(validation.diagnostics)).toBe(true);
-    const { text } = renderSiteProject(site);
+    if (!validation.ok) return;
+    const text = canonicalStringifyJson(validation.project as never);
     expect(text.endsWith("\n")).toBe(true);
     expect(text).toBe(canonicalStringifyJson(JSON.parse(text)));
     expect(Object.keys(JSON.parse(text))).toEqual(["activeSitemap", "collectionAttachments", "componentPack", "id", "name", "providers", "schemaVersion"]);
