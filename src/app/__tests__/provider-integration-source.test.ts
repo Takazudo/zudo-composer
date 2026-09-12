@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import { SITE_PROJECT_LOCAL_ROOT_NAME } from "../../../plugins/roots.mjs";
 import { siteProjectSourcePlugin, RESOLVED_SITE_PROJECT_SOURCE_ID } from "../../../plugins/site-project-source-plugin.mjs";
 import { hookHandler, strictFixture } from "../../../plugins/__tests__/test-helpers";
 import { composer } from "../../../server/config/config";
@@ -85,7 +86,7 @@ it("opens generated committed CMS ready and populated when the real dev source i
   expect(serialized).toContain('"status":"no-active"');
   expect(serialized).toContain("export const siteProject = null;");
   Object.assign(source, JSON.parse(serialized.split("\n")[0]!.slice("export const deliverySource = ".length, -1)));
-  await expect(lstat(join(currentHost.root, ".zudo-site-project"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(join(currentHost.root, SITE_PROJECT_LOCAL_ROOT_NAME))).rejects.toMatchObject({ code: "ENOENT" });
 
   // Normal dev open supplies neither a creation attempt nor an active project.
   const current = createProductionProviderIntegration({ createProviders: currentHost.createProviders, assetProvider: null });
@@ -103,5 +104,5 @@ it("opens generated committed CMS ready and populated when the real dev source i
   expect(await creation.initialization.initialize()).toMatchObject({ status: "error", error: { message: expect.stringContaining("already complete; open it explicitly") } });
   // No seed, repair, registry write, or source initialization happened on open.
   for (const file of generated.files) expect(createHash("sha256").update(await readFile(join(currentHost.root, file.path))).digest("hex")).toBe(file.digest);
-  await expect(lstat(join(currentHost.root, ".zudo-site-project"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(join(currentHost.root, SITE_PROJECT_LOCAL_ROOT_NAME))).rejects.toMatchObject({ code: "ENOENT" });
 });
