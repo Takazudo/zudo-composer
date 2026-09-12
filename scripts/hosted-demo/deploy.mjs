@@ -174,6 +174,25 @@ export function parseUploadedVersionId(output) {
 // code uses the upload-specific name and never infers an active version.
 export const parseDeployedVersionId = parseUploadedVersionId;
 
+// Cloudflare's API error for a script that was never uploaded. Wrangler prints
+// the numeric code alongside its own message, and the wording has changed
+// between versions, so match the code and both message spellings.
+const WORKER_NOT_FOUND_PATTERN = /\[code:\s*10007\]|script_not_found|Worker not found|workers\.api\.error\.not_found/i;
+
+/** @param {unknown} error @returns {boolean} */
+export function isWorkerNotFound(error) {
+  return WORKER_NOT_FOUND_PATTERN.test(error instanceof Error ? error.message : String(error));
+}
+
+/** @template T @param {() => Promise<T>} work @returns {Promise<{ value?: T, error?: unknown }>} */
+async function settle(work) {
+  try {
+    return { value: await work() };
+  } catch (error) {
+    return { error };
+  }
+}
+
 /** @typedef {import("./targets.mjs").DeployTarget} DeployTarget */
 
 /** @param {DeployTarget} target @param {{ environment?: Record<string, string | undefined>, runner?: typeof runCommand }} [options] */
@@ -214,6 +233,32 @@ function assertCapturedActive(current, expected) {
 }
 
 /**
+ * Rollback state for a Worker that already exists, or the first-deploy marker
+ * when Cloudflare has no such script yet.
+ *
+ * A Worker whose very first version has not been uploaded has no deployments
+ * and no rollback target, so the ordinary capture can never succeed for it —
+ * that is the entire reason a new target's first rollout needs its own path.
+ * Both listings must agree the script is missing: a Worker that answers one
+ * listing and reports "not found" for the other is an unexplained state, and
+ * still fails closed before any mutation.
+ *
+ * @param {DeployTarget} target
+ * @param {{ environment?: Record<string, string | undefined>, runner?: typeof runCommand }} options
+ * @returns {Promise<{ firstDeploy: true } | ({ firstDeploy: false } & ReturnType<typeof captureDeploymentState>)>}
+ */
+async function captureRolloutState(target, options) {
+  const [deployments, versions] = await Promise.all([
+    settle(() => listDeployments(target, options)),
+    settle(() => listVersions(target, options)),
+  ]);
+  if (isWorkerNotFound(deployments.error) && isWorkerNotFound(versions.error)) return { firstDeploy: true };
+  if (deployments.error) throw deployments.error;
+  if (versions.error) throw versions.error;
+  return { firstDeploy: false, ...captureDeploymentState({ deployments: deployments.value, versions: versions.value }) };
+}
+
+/**
  * @param {{ target?: DeployTarget, artifactDirectory?: string, expectedSourceRevision?: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, artifactVerifier?: import("./targets.mjs").ArtifactVerifier }} [options]
  */
 export async function preflightDeployment({ target = DEFAULT_TARGET, artifactDirectory = target.artifactDirectory, expectedSourceRevision, environment = process.env, runner = runCommand, artifactVerifier = target.verifyArtifact } = {}) {
@@ -229,11 +274,7 @@ export async function preflightDeployment({ target = DEFAULT_TARGET, artifactDir
   assert.equal(typeof artifact.root, "string", `${target.workerName} artifact verifier must return its checked directory`);
   assert.equal(resolve(artifact.root), resolvedArtifactDirectory, `${target.workerName} artifact verifier checked a different directory`);
   await runWrangler(["whoami", "--config", target.configPath], { environment, runner });
-  const [deployments, versions] = await Promise.all([
-    listDeployments(target, { environment, runner }),
-    listVersions(target, { environment, runner }),
-  ]);
-  const state = captureDeploymentState({ deployments, versions });
+  const state = await captureRolloutState(target, { environment, runner });
   await runWrangler([
     "deploy",
     "--dry-run",
@@ -279,6 +320,49 @@ function asError(value) {
 }
 
 /**
+ * Create a target's very first deployment.
+ *
+ * This path exists because the ordinary rollout cannot bootstrap a Worker:
+ * `versions upload` + `versions deploy` never applies a config's triggers, so a
+ * Worker first created that way would serve nothing on its custom domain, and
+ * there is no active deployment to capture as a rollback target either. Plain
+ * `wrangler deploy` creates the script, uploads the assets and binds the
+ * `routes` entry (the custom domain) in one call — and takes neither `--tag`
+ * nor `--message`, so the first version carries no rollout tag. The active
+ * version ID is then read back from Cloudflare rather than parsed out of the
+ * command's output.
+ *
+ * Nothing is rolled back when live verification fails: the only prior state is
+ * "the Worker does not exist", which a rollback cannot restore. The command
+ * fails red with the created version named, and the next run takes the ordinary
+ * versioned path against it.
+ *
+ * @param {{ preflight: Awaited<ReturnType<typeof preflightDeployment>>, target: DeployTarget, baseUrl: string, environment: Record<string, string | undefined>, runner: typeof runCommand, liveVerifier: (options: { baseUrl: string, artifactDirectory: string, expectedSourceRevision: string }) => Promise<{ routes: unknown[], assets: unknown[], manifest: unknown }> }} options
+ */
+async function createFirstDeployment({ preflight, target, baseUrl, environment, runner, liveVerifier }) {
+  console.log(`${target.workerName} has no deployments on Cloudflare; creating its first one and binding ${target.domain}.`);
+  await runWrangler([
+    "deploy",
+    "--no-bundle",
+    "--config",
+    target.configPath,
+    "--name",
+    target.workerName,
+    "--assets",
+    preflight.artifactDirectory,
+  ], { environment, runner });
+  const created = await currentDeployment(target, { environment, runner });
+  const deployedVersionId = created.activeVersionId;
+  console.log(`Created ${target.workerName} version ${deployedVersionId}; beginning bounded live verification at ${baseUrl}.`);
+  const proof = await liveVerifier({ baseUrl, artifactDirectory: preflight.artifactDirectory, expectedSourceRevision: preflight.artifact.manifest.sourceRevision }).catch((error) => {
+    const failure = asError(error);
+    throw new Error(`${failure.message}; first ${target.workerName} deployment ${deployedVersionId} stays active — there is no earlier version to roll back to`, { cause: error });
+  });
+  console.log(`${target.workerName} live verification passed for first version ${deployedVersionId}: ${proof.routes.length} routes and ${proof.assets.length} assets.`);
+  return { preflight, deployedVersionId, proof };
+}
+
+/**
  * Deploy the exact checked-in artifact, verify its live manifest/assets/routes,
  * and rollback only when the still-active version is this invocation's upload.
  * A smoke failure always remains a failed command even when rollback succeeds.
@@ -300,6 +384,9 @@ export async function deployHostedDemo({
   delayImpl = (milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)),
 } = {}) {
   const preflight = await preflightDeployment({ target, artifactDirectory, expectedSourceRevision, environment, runner, artifactVerifier });
+  if (preflight.state.firstDeploy) {
+    return createFirstDeployment({ preflight, target, baseUrl, environment, runner, liveVerifier });
+  }
   console.log(`Captured active deployment ${preflight.state.activeDeploymentId} (version ${preflight.state.activeVersionId}); rollback target ${preflight.state.rollbackVersionId}.`);
 
   let deployedVersionId;

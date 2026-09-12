@@ -10,7 +10,7 @@
   },
   "routes": [
     {
-      "pattern": "demo-shop.zudolab.dev",
+      "pattern": "zc-demo-shop.zudolab.dev",
       "custom_domain": true
     }
   ]

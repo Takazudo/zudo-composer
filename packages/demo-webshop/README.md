@@ -31,4 +31,4 @@ build does and asserts every route, its h1, the materialised lists and the
 pinned image URLs.
 
 The site is delivered at `/site` on the dev server and at
-`https://demo-shop.zudolab.dev` from `corepack pnpm demo:build-site webshop`.
+`https://zc-demo-shop.zudolab.dev` from `corepack pnpm demo:build-site webshop`.

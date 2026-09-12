@@ -1,6 +1,6 @@
 # Landing demo — Orrery
 
-Package `packages/demo-landing`, domain `demo-landing.zudolab.dev`, token
+Package `packages/demo-landing`, domain `zc-demo-landing.zudolab.dev`, token
 namespace `land-`, component id prefix `land.`. Lists follow
 [README § Lists](./README.md#lists); spacing axes follow
 `src/styles/README.md`; the `@theme` mechanism is the one in
@@ -311,7 +311,7 @@ text converted to paths), not image files.
 
 ## 10. Chrome and 404
 
-On `demo-landing.zudolab.dev` the pack's `land.header` and `land.footer`
+On `zc-demo-landing.zudolab.dev` the pack's `land.header` and `land.footer`
 (global template nodes) are the only chrome; the tool renders the skip link,
 `<main id="main-content">` and the not-found state. Nav links are static
 `land.nav-link` props. Unknown routes (`/signup`, `/docs`) show the

@@ -16,9 +16,9 @@ describe("hosted-demo deploy targets", () => {
     expect(DEFAULT_TARGET_KEY).toBe("zudo-composer");
     expect(TARGET_KEYS).toEqual(["zudo-composer", "webshop", "landing", "blog"]);
     expect(TARGETS["zudo-composer"]).toMatchObject({ workerName: "zudo-composer", configPath: "wrangler.jsonc", domain: "zudo-composer.zudolab.dev", kind: "hosted-demo" });
-    expect(TARGETS.webshop).toMatchObject({ workerName: "zudo-composer-demo-shop", configPath: "wrangler.demo-shop.jsonc", domain: "demo-shop.zudolab.dev", kind: "site-static" });
-    expect(TARGETS.landing).toMatchObject({ workerName: "zudo-composer-demo-landing", configPath: "wrangler.demo-landing.jsonc", domain: "demo-landing.zudolab.dev", kind: "site-static" });
-    expect(TARGETS.blog).toMatchObject({ workerName: "zudo-composer-demo-blog", configPath: "wrangler.demo-blog.jsonc", domain: "demo-blog.zudolab.dev", kind: "site-static" });
+    expect(TARGETS.webshop).toMatchObject({ workerName: "zudo-composer-demo-shop", configPath: "wrangler.demo-shop.jsonc", domain: "zc-demo-shop.zudolab.dev", kind: "site-static" });
+    expect(TARGETS.landing).toMatchObject({ workerName: "zudo-composer-demo-landing", configPath: "wrangler.demo-landing.jsonc", domain: "zc-demo-landing.zudolab.dev", kind: "site-static" });
+    expect(TARGETS.blog).toMatchObject({ workerName: "zudo-composer-demo-blog", configPath: "wrangler.demo-blog.jsonc", domain: "zc-demo-blog.zudolab.dev", kind: "site-static" });
     for (const key of TARGET_KEYS) expect(TARGETS[key].artifactDirectory.endsWith("dist-site") || TARGETS[key].artifactDirectory.endsWith("dist-hosted-demo")).toBe(true);
   });
 

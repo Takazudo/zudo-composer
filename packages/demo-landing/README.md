@@ -23,4 +23,4 @@ gitignored, all regenerable. Ordinary Assets edits under `pnpm dev` dirty
 store.
 
 The site is delivered at `/site` on the dev server and, once the static build
-exists, at `https://demo-landing.zudolab.dev`.
+exists, at `https://zc-demo-landing.zudolab.dev`.

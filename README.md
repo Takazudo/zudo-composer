@@ -85,9 +85,9 @@ they share. Full authoring and gate-wiring details are in
 
 | Package | Site | Hosted domain | Local dev port |
 | --- | --- | --- | --- |
-| `packages/demo-webshop` | Nightjar Supply | `demo-shop.zudolab.dev` | 4181 |
-| `packages/demo-landing` | Orrery | `demo-landing.zudolab.dev` | 4182 |
-| `packages/demo-blog` | Margin Notes | `demo-blog.zudolab.dev` | 4183 |
+| `packages/demo-webshop` | Nightjar Supply | `zc-demo-shop.zudolab.dev` | 4181 |
+| `packages/demo-landing` | Orrery | `zc-demo-landing.zudolab.dev` | 4182 |
+| `packages/demo-blog` | Margin Notes | `zc-demo-blog.zudolab.dev` | 4183 |
 
 Run one locally:
 

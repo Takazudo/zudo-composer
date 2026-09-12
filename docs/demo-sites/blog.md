@@ -1,6 +1,6 @@
 # Blog demo — Margin Notes
 
-Package `packages/demo-blog`, domain `demo-blog.zudolab.dev`, token namespace
+Package `packages/demo-blog`, domain `zc-demo-blog.zudolab.dev`, token namespace
 `blog-`, component id prefix `blog.`. Lists follow
 [README § Lists](./README.md#lists); spacing axes follow
 `src/styles/README.md`; the `@theme` mechanism is the one in
@@ -331,7 +331,7 @@ The about page reuses `cover-one-thing.webp`; no separate file.
 
 ## 10. Chrome and 404
 
-On `demo-blog.zudolab.dev` the pack's `blog.header` and `blog.footer` (global
+On `zc-demo-blog.zudolab.dev` the pack's `blog.header` and `blog.footer` (global
 template nodes) are the only chrome; the tool renders the skip link,
 `<main id="main-content">` and the not-found state. Nav links are static
 `blog.nav-link` props; the byline's author link is a `route-link` projection.
