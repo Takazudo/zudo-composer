@@ -10,7 +10,7 @@
 
 import { resolve } from "node:path";
 import { createServer } from "vite";
-import tailwindcss from "@tailwindcss/vite";
+import tailwindPlugin from "../plugins/tailwind-plugin.mjs";
 import preact from "@preact/preset-vite";
 import composerFileProviderPlugin from "../plugins/composer-file-provider-plugin.mjs";
 import domainFileProviderPlugin from "../plugins/domain-file-provider-plugin.mjs";
@@ -114,7 +114,7 @@ export async function resolveComposerDevConfig(options = {}) {
           ],
         }),
         composerAppHtmlPlugin(),
-        tailwindcss(),
+        tailwindPlugin(),
         preact(),
       ],
     },

@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import preact from "@preact/preset-vite";
-import tailwindcss from "@tailwindcss/vite";
+import tailwindPlugin from "./plugins/tailwind-plugin.mjs";
 import componentPackPlugin from "./plugins/component-pack-plugin.mjs";
 import hostStylesPlugin from "./plugins/host-styles-plugin.mjs";
 import { loadHostContext } from "./server/host-context.mjs";
@@ -77,7 +77,7 @@ export default defineConfig(async () => {
       site,
       componentPackPlugin({ workspaceRoot: hostRoot, pack: settings.pack }),
       hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath }),
-      tailwindcss(),
+      tailwindPlugin(),
       preact(),
     ],
   };
