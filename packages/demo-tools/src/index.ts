@@ -5,6 +5,7 @@ export {
   MAPPING_PROVIDER_ID,
   SITEMAP_PROVIDER_ID,
   defineSite,
+  entryRef,
   node,
   slugify,
 } from "./authoring";

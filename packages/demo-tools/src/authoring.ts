@@ -119,7 +119,7 @@ export interface Model {
 
 export interface EntryInput {
   id?: string;
-  /** Values keyed by field KEY; reference values take entry ids. */
+  /** Values keyed by field KEY. `reference` / `reference-list` values are `entryRef(...)` objects. */
   values: Record<string, JsonValue>;
   lifecycle?: "draft" | "published";
 }
@@ -226,19 +226,35 @@ function assertNew(registry: Map<string, unknown>, id: string, kind: string): vo
   if (registry.has(id)) throw new Error(`Duplicate ${kind} id "${id}".`);
 }
 
-function buildNodes(compositionId: string, inputs: readonly NodeInput[], seen: Set<string>, counter: { next: number }): CompositionNode[] {
+interface NodeBuildContext {
+  compositionId: string;
+  packId: string;
+  /** Component id → `schemaVersion`, the `componentVersion` every node is stamped with. */
+  componentVersions: ReadonlyMap<string, number>;
+  seen: Set<string>;
+  next: number;
+}
+
+function buildNodes(context: NodeBuildContext, inputs: readonly NodeInput[]): CompositionNode[] {
   return inputs.map((input) => {
-    const id = input.id ?? `${compositionId}-${slugify(input.componentId)}-${counter.next++}`;
-    if (seen.has(id)) throw new Error(`Duplicate node id "${id}" in composition "${compositionId}".`);
-    seen.add(id);
+    const componentVersion = context.componentVersions.get(input.componentId);
+    if (componentVersion === undefined) throw new Error(`Component "${input.componentId}" is not in pack "${context.packId}".`);
+    const id = input.id ?? `${context.compositionId}-${slugify(input.componentId)}-${context.next++}`;
+    if (context.seen.has(id)) throw new Error(`Duplicate node id "${id}" in composition "${context.compositionId}".`);
+    context.seen.add(id);
     const slots: Record<string, CompositionNode[]> = {};
-    for (const [slotId, children] of Object.entries(input.slots ?? {})) slots[slotId] = buildNodes(compositionId, children, seen, counter);
-    return { id, componentId: input.componentId, componentVersion: 1, props: { ...(input.props ?? {}) }, slots };
+    for (const [slotId, children] of Object.entries(input.slots ?? {})) slots[slotId] = buildNodes(context, children);
+    return { id, componentId: input.componentId, componentVersion, props: { ...(input.props ?? {}) }, slots };
   });
 }
 
+/** `publishedOn` → `published-on`, so derived field ids keep the key's word boundaries. */
+function kebabFromKey(key: string): string {
+  return slugify(key.replace(/([a-z0-9])([A-Z])/g, "$1-$2"));
+}
+
 function buildField(modelId: string, input: FieldInput): ContentFieldDefinition {
-  const base = { id: `${modelId}-${slugify(input.key)}`, key: input.key, label: input.label ?? labelFromKey(input.key), required: input.required ?? true };
+  const base = { id: `${modelId}-${kebabFromKey(input.key)}`, key: input.key, label: input.label ?? labelFromKey(input.key), required: input.required ?? true };
   switch (input.kind) {
     case "choice": return { ...base, kind: "choice", options: input.options };
     case "reference": return { ...base, kind: "reference", target: { providerId: CONTENT_PROVIDER_ID, recordId: input.target.id } };
@@ -267,20 +283,9 @@ export function defineSite(options: SiteOptions): Site {
   const envelope = { createdAt: timestamp, updatedAt: timestamp };
 
   const componentVersions = new Map(manifest.components.map((component) => [component.id, component.schemaVersion]));
-  const stampVersions = (nodes: CompositionNode[]): void => {
-    for (const item of nodes) {
-      const version = componentVersions.get(item.componentId);
-      if (version === undefined) throw new Error(`Component "${item.componentId}" is not in pack "${manifest.packId}".`);
-      item.componentVersion = version;
-      for (const children of Object.values(item.slots)) stampVersions(children);
-    }
-  };
-
   const composition = (id: string, root: NodeInput[]): CompositionNode[] => {
     assertNew(compositions, id, "composition");
-    const nodes = buildNodes(id, root, new Set(), { next: 1 });
-    stampVersions(nodes);
-    return nodes;
+    return buildNodes({ compositionId: id, packId: manifest.packId, componentVersions, seen: new Set(), next: 1 }, root);
   };
 
   const site: Site = {
@@ -320,7 +325,7 @@ export function defineSite(options: SiteOptions): Site {
       assertNew(models, id, "content model");
       const fields = input.fields.map((field) => buildField(id, field));
       const byKey = new Map(fields.map((field) => [field.key, field.id]));
-      if (byKey.size !== fields.length) throw new Error(`Model "${id}" declares a duplicate field key.`);
+      if (byKey.size !== fields.length || new Set(byKey.values()).size !== fields.length) throw new Error(`Model "${id}" declares a duplicate field key.`);
       const record: ContentModelRecord = { id, ...envelope, document: { schemaVersion: 1, id, name: input.name, description: input.description ?? "", kind: input.kind, fields } };
       models.set(id, record);
       return {
@@ -465,6 +470,11 @@ function ownerOfNode(compositions: Map<string, CompositionRecord>, nodeId: strin
   if (owners.length === 1) return owners[0]!;
   if (owners.length === 0) throw new Error(`No declared composition contains node "${nodeId}"; declare the page before attaching to it.`);
   throw new Error(`Node "${nodeId}" exists in compositions ${owners.join(", ")}; pass the owner as target.composition.`);
+}
+
+/** The provider-qualified value a `reference` field stores (a `reference-list` stores an array of them). */
+export function entryRef(entry: Entry): { providerId: string; modelId: string; recordId: string } {
+  return { providerId: CONTENT_PROVIDER_ID, modelId: entry.modelId, recordId: entry.id };
 }
 
 /** An entry id from its first slug/text value; explicit ids are preferred in real content. */

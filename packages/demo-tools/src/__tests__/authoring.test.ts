@@ -5,7 +5,7 @@ import { compileSiteProject } from "../../../../src/site-project/compiler";
 import { canonicalStringifyJson } from "../../../../src/site-project/model/canonical";
 import { validateSiteProject } from "../../../../src/site-project/model/validation";
 import type { SiteProjectApiRequest } from "../../../../src/site-project/api/types";
-import { defineSite, node, slugify } from "../authoring";
+import { defineSite, entryRef, node, slugify } from "../authoring";
 import { renderSiteProject } from "../generate";
 import { seedRelease } from "../seed";
 
@@ -95,8 +95,9 @@ describe("defineSite", () => {
     expect(slugify("Crème brûlée  #2")).toBe("creme-brulee-2");
     const { site, first } = authorSite();
     const project = site.toSiteProject();
-    expect(project.providers.content[0]!.models[0]!.document.fields.map((field) => field.id)).toEqual(["articles-heading", "articles-intro", "articles-publishedon", "articles-slug"]);
+    expect(project.providers.content[0]!.models[0]!.document.fields.map((field) => field.id)).toEqual(["articles-heading", "articles-intro", "articles-published-on", "articles-slug"]);
     expect(first.id).toBe("articles-first-post");
+    expect(entryRef(first)).toEqual({ providerId: "content-filesystem", modelId: "articles", recordId: "articles-first-post" });
     expect(project.providers.compositions[0]!.records.find((record) => record.id === "home")!.document.root[0]!.id).toBe("home-t-card-1");
   });
 
