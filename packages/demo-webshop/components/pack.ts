@@ -15,6 +15,7 @@ import { demoNoteComponent } from "./demo-note";
 import { faqAccordionComponent } from "./faq-accordion";
 import { faqItemComponent } from "./faq-item";
 import { footerComponent } from "./footer";
+import { galleryImageComponent } from "./gallery-image";
 import { gridComponent } from "./grid";
 import { headerComponent } from "./header";
 import { heroComponent } from "./hero";
@@ -65,6 +66,7 @@ export const componentPack = defineComponentPack({
     faqItemComponent,
     productHeroComponent,
     productGalleryComponent,
+    galleryImageComponent,
     specTableComponent,
     addToCartComponent,
     relatedProductsComponent,
@@ -89,6 +91,7 @@ export { DemoNote } from "./demo-note";
 export { FaqAccordion } from "./faq-accordion";
 export { FaqItem } from "./faq-item";
 export { Footer } from "./footer";
+export { GalleryImage } from "./gallery-image";
 export { Grid } from "./grid";
 export { Header } from "./header";
 export { Hero } from "./hero";

@@ -2,8 +2,8 @@ import { createContext } from "preact";
 import { useContext, useId, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { GridItemData, GridItemView } from "./grid-view";
 
-export interface GridRegistry {
-  register(id: string, data: GridItemData): void;
+export interface GridRegistry<T = GridItemData> {
+  register(id: string, data: T): void;
   unregister(id: string): void;
 }
 
@@ -30,10 +30,10 @@ export function useGridItem(data: GridItemData): GridItemView & { managed: boole
 }
 
 /** The list host's side: items register themselves; `ordered` is first-registration (= DOM = Mapping query) order. */
-export function useGridRegistry() {
-  const [items, setItems] = useState<ReadonlyMap<string, GridItemData>>(new Map());
+export function useGridRegistry<T = GridItemData>() {
+  const [items, setItems] = useState<ReadonlyMap<string, T>>(new Map());
   const sequence = useRef(new Map<string, number>());
-  const registry = useMemo<GridRegistry>(() => ({
+  const registry = useMemo<GridRegistry<T>>(() => ({
     register(id, data) {
       if (!sequence.current.has(id)) sequence.current.set(id, sequence.current.size === 0 ? 0 : Math.max(...sequence.current.values()) + 1);
       setItems((previous) => new Map(previous).set(id, data));

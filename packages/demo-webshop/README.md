@@ -22,5 +22,13 @@ gitignored, all regenerable. Ordinary Assets edits under `pnpm dev` dirty
 `cms/assets/catalog.json`; that is by design, as it is for the root dogfood
 store.
 
-The site is delivered at `/site` on the dev server and, once the static build
-exists, at `https://demo-shop.zudolab.dev`.
+The authored site is **Nightjar Supply** (`docs/demo-sites/webshop.md`): twelve
+products on three shelves (Desk, Carry, Light), a catalog with filter / sort /
+search, one page per product, a mock cart and checkout, About and FAQ. Image
+ids in `site-project.ts` are the record ids of the committed Assets store.
+`__tests__/site-compile.test.ts` compiles the committed JSON the way the static
+build does and asserts every route, its h1, the materialised lists and the
+pinned image URLs.
+
+The site is delivered at `/site` on the dev server and at
+`https://demo-shop.zudolab.dev` from `corepack pnpm demo:build-site webshop`.

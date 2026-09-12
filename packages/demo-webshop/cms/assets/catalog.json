@@ -1,6 +1,407 @@
 {
   "schemaVersion": 1,
-  "mutationToken": "0000000000000000000000000000000000000000000000000000000000000000",
-  "records": [],
+  "mutationToken": "1fdd562f588735f78991cf94e93dcc4092e67b1a0b015656ceadb1ecc0b3dfc3",
+  "records": [
+    {
+      "id": "assets-b8badec4-c972-48f8-9944-b44d671723cc",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:39.987Z",
+      "updatedAt": "2026-09-12T06:20:39.987Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-b8badec4-c972-48f8-9944-b44d671723cc",
+        "fileName": "shop-hero.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "05094b48582f8594ffef2615e80092e8ac4803fadf62d6d8d71e41772c71060d",
+        "versions": [
+          {
+            "id": "05094b48582f8594ffef2615e80092e8ac4803fadf62d6d8d71e41772c71060d",
+            "checksum": "05094b48582f8594ffef2615e80092e8ac4803fadf62d6d8d71e41772c71060d",
+            "mimeType": "image/webp",
+            "byteLength": 30910,
+            "url": "/uploaded-assets/sha256-05094b48582f8594ffef2615e80092e8ac4803fadf62d6d8d71e41772c71060d.webp",
+            "createdAt": "2026-09-12T06:20:39.987Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-449340b8-78fd-4646-97e1-20cbb6949a87",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.009Z",
+      "updatedAt": "2026-09-12T06:20:40.009Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-449340b8-78fd-4646-97e1-20cbb6949a87",
+        "fileName": "p-ledger-notebook.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "87f08f96b8bf321c1c0e40c985e8b2978d1b1ec1495c8f640f156f2480c13f51",
+        "versions": [
+          {
+            "id": "87f08f96b8bf321c1c0e40c985e8b2978d1b1ec1495c8f640f156f2480c13f51",
+            "checksum": "87f08f96b8bf321c1c0e40c985e8b2978d1b1ec1495c8f640f156f2480c13f51",
+            "mimeType": "image/webp",
+            "byteLength": 26566,
+            "url": "/uploaded-assets/sha256-87f08f96b8bf321c1c0e40c985e8b2978d1b1ec1495c8f640f156f2480c13f51.webp",
+            "createdAt": "2026-09-12T06:20:40.009Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-ab894c50-574e-4341-b5a8-709e8e9a68f7",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.031Z",
+      "updatedAt": "2026-09-12T06:20:40.031Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-ab894c50-574e-4341-b5a8-709e8e9a68f7",
+        "fileName": "p-ledger-notebook-2.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "666c89501dca437e57472dbb703c1023f9bd3781524656b11266d987698c1182",
+        "versions": [
+          {
+            "id": "666c89501dca437e57472dbb703c1023f9bd3781524656b11266d987698c1182",
+            "checksum": "666c89501dca437e57472dbb703c1023f9bd3781524656b11266d987698c1182",
+            "mimeType": "image/webp",
+            "byteLength": 30202,
+            "url": "/uploaded-assets/sha256-666c89501dca437e57472dbb703c1023f9bd3781524656b11266d987698c1182.webp",
+            "createdAt": "2026-09-12T06:20:40.031Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-6282f007-ca3b-4fb4-bfe8-589e6524b099",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.052Z",
+      "updatedAt": "2026-09-12T06:20:40.052Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-6282f007-ca3b-4fb4-bfe8-589e6524b099",
+        "fileName": "p-brass-rule.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "cb3a20815261d3c189ad74ab6655965619cd9d57f255ba1e471a48e63a91d5b0",
+        "versions": [
+          {
+            "id": "cb3a20815261d3c189ad74ab6655965619cd9d57f255ba1e471a48e63a91d5b0",
+            "checksum": "cb3a20815261d3c189ad74ab6655965619cd9d57f255ba1e471a48e63a91d5b0",
+            "mimeType": "image/webp",
+            "byteLength": 36264,
+            "url": "/uploaded-assets/sha256-cb3a20815261d3c189ad74ab6655965619cd9d57f255ba1e471a48e63a91d5b0.webp",
+            "createdAt": "2026-09-12T06:20:40.052Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-58a10ab3-1341-4693-bd6a-ca94c766fd4f",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.076Z",
+      "updatedAt": "2026-09-12T06:20:40.076Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-58a10ab3-1341-4693-bd6a-ca94c766fd4f",
+        "fileName": "p-field-pen.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "202fb57e2b87634d37fa3fc221b1f444365c2846fd82ce648cfbd5dbb151e274",
+        "versions": [
+          {
+            "id": "202fb57e2b87634d37fa3fc221b1f444365c2846fd82ce648cfbd5dbb151e274",
+            "checksum": "202fb57e2b87634d37fa3fc221b1f444365c2846fd82ce648cfbd5dbb151e274",
+            "mimeType": "image/webp",
+            "byteLength": 12902,
+            "url": "/uploaded-assets/sha256-202fb57e2b87634d37fa3fc221b1f444365c2846fd82ce648cfbd5dbb151e274.webp",
+            "createdAt": "2026-09-12T06:20:40.076Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-3e8d2ee4-42db-4b78-9374-3c715606f1e6",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.099Z",
+      "updatedAt": "2026-09-12T06:20:40.099Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-3e8d2ee4-42db-4b78-9374-3c715606f1e6",
+        "fileName": "p-field-pen-2.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "098c80086d5bd0395d70b6b72f33ffa4895eb66cb4365b2df660162b7d5d8fbe",
+        "versions": [
+          {
+            "id": "098c80086d5bd0395d70b6b72f33ffa4895eb66cb4365b2df660162b7d5d8fbe",
+            "checksum": "098c80086d5bd0395d70b6b72f33ffa4895eb66cb4365b2df660162b7d5d8fbe",
+            "mimeType": "image/webp",
+            "byteLength": 12882,
+            "url": "/uploaded-assets/sha256-098c80086d5bd0395d70b6b72f33ffa4895eb66cb4365b2df660162b7d5d8fbe.webp",
+            "createdAt": "2026-09-12T06:20:40.099Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-84599af4-0d54-4bbb-bae1-a4c74ccea928",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.125Z",
+      "updatedAt": "2026-09-12T06:20:40.125Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-84599af4-0d54-4bbb-bae1-a4c74ccea928",
+        "fileName": "p-slate-tray.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "8d4c754a115ed2bf8b2bf1f759c50d8b04b158b2a4b4846c24b1e2a696d18bfd",
+        "versions": [
+          {
+            "id": "8d4c754a115ed2bf8b2bf1f759c50d8b04b158b2a4b4846c24b1e2a696d18bfd",
+            "checksum": "8d4c754a115ed2bf8b2bf1f759c50d8b04b158b2a4b4846c24b1e2a696d18bfd",
+            "mimeType": "image/webp",
+            "byteLength": 19040,
+            "url": "/uploaded-assets/sha256-8d4c754a115ed2bf8b2bf1f759c50d8b04b158b2a4b4846c24b1e2a696d18bfd.webp",
+            "createdAt": "2026-09-12T06:20:40.125Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-27d2cd6e-0874-455b-91a5-784bf79c8d14",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.147Z",
+      "updatedAt": "2026-09-12T06:20:40.147Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-27d2cd6e-0874-455b-91a5-784bf79c8d14",
+        "fileName": "p-sling-pouch.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "aa7259a52aa5c5c244dd725494658bb55ea81edce7d5255d4ad9e7c64ee55452",
+        "versions": [
+          {
+            "id": "aa7259a52aa5c5c244dd725494658bb55ea81edce7d5255d4ad9e7c64ee55452",
+            "checksum": "aa7259a52aa5c5c244dd725494658bb55ea81edce7d5255d4ad9e7c64ee55452",
+            "mimeType": "image/webp",
+            "byteLength": 33468,
+            "url": "/uploaded-assets/sha256-aa7259a52aa5c5c244dd725494658bb55ea81edce7d5255d4ad9e7c64ee55452.webp",
+            "createdAt": "2026-09-12T06:20:40.147Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-eba643be-cd55-48f9-b7ce-7290ce2062d0",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.170Z",
+      "updatedAt": "2026-09-12T06:20:40.170Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-eba643be-cd55-48f9-b7ce-7290ce2062d0",
+        "fileName": "p-card-wallet.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "7ce9f76688aa003afb1255bf517eb2e66ac587fe9c58e5cbeb233ba363607836",
+        "versions": [
+          {
+            "id": "7ce9f76688aa003afb1255bf517eb2e66ac587fe9c58e5cbeb233ba363607836",
+            "checksum": "7ce9f76688aa003afb1255bf517eb2e66ac587fe9c58e5cbeb233ba363607836",
+            "mimeType": "image/webp",
+            "byteLength": 30446,
+            "url": "/uploaded-assets/sha256-7ce9f76688aa003afb1255bf517eb2e66ac587fe9c58e5cbeb233ba363607836.webp",
+            "createdAt": "2026-09-12T06:20:40.170Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-728d3d8d-1951-4baf-b65f-4f231afc24be",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.192Z",
+      "updatedAt": "2026-09-12T06:20:40.192Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-728d3d8d-1951-4baf-b65f-4f231afc24be",
+        "fileName": "p-key-loop.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "3a35c7a309a88dd0707e53c9d4823fb74a2cd28e9086c3836a4aeb7468fc3e4f",
+        "versions": [
+          {
+            "id": "3a35c7a309a88dd0707e53c9d4823fb74a2cd28e9086c3836a4aeb7468fc3e4f",
+            "checksum": "3a35c7a309a88dd0707e53c9d4823fb74a2cd28e9086c3836a4aeb7468fc3e4f",
+            "mimeType": "image/webp",
+            "byteLength": 16516,
+            "url": "/uploaded-assets/sha256-3a35c7a309a88dd0707e53c9d4823fb74a2cd28e9086c3836a4aeb7468fc3e4f.webp",
+            "createdAt": "2026-09-12T06:20:40.192Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-e6a710b3-480d-4b62-8e8b-da45c4f29cd7",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.215Z",
+      "updatedAt": "2026-09-12T06:20:40.215Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-e6a710b3-480d-4b62-8e8b-da45c4f29cd7",
+        "fileName": "p-rain-cape.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "13932263a82e63ca9c6549fa7955c97484917d2e0faa283d3cd11a3f93d970e2",
+        "versions": [
+          {
+            "id": "13932263a82e63ca9c6549fa7955c97484917d2e0faa283d3cd11a3f93d970e2",
+            "checksum": "13932263a82e63ca9c6549fa7955c97484917d2e0faa283d3cd11a3f93d970e2",
+            "mimeType": "image/webp",
+            "byteLength": 17352,
+            "url": "/uploaded-assets/sha256-13932263a82e63ca9c6549fa7955c97484917d2e0faa283d3cd11a3f93d970e2.webp",
+            "createdAt": "2026-09-12T06:20:40.215Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-7e6a524b-3b9a-4f89-a763-6949cd5c84bc",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.238Z",
+      "updatedAt": "2026-09-12T06:20:40.238Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-7e6a524b-3b9a-4f89-a763-6949cd5c84bc",
+        "fileName": "p-wick-lamp.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "1ebb87b94f8fdb3e5dc8915a3836bf9c72ed3f24370c26c4b422cfcbae420445",
+        "versions": [
+          {
+            "id": "1ebb87b94f8fdb3e5dc8915a3836bf9c72ed3f24370c26c4b422cfcbae420445",
+            "checksum": "1ebb87b94f8fdb3e5dc8915a3836bf9c72ed3f24370c26c4b422cfcbae420445",
+            "mimeType": "image/webp",
+            "byteLength": 20692,
+            "url": "/uploaded-assets/sha256-1ebb87b94f8fdb3e5dc8915a3836bf9c72ed3f24370c26c4b422cfcbae420445.webp",
+            "createdAt": "2026-09-12T06:20:40.238Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-14a1881b-90d9-4abc-9589-e887be624154",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.261Z",
+      "updatedAt": "2026-09-12T06:20:40.261Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-14a1881b-90d9-4abc-9589-e887be624154",
+        "fileName": "p-wick-lamp-2.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "4cf8b5fe9b005be579d8e6edc617aeb9b459089f03a90858481561a9f293433e",
+        "versions": [
+          {
+            "id": "4cf8b5fe9b005be579d8e6edc617aeb9b459089f03a90858481561a9f293433e",
+            "checksum": "4cf8b5fe9b005be579d8e6edc617aeb9b459089f03a90858481561a9f293433e",
+            "mimeType": "image/webp",
+            "byteLength": 19172,
+            "url": "/uploaded-assets/sha256-4cf8b5fe9b005be579d8e6edc617aeb9b459089f03a90858481561a9f293433e.webp",
+            "createdAt": "2026-09-12T06:20:40.261Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-30c8b3fb-2b3e-4d39-94df-5f2616f4882d",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.285Z",
+      "updatedAt": "2026-09-12T06:20:40.285Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-30c8b3fb-2b3e-4d39-94df-5f2616f4882d",
+        "fileName": "p-pocket-torch.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "4b3f75d98f7a17cf35dbf811d6335c0b88c41dbfae7af8ae0c3334bb6f3f39c9",
+        "versions": [
+          {
+            "id": "4b3f75d98f7a17cf35dbf811d6335c0b88c41dbfae7af8ae0c3334bb6f3f39c9",
+            "checksum": "4b3f75d98f7a17cf35dbf811d6335c0b88c41dbfae7af8ae0c3334bb6f3f39c9",
+            "mimeType": "image/webp",
+            "byteLength": 17394,
+            "url": "/uploaded-assets/sha256-4b3f75d98f7a17cf35dbf811d6335c0b88c41dbfae7af8ae0c3334bb6f3f39c9.webp",
+            "createdAt": "2026-09-12T06:20:40.285Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-29940c85-15d2-4c6e-bcce-2233d97bb497",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.307Z",
+      "updatedAt": "2026-09-12T06:20:40.307Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-29940c85-15d2-4c6e-bcce-2233d97bb497",
+        "fileName": "p-candle-set.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "2e8f284caba491116b8fdd9ab036d3c22cf24786f84db5a8aaa11897802ba224",
+        "versions": [
+          {
+            "id": "2e8f284caba491116b8fdd9ab036d3c22cf24786f84db5a8aaa11897802ba224",
+            "checksum": "2e8f284caba491116b8fdd9ab036d3c22cf24786f84db5a8aaa11897802ba224",
+            "mimeType": "image/webp",
+            "byteLength": 17880,
+            "url": "/uploaded-assets/sha256-2e8f284caba491116b8fdd9ab036d3c22cf24786f84db5a8aaa11897802ba224.webp",
+            "createdAt": "2026-09-12T06:20:40.307Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-98de0939-961d-42d1-b195-dac35fc4586b",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:20:40.330Z",
+      "updatedAt": "2026-09-12T06:20:40.330Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-98de0939-961d-42d1-b195-dac35fc4586b",
+        "fileName": "p-clip-light.webp",
+        "folderId": null,
+        "note": "",
+        "state": "active",
+        "currentVersionId": "fdec85c79d1c1737ad78de914f2e0221786d08668ddf0b82d2955ea405e4745c",
+        "versions": [
+          {
+            "id": "fdec85c79d1c1737ad78de914f2e0221786d08668ddf0b82d2955ea405e4745c",
+            "checksum": "fdec85c79d1c1737ad78de914f2e0221786d08668ddf0b82d2955ea405e4745c",
+            "mimeType": "image/webp",
+            "byteLength": 16316,
+            "url": "/uploaded-assets/sha256-fdec85c79d1c1737ad78de914f2e0221786d08668ddf0b82d2955ea405e4745c.webp",
+            "createdAt": "2026-09-12T06:20:40.330Z"
+          }
+        ]
+      }
+    }
+  ],
   "folders": []
 }

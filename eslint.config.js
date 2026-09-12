@@ -10,6 +10,7 @@ export default tseslint.config(
       'dist',
       'dist-hosted-demo',
       '**/dist-site',
+      '**/.zudo-site-project',
       '**/dist',
       'coverage',
       'worktrees/**',
