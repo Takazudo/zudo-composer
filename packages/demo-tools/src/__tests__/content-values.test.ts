@@ -3,8 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ComponentPackManifest } from "@zudo-composer/component-contract";
-import { defineSite } from "../authoring";
-import { readAssetUrls } from "../seed";
+import { defineSite, readAssetUrls } from "zudo-composer/authoring";
 
 const manifest = { contractVersion: 2, packId: "t", packVersion: "1.0.0", components: [] } as unknown as ComponentPackManifest;
 
@@ -27,12 +26,13 @@ describe("readAssetUrls", () => {
   it("maps each active asset's file name to its canonical authoring URL", () => {
     const root = mkdtempSync(join(tmpdir(), "demo-tools-assets-"));
     try {
-      mkdirSync(join(root, "cms/assets"), { recursive: true });
-      writeFileSync(join(root, "cms/assets/catalog.json"), JSON.stringify({ records: [
+      const assets = join(root, "media-store");
+      mkdirSync(assets, { recursive: true });
+      writeFileSync(join(assets, "catalog.json"), JSON.stringify({ records: [
         { id: "assets-1", document: { fileName: "a.webp", state: "active" } },
         { id: "assets-2", document: { fileName: "old.webp", state: "trash" } },
       ] }));
-      expect(readAssetUrls(root)).toEqual({ "a.webp": "/uploaded-assets/asset-assets-1" });
+      expect(readAssetUrls({ paths: { assets } })).toEqual({ "a.webp": "/uploaded-assets/asset-assets-1" });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

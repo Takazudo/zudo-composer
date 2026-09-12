@@ -1,10 +1,10 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { defineComponent, defineComponentPack } from "@zudo-composer/component-contract";
-import { createComponentCatalog } from "../../../../src/composer/model/types";
-import { compileSiteProject } from "../../../../src/site-project/compiler";
-import { canonicalStringifyJson } from "../../../../src/site-project/model/canonical";
-import { validateSiteProject } from "../../../../src/site-project/model/validation";
-import { defineSite, entryRef, node, slugify } from "../authoring";
+import { canonicalStringifyJson, defineSite, entryRef, node, slugify, validateSiteProject } from "zudo-composer/authoring";
+import { compileStaticSite } from "zudo-composer/site-build";
 import { renderSiteProject } from "../generate";
 
 interface FrameProps { children?: unknown }
@@ -119,14 +119,19 @@ describe("defineSite", () => {
       target: { nodeId: "journal-grid", slotId: "items" },
       mapping: { providerId: "mapping-filesystem", recordId: cardMapping.id },
     }]);
-    const compilation = await compileSiteProject(project, { componentCatalog: createComponentCatalog(componentPack.manifest), policy: "authoring-preview" });
-    expect(compilation.status, JSON.stringify(compilation.diagnostics)).toBe("ready");
-    if (compilation.status !== "ready") return;
-    expect(compilation.build.routes.map((route) => route.pathname).sort()).toEqual(["/", "/journal", "/journal/first-post", "/journal/second-post"]);
-    const journal = compilation.build.routes.find((route) => route.pathname === "/journal")!;
-    const grid = journal.composition.document.root.find((item) => item.id === "journal-grid")!;
-    expect(grid.slots.items!.map((item) => item.props.title)).toEqual(["Second post", "First post"]);
-    expect(grid.slots.items!.map((item) => item.props.href)).toEqual(["/journal/second-post", "/journal/first-post"]);
+    const root = await mkdtemp(join(tmpdir(), "authoring-compile-"));
+    try {
+      const projectPath = join(root, "site-project.json");
+      await writeFile(projectPath, canonicalStringifyJson(project as never));
+      const compilation = await compileStaticSite({ projectPath, pack: componentPack, assetsStoreRoot: join(root, "assets") });
+      expect(compilation.build.routes.map((route) => route.pathname).sort()).toEqual(["/", "/journal", "/journal/first-post", "/journal/second-post"]);
+      const journal = compilation.build.routes.find((route) => route.pathname === "/journal")!;
+      const grid = journal.composition.document.root.find((item) => item.id === "journal-grid")!;
+      expect(grid.slots.items!.map((item) => item.props.title)).toEqual(["Second post", "First post"]);
+      expect(grid.slots.items!.map((item) => item.props.href)).toEqual(["/journal/second-post", "/journal/first-post"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("refuses duplicate ids, unknown components and unknown fields", () => {

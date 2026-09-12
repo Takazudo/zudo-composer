@@ -2,23 +2,24 @@
 //
 //   generate       site-project.ts → site-project.json
 //   seed           seed-assets, then seed-release
-//   seed-assets    images-src/manifest.json → cms/assets
+//   seed-assets    [manifest] → the configured Assets store
 //   seed-release   site-project.json → `zudo-composer seed`
 
 import { resolve } from "node:path";
 import { generateSiteProject } from "./generate";
-import { readAssetManifest, seedAssets, seedRelease } from "./seed";
+import { seedAssets, seedRelease } from "./seed";
 
 const USAGE = `Usage: demo-tools <generate | seed | seed-assets | seed-release>
 
 Runs against the demo package in the current directory.
+seed-assets accepts a manifest path (default: images-src/manifest.json).
 `;
 
 export async function runDemoTools(argv: readonly string[], cwd = process.cwd()): Promise<number> {
   const packageRoot = resolve(cwd);
-  const [command] = argv;
+  const [command, manifestPath] = argv;
   const assets = async () => {
-    const result = await seedAssets(packageRoot, await readAssetManifest(packageRoot));
+    const result = await seedAssets(packageRoot, manifestPath);
     console.log(`Assets: added ${result.added}, already present ${result.skipped}.`);
   };
   const release = async () => {

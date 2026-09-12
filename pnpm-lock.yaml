@@ -186,9 +186,12 @@ importers:
       '@zudo-composer/component-contract':
         specifier: workspace:*
         version: link:../component-contract
-      tsx:
-        specifier: ^4.20.5
-        version: 4.23.12
+      vite:
+        specifier: ^8.2.2
+        version: 8.2.2(@types/node@26.4.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.12)
+      zudo-composer:
+        specifier: workspace:*
+        version: link:../..
 
   packages/demo-webshop:
     devDependencies:
