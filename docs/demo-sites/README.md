@@ -192,6 +192,84 @@ export default site;
 - **Browser lanes** are not run by implementation tasks. The demos lane (port
   4176) and the static build lane (4177) belong to later tasks in the epic.
 
+## Static website build
+
+Each demo domain serves a static build of its host package: the delivered site
+at `/`, with no authoring routes and no tool chrome.
+
+```sh
+corepack pnpm demo:build-site webshop            # or landing / blog / a host directory
+corepack pnpm --filter demo-webshop build:site   # the same, from the package
+corepack pnpm site-static:verify packages/demo-webshop/dist-site [git-sha]
+```
+
+`demo:build-site` runs `vite build --config vite.site-static.config.ts` with
+`ZUDO_HOST_ROOT=packages/demo-<name>`, then `scripts/check-site-static.mjs`.
+At config time the build loads the host's config and pack
+(`server/host-context.mjs`), then compiles the committed `site-project.json`
+the way a release does: validation, an exact-version Assets lock from the
+host's `cms/assets` store and `policy: "release"`. It never reads `.zudo-site-project/`, so no
+seed or activation is needed, and a blocked project fails the build. The
+compiled project and build plan are baked into `virtual:site-static-project`.
+The entry `src/site-static/main.tsx` mounts `SiteDelivery` with a `static`
+source at `basePath "/"`. It renders from `location.pathname` and handles clicks
+on compiled routes with `pushState`.
+
+Output, `<host>/dist-site/` (gitignored):
+
+```text
+index.html            the one HTML document; every route renders from it
+assets/               hashed Vite output (JS, CSS)
+uploaded-assets/      pinned asset versions (sha256-….ext) + the host's public/uploaded-assets files
+_headers              Cloudflare rules: /assets/* immutable; per-file rules for pinned assets
+site-manifest.json    not listed in itself
+```
+
+```json
+{
+  "schemaVersion": 1,
+  "projectId": "demo-webshop",
+  "sourceRevision": "<40-hex git HEAD at build time>",
+  "projectSourceRevision": "<sha256 of canonical site-project.json>",
+  "routes": ["/", "…every compiled sitemap pathname"],
+  "files": { "<relative path>": "<sha256>" }
+}
+```
+
+The verifier rejects:
+
+- a file missing from the manifest or not on disk
+- a checksum mismatch
+- a pinned asset whose name is not its own hash
+- `_headers` that do not match the pinned set
+- a symlink
+- server or filesystem markers (`node:fs`, `.zudo-site-project`, …) in HTML, JS or CSS
+
+It takes an optional expected git SHA for CI.
+
+**Serving.** Routes are client-side, and only `index.html` exists. So the
+server must answer every unknown path with `index.html` (Cloudflare Workers
+static assets: `not_found_handling: "single-page-application"`). The page then
+renders the matching route, or the tool's plain not-found page. The HTTP status
+is 200 in both cases.
+
+**Chrome at `/`.** `DeliveryChrome` renders only the skip link (to
+`#main-content`), `<main id="main-content">` and the state pages (loading,
+blocked, not found, with a link to `/`). Header, navigation, breadcrumbs and footer
+— including the "Built with zudo-composer" credit — are the host's own
+global-template nodes. Nav links are static props or `route-link` projections;
+the components compute active state from `location.pathname`. Href prefixing is
+a no-op at `/`, and `/uploaded-assets/` stays canonical. `/site` and
+`/website-preview` keep the full tool chrome unchanged. The page's only tool CSS
+is `src/site-static/styles.css`, which uses no authoring-app tokens.
+
+**No `zudo-composer build-site` subcommand.** The build depends on this repository
+(`vite.site-static.config.ts` and `src/site-static/` are excluded from the published
+`files`, and the manifest stamps this checkout's git SHA). Shipping it would
+mean supporting static deployment for installed hosts, which the tool does not
+claim. `server/cli/run.mjs` therefore stays `dev` + `release`, and the root
+`demo:build-site` script is the one entry point.
+
 ## Lists
 
 Every list on a demo site — product grids, pricing tiers, article lists,

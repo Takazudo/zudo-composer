@@ -4,21 +4,21 @@ import { Component, h, type ComponentChildren, type JSX } from "preact";
 import type { CompositionDocument, CompositionNode } from "../../composer/model/types";
 import { validateNodeProps } from "../../composer/model/node-props";
 import type { SiteCompiledRouteComposition } from "../../site-project/compiler";
-import { safeDeliveryHref } from "./routing";
+import { safeDeliveryHref, type DeliveryBasePath } from "./routing";
 
 export interface DeliveryComponentError { nodeId: string; componentId: string; error: unknown }
 export interface DeliveryRuntimeProps {
   composition: SiteCompiledRouteComposition;
   pack: TrustedComponentPack;
   onComponentError?: (detail: DeliveryComponentError) => void;
-  basePath?: "/site" | "/website-preview";
+  basePath?: DeliveryBasePath;
 }
 
 type Schema = { type?: string; schema?: Schema; fields?: readonly { key: string; schema: Schema }[]; items?: Schema | readonly Schema[] };
 
 function schemaValue(schema: Schema): Schema { return schema.schema ?? schema; }
 
-function rewriteSchemaValue(value: JsonValue, schema: Schema, key?: string, basePath: "/site" | "/website-preview" = "/site"): JsonValue | undefined {
+function rewriteSchemaValue(value: JsonValue, schema: Schema, key?: string, basePath: DeliveryBasePath = "/site"): JsonValue | undefined {
   schema = schemaValue(schema);
   if (key === "href" && schema.type === "string" && typeof value === "string") return safeDeliveryHref(value, basePath);
   if (schema.type === "object" && value !== null && !Array.isArray(value) && typeof value === "object") {
@@ -40,7 +40,7 @@ function rewriteSchemaValue(value: JsonValue, schema: Schema, key?: string, base
   return value;
 }
 
-export function projectTrustedProps(node: CompositionNode, definition: ComponentManifest, basePath: "/site" | "/website-preview" = "/site"): Record<string, unknown> | null {
+export function projectTrustedProps(node: CompositionNode, definition: ComponentManifest, basePath: DeliveryBasePath = "/site"): Record<string, unknown> | null {
   if (!validateNodeProps(node, definition).ok) return null;
   const props: Record<string, unknown> = { ...definition.defaults };
   const fields = new Map(definition.fields.map((field) => [field.prop, field]));
@@ -75,7 +75,7 @@ interface RuntimeNodeProps {
   pack: TrustedComponentPack;
   outlet?: { parentId: string; slotId: string; children: readonly CompositionNode[]; localOwner: string };
   report?: (detail: DeliveryComponentError) => void;
-  basePath: "/site" | "/website-preview";
+  basePath: DeliveryBasePath;
 }
 
 function RuntimeInvocation({ runtime, props }: { runtime: ReturnType<typeof resolveComponentNode> extends infer T ? T : never; props: Record<string, unknown> }): ComponentChildren {
