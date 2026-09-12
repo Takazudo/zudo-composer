@@ -1,10 +1,109 @@
 /* The host's base stylesheet: Tailwind v4 with NO default theme. Every utility
-   a component uses comes from the `blog-` token namespace declared here. */
+   a component uses comes from the `blog-` token namespace declared here; the
+   tone rules live in docs/demo-sites/blog.md. */
 @import "tailwindcss/preflight";
 @import "tailwindcss/utilities";
 
 @source "../components";
 
+:root {
+  --blog-palette-gray-0: oklch(0.975 0.012 80);
+  --blog-palette-gray-1: oklch(0.955 0.014 80);
+  --blog-palette-gray-2: oklch(0.92 0.015 80);
+  --blog-palette-gray-3: oklch(0.85 0.015 80);
+  --blog-palette-gray-4: oklch(0.58 0.015 70);
+  --blog-palette-gray-5: oklch(0.45 0.018 70);
+  --blog-palette-gray-6: oklch(0.25 0.02 60);
+  --blog-palette-gray-7: oklch(0.17 0.02 60);
+  --blog-palette-oxblood-1: oklch(0.93 0.03 25);
+  --blog-palette-oxblood-4: oklch(0.46 0.13 25);
+  --blog-palette-oxblood-5: oklch(0.38 0.12 25);
+  --blog-palette-green-4: oklch(0.55 0.13 150);
+  --blog-palette-red-4: oklch(0.52 0.17 25);
+}
+
 @theme {
-  --color-blog-accent: oklch(55% 0.16 150);
+  --color-blog-bg: var(--blog-palette-gray-0);
+  --color-blog-surface: var(--blog-palette-gray-1);
+  --color-blog-surface-2: var(--blog-palette-gray-2);
+  --color-blog-border: var(--blog-palette-gray-3);
+  --color-blog-faint: var(--blog-palette-gray-4);
+  --color-blog-muted: var(--blog-palette-gray-5);
+  --color-blog-fg: var(--blog-palette-gray-6);
+  --color-blog-fg-strong: var(--blog-palette-gray-7);
+  --color-blog-link: var(--blog-palette-oxblood-4);
+  --color-blog-accent: var(--blog-palette-oxblood-4);
+  --color-blog-accent-strong: var(--blog-palette-oxblood-5);
+  --color-blog-accent-soft: var(--blog-palette-oxblood-1);
+  --color-blog-focus: var(--blog-palette-oxblood-5);
+  --color-blog-success: var(--blog-palette-green-4);
+  --color-blog-danger: var(--blog-palette-red-4);
+
+  --spacing-blog-hsp-xs: 0.5rem;
+  --spacing-blog-hsp-sm: 1rem;
+  --spacing-blog-hsp-md: 1.5rem;
+  --spacing-blog-hsp-lg: 2.5rem;
+  --spacing-blog-hsp-xl: 4rem;
+  --spacing-blog-hsp-2xl: 6rem;
+  --spacing-blog-vsp-xs: 0.5rem;
+  --spacing-blog-vsp-sm: 1rem;
+  --spacing-blog-vsp-md: 1.75rem;
+  --spacing-blog-vsp-lg: 3rem;
+  --spacing-blog-vsp-xl: 5rem;
+  --spacing-blog-vsp-2xl: 7rem;
+  --spacing-blog-control-h: 2.75rem;
+  --spacing-blog-nav-h: 3.75rem;
+  --spacing-blog-avatar-sm: 2.5rem;
+  --spacing-blog-avatar-lg: 5rem;
+
+  /* The spec's --font-size-blog-* scale; Tailwind v4 reads font sizes from --text-*. */
+  --text-blog-caption: 0.8125rem;
+  --text-blog-caption--line-height: 1.5;
+  --text-blog-body: 1.125rem;
+  --text-blog-body--line-height: 1.7;
+  --text-blog-lead: 1.3125rem;
+  --text-blog-lead--line-height: 1.5;
+  --text-blog-h3: 1.375rem;
+  --text-blog-h3--line-height: 1.3;
+  --text-blog-h2: 1.75rem;
+  --text-blog-h2--line-height: 1.25;
+  --text-blog-h1-sm: 2rem;
+  --text-blog-h1-sm--line-height: 1.15;
+  --text-blog-h1: 2.5rem;
+  --text-blog-h1--line-height: 1.15;
+  --text-blog-display: 3.5rem;
+  --text-blog-display--line-height: 1.05;
+  --text-blog-code: 0.9em;
+  --text-blog-drop-cap: 3.4em;
+  --text-blog-drop-cap--line-height: 0.85;
+
+  --font-blog-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --font-blog-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-blog-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-weight-blog-normal: 400;
+  --font-weight-blog-medium: 500;
+  --font-weight-blog-semibold: 600;
+  --tracking-blog-caps: 0.08em;
+
+  --radius-blog-avatar: 9999px;
+
+  --container-blog-measure: 38rem;
+  --container-blog-page: 64rem;
+
+  --breakpoint-blog-sm: 40rem;
+  --breakpoint-blog-md: 48rem;
+  --breakpoint-blog-lg: 64rem;
+
+  --aspect-blog-cover: 16 / 10;
+}
+
+:where(body) {
+  background-color: var(--color-blog-bg);
+  color: var(--color-blog-fg);
+  font-family: var(--font-blog-serif);
+}
+
+:where(a, button, input, textarea):focus-visible {
+  outline: 2px solid var(--color-blog-focus);
+  outline-offset: 2px;
 }
