@@ -47,7 +47,7 @@ async function expectRouteContent(page: Page, route: string) {
     "/site/journal/start-with-the-question": "Start with the question",
   };
   await expect(page.getByRole("heading", { name: headings[route]!, exact: true })).toBeVisible();
-  if (route === "/site/about") await expect(page.getByText("Work made visible", { exact: true })).toBeVisible();
+  if (route === "/site/about") await expect(page.getByText("Who we are", { exact: true })).toBeVisible();
   if (route === "/site/journal/map-the-moving-parts") await expect(page.getByText("Draw the relationships", { exact: true })).toBeVisible();
   if (route === "/site/journal/review-in-small-loops") await expect(page.getByText("Share something concrete", { exact: true })).toBeVisible();
   if (route === "/site/journal/start-with-the-question") await expect(page.getByText("Begin with purpose", { exact: true })).toBeVisible();
