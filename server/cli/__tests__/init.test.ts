@@ -38,7 +38,7 @@ describe("create-only init arguments", () => {
     ["init", "one", "--name", "a", "--name", "b"], ["init", "one", "--tool-tarball", "tool.tgz"],
     ["init", "one", "--contract-tarball", "contract.tgz"], ["init", "one", "--skip-install"],
     ["init", "one", "--upgrade"], ["upgrade", "one"],
-  ])("rejects incomplete, ambiguous or upgrading invocation %j", (args) => {
+  ].map((args) => ({ args })))("rejects incomplete, ambiguous or upgrading invocation $args", ({ args }) => {
     expect(parseArguments(args)).toHaveProperty("error");
   });
   it.each(["Uppercase", "../outside", "two words", "@scope", ".hidden", "zudo-composer", "preact", "node_modules", "src"])("rejects unsafe or colliding package name %s", (name) => {
