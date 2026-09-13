@@ -6,4 +6,124 @@ description: The files and directories a host project uses for CMS data, compone
 
 ## Overview
 
-This page will cover the host directory layout and how configuration settings map to each path.
+The host owns the component code, stylesheet entry, authored SiteProject, and
+all CMS records. zudo-composer resolves these paths from the host root; the
+tool package does not become the host's data directory.
+
+## Minimal host tree
+
+With the default paths and a host-owned component pack, the smallest useful
+layout is:
+
+```text
+my-site/
+├── package.json                 # name: "my-site", exports: { "./components": … }
+├── pnpm-workspace.yaml           # explicit Git-source and build permissions
+├── zudo-composer.config.ts       # pack: "my-site/components"
+├── components/
+│   └── pack.ts                   # the component pack `exports` resolves to
+├── styles/
+│   └── base.css                  # imported pack CSS + Tailwind @source
+├── public/
+│   └── uploaded-assets/          # publicAssetsDir — committed, served bytes
+└── cms/                          # dataDir — everything the tool authors
+    ├── compositions/
+    ├── content/
+    ├── mappings/
+    ├── sitemaps/
+    └── assets/
+```
+
+The tree above is copied verbatim from the repository's README. The
+`public/uploaded-assets/` and `cms/` directories are commonly retained with a
+`.gitkeep` file when they are empty.
+
+## What each directory contains
+
+| Path | Ownership and contents |
+| --- | --- |
+| `package.json` | The host package name, `exports` map, package-manager pin, scripts, and installed tool, contract, Preact, and pack dependencies. |
+| `pnpm-workspace.yaml` | The host's workspace membership, `blockExoticSubdeps: false` policy when the provider is Git-hosted, and its restricted `allowBuilds` list. |
+| `zudo-composer.config.ts` | The `pack` module specifier and any non-default data, public-asset, or style paths. |
+| `components/` | Host-owned Preact components and the `componentPack` registry when `pack` uses a self-reference. |
+| `styles/` | The host's CSS entry. `styles/base.css` is the sole importer of pack CSS and the Tailwind `@source` declaration point. |
+| `public/uploaded-assets/` | Published asset bytes. The host commits these files and serves them as `/uploaded-assets/`; `publicAssetsDir` is independent of `dataDir`. |
+| `cms/compositions/` | Composition JSON, including global templates. There is no separate templates directory or template file format. |
+| `cms/content/` | Content models and entries. |
+| `cms/mappings/` | Content-to-Composition mapping records. |
+| `cms/sitemaps/` | Sitemapper page-tree records. |
+| `cms/assets/` | The content-addressed Assets store: `catalog.json` and retained `versions/` bytes. |
+
+The five CMS directories below `dataDir` are rebased together when
+`dataDir` changes; a child setting supplied explicitly keeps its own path. See
+[Configuration](./configuration.mdx) for the complete settings and environment
+map.
+
+## Component self-reference
+
+The self-reference shape lets a host keep its pack in `components/` without
+installing a themeset package. The host package must expose the pack entry:
+
+```json
+{
+  "name": "my-site",
+  "exports": {
+    "./components": "./components/pack.ts"
+  }
+}
+```
+
+The matching config value is `pack: "my-site/components"`. The package name
+must be a valid lowercase npm name, and the exported subpath must not contain a
+`src` segment. `components/pack.ts` exports `componentPack` built with
+`defineComponentPack`; each manifest `source.module` is the same public package
+specifier so generated composition modules can import it from the host root.
+
+An installed themeset uses the same host shape but points `pack` at a package
+export. The host's stylesheet then imports that package's CSS and tells
+Tailwind where to scan its source:
+
+```css
+@import "@acme/themeset/styles/themeset.css";
+
+@source "../node_modules/@acme/themeset/src";
+```
+
+The host's `styles` file is resolved through
+`virtual:zudo-composer-host-styles`, preserving the host-relative bases of its
+`@import` and `@source` statements. A missing styles file is a configuration
+error; zudo-composer does not silently select another stylesheet.
+
+## Worked fixtures
+
+The repository keeps two focused host examples that exercise the two admitted
+pack shapes:
+
+| Fixture | Pack shape | What to inspect |
+| --- | --- | --- |
+| `fixtures/self-host` | Host self-reference: `self-host/components` | `package.json` exports `./components` to `components/pack.ts`; the fixture owns its component source and CSS. |
+| `fixtures/themeset-host` | Installed package: `@zudo-composer/fixture-themeset/composer-pack` | `zudo-composer.config.ts` changes the pack and `styles/base.css` imports the themeset CSS; no tool source or build wiring changes. |
+
+`fixtures/host` is the smallest in-repository dogfood host for the installed
+tool and the provider pack. It has the default `cms/` and
+`public/uploaded-assets/` locations and is useful as a baseline when comparing
+the two fixtures above. `fixtures/host` and `fixtures/themeset-host` run the
+installed command from their host roots; `fixtures/self-host` is the focused
+self-reference pack fixture used by the resolution tests. Their data stays
+separate from the repository root.
+
+## Authored and generated state
+
+`site-project.ts` is authored source. `zudo-composer generate` writes its
+canonical `site-project.json`, while `seed --ready-workspace` produces the
+selected ready CMS records beneath the five domain directories and the
+workspace registry. Plain `seed` also uses the host's disposable
+`.zudo-site-project/` release root to activate a local release; that root is
+derived state and is normally gitignored.
+
+The creator's starter tree includes a page, global template, Content model and
+entry, Mapping, Sitemap, three components, and one imported PNG. Commit the
+retained CMS records and public bytes that belong to a host; preserve local
+authoring changes before replacing generated state. The [installation
+guide](./installing-into-a-host.mdx) describes the creator's full bootstrap
+sequence.
