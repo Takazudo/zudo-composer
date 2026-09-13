@@ -1,7 +1,8 @@
 # Blog demo — Margin Notes
 
-Package `packages/demo-blog`, domain `zc-demo-blog.zudolab.dev`, token namespace
-`blog-`, component id prefix `blog.`. Lists follow
+Package `packages/demo-blog`, site domain `zc-demo-blog.zudolab.dev`, editor
+domain `zc-demo-blog-editor.zudolab.dev`, token namespace `blog-`, component id
+prefix `blog.`. Lists follow
 [README § Lists](./README.md#lists); spacing axes follow
 `src/styles/README.md`; the `@theme` mechanism is the one in
 `src/styles/app-tokens.css` under a different namespace.

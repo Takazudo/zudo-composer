@@ -2,8 +2,9 @@
 
 The sample SiteProject is authored in `packages/demo-sample/site-project.ts`
 and generated into that host's sole `site-project.json`. Tests and the hosted
-demo consume this same JSON for the sample served at `/site/*` and on
-`zudo-composer.zudolab.dev`. This document says what to improve and within
+site/editor targets consume this same JSON for the sample served at `/site/*`,
+`zc-demo-sample.zudolab.dev` and `zc-demo-sample-editor.zudolab.dev`. This
+document says what to improve and within
 which walls; task #497 implements it.
 
 ## Hard walls (unchanged by this spec)
@@ -167,7 +168,8 @@ no people, no text, documentary calm".
 ## Acceptance (for #497)
 
 - `pnpm test`, `pnpm site-project:boundary`, `pnpm handoff:boundary`,
-  `pnpm build:hosted-demo && pnpm hosted-demo:verify` green.
+  `pnpm demo:build-editor sample` and
+  `HOSTED_DEMO_TARGET=sample-editor pnpm hosted-demo:verify packages/demo-sample/dist-editor` green.
 - 5 sitemap pages, nav labels unchanged, updated h1 map in the acceptance
   spec.
 - Every page satisfies the non-negotiables above; count them by reading the

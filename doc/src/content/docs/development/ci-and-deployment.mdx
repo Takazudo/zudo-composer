@@ -12,15 +12,16 @@ current job names are `validate`, `packed-host-matrix`, `packed-host-install`,
 
 | Job | Shape | Main responsibility and artifact |
 | --- | --- | --- |
-| `validate` | One Ubuntu job, 45-minute budget | Frozen install, repository gates, contract gates, unit/build checks, host/dev/SiteProject/browser lanes, hosted-demo build/verify, and demo browser proof. Uploads `hosted-demo-<sha>` from `dist-hosted-demo`; on failure it may upload `playwright-results`. |
+| `validate` | One Ubuntu job, 45-minute budget | Frozen install, repository gates, contract gates, unit/build checks, host/dev/SiteProject/browser lanes, static-site/editor artifact verification, and demo browser proof. On failure it may upload `playwright-results`. |
 | `packed-host-matrix` | One Ubuntu discovery job | Runs `packed-host-matrix --github-output` and exposes the disk-discovered host matrix. It does not run the host proof itself. |
 | `packed-host-install` | Fail-fast-disabled matrix from the previous job | Gives every discovered host its own isolated packed-install job and runs `smoke:host-install -- --host <name>`. |
-| `demo-sites-build` | Fail-fast-disabled `webshop`, `landing`, `blog` matrix | Builds and verifies each static `dist-site`, then uploads `demo-site-<site>-<sha>`. |
+| `demo-sites-build` | Fail-fast-disabled `sample`, `shop`, `landing`, `blog` matrix | Builds and verifies each static `dist-site`, then uploads `demo-site-<site>-<sha>`. |
 | `doc-site-build` | One Ubuntu documentation artifact job | Runs `pnpm doc:build-site` from the default shallow checkout, verifies `doc/dist` with the `doc-site` contract, and uploads `doc-site-<sha>` from `doc/dist`. |
 
 The validation job's browser steps consume prepared artifacts and never rebuild
 them. `demo:build-sites` runs before the SiteProject and demos lanes, while
-`build:hosted-demo` and `hosted-demo:verify` run before the hosted-demo lane.
+`demo:build-editors` and the `test:browser:demo-editor` lane cover the four
+per-host editor artifacts.
 The separate `doc-site-build` job builds and verifies `doc/dist` before it
 uploads the documentation artifact; the production matrix consumes that exact
 SHA-named artifact.
@@ -31,19 +32,23 @@ pages explain the local equivalents and port ownership.
 
 `.github/workflows/hosted-demo-deploy.yml` is an independent production
 workflow. Its automatic trigger is only a successful `CI` workflow run for a
-push to `main` in this repository. A manual dispatch must provide the CI
-`run_id` and full `sha`; the same guard still verifies the run through the
-GitHub API and checks that `origin/main` has not moved.
+push to `main` in this repository. A manual dispatch must provide one registry
+`target`, the CI `run_id` and full `sha`; the same guard still verifies the run
+through the GitHub API and checks that `origin/main` has not moved.
 
-The production matrix contains five current hosted targets:
+The production matrix contains nine current hosted targets:
 
 | Target key | Worker | Wrangler config | Domain | Artifact directory | Manifest | CI artifact |
 | --- | --- | --- | --- | --- | --- | --- |
-| `zudo-composer` | `zudo-composer` | `wrangler.jsonc` | `zudo-composer.zudolab.dev` | `dist-hosted-demo` | `hosted-demo-manifest.json` | `hosted-demo-<sha>` |
-| `webshop` | `zudo-composer-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` | `site-manifest.json` | `demo-site-webshop-<sha>` |
-| `landing` | `zudo-composer-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` | `site-manifest.json` | `demo-site-landing-<sha>` |
-| `blog` | `zudo-composer-demo-blog` | `wrangler.demo-blog.jsonc` | `zc-demo-blog.zudolab.dev` | `packages/demo-blog/dist-site` | `site-manifest.json` | `demo-site-blog-<sha>` |
-| `doc` | `zudo-composer-doc` | `wrangler.doc.jsonc` | `zc-doc.zudolab.dev` | `doc/dist` | `doc-site-manifest.json` | `doc-site-<sha>` |
+| `doc` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` | `doc/dist` | `doc-site-manifest.json` | `doc-site-<sha>` |
+| `sample` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` | `packages/demo-sample/dist-site` | `site-manifest.json` | `demo-site-sample-<sha>` |
+| `shop` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` | `site-manifest.json` | `demo-site-shop-<sha>` |
+| `landing` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` | `site-manifest.json` | `demo-site-landing-<sha>` |
+| `blog` | `zc-demo-blog` | `wrangler.demo-blog.jsonc` | `zc-demo-blog.zudolab.dev` | `packages/demo-blog/dist-site` | `site-manifest.json` | `demo-site-blog-<sha>` |
+| `sample-editor` | `zc-demo-sample-editor` | `wrangler.demo-sample-editor.jsonc` | `zc-demo-sample-editor.zudolab.dev` | `packages/demo-sample/dist-editor` | `demo-editor-manifest.json` | `demo-editor-sample-<sha>` |
+| `shop-editor` | `zc-demo-shop-editor` | `wrangler.demo-shop-editor.jsonc` | `zc-demo-shop-editor.zudolab.dev` | `packages/demo-webshop/dist-editor` | `demo-editor-manifest.json` | `demo-editor-shop-<sha>` |
+| `landing-editor` | `zc-demo-landing-editor` | `wrangler.demo-landing-editor.jsonc` | `zc-demo-landing-editor.zudolab.dev` | `packages/demo-landing/dist-editor` | `demo-editor-manifest.json` | `demo-editor-landing-<sha>` |
+| `blog-editor` | `zc-demo-blog-editor` | `wrangler.demo-blog-editor.jsonc` | `zc-demo-blog-editor.zudolab.dev` | `packages/demo-blog/dist-editor` | `demo-editor-manifest.json` | `demo-editor-blog-<sha>` |
 
 The `doc` target is a multi-page static site. Keep its target key, Worker,
 config, domain, artifact directory, manifest, and CI artifact name aligned with
@@ -52,8 +57,11 @@ and `liveRoutes` reads the manifest's routes. The `routeFile` and `assetUrl`
 hooks select each page's own HTML and canonical asset URL for extensionless
 and trailing-slash pages; see the
 [live delivery contract](../architecture/hosted-demo-pipeline.mdx#live-delivery-contract).
-Local doc builds may omit `sourceRevision`, but production preflight requires
-the full expected SHA and the same recorded artifact revision before Wrangler.
+Static demo builds and disposable editor builds retain their own manifest
+contracts and artifact directories; the editor build is per-host and uses the
+`demo-editor` kind rather than a shared sample. Local doc builds may omit
+`sourceRevision`, but production preflight requires the full expected SHA and
+the same recorded artifact revision before Wrangler.
 
 ## Rollout sequence
 

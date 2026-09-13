@@ -75,9 +75,12 @@ one server is active:
 `seed` imports the host's image manifest and activates a local release; it is
 not needed merely to start authoring libraries. The browser lanes use their
 own machine-global ports and isolated roots: 4173 (host), 4174 (SiteProject),
-4175 (hosted demo or packed smoke), and 4176 (demos). The ordinary repository
-server remains on 5173. See [Browser lanes](./browser-lanes.mdx) before
-starting a lane alongside a development server.
+4175 (demo-editor or packed smoke), and 4176 (demos). The
+ordinary repository server remains on 5173. To inspect a hosted editor locally,
+prepare all four artifacts with `corepack pnpm demo:build-editors`, then run
+`corepack pnpm test:browser:demo-editor [sample|shop|landing|blog]`. See
+[Browser lanes](./browser-lanes.mdx) before starting a lane alongside a
+development server.
 
 ## CMS and generated files
 

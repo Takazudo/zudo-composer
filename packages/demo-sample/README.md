@@ -25,6 +25,10 @@ generated JSON does not reference uploaded images.
 `build:site` emits the seven static routes from `/` into `dist-site` directly
 from the generated project, without a local release.
 
+The static site is published at `https://zc-demo-sample.zudolab.dev`; its
+disposable editor is published at `https://zc-demo-sample-editor.zudolab.dev`
+from `corepack pnpm demo:build-editor sample`.
+
 Keep `site-project.json` and `cms/` generated. The repository's canonical CMS
 regenerator discovers this host and owns its ready workspace alongside the
 other demos. The fixed record IDs, timestamp and content preserve the original

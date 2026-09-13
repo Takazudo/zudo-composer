@@ -60,3 +60,11 @@ The [packed-host install guide](https://github.com/Takazudo/zudo-composer/blob/m
 contains focused and deliberate-negative runs; the [workspace acceptance
 guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/workspace-acceptance.md)
 explains the browser evidence those gates complement.
+
+The hosted demo/editor checks are deliberately focused around their artifact
+contracts. `corepack pnpm demo:build-sites` prepares all four static host
+artifacts, while `corepack pnpm demo:build-editors` prepares each per-host
+`demo-editor` artifact. Their browser lanes are
+`corepack pnpm test:browser:demos` (port 4176) and
+`corepack pnpm test:browser:demo-editor` (port 4175); neither lane rebuilds an
+artifact or writes to a committed host CMS tree.
