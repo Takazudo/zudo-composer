@@ -141,8 +141,10 @@ adds one disposable static sample at `https://zudo-composer.zudolab.dev`; issue
 websites built from committed SiteProject content: `zc-demo-shop.zudolab.dev`
 (`packages/demo-webshop`), `zc-demo-landing.zudolab.dev`
 (`packages/demo-landing`) and `zc-demo-blog.zudolab.dev` (`packages/demo-blog`).
-The zudo-doc developer documentation site is the fifth target at
-`zc-doc.zudolab.dev`.
+The `doc/` workspace is the zudo-doc developer documentation site and the
+fifth target at `zc-doc.zudolab.dev`; `docs/` remains the operator-reference
+surface. The documentation runtime stays in that separate workspace, outside
+the installed authoring tool.
 None of this adds hosted persistence, a hosted API, authentication, arbitrary
 host project access or deployment support for installed applications. Each
 target is its own Worker with its own custom-domain binding, configured in
@@ -169,7 +171,7 @@ domain and artifact contract; `deploy.mjs`, `live-check.mjs` and
 never touch an artifact or a Cloudflare config. The independent production
 workflow runs as a matrix of the five targets, each accepting only a
 successful same-repository `main` CI run, verifying its own run/SHA/artifact,
-performing a Wrangler dry run, capturing the active single-version deployment,
+capturing the active single-version deployment, performing a Wrangler dry run,
 uploading the verified directory with Wrangler 4.130.0, and activating only
 the version ID returned by that upload. It has no pull-request artifact path.
 Pull-request validation has no Cloudflare secrets, and production uses only

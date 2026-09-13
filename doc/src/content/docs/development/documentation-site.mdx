@@ -48,13 +48,13 @@ Run the root wrappers from the repository root:
 | `corepack pnpm doc:dev` | Starts the zfb site and document-history server for local authoring. |
 | `corepack pnpm doc:build` | Builds the static zudo-doc site into `doc/dist/`. |
 | `corepack pnpm doc:check` | Runs zfb content and TypeScript checks. |
-| `corepack pnpm doc:build-site` | Planned deployment build wrapper for the doc-site artifact; its name is fixed by the sibling pipeline work and final wiring is reconciled in #593. |
+| `corepack pnpm doc:build-site` | Builds the static site, writes `doc-site-manifest.json`, and verifies the `doc/dist` deployment artifact. |
 
 The package-local equivalents are `pnpm -C doc dev`, `pnpm -C doc build`, and
-`pnpm -C doc check`. The final doc deployment build is expected to preserve
-the root-mounted `doc/dist/` shape and write the target manifest
-`doc-site-manifest.json`; until the sibling wiring lands, use `doc:build` for
-the local static build and leave deployment reconciliation to #593.
+`pnpm -C doc check`. The root `doc:build-site` wrapper runs the package build,
+then writes and verifies the deployment manifest while preserving the
+root-mounted `doc/dist/` shape. Use `doc:build` when you need only the raw
+static site without its deployment manifest.
 
 Build output is ignored. A clean build must not leave tracked or unexpected
 `doc/dist/`, `doc/.zfb/`, or `doc/.zfb-build/` files. Because the site's base is
@@ -90,10 +90,17 @@ filesystem category. Follow these rules:
 those provenance notes with the scaffold/config changes; do not silently
 upgrade the theme or runtime while editing prose.
 
-The hosted pipeline's planned documentation job is `doc-site-build`. It builds
-and verifies `doc/dist`, uploads the CI artifact `doc-site-<sha>`, and the
-planned trusted-run target is `doc` on Worker `zudo-composer-doc` using
-`wrangler.doc.jsonc` at `zc-doc.zudolab.dev`. Its artifact manifest is
-`doc-site-manifest.json`. These names are intentional epic wiring, not a claim
-that the current pre-wiring checkout has the job or Worker; #593 performs the
-final reconciliation after the sibling implementation lands.
+The hosted pipeline's documentation job is `doc-site-build`. It runs
+`doc:build-site`, verifies `doc/dist`, and uploads the CI artifact
+`doc-site-<sha>`. The trusted-run target is `doc` on Worker `zudo-composer-doc`
+using `wrangler.doc.jsonc` at `zc-doc.zudolab.dev`; its artifact manifest is
+`doc-site-manifest.json`.
+
+The target's `verifyArtifact` hook uses `verifyDocSiteArtifact`, while
+`liveRoutes` reads that manifest's routes. Its `routeFile` and `assetUrl` hooks
+map each route to its own HTML and fetch canonical asset URLs, matching
+Wrangler's default `auto-trailing-slash` handling and explicit `404-page`
+fallback. The [pipeline's live delivery contract](../architecture/hosted-demo-pipeline.mdx#live-delivery-contract)
+describes those mappings. Local builds may omit `sourceRevision`; CI records
+the full source SHA, and production preflight requires it to match the trusted
+run before any Wrangler call.

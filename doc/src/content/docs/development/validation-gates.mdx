@@ -28,7 +28,9 @@ by weakening an earlier boundary.
 | 13 | `test` | Runs the repository's Vitest suites, including package, domain, and script regressions. | Any test fails or exits unsuccessfully. |
 | 14 | `build` | Runs the TypeScript build and the ordinary Vite production build. | Compilation, bundling, or asset generation fails. |
 | 15 | `dist:boundary` | Inspects `dist/` after `build`: root-relative assets, one preview/app entry, focused WASM/glue, canonical CSS, local/provider Tailwind proof, and no server/file-provider leakage. | Build output is absent, has a forbidden marker, emits an extra or missing runtime asset, or violates the CSS/asset boundary. |
-| 16 | `smoke:host-install` | Packs the tool and contract, installs them in isolated disposable hosts, runs installed dev/generate/seed/build/test/browser proofs, and checks data ownership and release portability. It owns port 4175 and needs network access and Playwright Chromium. | A packed archive, frozen install, host command, generated output, artifact, browser proof, or cleanup/confinement assertion fails. |
+| 16 | `doc:check` | Runs the zudo-doc content and TypeScript checks for the documentation workspace. | MDX/frontmatter/content validation or documentation TypeScript checks fail. |
+| 17 | `doc:build-site` | Builds the static documentation site, writes `doc-site-manifest.json`, and verifies every emitted file, route, MIME identity, tool identity, and optional source SHA in `doc/dist`. | The docs build, manifest route derivation, artifact inventory/checksum, supported extension, or trusted source identity fails. |
+| 18 | `smoke:host-install` | Packs the tool and contract, installs them in isolated disposable hosts, runs installed dev/generate/seed/build/test/browser proofs, and checks data ownership and release portability. It owns port 4175 and needs network access and Playwright Chromium. | A packed archive, frozen install, host command, generated output, artifact, browser proof, or cleanup/confinement assertion fails. |
 
 `consumer:boundary` invokes `creator:check` itself; `creator:check` is listed
 separately here because it is also the focused command for a generated host.

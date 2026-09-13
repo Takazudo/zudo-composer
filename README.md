@@ -35,7 +35,8 @@ unpublished-package preview, and which generated files to commit.
 The [`doc/`](./doc/) directory is the zudo-doc developer site at
 <https://zc-doc.zudolab.dev>; [`docs/`](./docs/) remains the repository's
 operator-reference surface. From the repository root, use `pnpm doc:dev`,
-`pnpm doc:build`, or `pnpm doc:check`.
+`pnpm doc:build`, or `pnpm doc:check`. `pnpm doc:build-site` also writes and
+verifies the deployment artifact manifest.
 
 ## Routes and assets
 
@@ -495,19 +496,22 @@ checks the final files, manifest identities, checksums, MIME types and the
 ordinary artifact boundary. CI then runs the hosted browser lane against that
 same directory and uploads an artifact named for the exact 40-character commit
 SHA. Production can consume only a successful `main` CI run from this
-repository, downloads that exact run/SHA artifact, verifies it again, runs a
-Wrangler dry run, captures the currently active single-version deployment, and
+repository, downloads that exact run/SHA artifact, verifies it again, captures
+the currently active single-version deployment, runs a Wrangler dry run, and
 uploads the same directory with Wrangler 4.130.0 before activating its returned
 version ID.
 
-The production workflow is serialized and refuses a stale `main` head, missing
-or partial Cloudflare credentials, a missing rollback target, a split-traffic
-deployment, or an artifact/source mismatch. It checks the live manifest, every
-route and every asset with bounded HTTPS requests. If smoke verification fails,
-it rolls back only when the active version is still the version this run
-uploaded; the workflow remains failed even after a verified rollback. A manual
-rollback uses the captured version ID with `wrangler rollback`; never copy local
-OAuth tokens into repository or workflow secrets.
+The production workflow is serialized per target and refuses a stale `main`
+head, missing or partial Cloudflare credentials, a missing rollback target,
+a split-traffic deployment, or an artifact/source mismatch. A never-created
+Worker is the one missing-state exception: the pipeline creates it with
+`wrangler deploy` and has no prior version to roll back to. It checks the live
+manifest, every route and every asset with bounded HTTPS requests. On later
+rollouts, a smoke verification failure rolls back only when the active version
+is still the version this run uploaded; the workflow remains failed even after
+a verified rollback. A manual rollback uses the captured version ID with
+`wrangler rollback`; never copy local OAuth tokens into repository or workflow
+secrets.
 
 Prove the exact local artifact with:
 
