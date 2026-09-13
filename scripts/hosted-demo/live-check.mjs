@@ -3,13 +3,18 @@
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import { DEMO_EDITOR_MANIFEST, sha256, verifyDemoEditorArtifact } from "./artifact.mjs";
-import { DEFAULT_TARGET_KEY, resolveTarget } from "./targets.mjs";
-import { verifiedDemoEditorRoutes } from "../routes.mjs";
+import { sha256 } from "./artifact.mjs";
+import { resolveTarget } from "./targets.mjs";
 import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
 
-const DEFAULT_TARGET = resolveTarget(DEFAULT_TARGET_KEY);
-export const LIVE_ORIGIN = `https://${DEFAULT_TARGET.domain}`;
+/** @typedef {import("./targets.mjs").DeployTarget} DeployTarget */
+
+/** @param {DeployTarget | undefined} target @returns {DeployTarget} */
+function requireTarget(target) {
+  assert.ok(target, "Hosted-demo live-check target is required; pass a target explicitly or set HOSTED_DEMO_TARGET.");
+  return target;
+}
+
 export const HTTP_TIMEOUT_MS = 10_000;
 export const LIVE_CHECK_TIMEOUT_MS = 120_000;
 // A deploy can take a short time to reach every edge. Keep retries bounded so
@@ -72,21 +77,23 @@ export function verifyNavigationHtml(bytes, expectedSha256, expectedFile = "inde
 }
 
 /**
- * @param {{ baseUrl: string, artifactDirectory: string, expectedSourceRevision?: string, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response>, requestTimeoutMs?: number, overallTimeoutMs?: number, manifestFileName?: string, artifactVerifier?: import("./targets.mjs").ArtifactVerifier, liveRoutes?: (manifest: Record<string, unknown>) => string[], routeFile?: import("./targets.mjs").DeployTarget["routeFile"], assetUrl?: import("./targets.mjs").DeployTarget["assetUrl"] }} options
+ * @param {{ target?: DeployTarget, baseUrl: string, artifactDirectory: string, expectedSourceRevision?: string, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response>, requestTimeoutMs?: number, overallTimeoutMs?: number, manifestFileName?: string, artifactVerifier?: import("./targets.mjs").ArtifactVerifier, liveRoutes?: (manifest: Record<string, unknown>) => string[], routeFile?: DeployTarget["routeFile"], assetUrl?: DeployTarget["assetUrl"] }} options
  */
-export async function verifyLiveDeployment({
-  baseUrl,
-  artifactDirectory,
-  expectedSourceRevision,
-  fetchImpl = globalThis.fetch,
-  requestTimeoutMs = HTTP_TIMEOUT_MS,
-  overallTimeoutMs = LIVE_CHECK_TIMEOUT_MS,
-  manifestFileName = DEMO_EDITOR_MANIFEST,
-  artifactVerifier = verifyDemoEditorArtifact,
-  liveRoutes = verifiedDemoEditorRoutes,
-  routeFile = () => "index.html",
-  assetUrl = (path) => path === "index.html" ? "/" : `/${path}`,
-}) {
+export async function verifyLiveDeployment(options) {
+  const target = requireTarget(options.target);
+  const {
+    baseUrl,
+    artifactDirectory,
+    expectedSourceRevision,
+    fetchImpl = globalThis.fetch,
+    requestTimeoutMs = HTTP_TIMEOUT_MS,
+    overallTimeoutMs = LIVE_CHECK_TIMEOUT_MS,
+  } = options;
+  const manifestFileName = options.manifestFileName ?? target.manifestFileName;
+  const artifactVerifier = options.artifactVerifier ?? target.verifyArtifact;
+  const liveRoutes = options.liveRoutes ?? target.liveRoutes;
+  const routeFile = options.routeFile ?? target.routeFile ?? (() => "index.html");
+  const assetUrl = options.assetUrl ?? target.assetUrl ?? ((path) => path === "index.html" ? "/" : `/${path}`);
   assert.equal(typeof fetchImpl, "function", "A fetch implementation is required for live verification");
   const artifact = await artifactVerifier({ directory: artifactDirectory, expectedSourceRevision });
   const origin = new URL(baseUrl);
@@ -175,6 +182,8 @@ export async function verifyLiveWithRetries({
   onRetry = () => {},
   ...options
 }) {
+  const target = requireTarget(options.target);
+  options = { ...options, target };
   const overallDeadlineAt = Date.now() + (options.overallTimeoutMs ?? LIVE_CHECK_TIMEOUT_MS);
   /** @type {Error | undefined} */
   let lastError;
@@ -215,11 +224,12 @@ function parseArguments(argv) {
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const options = parseArguments(process.argv.slice(2));
-  const target = resolveTarget(options.target ?? process.env.HOSTED_DEMO_TARGET ?? DEFAULT_TARGET_KEY);
+  const target = resolveTarget(options.target ?? process.env.HOSTED_DEMO_TARGET);
   const baseUrl = options.base_url ?? process.env.HOSTED_DEMO_BASE_URL ?? `https://${target.domain}`;
   const artifactDirectory = options.artifact ?? process.env.HOSTED_DEMO_ARTIFACT ?? target.artifactDirectory;
   const expectedSourceRevision = options.expected_sha ?? process.env.HOSTED_DEMO_EXPECTED_SHA;
   const proof = await verifyLiveWithRetries({
+    target,
     baseUrl,
     artifactDirectory,
     expectedSourceRevision,

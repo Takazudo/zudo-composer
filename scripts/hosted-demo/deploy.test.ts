@@ -3,7 +3,6 @@
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
-  ARTIFACT_DIRECTORY,
   captureDeploymentState,
   deployHostedDemo,
   deploymentCredentialState,
@@ -30,6 +29,8 @@ const ENVIRONMENT = {
   CLOUDFLARE_ACCOUNT_ID: "test-account",
   HOSTED_DEMO_RUN_ID: "12345",
 };
+const EDITOR_TARGET = TARGETS["sample-editor"];
+const ARTIFACT_DIRECTORY = EDITOR_TARGET.artifactDirectory;
 
 const artifactVerifier = async ({ directory }: { directory: string }) => ({
   root: directory,
@@ -90,7 +91,7 @@ const siteArtifactVerifier = async ({ directory }: { directory: string }) => ({
 });
 
 /** A Worker Cloudflare has never seen: both listings fail until `deploy` creates it. */
-function firstDeployRunner(options: { versionsListExists?: boolean } = {}) {
+function firstDeployRunner(options: { versionsListExists?: boolean; partial?: boolean } = {}) {
   const notFound = () => new Error("wrangler deployments list failed with exit 1:\nA request to the Cloudflare API failed. Worker not found. [code: 10007]");
   let exists = false;
   const calls: string[][] = [];
@@ -103,10 +104,12 @@ function firstDeployRunner(options: { versionsListExists?: boolean } = {}) {
       return { stdout: `Current Version ID: ${NEW_VERSION}\n`, stderr: "" };
     }
     if (args[0] === "deployments" && args[1] === "list") {
+      if (!exists && options.partial) return { stdout: JSON.stringify([]), stderr: "" };
       if (!exists) throw notFound();
       return { stdout: JSON.stringify([deployment(NEW_VERSION, NEW_DEPLOYMENT, "2026-09-12T08:00:00Z")]), stderr: "" };
     }
     if (args[0] === "versions" && args[1] === "list") {
+      if (!exists && options.partial) return { stdout: JSON.stringify([{ id: NEW_VERSION }]), stderr: "" };
       if (!exists && !options.versionsListExists) throw notFound();
       return { stdout: JSON.stringify([{ id: NEW_VERSION }]), stderr: "" };
     }
@@ -171,6 +174,7 @@ describe("hosted demo deployment guard", () => {
 
   it("rejects an artifact directory that differs from the Wrangler config", async () => {
     await expect(preflightDeployment({
+      target: EDITOR_TARGET,
       artifactDirectory: join(ARTIFACT_DIRECTORY, "other"),
       environment: ENVIRONMENT,
       runner: vi.fn(),
@@ -181,6 +185,7 @@ describe("hosted demo deployment guard", () => {
     const fake = fakeRunner();
     const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: [], assets: [] }));
     const result = await deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -192,7 +197,7 @@ describe("hosted demo deployment guard", () => {
     });
     expect(result.deployedVersionId).toBe(NEW_VERSION);
     expect(liveVerifier).toHaveBeenCalledWith({
-      baseUrl: "https://zudo-composer.zudolab.dev",
+      baseUrl: `https://${EDITOR_TARGET.domain}`,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
     });
@@ -205,6 +210,7 @@ describe("hosted demo deployment guard", () => {
   it("fails safely without activation when upload output has no known version ID", async () => {
     const fake = fakeRunner({ uploadOutput: "Total Upload: 1 KiB\n" });
     await expect(deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -225,6 +231,7 @@ describe("hosted demo deployment guard", () => {
       return result;
     };
     await expect(deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -239,6 +246,7 @@ describe("hosted demo deployment guard", () => {
   it("rolls back the captured active version after a live failure", async () => {
     const fake = fakeRunner();
     await expect(deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -255,6 +263,7 @@ describe("hosted demo deployment guard", () => {
   it("recovers a CLI failure after Cloudflare accepted the known replacement", async () => {
     const fake = fakeRunner({ failAfterAccept: true });
     await expect(deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -269,6 +278,7 @@ describe("hosted demo deployment guard", () => {
   it("refuses rollback when production no longer serves this run's version", async () => {
     const fake = fakeRunner();
     await expect(deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -283,8 +293,8 @@ describe("hosted demo deployment guard", () => {
     expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
   });
 
-  it("deploys a non-default target against its own Worker, config and domain", async () => {
-    const target = TARGETS.webshop;
+  it("deploys the shop target against its own Worker, config and domain", async () => {
+    const target = TARGETS.shop;
     const fake = fakeRunner();
     const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: [], assets: [] }));
     const result = await deployHostedDemo({
@@ -305,9 +315,9 @@ describe("hosted demo deployment guard", () => {
     const upload = fake.calls.find((args) => args[0] === "versions" && args[1] === "upload");
     const activate = fake.calls.find((args) => args[0] === "versions" && args[1] === "deploy");
     const rollback = fake.calls.find((args) => args[0] === "deployments" && args[1] === "list");
-    expect(upload).toEqual(expect.arrayContaining(["--config", "wrangler.demo-shop.jsonc", "--name", "zudo-composer-demo-shop"]));
-    expect(activate).toEqual(expect.arrayContaining(["--name", "zudo-composer-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
-    expect(rollback).toEqual(expect.arrayContaining(["--name", "zudo-composer-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
+    expect(upload).toEqual(expect.arrayContaining(["--config", "wrangler.demo-shop.jsonc", "--name", "zc-demo-shop"]));
+    expect(activate).toEqual(expect.arrayContaining(["--name", "zc-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
+    expect(rollback).toEqual(expect.arrayContaining(["--name", "zc-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
   });
 
   it.each(TARGET_KEYS)("deploys %s against its own Worker, config and domain", async (key) => {
@@ -372,7 +382,7 @@ describe("hosted demo deployment guard", () => {
     const routeFile = vi.fn((route: string) => route === "/" ? "index.html" : "docs/a/index.html");
     const assetUrl = vi.fn((path: string) => path === "docs/a/index.html" ? null : path === "404.html" ? "/404" : "/");
     const target = {
-      ...TARGETS.webshop,
+      ...TARGETS.shop,
       manifestFileName: "test-multi-page-manifest.json",
       verifyArtifact: async ({ directory }: { directory: string }) => ({ root: directory, manifest, files }),
       liveRoutes: (routeManifest: Record<string, unknown>) => routeManifest.routes as string[],
@@ -452,7 +462,7 @@ describe("hosted demo deployment guard", () => {
   it("refuses to treat a half-missing Worker as a first deployment", async () => {
     const fake = firstDeployRunner({ versionsListExists: true });
     await expect(deployHostedDemo({
-      target: TARGETS.webshop,
+      target: TARGETS.shop,
       environment: ENVIRONMENT,
       runner: fake.runner,
       artifactVerifier: siteArtifactVerifier,
@@ -461,13 +471,39 @@ describe("hosted demo deployment guard", () => {
     expect(fake.calls.some((args) => args[0] === "deploy" && !args.includes("--dry-run"))).toBe(false);
   });
 
-  it("rejects a webshop artifact directory that differs from its Wrangler config", async () => {
+  it("routes a partial first-deploy Worker to the cleanup runbook", async () => {
+    const fake = firstDeployRunner({ partial: true });
+    await expect(deployHostedDemo({
+      target: TARGETS.shop,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      retryDelaysMs: [],
+    })).rejects.toThrow(/delete the partial Worker, then rerun target shop/i);
+    expect(fake.calls.some((args) => args[0] === "deploy" && !args.includes("--dry-run"))).toBe(false);
+  });
+
+  it("keeps an existing partial Worker on the ordinary path and adds the cleanup runbook to live failures", async () => {
+    const fake = fakeRunner();
+    await expect(deployHostedDemo({
+      target: TARGETS.shop,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier: async () => { throw new Error("custom domain is unbound"); },
+      retryDelaysMs: [],
+    })).rejects.toThrow(/Runbook: delete the partial Worker, then rerun target shop/);
+    expect(fake.calls.some((args) => args[0] === "versions" && args[1] === "upload")).toBe(true);
+    expect(fake.calls.some((args) => args[0] === "deploy" && !args.includes("--dry-run"))).toBe(false);
+  });
+
+  it("rejects a shop artifact directory that differs from its Wrangler config", async () => {
     await expect(preflightDeployment({
-      target: TARGETS.webshop,
-      artifactDirectory: join(TARGETS.webshop.artifactDirectory, "other"),
+      target: TARGETS.shop,
+      artifactDirectory: join(TARGETS.shop.artifactDirectory, "other"),
       environment: ENVIRONMENT,
       runner: vi.fn(),
       artifactVerifier: async ({ directory }: { directory: string }) => ({ root: directory, manifest: {}, files: [] }),
-    })).rejects.toThrow(/zudo-composer-demo-shop deployment must verify and upload/);
+    })).rejects.toThrow(/zc-demo-shop deployment must verify and upload/);
   });
 });
