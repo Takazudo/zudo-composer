@@ -146,9 +146,9 @@ secrets. The checked-in [`wrangler.jsonc`](../wrangler.jsonc),
 custom-domain binding. The compatibility date is pinned in each file; no
 account ID or credential is committed to any of them.
 
-Before any upload, the workflow runs `wrangler deploy --dry-run`, checks the
-active deployment and its single 100% version, and records that exact version as
-the rollback target. It then runs `wrangler versions upload` against the
+Before any upload, the workflow checks the active deployment and its single
+100% version, records that exact version as the rollback target, and runs
+`wrangler deploy --dry-run`. It then runs `wrangler versions upload` against the
 verified artifact with a unique run tag. Activation is requested only for the
 version ID returned by that upload (`versions deploy <id>@100 --yes`). A missing
 upload ID stops before activation. A command failure after Cloudflare accepts

@@ -1,7 +1,7 @@
 ---
 title: Hosted Demo Pipeline
 sidebar_position: 7
-description: The trusted-run pipeline that builds and deploys the repository's hosted demo sites.
+description: The trusted-run pipeline that builds and deploys the repository's hosted demo and documentation sites.
 ---
 
 ## Repository-owned static targets
@@ -12,13 +12,13 @@ its own Worker, custom domain, artifact contract, and deployment concurrency
 group. This exception does not add deployment or hosted persistence to an
 installed host's ordinary authoring workflow.
 
-| Target | Worker | Wrangler config | Domain | Artifact directory |
-| --- | --- | --- | --- | --- |
-| `zudo-composer` | `zudo-composer` | `wrangler.jsonc` | `zudo-composer.zudolab.dev` | `dist-hosted-demo` |
-| `webshop` | `zudo-composer-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` |
-| `landing` | `zudo-composer-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` |
-| `blog` | `zudo-composer-demo-blog` | `wrangler.demo-blog.jsonc` | `zc-demo-blog.zudolab.dev` | `packages/demo-blog/dist-site` |
-| `doc` | `zudo-composer-doc` | `wrangler.doc.jsonc` | `zc-doc.zudolab.dev` | `doc/dist` |
+| Target | Worker | Wrangler config | Domain | Artifact directory | Manifest | CI artifact |
+| --- | --- | --- | --- | --- | --- | --- |
+| `zudo-composer` | `zudo-composer` | `wrangler.jsonc` | `zudo-composer.zudolab.dev` | `dist-hosted-demo` | `hosted-demo-manifest.json` | `hosted-demo-<sha>` |
+| `webshop` | `zudo-composer-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` | `site-manifest.json` | `demo-site-webshop-<sha>` |
+| `landing` | `zudo-composer-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` | `site-manifest.json` | `demo-site-landing-<sha>` |
+| `blog` | `zudo-composer-demo-blog` | `wrangler.demo-blog.jsonc` | `zc-demo-blog.zudolab.dev` | `packages/demo-blog/dist-site` | `site-manifest.json` | `demo-site-blog-<sha>` |
+| `doc` | `zudo-composer-doc` | `wrangler.doc.jsonc` | `zc-doc.zudolab.dev` | `doc/dist` | `doc-site-manifest.json` | `doc-site-<sha>` |
 
 [file: scripts/hosted-demo/targets.mjs](https://github.com/Takazudo/zudo-composer/blob/main/scripts/hosted-demo/targets.mjs)
 is the target registry consumed by deployment and verification. The Composer
@@ -26,7 +26,13 @@ demo uses `hosted-demo-manifest.json`; the three visitor sites use
 `site-manifest.json`; documentation uses `doc-site-manifest.json`.
 The documentation artifact has a separate HTML file per route, so its route
 verification must select that route's emitted HTML rather than a shared SPA
-entry.
+entry. Its `verifyArtifact` hook directly uses `verifyDocSiteArtifact`, and
+`liveRoutes` reads the doc manifest's `routes` array.
+
+The `doc-site-build` CI job runs `pnpm doc:build-site`, verifies the `doc`
+target's artifact contract, and uploads `doc-site-<sha>` from `doc/dist`. The
+production matrix downloads that exact artifact name before the target-specific
+Wrangler preflight.
 
 ## Build and deployment are separate workflows
 
@@ -113,10 +119,19 @@ demo uses its fixed authoring/sample routes; static sites and documentation
 derive routes from their manifests. Route/file mappings support both a shared
 SPA entry and a documentation route's own HTML file.
 
+For the `doc` target, `routeFile` maps `/` to `index.html`, `/docs/a/` to
+`docs/a/index.html`, and `/x` to `x.html`. Its `assetUrl` hook skips index HTML
+only after a route has verified that file. Other files use their canonical
+asset URL: `x.html` is fetched at `/x`, `404.html` at `/404`, and non-HTML files
+at their emitted paths. This avoids redirects under Workers Static Assets'
+default `auto-trailing-slash` HTML handling. The config's `404-page` fallback
+serves unknown routes with HTTP 404 and the emitted `404.html` bytes.
+
 Navigation requests carry HTML/navigation headers. The checker permits only
 the narrowly recognized Cloudflare analytics beacon insertion and then checks
 the remaining HTML bytes against the expected file. Asset requests have their
-own MIME/hash checks. Arbitrary scripts, changed route content, missing files,
+own MIME/hash checks, including the doc verifier's explicit ICO/XML MIME
+alternatives. Arbitrary scripts, changed route content, missing files,
 and incorrect immutable asset headers fail verification.
 
 The hosted Composer adapter starts from the committed Studio sample and keeps

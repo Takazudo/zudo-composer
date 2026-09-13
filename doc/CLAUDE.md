@@ -30,19 +30,22 @@ Run these commands from the repository root:
 pnpm doc:dev      # zfb dev server plus the document-history server
 pnpm doc:build    # static production build to doc/dist/
 pnpm doc:check    # zfb content and TypeScript checks
+pnpm doc:build-site # production build plus doc-site-manifest.json and artifact verification
 ```
 
-The equivalent package-local commands are available with `pnpm -C doc`.
-Do not add the documentation checks to the root `check` chain until the
-deployment audit allowlist is updated by its follow-up work.
+The package-local equivalents are `pnpm -C doc dev`, `pnpm -C doc build`, and
+`pnpm -C doc check`. `doc:build-site` is a root-only artifact wrapper, not a
+script in the `doc` package.
+The root `check` chain runs `doc:check` and `doc:build-site` before the packed
+host-install proof; those checks must stay behind the no-deploy audit.
 
 ## Build output shape
 
 `pnpm doc:build` writes the root-mounted static site to `doc/dist/`:
 
 - `doc/dist/index.html` and `doc/dist/404.html` are the root pages.
-- `doc/dist/docs/<category>/<page>/index.html` contains each category index and
-  content page.
+- `doc/dist/docs/<category>/index.html` contains each category landing page.
+- `doc/dist/docs/<category>/<page>/index.html` contains each content page.
 - `doc/dist/assets/` contains the generated CSS and JavaScript bundles.
 - The favicon files and package-owned routes (such as the sitemap, robots file,
   and search index) are copied into the static output.
@@ -51,10 +54,10 @@ Because `base` is `/`, emitted links and asset URLs are root-relative. Build
 output and zfb working directories are ignored; a build must not leave
 untracked `doc/dist/`, `doc/.zfb/`, or `doc/.zfb-build/` files.
 
-The eventual deployment target is the fifth trusted-run target in the hosted
-pipeline, served at [zc-doc.zudolab.dev](https://zc-doc.zudolab.dev/). The
-deployment wiring lives with the hosted-demo pipeline rather than in this
-workspace's local development commands.
+The deployment target is the fifth trusted-run target in the hosted pipeline,
+served at [zc-doc.zudolab.dev](https://zc-doc.zudolab.dev/). The pipeline's
+`doc-site-build` job uploads `doc-site-<sha>` from `doc/dist`; the trusted
+target uses `zudo-composer-doc` and `wrangler.doc.jsonc`.
 
 ## Content conventions
 
