@@ -196,11 +196,13 @@ The owner can delete the retired scripts explicitly (or use the Cloudflare
 dashboard when a custom-domain binding needs separate cleanup):
 
 ```sh
-corepack pnpm exec wrangler delete --name zudo-composer --yes
-corepack pnpm exec wrangler delete --name zudo-composer-doc --yes
-corepack pnpm exec wrangler delete --name zudo-composer-demo-shop --yes
-corepack pnpm exec wrangler delete --name zudo-composer-demo-landing --yes
-corepack pnpm exec wrangler delete --name zudo-composer-demo-blog --yes
+# Wrangler 4.130.0 has no --yes flag; a non-interactive run accepts the
+# confirmation prompt. Set CLOUDFLARE_ACCOUNT_ID when the login has several accounts.
+corepack pnpm exec wrangler delete zudo-composer < /dev/null
+corepack pnpm exec wrangler delete zudo-composer-doc < /dev/null
+corepack pnpm exec wrangler delete zudo-composer-demo-shop < /dev/null
+corepack pnpm exec wrangler delete zudo-composer-demo-landing < /dev/null
+corepack pnpm exec wrangler delete zudo-composer-demo-blog < /dev/null
 ```
 
 If a first deploy is interrupted and only one of `deployments list` or
