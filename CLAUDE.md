@@ -59,6 +59,12 @@ layouts, and file-provider formats when needed. Do not add migrations,
 redirects, aliases, legacy fallbacks, compatibility shims, or fixtures for old
 schemas.
 
+The project is still in development and has no audience, so the same rule
+covers its own public surface: hosted demo domains, Worker names, deploy target
+keys, demo package names and URLs may be renamed or retired outright. Do not
+keep old domains alive, add redirects between them, or preserve old names for
+backward compatibility.
+
 The demo hosts' `site-project.ts` files are authored source. Their tracked
 `site-project.json` and ready CMS records are generated material and current
 reader compatibility fixtures; never edit them by hand. A storage format,
@@ -80,7 +86,9 @@ there are still no migrations for consumer repositories. See the
 
 This authority applies only to this project's current state. It does not permit
 destructive changes to unrelated repositories, user files, hosting resources,
-domains, credentials, or other infrastructure.
+domains, credentials, or other infrastructure. Deleting or unbinding this
+project's own live Cloudflare Workers and domains is still a user-performed or
+user-approved step, never an automatic side effect of a workflow.
 
 ## Provider and contract handoffs
 
