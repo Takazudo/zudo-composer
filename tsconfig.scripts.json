@@ -45,7 +45,7 @@
     "scripts/run-dev-browser.mjs",
     "scripts/run-host-browser.mjs",
     "scripts/run-site-project-browser.mjs",
-    "scripts/run-hosted-demo-browser.mjs",
+    "scripts/run-demo-editor-browser.mjs",
     "scripts/run-demos-browser.mjs",
     "scripts/hosted-demo/static-server.mjs",
     "scripts/smoke-host-install.mjs",
