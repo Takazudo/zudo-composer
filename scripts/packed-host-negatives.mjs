@@ -19,6 +19,13 @@ export async function packMissingRuntime(toolTarball, workspace) {
   await readFile(join(packageRoot, MISSING_RUNTIME));
   const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
   if (!Array.isArray(manifest.files)) throw new Error("The missing-runtime proof requires the tool files allowlist");
+  // pnpm pack removes packageManager. Restore its retained exact engine pin
+  // only in this disposable repack source so Corepack cannot select a global
+  // fallback before reaching the intended missing-runtime failure.
+  if (!manifest.packageManager && typeof manifest.engines?.pnpm === "string") {
+    if (!/^\d+\.\d+\.\d+$/.test(manifest.engines.pnpm)) throw new Error("Negative repack requires an exact pnpm engine pin");
+    manifest.packageManager = `pnpm@${manifest.engines.pnpm}`;
+  }
   manifest.files.push(`!${MISSING_RUNTIME}`);
   await writeFile(join(packageRoot, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   const broken = await packPackage(packageRoot, join(workspace, "missing-runtime-tarball"));

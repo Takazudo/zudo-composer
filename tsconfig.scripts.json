@@ -30,6 +30,7 @@
     "scripts/check-creator.mjs",
     "scripts/check-no-deploy.mjs",
     "scripts/packed-host-matrix.mjs",
+    "scripts/prepare-packed-pnpm.mjs",
     "scripts/check-standalone-handoff.mjs",
     "scripts/routes.mjs",
     "scripts/host-site-routes.mjs",

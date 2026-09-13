@@ -13,6 +13,7 @@ import {
 } from "../packed-host-helpers.mjs";
 import { MISSING_RUNTIME, packMissingRuntime, plantHoistedDependency } from "../packed-host-negatives.mjs";
 import { snapshotGeneratedHost } from "../packed-generated-host.mjs";
+import { preparePackedPnpm } from "../prepare-packed-pnpm.mjs";
 import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, siteHeaders, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -38,6 +39,22 @@ const declared = () => ({
   devDependencies: { "zudo-composer": "workspace:*", "@zudo-composer/component-contract": "workspace:*", preact: "^10.29.8" },
 });
 const archiveSpecs = { "zudo-composer": "file:/tmp/tool.tgz", "@zudo-composer/component-contract": "file:/tmp/contract.tgz" };
+
+it("preserves a location-dependent CI package-manager launcher without exposing its dependency bin", async () => {
+  const root = await temporary();
+  const actionBin = join(root, "action's tools/node_modules/.bin");
+  await mkdir(actionBin, { recursive: true });
+  await writeFile(join(actionBin, "version"), "11.5.2\n");
+  await writeFile(join(actionBin, "pnpm"), '#!/bin/sh\ncat "$(dirname "$0")/version"\nprintf "%s\\n" "$@"\n', { mode: 0o755 });
+  const pathFile = join(root, "github-path");
+  const bin = await preparePackedPnpm({ RUNNER_TEMP: root, PNPM_HOME: actionBin, GITHUB_PATH: pathFile });
+  const env = isolatedEnvironment([repositoryRoot], { ...process.env, PATH: [actionBin, bin, process.env.PATH].join(delimiter) });
+  expect(env.PATH?.split(delimiter)).not.toContain(actionBin);
+  expect(env.PATH?.split(delimiter)).toContain(bin);
+  expect(await readFile(pathFile, "utf8")).toBe(`${bin}\n`);
+  expect((await run("pnpm", ["--version", "argument with spaces"], root, { env })).stdout)
+    .toBe("11.5.2\n--version\nargument with spaces\n");
+});
 
 describe("packed host discovery and manifest isolation", () => {
   it("covers all four real hosts from disk and retains the default synthesized proof", () => {
@@ -284,7 +301,7 @@ describe("real bounded package/install and negative mechanics", () => {
   it("repackages a broken files allowlist and fails an actual runtime import from that tarball", async () => {
     const workspace = await temporary();
     const source = join(workspace, "tool");
-    await put(source, "package.json", JSON.stringify({ name: "zudo-composer", version: "1.0.0", packageManager, files: ["plugins"] }));
+    await put(source, "package.json", JSON.stringify({ name: "zudo-composer", version: "1.0.0", packageManager, engines: { pnpm: packageManager.split("@")[1] }, files: ["plugins"] }));
     await put(source, MISSING_RUNTIME, "export const root = true;");
     await put(source, "plugins/entry.mjs", "import './roots.mjs';");
     const good = await packPackage(source, join(workspace, "tarballs"));

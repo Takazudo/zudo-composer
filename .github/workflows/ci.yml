@@ -121,12 +121,7 @@ jobs:
       # The isolated host PATH excludes node_modules, including action-setup's
       # own bin directory. Expose only its pnpm executable through a clean shim.
       - name: Expose pnpm to isolated hosts
-        run: >-
-          node --input-type=module -e 'import { mkdtempSync, symlinkSync, appendFileSync } from "node:fs";
-          import { join } from "node:path";
-          const bin = mkdtempSync(join(process.env.RUNNER_TEMP, "packed-host-bin-"));
-          symlinkSync(join(process.env.PNPM_HOME, "pnpm"), join(bin, "pnpm"));
-          appendFileSync(process.env.GITHUB_PATH, bin + "\n");'
+        run: node scripts/prepare-packed-pnpm.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm no-deploy:check
       - run: pnpm exec playwright install --with-deps chromium
