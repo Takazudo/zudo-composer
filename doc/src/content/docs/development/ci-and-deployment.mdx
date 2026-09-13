@@ -1,0 +1,107 @@
+---
+title: CI and Deployment
+sidebar_position: 6
+description: The continuous-integration and deployment workflows that verify and publish repository surfaces.
+---
+
+## CI jobs and artifacts
+
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
+current job names are `validate`, `packed-host-matrix`, `packed-host-install`,
+`demo-sites-build`, and `doc-site-build`.
+
+| Job | Shape | Main responsibility and artifact |
+| --- | --- | --- |
+| `validate` | One Ubuntu job, 45-minute budget | Frozen install, repository gates, contract gates, unit/build checks, host/dev/SiteProject/browser lanes, hosted-demo build/verify, and demo browser proof. Uploads `hosted-demo-<sha>` from `dist-hosted-demo`; on failure it may upload `playwright-results`. |
+| `packed-host-matrix` | One Ubuntu discovery job | Runs `packed-host-matrix --github-output` and exposes the disk-discovered host matrix. It does not run the host proof itself. |
+| `packed-host-install` | Fail-fast-disabled matrix from the previous job | Gives every discovered host its own isolated packed-install job and runs `smoke:host-install -- --host <name>`. |
+| `demo-sites-build` | Fail-fast-disabled `webshop`, `landing`, `blog` matrix | Builds and verifies each static `dist-site`, then uploads `demo-site-<site>-<sha>`. |
+| `doc-site-build` | One Ubuntu documentation artifact job | Runs `pnpm doc:build-site` from the default shallow checkout, verifies `doc/dist` with the `doc-site` contract, and uploads `doc-site-<sha>` from `doc/dist`. |
+
+The validation job's browser steps consume prepared artifacts and never rebuild
+them. `demo:build-sites` runs before the SiteProject and demos lanes, while
+`build:hosted-demo` and `hosted-demo:verify` run before the hosted-demo lane.
+The separate `doc-site-build` job builds and verifies `doc/dist` before it
+uploads the documentation artifact; the production matrix consumes that exact
+SHA-named artifact.
+The [validation-gates](./validation-gates.mdx) and [browser-lanes](./browser-lanes.mdx)
+pages explain the local equivalents and port ownership.
+
+## Trusted-run deployment
+
+`.github/workflows/hosted-demo-deploy.yml` is an independent production
+workflow. Its automatic trigger is only a successful `CI` workflow run for a
+push to `main` in this repository. A manual dispatch must provide the CI
+`run_id` and full `sha`; the same guard still verifies the run through the
+GitHub API and checks that `origin/main` has not moved.
+
+The production matrix contains five current hosted targets:
+
+| Target key | Worker | Wrangler config | Domain | Artifact directory | Manifest | CI artifact |
+| --- | --- | --- | --- | --- | --- | --- |
+| `zudo-composer` | `zudo-composer` | `wrangler.jsonc` | `zudo-composer.zudolab.dev` | `dist-hosted-demo` | `hosted-demo-manifest.json` | `hosted-demo-<sha>` |
+| `webshop` | `zudo-composer-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` | `site-manifest.json` | `demo-site-webshop-<sha>` |
+| `landing` | `zudo-composer-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` | `site-manifest.json` | `demo-site-landing-<sha>` |
+| `blog` | `zudo-composer-demo-blog` | `wrangler.demo-blog.jsonc` | `zc-demo-blog.zudolab.dev` | `packages/demo-blog/dist-site` | `site-manifest.json` | `demo-site-blog-<sha>` |
+| `doc` | `zudo-composer-doc` | `wrangler.doc.jsonc` | `zc-doc.zudolab.dev` | `doc/dist` | `doc-site-manifest.json` | `doc-site-<sha>` |
+
+The `doc` target is a multi-page static site. Keep its target key, Worker,
+config, domain, artifact directory, manifest, and CI artifact name aligned with
+the registry. Its `verifyArtifact` hook directly uses `verifyDocSiteArtifact`,
+and `liveRoutes` reads the manifest's routes. The `routeFile` and `assetUrl`
+hooks select each page's own HTML and canonical asset URL for extensionless
+and trailing-slash pages; see the
+[live delivery contract](../architecture/hosted-demo-pipeline.mdx#live-delivery-contract).
+Local doc builds may omit `sourceRevision`, but production preflight requires
+the full expected SHA and the same recorded artifact revision before Wrangler.
+
+## Rollout sequence
+
+Each matrix leg follows the same guarded sequence. The deployment script's
+preflight captures remote state before it runs the non-mutating Wrangler dry
+run, so the rollback precondition is known before any upload:
+
+1. **Guard.** Load the guard from a fresh trusted `main` checkout. Require a
+   successful same-repository `main` CI push (or validate the equivalent manual
+   inputs), the exact full SHA, and a current `origin/main`.
+2. **Download.** Download only the target's `<prefix>-<sha>` artifact from the
+   selected CI run.
+3. **Verify.** Verify every artifact byte, manifest, source identity, route
+   list, and target-specific contract before Cloudflare access.
+4. **Preflight.** Require deployment credentials, run `wrangler whoami`, and
+   resolve the target config before any mutation.
+5. **Capture.** Inspect the target's current state. Require the current
+   deployment to be one 100% version and save that exact active version as the
+   rollback target. Split traffic, missing rollback state, or partial
+   Cloudflare state fails closed.
+6. **Dry run.** Run `wrangler deploy --dry-run --no-bundle` with the verified
+   directory and target config.
+7. **Upload.** Use `wrangler versions upload` for the verified directory and
+   retain the version ID returned by that upload.
+8. **Activate.** Activate only that returned version ID at 100%; never infer an
+   ID from an older versions list entry.
+9. **Live check.** Fetch the manifest, every emitted asset, and every target
+   route over bounded HTTPS requests, checking bytes, checksums, MIME types,
+   and the active version.
+10. **Rollback.** If live verification fails, roll back only while the exact
+   uploaded version remains active. A successful rollback still leaves the job
+   failed so the incident remains visible.
+
+There is one first-Worker exception. When both `deployments list` and `versions
+list` report that a target Worker does not exist, a plain `wrangler deploy`
+creates the Worker, uploads its verified artifact, and binds its custom domain.
+It has no prior rollback target. Any other missing-state combination fails
+before mutation; a first-deploy live failure is reported red because there is
+no prior Worker to restore.
+
+## Secrets and environment boundaries
+
+Pull-request validation has no Cloudflare secrets. The production step receives
+only the existing deployment credentials after the trusted-run guard and
+artifact checks: a Cloudflare API token (`CLOUDFLARE_API_TOKEN` or
+`CLOUDFLARE_TOKEN`) and `CLOUDFLARE_ACCOUNT_ID`. Missing or partial credentials
+fail visibly. Local Wrangler OAuth sessions may be useful for read-only checks,
+but must never be copied into repository or workflow secrets.
+
+For the target contracts, live-check details, and manual recovery rules, use
+the [hosted-demo operator guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/hosted-demo.md).

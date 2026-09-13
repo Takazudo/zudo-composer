@@ -1,0 +1,164 @@
+---
+title: Installing into a Host
+sidebar_position: 1
+description: How a host project installs and invokes zudo-composer from an exact source revision.
+---
+
+## Overview
+
+`zudo-composer` is installed by the project it authors. A host supplies the
+component pack, keeps the CMS files in its own tree, and runs the installed bin
+from that project root.
+
+## Prerequisites
+
+| Requirement | Supported value | Why it matters |
+| --- | --- | --- |
+| Node.js | `^22.13.0` or `>=24.0.0` | These are the versions declared by the tool's `engines.node`; Node 23 is outside that range. |
+| pnpm | `11.5.2` | The tool and generated hosts pin this exact version. |
+| Corepack | Enabled or otherwise available | The documented install and creator commands invoke pnpm through `corepack`. |
+
+The host should pin the same package manager in its `package.json`:
+
+```json
+{
+  "packageManager": "pnpm@11.5.2"
+}
+```
+
+## Install the tool and contract
+
+There is no registry release in the current distribution. Install the tool and
+the component contract from exact Git commits:
+
+```sh
+pnpm add -D \
+  "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
+  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#b66d52bb273a10010485efb2d06f80cee8001bd6"
+```
+
+Replace `<commit>` with the tool's full 40-character commit. The contract
+commit is a separate handoff and must remain a full SHA. The host also installs
+the package that provides the configured component pack; see
+[configuration](./configuration.mdx) for the two supported pack shapes.
+
+Declare that pack at the host root. The following minimal config uses the
+repository's dogfood provider:
+
+```ts
+import { defineComposerConfig } from "zudo-composer/config";
+
+export default defineComposerConfig({
+  pack: "@zudo-sg/ui/composer-pack",
+});
+```
+
+### Why the contract is a peer dependency
+
+The tool declares `@zudo-composer/component-contract` as a peer dependency so
+the host's component sidecars and the tool validate against one contract
+instance. The host's `defineComponent` calls therefore use the same package
+instance and API version as the installed tool. Install the contract explicitly
+alongside `zudo-composer`, rather than relying on a transitive copy.
+
+`preact` is also a peer dependency of the tool. The host receives the Preact
+version required by the tool and its component pack, while Tailwind remains
+tool-supplied; the host owns its CSS entry and Tailwind `@source` declaration.
+
+## Configure pnpm for the Git provider
+
+The provider used by a component pack can itself be Git-hosted. With pnpm
+11.5.2, the host must explicitly permit transitive Git sources and name the
+allowed build packages. Put these keys in the host project's
+`pnpm-workspace.yaml`; keep any existing `packages` declaration:
+
+```yaml
+blockExoticSubdeps: false
+allowBuilds:
+  "@zudo-composer/component-contract": true
+  esbuild: true
+```
+
+`blockExoticSubdeps: false` permits transitive Git sources for this host. Review
+the host's other dependencies before adopting it; do not change global pnpm
+settings. `allowBuilds` keeps build permission limited to the named packages.
+The generated host from `init` writes the same `blockExoticSubdeps` policy and
+allows `esbuild`; add the contract entry when the host's install requires it.
+
+## Create a populated host
+
+The create-only creator is invoked with one new destination:
+
+```sh
+zudo-composer init <new-directory>
+```
+
+`init` validates a lowercase npm package name (the destination basename by
+default), installs matching dependencies in an isolated temporary project,
+generates the aggregate, imports the starter asset, and produces a ready CMS
+workspace. It then copies the populated host into the requested directory.
+Opening the resulting studio does not require a seed command.
+
+| Option | Meaning |
+| --- | --- |
+| `--name <name>` | Use a lowercase npm package name instead of the destination basename. Scoped names such as `@your-team/site` are accepted when valid. |
+| `--tool-tarball <file>` | Use a packed `zudo-composer` archive for an unpublished preview. Must be paired with `--contract-tarball`. |
+| `--contract-tarball <file>` | Use the matching component-contract archive for an unpublished preview. Must be paired with `--tool-tarball`. |
+
+The destination must not exist, even as an empty directory, and its parent must
+already exist. Creation preserves an existing destination and does not
+initialize Git, upgrade a project, or migrate data. The archive options inspect
+the package metadata inside each tarball; archive filenames do not establish
+the version. Temporary overrides, archive copies, and a preview lockfile are
+not retained in the created host.
+
+The current `zudo-composer@0.0.0` source is unpublished. Until the matching
+versions are published, preview creation must supply both archives:
+
+```sh
+zudo-composer init my-site \
+  --tool-tarball /absolute/path/zudo-composer-0.0.0.tgz \
+  --contract-tarball /absolute/path/zudo-composer-component-contract-1.0.0.tgz
+```
+
+The creator copies the base tree from `templates/host/` and generates the
+configuration files around it. The retained starter contains:
+
+| Area | Seeded files and data |
+| --- | --- |
+| Components | `components/pack.ts` and `components/page.tsx`, with three starter Preact components and a self-reference pack. |
+| Site source | `site-project.ts`, containing a frame, template, Content model and entry, mapping, and sitemap. |
+| Styles | `styles/base.css`, including Tailwind layers and the host component scan point. |
+| Assets | `images-src/manifest.json` and `images-src/starter.png`; the imported immutable bytes are copied to `public/uploaded-assets/`. |
+| Tests and docs | `tests/starter.spec.tsx` and the starter `README.md`. |
+
+The creator additionally generates `package.json`,
+`zudo-composer.config.ts`, `tsconfig.json`, `vitest.config.ts`, `.gitignore`,
+`.npmrc`, and `pnpm-workspace.yaml`. It runs `generate`,
+`assets import images-src/manifest.json`, and `seed --ready-workspace` in the
+temporary host before publication. Normal creation retains its registry
+lockfile; `node_modules`, `.zudo-site-project`, and other scratch output are
+left out.
+
+## Start the host
+
+The host's `package.json` invokes the installed binary:
+
+```jsonc
+// package.json
+{ "scripts": { "dev": "zudo-composer dev" } }
+```
+
+After cloning a host with a committed lockfile, install and start it from the
+host root:
+
+```sh
+corepack pnpm install --frozen-lockfile
+corepack pnpm dev
+```
+
+The `dev` command uses the current directory as the host root by default. Use
+the `--root`, `--port`, `--host`, and `--strict-port` options when a different
+root or listener is required; the complete reference is in [CLI](./cli.mdx).
+The generated host also includes `generate`, `generate:check`,
+`assets:import`, `seed`, `build:site`, `test`, `typecheck`, and `check` scripts.

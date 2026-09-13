@@ -44,28 +44,29 @@ async function fetchWithTimeout(fetchImpl, url, timeoutMs, headers = {}, deadlin
   });
 }
 
-/** @param {URL} url @param {string} sourceRevision @returns {URL} */
+/** @param {URL} url @param {string | undefined} sourceRevision @returns {URL} */
 function cacheBusted(url, sourceRevision) {
   const result = new URL(url);
-  result.searchParams.set("hosted-demo-revision", sourceRevision);
+  if (sourceRevision !== undefined) result.searchParams.set("hosted-demo-revision", sourceRevision);
   return result;
 }
 
 /**
  * Cloudflare injects its documented RUM beacon into navigation HTML. Permit
  * only that exact empty external script immediately before the closing body;
- * every other byte must still match the tested index. The untransformed
- * index.html is verified separately with the other artifact files.
+ * every other byte must still match the tested HTML file. Targets may also
+ * verify the untransformed HTML separately with the other artifact files.
  * @param {Buffer} bytes
  * @param {string} expectedSha256
+ * @param {string} [expectedFile]
  */
-export function verifyNavigationHtml(bytes, expectedSha256) {
+export function verifyNavigationHtml(bytes, expectedSha256, expectedFile = "index.html") {
   const responseSha256 = sha256(bytes);
   if (responseSha256 === expectedSha256) return { responseSha256, cloudflareAnalyticsInjected: false };
   const beacon = /<script type="module" src="https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js\/v[0-9a-f]+" integrity="sha512-[A-Za-z0-9+/=]+" data-cf-beacon='([^'<>\r\n]+)' crossorigin="anonymous"><\/script>\n(?=<\/body>)/gu;
   const html = bytes.toString("utf8");
   const matches = [...html.matchAll(beacon)];
-  assert.equal(matches.length, 1, "Navigation HTML differs from index.html without exactly one recognized Cloudflare analytics injection");
+  assert.equal(matches.length, 1, `Navigation HTML differs from ${expectedFile} without exactly one recognized Cloudflare analytics injection`);
   const config = JSON.parse(matches[0][1]);
   assert.ok(config && typeof config === "object" && typeof config.version === "string" && /^[a-f0-9]{32}$/.test(config.token), "Cloudflare analytics injection has an unexpected configuration");
   assert.equal(sha256(Buffer.from(html.replace(beacon, ""))), expectedSha256, "Navigation HTML contains changes beyond Cloudflare analytics injection");
@@ -73,7 +74,7 @@ export function verifyNavigationHtml(bytes, expectedSha256) {
 }
 
 /**
- * @param {{ baseUrl: string, artifactDirectory: string, expectedSourceRevision?: string, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response>, requestTimeoutMs?: number, overallTimeoutMs?: number, manifestFileName?: string, artifactVerifier?: import("./targets.mjs").ArtifactVerifier, liveRoutes?: (manifest: Record<string, unknown>) => string[] }} options
+ * @param {{ baseUrl: string, artifactDirectory: string, expectedSourceRevision?: string, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response>, requestTimeoutMs?: number, overallTimeoutMs?: number, manifestFileName?: string, artifactVerifier?: import("./targets.mjs").ArtifactVerifier, liveRoutes?: (manifest: Record<string, unknown>) => string[], routeFile?: import("./targets.mjs").DeployTarget["routeFile"], assetUrl?: import("./targets.mjs").DeployTarget["assetUrl"] }} options
  */
 export async function verifyLiveDeployment({
   baseUrl,
@@ -85,6 +86,8 @@ export async function verifyLiveDeployment({
   manifestFileName = HOSTED_DEMO_MANIFEST,
   artifactVerifier = verifyHostedDemoArtifact,
   liveRoutes = () => HOSTED_DEMO_LIVE_ROUTES,
+  routeFile = () => "index.html",
+  assetUrl = (path) => path === "index.html" ? "/" : `/${path}`,
 }) {
   assert.equal(typeof fetchImpl, "function", "A fetch implementation is required for live verification");
   const artifact = await artifactVerifier({ directory: artifactDirectory, expectedSourceRevision });
@@ -100,31 +103,54 @@ export async function verifyLiveDeployment({
   const remoteManifest = JSON.parse(await manifestResponse.text());
   assert.deepEqual(remoteManifest, artifact.manifest, "Live deployment manifest does not match the downloaded artifact");
 
-  const index = artifact.files.find((file) => file.path === "index.html");
-  assert.ok(index, "Deploy artifact must include index.html");
+  const filesByPath = new Map(artifact.files.map((file) => [file.path, file]));
+  assert.ok(filesByPath.has("index.html"), "Deploy artifact must include index.html");
+  /** @param {import("./targets.mjs").TargetFile} file @param {string} context @param {Response} response */
+  function assertMime(file, context, response) {
+    const acceptedMimes = [...new Set([file.mime, ...(file.acceptedMimes ?? [])])];
+    const actualMime = responseMime(response);
+    assert.ok(acceptedMimes.includes(actualMime), `${context}: expected ${acceptedMimes.join(" or ")}, received ${actualMime || "no Content-Type"}`);
+  }
+  /** @type {Set<string>} */
+  const verifiedRouteFiles = new Set();
   const routeResults = await Promise.all(liveRoutes(artifact.manifest).map(async (route) => {
+    const expectedPath = routeFile(route, artifact.manifest);
+    const file = filesByPath.get(expectedPath);
+    assert.ok(file, `${route}: deploy artifact must include route file ${expectedPath}`);
+    assert.equal(file.mime, "text/html", `${route}: route file ${file.path} must be HTML, received ${file.mime}`);
     const response = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(route, origin), sourceRevision), requestTimeoutMs, {
       accept: "text/html",
       "sec-fetch-mode": "navigate",
     }, deadlineAt);
     assert.ok(response.ok, `${route}: expected HTTP 2xx, received ${response.status}`);
     const bytes = Buffer.from(await response.arrayBuffer());
-    const navigationProof = verifyNavigationHtml(bytes, index.sha256);
-    assert.equal(responseMime(response), index.mime, `${route}: expected ${index.mime}, received ${responseMime(response) || "no Content-Type"}`);
-    return { path: route, sha256: index.sha256, mime: index.mime, ...navigationProof };
+    let navigationProof;
+    try {
+      navigationProof = verifyNavigationHtml(bytes, file.sha256, file.path);
+    } catch (error) {
+      throw new Error(`${route}: navigation HTML does not match ${file.path}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    }
+    assertMime(file, route, response);
+    verifiedRouteFiles.add(file.path);
+    return { path: route, sha256: file.sha256, mime: file.mime, ...navigationProof };
   }));
 
-  const assetResults = await Promise.all(artifact.files.map(async (file) => {
+  const assetResults = (await Promise.all(artifact.files.map(async (file) => {
     // Static Assets canonicalizes /index.html to /. A non-navigation request
     // to that canonical URL returns the original file without RUM injection.
-    const assetPath = file.path === "index.html" ? "/" : `/${file.path}`;
+    // Multi-page targets can map other HTML URLs or rely on their route proof.
+    const assetPath = assetUrl(file.path);
+    if (assetPath === null) {
+      assert.ok(verifiedRouteFiles.has(file.path), `/${file.path}: asset fetch cannot be skipped without a verified route for this file`);
+      return null;
+    }
     const response = await fetchWithTimeout(fetchImpl, cacheBusted(new URL(assetPath, origin), sourceRevision), requestTimeoutMs, {}, deadlineAt);
     assert.ok(response.ok, `/${file.path}: expected HTTP 2xx, received ${response.status}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.equal(sha256(bytes), file.sha256, `/${file.path}: response SHA-256 does not match the built artifact`);
-    assert.equal(responseMime(response), file.mime, `/${file.path}: expected ${file.mime}, received ${responseMime(response) || "no Content-Type"}`);
-    if (ASSET_CHECKSUM_URL_PATTERN.test(assetPath)) {
-      const checksum = assetPath.slice("/uploaded-assets/sha256-".length, assetPath.lastIndexOf("."));
+    assertMime(file, `/${file.path}`, response);
+    if (ASSET_CHECKSUM_URL_PATTERN.test(`/${file.path}`)) {
+      const checksum = file.path.slice("uploaded-assets/sha256-".length, file.path.lastIndexOf("."));
       assert.equal(response.headers.get("cache-control"), ASSET_IMMUTABLE_CACHE_CONTROL, `/${file.path}: immutable cache policy is missing`);
       assert.equal(response.headers.get("x-content-type-options"), ASSET_NOSNIFF, `/${file.path}: nosniff policy is missing`);
       assert.equal(response.headers.get("content-length"), String(bytes.byteLength), `/${file.path}: byte length header is wrong`);
@@ -137,7 +163,7 @@ export async function verifyLiveDeployment({
       }
     }
     return { path: file.path, sha256: file.sha256, mime: file.mime };
-  }));
+  }))).filter((result) => result !== null);
 
   return { manifest: artifact.manifest, routes: routeResults, assets: assetResults };
 }
@@ -202,7 +228,9 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     manifestFileName: target.manifestFileName,
     artifactVerifier: target.verifyArtifact,
     liveRoutes: target.liveRoutes,
+    routeFile: target.routeFile,
+    assetUrl: target.assetUrl,
     onRetry: ({ attempt, delayMs, error }) => console.warn(`${target.workerName} live check attempt ${attempt} failed (${error.message}); retrying in ${delayMs}ms.`),
   });
-  console.log(`${target.workerName} live check passed at ${baseUrl}: ${proof.routes.length} routes and ${proof.assets.length} assets matched source ${proof.manifest.sourceRevision}.`);
+  console.log(`${target.workerName} live check passed at ${baseUrl}: ${proof.routes.length} routes and ${proof.assets.length} assets matched${proof.manifest.sourceRevision === undefined ? "" : ` source ${proof.manifest.sourceRevision}`}.`);
 }

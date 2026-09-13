@@ -1,0 +1,62 @@
+---
+title: What Is zudo-composer
+sidebar_position: 1
+description: A concise introduction to zudo-composer and the authoring problems it solves.
+---
+
+## Overview
+
+`zudo-composer` is an installable, local-first Preact authoring tool. A host
+project installs the package, supplies a `zudo-composer.config.ts`, and runs
+the development server against the host's own files. The tool has no content
+application of its own: its job is to provide the authoring products and the
+runtime boundaries that turn host-owned records into a preview or a static
+site.
+
+## Ownership boundary
+
+The durable boundary is between the tool's models and behavior and the host's
+code and data. All five authoring domains write through the shared
+`TransactionalRecordStore`, but the roots are selected by the host's config.
+
+| Surface | zudo-composer owns | Host project owns |
+| --- | --- | --- |
+| Composer | Composition document model, source generation, reuse rules, editor chrome, preview renderer, and the same-origin iframe protocol | Composition records and the component pack they reference |
+| Content / Entry | Content model, Entry library, and authoring UI | Content models and Entry records |
+| Mapping | Binding model, resolver, preview handoff, and authoring UI | Mapping records in the host's CMS tree |
+| Sitemapper | Page-tree model, library, authoring UI, and the catalog integration that resolves saved Composer records | Sitemap records and the host's authored page tree |
+| Assets | Asset metadata model, library route, upload and delivery boundaries, and the content-addressed store | Asset bytes and metadata under the configured `assetsDir`, plus committed delivery bytes under `publicAssetsDir` |
+| Components | The component-pack contract and the loader for the configured `pack` module specifier | Component code, reached through the host package's `exports` self-reference or an installed themeset package; a component path is not a valid pack |
+| Templates | The Composition and reuse semantics for a global template | Template data: a Composition with `publication.kind: "global-template"`, stored under `compositionsDir`; there is no templates directory or template file format |
+| CMS data | The four domain formats and their filesystem providers | The four JSON domains plus Assets, rooted by `dataDir` and `assetsDir` |
+
+The distinction matters when a host changes its provider or theme: the tool
+does not copy components into the host and does not fall back to a bundled
+pack. The repository's `@zudo-sg/ui` installation is an ordinary component
+pack used by the dogfood host. Another themeset satisfying the same contract
+can replace it by changing the host's `pack` value and stylesheet import.
+
+## Authoring and delivery routes
+
+The development server uses Vite base `/`. The authoring routes are the
+tool's stable surface; delivery routes are either a local activated release or
+a verified static artifact.
+
+| Surface | Route | Responsibility |
+| --- | --- | --- |
+| Authoring | `/` | Standalone product landing page |
+| Authoring | `/composer` | Composer library and editor |
+| Authoring | `/composer/preview` | Isolated, same-origin Composer preview document |
+| Authoring | `/content` | Content model and Entry authoring |
+| Authoring | `/mapping` | Content-to-Composition binding authoring |
+| Authoring | `/sitemapper` | Sitemapper library and editor |
+| Authoring | `/assets` | Assets library and upload/delivery status; upload authoring is local-development only |
+| Delivery | `/site` | Activated host SiteProject in the development server |
+| Delivery | `/` and the site's paths | A static host website built from `dist-site`; the route set comes from its verified `site-manifest.json`, not from the installed tool contract |
+| Delivery | `/assets/` | Build-emitted JavaScript, CSS, and the focused render WASM/glue |
+| Delivery | `/uploaded-assets/` | Committed images and PDFs from the host's `publicAssetsDir` |
+
+The `/composer/preview` route is an implementation boundary rather than a
+second public product. Likewise, `/site` is local release delivery; a static
+build serves the host website from its artifact root, where `/` is the site's
+entry route.

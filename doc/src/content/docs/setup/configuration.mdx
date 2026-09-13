@@ -1,0 +1,125 @@
+---
+title: Configuration
+sidebar_position: 2
+description: The host configuration file and environment variables that control zudo-composer.
+---
+
+## Overview
+
+The host's `zudo-composer.config.ts` selects a component pack and can override
+where the host keeps its CMS data, published assets, and base stylesheet. The
+configuration loader resolves every relative path against the host project
+root and returns a complete settings table.
+
+## Settings
+
+The `pack` setting is required. Every other setting has the default shown below;
+the environment column is the exact variable used for its override.
+
+| Setting | Default | Environment override | Meaning |
+| --- | --- | --- | --- |
+| `dataDir` | `cms` | `ZUDO_COMPOSER_DATA_DIR` | Root for the four JSON domains and the Assets store. |
+| `compositionsDir` | `cms/compositions` | `ZUDO_COMPOSER_COMPOSITIONS_DIR` | Composition JSON, including global templates. |
+| `contentDir` | `cms/content` | `ZUDO_COMPOSER_CONTENT_DIR` | Content-domain JSON. |
+| `mappingsDir` | `cms/mappings` | `ZUDO_COMPOSER_MAPPINGS_DIR` | Mapping-domain JSON. |
+| `sitemapsDir` | `cms/sitemaps` | `ZUDO_COMPOSER_SITEMAPS_DIR` | Sitemapper-domain JSON. |
+| `assetsDir` | `cms/assets` | `ZUDO_COMPOSER_ASSETS_DIR` | Content-addressed Assets store (`catalog.json` and `versions/`). |
+| `publicAssetsDir` | `public/uploaded-assets` | `ZUDO_COMPOSER_PUBLIC_ASSETS_DIR` | Published asset bytes the host commits and serves. |
+| `styles` | `styles/base.css` | `ZUDO_COMPOSER_STYLES` | Host base CSS entry; it imports pack CSS and declares Tailwind sources. |
+| `pack` | *(required, no default)* | `ZUDO_COMPOSER_PACK` | Component-pack package module specifier. |
+
+These eight defaulted settings are `DEFAULT_SETTINGS`; together with the
+required `pack` key, they cover every key in `SETTING_ENVIRONMENT_KEYS`. Keep
+the names unchanged; they are also the keys serialized into the resolved host
+configuration.
+
+## Host configuration file
+
+Create `zudo-composer.config.ts` at the host root and export the result of
+`defineComposerConfig`:
+
+```ts
+import { defineComposerConfig } from "zudo-composer/config";
+
+export default defineComposerConfig({
+  pack: "my-site/components",
+  dataDir: "content-store",
+  styles: "styles/base.css",
+});
+```
+
+`defineComposerConfig` is the public identity helper and type contract. Path
+settings are optional in the authored object, while `pack` is required. A
+resolved configuration always contains every setting, including defaults.
+
+`pack` is a package module specifier, not a filesystem path. The two supported
+shapes are an installed themeset such as
+`"@acme/themeset/composer-pack"`, or a host self-reference such as
+`"my-site/components"` exposed by the host package's `exports`. A path such as
+`./components/pack.ts`, an absolute path, or a specifier containing a `src`
+segment is rejected before the server starts. Component source modules must
+also be public exports resolvable from the host root.
+
+## Directory rebasing
+
+`dataDir` is the root of the five CMS directories. When it changes, every
+domain directory that was not explicitly supplied is rebased to that root:
+
+| Setting | `dataDir: "store"` resolves to |
+| --- | --- |
+| `compositionsDir` | `store/compositions` |
+| `contentDir` | `store/content` |
+| `mappingsDir` | `store/mappings` |
+| `sitemapsDir` | `store/sitemaps` |
+| `assetsDir` | `store/assets` |
+
+An explicit child setting wins over the rebased value. `publicAssetsDir` and
+`styles` are not CMS data, so they never move when `dataDir` changes. The full
+host tree is shown in [Host directory layout](./host-directory-layout.mdx).
+
+## Environment overrides and precedence
+
+Every setting has the mechanical `ZUDO_COMPOSER_` + screaming-snake-case name
+shown in the table. For example:
+
+For a host that leaves these keys out of its config, an environment override can
+be set for one invocation:
+
+```sh
+ZUDO_COMPOSER_DATA_DIR=content-store \
+ZUDO_COMPOSER_STYLES=theme/base.css \
+zudo-composer dev
+```
+
+Values are trimmed; a blank environment value is treated as absent. Resolution
+uses this precedence, from strongest to weakest:
+
+| Priority | Source |
+| --- | --- |
+| 1 | Explicit key in `defineComposerConfig({ ... })` |
+| 2 | Matching `ZUDO_COMPOSER_<SETTING>` environment variable |
+| 3 | The default table above |
+
+The same precedence applies to `pack`, so `ZUDO_COMPOSER_PACK` can supply a
+pack when the config object does not. Environment paths follow the same
+host-root-relative rules as config paths.
+
+## Path rules and startup failures
+
+All eight path settings must be non-empty, use `/` separators, and stay inside
+the host project root. Absolute paths and paths that climb with `..` fail during
+config loading. The `pack` setting must resolve from the host's
+`package.json`; zudo-composer never falls back to a bundled provider.
+
+For example, an unavailable installed pack produces a startup error with the
+specifier and the package file used for resolution:
+
+```text
+Component pack "@acme/not-installed/composer-pack" could not be resolved from /path/to/host/package.json: <Node resolution error>. Install it as a dependency of the host, or expose it through the host package's own "name" + "exports".
+```
+
+The `<Node resolution error>` portion is supplied by Node and can vary, but the
+specifier, host `package.json`, and remediation are part of the tool's error.
+The missing-pack configuration error likewise names
+`zudo-composer.config.ts`, says that `pack` has no default, and points to
+`ZUDO_COMPOSER_PACK`.

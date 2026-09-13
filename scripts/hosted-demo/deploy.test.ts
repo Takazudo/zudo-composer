@@ -15,7 +15,8 @@ import {
   rolloutIdentity,
   sortDeploymentsNewestFirst,
 } from "./deploy.mjs";
-import { TARGETS } from "./targets.mjs";
+import { TARGET_KEYS, TARGETS } from "./targets.mjs";
+import { sha256 } from "./artifact.mjs";
 
 const SOURCE_REVISION = "a".repeat(40);
 const PROJECT_REVISION = "b".repeat(64);
@@ -305,12 +306,104 @@ describe("hosted demo deployment guard", () => {
     expect(rollback).toEqual(expect.arrayContaining(["--name", "zudo-composer-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
   });
 
-  it("creates a never-deployed target with wrangler deploy, binding its custom domain", async () => {
-    const target = TARGETS.webshop;
+  it.each(TARGET_KEYS)("deploys %s against its own Worker, config and domain", async (key) => {
+    const target = TARGETS[key];
+    const fake = fakeRunner();
+    const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: [], assets: [] }));
+    const result = await deployHostedDemo({
+      target,
+      expectedSourceRevision: SOURCE_REVISION,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier,
+      retryDelaysMs: [],
+      delayImpl: async () => {},
+    });
+    expect(result.deployedVersionId).toBe(NEW_VERSION);
+    expect(liveVerifier).toHaveBeenCalledWith({
+      baseUrl: `https://${target.domain}`,
+      artifactDirectory: target.artifactDirectory,
+      expectedSourceRevision: SOURCE_REVISION,
+    });
+    const upload = fake.calls.find((args) => args[0] === "versions" && args[1] === "upload");
+    const activate = fake.calls.find((args) => args[0] === "versions" && args[1] === "deploy");
+    expect(upload).toEqual(expect.arrayContaining(["--config", target.configPath, "--name", target.workerName]));
+    expect(activate).toEqual(expect.arrayContaining(["--name", target.workerName, "--config", target.configPath]));
+  });
+
+  it.each([undefined, "short", `${SOURCE_REVISION}\n`])("requires the doc site's full expected source SHA before any Wrangler call: %j", async (expectedSourceRevision) => {
+    const fake = fakeRunner();
+    await expect(deployHostedDemo({
+      target: TARGETS.doc,
+      expectedSourceRevision,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+    })).rejects.toThrow(/full expected source Git SHA/);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it.each([undefined, "b".repeat(40)])("refuses an unpinned or mismatched doc artifact before any Wrangler call: %j", async (sourceRevision) => {
+    const fake = fakeRunner();
+    await expect(preflightDeployment({
+      target: TARGETS.doc,
+      expectedSourceRevision: SOURCE_REVISION,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: async ({ directory }) => ({ root: directory, manifest: { kind: "doc-site", sourceRevision }, files: [] }),
+    })).rejects.toThrow(/must record the expected source Git SHA/);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it.each([["existing", fakeRunner], ["first", firstDeployRunner]] as const)("passes multi-page hooks to the default live verifier for an %s deployment", async (_label, createRunner) => {
+    const fake = createRunner();
+    const bodies = {
+      "index.html": "<!doctype html><html><body>Home</body></html>",
+      "docs/a/index.html": "<!doctype html><html><body>Document A</body></html>",
+      "404.html": "<!doctype html><html><body>Not found</body></html>",
+    };
+    const files = Object.entries(bodies).map(([path, body]) => ({ path, sha256: sha256(Buffer.from(body)), mime: "text/html" }));
+    const manifest = { sourceRevision: SOURCE_REVISION, routes: ["/", "/docs/a/"], files };
+    const routeFile = vi.fn((route: string) => route === "/" ? "index.html" : "docs/a/index.html");
+    const assetUrl = vi.fn((path: string) => path === "docs/a/index.html" ? null : path === "404.html" ? "/404" : "/");
+    const target = {
+      ...TARGETS.webshop,
+      manifestFileName: "test-multi-page-manifest.json",
+      verifyArtifact: async ({ directory }: { directory: string }) => ({ root: directory, manifest, files }),
+      liveRoutes: (routeManifest: Record<string, unknown>) => routeManifest.routes as string[],
+      routeFile,
+      assetUrl,
+    };
+    const requests: string[] = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = new URL(input.toString()).pathname;
+      requests.push(path);
+      if (path === "/test-multi-page-manifest.json") return new Response(JSON.stringify(manifest), { headers: { "content-type": "application/json" } });
+      const body = path === "/" ? bodies["index.html"] : path === "/docs/a/" ? bodies["docs/a/index.html"] : path === "/404" ? bodies["404.html"] : undefined;
+      if (!body) throw new Error(`Unexpected asset URL: ${path}`);
+      return new Response(body, { headers: { "content-type": "text/html" } });
+    });
+    try {
+      const result = await deployHostedDemo({ target, environment: ENVIRONMENT, runner: fake.runner, retryDelaysMs: [], delayImpl: async () => {} });
+      expect(result.deployedVersionId).toBe(NEW_VERSION);
+      expect(result.proof.routes.map(({ path }) => path)).toEqual(["/", "/docs/a/"]);
+      expect(result.proof.assets.map(({ path }) => path)).toEqual(["index.html", "404.html"]);
+      expect(routeFile.mock.calls).toEqual([["/", manifest], ["/docs/a/", manifest]]);
+      expect(assetUrl.mock.calls).toEqual([["index.html"], ["docs/a/index.html"], ["404.html"]]);
+      expect(requests).toEqual(["/test-multi-page-manifest.json", "/", "/docs/a/", "/", "/404"]);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it.each(TARGET_KEYS)("creates a never-deployed %s target with wrangler deploy, binding its custom domain", async (key) => {
+    const target = TARGETS[key];
     const fake = firstDeployRunner();
     const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: ["/"], assets: [] }));
     const result = await deployHostedDemo({
       target,
+      expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
       runner: fake.runner,
       artifactVerifier: siteArtifactVerifier,
@@ -323,7 +416,7 @@ describe("hosted demo deployment guard", () => {
     // A brand-new hostname gets a longer live-check budget than a rollout onto an
     // existing domain, whose DNS is already in place.
     expect(liveVerifier).toHaveBeenCalledWith({
-      baseUrl: "https://zc-demo-shop.zudolab.dev",
+      baseUrl: `https://${target.domain}`,
       artifactDirectory: target.artifactDirectory,
       expectedSourceRevision: SOURCE_REVISION,
       retryDelaysMs: FIRST_DEPLOY_LIVE_RETRY_DELAYS_MS,
@@ -332,21 +425,23 @@ describe("hosted demo deployment guard", () => {
     // `versions upload` never applies a config's routes, so the bootstrap must be
     // a plain `deploy` — and there is nothing to roll back from "no Worker".
     const create = fake.calls.find((args) => args[0] === "deploy" && !args.includes("--dry-run"));
-    expect(create).toEqual(expect.arrayContaining(["--config", "wrangler.demo-shop.jsonc", "--name", "zudo-composer-demo-shop", "--assets", target.artifactDirectory]));
+    expect(create).toEqual(expect.arrayContaining(["--config", target.configPath, "--name", target.workerName, "--assets", target.artifactDirectory]));
     expect(fake.calls.some((args) => args[0] === "versions" && args[1] === "upload")).toBe(false);
     expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
   });
 
-  it("leaves a failed first deployment in place and says why no rollback happened", async () => {
+  it.each(TARGET_KEYS)("leaves a failed first %s deployment in place and says why no rollback happened", async (key) => {
+    const target = TARGETS[key];
     const fake = firstDeployRunner();
     await expect(deployHostedDemo({
-      target: TARGETS.webshop,
+      target,
+      expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
       runner: fake.runner,
       artifactVerifier: siteArtifactVerifier,
       liveVerifier: async () => { throw new Error("live route mismatch"); },
       retryDelaysMs: [],
-    })).rejects.toThrow(new RegExp(`live route mismatch; first zudo-composer-demo-shop deployment ${NEW_VERSION} stays active`));
+    })).rejects.toThrow(new RegExp(`live route mismatch; first ${target.workerName} deployment ${NEW_VERSION} stays active`));
     expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
   });
 

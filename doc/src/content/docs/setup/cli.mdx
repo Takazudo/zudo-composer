@@ -1,0 +1,270 @@
+---
+title: CLI
+sidebar_position: 4
+description: The zudo-composer commands for local authoring, generation, builds, and verification.
+---
+
+## Overview
+
+The installed `zudo-composer` bin is the host's entry point for development,
+creation, generation, CMS seeding, static builds, release operations, and asset
+imports. Its public invocation is:
+
+```text
+zudo-composer <command> [options]
+```
+
+## Commands at a glance
+
+| Command | Purpose | Default root or input |
+| --- | --- | --- |
+| `init <dir>` | Create a populated host in one new directory. | The supplied destination; it must not already exist. |
+| `dev` | Start the authoring Vite server. | The current directory. |
+| `generate` | Generate `site-project.json` from `site-project.ts`. | The current host directory. |
+| `seed` | Publish and activate a committed SiteProject, or produce a ready workspace. | `site-project.json` under the host root. |
+| `build-site` | Build and verify the host's static website in `dist-site`. | `dist-site` under the host root. |
+| `release` | Run the SiteProject JSON-stdin release API. | The current host and its local release root. |
+| `assets import [manifest]` | Import a host asset manifest, or read its path from JSON stdin. | The resolved host config and its `assetsDir`. |
+
+The parser calls the last command `assets-import` internally; the public shell
+spelling is `assets import`. There is no separate `zudo-composer
+assets-import` command.
+
+## Common behavior
+
+With no command, or with `help`, `--help`, or `-h`, the launcher prints its
+usage text and exits successfully. A parser error writes
+`[zudo-composer] <reason>` followed by the usage text to stderr and exits 1.
+The launcher resolves command paths to absolute paths before passing them to a
+child, so relative paths are interpreted from the caller's current directory
+unless a command says otherwise.
+
+`dev` runs in the current process because the Vite server owns its listener.
+`init`, `generate`, `seed`, `build-site`, `release`, and `assets import` run in
+supervised child processes. A successful one-shot command exits 0; command
+failures are nonzero and the child status is preserved by the launcher.
+
+## `dev`
+
+Start the authoring server for the host in the current directory:
+
+```sh
+zudo-composer dev
+```
+
+| Flag | Behavior |
+| --- | --- |
+| `--root <dir>` | Use this host project root instead of the current directory. |
+| `--port <number>` | Ask Vite to listen on this numeric port; `0` chooses a free port. |
+| `--host [addr]` | Expose the server at `addr`; a bare `--host` listens on all addresses. |
+| `--strict-port` | Fail if the requested port is occupied instead of moving to the next free port. |
+
+The server resolves the host config and component pack before it listens. A
+successful invocation remains running until it receives a terminating signal;
+startup, config, pack, or listener failures exit nonzero.
+
+| Invalid invocation | Error text |
+| --- | --- |
+| `zudo-composer dev --port` or `--port nope` | `--port requires a number.` |
+| `zudo-composer dev --root` | `--root requires a directory.` |
+| `zudo-composer dev --open` | `Unknown dev option "--open".` |
+| `zudo-composer dev host-dir` | `Unknown dev option "host-dir".` |
+
+## `init`
+
+Create a complete host in one new directory:
+
+```sh
+zudo-composer init my-site
+```
+
+| Flag | Behavior |
+| --- | --- |
+| `--name <name>` | Lowercase npm package name; defaults to the destination basename. |
+| `--tool-tarball <file>` | Packed `zudo-composer` archive for an unpublished preview. |
+| `--contract-tarball <file>` | Matching `@zudo-composer/component-contract` archive for an unpublished preview. |
+
+The two tarball flags must be supplied together. The creator validates their
+package metadata, installs matching dependencies in a temporary isolated host,
+runs generation, asset import, and ready-workspace production, then copies the
+retained tree to the destination. It is create-only: an existing destination
+is preserved, and the command does not upgrade or migrate it. See
+[Installing into a host](./installing-into-a-host.mdx) for the seeded files and
+preview workflow.
+
+| Invalid invocation | Error text |
+| --- | --- |
+| No destination | `init requires a new directory.` |
+| More than one destination | `init accepts one new directory.` |
+| `--name` without a value | `--name requires a package name.` |
+| A tarball flag without a value | `<flag> requires a file.` |
+| Only one tarball flag | `--tool-tarball and --contract-tarball must be supplied together.` |
+| Repeating a named option | `<flag> may be supplied only once.` |
+| `--upgrade` | `Unknown init option "--upgrade".` |
+
+The parser returns these errors before spawning the creator. Invalid package
+names, an existing target, a missing parent, archive metadata mismatch, and
+installation or bootstrap failures are creator errors and exit 1. A successful
+creation exits 0.
+
+## `generate`
+
+Generate the canonical aggregate from the host-authored `site-project.ts`:
+
+```sh
+zudo-composer generate
+```
+
+| Flag | Behavior |
+| --- | --- |
+| `--root <dir>` | Read the host from this root instead of the current directory. |
+| `--check` | Compare `site-project.json` with freshly generated bytes without writing it. |
+
+Normal mode evaluates the default-exported site, validates it against the
+resolved component pack, and writes `site-project.json` when it changed. It
+prints `Wrote <absolute-path>` or `Unchanged <absolute-path>`. Check mode
+prints `Current <absolute-path>` when the committed aggregate matches. A
+missing or stale aggregate is an error, so use normal mode to update it.
+
+| Invalid invocation | Error text |
+| --- | --- |
+| `zudo-composer generate --root` | `--root requires a directory.` |
+| `zudo-composer generate --from project.json` | `Unknown generate option "--from".` |
+
+Parser, config, pack, evaluation, validation, missing-source, and stale-output
+errors exit 1. A successful write, no-op, or current check exits 0.
+
+## `seed`
+
+The default mode reads `site-project.json` from the host root, publishes its
+committed project, and activates the resulting local release:
+
+```sh
+zudo-composer seed
+```
+
+| Flag | Behavior |
+| --- | --- |
+| `--root <dir>` | Use this host project root. |
+| `--from <file>` | Read a committed project JSON file resolved relative to the caller's current directory. The default is `<host>/site-project.json`. |
+| `--ready-workspace` | Produce a selected, complete, reproducible CMS workspace through disposable release state; it does not activate the host's local release. |
+| `--output <dir>` | With `--ready-workspace`, write to this fresh output tree resolved relative to the caller's current directory and preserve the host's configured relative layout. |
+
+Plain `seed` prints one JSON result containing the release identity and a
+`status` of `activated` or `unchanged`. Ready-workspace mode prints the same
+identity with `workspaceId`, a `status` of `created` or `unchanged`, and sorted
+directory and file inventories (including SHA-256 file digests). Existing
+different ready-workspace output is preserved and rejected; use a fresh
+`--output` directory to review a new generation. The workspace details and
+regeneration rules are covered by the [Site Project and Static Build
+architecture page](../architecture/site-project-and-static-build.mdx).
+
+| Invalid invocation | Error text |
+| --- | --- |
+| `zudo-composer seed --output fresh` without `--ready-workspace` | `--output requires --ready-workspace.` |
+| `zudo-composer seed --ready-workspace --output` | `--output requires a directory.` |
+| `zudo-composer seed --from` | `--from requires a file.` |
+| `zudo-composer seed --print-routes` | `Unknown seed option "--print-routes".` |
+
+Parser, config, project validation, release checks, filesystem conflicts, and
+seed failures exit 1. Successful activation, unchanged output, or ready
+workspace creation exits 0.
+
+## `build-site`
+
+Build and verify a host's static website:
+
+```sh
+zudo-composer build-site
+```
+
+| Flag | Behavior |
+| --- | --- |
+| `--root <dir>` | Use this host root instead of the current directory. |
+| `--print-routes` | Verify an existing artifact and print its manifest routes as one JSON array. Without `--verify`, the artifact is `<root>/dist-site`. |
+| `--verify <dir>` | Verify this existing artifact instead of building it; the directory is resolved relative to the caller's current directory. Combine with `--print-routes` to print its routes. |
+| `--source-revision <rev>` | Record or verify this exact nonempty host revision. If omitted, a nonempty `GITHUB_SHA` is used; otherwise no source revision is recorded or expected. |
+
+Without `--verify` or `--print-routes`, the command evaluates the host config
+and project, builds to `<host>/dist-site`, writes `site-manifest.json`, and
+verifies every emitted file and route. `--print-routes` is a read-only artifact
+inspection mode; `--verify` is also read-only and does not load the host config
+or compile the project. A normal successful run prints a summary such as
+`Static site verified: <project>, <files> files, <routes> routes, tool
+<name>@<version>.`; a source revision adds `, source <revision>` before the
+period. Route and asset surfaces are described in [Routes and
+assets](./routes-and-assets.mdx).
+
+| Invalid invocation | Error text |
+| --- | --- |
+| `zudo-composer build-site --root` | `--root requires a directory.` |
+| `zudo-composer build-site --verify` | `--verify requires a directory.` |
+| `zudo-composer build-site --source-revision` or a blank value | `--source-revision requires a nonempty revision.` |
+| `zudo-composer build-site --port 4173` | `Unknown build-site option "--port".` |
+
+`--verify` and `--print-routes` are a supported combination, not an error.
+Parser, build, missing-artifact, manifest, checksum, route, and source-revision
+verification failures exit 1. A verified artifact or completed build exits 0.
+
+## `release`
+
+Run the local SiteProject release API:
+
+```sh
+zudo-composer release
+```
+
+The command accepts exactly one UTF-8 JSON request on stdin (up to 8 MiB) and
+writes exactly one canonical JSON response plus a newline to stdout. The
+request and operation shapes are documented in the repository's SiteProject
+operator guide; the [Site Project and Static Build architecture
+page](../architecture/site-project-and-static-build.mdx) explains the role of
+the committed project and release identity. The top-level launcher forwards
+arguments after `release` unchanged; there are no documented release flags,
+because the protocol is carried on stdin.
+
+| Result | Exit code |
+| --- | ---: |
+| `{ "ok": true, ... }` | `0` |
+| Malformed request, unsupported protocol, validation, compile-blocked, not-found, or conflict response | `2` |
+| Internal/unavailable response | `1` |
+
+Protocol failures remain JSON responses; they are not replaced by a human-only
+stderr message. Never infer activation from an `apply` or `build` response;
+inspect the exact response and release identity.
+
+## `assets import`
+
+Import host-owned asset files from a manifest:
+
+```sh
+zudo-composer assets import images-src/manifest.json
+```
+
+| Input or flag | Behavior |
+| --- | --- |
+| `<manifest>` | Optional JSON manifest path, relative to the host root or absolute. Files named by entries are relative to the manifest's directory. |
+| `--root <dir>` | Use this host root and its resolved configuration instead of the current directory. |
+| No manifest argument | Read one JSON request such as `{ "manifest": "images-src/manifest.json" }` from stdin. |
+
+The importer validates the complete manifest and source bytes before writing to
+the configured `assetsDir`. Repeating an import skips matching filenames and
+checksums and reports a canonical response such as
+`{ "ok": true, "result": { "added": 1, "skipped": 0 } }`. This command is
+the CLI counterpart to the host's local Assets authoring workflow; published
+bytes are delivered from `publicAssetsDir` as described in [Routes and
+assets](./routes-and-assets.mdx).
+
+| Invalid invocation | Error text or response |
+| --- | --- |
+| `zudo-composer assets` or `assets list` | `assets requires the "import" subcommand.` |
+| `zudo-composer assets import --root` | `--root requires a directory.` |
+| Two manifest paths | `assets import accepts one manifest path.` |
+| An empty manifest path | `assets import requires a nonempty manifest path.` |
+| `zudo-composer assets import --verify` | `Unknown assets import option "--verify".` |
+| Invalid stdin JSON or request shape | One `{ "ok": false, "error": { "code": "malformed-request", ... } }` response; exit `2`. |
+
+Successful imports exit 0. Manifest validation, missing sources, and known
+filesystem conflicts return one canonical error response and exit 2. An
+unexpected internal failure writes an `internal` error response, reports the
+underlying detail on stderr, and exits 1.

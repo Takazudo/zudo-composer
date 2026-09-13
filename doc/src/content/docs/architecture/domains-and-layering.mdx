@@ -1,0 +1,91 @@
+---
+title: Domains and Layering
+sidebar_position: 1
+description: How zudo-composer divides authoring responsibilities across its domains and layers.
+---
+
+## Five authoring domains
+
+zudo-composer owns the authoring tool. A host supplies a component pack and owns
+the compositions, content, mappings, sitemaps, and assets the tool saves into
+its directories. The domain code describes those records and their rules;
+the feature code turns those rules into editors.
+
+| Domain and source | Responsibility | Feature mounted by the application |
+| --- | --- | --- |
+| [file: src/composer/](https://github.com/Takazudo/zudo-composer/tree/main/src/composer) | Versioned component trees, commands, composition records, JSX generation, and reusable templates/patterns. | `/composer` mounts `ComposerApp` from `src/features/composer/chrome/composer-app.tsx`. |
+| [file: src/content/](https://github.com/Takazudo/zudo-composer/tree/main/src/content) | Content models, typed field values, entries, graph validation, and publication state. | `/content` mounts `ContentRouteContent` from `src/features/content/route-content.tsx`. |
+| [file: src/mapping/](https://github.com/Takazudo/zudo-composer/tree/main/src/mapping) | Bindings and projections from Content values into Composition fields and collection slots. | `/mapping` mounts `MappingRouteContent` from `src/features/mapping/route-content.tsx`. |
+| [file: src/sitemapper/](https://github.com/Takazudo/zudo-composer/tree/main/src/sitemapper) | Page trees, route/navigation resolution, and provider-qualified Composition or Mapping assignments. | `/sitemapper` mounts `SitemapperRouteContent` from `src/features/sitemapper/route-content.tsx`. |
+| [file: src/assets/](https://github.com/Takazudo/zudo-composer/tree/main/src/assets) | Asset metadata, logical folders, immutable versions, reference resolution, and upload/delivery boundaries. | `/assets` mounts `AssetRouteContent` from `src/features/assets/route-content.tsx`. |
+
+Assets is one of the five authoring products, but it remains a global provider.
+A [SiteProject](./site-project-and-static-build.mdx) aggregates the other four
+domains and captures exact Assets references for a release; it does not embed
+an Assets provider as a fifth project domain.
+
+## Layering and composition
+
+```text
+src/main.tsx
+  +-- /composer/preview --> isolated preview entry + trusted pack
+  |
+  +-- other routes --> src/App.tsx
+                        |
+                        +-- src/app/         shell, workspace, dashboard
+                        +-- src/components/  shared UI
+                        |
+                        v
+                  src/features/<domain>/
+                  controllers, editors, route content
+                        |
+                        v
+                  src/<domain>/
+                  model / library / catalog / resolver / storage / ...
+                        |
+                        v
+                  browser file-provider adapters
+                        | same-origin development HTTP
+                        v
+                  plugins/ --> domain Node stores --> host-owned files
+```
+
+The directory names express responsibilities, not a mandatory identical tree
+in every domain. `model/` defines serializable types and validation; `library/`
+defines record/provider operations; `storage/` implements persistence adapters.
+Specialized subdirectories hold work such as Composer's `source/` and `reuse/`,
+Mapping's `resolver/`, and Sitemapper's `routes/` and `catalog/`.
+
+Cross-domain consumers use catalogs and provider interfaces. For example,
+Sitemapper's `createCompositionCatalog` lists and resolves records across
+Composition providers, and `createMappingAssignmentCatalog` supplies Mapping
+assignments. The application wires those catalogs to the selected workspace
+in [file: src/app/provider-integration.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/app/provider-integration.ts).
+The domain models do not reach upward into the application to find an editor
+or choose a provider.
+
+The component pack is another explicit dependency. Headless validation and
+generation consume its serializable manifest; preview rendering consumes its
+trusted runtime entries. See [Component Packs and Contract](./component-packs-and-contract.mdx)
+and [Storage Engine](./storage-engine.mdx) for those boundaries.
+
+## Application routes and the dashboard
+
+[file: src/App.tsx](https://github.com/Takazudo/zudo-composer/blob/main/src/App.tsx)
+owns route selection, provider integration, workspace replacement, and the save
+barrier before navigation. `src/app/shell.tsx` supplies the navigation rail and
+topbar. Shared controls live under `src/components/`.
+
+The `/` route mounts `Dashboard` from
+[file: src/app/dashboard/dashboard.tsx](https://github.com/Takazudo/zudo-composer/blob/main/src/app/dashboard/dashboard.tsx).
+It consumes the same workspace summary used by the shell: counts, recent
+records, attention items, and links into the authoring products. It is a view
+over the active integration, not a separate CMS store.
+
+The exact core authoring route list lives in
+[file: scripts/routes.mjs](https://github.com/Takazudo/zudo-composer/blob/main/scripts/routes.mjs).
+There are additional application surfaces: `/review` mounts the release UI,
+`/website-preview` renders the current working project, and `/site` renders an
+activated local release. `/composer/preview` is special: `src/main.tsx` selects
+its [iframe entry](./composer-preview-protocol.mdx) before importing `App`, so it
+does not mount the shell or initialize workspace persistence.

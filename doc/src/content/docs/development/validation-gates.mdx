@@ -1,0 +1,62 @@
+---
+title: Validation Gates
+sidebar_position: 2
+description: The checks that protect package boundaries, generated artifacts, and public behavior.
+---
+
+## The aggregate check
+
+The root `check` script is an ordered chain. Run it from the repository root
+with `corepack pnpm check` when the full source, artifact, and installed-host
+proof is required. Each step fails closed; a later gate must not be made green
+by weakening an earlier boundary.
+
+| Step | Script | What it guards | Failure means |
+| --- | --- | --- | --- |
+| 1 | `no-deploy:check` | Statically audits validation entry points, package aliases, local wrappers, workflows, and Cloudflare command arguments. | A reachable validation path is unresolved, an unknown command/action is encountered, or a Cloudflare call is not provably `wrangler deploy --dry-run`. |
+| 2 | `public:check` | Rebuilds the public Node entry modules and declarations in disposable storage and compares them with committed `server/` output. | A generated entry/chunk is stale or missing, a public graph imports a host-only module, or obsolete generated output remains. |
+| 3 | `studio:check` | Keeps Sample Studio's generated `packages/demo-studio/site-project.json` as the one bundled sample source and checks its importing modules plus canonical bytes. | A duplicate, retired, hand-edited, or stale Studio sample exists, or a required static import moved away from the generated file. |
+| 4 | `cms:check` | Discovers source-bearing hosts and checks every generated ready-workspace directory, file digest, reader, and `scripts/cms-fixtures.json` ownership entry. | Generated CMS differs from the installed producer, ownership is stale, a managed file is extra/missing, or a current reader rejects the committed bytes. |
+| 5 | `lint` | Runs the repository ESLint configuration over source, scripts, hosts, and configuration. | ESLint reports an error. |
+| 6 | `typecheck` (including `typecheck:public`) | Runs the root TypeScript build, component-contract type tests, and the public type-surface check. `typecheck:public` compares source and generated declarations with the reviewed export list. | TypeScript diagnostics, contract type-test failures, unresolved host config types, or public named-type drift are found. |
+| 7 | `headless:negative-scan` | Keeps domain/model and persistence code independent of the UI provider, zudo-doc/zfb application layers, browser storage, DOM, and forbidden application aliases. | A production-domain file imports a forbidden layer, uses browser storage or DOM in a headless seam, or revives a removed adapter/compatibility path. |
+| 8 | `consumer:boundary` (including `creator:check`) | Scans discovered hosts and the creator template for outside-host imports, undeclared packages, dependency protocols, unsafe `@source` paths, and non-empty violation ledgers. `creator:check` also checks generated-host version parity and required files. | Consumer code reaches the repository or an undeclared package, uses `workspace:`, `file:`, or `link:` incorrectly, escapes its host, or creator output is incomplete. |
+| 9 | `site-project:boundary` | Pins the authoring routes, verified artifact route handoff, isolated roots, release/source-plugin seams, and the absence of local SiteProject machinery in production output. | A route, root, watcher, browser handoff, or production-boundary assertion drifts. |
+| 10 | `handoff:boundary` | Verifies the tool bin/config/data contract, provider and contract identities, route surface, clean-break policy, and absence of copied or stale provenance. | A permanent handoff hash/spec/version, host-facing filename, route, or current-only rule no longer matches the documented contract. |
+| 11 | `styles:class-names` | Checks that browser specs name live classes and that source does not write numeric Tailwind spacing utilities the theme cannot generate. | A selector is stale, or a spacing utility silently emits no CSS. |
+| 12 | `provider:boundary` | Compares the exact provider Git spec and lockfile codeload resolution with installed metadata, generated pack entries, sidecars, public source modules, and unique component IDs. | The provider is not the pinned full SHA, local/sibling resolution appears, or pack/sidecar order or identity differs. |
+| 13 | `test` | Runs the repository's Vitest suites, including package, domain, and script regressions. | Any test fails or exits unsuccessfully. |
+| 14 | `build` | Runs the TypeScript build and the ordinary Vite production build. | Compilation, bundling, or asset generation fails. |
+| 15 | `dist:boundary` | Inspects `dist/` after `build`: root-relative assets, one preview/app entry, focused WASM/glue, canonical CSS, local/provider Tailwind proof, and no server/file-provider leakage. | Build output is absent, has a forbidden marker, emits an extra or missing runtime asset, or violates the CSS/asset boundary. |
+| 16 | `doc:check` | Runs the zudo-doc content and TypeScript checks for the documentation workspace. | MDX/frontmatter/content validation or documentation TypeScript checks fail. |
+| 17 | `doc:build-site` | Builds the static documentation site, writes `doc-site-manifest.json`, and verifies every emitted file, route, MIME identity, tool identity, and optional source SHA in `doc/dist`. | The docs build, manifest route derivation, artifact inventory/checksum, supported extension, or trusted source identity fails. |
+| 18 | `smoke:host-install` | Packs the tool and contract, installs them in isolated disposable hosts, runs installed dev/generate/seed/build/test/browser proofs, and checks data ownership and release portability. It owns port 4175 and needs network access and Playwright Chromium. | A packed archive, frozen install, host command, generated output, artifact, browser proof, or cleanup/confinement assertion fails. |
+
+`consumer:boundary` invokes `creator:check` itself; `creator:check` is listed
+separately here because it is also the focused command for a generated host.
+Likewise, `typecheck:public` is the public-surface part of `typecheck`, not an
+extra aggregate step.
+
+## Contract and packed-host gates
+
+The contract handoff has three commands in addition to the aggregate chain:
+
+| Command | What it guards | Failure means |
+| --- | --- | --- |
+| `contract:conformance` | The `@zudo-composer/component-contract` package version, exports, built declarations/runtime, pack contents, and consumer-facing boundary. | A package manifest/export/build/pack invariant or published-file allowlist is wrong. |
+| `contract:negative-scan` | The generic contract package's independence from `workspace:`, `file:`, `link:`, sibling paths, root-workspace preparation, and application dependencies. | A contract source or handoff document introduces a forbidden protocol, preparation command, or application coupling. |
+| `contract:external-install -- --exact` | The exact package-only Git handoff: advertised branch and package tree, full commit SHA in the lockfile, frozen install, and imports of the package and `./fixtures`. | The handoff branch is unavailable/stale, the tree differs, a path/protocol appears in the external install, or the installed contract cannot load. `--exact` makes an unavailable public branch an error rather than using the local fallback proof. |
+
+`corepack pnpm packed-host:matrix` runs `scripts/packed-host-matrix.mjs` and
+prints the disk-discovered host matrix (or writes it to `GITHUB_OUTPUT` with
+`--github-output`). CI uses that output to create one fail-fast-disabled
+`packed-host-install` job per host. Discovery includes the four demo hosts,
+the generated creator host, `fixtures/self-host`, and later configured hosts;
+it is not a hand-maintained sample list.
+
+The hard rule is: **never weaken frozen install, negative scans, the exact
+provider pin, or the 12-component runtime/CSS/WASM proof to make a gate pass.**
+The [packed-host install guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/packed-host-install.md)
+contains focused and deliberate-negative runs; the [workspace acceptance
+guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/workspace-acceptance.md)
+explains the browser evidence those gates complement.

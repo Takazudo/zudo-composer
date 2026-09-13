@@ -1,0 +1,61 @@
+---
+title: Repository Map
+sidebar_position: 2
+description: A guide to the repository directories and the responsibilities they contain.
+---
+
+## Overview
+
+The repository separates browser and domain code in `src/` from Node launch,
+authoring, and build code in `server/`. Package, fixture, documentation, and
+deployment surfaces stay at the root so a host install can be audited without
+following generated build output.
+
+## Source and runtime
+
+| Path | Responsibility |
+| --- | --- |
+| `src/` | Browser-facing and headless product source. Each domain (`composer/`, `content/`, `mapping/`, `sitemapper/`, and `assets/`) is split into boundaries such as `model/`, `storage/`, `library/`, `catalog/`, and domain-specific resolvers or references. `features/` owns route-level composition; `app/` owns the application shell and workspace integration; `components/` contains shared UI; `shared/` contains cross-domain utilities and persistence seams; `site-project/` contains the aggregate model, compiler, and release API; `hosted-demo/` contains the bundled demo handoff; `styles/` contains stylesheet barrels and tokens; `theme/` contains theme selection. |
+| `server/` | Node-only launcher and host integration. `cli/` parses and supervises commands; `config/` loads host settings; `authoring/` contains Node-only authoring helpers; `creator/` creates a new host; `site-build/` compiles and verifies static artifacts; `site-project-local/` implements local release storage and the JSON API; `public/` is the stable package-facing Node facade; `generated/` contains build-generated validation/runtime output. |
+| `plugins/` | Vite plugins and development middleware for the component pack, host styles, domain file providers, Composer app HTML, roots, and SiteProject source. |
+
+## Packages and fixtures
+
+Each workspace package has a separate boundary or demonstrates one:
+
+| Path | Responsibility |
+| --- | --- |
+| `packages/component-contract/` | The versioned, framework-neutral `@zudo-composer/component-contract` package that defines the provider/consumer component-pack contract. |
+| `packages/demo-blog/` | A complete host project with a host-owned component pack and authored blog SiteProject. |
+| `packages/demo-landing/` | A complete host project with a host-owned component pack and authored landing SiteProject. |
+| `packages/demo-studio/` | The Sample Studio host, using the installed `@zudo-sg/ui` themeset and frozen hosted-demo route data. |
+| `packages/demo-webshop/` | A complete host project with a host-owned component pack and authored webshop SiteProject. |
+| `packages/fixture-themeset/` | An independently installed component-pack fixture used to prove that swapping a themeset is a host configuration change. |
+| `packages/image-editor/` | The source-only, zero-dependency RGBA editing core and worker/UI entry boundaries. |
+| `fixtures/` | Minimal host fixtures: `host/` exercises an installed tool, `self-host/` exercises a package `exports` self-reference, and `themeset-host/` exercises an installed themeset package. |
+
+## Project surfaces
+
+| Path | Responsibility |
+| --- | --- |
+| `scripts/` | Repository checks, generators, boundary scans, asset helpers, static-build helpers, and CI support. `scripts/hosted-demo/` contains the hosted-demo target definitions, artifact preparation, deployment guard, deployment commands, and bounded live checks. |
+| `docs/` | Operator-reference documentation for creator bootstrap, demo sites, SiteProject release/build behavior, packed installs, hosted demos, and workspace acceptance. |
+| `doc/` | This zudo-doc developer documentation site: its content, config, route seams, and static-site checks. |
+| `cms/` | The repository's own dogfood host data. The tracked root currently retains the demo Assets catalog; other runtime CMS trees are host or generated state. |
+| `templates/host/` | The canonical host starter copied by `zudo-composer init`; it contains host-owned components, styles, authored SiteProject source, an image manifest/source asset, and starter tests. |
+| `tests/` | Browser acceptance, document-readiness, isolated-host, and runtime-failure test support. |
+| `styles/` | The root dogfood host's `base.css`, which imports provider CSS and declares the host stylesheet entry. |
+| `bin/` | The published `zudo-composer` executable entry point. |
+| `type-tests/` | Compile-time fixtures for the public SiteProject exports. |
+
+## Root configuration families
+
+| Path | Responsibility |
+| --- | --- |
+| `tsconfig.*.json` | TypeScript project configurations for the app, Node/CLI code, plugins, public entries, scripts, SiteProject local code, and type tests. |
+| `playwright.*.config.ts` | Browser-lane configurations for development, host, hosted-demo, demo, and SiteProject acceptance surfaces. |
+| `wrangler*.jsonc` | Cloudflare Worker configurations for the hosted Composer target and the demo sites. |
+| `zudo-composer.config.ts` | The repository root's host configuration: this repository is its own dogfood host and selects `@zudo-sg/ui/composer-pack`. |
+| `vite*.config.ts`, `vitest.config.ts`, `eslint.config.js` | Root Vite build variants, Vitest setup, and ESLint configuration used by repository checks. |
+| `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml` | Workspace scripts, package membership and package-manager policy, and the frozen dependency graph. |
+| `CLAUDE.md`, `README.md`, `ZUDO_DEPS_PINS.md`, `contract-handoff.json` | Ownership, operating guidance, dependency/provider pin records, and the component-contract handoff metadata. |

@@ -1,0 +1,94 @@
+---
+title: Local Development
+sidebar_position: 1
+description: The local workflow for running zudo-composer, fixtures, and demo hosts.
+---
+
+## Prerequisites
+
+The repository is tested with Node.js **22.13.0 or newer in the 22 line, or
+24.0.0 or newer**, and pnpm **11.5.2**. The root `package.json` pins both the
+supported engine range and `packageManager`; use Corepack so the command-line
+client matches the lockfile.
+
+From a fresh checkout:
+
+```sh
+corepack pnpm install --frozen-lockfile
+corepack pnpm dev
+```
+
+The frozen install is part of the handoff contract. It must not be replaced by
+an unlocked install to work around a dependency or provider problem. The
+ordinary root `dev` script starts Vite on its default development port,
+`http://localhost:5173`.
+
+## The repository is a host
+
+The repository root is its own dogfood host. [`zudo-composer.config.ts`](https://github.com/Takazudo/zudo-composer/blob/main/zudo-composer.config.ts)
+selects `@zudo-sg/ui/composer-pack`, while `styles/base.css` is the host-owned
+stylesheet entry that imports the provider CSS. The same host-rooted resolution
+is exercised by `pnpm dev`, `pnpm build`, and the artifact gates; there is no
+second private application configuration to keep in sync.
+
+With the default config, authoring data is written beneath `cms/` and committed
+delivery files are served from `public/uploaded-assets/`. The root
+`zudo-composer.config.ts` and `styles/base.css` are code/configuration, not
+generated CMS output. Open the URL printed by Vite and use the authoring routes
+(`/`, `/composer`, `/composer/preview`, `/content`, `/mapping`, `/sitemapper`,
+and `/assets`) to inspect the host. The `/site` route requires a local
+activated release; use a host's `seed` command when you need that delivery
+surface.
+
+## Minimal fixtures
+
+The three fixtures isolate host-resolution claims that are easy to accidentally
+hide behind the repository's own workspace:
+
+| Fixture | What it proves | Local entry point |
+| --- | --- | --- |
+| `fixtures/host` | The smallest installed-host shape: Vite is rooted at the fixture and CMS writes stay under that host. | `corepack pnpm dev` |
+| `fixtures/self-host` | A host-owned component pack reached through the package's `exports` self-reference; the pack is a package specifier, not a path. | `zudo-composer.config.ts` with `pack: "self-host/components"` |
+| `fixtures/themeset-host` | The same host can swap to an installed themeset by changing its `pack` and stylesheet import. | `corepack pnpm dev` |
+
+The minimal host keeps empty CMS and public directories with `.gitkeep` files.
+The fixture `.gitignore` files ignore authored JSON/TSX and uploaded bytes while
+keeping the directory shape. `fixtures/self-host` intentionally has no
+workspace membership: its self-reference must resolve from the host package's
+own `exports` map. See the [host-install operator guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/packed-host-install.md)
+for the disposable packed proof that exercises these shapes outside the
+checkout.
+
+## Demo host ports
+
+The complete demo hosts are workspace members under `packages/`. Run a host
+from its package directory and pass its reserved one-off port when more than
+one server is active:
+
+| Host | Local port | Typical commands |
+| --- | ---: | --- |
+| `packages/demo-webshop` | 4181 | `corepack pnpm seed`, then `corepack pnpm dev --port 4181` |
+| `packages/demo-landing` | 4182 | `corepack pnpm seed`, then `corepack pnpm dev --port 4182` |
+| `packages/demo-blog` | 4183 | `corepack pnpm seed`, then `corepack pnpm dev --port 4183` |
+| `packages/demo-studio` | 4184 | `corepack pnpm seed`, then `corepack pnpm dev --port 4184` |
+
+`seed` imports the host's image manifest and activates a local release; it is
+not needed merely to start authoring libraries. The browser lanes use their
+own machine-global ports and isolated roots: 4173 (host), 4174 (SiteProject),
+4175 (hosted demo or packed smoke), and 4176 (demos). The ordinary repository
+server remains on 5173. See [Browser lanes](./browser-lanes.mdx) before
+starting a lane alongside a development server.
+
+## CMS and generated files
+
+The root `.gitignore` ignores runtime data under `/cms/*`, then explicitly
+keeps `/cms/assets/` tracked. The root Assets catalog and immutable versions
+are deliberate dogfood inputs; ordinary Composer, Content, Mapping, Sitemapper,
+and workspace records are disposable local state. The root ignore also excludes
+`.zudo-site-project/`, `dist-site/`, and other build or release output.
+
+Do not hand-edit generated host records. Demo hosts own their authored
+`site-project.ts`; `site-project.json` and ready CMS trees are regenerated
+together by `corepack pnpm cms:regenerate`. For the ownership and preservation
+rules, see [CMS regeneration](./cms-regeneration.mdx) and the
+[SiteProject operator guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/site-project.md).

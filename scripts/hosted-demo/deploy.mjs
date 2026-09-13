@@ -280,6 +280,12 @@ export async function preflightDeployment({ target = DEFAULT_TARGET, artifactDir
   const artifact = await artifactVerifier({ directory: resolvedArtifactDirectory, expectedSourceRevision });
   assert.equal(typeof artifact.root, "string", `${target.workerName} artifact verifier must return its checked directory`);
   assert.equal(resolve(artifact.root), resolvedArtifactDirectory, `${target.workerName} artifact verifier checked a different directory`);
+  if (target.kind === "doc-site") {
+    assert.ok(typeof expectedSourceRevision === "string" && expectedSourceRevision.length === 40 && /^[a-f0-9]{40}$/u.test(expectedSourceRevision), "Documentation deployment requires a full expected source Git SHA");
+    assert.equal(artifact.manifest.sourceRevision, expectedSourceRevision, "Documentation artifact must record the expected source Git SHA");
+  }
+  const sourceRevision = artifact.manifest.sourceRevision;
+  assert.ok(typeof sourceRevision === "string" && sourceRevision.length === 40 && /^[a-f0-9]{40}$/u.test(sourceRevision), `${target.workerName} deployment requires a full source Git SHA`);
   await runWrangler(["whoami", "--config", target.configPath], { environment, runner });
   const state = await captureRolloutState(target, { environment, runner });
   await runWrangler([
@@ -291,7 +297,7 @@ export async function preflightDeployment({ target = DEFAULT_TARGET, artifactDir
     "--assets",
     resolvedArtifactDirectory,
   ], { environment, runner });
-  return { artifact, artifactDirectory: resolvedArtifactDirectory, state, credentials, target };
+  return { artifact: { ...artifact, manifest: { ...artifact.manifest, sourceRevision } }, artifactDirectory: resolvedArtifactDirectory, state, credentials, target };
 }
 
 /**
@@ -392,7 +398,14 @@ export async function deployHostedDemo({
   artifactVerifier = target.verifyArtifact,
   // Bind this invocation's target into the shared live verifier so callers
   // that override `liveVerifier` (tests) keep the plain three-key call below.
-  liveVerifier = (liveOptions) => verifyLiveWithRetries({ ...liveOptions, manifestFileName: target.manifestFileName, artifactVerifier: target.verifyArtifact, liveRoutes: target.liveRoutes }),
+  liveVerifier = (liveOptions) => verifyLiveWithRetries({
+    ...liveOptions,
+    manifestFileName: target.manifestFileName,
+    artifactVerifier: target.verifyArtifact,
+    liveRoutes: target.liveRoutes,
+    routeFile: target.routeFile,
+    assetUrl: target.assetUrl,
+  }),
   retryDelaysMs = DEPLOYMENT_RETRY_DELAYS_MS,
   delayImpl = (milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)),
 } = {}) {

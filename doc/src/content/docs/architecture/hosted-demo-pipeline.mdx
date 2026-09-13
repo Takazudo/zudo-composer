@@ -1,0 +1,141 @@
+---
+title: Hosted Demo Pipeline
+sidebar_position: 7
+description: The trusted-run pipeline that builds and deploys the repository's hosted demo and documentation sites.
+---
+
+## Repository-owned static targets
+
+The hosted pipeline publishes the repository's disposable Composer demo, three
+static sample websites, and this developer documentation site. Each target has
+its own Worker, custom domain, artifact contract, and deployment concurrency
+group. This exception does not add deployment or hosted persistence to an
+installed host's ordinary authoring workflow.
+
+| Target | Worker | Wrangler config | Domain | Artifact directory | Manifest | CI artifact |
+| --- | --- | --- | --- | --- | --- | --- |
+| `zudo-composer` | `zudo-composer` | `wrangler.jsonc` | `zudo-composer.zudolab.dev` | `dist-hosted-demo` | `hosted-demo-manifest.json` | `hosted-demo-<sha>` |
+| `webshop` | `zudo-composer-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` | `packages/demo-webshop/dist-site` | `site-manifest.json` | `demo-site-webshop-<sha>` |
+| `landing` | `zudo-composer-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site` | `site-manifest.json` | `demo-site-landing-<sha>` |
+| `blog` | `zudo-composer-demo-blog` | `wrangler.demo-blog.jsonc` | `zc-demo-blog.zudolab.dev` | `packages/demo-blog/dist-site` | `site-manifest.json` | `demo-site-blog-<sha>` |
+| `doc` | `zudo-composer-doc` | `wrangler.doc.jsonc` | `zc-doc.zudolab.dev` | `doc/dist` | `doc-site-manifest.json` | `doc-site-<sha>` |
+
+[file: scripts/hosted-demo/targets.mjs](https://github.com/Takazudo/zudo-composer/blob/main/scripts/hosted-demo/targets.mjs)
+is the target registry consumed by deployment and verification. The Composer
+demo uses `hosted-demo-manifest.json`; the three visitor sites use
+`site-manifest.json`; documentation uses `doc-site-manifest.json`.
+The documentation artifact has a separate HTML file per route, so its route
+verification must select that route's emitted HTML rather than a shared SPA
+entry. Its `verifyArtifact` hook directly uses `verifyDocSiteArtifact`, and
+`liveRoutes` reads the doc manifest's `routes` array.
+
+The `doc-site-build` CI job runs `pnpm doc:build-site`, verifies the `doc`
+target's artifact contract, and uploads `doc-site-<sha>` from `doc/dist`. The
+production matrix downloads that exact artifact name before the target-specific
+Wrangler preflight.
+
+## Build and deployment are separate workflows
+
+```text
+same-repository main push
+  -> CI builds, checks, and uploads SHA-named artifacts
+     -> trusted-run guard verifies run + source SHA + current main
+        -> download and verify the selected target artifact
+           -> credential/config preflight + capture active state
+              -> Wrangler dry run
+                 -> upload verified artifact
+                    -> activate returned version ID
+                       -> live manifest + files + routes
+                          +-- pass: rollout verified
+                          +-- fail: guarded rollback, workflow stays failed
+```
+
+Pull-request validation has no production Cloudflare credentials and does not
+supply production artifacts. Deployment accepts a successful same-repository
+`main` push run of the `CI` workflow. A manual dispatch also names a specific
+successful CI run and full SHA; it does not bypass those checks.
+
+`workflow-guard.mjs` rechecks the selected run through GitHub's read-only API
+and verifies that the trusted SHA is still `origin/main`. The selected artifact
+must match that same source revision and its target-specific inventory and
+hashes. A valid local static-site artifact may omit a host revision, but a
+production target requires a full 40-character Git `sourceRevision`.
+
+## Responsibility map
+
+| Module | Responsibility |
+| --- | --- |
+| [file: scripts/hosted-demo/targets.mjs](https://github.com/Takazudo/zudo-composer/blob/main/scripts/hosted-demo/targets.mjs) | Target identity, artifact verification adapter, CI artifact naming, live routes, and route/file URL mappings. |
+| [file: scripts/hosted-demo/workflow-guard.mjs](https://github.com/Takazudo/zudo-composer/blob/main/scripts/hosted-demo/workflow-guard.mjs) | Validate trusted run inputs, recheck GitHub CI metadata, and reject a stale main SHA before production credentials are needed. |
+| [file: scripts/hosted-demo/deploy.mjs](https://github.com/Takazudo/zudo-composer/blob/main/scripts/hosted-demo/deploy.mjs) | Preflight, capture rollout state, upload, activate, check live delivery, and conditionally roll back. |
+| [file: scripts/hosted-demo/live-check.mjs](https://github.com/Takazudo/zudo-composer/blob/main/scripts/hosted-demo/live-check.mjs) | Verify live manifest, route HTML, asset bytes/MIME, and immutable asset delivery headers with bounded HTTPS requests. |
+| [file: scripts/check-no-deploy.mjs](https://github.com/Takazudo/zudo-composer/blob/main/scripts/check-no-deploy.mjs) | Audit validation entry points, aliases, wrappers, imports, and workflows so ordinary local checks cannot reach an unapproved deploy path. |
+
+The no-deploy audit requires statically provable dry-run arguments for
+Cloudflare commands reachable from ordinary validation and rejects opaque
+deployment wrappers or API calls. Production mutation is confined to the
+separately guarded hosted workflow. The
+[CI and Deployment](../development/ci-and-deployment.mdx) page describes the
+developer workflow around these boundaries.
+
+## Rollout ownership and rollback
+
+Before mutation, `preflightDeployment` validates credentials, target config,
+artifact identity, and the current deployment state, then performs the dry run.
+An ordinary rollout requires a known single active version. Missing rollback
+state, split traffic, stale source, or inconsistent remote state fails before
+upload/activation.
+
+`deployHostedDemo` captures that active version as the rollback target and
+uploads only the verified directory with the pinned Wrangler toolchain. It
+activates only the version ID returned by that upload, then confirms the
+active state and runs live checks. It does not infer a new version from an
+arbitrary list entry.
+
+If live verification fails, rollback first rechecks ownership: the active
+version must still be the exact version uploaded by this invocation. A newer
+external rollout prevents automatic rollback. An owned failure restores the
+captured version and verifies it is active. Successful rollback still leaves
+the workflow failed so the incident remains visible.
+
+## The first-Worker exception
+
+A target with no Worker has no previous version to capture. The exception
+applies only when both `deployments list` and `versions list` report the Worker
+missing. Any partial or contradictory missing-state result still fails closed.
+
+For that exact state, the pipeline uses a plain `wrangler deploy` of the
+verified artifact. It creates the Worker and binds the custom domain, then
+reads back the active version. First deployment has an extended bounded live
+check budget for the newly created hostname. It has no rollback target; a
+failed first live check leaves the job failed with the created version recorded.
+Later runs use the ordinary versioned rollout path.
+
+## Live delivery contract
+
+`verifyLiveDeployment` compares the remote manifest with the verified local
+artifact, fetches emitted files, and checks every target route. The Composer
+demo uses its fixed authoring/sample routes; static sites and documentation
+derive routes from their manifests. Route/file mappings support both a shared
+SPA entry and a documentation route's own HTML file.
+
+For the `doc` target, `routeFile` maps `/` to `index.html`, `/docs/a/` to
+`docs/a/index.html`, and `/x` to `x.html`. Its `assetUrl` hook skips index HTML
+only after a route has verified that file. Other files use their canonical
+asset URL: `x.html` is fetched at `/x`, `404.html` at `/404`, and non-HTML files
+at their emitted paths. This avoids redirects under Workers Static Assets'
+default `auto-trailing-slash` HTML handling. The config's `404-page` fallback
+serves unknown routes with HTTP 404 and the emitted `404.html` bytes.
+
+Navigation requests carry HTML/navigation headers. The checker permits only
+the narrowly recognized Cloudflare analytics beacon insertion and then checks
+the remaining HTML bytes against the expected file. Asset requests have their
+own MIME/hash checks, including the doc verifier's explicit ICO/XML MIME
+alternatives. Arbitrary scripts, changed route content, missing files,
+and incorrect immutable asset headers fail verification.
+
+The hosted Composer adapter starts from the committed Studio sample and keeps
+edits/uploads in the current tab; reload resets them. The other targets publish
+static artifacts. Operator details, deployment evidence, and recovery commands
+belong in the
+[hosted demo guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/hosted-demo.md).

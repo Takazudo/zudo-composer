@@ -4,18 +4,24 @@
 // It serves only the already-built artifact; authoring APIs and Vite middleware
 // are intentionally absent from this path.
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition, assetMimeTypeForExtension } from "../../src/assets/model/asset-kinds.mjs";
 
 const MIME_BY_EXTENSION = new Map([
   [".css", "text/css; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],
+  [".ico", "image/vnd.microsoft.icon"],
   [".js", "text/javascript; charset=utf-8"],
   [".json", "application/json; charset=utf-8"],
   [".mjs", "text/javascript; charset=utf-8"],
   [".png", "image/png"],
+  [".svg", "image/svg+xml"],
+  [".txt", "text/plain; charset=utf-8"],
   [".wasm", "application/wasm"],
+  [".webmanifest", "application/manifest+json"],
+  [".woff2", "font/woff2"],
+  [".xml", "application/xml"],
 ]);
 
 /** @param {string} path */
@@ -30,16 +36,36 @@ function isSafePath(root, pathname) {
   return withinRoot ? path : null;
 }
 
+/** @param {string} root @param {string} pathname @returns {Promise<string | null>} */
+async function findFile(root, pathname) {
+  const path = isSafePath(root, pathname);
+  if (!path) return null;
+  try {
+    return (await stat(path)).isFile() ? path : null;
+  } catch {
+    return null;
+  }
+}
+
+/** @param {import("node:http").ServerResponse} response @param {string} pathname @param {string} search */
+function redirectHtml(response, pathname, search) {
+  // Encode decoded filenames again, preserving the query and a same-origin
+  // absolute path even if the request contained an encoded leading slash.
+  const location = pathname.replace(/^\/+/, "/").split("/").map(encodeURIComponent).join("/") + search;
+  response.writeHead(308, { Location: location });
+  response.end();
+}
+
 /** @param {import("node:http").IncomingMessage} request */
 function acceptsHtml(request) {
   return String(request.headers.accept ?? "").split(",").some((value) => value.trim().split(";", 1)[0] === "text/html");
 }
 
-/** @param {string} pathname @param {import("node:http").IncomingMessage} request */
-function isSpaNavigation(pathname, request) {
+/** @param {string} pathname */
+function isNavigationPath(pathname) {
   // Unknown immutable uploads must stay 404 even if a browser sends a broad
   // Accept header. Asset URLs with a suffix are also never HTML fallbacks.
-  return acceptsHtml(request) && !pathname.startsWith("/uploaded-assets/") && !extname(pathname);
+  return !pathname.startsWith("/uploaded-assets/") && !extname(pathname);
 }
 
 /**
@@ -51,6 +77,11 @@ export async function startHostedDemoStaticServer({ directory, host = "127.0.0.1
   const root = resolve(directory);
   const rootInfo = await stat(root);
   if (!rootInfo.isDirectory()) throw new Error(`Hosted demo artifact is not a directory: ${root}`);
+  // An artifact with only a root index keeps the existing SPA request behavior.
+  // Additional HTML files (including 404.html) opt into multi-page routing.
+  const multiPage = (await readdir(root, { recursive: true, withFileTypes: true }))
+    .some((entry) => entry.isFile() && extname(entry.name) === ".html" && (entry.name !== "index.html" || entry.parentPath !== root));
+  const notFoundFile = await findFile(root, "/404.html");
   const server = createServer(
     /** @param {import("node:http").IncomingMessage} request @param {import("node:http").ServerResponse} response */
     async (request, response) => {
@@ -60,28 +91,50 @@ export async function startHostedDemoStaticServer({ directory, host = "127.0.0.1
         return;
       }
       let pathname;
+      let requestUrl;
       try {
-        pathname = decodeURIComponent(new URL(request.url ?? "/", `http://${host}`).pathname);
+        requestUrl = new URL(request.url ?? "/", `http://${host}`);
+        pathname = decodeURIComponent(requestUrl.pathname);
       } catch {
         response.writeHead(400);
         response.end("Bad URL");
         return;
       }
-      if (pathname === "/_headers") {
+      if (pathname === "/_headers" || !isSafePath(root, pathname)) {
         response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
         response.end("Not found");
         return;
       }
-      let filePath = isSafePath(root, pathname);
-      if (filePath) {
-        try {
-          const info = await stat(filePath);
-          if (!info.isFile()) filePath = null;
-        } catch {
-          filePath = null;
+      let filePath = await findFile(root, pathname);
+      if (multiPage && !pathname.startsWith("/uploaded-assets/")) {
+        if (filePath && extname(pathname) === ".html") {
+          const canonicalPath = pathname.endsWith("/index.html") ? pathname.slice(0, -"index.html".length) : pathname.slice(0, -".html".length);
+          redirectHtml(response, canonicalPath, requestUrl.search);
+          return;
+        }
+        if (!filePath && pathname.endsWith("/")) {
+          filePath = await findFile(root, `${pathname}index.html`);
+          if (!filePath && await findFile(root, `${pathname.slice(0, -1)}.html`)) {
+            redirectHtml(response, pathname.slice(0, -1), requestUrl.search);
+            return;
+          }
+        } else if (!filePath && !extname(pathname)) {
+          filePath = await findFile(root, `${pathname}.html`);
+          if (!filePath && await findFile(root, `${pathname}/index.html`)) {
+            redirectHtml(response, `${pathname}/`, requestUrl.search);
+            return;
+          }
         }
       }
-      if (!filePath && isSpaNavigation(pathname, request)) filePath = join(root, "index.html");
+      let status = 200;
+      if (!filePath && isNavigationPath(pathname)) {
+        if (notFoundFile) {
+          filePath = notFoundFile;
+          status = 404;
+        } else if (acceptsHtml(request)) {
+          filePath = join(root, "index.html");
+        }
+      }
       if (!filePath) {
         response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
         response.end("Not found");
@@ -110,7 +163,7 @@ export async function startHostedDemoStaticServer({ directory, host = "127.0.0.1
         const disposition = assetContentDisposition(assetMimeType, checksum);
         if (disposition !== undefined) headers["Content-Disposition"] = disposition;
       }
-      response.writeHead(200, {
+      response.writeHead(status, {
         ...headers,
       });
       if (request.method === "HEAD") response.end();

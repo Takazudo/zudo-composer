@@ -125,6 +125,52 @@ describe("reachable validation commands cannot deploy", () => {
     expect(() => audit(root)).toThrow(/Wrangler deploy --dry-run/u);
   });
 
+  it("resolves doc workspace build/check scripts and accepts the local zfb binary", async () => {
+    const root = await fixture("pnpm -C doc build");
+    await put(root, "pnpm-workspace.yaml", "packages:\n  - doc\n");
+    await put(root, "doc/package.json", JSON.stringify({ name: "doc", scripts: { build: "zfb build", check: "zfb check" } }));
+    expect(() => audit(root)).not.toThrow();
+  });
+
+  it("audits lifecycle hooks for every pnpm workspace member", async () => {
+    const root = await fixture("pnpm install");
+    await put(root, "pnpm-workspace.yaml", "packages:\n  - doc\n");
+    await put(root, "doc/package.json", JSON.stringify({ name: "doc", scripts: { postinstall: "wrangler deploy" } }));
+    expect(() => audit(root)).toThrow(/Wrangler deploy --dry-run/u);
+  });
+
+  it("retains command discovery for non-workspace packages reached by local entries", async () => {
+    const root = await fixture("pnpm -C external build");
+    await put(root, "external/package.json", JSON.stringify({ scripts: { build: "zfb build", release: "wrangler deploy" } }));
+    expect(() => audit(root)).toThrow(/Wrangler deploy --dry-run/u);
+  });
+
+  it.each([
+    ["sites/*", "sites/docs"], ["sites/**", "sites/nested/docs"],
+    ["{doc,sites/*}", "doc"], ["sites/[ab]", "sites/a"], ["sites/@(a|b)", "sites/b"],
+  ])("discovers lifecycle hooks through workspace glob %s", async (pattern, member) => {
+    const root = await fixture("pnpm install");
+    await put(root, "pnpm-workspace.yaml", `packages:\n  - '${pattern}'\n`);
+    await put(root, `${member}/package.json`, JSON.stringify({ scripts: { postinstall: "wrangler deploy" } }));
+    expect(() => audit(root)).toThrow(/Wrangler deploy --dry-run/u);
+  });
+
+  it.each(["!members/legacy", "!./members/legacy", "!**/legacy/**"])("respects workspace exclusion %s and skips dependencies and unrelated directories", async (exclude) => {
+    const root = await fixture("pnpm install");
+    await put(root, "pnpm-workspace.yaml", `packages:\n  - 'members/**'\n  - '${exclude}'\n`);
+    await put(root, "members/current/package.json", JSON.stringify({ scripts: { postinstall: "zfb build" } }));
+    for (const path of ["members/legacy", "members/current/node_modules/untrusted", "unrelated"]) {
+      await put(root, `${path}/package.json`, JSON.stringify({ scripts: { postinstall: "wrangler deploy" } }));
+    }
+    expect(() => audit(root)).not.toThrow();
+  });
+
+  it.each([null, "doc", [42], [""]])("rejects malformed workspace patterns instead of skipping their hooks: %j", async (packages) => {
+    const root = await fixture("pnpm install");
+    await put(root, "pnpm-workspace.yaml", `packages: ${JSON.stringify(packages)}\n`);
+    expect(() => audit(root)).toThrow(/workspace packages must be an array/u);
+  });
+
   it.each(["pre", "post"])("audits a local Node action's %s lifecycle entry", async (stage) => {
     const root = await fixture();
     await put(root, ".github/workflows/ci.yml", "jobs:\n  packed:\n    steps:\n      - uses: ./.github/actions/check\n");
@@ -169,6 +215,31 @@ describe("reachable validation commands cannot deploy", () => {
 });
 
 describe("CI and aggregate packed-host coverage", () => {
+  it("builds and verifies the exact doc artifact before the five-target deployment handoff", async () => {
+    const workflow = parse(await readFile(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8"));
+    const job = workflow.jobs["doc-site-build"];
+    const checkout = job.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/checkout@"));
+    expect(checkout.with?.["fetch-depth"] ?? 1).toBe(1);
+    expect(job.steps.some((step: { "continue-on-error"?: boolean }) => step["continue-on-error"])).toBe(false);
+    expect(job.steps.filter((step: { run?: string }) => step.run === "pnpm doc:build-site")).toHaveLength(1);
+    const verify = job.steps.find((step: { run?: string }) => step.run?.includes("hosted-demo:verify"));
+    expect(verify.run).toBe('pnpm hosted-demo:verify doc/dist "${{ github.sha }}"');
+    expect(verify.env.HOSTED_DEMO_TARGET).toBe("doc");
+    const upload = job.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/upload-artifact@"));
+    expect(upload.uses).toBe(workflow.jobs["demo-sites-build"].steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/upload-artifact@")).uses);
+    expect(upload.with).toEqual({ name: "doc-site-${{ github.sha }}", path: "doc/dist", "if-no-files-found": "error", "retention-days": 7 });
+    const production = parse(await readFile(join(repositoryRoot, ".github/workflows/hosted-demo-deploy.yml"), "utf8"));
+    expect(production.jobs.deploy.strategy.matrix.include).toEqual([
+      { target: "zudo-composer", artifact_name: "hosted-demo", dist_dir: "dist-hosted-demo" },
+      { target: "webshop", artifact_name: "demo-site-webshop", dist_dir: "packages/demo-webshop/dist-site" },
+      { target: "landing", artifact_name: "demo-site-landing", dist_dir: "packages/demo-landing/dist-site" },
+      { target: "blog", artifact_name: "demo-site-blog", dist_dir: "packages/demo-blog/dist-site" },
+      { target: "doc", artifact_name: "doc-site", dist_dir: "doc/dist" },
+    ]);
+    const manifest = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"));
+    expect(shellCommands(manifest.scripts.check).slice(-3)).toEqual([["pnpm", "doc:check"], ["pnpm", "doc:build-site"], ["pnpm", "smoke:host-install"]]);
+  });
+
   it("uses disk discovery for all four hosts, generated output and the retained synthesized proof", async () => {
     const workflow = parse(await readFile(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8"));
     const matrixJob = workflow.jobs["packed-host-matrix"];

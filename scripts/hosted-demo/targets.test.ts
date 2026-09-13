@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSiteManifest, SITE_HEADERS, SITE_MANIFEST, siteHeaders, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
+import { createDocSiteManifest, DOC_SITE_MANIFEST, verifyDocSiteArtifact } from "./doc-site-artifact.mjs";
 import { DEFAULT_TARGET_KEY, HOSTED_DEMO_LIVE_ROUTES, TARGET_KEYS, TARGETS, resolveTarget } from "./targets.mjs";
 
 const directories: string[] = [];
@@ -14,12 +15,13 @@ afterEach(async () => { await Promise.all(directories.splice(0).map((directory) 
 describe("hosted-demo deploy targets", () => {
   it("names every target's Worker, config file and custom domain", () => {
     expect(DEFAULT_TARGET_KEY).toBe("zudo-composer");
-    expect(TARGET_KEYS).toEqual(["zudo-composer", "webshop", "landing", "blog"]);
+    expect(TARGET_KEYS).toEqual(["zudo-composer", "webshop", "landing", "blog", "doc"]);
     expect(TARGETS["zudo-composer"]).toMatchObject({ workerName: "zudo-composer", configPath: "wrangler.jsonc", domain: "zudo-composer.zudolab.dev", kind: "hosted-demo" });
     expect(TARGETS.webshop).toMatchObject({ workerName: "zudo-composer-demo-shop", configPath: "wrangler.demo-shop.jsonc", domain: "zc-demo-shop.zudolab.dev", kind: "site-static" });
     expect(TARGETS.landing).toMatchObject({ workerName: "zudo-composer-demo-landing", configPath: "wrangler.demo-landing.jsonc", domain: "zc-demo-landing.zudolab.dev", kind: "site-static" });
     expect(TARGETS.blog).toMatchObject({ workerName: "zudo-composer-demo-blog", configPath: "wrangler.demo-blog.jsonc", domain: "zc-demo-blog.zudolab.dev", kind: "site-static" });
-    for (const key of TARGET_KEYS) expect(TARGETS[key].artifactDirectory.endsWith("dist-site") || TARGETS[key].artifactDirectory.endsWith("dist-hosted-demo")).toBe(true);
+    expect(TARGETS.doc).toMatchObject({ workerName: "zudo-composer-doc", configPath: "wrangler.doc.jsonc", domain: "zc-doc.zudolab.dev", kind: "doc-site" });
+    for (const key of TARGET_KEYS) expect(TARGETS[key].artifactDirectory.endsWith("dist-site") || TARGETS[key].artifactDirectory.endsWith("dist-hosted-demo") || TARGETS[key].artifactDirectory.endsWith("doc/dist")).toBe(true);
   });
 
   it("rejects an unknown target", () => {
@@ -35,6 +37,52 @@ describe("hosted-demo deploy targets", () => {
 
   it("reads a static demo site's live routes from its own manifest", () => {
     expect(TARGETS.webshop.liveRoutes({ routes: ["/", "/about"] })).toEqual(["/", "/about"]);
+  });
+
+  it("maps doc-site routes and assets and verifies a multi-page tree", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "doc-site-target-"));
+    directories.push(directory);
+    const files: Record<string, string> = {
+      "index.html": "<!doctype html><h1>Docs</h1>",
+      "docs/a/index.html": "<!doctype html><h1>A</h1>",
+      "x.html": "<!doctype html><h1>X</h1>",
+      "404.html": "<!doctype html><h1>Not found</h1>",
+      "assets/site.css": "body { color: black; }",
+      "assets/favicon.ico": "ico bytes",
+      "sitemap.xml": "<urlset />",
+    };
+    for (const [path, content] of Object.entries(files)) {
+      await mkdir(join(directory, path, ".."), { recursive: true });
+      await writeFile(join(directory, path), content);
+    }
+    const sourceRevision = "a".repeat(40);
+    const manifest = await createDocSiteManifest({ directory, sourceRevision });
+    await writeFile(join(directory, DOC_SITE_MANIFEST), JSON.stringify(manifest));
+    const target = TARGETS.doc;
+
+    expect(target.liveRoutes(manifest)).toEqual(["/", "/docs/a/", "/x"]);
+    expect(target.routeFile?.("/", manifest)).toBe("index.html");
+    expect(target.routeFile?.("/docs/a/", manifest)).toBe("docs/a/index.html");
+    expect(target.routeFile?.("/x", manifest)).toBe("x.html");
+    expect(target.assetUrl?.("index.html")).toBeNull();
+    expect(target.assetUrl?.("docs/a/index.html")).toBeNull();
+    expect(target.assetUrl?.("404.html")).toBe("/404");
+    expect(target.assetUrl?.("x.html")).toBe("/x");
+    expect(target.assetUrl?.("assets/site.css")).toBe("/assets/site.css");
+    expect(target.verifyArtifact).toBe(verifyDocSiteArtifact);
+
+    const artifact = await target.verifyArtifact({ directory, expectedSourceRevision: sourceRevision });
+    expect(artifact.manifest.sourceRevision).toBe(sourceRevision);
+    expect(artifact.files.find((file) => file.path === "assets/favicon.ico")).toMatchObject({
+      mime: "image/vnd.microsoft.icon",
+      acceptedMimes: ["image/vnd.microsoft.icon", "image/x-icon"],
+    });
+    expect(artifact.files.find((file) => file.path === "sitemap.xml")).toMatchObject({
+      mime: "application/xml",
+      acceptedMimes: ["application/xml", "text/xml"],
+    });
+    await writeFile(join(directory, DOC_SITE_MANIFEST), JSON.stringify({ ...manifest, sourceRevision: undefined }));
+    await expect(target.verifyArtifact({ directory })).resolves.toMatchObject({ manifest: { kind: "doc-site" } });
   });
 
   it("adapts a static site artifact to the shared { root, manifest, files } shape, dropping _headers", async () => {

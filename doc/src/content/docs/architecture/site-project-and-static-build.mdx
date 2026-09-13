@@ -1,0 +1,165 @@
+---
+title: Site Project and Static Build
+sidebar_position: 6
+description: How SiteProject data becomes a verified static website artifact.
+---
+
+## SiteProject is the portable authoring graph
+
+A `SiteProject` is a JSON-safe aggregate of provider-scoped Compositions,
+Content models and entries, Mappings, and Sitemaps. It records the required
+component-pack identity, an `activeSitemap` reference, and collection
+attachments. References use `{ providerId, recordId }`, so record IDs alone do
+not identify a record across providers. Assets stays global and is captured
+separately as an exact-version lock for release.
+
+| Module | Responsibility |
+| --- | --- |
+| [file: src/site-project/model/](https://github.com/Takazudo/zudo-composer/tree/main/src/site-project/model) | Schema, provider registry, graph validation, canonical serialization, and detached in-memory adapters. |
+| [file: src/site-project/compiler/](https://github.com/Takazudo/zudo-composer/tree/main/src/site-project/compiler) | Materialize routes, Mapping results, template dependencies, navigation, and deterministic JSX modules from one validated snapshot. |
+| [file: src/site-project/api/](https://github.com/Takazudo/zudo-composer/tree/main/src/site-project/api) | Provider-neutral release review, approval/precondition checks, staging, build, activation, and publication reconciliation. |
+| [file: src/site-project/assets/](https://github.com/Takazudo/zudo-composer/tree/main/src/site-project/assets) | Inspect project asset uses, capture exact versions, and resolve them for compilation. |
+| [file: server/site-project-local/](https://github.com/Takazudo/zudo-composer/tree/main/server/site-project-local) | Filesystem release store, installed toolchain identity, local API/CLI adapter, seeding, and verified active-release reader. |
+| [file: server/site-build/](https://github.com/Takazudo/zudo-composer/tree/main/server/site-build) | Build committed source into a visitor-only `dist-site` artifact and verify its manifest. |
+
+`compileSiteProject` accepts a validated aggregate and a serializable component
+catalog. It performs no provider or runtime-component I/O. It returns a ready
+`SiteBuildPlan` or blocking diagnostics with stable paths and affected route or
+node context. Persistence and executable pack loading belong to the adapters
+around that compiler.
+
+## Commands produce different kinds of state
+
+```text
+host site-project.ts
+  -> generate -> site-project.json
+                  |
+                  +-> seed --ready-workspace -> selected CMS workspace
+                  |
+                  +-> build-site -> dist-site/site-manifest.json
+                  |
+                  +-> seed -> local completed, activated release
+
+flushed working project or explicit JSON
+  -> release API: plan -> apply -> build -> activate -> /site
+```
+
+`zudo-composer generate` evaluates authored `site-project.ts` into
+`site-project.json`; `--check` verifies the generated result. The committed
+JSON and ready CMS records are generated material, so source edits belong in
+the host's authored files.
+
+`seed --ready-workspace` consumes committed JSON and uses the release service
+in disposable staging to validate and publish a reproducible selected
+`initial` workspace. It writes the four workspace-scoped CMS trees and the
+workspace registry, including complete file/digest inventories. It does not
+create or require the host's `.zudo-site-project` release directory, and it
+does not activate website delivery in that host. Plain `seed` does activate a
+local release. Both require referenced Assets to be available.
+
+`zudo-composer release` accepts one protocol-2 JSON request on stdin and emits
+one JSON response. Its `plan`, `apply`, `build`, and `activate` operations are
+also the service sequence behind local release review.
+`zudo-composer build-site` is a separate static builder over committed JSON;
+it does not consume the current browser workspace or require an active local
+release. See [CLI](../setup/cli.mdx) for command options and
+[CMS Regeneration](../development/cms-regeneration.mdx) for committed hosts.
+
+## Review, immutable builds, and activation
+
+Planning creates a detached delivery candidate, exact asset lock, toolchain
+identity, changes/checks/affected records, and a `planDigest`. Content publication
+is selective: unselected edits to a published entry retain its activated
+baseline value, and new unselected drafts are excluded. Other graph/schema
+changes are reviewed at project scope. A plan can contain blocking checks for
+the review UI; it cannot then be applied.
+
+`apply` recomputes the plan and validates approval and preconditions before
+staging immutable inputs. `build` reads those staged inputs and completes
+immutable output. `activate` verifies the completed artifact and compares the
+expected active identity before selecting the exact target. Staging or building
+does not change the active site.
+
+```ts
+interface SiteProjectActiveSelection {
+  projectId: string;
+  revision: string;
+  buildId: string;
+}
+```
+
+The `revision` hashes canonical four-domain project JSON. `buildId` additionally
+binds the sorted asset lock and toolchain. A changed asset version or installed
+pack can therefore change a build without changing project JSON. Completion
+digests bind that identity to all emitted files.
+
+Compare-and-swap (CAS) checks prevent applying review made against a different
+project head, active identity, or storage generation. Browser review also binds
+the coherently flushed workspace generation; even an edit/revert can invalidate
+approval. The standalone CLI instead operates on explicit detached JSON with
+`workingPrecondition: null`. Once a candidate is staged, later working edits
+do not change that candidate's build inputs.
+
+The local layout is defined by
+[file: server/site-project-local/store.ts](https://github.com/Takazudo/zudo-composer/blob/main/server/site-project-local/store.ts):
+
+```text
+.zudo-site-project/
+  heads.json                         # heads, stage order, generations, receipts
+  active.json                        # only projectId / revision / buildId
+  projects/<project>/<revision>.json  # canonical immutable project
+  stages/<buildId>.json               # locked build inputs
+  builds/<buildId>/                   # compiled snapshot, modules, Assets
+    complete.json                    # terminal completion manifest
+```
+
+The private release tree is disposable derived state, separate from CMS data.
+Old completed releases remain retained. `discard` only removes uncompleted
+stages from the visible catalog; no permanent release garbage collection is
+implemented. `commit-uncertain` requires inspecting exact retained state and
+identity before retrying. Detailed recovery belongs to the
+[SiteProject operator guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/site-project.md).
+
+## Local delivery and uploaded assets
+
+`/site` reads only the verified active completed release through
+`plugins/site-project-source-plugin.mjs` and
+`server/site-project-local/dev-reader.ts`. The local visitor renders the compiled
+composition snapshot in `build.json`; generated modules remain verified
+dependencies but are not executed as the visitor's source modules.
+Missing/corrupt state or a runtime-pack mismatch makes delivery unavailable.
+
+`/website-preview` instead flushes and compiles the current authoring snapshot.
+Their route matching and URL boundaries are implemented in
+[file: src/features/delivery/routing.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/features/delivery/routing.ts).
+Local activation does not deploy a host site.
+
+Authoring asset URLs identify mutable assets; release capture resolves exact
+versions. Activated delivery serves copied, verified build bytes at
+`/uploaded-assets/sha256-<checksum>.<extension>`, so later asset replacement does
+not change that release. Vite-emitted JS/CSS resources live separately under
+`/assets/`.
+
+## Static visitor artifacts
+
+`server/site-build/compile.ts` validates committed `site-project.json`, captures
+its asset lock, and invokes the same compiler with release policy.
+`server/site-build/vite-config.ts` builds a package-owned visitor entry at
+base `/`, integrates host styles and the configured pack, and excludes local
+authoring/release transports. The result is `dist-site/`, including
+`index.html`, emitted resources, selected public assets, `_headers`, and
+`site-manifest.json`.
+
+[file: server/site-build/artifact.mjs](https://github.com/Takazudo/zudo-composer/blob/main/server/site-build/artifact.mjs)
+owns `createSiteManifest` and `verifySiteStaticArtifact`. The manifest records
+the project ID, installed tool identity, optional host `sourceRevision`,
+canonical `projectSourceRevision`, compiled routes, and SHA-256 digests of
+every file except the manifest itself. Verification checks the exact inventory,
+digests, pinned asset filenames, header rules, safe paths, and forbidden
+server/authoring markers. It can inspect an artifact without rebuilding it.
+
+Static routes come from that artifact's manifest. The hosted Composer sample's
+frozen routes are specific to its demo adapter. The
+[hosted pipeline](./hosted-demo-pipeline.mdx) adds a trusted Git revision and
+deployment policy around selected repository artifacts; hosted authoring
+persistence, authentication, and a hosted release API remain future work.
