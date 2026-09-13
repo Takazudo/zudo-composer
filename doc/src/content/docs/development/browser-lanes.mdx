@@ -16,14 +16,14 @@ Playwright configs are the executable source of truth:
 | Host | `corepack pnpm test:browser:host` | 4173 | `playwright.host.config.ts` | Runs `zudo-composer dev` through the package's installed-bin shape against a disposable host, after activating the Sample Studio project, and exercises the `tests/browser` authoring proof (excluding the SiteProject spec). |
 | Development | `corepack pnpm test:browser:dev` | 5173 | `playwright.dev.config.ts` | Runs this repository's own `pnpm dev` with disposable release, Assets, Composition, and CMS roots and exercises `tests/browser-dev`. |
 | SiteProject | `corepack pnpm test:browser:site-project` | 4174 | `playwright.site-project.config.ts` | Verifies the Sample Studio static artifact and frozen route parity, activates the committed project into isolated roots, and crawls `site-project-acceptance.pw.ts` against the repository Vite app. |
-| Hosted demo | `corepack pnpm test:browser:hosted-demo` | 4175 | `playwright.hosted-demo.config.ts` | Serves the already-built `dist-hosted-demo` artifact, then checks the hosted-demo routes and asset/runtime behavior as a static site. |
-| Demos | `corepack pnpm test:browser:demos` | 4176 | `playwright.demos.config.ts` | Visits each of `demo-webshop`, `demo-landing`, and `demo-blog` in turn through its installed host dev server, crawls every verified static route, and performs the demo's one mock interaction. |
+| Demos | `corepack pnpm test:browser:demos` | 4176 | `playwright.demos.config.ts` | Visits each of `demo-sample`, `demo-webshop`, `demo-landing`, and `demo-blog` in turn through its installed host dev server, crawls every verified static route, and performs the demo's one mock interaction. |
+| Demo editor | `corepack pnpm test:browser:demo-editor [sample\|shop\|landing\|blog]` | 4175 | `playwright.demo-editor.config.ts` | Serves each prepared per-host `dist-editor` artifact in turn, verifies its `demo-editor-manifest.json`, and runs the editor acceptance proof. |
 
-The packed-host smoke proof also owns port 4175, so it cannot overlap the
-hosted-demo lane. The reserved set is therefore 4173, 4174, 4175, 4176, and
-5173. The demo packages' interactive one-off servers use 4181 (Webshop), 4182
-(Landing), 4183 (Blog), and 4184 (Sample Studio); those are not browser-lane
-ports.
+The demo-editor and packed-host smoke proofs share port 4175 and must run
+serially, so they cannot overlap. The reserved set is therefore 4173,
+4174, 4175, 4176, and 5173. The demo packages' interactive one-off servers use
+4181 (Webshop), 4182 (Landing), 4183 (Blog), and 4184 (Sample Studio); those are
+not browser-lane ports.
 
 ## Preparation and artifact rules
 
@@ -34,23 +34,21 @@ run:
 corepack pnpm demo:build-sites
 corepack pnpm test:browser:site-project
 corepack pnpm test:browser:demos
+corepack pnpm demo:build-editors
+corepack pnpm test:browser:demo-editor
 ```
 
-The hosted-demo lane consumes the corresponding static artifact:
-
-```sh
-corepack pnpm build:hosted-demo
-corepack pnpm hosted-demo:verify dist-hosted-demo
-corepack pnpm test:browser:hosted-demo
-```
+The four static-site artifacts and four editor artifacts have separate target
+contracts. Use `corepack pnpm demo:build-sites` before the SiteProject/demos
+lanes and `corepack pnpm demo:build-editors` before the editor lane.
 
 Preparation builds and verifies; browser lanes only read the verified bytes and
 never rebuild them. Before using a route, the SiteProject and demo runners
 check the artifact manifest, file checksums, source/tool identity, Assets, and
 sitemap route parity. A stale or missing artifact fails with the preparation
 instruction rather than falling back to a newly generated route list. The
-hosted-demo runner likewise requires `dist-hosted-demo/index.html` before it
-starts its static server.
+editor runner likewise requires each host's `dist-editor/demo-editor-manifest.json`
+before it starts its static server.
 
 ## What each proof isolates
 
@@ -64,10 +62,12 @@ the next invocation.
 The SiteProject lane reads `packages/demo-sample/dist-site/site-manifest.json`
 through its verified-manifest helper, compares the authoring routes with
 Studio's frozen production route data, and seeds a release in temporary roots.
-The demos lane copies each committed `cms/` tree into a temporary host-local
-directory, seeds a separate release root, starts one demo at a time on 4176,
-and checks every route from that host's verified `site-manifest.json`. It never
-authors into a committed CMS tree.
+The demos lane copies each of the four committed `cms/` trees into a temporary
+host-local directory, seeds a separate release root, starts one demo at a time
+on 4176, and checks every route from that host's verified `site-manifest.json`.
+It never authors into a committed CMS tree. The demo-editor lane serves the
+four corresponding `dist-editor` artifacts serially on 4175 and does not
+rebuild them.
 
 Both host and development configs route specs by filename. `*.coarse.pw.ts`
 runs only in the touch-capable 390x844 coarse project, while

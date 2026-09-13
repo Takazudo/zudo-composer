@@ -1,7 +1,8 @@
 # Webshop demo — Nightjar Supply
 
-Package `packages/demo-webshop`, domain `zc-demo-shop.zudolab.dev`, token
-namespace `shop-`, component id prefix `shop.`. Lists follow
+Package `packages/demo-webshop`, site domain `zc-demo-shop.zudolab.dev`, editor
+domain `zc-demo-shop-editor.zudolab.dev`, token namespace `shop-`, component id
+prefix `shop.`. Lists follow
 [README § Lists](./README.md#lists). Spacing axes and ladder pairing follow
 `src/styles/README.md`; the `@theme` mechanism is the one in
 `src/styles/app-tokens.css` under a different namespace.

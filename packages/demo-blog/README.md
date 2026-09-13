@@ -43,4 +43,6 @@ checksum-named delivery copies under `public/uploaded-assets`. Ordinary Assets
 edits under `pnpm dev` dirty the catalog by design.
 
 The site is delivered at `/site` on the dev server and, once the static build
-exists, at `https://zc-demo-blog.zudolab.dev`.
+exists, at `https://zc-demo-blog.zudolab.dev`. Its disposable editor is
+published at `https://zc-demo-blog-editor.zudolab.dev` from
+`corepack pnpm demo:build-editor blog`.

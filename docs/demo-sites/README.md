@@ -7,13 +7,14 @@ the way a real host exercises it — through its `bin`, its `zudo-composer/confi
 subpath and a host-owned component pack — without any of them leaking into the
 published package.
 
-| Package | Site | Token namespace | One-off dev port |
-| --- | --- | --- | --- |
-| `packages/demo-webshop` | `zc-demo-shop.zudolab.dev` | `shop-` | 4181 |
-| `packages/demo-landing` | `zc-demo-landing.zudolab.dev` | `land-` | 4182 |
-| `packages/demo-blog` | `zc-demo-blog.zudolab.dev` | `blog-` | 4183 |
+| Package | Site | Editor | Token namespace | One-off dev port |
+| --- | --- | --- | --- | --- |
+| `packages/demo-sample` | `zc-demo-sample.zudolab.dev` | `zc-demo-sample-editor.zudolab.dev` | provider | 4184 |
+| `packages/demo-webshop` | `zc-demo-shop.zudolab.dev` | `zc-demo-shop-editor.zudolab.dev` | `shop-` | 4181 |
+| `packages/demo-landing` | `zc-demo-landing.zudolab.dev` | `zc-demo-landing-editor.zudolab.dev` | `land-` | 4182 |
+| `packages/demo-blog` | `zc-demo-blog.zudolab.dev` | `zc-demo-blog-editor.zudolab.dev` | `blog-` | 4183 |
 
-Sample Studio is the fourth symmetric host, `packages/demo-sample`. It uses
+Sample Studio is the symmetric fourth host, `packages/demo-sample`. It uses
 the exact installed `@zudo-sg/ui` provider and preserves the original project
 JSON. The original project contains no uploaded-image URLs: its provider
 placeholder is separate from the five optional Studio image rows in the
@@ -205,28 +206,35 @@ export default site;
   of the tarball; `scripts/check-package-conformance.mjs` now asserts it.
 - **Install.** The lockfile was regenerated once for the new workspace members;
   `corepack pnpm install --frozen-lockfile` must pass afterwards.
-- **Browser lanes.** `test:browser:demos` (port 4176, `tests/browser-demos`) is
-  wired into CI after the other browser lanes — see "Browser lane" below. The
-  static build's own CI lane (port 4177) belongs to a later task in the epic.
+- **Browser lanes.** `test:browser:demos` (port 4176, `tests/browser-demos`)
+  visits all four hosts one at a time. The prepared editor artifacts have a
+  separate `test:browser:demo-editor [sample|shop|landing|blog]` lane on port
+  4175; see "Browser lane" below.
 
 ## Browser lane
 
-`pnpm test:browser:demos` (`scripts/run-demos-browser.mjs`) copies each demo
-package's committed `cms/` tree to a disposable host-local data root and seeds
-its release under a separate temporary root. It boots that package's own
-`zudo-composer dev` on port 4176, so the lane never dirties the committed CMS
-or a developer's own release, and crawls every route from its verified
+`pnpm test:browser:demos` (`scripts/run-demos-browser.mjs`) copies each of the
+four demo packages' committed `cms/` tree to a disposable host-local data root
+and seeds its release under a separate temporary root. It boots that package's
+own `zudo-composer dev` on port 4176, so the lane never dirties the committed
+CMS or a developer's own release, and crawls every route from its verified
 `dist-site/site-manifest.json`. The read-only check also compiles the current
 project and requires matching source identity, routes and pinned asset bytes.
 For each route it checks: 200 on direct navigation and after a reload, an `h1`, and zero
 console errors or failed requests across the whole crawl
 (`tests/runtime-failures.ts`). It also checks no horizontal overflow and a
 tappable (≥44px) primary nav at 375×812, and runs one mock interaction per
-demo: webshop adds a product to the cart and checks the header count; landing
-toggles yearly billing and checks a tier price changes; blog submits a
-comment and checks it appears with a success message. One demo at a time,
-like every other lane in this repository — this one owns port 4176 and none
-of the lanes may run concurrently.
+demo: sample checks the hosted sample routes; webshop adds a product to the
+cart and checks the header count; landing toggles yearly billing and checks a
+tier price changes; blog submits a comment and checks it appears with a
+success message. One demo at a time, like every other lane in this repository
+— this one owns port 4176 and none of the lanes may run concurrently.
+
+Before the editor lane, build all four editor artifacts with
+`pnpm demo:build-editors`. `pnpm test:browser:demo-editor` serves each
+`dist-editor` on port 4175, verifies `demo-editor-manifest.json`, and runs the
+same editor acceptance suite serially. It does not rebuild or mutate a host's
+CMS tree.
 
 Before either the SiteProject or demos browser lane, prepare all discovered
 host artifacts from the repository root:
@@ -235,21 +243,24 @@ host artifacts from the repository root:
 corepack pnpm demo:build-sites
 corepack pnpm test:browser:site-project
 corepack pnpm test:browser:demos
+corepack pnpm demo:build-editors
+corepack pnpm test:browser:demo-editor
 ```
 
 The lanes read `manifest.routes` only after verifying every artifact file and
 matching the current source, assets, tool identity and compiled sitemap. They
 never rebuild; changing one host's sitemap requires preparing its new artifact,
-with no central route-list edit. The production hosted Composer target keeps
-Studio's separate frozen route data, verified for parity with the Studio artifact.
+with no central route-list edit. The SiteProject acceptance lane keeps Studio's
+separate frozen route data, verified for parity with the Studio artifact.
 
 ## Static website build
 
-Each demo domain serves a static build of its host package: the delivered site
-at `/`, with no authoring routes and no tool chrome.
+Each demo site domain serves a static build of its host package: the delivered
+site at `/`, with no authoring routes and no tool chrome. The editor domain
+serves the corresponding disposable `dist-editor` artifact instead.
 
 ```sh
-corepack pnpm demo:build-site webshop            # or landing / blog / a host directory
+corepack pnpm demo:build-site sample             # or webshop / landing / blog / a host directory
 cd packages/demo-webshop && corepack pnpm build:site   # the same, from the package
 corepack pnpm site-static:verify packages/demo-webshop/dist-site [expected-host-revision]
 zudo-composer build-site --root /absolute/path/to/host
@@ -321,9 +332,10 @@ It identifies the host's source and may use any revision system.
 Verification compares any supplied expected host revision exactly, including
 failing when the manifest omits it. The build command uses its resolved revision
 as the expected value when verifying, also in `--verify` and `--print-routes`
-modes. CI explicitly verifies each artifact against its expected Git SHA. The
-hosted composer demo records the same tool identity and still requires a full
-40-hex Git SHA; the three production site targets retain that requirement too.
+modes. CI explicitly verifies each static artifact against its expected Git SHA.
+The four production site targets retain that requirement, while the separate
+`demo-editor` contract records the tool SHA, project SHA, all active immutable
+asset versions and the editor route set in `demo-editor-manifest.json`.
 
 **Serving.** Routes are client-side, and only `index.html` exists. So the
 server must answer every unknown path with `index.html` (Cloudflare Workers
