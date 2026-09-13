@@ -2,6 +2,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
+import { parse } from "yaml";
 import type { SiteProject } from "zudo-composer/site-project";
 import { compileStaticSite, createSiteManifest, SITE_HEADERS, SITE_MANIFEST, siteHeaders } from "../../server/site-build.mjs";
 import { loadHostContext } from "../../server/host-context.mjs";
@@ -9,6 +10,7 @@ import { authoringSiteRoutes, readVerifiedHostManifest } from "../host-site-rout
 import { DEMO_EDITOR_AUTHORING_ROUTES, demoEditorRoutes, verifiedDemoEditorRoutes } from "../routes.mjs";
 import { createDemoEditorManifest, DEMO_EDITOR_MANIFEST, DEMO_EDITOR_SEED, verifyDemoEditorArtifact } from "../hosted-demo/artifact.mjs";
 import { writeEditorArtifact } from "../hosted-demo/__fixtures__/editor-artifact";
+import { TARGET_KEYS, TARGETS } from "../hosted-demo/targets.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const temporary: string[] = [];
@@ -77,17 +79,27 @@ it("rejects a tampered route list, artifact bytes, project identity, tool identi
   await expect(readVerifiedHostManifest(host.host, { env: {} })).rejects.toThrow("checksum");
 });
 
-it("wires disk-discovered preparation ahead of both browser lanes and keeps their builders outside the lanes", async () => {
-  const workflow = await readFile(join(root, ".github/workflows/ci.yml"), "utf8");
-  const prep = workflow.indexOf("- run: pnpm demo:build-sites");
+it("wires disk-discovered preparation ahead of browser lanes and builds every editor host", async () => {
+  const source = await readFile(join(root, ".github/workflows/ci.yml"), "utf8");
+  const workflow = parse(source);
+  const prep = source.indexOf("- run: pnpm demo:build-sites");
   for (const lane of ["site-project", "demos"]) {
     expect(prep).toBeGreaterThan(0);
-    expect(prep).toBeLessThan(workflow.indexOf(`- run: pnpm test:browser:${lane}\n`));
+    expect(prep).toBeLessThan(source.indexOf(`- run: pnpm test:browser:${lane}\n`));
     const script = await readFile(join(root, `scripts/run-${lane === "demos" ? "demos" : "site-project"}-browser.mjs`), "utf8");
     expect(script).toContain("readVerifiedHostManifest");
     expect(script).not.toMatch(/\[.*["']build-site["']/);
   }
   expect(await readFile(join(root, "scripts/build-demo-sites.mjs"), "utf8")).toContain("discoverPackedHosts(root)");
+  const staticTargets = TARGET_KEYS.filter((key) => TARGETS[key].kind === "site-static");
+  expect(workflow.jobs["demo-sites-build"].strategy.matrix.site).toEqual(staticTargets);
+  const editorJob = workflow.jobs["demo-editors-build"];
+  expect(editorJob.strategy["fail-fast"]).toBe(false);
+  expect(editorJob.strategy.matrix.name).toEqual(staticTargets);
+  expect(editorJob.steps.find((step: { run?: string }) => step.run?.includes("demo:build-editor")).run).toContain("${{ matrix.name }}");
+  expect(editorJob.steps.find((step: { run?: string }) => step.run?.includes("test:browser:demo-editor")).run).toContain("${{ matrix.name }}");
+  const editorTargets = TARGET_KEYS.filter((key) => TARGETS[key].kind === "demo-editor");
+  expect(editorJob.strategy.matrix.include.map((entry: { target: string }) => entry.target)).toEqual(editorTargets);
 });
 
 it("recompiles editor routes from its own bundled project without a static-site manifest", async () => {

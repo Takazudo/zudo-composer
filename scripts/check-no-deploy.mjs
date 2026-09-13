@@ -11,7 +11,7 @@ import { parse } from "yaml";
 import { discoverConsumerHosts } from "./check-consumer-boundary.mjs";
 
 const self = fileURLToPath(import.meta.url);
-const localEntries = ["check", "smoke:host-install", "packed-host:matrix", "consumer:boundary", "creator:check", "cms:check", "cms:regenerate", "public:check", "public:installed", "sample:check", "demo:build-sites", "demo:build-site", "site-static:verify", "doc:build-site", "doc:build", "doc:check"];
+const localEntries = ["check", "smoke:host-install", "packed-host:matrix", "consumer:boundary", "creator:check", "cms:check", "cms:regenerate", "public:check", "public:installed", "sample:check", "demo:build-sites", "demo:build-site", "demo:build-editor", "demo:build-editors", "test:browser:demo-editor", "site-static:verify", "doc:build-site", "doc:build", "doc:check"];
 const packageOperations = new Set(["install", "pack", "add", "remove", "rebuild"]);
 // zfb is a static site generator; it never talks to Cloudflare.
 const localBinaries = new Set(["vite", "vitest", "tsc", "eslint", "playwright", "rollup", "zudo-composer", "zfb"]);
