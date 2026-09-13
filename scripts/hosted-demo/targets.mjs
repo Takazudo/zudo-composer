@@ -60,7 +60,12 @@ async function verifySiteStaticTargetArtifact({ directory, expectedSourceRevisio
   return { root: resolve(directory), manifest: { ...manifest, sourceRevision }, files };
 }
 
-/** @typedef {{
+/**
+ * `routeFile` selects the artifact HTML path a navigation must match; it defaults
+ * to index.html for SPA targets. `assetUrl` selects an artifact file's public
+ * URL (default: index.html at /, other files at /<path>); null skips its asset
+ * request only when a verified route covers the same file.
+ * @typedef {{
  *   key: string,
  *   kind: "hosted-demo" | "site-static",
  *   workerName: string,
@@ -71,6 +76,8 @@ async function verifySiteStaticTargetArtifact({ directory, expectedSourceRevisio
  *   ciArtifactName: (sha: string) => string,
  *   verifyArtifact: ArtifactVerifier,
  *   liveRoutes: (manifest: Record<string, unknown>) => string[],
+ *   routeFile?: (route: string, manifest: Record<string, unknown>) => string,
+ *   assetUrl?: (path: string) => string | null,
  * }} DeployTarget */
 
 /** @type {Record<string, DeployTarget>} */

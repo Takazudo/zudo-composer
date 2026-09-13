@@ -392,7 +392,14 @@ export async function deployHostedDemo({
   artifactVerifier = target.verifyArtifact,
   // Bind this invocation's target into the shared live verifier so callers
   // that override `liveVerifier` (tests) keep the plain three-key call below.
-  liveVerifier = (liveOptions) => verifyLiveWithRetries({ ...liveOptions, manifestFileName: target.manifestFileName, artifactVerifier: target.verifyArtifact, liveRoutes: target.liveRoutes }),
+  liveVerifier = (liveOptions) => verifyLiveWithRetries({
+    ...liveOptions,
+    manifestFileName: target.manifestFileName,
+    artifactVerifier: target.verifyArtifact,
+    liveRoutes: target.liveRoutes,
+    routeFile: target.routeFile,
+    assetUrl: target.assetUrl,
+  }),
   retryDelaysMs = DEPLOYMENT_RETRY_DELAYS_MS,
   delayImpl = (milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)),
 } = {}) {

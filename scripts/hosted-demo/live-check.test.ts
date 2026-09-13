@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { HOSTED_DEMO_LIVE_ROUTES, verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
 import { HOSTED_DEMO_HEADERS, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
 import { TARGETS } from "./targets.mjs";
@@ -254,5 +254,167 @@ describe("static demo site live verification (a non-default target)", () => {
     expect(proof.assets.map(({ path }) => path).sort()).toEqual(["assets/index-abc.js", "index.html", [...fixture.files.keys()].find((path) => path.startsWith("uploaded-assets/"))].sort());
     expect(mock.requests.some((path) => path === "/_headers")).toBe(false);
     expect(mock.requests).toContain(`/${SITE_MANIFEST}`);
+  });
+});
+
+describe("multi-page static site live verification", () => {
+  function multiPageFixture(options: { injectAnalytics?: boolean; wrongPage?: boolean; corruptAsset?: string; staleFirstManifest?: boolean; routeMime?: string } = {}) {
+    const files = new Map([
+      ["index.html", Buffer.from("<!doctype html><html><body>Home</body></html>\n")],
+      ["docs/a/index.html", Buffer.from("<!doctype html><html><body>Document A</body></html>\n")],
+      ["404.html", Buffer.from("<!doctype html><html><body>Not found</body></html>\n")],
+      ["assets/site.css", Buffer.from("body { color: black; }\n")],
+    ]);
+    const artifactFiles = [...files].map(([path, bytes]) => ({
+      path,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      mime: path.endsWith(".css") ? "text/css" : "text/html",
+    }));
+    const manifest = {
+      sourceRevision: SOURCE_REVISION,
+      routeFiles: { "/": "index.html", "/docs/a/": "docs/a/index.html" },
+      files: Object.fromEntries(artifactFiles.map(({ path, sha256 }) => [path, sha256])),
+    };
+    const requests: Array<{ url: URL; init: RequestInit | undefined }> = [];
+    let manifestRequests = 0;
+    const fetchImpl = async (input: URL | string, init?: RequestInit) => {
+      const url = new URL(input.toString());
+      requests.push({ url, init });
+      if (url.pathname === "/multi-page-manifest.json") {
+        const remoteManifest = options.staleFirstManifest && manifestRequests++ === 0 ? { ...manifest, sourceRevision: "e".repeat(40) } : manifest;
+        return response(JSON.stringify(remoteManifest), "application/json");
+      }
+      const path = ({ "/": "index.html", "/docs/a/": "docs/a/index.html", "/404": "404.html", "/assets/site.css": "assets/site.css" } as Record<string, string>)[url.pathname];
+      if (!path) throw new Error(`Unexpected asset URL: ${url.pathname}`);
+      const navigation = new Headers(init?.headers).get("sec-fetch-mode") === "navigate";
+      const body = path === options.corruptAsset ? "changed" : files.get(options.wrongPage && url.pathname === "/docs/a/" ? "index.html" : path)!.toString();
+      const mime = path.endsWith(".css") ? "text/css" : navigation ? options.routeMime ?? "text/html" : "text/html";
+      return response(options.injectAnalytics && navigation ? body.replace("</body>", `${BEACON}</body>`) : body, mime);
+    };
+    const routeFile = vi.fn((route: string, routeManifest: Record<string, unknown>) => (routeManifest.routeFiles as Record<string, string>)[route]);
+    const assetUrl = vi.fn((path: string) => path === "docs/a/index.html" ? null : path === "404.html" ? "/404" : path === "index.html" ? "/" : `/${path}`);
+    return {
+      manifest,
+      requests,
+      routeFile,
+      assetUrl,
+      options: {
+        baseUrl: "https://multi-page.example.test",
+        artifactDirectory: "/test/multi-page-artifact",
+        expectedSourceRevision: SOURCE_REVISION,
+        manifestFileName: "multi-page-manifest.json",
+        artifactVerifier: async ({ directory }: { directory: string }) => ({ root: directory, manifest, files: artifactFiles }),
+        liveRoutes: (routeManifest: Record<string, unknown>) => Object.keys(routeManifest.routeFiles as Record<string, string>),
+        routeFile,
+        assetUrl,
+        fetchImpl,
+      },
+    };
+  }
+
+  it.each([false, true])("checks each route's HTML with analytics injection %s and maps canonical asset URLs", async (injectAnalytics) => {
+    const fixture = multiPageFixture({ injectAnalytics });
+    const proof = await verifyLiveDeployment(fixture.options);
+    expect(proof.routes.map(({ path, sha256, cloudflareAnalyticsInjected }) => ({ path, sha256, cloudflareAnalyticsInjected }))).toEqual([
+      { path: "/", sha256: fixture.manifest.files["index.html"], cloudflareAnalyticsInjected: injectAnalytics },
+      { path: "/docs/a/", sha256: fixture.manifest.files["docs/a/index.html"], cloudflareAnalyticsInjected: injectAnalytics },
+    ]);
+    expect(fixture.routeFile.mock.calls).toEqual([["/", fixture.manifest], ["/docs/a/", fixture.manifest]]);
+    expect(proof.assets.map(({ path }) => path)).toEqual(["index.html", "404.html", "assets/site.css"]);
+    expect(fixture.requests.map(({ url }) => url.pathname)).toEqual([
+      "/multi-page-manifest.json", "/", "/docs/a/", "/", "/404", "/assets/site.css",
+    ]);
+    expect(fixture.requests.every(({ url, init }) => url.searchParams.get("hosted-demo-revision") === SOURCE_REVISION && init?.redirect === "error")).toBe(true);
+    expect(fixture.requests.find(({ url }) => url.pathname === "/404")?.init?.headers).toEqual({});
+  });
+
+  it.each([false, true])("rejects a wrong page body with analytics injection %s and identifies the route and expected file", async (injectAnalytics) => {
+    const fixture = multiPageFixture({ wrongPage: true, injectAnalytics });
+    await expect(verifyLiveDeployment(fixture.options)).rejects.toThrow(/\/docs\/a\/: navigation HTML does not match docs\/a\/index\.html/);
+  });
+
+  it("retains the route MIME check for a correctly mapped page", async () => {
+    const fixture = multiPageFixture({ routeMime: "text/plain" });
+    await expect(verifyLiveDeployment(fixture.options)).rejects.toThrow(/expected text\/html, received text\/plain/);
+  });
+
+  it("rejects a route mapping to a missing artifact file", async () => {
+    const fixture = multiPageFixture();
+    await expect(verifyLiveDeployment({ ...fixture.options, routeFile: () => "missing/index.html" })).rejects.toThrow(/\/: deploy artifact must include route file missing\/index\.html/);
+  });
+
+  it("requires navigation mappings to select HTML rather than bypass asset checks", async () => {
+    const fixture = multiPageFixture();
+    await expect(verifyLiveDeployment({ ...fixture.options, routeFile: () => "assets/site.css", assetUrl: () => null })).rejects.toThrow(/route file assets\/site\.css must be HTML, received text\/css/);
+  });
+
+  it("retains the root index requirement even if no routes are configured", async () => {
+    const fixture = multiPageFixture();
+    await expect(verifyLiveDeployment({
+      ...fixture.options,
+      liveRoutes: () => [],
+      artifactVerifier: async (options) => {
+        const artifact = await fixture.options.artifactVerifier(options);
+        return { ...artifact, files: artifact.files.filter(({ path }) => path !== "index.html") };
+      },
+    })).rejects.toThrow("Deploy artifact must include index.html");
+  });
+
+  it("checks the exact bytes of 404.html at its mapped URL", async () => {
+    const fixture = multiPageFixture({ corruptAsset: "404.html" });
+    await expect(verifyLiveDeployment(fixture.options)).rejects.toThrow(/\/404\.html: response SHA-256 does not match/);
+    expect(fixture.requests.some(({ url }) => url.pathname === "/404")).toBe(true);
+  });
+
+  it("refuses to skip an asset that no verified route covers", async () => {
+    const fixture = multiPageFixture();
+    await expect(verifyLiveDeployment({
+      ...fixture.options,
+      assetUrl: (path) => path === "assets/site.css" ? null : fixture.assetUrl(path),
+    })).rejects.toThrow(/\/assets\/site\.css: asset fetch cannot be skipped without a verified route/);
+  });
+
+  it("forwards both hooks through bounded retries", async () => {
+    const fixture = multiPageFixture({ staleFirstManifest: true, injectAnalytics: true });
+    const onRetry = vi.fn();
+    const proof = await verifyLiveWithRetries({ ...fixture.options, retryDelaysMs: [0], delayImpl: async () => {}, onRetry });
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(proof.routes[1]).toMatchObject({ path: "/docs/a/", sha256: fixture.manifest.files["docs/a/index.html"], cloudflareAnalyticsInjected: true });
+    expect(proof.assets.map(({ path }) => path)).toEqual(["index.html", "404.html", "assets/site.css"]);
+    expect(fixture.requests.filter(({ url }) => url.pathname.endsWith("/index.html"))).toHaveLength(0);
+    expect(fixture.requests.filter(({ url }) => url.pathname === "/404")).toHaveLength(1);
+  });
+
+  it("retains immutable upload GET/HEAD header verification when its URL is mapped", async () => {
+    const fixture = await writeArtifact();
+    fixtures.push(fixture.root);
+    const zipPath = [...fixture.files.keys()].find((path) => path.endsWith(".zip"))!;
+    for (const weakenHeader of [false, true]) {
+      const mock = mockFetch(fixture);
+      const methods: string[] = [];
+      const proof = verifyLiveDeployment({
+        baseUrl: "https://demo.example.test",
+        artifactDirectory: fixture.root,
+        assetUrl: (path) => path === zipPath ? "/download.zip" : path === "index.html" ? "/" : `/${path}`,
+        fetchImpl: async (input, init) => {
+          const url = new URL(input.toString());
+          const mapped = url.pathname === "/download.zip";
+          if (mapped) {
+            methods.push(init?.method ?? "GET");
+            url.pathname = `/${zipPath}`;
+          }
+          const result = await mock.fetchImpl(url, init);
+          if (mapped && weakenHeader) result.headers.delete("cache-control");
+          return result;
+        },
+      });
+      if (weakenHeader) {
+        await expect(proof).rejects.toThrow(/immutable cache policy is missing/);
+        expect(methods).toEqual(["GET"]);
+      } else {
+        expect((await proof).assets.some(({ path }) => path === zipPath)).toBe(true);
+        expect(methods).toEqual(["GET", "HEAD"]);
+      }
+    }
   });
 });
