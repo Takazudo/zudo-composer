@@ -201,6 +201,9 @@ for (const required of [
   'server/cli/build-site-entry.mjs',
   'server/cli/generate-entry.mjs',
   'server/cli/generate.ts',
+  'server/cli/init-entry.mjs',
+  'server/creator/init.mjs',
+  'server/creator/project.mjs',
   'server/cli/run.d.mts',
   'server/module-evaluator.mjs',
   'server/config/index.ts',
@@ -227,6 +230,14 @@ for (const required of [
   'plugins/host-styles-plugin.mjs',
   'plugins/roots.mjs',
   'plugins/composer-app-html.mjs',
+  'templates/host/components/pack.ts',
+  'templates/host/components/page.tsx',
+  'templates/host/styles/base.css',
+  'templates/host/site-project.ts',
+  'templates/host/images-src/manifest.json',
+  'templates/host/images-src/starter.png',
+  'templates/host/tests/starter.spec.tsx',
+  'templates/host/README.md',
 ]) {
   assert(rootPackedPaths.has(required), `packed archive omits the runtime file ${required}`);
 }

@@ -331,7 +331,7 @@ describe('consumer boundary ledger and CLI', () => {
     const ledger: unknown = JSON.parse(readFileSync(join(repositoryRoot, 'scripts/consumer-boundary-ledger.json'), 'utf8'));
     expect(checkConsumerLedger(actual, ledger).ok).toBe(true);
     const manifest = JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
-    expect(manifest.scripts['consumer:boundary']).toBe('node scripts/check-consumer-boundary.mjs');
+    expect(manifest.scripts['consumer:boundary']).toBe('node scripts/check-consumer-boundary.mjs && node scripts/check-creator.mjs');
     expect(manifest.scripts.check.split(' && ')).toContain('pnpm consumer:boundary');
   });
 

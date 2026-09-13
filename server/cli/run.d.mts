@@ -8,6 +8,7 @@ export const BUILD_SITE_ENTRY_PATH: string;
 export const ASSETS_IMPORT_ENTRY_PATH: string;
 export const SEED_ENTRY_PATH: string;
 export const GENERATE_ENTRY_PATH: string;
+export const INIT_ENTRY_PATH: string;
 export const CLOSE_GRACE_MS: number;
 export const USAGE: string;
 
@@ -30,6 +31,7 @@ export interface GenerateOptions {
 }
 
 export type ParsedComposerCommand =
+  | { command: "init"; options: import("../creator/init.mjs").InitOptions }
   | { command: "dev"; options: Record<string, unknown> }
   | { command: "release"; rest: string[] }
   | { command: "build-site"; options: BuildSiteOptions }

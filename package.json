@@ -46,6 +46,7 @@
     "plugins",
     "server",
     "src",
+    "templates/host",
     "packages/image-editor/src/core/encode.ts",
     "packages/image-editor/src/core/geometry.ts",
     "packages/image-editor/src/core/history.ts",
@@ -74,7 +75,8 @@
     "!src/hosted-demo"
   ],
   "engines": {
-    "node": "^22.13.0 || >=24.0.0"
+    "node": "^22.13.0 || >=24.0.0",
+    "pnpm": "11.5.2"
   },
   "scripts": {
     "dev": "vite",
@@ -93,7 +95,8 @@
     "headless:negative-scan": "node scripts/check-headless-boundary.mjs",
     "contract:conformance": "node scripts/check-package-conformance.mjs",
     "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
-    "consumer:boundary": "node scripts/check-consumer-boundary.mjs",
+    "consumer:boundary": "node scripts/check-consumer-boundary.mjs && node scripts/check-creator.mjs",
+    "creator:check": "node scripts/check-creator.mjs",
     "contract:external-install": "node scripts/verify-contract-install.mjs",
     "site-project:boundary": "node scripts/check-site-project-boundary.mjs",
     "provider:boundary": "node scripts/check-provider-boundary.mjs",
