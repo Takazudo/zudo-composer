@@ -174,16 +174,28 @@ describe("packed host write confinement", () => {
 });
 
 describe("real bounded package/install and negative mechanics", () => {
-  it("installs exact tarballs, including a transitive contract dependency, without a registry or workspace link", async () => {
+  it("resolves public ESM entries and the transitive import-only contract from exact offline tarballs", async () => {
     const workspace = await temporary();
     const tarballs: Record<string, string> = {};
     for (const name of FIRST_PARTY) {
-      const source = join(workspace, name === "zudo-composer" ? "tool" : "contract");
+      const isTool = name === "zudo-composer";
+      const source = join(workspace, isTool ? "tool" : "contract");
       await put(source, "package.json", JSON.stringify({
-        name, version: "1.0.0", packageManager, files: ["index.mjs"], exports: { ".": "./index.mjs", "./package.json": "./package.json" },
-        ...(name === "zudo-composer" ? { dependencies: { "@zudo-composer/component-contract": "1.0.0" } } : {}),
+        name, version: "1.0.0", type: "module", packageManager, files: [isTool ? "server" : "dist"],
+        exports: isTool
+          ? { ".": { types: "./server/dev-server.d.mts", default: "./server/dev-server.mjs" }, "./package.json": "./package.json" }
+          : { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" }, "./fixtures": { types: "./dist/fixtures.d.ts", import: "./dist/fixtures.js" } },
+        ...(isTool ? { dependencies: { "@zudo-composer/component-contract": "1.0.0" } } : {}),
       }));
-      await put(source, "index.mjs", "export const packed = true;");
+      if (isTool) {
+        await put(source, "server/dev-server.mjs", "export { packed } from '@zudo-composer/component-contract';\nexport const contractEntry = import.meta.resolve('@zudo-composer/component-contract');\n");
+        await put(source, "server/dev-server.d.mts", "export declare const packed: true;\nexport declare const contractEntry: string;\n");
+      } else {
+        await put(source, "dist/index.js", "export const packed = true;\n");
+        await put(source, "dist/index.d.ts", "export declare const packed: true;\n");
+        await put(source, "dist/fixtures.js", "export const fixture = true;\n");
+        await put(source, "dist/fixtures.d.ts", "export declare const fixture: true;\n");
+      }
       tarballs[name] = await packPackage(source, join(workspace, "tarballs"));
     }
     const host = join(workspace, "host");
@@ -201,16 +213,23 @@ describe("real bounded package/install and negative mechanics", () => {
     await run(pnpm, ["install", "--offline", "--frozen-lockfile"], host, { env });
     const installed = await assertInstalledHost(host, env, [repositoryRoot]);
     expect(Object.keys(installed)).toEqual(FIRST_PARTY);
+    expect(installed["zudo-composer"]).toMatch(/\/server\/dev-server[.]mjs$/u);
+    expect(installed["@zudo-composer/component-contract"]).toMatch(/\/dist\/index[.]js$/u);
     // pnpm 11 verifies dependencies before exec/run; the rewritten manifest and
     // frozen lockfile must stay coherent when the actual host command starts.
     const executed = await run(pnpm, ["exec", "node", "--input-type=module", "-e", "import { packed } from 'zudo-composer'; console.log(packed);"], host, { env });
     expect(executed.stdout.trim()).toBe("true");
     const { stdout } = await run(process.execPath, ["--input-type=module", "-e", `
+      import assert from 'node:assert/strict';
+      import { realpath } from 'node:fs/promises';
       import { createRequire } from 'node:module';
       import { resolve } from 'node:path';
+      import { fileURLToPath } from 'node:url';
+      import { contractEntry } from 'zudo-composer';
       const host = createRequire(resolve('package.json'));
-      const tool = createRequire(host.resolve('zudo-composer/package.json'));
-      console.log(tool.resolve('@zudo-composer/component-contract/package.json'));
+      assert.throws(() => host.resolve('@zudo-composer/component-contract/package.json'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+      assert.throws(() => host.resolve('@zudo-composer/component-contract'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+      console.log(await realpath(fileURLToPath(contractEntry)));
     `], host, { env });
     expect(stdout.trim()).toBe(installed["@zudo-composer/component-contract"]);
   });
