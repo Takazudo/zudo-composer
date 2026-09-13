@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "brass-rule",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "in-stock",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "desk"
+    },
+    "products-currency": "USD",
+    "products-description": "A 30 cm straightedge milled from a single bar of solid brass, with millimetre and centimetre marks cut into the face rather than printed on it. The marks will outlast the desk.\n\nAt nearly 200 g the rule stays put when you draw against it and holds a book open at the page you are copying from. The edges are broken by hand so it is kind to fingers and paper.\n\nLeft alone, the brass darkens to a soft brown within a season. Rub it with a cloth and a little polish if you prefer it bright.",
+    "products-featured": false,
+    "products-image1": {
+      "products-image1-alt": "Solid brass 30 cm ruler with engraved marks",
+      "products-image1-src": "/uploaded-assets/asset-assets-6282f007-ca3b-4fb4-bfe8-589e6524b099"
+    },
+    "products-name": "Brass Rule 30 cm",
+    "products-price": 38,
+    "products-slug": "brass-rule",
+    "products-spec": {
+      "products-spec-care": "Let it patina, or polish with a soft cloth",
+      "products-spec-dimensions": "320 × 25 × 3 mm",
+      "products-spec-material": "Solid C360 brass",
+      "products-spec-origin": "Machined in Osaka, Japan",
+      "products-spec-warranty": "Lifetime against manufacturing faults",
+      "products-spec-weight": "195 g"
+    },
+    "products-stock-label": "In stock",
+    "products-subtitle": "Solid brass, engraved millimetres, heavy enough to hold a page.",
+    "products-tag1": "brass",
+    "products-tag2": "drawing",
+    "products-tag3": "measure",
+    "products-tags": [
+      "brass",
+      "drawing",
+      "measure"
+    ]
+  }
+}

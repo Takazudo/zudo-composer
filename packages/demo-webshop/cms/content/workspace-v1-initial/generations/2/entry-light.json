@@ -1,0 +1,20 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "light",
+  "lifecycle": "published",
+  "modelId": "categories",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "categories-caption": "Four lights for late work",
+    "categories-image": {
+      "categories-image-alt": "Small lit brass oil lamp with a glass chimney",
+      "categories-image-src": "/uploaded-assets/asset-assets-7e6a524b-3b9a-4f89-a763-6949cd5c84bc"
+    },
+    "categories-intro": "Low, warm light for late work. A lamp for the desk, a torch for the pocket, candles for the evening after.",
+    "categories-name": "Light",
+    "categories-order": 3,
+    "categories-slug": "light"
+  }
+}

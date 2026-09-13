@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-6",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "Two products are marked sold out so the demo can show how the shop behaves when stock runs out: the badge changes and the add-to-cart button is disabled.",
+    "faq-order": 6,
+    "faq-question": "Why do some products say sold out?"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "generation": 2,
+  "mutationToken": "c63b3b7bb98f06a3058db08584ea0ca290067a3d5ff9333da689b3bf27daf929",
+  "entries": [
+    {
+      "id": "meta",
+      "digest": "23a6d11391bfe6ddbfa38648297c473c16065dea4dc32c8e97a5f20ad2c00e50"
+    },
+    {
+      "id": "sample-studio-sitemap",
+      "digest": "2888c17547cd3e5d4fce6d11a292c186ad53b7ed22477c45f7cdc8a59fe2bff3"
+    }
+  ]
+}

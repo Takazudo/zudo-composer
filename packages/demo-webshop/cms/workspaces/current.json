@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "generation": 3,
+  "mutationToken": "539d2bf1a6570ea2096f440e5071d4eeacc20339400bb288429c6320128f0654",
+  "entries": [
+    {
+      "id": "initial",
+      "digest": "2d5bde8e76378269832a93ff788a9be3984324bca5f3612a1485c36871d0aa63"
+    },
+    {
+      "id": "meta",
+      "digest": "e4140d448ab60722bc20524268d58c26c493f4a913b55c2e2e0883c2a31a69c2"
+    },
+    {
+      "id": "selection",
+      "digest": "d75ff487736d32dcf7cfd181caf65ca09b171ecc2fbeca9e63640aea9205d3e2"
+    }
+  ]
+}

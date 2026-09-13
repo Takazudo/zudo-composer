@@ -1,3 +1,4 @@
+import { lstat } from "node:fs/promises";
 import type { SiteProject } from "../../src/site-project/model/types";
 import type { CompletedRelease, SiteProjectActiveSelection } from "../../src/site-project/api/types";
 import type { AssetType } from "../../src/assets/model";
@@ -13,7 +14,13 @@ type DeliveryReaderOptions = LocalSiteProjectStoreOptions & LocalReleaseToolchai
 /** Read-only development seam. No path, mutation, or filesystem capability crosses it. */
 export interface ActivatedSiteReleaseData { project: SiteProject; release: CompletedRelease }
 export async function readActivatedSiteRelease(options?: DeliveryReaderOptions): Promise<ActivatedSiteReleaseData | null> {
-  const result = await createLocalSiteProjectStore(options).readActiveRelease();
+  const store = createLocalSiteProjectStore(options);
+  // A read-only dev source must not initialize disposable release storage on a
+  // host that has only committed authoring CMS. Existing roots still go through
+  // the complete layout/identity/digest validation, including malformed roots.
+  try { await lstat(store.root); }
+  catch (cause) { if ((cause as NodeJS.ErrnoException).code === "ENOENT") return null; throw cause; }
+  const result = await store.readActiveRelease();
   if (result.status === "unavailable") throw new Error(`Activated release is unavailable: ${result.message}`);
   if (result.status === "not-found") throw new Error("Activated release lookup failed.");
   if (result.value && releaseJson(result.value.release.stage.toolchain) !== releaseJson(await resolveLocalReleaseToolchain(options))) throw new Error("Activated release toolchain does not match the current installed runtime.");

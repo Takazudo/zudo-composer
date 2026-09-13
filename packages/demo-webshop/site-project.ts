@@ -1,6 +1,7 @@
-// The authored site. `pnpm generate` turns this into `site-project.json`;
-// the tests fail when the two disagree.
-import { defineSite, entryRef, node, type BindingInput, type Entry, type JsonObject, type Model, type RouteInput } from "demo-tools";
+// The authored site. `zudo-composer generate` turns this into `site-project.json`;
+// `zudo-composer generate --check` reports when the committed output disagrees.
+import { defineSite, entryRef, node } from "zudo-composer/authoring";
+import type { BindingInput, Entry, JsonObject, Model, RouteInput } from "zudo-composer/site-project";
 import { componentPack } from "./components/pack";
 
 const site = defineSite({ id: "demo-webshop", name: "Nightjar Supply", componentPack });

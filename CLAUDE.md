@@ -30,15 +30,16 @@ tool. Never copy provider components or add a fallback registry. `@zudo-sg/ui`
 is otherwise an ordinary component pack — any themeset that satisfies the same
 contract is interchangeable with it.
 
-Exact routes are `/`, `/composer`, same-origin `/composer/preview`, `/content`,
-`/mapping`, `/sitemapper`, `/assets`, and the sample SiteProject delivery routes
-`/site`, `/site/about`, `/site/services`, `/site/journal`,
-`/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
-and `/site/journal/start-with-the-question`; emitted files live under
-`/assets/`, while committed images and PDFs from this repository's own
-`publicAssetsDir` are delivered under `/uploaded-assets/`. Upload authoring
-remains dev-only. Keep Vite base `/` and the preview graph isolated from a
-consuming host project and its file-provider plumbing.
+The tool's authoring routes are `/`, `/composer`, same-origin
+`/composer/preview`, `/content`, `/mapping`, `/sitemapper`, and `/assets`.
+An activated host site is delivered under `/site`; each static site's own routes
+come from its verified `dist-site/site-manifest.json`. Only Sample Studio's
+hosted Composer production target uses frozen route data in
+`packages/demo-studio/hosted-routes.mjs`, checked against the Studio artifact.
+Emitted files live under `/assets/`, and committed images and PDFs from the
+host's `publicAssetsDir` are delivered under `/uploaded-assets/`. Upload
+authoring remains dev-only. Keep Vite base `/` and the preview graph isolated
+from a consuming host project and its file-provider plumbing.
 
 The SiteProject operator/API guide is [`docs/site-project.md`](./docs/site-project.md).
 It is the source for provider-scoped graph, whole-project apply, active
@@ -52,8 +53,27 @@ nothing in this repository claims them.
 There are no users or persisted production data. Prefer one clear current
 schema and destructively replace provisional application routes, storage/source
 layouts, and file-provider formats when needed. Do not add migrations,
-redirects, aliases, legacy fallbacks, compatibility shims, or compatibility
-fixtures.
+redirects, aliases, legacy fallbacks, compatibility shims, or fixtures for old
+schemas.
+
+The demo hosts' `site-project.ts` files are authored source. Their tracked
+`site-project.json` and ready CMS records are generated material and current
+reader compatibility fixtures; never edit them by hand. A storage format,
+workspace layout, compiler, component pack, or authored source change must
+regenerate **every host atomically in the same PR** with
+`corepack pnpm cms:regenerate`, then pass `corepack pnpm cms:check` (also part
+of `corepack pnpm check`). The command discovers hosts on disk, including new
+demo hosts, and uses the installed `generate` and `seed --ready-workspace`
+commands. A changed build identity requires regeneration, even when the
+SiteProject JSON did not change; do not exempt a baseline or relax readers.
+
+Run regeneration with authoring stopped and preserve local CMS edits first.
+It replaces only known generated trees that match Git HEAD or the newly
+produced bytes, and preserves Assets and unrelated host state. Commit the
+generated ownership file `scripts/cms-fixtures.json` with all generated host
+files. Old records need not pass new readers before explicit regeneration;
+there are still no migrations for consumer repositories. See the
+[clean-break procedure](docs/site-project.md#regenerating-committed-hosts).
 
 This authority applies only to this project's current state. It does not permit
 destructive changes to unrelated repositories, user files, hosting resources,
@@ -88,17 +108,27 @@ relationship for the external UI-provider dependency.
 
 - Install: `corepack pnpm install --frozen-lockfile`.
 - Develop: `corepack pnpm dev`.
-- Main bounded gate: `corepack pnpm check`.
+- Aggregate gate: `corepack pnpm check`, including the complete packed-install
+  proof. It needs network access, Playwright Chromium and exclusive browser
+  port 4175; run it with the other browser lanes stopped.
 - Contract handoff: `corepack pnpm contract:conformance`, `corepack pnpm
   contract:negative-scan`, and `corepack pnpm contract:external-install --
   --exact`.
+- Browser preparation: `corepack pnpm demo:build-sites` discovers and builds
+  all host artifacts before the SiteProject and demos browser lanes; stale
+  artifacts fail their read-only verification.
 - Browser lanes: `corepack pnpm test:browser:host`, `corepack pnpm
   test:browser:dev`, `corepack pnpm test:browser:site-project`, and `corepack
   pnpm test:browser:demos` (port 4176, the three `packages/demo-*` hosts). Each
   owns one machine-global port, so none may run concurrently, and no lane may
   rebuild.
-- Host install: `corepack pnpm smoke:host-install`, the only proof that packs the
-  package and installs it into a project outside this repository.
+- Consumer boundary: the ledger must contain zero entries. Scan actual creator
+  templates and complete generated output before packed dependency rewriting.
+- Host install: `corepack pnpm smoke:host-install` packs the tool and contract,
+  then proves all disk-discovered package hosts, freshly generated creator
+  output and the synthesized fixture outside this repository. CI uses one
+  matrix job per host. `corepack pnpm no-deploy:check` guards these validation
+  commands, including aliases and local wrappers; Cloudflare dry-runs only.
 
 Do not weaken frozen install, negative dependency scans, exact provider pin, or
 the 12-component runtime/CSS/WASM proof to make a gate pass.

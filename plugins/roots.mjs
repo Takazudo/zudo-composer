@@ -3,12 +3,14 @@
 // host project's node_modules the package directory and the host project
 // directory are different places, and no single Vite root satisfies both.
 
-import { realpathSync } from "node:fs";
+import { globSync, realpathSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 
 /** The application entry every host boots, package-relative. */
 export const APP_ENTRY = "src/main.tsx";
+/** The static website visitor entry, package-relative. */
+export const SITE_BUILD_ENTRY = "server/site-build/client/main.tsx";
 
 /** The installed package directory. Never derived from `config.root`. */
 export const APP_ROOT = resolve(fileURLToPath(import.meta.url), "../..");
@@ -104,14 +106,21 @@ export function resolveSiteProjectLocalRoot(workspaceRoot, configured) {
  * warmed up. Test sources are excluded because no route imports them.
  */
 export function resolveAppWarmupFiles() {
-  return [
-    resolve(APP_ROOT, APP_ENTRY),
-    resolve(APP_ROOT, "src/**/*.{ts,tsx,css}"),
-    `!${resolve(APP_ROOT, "src/**/__tests__/**")}`,
-    // Entries built only by their own Vite configs; their virtual modules never exist here.
-    `!${resolve(APP_ROOT, "src/hosted-demo/**")}`,
-    `!${resolve(APP_ROOT, "src/site-static/**")}`,
-  ];
+  // The static visitor entry lives under server/site-build/client, outside this tree.
+  const sourceRoot = resolve(APP_ROOT, "src");
+  const sourceRootPath = sourceRoot.split(sep).join("/");
+  const sourceFiles = globSync("**/*.{ts,tsx,css}", {
+    cwd: sourceRoot,
+    exclude: (file) => {
+      const normalized = file.split(sep).join("/");
+      const relativePath = normalized.startsWith(`${sourceRootPath}/`) ? normalized.slice(sourceRootPath.length + 1) : normalized;
+      const segments = relativePath.split("/");
+      return segments.includes("__tests__") || segments.includes("test-support") || segments[0] === "hosted-demo";
+    },
+  })
+    .map((file) => resolve(sourceRoot, file))
+    .filter((file) => statSync(file).isFile());
+  return [...new Set([resolve(APP_ROOT, APP_ENTRY), ...sourceFiles])];
 }
 
 /**

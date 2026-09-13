@@ -1,13 +1,12 @@
-// The committed site-project.json compiled through src/site-project/compiler
-// the way the static build does it: validation, an exact Assets lock from
-// cms/assets and `policy: "release"`.
+// The committed site-project.json compiled through the public static build
+// API: validation, an exact Assets lock, and release policy.
 import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { CompositionNode } from "../../../src/composer/model/types";
-import { matchDeliveryRoute } from "../../../src/features/delivery/routing";
-import type { SiteCompiledRoute } from "../../../src/site-project/compiler";
-import { compileStaticSite, type StaticSiteCompilation } from "../../../scripts/site-static/compile";
+import type { CompositionNode } from "zudo-composer/site-project";
+import { compileStaticSite, type StaticSiteCompilation } from "zudo-composer/site-build";
 import { componentPack } from "../components/pack";
+
+type SiteCompiledRoute = StaticSiteCompilation["build"]["routes"][number];
 
 const packageRoot = resolve(import.meta.dirname, "..");
 
@@ -125,9 +124,9 @@ describe("demo-webshop compiled site", () => {
     expect(compiled.build.navigation.primary.map((item) => item.label)).toEqual(["Desk", "Carry", "Light", "All products", "About"]);
   });
 
-  it("leaves unknown routes to the tool's not-found state", () => {
-    for (const pathname of ["/products/nope", "/sale", "/404"]) expect(matchDeliveryRoute(compiled.build.routes, pathname, "/"), pathname).toBeUndefined();
-    expect(matchDeliveryRoute(compiled.build.routes, "/products/field-pen", "/")?.pathname).toBe("/products/field-pen");
+  it("declares product routes without adding unknown or synthetic not-found routes", () => {
+    for (const pathname of ["/products/nope", "/sale", "/404"]) expect(compiled.build.routes.find((candidate) => candidate.pathname === pathname), pathname).toBeUndefined();
+    expect(route("/products/field-pen").pathname).toBe("/products/field-pen");
     const compositionIds = compiled.project.providers.compositions.flatMap((provider) => provider.records.map((record) => record.id));
     expect(compositionIds.filter((id) => /404|not-found/.test(id))).toEqual([]);
   });

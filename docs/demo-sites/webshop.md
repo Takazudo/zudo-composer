@@ -284,7 +284,7 @@ Field kinds are `src/content/model/types.ts` kinds.
 | `subtitle` | text | one line |
 | `description` | markdown | 2–3 short paragraphs |
 | `price` | number | in `currency` units, 2 decimals |
-| `currency` | text | `USD` on every entry (guarded by the currency test) |
+| `currency` | text | `USD` on every entry; checked by the generated aggregate |
 | `availability` | text `in-stock` / `low-stock` / `sold-out` | drives badge + add-to-cart; text, not choice, because a choice cannot bind to a `select` prop (#510) |
 | `stockLabel` | text `In stock` / `Only a few left` / `Sold out` / `Ships in 2 weeks` | display text (text for the same reason) |
 | `tags` | list<text> | 1–3 tags; `contains` queries |
@@ -341,7 +341,7 @@ Bindings on `product-card` and `product-page` (projection → transform → prop
 reference-id→select category` (options are the category record ids);
 `featured value→boolean`; `subtitle`, `description value→markdown`; spec
 `object-field[material]→spec1Value` … with static `spec1Label` props;
-`tags` is flattened by demo-tools into `tag1`–`tag3` text fields on the same
+`tags` is flattened by the `site-project.ts` authoring source into `tag1`–`tag3` text fields on the same
 entry (the `list` field stays for `contains` queries). No `asset-ref` and no
 `reference-list-ids` bindings exist (README § Lists).
 

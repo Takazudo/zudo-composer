@@ -1,14 +1,17 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { once } from "node:events";
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { runInNewContext } from "node:vm";
+import { build } from "vite";
 import { APP_ROOT, resolvePublicDir } from "../../plugins/roots.mjs";
 import { APP_ENTRY_MODULE } from "../../plugins/composer-app-html.mjs";
-import { OPTIMIZE_DEPS_EXCLUDE, loadHostConfig, resolveComposerDevConfig, resolvePreactAliases } from "../dev-server.mjs";
+import { OPTIMIZE_DEPS_EXCLUDE, loadHostConfig, resolveComposerDevConfig } from "../dev-server.mjs";
 import { resolveImageEditorAliases } from "../../plugins/image-editor-aliases.mjs";
 import { resolveFsAllow } from "../../plugins/roots.mjs";
 import { resolveComponentPack } from "../../plugins/component-pack.mjs";
@@ -100,38 +103,6 @@ describe("resolveFsAllow", () => {
   });
 });
 
-describe("resolvePreactAliases", () => {
-  // `@preact/preset-vite` injects these five into `optimizeDeps.include`, and
-  // Vite resolves an include entry from the HOST root, where a real install
-  // cannot see zudo-composer's own preact.
-  const specifiers = ["preact", "preact/jsx-runtime", "preact/jsx-dev-runtime", "preact/debug", "preact/devtools"];
-
-  it("pins every specifier the preact preset asks the optimizer to prebundle", () => {
-    const aliases = resolvePreactAliases();
-    expect(aliases.map(({ find }) => find.source)).toEqual(
-      specifiers.map((specifier) => `^${specifier.replace("/", "\\/")}$`),
-    );
-  });
-
-  it("points at directories, so Vite reads each subpackage's own browser entry", () => {
-    for (const { replacement } of resolvePreactAliases()) {
-      expect(statSync(replacement).isDirectory()).toBe(true);
-      expect(existsSync(join(replacement, "package.json"))).toBe(true);
-    }
-  });
-
-  it("anchors each pattern, so `preact/hooks` keeps resolving relative to its importer", () => {
-    for (const { find } of resolvePreactAliases()) {
-      expect(find.test("preact/hooks")).toBe(false);
-      expect(find.test("preact/compat")).toBe(false);
-    }
-  });
-
-  it("declares nothing when the host supplies its own preact", () => {
-    expect(resolvePreactAliases(host)).toEqual([]);
-  });
-});
-
 describe("resolvePublicDir", () => {
   it("is the parent of the published-assets directory", () => {
     expect(resolvePublicDir("/host", "/host/public/uploaded-assets")).toBe("/host/public");
@@ -171,7 +142,8 @@ describe("resolveComposerDevConfig", () => {
     expect(inlineConfig.optimizeDeps?.entries).toEqual([resolve(APP_ROOT, APP_ENTRY_MODULE)]);
     // The pack's own directory is allowed too: it is outside the host root.
     expect(inlineConfig.server?.fs?.allow).toEqual([...resolveFsAllow(FIXTURE_HOST), pack.packageRoot]);
-    expect(inlineConfig.resolve?.alias).toEqual([...resolvePreactAliases(), ...resolveImageEditorAliases()]);
+    expect(inlineConfig.resolve?.alias).toEqual(resolveImageEditorAliases());
+    expect(inlineConfig.resolve?.dedupe).toEqual(["preact"]);
     const names = inlineConfig.plugins?.flat().map((plugin) => (plugin as { name?: string } | undefined)?.name);
     expect(names).toContain("zudo-composer-app-html");
     expect(names).toContain("zudo-component-pack");
@@ -182,6 +154,109 @@ describe("resolveComposerDevConfig", () => {
     await expect(resolveComposerDevConfig({ workspaceRoot: host })).rejects.toThrow(
       /^Component pack "@acme\/themeset\/composer-pack" could not be resolved from /,
     );
+  });
+});
+
+describe("the host Preact peer", () => {
+  it("shares one runtime and every public subpath across an external app graph and a host pack", async () => {
+    const directory = realpathSync(await mkdtemp(join(tmpdir(), "zudo-composer-preact-peer-")));
+    try {
+      const hostRoot = join(directory, "host");
+      const toolRoot = join(directory, "tool");
+      const packRoot = join(directory, "pack");
+      const hostPreact = join(hostRoot, "node_modules/preact");
+      const appEntry = join(toolRoot, "entry.js");
+      const packEntry = join(packRoot, "pack.js");
+      const installedPreact = realpathSync(join(APP_ROOT, "node_modules/preact"));
+      const preactPackage = JSON.parse(await readFile(join(installedPreact, "package.json"), "utf8")) as {
+        exports: Record<string, string | { browser?: string }>;
+      };
+      await Promise.all([
+        mkdir(join(hostRoot, "node_modules"), { recursive: true }),
+        mkdir(toolRoot),
+        mkdir(join(packRoot, "node_modules"), { recursive: true }),
+      ]);
+      // These are two PHYSICAL copies, not two symlinks to one workspace
+      // install. Without dedupe the app and pack really do load different
+      // Preact options/hooks singletons, even though their versions match.
+      await cp(installedPreact, hostPreact, { recursive: true });
+      await Promise.all([
+        symlink(join(APP_ROOT, "node_modules"), join(toolRoot, "node_modules"), "dir"),
+        symlink(hostPreact, join(packRoot, "node_modules/preact"), "dir"),
+        symlink(packRoot, join(hostRoot, "node_modules/peer-fixture-pack"), "dir"),
+        writeFile(join(hostRoot, "package.json"), JSON.stringify({ name: "peer-fixture-host", type: "module", dependencies: { preact: "^10.29.8" } })),
+        writeFile(join(toolRoot, "package.json"), JSON.stringify({ name: "peer-fixture-tool", type: "module" })),
+        writeFile(join(packRoot, "package.json"), JSON.stringify({ name: "peer-fixture-pack", type: "module", exports: { "./composer-pack": "./pack.js" }, peerDependencies: { preact: "^10.29.8" } })),
+        writeFile(join(hostRoot, "zudo-composer.config.ts"), 'export default { pack: "peer-fixture-pack/composer-pack" };\n'),
+        cp(join(APP_ROOT, "fixtures/self-host/components/components.tsx"), join(packRoot, "components.tsx")),
+        writeFile(packEntry, `
+          import { h } from "preact";
+          import { useContext, useState } from "preact/hooks";
+          export { options } from "preact";
+          export { useState } from "preact/hooks";
+          export { Banner } from "./components.tsx";
+          export function HostConsumer({ context }) {
+            const [suffix] = useState("hooks");
+            return h("span", null, useContext(context) + ": " + suffix);
+          }
+        `),
+        // Production virtual modules also re-export a host pack by absolute
+        // path, crossing from the tool's graph into host-owned source.
+        writeFile(appEntry, `
+          import { createContext, h, options } from "preact";
+          import { useState } from "preact/hooks";
+          import { renderToString } from "preact-render-to-string";
+          import { Banner, HostConsumer, options as packOptions, useState as packUseState } from ${JSON.stringify(packEntry)};
+          const context = createContext("unprovided default");
+          export const sharedRuntime = options === packOptions && useState === packUseState;
+          export const markup = renderToString(h(context.Provider, { value: "host peer" }, h(HostConsumer, { context })));
+          export const banner = renderToString(h(Banner, { headline: "Hook fixture" }));
+        `),
+      ]);
+      expect(createRequire(appEntry).resolve("preact")).not.toBe(createRequire(packEntry).resolve("preact"));
+      const { inlineConfig } = await resolveComposerDevConfig({ workspaceRoot: hostRoot });
+      // A tiny client bundle exercises Vite's real resolver and the actual
+      // Preact runtime without listening on a port or starting a browser.
+      const result = await build({
+        configFile: false,
+        root: hostRoot,
+        logLevel: "silent",
+        resolve: inlineConfig.resolve,
+        oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
+        plugins: [{
+          name: "preact-peer-resolution-proof",
+          async buildStart() {
+            for (const [subpath, target] of Object.entries(preactPackage.exports)) {
+              const specifier = subpath === "." ? "preact" : `preact${subpath.slice(1)}`;
+              const appResolution = await this.resolve(specifier, appEntry);
+              const packResolution = await this.resolve(specifier, packEntry);
+              expect(appResolution?.id, specifier).toBe(packResolution?.id);
+              expect(appResolution?.id.startsWith(`${hostPreact}/`), specifier).toBe(true);
+              if (typeof target !== "string" && target.browser) {
+                expect(appResolution?.id, specifier).toBe(resolve(hostPreact, target.browser));
+              }
+            }
+            // A real private file must stay behind Preact's export boundary.
+            await expect(this.resolve("preact/src/index.js", appEntry)).rejects.toThrow(/preact\/src\/index\.js/);
+          },
+        }],
+        build: {
+          write: false,
+          minify: false,
+          lib: { entry: appEntry, formats: ["cjs"], fileName: "peer-proof" },
+        },
+      });
+      const outputs = Array.isArray(result) ? result : [result];
+      const chunk = outputs.flatMap((output) => "output" in output ? output.output : []).find((output) => output.type === "chunk");
+      expect(chunk).toBeDefined();
+      const rendered: { sharedRuntime?: boolean; markup?: string; banner?: string } = {};
+      runInNewContext(chunk!.code, { exports: rendered });
+      expect(rendered.sharedRuntime).toBe(true);
+      expect(rendered.markup).toBe("<span>host peer: hooks</span>");
+      expect(rendered.banner).toMatch(/^<h1 id="[^"]+" class="self-host-banner">Hook fixture<\/h1>$/);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

@@ -1,15 +1,13 @@
 import { expect, test, type Page, type Response } from "@playwright/test";
 import { watchRuntimeFailures } from "../runtime-failures";
 
-const SITE_ROUTES = [
-  "/site",
-  "/site/about",
-  "/site/services",
-  "/site/journal",
-  "/site/journal/map-the-moving-parts",
-  "/site/journal/review-in-small-loops",
-  "/site/journal/start-with-the-question",
-] as const;
+// The guarded runner supplies routes from the verified Studio artifact.
+const SITE_ROUTES: string[] = JSON.parse(process.env.SITE_PROJECT_LANE_ROUTES ?? "null");
+if (!Array.isArray(SITE_ROUTES) || SITE_ROUTES.length === 0
+  || !SITE_ROUTES.includes("/site") || new Set(SITE_ROUTES).size !== SITE_ROUTES.length
+  || SITE_ROUTES.some((route) => typeof route !== "string" || (route !== "/site" && !route.startsWith("/site/")))) {
+  throw new Error("Use test:browser:site-project with prepared demo:build-sites artifacts.");
+}
 
 async function useTheme(page: Page, theme: "light" | "dark") {
   await page.evaluate((value) => {
@@ -115,7 +113,7 @@ test("crawls every emitted SiteProject route with refresh, Entry content, chrome
     }));
     const unique = [...new Set(hrefs)];
     expect(unique.every((href) => (SITE_ROUTES as readonly string[]).includes(href)), `${route} internal links`).toBe(true);
-    for (const href of unique) expect((await page.request.get(href)).status(), `${route} -> ${href}`).toBe(200);
+    for (const href of unique) expect((await page.request.get(href, { headers: { accept: "text/html" } })).status(), `${route} -> ${href}`).toBe(200);
     expect(failures, `${route} runtime failures`).toEqual([]);
   }
 });

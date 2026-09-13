@@ -1,0 +1,97 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "author-page-name-name",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "authors-name",
+        "target": {
+          "nodeId": "author-hero",
+          "prop": "name"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "author-page-bio-bio",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "authors-bio",
+        "target": {
+          "nodeId": "author-hero",
+          "prop": "bio"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "author-page-avatar-src",
+        "projection": {
+          "fieldIds": [
+            "authors-avatar-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "authors-avatar",
+        "target": {
+          "nodeId": "author-hero",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "author-page-avatar-alt",
+        "projection": {
+          "fieldIds": [
+            "authors-avatar-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "authors-avatar",
+        "target": {
+          "nodeId": "author-hero",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "author-page"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "authors"
+    },
+    "id": "author-page",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "asc",
+            "fieldId": "authors-name"
+          }
+        ]
+      }
+    },
+    "name": "Author page",
+    "schemaVersion": 2
+  },
+  "id": "author-page",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

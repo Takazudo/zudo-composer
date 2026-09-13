@@ -1,0 +1,41 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "article-choosing-tools-you-can-repair",
+  "lifecycle": "published",
+  "modelId": "articles",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "articles-author": {
+      "modelId": "authors",
+      "providerId": "content-filesystem",
+      "recordId": "author-teodor-lindqvist"
+    },
+    "articles-author-avatar": {
+      "articles-author-avatar-alt": "Abstract painterly avatar in slate blue and cream",
+      "articles-author-avatar-src": "/uploaded-assets/asset-assets-b36741ff-7dd4-4c15-9135-25c274e61e39"
+    },
+    "articles-author-bio": "Teodor trained as a joiner and now works mostly in text. He writes about tools, maintenance and the craft of doing one thing well.",
+    "articles-author-name": "Teodor Lindqvist",
+    "articles-author-slug": "teodor-lindqvist",
+    "articles-body": "My fountain pen is older than I am. It belonged to my grandfather, and it has been taken apart, cleaned, and put back together more times than anyone has counted. Last winter the feed cracked, and I ordered a replacement for a few coins, fitted it with a small screwdriver on the kitchen table, and was writing again the same evening. Almost every other tool I own would have gone in the bin.\n\nThat repair made me look at the rest of my tools with a new question. Not *is this good?* but *when it breaks, can I fix it?*\n\n## Repair is a kind of understanding\n\nA tool you can take apart is a tool you can understand. You can see how the ink travels from the reservoir to the nib, which part wears first, and what a small adjustment does. That understanding changes how you use it. You notice early signs of trouble. You stop blaming yourself for problems that are really mechanical, and you stop blaming the tool for problems that are really yours.\n\nA sealed tool offers none of that. When it misbehaves, the only options are to accept the behaviour or replace the whole thing. Over time you stop paying attention to how it works at all, because there is nothing you can do with the knowledge. The tool becomes a black box you depend on without understanding.\n\n## The same question for digital tools\n\nThis matters just as much for software, where most of my working hours are spent. A few questions help me judge whether a digital tool is repairable in the sense I care about:\n\n1. **Can I get my work out in a plain format?** Text files, standard images, a folder I can open without the tool. If the only way to read my notes is through one application, that application owns them.\n2. **Can I change the parts that bother me?** Settings, templates, shortcuts, small scripts. A tool that lets me adjust it to my habits is one I will keep sharp.\n3. **Will it still work if the company behind it disappears?** Tools that depend entirely on a remote service can vanish overnight. Tools that run on my own machine, with files I hold, tend to last.\n4. **Is it simple enough to learn completely?** I would rather use a small tool I understand fully than a large one I understand in patches.\n\nNone of these rule out modern or convenient tools. They just make the trade visible. Sometimes the sealed option is worth it. But I want to choose that, not drift into it.\n\n## Fewer, better, maintained\n\nChoosing repairable tools has left me with fewer of them. That was not the goal, but it follows naturally. Repairable tools need care, and I only have attention to care for so many. So I keep a small set: the pen, a plain text editor, a paper notebook, a box of [index cards](/articles/notes-that-survive-the-week), a chisel set that I [sharpen on Fridays](/articles/sharpen-before-you-cut). Each one gets regular maintenance, and each one feels better in the hand for it.\n\nThe maintenance itself has become part of the work I enjoy. Cleaning a pen takes ten minutes and leaves my mind clearer than it found it. Tidying a set of text templates does something similar. These small acts of care keep me connected to the tools, and through them to the work.\n\n## A modest test\n\nNext time a tool breaks, before replacing it, spend ten minutes finding out whether it can be fixed. Look for a part number, a manual, a forum where someone else has had the same problem. Sometimes the answer is no, and that is useful to know when you choose the next one. Sometimes the answer is a spare part that costs less than a coffee and an evening at the kitchen table.\n\nEither way, you will understand the tool a little better than you did. That understanding is the real thing a repairable tool gives you, and it lasts longer than the tool itself.",
+    "articles-body-length": 3716,
+    "articles-cover": {
+      "articles-cover-alt": "A fountain pen disassembled into parts on a cloth beside a small screwdriver",
+      "articles-cover-caption": "Every part of a pen that outlived its first owner.",
+      "articles-cover-src": "/uploaded-assets/asset-assets-ef74294b-4999-49e7-b44f-72c9fcec23a8"
+    },
+    "articles-date": "2026-06-10",
+    "articles-intro": "A cracked pen feed, a few coins and an evening at the kitchen table. A tool you can fix is a tool you understand.",
+    "articles-slug": "choosing-tools-you-can-repair",
+    "articles-tag1": "tools",
+    "articles-tag2": "craft",
+    "articles-tag3": "",
+    "articles-tags": [
+      "tools",
+      "craft"
+    ],
+    "articles-title": "Choosing tools you can repair"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "sling-pouch",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "in-stock",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "carry"
+    },
+    "products-currency": "USD",
+    "products-description": "A small cross-body pouch in black waxed cotton canvas that sheds rain and softens with use. It carries a phone, a wallet, keys and a notebook, and refuses anything more, which is the point.\n\nThe strap adjusts through a matte steel buckle and sits flat against the body. Inside, one slip pocket keeps cards apart from keys.\n\nThe wax wears in where you touch it. Re-wax once a year and the canvas will keep its shape for a decade.",
+    "products-featured": true,
+    "products-image1": {
+      "products-image1-alt": "Small black waxed-canvas sling pouch",
+      "products-image1-src": "/uploaded-assets/asset-assets-27d2cd6e-0874-455b-91a5-784bf79c8d14"
+    },
+    "products-name": "Sling Pouch",
+    "products-price": 64,
+    "products-slug": "sling-pouch",
+    "products-spec": {
+      "products-spec-care": "Brush off dirt; re-wax once a year",
+      "products-spec-dimensions": "220 × 150 × 60 mm, strap 70–130 cm",
+      "products-spec-material": "Waxed cotton canvas; leather trim; steel buckle",
+      "products-spec-origin": "Sewn in Leicester, England",
+      "products-spec-warranty": "Five years on seams and hardware",
+      "products-spec-weight": "280 g"
+    },
+    "products-stock-label": "In stock",
+    "products-subtitle": "Waxed canvas, one buckle, and room for exactly what you need.",
+    "products-tag1": "canvas",
+    "products-tag2": "bag",
+    "products-tag3": "everyday",
+    "products-tags": [
+      "canvas",
+      "bag",
+      "everyday"
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-yearly",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "Pay for twelve months up front and each month costs about 20% less: $10 instead of $12 on Studio, $24 instead of $29 on Org.",
+    "faq-order": 5,
+    "faq-question": "How does yearly billing work?",
+    "faq-topic": "billing"
+  }
+}

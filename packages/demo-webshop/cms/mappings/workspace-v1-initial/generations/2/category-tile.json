@@ -1,0 +1,112 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "category-tile-name-label",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "categories-name",
+        "target": {
+          "nodeId": "tile",
+          "prop": "label"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "category-tile-slug-href",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "categories-slug",
+        "target": {
+          "nodeId": "tile",
+          "prop": "href"
+        },
+        "transform": {
+          "kind": "prefix",
+          "prefix": "/"
+        }
+      },
+      {
+        "id": "category-tile-image-src",
+        "projection": {
+          "fieldIds": [
+            "categories-image-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "categories-image",
+        "target": {
+          "nodeId": "tile",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "category-tile-image-alt",
+        "projection": {
+          "fieldIds": [
+            "categories-image-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "categories-image",
+        "target": {
+          "nodeId": "tile",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "category-tile-caption-caption",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "categories-caption",
+        "target": {
+          "nodeId": "tile",
+          "prop": "caption"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "category-tile"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "categories"
+    },
+    "id": "category-tile",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "asc",
+            "fieldId": "categories-order"
+          }
+        ]
+      }
+    },
+    "name": "Category tile",
+    "schemaVersion": 2
+  },
+  "id": "category-tile",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

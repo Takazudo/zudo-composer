@@ -1,17 +1,9 @@
 // @ts-check
+import { HOSTED_SITE_ROUTES } from "../packages/demo-studio/hosted-routes.mjs";
 
 /** @type {string[]} */
 export const AUTHORING_ROUTES = ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/assets"];
-/** The checked-in sample compiler currently emits one root and six nested site routes. */
+// Adapter for the existing hosted Composer production target only. Site routes
+// are Sample Studio deployment data, not part of the installed tool contract.
 /** @type {string[]} */
-export const SITE_ROUTES = [
-  "/site",
-  "/site/about",
-  "/site/services",
-  "/site/journal",
-  "/site/journal/map-the-moving-parts",
-  "/site/journal/review-in-small-loops",
-  "/site/journal/start-with-the-question",
-];
-/** @type {string[]} */
-export const SPA_ROUTES = [...AUTHORING_ROUTES, ...SITE_ROUTES];
+export const SPA_ROUTES = [...AUTHORING_ROUTES, ...HOSTED_SITE_ROUTES];

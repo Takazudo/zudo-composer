@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "pocket-torch",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "in-stock",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "light"
+    },
+    "products-currency": "USD",
+    "products-description": "A pocket torch turned from black anodised aluminium, no longer than a key. One click gives a soft 30 lumen light for reading a map; a second gives 300 lumens for finding the path.\n\nIt charges over USB-C in an hour and runs for a week of evening walks on one charge. The lens is frosted, so the beam is even rather than a hot spot.\n\nThe tail stands flat, so it can point at the ceiling and light a small room.",
+    "products-featured": false,
+    "products-image1": {
+      "products-image1-alt": "Short black aluminium pocket flashlight",
+      "products-image1-src": "/uploaded-assets/asset-assets-30c8b3fb-2b3e-4d39-94df-5f2616f4882d"
+    },
+    "products-name": "Pocket Torch",
+    "products-price": 46,
+    "products-slug": "pocket-torch",
+    "products-spec": {
+      "products-spec-care": "Keep the port dry; charge every few months in storage",
+      "products-spec-dimensions": "72 × 18 mm",
+      "products-spec-material": "Anodised 6061 aluminium; frosted polycarbonate lens",
+      "products-spec-origin": "Assembled in Shenzhen, China",
+      "products-spec-warranty": "Two years, battery included",
+      "products-spec-weight": "34 g"
+    },
+    "products-stock-label": "In stock",
+    "products-subtitle": "A short aluminium torch with one button and two brightnesses.",
+    "products-tag1": "torch",
+    "products-tag2": "aluminium",
+    "products-tag3": "travel",
+    "products-tags": [
+      "torch",
+      "aluminium",
+      "travel"
+    ]
+  }
+}

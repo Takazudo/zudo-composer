@@ -1,0 +1,77 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "faq-item-question-question",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "faq-question",
+        "target": {
+          "nodeId": "faq-item",
+          "prop": "question"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "faq-item-answer-answer",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "faq-answer",
+        "target": {
+          "nodeId": "faq-item",
+          "prop": "answer"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "faq-item-order-order",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "faq-order",
+        "target": {
+          "nodeId": "faq-item",
+          "prop": "order"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "faq-item"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "faq"
+    },
+    "id": "faq-item",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "asc",
+            "fieldId": "faq-order"
+          }
+        ]
+      }
+    },
+    "name": "FAQ item",
+    "schemaVersion": 2
+  },
+  "id": "faq-item",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

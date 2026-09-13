@@ -3,8 +3,6 @@ import type { ResolvedComposerConfig } from "./config";
 
 export const OPTIMIZE_DEPS_EXCLUDE: readonly string[];
 
-export function resolvePreactAliases(appRoot?: string): Array<{ find: RegExp; replacement: string }>;
-
 export function loadHostConfig(workspaceRoot: string, env?: Record<string, string | undefined>): Promise<ResolvedComposerConfig>;
 
 export interface ComposerDevServerOptions {

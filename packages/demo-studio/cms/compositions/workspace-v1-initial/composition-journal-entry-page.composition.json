@@ -1,0 +1,71 @@
+{
+  "id": "journal-entry-page",
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "updatedAt": "2026-08-31T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "main-content",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "journal-entry-page",
+    "name": "Journal entry page",
+    "root": [
+      {
+        "componentId": "ui.section-heading",
+        "componentVersion": 1,
+        "id": "journal-entry-heading",
+        "props": {
+          "as": "h1",
+          "eyebrow": "Studio journal",
+          "heading": "Static journal heading",
+          "intro": "Static journal introduction"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "ui.prose-p",
+        "componentVersion": 1,
+        "id": "journal-entry-date",
+        "props": {
+          "children": "Static publication date"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "ui.prose-md",
+        "componentVersion": 1,
+        "id": "journal-entry-body",
+        "props": {
+          "markdown": "Static journal body"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "ui.callout",
+        "componentVersion": 1,
+        "id": "journal-entry-callout",
+        "props": {
+          "title": "More notes",
+          "tone": "muted"
+        },
+        "slots": {
+          "body": [
+            {
+              "componentId": "ui.cta-button",
+              "componentVersion": 1,
+              "id": "journal-entry-callout-link",
+              "props": {
+                "arrow": false,
+                "children": "Back to the journal",
+                "href": "/journal",
+                "variant": "secondary"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

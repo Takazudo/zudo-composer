@@ -8,6 +8,7 @@ export const SITE_PROJECT_LOCAL_ROOT_NAME: string;
 export const SITE_PROJECT_LOCAL_ROOT_ENV: string;
 export function resolveSiteProjectLocalRoot(workspaceRoot: string, configured?: string): string;
 export const APP_ENTRY: string;
+export const SITE_BUILD_ENTRY: string;
 export function resolveAppWarmupFiles(): string[];
 export function resolveWatchIgnored(roots: readonly (string | undefined)[]): string[];
 export function resolvePublicDir(workspaceRoot: string, publicAssets: string): string;

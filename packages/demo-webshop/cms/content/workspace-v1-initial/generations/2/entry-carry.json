@@ -1,0 +1,20 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "carry",
+  "lifecycle": "published",
+  "modelId": "categories",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "categories-caption": "Four objects for the walk between places",
+    "categories-image": {
+      "categories-image-alt": "Small black waxed-canvas sling pouch",
+      "categories-image-src": "/uploaded-assets/asset-assets-27d2cd6e-0874-455b-91a5-784bf79c8d14"
+    },
+    "categories-intro": "Small goods for the walk between places. Waxed canvas, full-grain leather and nothing that rattles.",
+    "categories-name": "Carry",
+    "categories-order": 2,
+    "categories-slug": "carry"
+  }
+}

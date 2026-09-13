@@ -8,9 +8,10 @@
 // identical for every target.
 
 import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { HOSTED_DEMO_MANIFEST, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
-import { SITE_HEADERS, SITE_MANIFEST, verifySiteStaticArtifact } from "../site-static/artifact.mjs";
+import { SITE_HEADERS, SITE_MANIFEST, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
 import { SPA_ROUTES } from "../routes.mjs";
 
 const root = resolve(fileURLToPath(new URL("../../", import.meta.url)));
@@ -19,7 +20,8 @@ const root = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 export const HOSTED_DEMO_LIVE_ROUTES = [...SPA_ROUTES, "/review", "/website-preview"];
 
 /** @typedef {{ path: string, sha256: string, mime: string }} TargetFile */
-// Both manifest shapes (hosted-demo and site-static) carry `sourceRevision`;
+// Every production target requires a full `sourceRevision`, including static
+// sites whose ordinary local artifacts may omit a host revision entirely;
 // every other field is target-kind-specific and stays untyped here.
 /** @typedef {{ root: string, manifest: Record<string, unknown> & { sourceRevision: string }, files: TargetFile[] }} TargetArtifact */
 /**
@@ -48,11 +50,14 @@ async function verifyHostedDemoTargetArtifact(options) {
  */
 async function verifySiteStaticTargetArtifact({ directory, expectedSourceRevision }) {
   const manifest = await verifySiteStaticArtifact({ directory, expectedSourceRevision });
+  const sourceRevision = manifest.sourceRevision;
+  assert.ok(typeof sourceRevision === "string", "Deployed site artifact requires a sourceRevision");
+  assert.match(sourceRevision, /^[a-f0-9]{40}$/, "Deployed site artifact requires a full source Git SHA");
   const files = Object.entries(manifest.files)
     .filter(([path]) => path !== SITE_HEADERS)
     .map(([path, sha256]) => ({ path, sha256, mime: expectedMime(path) }))
     .sort((a, b) => a.path.localeCompare(b.path));
-  return { root: resolve(directory), manifest, files };
+  return { root: resolve(directory), manifest: { ...manifest, sourceRevision }, files };
 }
 
 /** @typedef {{

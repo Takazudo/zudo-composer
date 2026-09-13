@@ -1,0 +1,18 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "author-teodor-lindqvist",
+  "lifecycle": "published",
+  "modelId": "authors",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "authors-avatar": {
+      "authors-avatar-alt": "Abstract painterly avatar in slate blue and cream",
+      "authors-avatar-src": "/uploaded-assets/asset-assets-b36741ff-7dd4-4c15-9135-25c274e61e39"
+    },
+    "authors-bio": "Teodor trained as a joiner and now works mostly in text. He writes about tools, maintenance and the craft of doing one thing well.",
+    "authors-name": "Teodor Lindqvist",
+    "authors-slug": "teodor-lindqvist"
+  }
+}

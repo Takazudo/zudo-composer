@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "generation": 2,
+  "mutationToken": "3acf7661b7f70ecc83d4767c8805787fe01bc11d54aa76ae61e92a3663940b2e",
+  "entries": [
+    {
+      "id": "meta",
+      "digest": "23a6d11391bfe6ddbfa38648297c473c16065dea4dc32c8e97a5f20ad2c00e50"
+    },
+    {
+      "id": "nightjar-supply-sitemap",
+      "digest": "01092c69368e71748d44f85b42721e0255d8e400717f780e4f7c45b14976c9cb"
+    }
+  ]
+}

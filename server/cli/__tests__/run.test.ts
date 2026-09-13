@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { RELEASE_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
+import { resolve } from "node:path";
+import { ASSETS_IMPORT_ENTRY_PATH, BUILD_SITE_ENTRY_PATH, GENERATE_ENTRY_PATH, INIT_ENTRY_PATH, RELEASE_ENTRY_PATH, SEED_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
 import { forwardedSignals, superviseChild } from "../supervise.mjs";
 
 function fakeProcess(platform = "linux") {
@@ -38,9 +39,68 @@ function fakeChild() {
 
 describe("parseArguments", () => {
   it("treats no arguments and every help spelling as the usage request", () => {
-    for (const argv of [[], ["--help"], ["-h"], ["help"], ["dev", "--help"]]) {
+    for (const argv of [[], ["--help"], ["-h"], ["help"], ["dev", "--help"], ["build-site", "--help"], ["build-site", "-h"], ["seed", "--help"], ["seed", "-h"], ["generate", "--help"], ["generate", "-h"]]) {
       expect(parseArguments(argv)).toEqual({ command: "help" });
     }
+  });
+
+  it("defaults seed to the host's committed project and resolves explicit paths from the caller", () => {
+    expect(parseArguments(["seed"])).toEqual({ command: "seed", options: {} });
+    expect(parseArguments(["seed", "--root", "host/..", "--from", "committed/project.json"]))
+      .toEqual({ command: "seed", options: { workspaceRoot: resolve("host/.."), from: resolve("committed/project.json") } });
+    for (const argv of [["--from"], ["--from", "--root"], ["--from", ""]]) {
+      expect(parseArguments(["seed", ...argv])).toEqual({ error: "--from requires a file." });
+    }
+    expect(parseArguments(["seed", "--root"])).toEqual({ error: "--root requires a directory." });
+    for (const flag of ["--port", "--print-routes", "--verify", "--source-revision", "project.json"]) {
+      expect(parseArguments(["seed", flag])).toEqual({ error: `Unknown seed option "${flag}".` });
+    }
+    expect(parseArguments(["dev", "--from", "project.json"])).toEqual({ error: 'Unknown dev option "--from".' });
+    expect(parseArguments(["build-site", "--from", "project.json"])).toEqual({ error: 'Unknown build-site option "--from".' });
+  });
+
+  it("parses the ready workspace mode and its optional fresh output tree", () => {
+    expect(parseArguments(["seed", "--output", "fresh tree", "--ready-workspace", "--root", "host"]))
+      .toEqual({ command: "seed", options: { outputRoot: resolve("fresh tree"), readyWorkspace: true, workspaceRoot: resolve("host") } });
+    expect(parseArguments(["seed", "--output", "fresh"])).toEqual({ error: "--output requires --ready-workspace." });
+    expect(parseArguments(["seed", "--ready-workspace", "--output"])).toEqual({ error: "--output requires a directory." });
+    expect(parseArguments(["dev", "--ready-workspace"])).toHaveProperty("error");
+  });
+
+  it("accepts generate with an optional host root and currency check", () => {
+    expect(parseArguments(["generate"])).toEqual({ command: "generate", options: {} });
+    expect(parseArguments(["generate", "--root", "host/..", "--check"]))
+      .toEqual({ command: "generate", options: { workspaceRoot: resolve("host/.."), check: true } });
+    expect(parseArguments(["generate", "--check", "--check"]))
+      .toEqual({ command: "generate", options: { check: true } });
+    expect(parseArguments(["generate", "--from", "project.json"])).toEqual({ error: 'Unknown generate option "--from".' });
+  });
+
+  it("reads build-site paths relative to the caller and allows verification with route printing", () => {
+    expect(parseArguments(["build-site"])).toEqual({ command: "build-site", options: {} });
+    expect(parseArguments(["build-site", "--root", "host/..", "--print-routes", "--verify", "artifact"]))
+      .toEqual({ command: "build-site", options: { workspaceRoot: resolve("host/.."), printRoutes: true, verifyDirectory: resolve("artifact") } });
+  });
+
+  it("rejects build-site flags with missing paths, dev-only flags and positional arguments", () => {
+    for (const argv of [["--root"], ["--root", "--print-routes"], ["--root", ""]]) {
+      expect(parseArguments(["build-site", ...argv])).toEqual({ error: "--root requires a directory." });
+    }
+    for (const argv of [["--verify"], ["--verify", "--print-routes"], ["--verify", ""]]) {
+      expect(parseArguments(["build-site", ...argv])).toEqual({ error: "--verify requires a directory." });
+    }
+    for (const argv of [["--source-revision"], ["--source-revision", "--print-routes"], ["--source-revision", ""], ["--source-revision", "  "]]) {
+      expect(parseArguments(["build-site", ...argv])).toEqual({ error: "--source-revision requires a nonempty revision." });
+    }
+    for (const flag of ["--port", "--host", "--strict-port", "host-dir"]) {
+      expect(parseArguments(["build-site", flag])).toEqual({ error: `Unknown build-site option "${flag}".` });
+    }
+  });
+
+  it("preserves an explicit host revision verbatim and keeps the option scoped to build-site", () => {
+    const sourceRevision = "release:2026-09-13/candidate-2";
+    expect(parseArguments(["build-site", "--source-revision", sourceRevision])).toEqual({ command: "build-site", options: { sourceRevision } });
+    expect(parseArguments(["dev", "--source-revision", sourceRevision])).toEqual({ error: 'Unknown dev option "--source-revision".' });
   });
 
   it("reads the dev options", () => {
@@ -65,9 +125,100 @@ describe("parseArguments", () => {
   it("forwards every argument after `release` untouched", () => {
     expect(parseArguments(["release", "--anything", "-h"])).toEqual({ command: "release", rest: ["--anything", "-h"] });
   });
+
+  it("accepts a manifest relative to the host, or JSON stdin, with scoped asset options", () => {
+    expect(parseArguments(["assets", "import"])).toEqual({ command: "assets-import", options: {} });
+    expect(parseArguments(["assets", "import", "images-src/manifest.json", "--root", "host"]))
+      .toEqual({ command: "assets-import", options: { manifest: "images-src/manifest.json", workspaceRoot: resolve("host") } });
+    for (const argv of [["assets", "--help"], ["assets", "import", "-h"]]) expect(parseArguments(argv)).toEqual({ command: "help" });
+    for (const argv of [["assets"], ["assets", "list"]]) expect(parseArguments(argv)).toEqual({ error: 'assets requires the "import" subcommand.' });
+    expect(parseArguments(["assets", "import", "--root"])).toEqual({ error: "--root requires a directory." });
+    expect(parseArguments(["assets", "import", "a.json", "b.json"])).toEqual({ error: "assets import accepts one manifest path." });
+    expect(parseArguments(["assets", "import", "  "])).toEqual({ error: "assets import requires a nonempty manifest path." });
+    expect(parseArguments(["assets", "import", "--verify"])).toEqual({ error: 'Unknown assets import option "--verify".' });
+  });
 });
 
 describe("runComposerCli", () => {
+  it("supervises creation with a normalized target and paired packed dependencies", async () => {
+    const proc = fakeProcess(), child = fakeChild(), spawn = vi.fn(() => child);
+    await runComposerCli(["init", "host with spaces", "--name", "@team/site", "--tool-tarball", "tool.tgz", "--contract-tarball", "contract.tgz"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [INIT_ENTRY_PATH, resolve("host with spaces"), "--name", "@team/site", "--tool-tarball", resolve("tool.tgz"), "--contract-tarball", resolve("contract.tgz")], { stdio: "inherit" });
+    proc.emitter.emit("SIGINT");
+    expect(child.kill).toHaveBeenCalledWith("SIGINT");
+  });
+
+  it("reports a missing creator entry before launching a partial installation", async () => {
+    const proc = fakeProcess(), spawn = vi.fn();
+    await runComposerCli(["init", "new-host"], { proc, spawn: spawn as never, exists: () => false });
+    expect(proc.err.join("")).toContain(INIT_ENTRY_PATH);
+    expect(proc.exits).toEqual([1]);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("documents seed and the build-site artifact modes in the exact usage text", () => {
+    expect(USAGE).toBe(`Usage: zudo-composer <command> [options]
+
+Commands:
+  init <dir>  Create a populated host in a new directory.
+  dev         Start the authoring dev server, rooted at the current project.
+  release     Run the SiteProject release API (one JSON request on stdin, one
+              canonical JSON response on stdout).
+  build-site  Build and verify the host's static website in dist-site.
+  assets import [manifest]
+              Import a host asset manifest, or read { "manifest": "path" } on
+              stdin; write one canonical JSON response on stdout.
+  generate    Generate site-project.json from site-project.ts.
+  seed        Publish and activate a committed SiteProject; print its release
+              identity and status (activated or unchanged) as JSON.
+
+init options:
+  --name <name>   Lowercase npm package name (default: directory basename).
+  --tool-tarball <file> --contract-tarball <file>
+                  Preview unpublished matching packages using temporary,
+                  isolated overrides. Both archives are required together.
+                  Creation runs install, generate, assets import and the ready
+                  workspace producer; it never upgrades an existing project.
+
+dev options:
+  --root <dir>     Host project root (default: the current directory).
+  --port <number>  Port to listen on (0 picks a free one).
+  --host [addr]    Expose the server; bare --host listens on all addresses.
+  --strict-port    Fail instead of moving to the next free port.
+
+seed options:
+  --root <dir>     Host project root (default: the current directory).
+  --from <file>    Committed project JSON (relative to cwd; default:
+                  site-project.json under the host project root).
+  --ready-workspace
+                  Produce a selected, complete, reproducible CMS workspace.
+                  Uses a disposable release; no host activation is needed.
+                  Identical output is unchanged; different existing state fails.
+  --output <dir>  With --ready-workspace, use this fresh output tree (relative
+                  to cwd), preserving the host's configured relative layout.
+                  Print release identity, status, directories and file digests.
+
+build-site options:
+  --root <dir>     Host project root (default: the current directory).
+  --print-routes   Verify an existing artifact and print its routes as JSON.
+  --verify <dir>   Verify this artifact instead of building (relative to cwd).
+                  Combine with --print-routes to print this artifact's routes.
+  --source-revision <revision>
+                  Host revision to record or verify exactly (default: GITHUB_SHA
+                  when nonempty; omitted otherwise).
+
+assets import options:
+  --root <dir>     Host project root (default: the current directory).
+  <manifest>      JSON manifest path, relative to the host root or absolute.
+                  Files are relative to the manifest directory. The resolved
+                  host config selects the asset store; reruns preserve edits.
+
+generate options:
+  --root <dir>     Host project root (default: the current directory).
+  --check          Verify site-project.json is current without writing it.
+`);
+  });
+
   it("prints usage on stdout, and usage plus the reason on stderr for a bad command", async () => {
     const help = fakeProcess();
     await runComposerCli([], { proc: help });
@@ -87,6 +238,114 @@ describe("runComposerCli", () => {
     const spawn = vi.fn(() => child);
     await runComposerCli(["release", "--flag"], { proc, spawn: spawn as never, exists: () => true });
     expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [RELEASE_ENTRY_PATH, "--flag"], { stdio: "inherit" });
+  });
+
+  it("supervises the build-site child and passes normalized explicit paths", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    const sourceRevision = "a".repeat(40);
+    await runComposerCli(["build-site", "--root", "host", "--verify", "artifact", "--print-routes", "--source-revision", sourceRevision], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [BUILD_SITE_ENTRY_PATH, "--root", resolve("host"), "--print-routes", "--verify", resolve("artifact"), "--source-revision", sourceRevision], { stdio: "inherit" });
+    proc.emitter.emit("SIGTERM");
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    child.emit("exit", 7, null);
+    expect(proc.exits).toEqual([7]);
+  });
+
+  it("supervises asset import and preserves the manifest path for resolution by the host", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    await runComposerCli(["assets", "import", "images-src/manifest.json", "--root", "host"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [ASSETS_IMPORT_ENTRY_PATH, "images-src/manifest.json", "--root", resolve("host")], { stdio: "inherit" });
+    proc.emitter.emit("SIGINT");
+    expect(child.kill).toHaveBeenCalledWith("SIGINT");
+    child.emit("exit", 2, null);
+    expect(proc.exits).toEqual([2]);
+  });
+
+  it("inherits JSON stdin for assets import and fails a partial install before spawn", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    await runComposerCli(["assets", "import"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [ASSETS_IMPORT_ENTRY_PATH], { stdio: "inherit" });
+    spawn.mockClear();
+    await runComposerCli(["assets", "import"], { proc, spawn: spawn as never, exists: () => false });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(proc.err.join("")).toContain(ASSETS_IMPORT_ENTRY_PATH);
+    expect(proc.exits).toEqual([1]);
+  });
+
+  it("supervises seed and forwards normalized host/source paths and the failure exit status", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    await runComposerCli(["seed", "--root", "host with spaces", "--from", "project.json"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [SEED_ENTRY_PATH, "--root", resolve("host with spaces"), "--from", resolve("project.json")], { stdio: "inherit" });
+    proc.emitter.emit("SIGTERM");
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    child.emit("exit", 1, null);
+    expect(proc.exits).toEqual([1]);
+  });
+
+  it("forwards ready generation and fresh output through the supervised seed child", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    await runComposerCli(["seed", "--ready-workspace", "--output", "fresh tree"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [SEED_ENTRY_PATH, "--ready-workspace", "--output", resolve("fresh tree")], { stdio: "inherit" });
+  });
+
+  it("supervises generate and forwards the host root and check flag", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    await runComposerCli(["generate", "--root", "host with spaces", "--check"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [GENERATE_ENTRY_PATH, "--root", resolve("host with spaces"), "--check"], { stdio: "inherit" });
+    proc.emitter.emit("SIGTERM");
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    child.emit("exit", 1, null);
+    expect(proc.exits).toEqual([1]);
+  });
+
+  it("refuses a missing generate entry and rejects invalid generate flags before spawning", async () => {
+    const proc = fakeProcess();
+    const spawn = vi.fn();
+    await runComposerCli(["generate"], { proc, spawn: spawn as never, exists: () => false });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(proc.err.join("")).toContain(GENERATE_ENTRY_PATH);
+    expect(proc.exits).toEqual([1]);
+    const bad = fakeProcess();
+    await runComposerCli(["generate", "--from", "project.json"], { proc: bad, spawn: spawn as never });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(bad.exitCode).toBe(1);
+  });
+
+  it("refuses a missing seed entry and rejects invalid seed flags before spawning", async () => {
+    const proc = fakeProcess();
+    const spawn = vi.fn();
+    await runComposerCli(["seed"], { proc, spawn: spawn as never, exists: () => false });
+    expect(proc.err.join("")).toContain(SEED_ENTRY_PATH);
+    expect(proc.exits).toEqual([1]);
+    const bad = fakeProcess();
+    await runComposerCli(["seed", "--from"], { proc: bad, spawn: spawn as never });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(bad.exitCode).toBe(1);
+  });
+
+  it("does not start a missing builder or spawn for an invalid build-site option", async () => {
+    const proc = fakeProcess();
+    const spawn = vi.fn();
+    await runComposerCli(["build-site"], { proc, spawn: spawn as never, exists: () => false });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(proc.err.join("")).toContain(BUILD_SITE_ENTRY_PATH);
+    expect(proc.exits).toEqual([1]);
+    const bad = fakeProcess();
+    await runComposerCli(["build-site", "--verify"], { proc: bad, spawn: spawn as never });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(bad.exitCode).toBe(1);
   });
 
   it("names the resolved absolute path when the package file is missing, and spawns nothing", async () => {

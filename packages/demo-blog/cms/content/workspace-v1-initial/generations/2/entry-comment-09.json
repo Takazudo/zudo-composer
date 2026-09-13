@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "comment-09",
+  "lifecycle": "published",
+  "modelId": "comments",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "comments-article": {
+      "modelId": "articles",
+      "providerId": "content-filesystem",
+      "recordId": "article-the-quiet-hour"
+    },
+    "comments-article-slug": "the-quiet-hour",
+    "comments-body": "Mine is twenty minutes on the balcony after the kids are asleep. Same rules, same effect.",
+    "comments-date": "2026-05-21",
+    "comments-name": "Lucia",
+    "comments-order": 9
+  }
+}

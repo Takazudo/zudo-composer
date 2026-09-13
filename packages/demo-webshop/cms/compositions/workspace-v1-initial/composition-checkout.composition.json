@@ -1,0 +1,74 @@
+{
+  "id": "checkout",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "checkout",
+    "name": "Checkout",
+    "root": [
+      {
+        "componentId": "shop.section-heading",
+        "componentVersion": 1,
+        "id": "checkout-shop-section-heading-1",
+        "props": {
+          "as": "h1",
+          "eyebrow": "",
+          "heading": "Checkout",
+          "intro": ""
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.split",
+        "componentVersion": 1,
+        "id": "checkout-shop-split-2",
+        "props": {
+          "ratio": "3/2"
+        },
+        "slots": {
+          "left": [
+            {
+              "componentId": "shop.checkout-form",
+              "componentVersion": 1,
+              "id": "checkout-shop-checkout-form-3",
+              "props": {
+                "heading": "Shipping and payment",
+                "successHeading": "Order placed",
+                "successText": "Thank you. Nothing was charged and nothing will ship — this is a demo."
+              },
+              "slots": {}
+            }
+          ],
+          "right": [
+            {
+              "componentId": "shop.cart-summary",
+              "componentVersion": 1,
+              "id": "checkout-shop-cart-summary-4",
+              "props": {
+                "checkoutHref": "/checkout",
+                "currency": "USD",
+                "readOnly": true,
+                "shipping": 8
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "shop.demo-note",
+        "componentVersion": 1,
+        "id": "checkout-shop-demo-note-5",
+        "props": {
+          "text": "Demo — no data is sent."
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

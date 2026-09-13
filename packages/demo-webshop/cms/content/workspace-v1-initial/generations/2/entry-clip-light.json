@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "clip-light",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "sold-out",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "light"
+    },
+    "products-currency": "USD",
+    "products-description": "A reading light that clips to a book cover, a shelf or the edge of a bunk and bends its neck to where the page is. The warm 2700 K light is dimmable in three steps and never glares off paper.\n\nThe clip is lined with soft silicone so it will not mark a cover. It charges over USB-C and lasts twenty evenings of an hour each.\n\nThis batch is gone. We are waiting on new clips that grip thicker shelves.",
+    "products-featured": false,
+    "products-image1": {
+      "products-image1-alt": "Small black clip-on reading light",
+      "products-image1-src": "/uploaded-assets/asset-assets-98de0939-961d-42d1-b195-dac35fc4586b"
+    },
+    "products-name": "Clip Reading Light",
+    "products-price": 34,
+    "products-slug": "clip-light",
+    "products-spec": {
+      "products-spec-care": "Wipe clean; avoid bending the neck past 90°",
+      "products-spec-dimensions": "Clip 45 mm; neck 220 mm",
+      "products-spec-material": "ABS body; silicone-lined clip; steel gooseneck",
+      "products-spec-origin": "Assembled in Dongguan, China",
+      "products-spec-warranty": "One year",
+      "products-spec-weight": "68 g"
+    },
+    "products-stock-label": "Ships in 2 weeks",
+    "products-subtitle": "A small clip-on light with a flexible neck for books and bunks.",
+    "products-tag1": "reading",
+    "products-tag2": "lamp",
+    "products-tag3": "travel",
+    "products-tags": [
+      "reading",
+      "lamp",
+      "travel"
+    ]
+  }
+}

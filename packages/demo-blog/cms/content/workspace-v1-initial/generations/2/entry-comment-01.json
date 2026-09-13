@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "comment-01",
+  "lifecycle": "published",
+  "modelId": "comments",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "comments-article": {
+      "modelId": "articles",
+      "providerId": "content-filesystem",
+      "recordId": "article-the-half-finished-list"
+    },
+    "comments-article-slug": "the-half-finished-list",
+    "comments-body": "Asking \"why is this still here?\" instead of counting what got done is such a small change. I tried it last night and found three items that were never mine to do.",
+    "comments-date": "2026-03-05",
+    "comments-name": "Hana",
+    "comments-order": 1
+  }
+}

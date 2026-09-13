@@ -1,0 +1,23 @@
+{
+  "name": "demo-studio",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sample Studio: a host project authored with zudo-composer and the installed @zudo-sg/ui themeset.",
+  "scripts": {
+    "dev": "zudo-composer dev",
+    "generate": "zudo-composer generate",
+    "seed": "zudo-composer assets import images-src/manifest.json && zudo-composer seed",
+    "build:site": "zudo-composer build-site",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "@zudo-composer/component-contract": "workspace:*",
+    "@zudo-sg/ui": "git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf",
+    "preact": "^10.29.8",
+    "preact-render-to-string": "^6.6.6",
+    "vitest": "^4.1.11",
+    "zudo-composer": "workspace:*"
+  }
+}

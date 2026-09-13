@@ -1,0 +1,19 @@
+{
+  "id": "product-card",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "product-card",
+    "name": "Product card",
+    "root": [
+      {
+        "componentId": "shop.product-card",
+        "componentVersion": 1,
+        "id": "card",
+        "props": {},
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

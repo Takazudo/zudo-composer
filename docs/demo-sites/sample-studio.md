@@ -1,7 +1,8 @@
 # Sample Studio polish
 
-The existing sample SiteProject (`src/test/site-project-fixture.json`,
-mirrored by `src/hosted-demo/sample-project.json`) served at `/site/*` and on
+The sample SiteProject is authored in `packages/demo-studio/site-project.ts`
+and generated into that host's sole `site-project.json`. Tests and the hosted
+demo consume this same JSON for the sample served at `/site/*` and on
 `zudo-composer.zudolab.dev`. This document says what to improve and within
 which walls; task #497 implements it.
 

@@ -1,0 +1,125 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "testimonial-quote-quote",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "testimonials-quote",
+        "target": {
+          "nodeId": "testimonial",
+          "prop": "quote"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "testimonial-name-name",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "testimonials-name",
+        "target": {
+          "nodeId": "testimonial",
+          "prop": "name"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "testimonial-role-role",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "testimonials-role",
+        "target": {
+          "nodeId": "testimonial",
+          "prop": "role"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "testimonial-avatar-src",
+        "projection": {
+          "fieldIds": [
+            "testimonials-avatar-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "testimonials-avatar",
+        "target": {
+          "nodeId": "testimonial",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "testimonial-avatar-alt",
+        "projection": {
+          "fieldIds": [
+            "testimonials-avatar-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "testimonials-avatar",
+        "target": {
+          "nodeId": "testimonial",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "testimonial-order-order",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "testimonials-order",
+        "target": {
+          "nodeId": "testimonial",
+          "prop": "order"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "testimonial"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "testimonials"
+    },
+    "id": "testimonial",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "asc",
+            "fieldId": "testimonials-order"
+          }
+        ]
+      }
+    },
+    "name": "Testimonial",
+    "schemaVersion": 2
+  },
+  "id": "testimonial",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

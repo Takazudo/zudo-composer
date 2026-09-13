@@ -1,0 +1,49 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "wick-lamp",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "in-stock",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "light"
+    },
+    "products-currency": "USD",
+    "products-description": "A small table lamp spun from brass with a hand-blown glass chimney. It burns lamp oil through a flat cotton wick and gives about the light of two candles, steady and warm, for eight hours on one filling.\n\nA thumbwheel raises and lowers the wick, so you can turn it down to a glow at the end of the evening. The wide base will not tip on a desk.\n\nIt is the lamp in the photograph at the top of this shop, and the one we work by after dark.",
+    "products-featured": true,
+    "products-image1": {
+      "products-image1-alt": "Small lit brass oil lamp with a glass chimney",
+      "products-image1-src": "/uploaded-assets/asset-assets-7e6a524b-3b9a-4f89-a763-6949cd5c84bc"
+    },
+    "products-image2": {
+      "products-image2-alt": "The brass lamp unlit with its chimney set beside it",
+      "products-image2-src": "/uploaded-assets/asset-assets-14a1881b-90d9-4abc-9589-e887be624154"
+    },
+    "products-name": "Wick Lamp",
+    "products-price": 148,
+    "products-slug": "wick-lamp",
+    "products-spec": {
+      "products-spec-care": "Trim the wick flat; burn only clear lamp oil",
+      "products-spec-dimensions": "110 mm base, 240 mm tall with chimney",
+      "products-spec-material": "Spun brass; borosilicate glass chimney; cotton wick",
+      "products-spec-origin": "Spun in Moradabad, India",
+      "products-spec-warranty": "Three years; chimneys replaced at cost",
+      "products-spec-weight": "610 g"
+    },
+    "products-stock-label": "In stock",
+    "products-subtitle": "A small brass oil lamp with a glass chimney and a steady flame.",
+    "products-tag1": "brass",
+    "products-tag2": "lamp",
+    "products-tag3": "oil",
+    "products-tags": [
+      "brass",
+      "lamp",
+      "oil"
+    ]
+  }
+}

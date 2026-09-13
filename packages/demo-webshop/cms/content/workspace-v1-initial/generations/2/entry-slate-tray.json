@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "slate-tray",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "in-stock",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "desk"
+    },
+    "products-currency": "USD",
+    "products-description": "Cut from a single piece of dark Welsh slate and honed to a soft matte face, this tray gives paper clips, keys and a watch somewhere to live that is not the middle of your desk.\n\nThe floor is sunk 8 mm, just enough to stop things rolling off, and the underside carries four cork feet so the stone never scratches wood.\n\nNo two trays are quite the same colour. Some carry a faint grey seam through the stone, which we consider a feature.",
+    "products-featured": false,
+    "products-image1": {
+      "products-image1-alt": "Shallow dark slate desk tray holding two paper clips",
+      "products-image1-src": "/uploaded-assets/asset-assets-84599af4-0d54-4bbb-bae1-a4c74ccea928"
+    },
+    "products-name": "Slate Desk Tray",
+    "products-price": 56,
+    "products-slug": "slate-tray",
+    "products-spec": {
+      "products-spec-care": "Wipe with a damp cloth; a drop of oil deepens the colour",
+      "products-spec-dimensions": "240 × 120 × 18 mm",
+      "products-spec-material": "Honed Welsh slate; cork feet",
+      "products-spec-origin": "Cut in Blaenau Ffestiniog, Wales",
+      "products-spec-warranty": "Replaced if it arrives chipped",
+      "products-spec-weight": "820 g"
+    },
+    "products-stock-label": "In stock",
+    "products-subtitle": "A shallow tray of honed slate for the small things on a desk.",
+    "products-tag1": "stone",
+    "products-tag2": "storage",
+    "products-tag3": "tray",
+    "products-tags": [
+      "stone",
+      "storage",
+      "tray"
+    ]
+  }
+}

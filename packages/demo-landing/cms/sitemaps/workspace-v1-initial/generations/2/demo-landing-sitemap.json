@@ -1,0 +1,171 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "demo-landing-sitemap",
+    "name": "Demo Landing sitemap",
+    "navigation": {
+      "footer": [
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "features-node"
+          },
+          "id": "nav-features-node",
+          "label": "Features",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "pricing-node"
+          },
+          "id": "nav-pricing-node",
+          "label": "Pricing",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "about-node"
+          },
+          "id": "nav-about-node",
+          "label": "About",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "privacy-node"
+          },
+          "id": "nav-privacy-node",
+          "label": "Privacy",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "terms-node"
+          },
+          "id": "nav-terms-node",
+          "label": "Terms",
+          "visible": true
+        }
+      ],
+      "primary": [
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "features-node"
+          },
+          "id": "nav-features-node",
+          "label": "Features",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "pricing-node"
+          },
+          "id": "nav-pricing-node",
+          "label": "Pricing",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "about-node"
+          },
+          "id": "nav-about-node",
+          "label": "About",
+          "visible": true
+        }
+      ]
+    },
+    "root": [
+      {
+        "children": [
+          {
+            "children": [],
+            "id": "features-node",
+            "slug": "features",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "features"
+              }
+            },
+            "title": "Features"
+          },
+          {
+            "children": [],
+            "id": "pricing-node",
+            "slug": "pricing",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "pricing"
+              }
+            },
+            "title": "Pricing"
+          },
+          {
+            "children": [],
+            "id": "about-node",
+            "slug": "about",
+            "source": {
+              "kind": "mapping",
+              "ref": {
+                "providerId": "mapping-filesystem",
+                "recordId": "about-page"
+              },
+              "route": {
+                "kind": "single"
+              }
+            },
+            "title": "About"
+          },
+          {
+            "children": [],
+            "id": "privacy-node",
+            "slug": "privacy",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "privacy"
+              }
+            },
+            "title": "Privacy"
+          },
+          {
+            "children": [],
+            "id": "terms-node",
+            "slug": "terms",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "terms"
+              }
+            },
+            "title": "Terms"
+          }
+        ],
+        "id": "home-node",
+        "source": {
+          "kind": "composition",
+          "ref": {
+            "providerId": "files",
+            "recordId": "home"
+          }
+        },
+        "title": "Home"
+      }
+    ],
+    "schemaVersion": 3
+  },
+  "id": "demo-landing-sitemap",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

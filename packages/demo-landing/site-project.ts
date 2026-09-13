@@ -1,9 +1,11 @@
-// The authored Orrery site (docs/demo-sites/landing.md). `pnpm generate` turns
-// this into `site-project.json`; the tests fail when the two disagree.
-import { defineSite, node, type JsonObject, type Page } from "demo-tools";
+// The authored Orrery site (docs/demo-sites/landing.md). `zudo-composer generate` turns
+// this into `site-project.json`; `zudo-composer generate --check` reports when
+// the committed output disagrees.
+import { defineSite, node } from "zudo-composer/authoring";
+import type { JsonObject, Page, SiteProject } from "zudo-composer/site-project";
 import { componentPack } from "./components/pack";
 
-const site = defineSite({ id: "demo-landing", name: "Orrery", componentPack });
+const site = defineSite({ id: "demo-landing", name: "Orrery", componentPack }) satisfies { toSiteProject(): SiteProject };
 
 // Asset record ids in this package's committed cms/assets store (`pnpm seed`).
 const asset = (id: string) => `/uploaded-assets/asset-${id}`;

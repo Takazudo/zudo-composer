@@ -1,0 +1,196 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "article-cards-related-title-title",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-title",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "title"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-cards-related-slug-href",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-slug",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "href"
+        },
+        "transform": {
+          "kind": "prefix",
+          "prefix": "/articles/"
+        }
+      },
+      {
+        "id": "article-cards-related-slug-slug",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-slug",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "slug"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-cards-related-intro-intro",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-intro",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "intro"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-cards-related-date-date",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-date",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "date"
+        },
+        "transform": {
+          "kind": "date-medium"
+        }
+      },
+      {
+        "id": "article-cards-related-cover-src",
+        "projection": {
+          "fieldIds": [
+            "articles-cover-src"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "articles-cover",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "src"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-cards-related-cover-alt",
+        "projection": {
+          "fieldIds": [
+            "articles-cover-alt"
+          ],
+          "kind": "object-field"
+        },
+        "sourceFieldId": "articles-cover",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "alt"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-cards-related-tag1-tag1",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-tag1",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "tag1"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-cards-related-tag2-tag2",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-tag2",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "tag2"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-cards-related-tag3-tag3",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-tag3",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "tag3"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-cards-related-authorslug-authorslug",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "articles-author-slug",
+        "target": {
+          "nodeId": "article-card",
+          "prop": "authorSlug"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "article-card"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "articles"
+    },
+    "id": "article-cards-related",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 4,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "desc",
+            "fieldId": "articles-date"
+          }
+        ]
+      }
+    },
+    "name": "Article cards related",
+    "schemaVersion": 2
+  },
+  "id": "article-cards-related",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

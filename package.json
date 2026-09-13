@@ -25,6 +25,17 @@
       "types": "./plugins/index.d.mts",
       "default": "./plugins/index.mjs"
     },
+    "./authoring": {
+      "types": "./server/authoring.d.mts",
+      "default": "./server/authoring.mjs"
+    },
+    "./site-build": {
+      "types": "./server/site-build.d.mts",
+      "default": "./server/site-build.mjs"
+    },
+    "./site-project": {
+      "types": "./server/site-project.d.mts"
+    },
     "./styles": "./src/style.css",
     "./package.json": "./package.json"
   },
@@ -35,11 +46,7 @@
     "plugins",
     "server",
     "src",
-    "packages/component-contract/src/fixtures.ts",
-    "packages/component-contract/src/index.ts",
-    "packages/component-contract/src/runtime.ts",
-    "packages/component-contract/src/types.ts",
-    "packages/component-contract/src/validation.ts",
+    "templates/host",
     "packages/image-editor/src/core/encode.ts",
     "packages/image-editor/src/core/geometry.ts",
     "packages/image-editor/src/core/history.ts",
@@ -63,13 +70,14 @@
     "packages/image-editor/src/worker/worker.ts",
     "!**/__tests__",
     "!**/type-tests",
+    "!**/test-support",
     "!**/*.test.*",
     "!src/test",
-    "!src/hosted-demo",
-    "!src/site-static"
+    "!src/hosted-demo"
   ],
   "engines": {
-    "node": "^22.13.0 || >=24.0.0"
+    "node": "^22.13.0 || >=24.0.0",
+    "pnpm": "11.5.2"
   },
   "scripts": {
     "dev": "vite",
@@ -77,13 +85,19 @@
     "demo:images": "node scripts/demo/optimise-images.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false",
+    "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false && pnpm typecheck:public",
+    "typecheck:public": "tsc -p tsconfig.public-types.json --pretty false && node scripts/check-public-types.mjs",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json --pretty false",
     "test": "vitest run",
-    "check": "pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm provider:boundary && pnpm test && pnpm build && pnpm dist:boundary",
+    "check": "pnpm no-deploy:check && pnpm public:check && pnpm studio:check && pnpm cms:check && pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm consumer:boundary && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm provider:boundary && pnpm test && pnpm build && pnpm dist:boundary && pnpm smoke:host-install",
+    "studio:check": "node scripts/check-studio-sample.mjs",
+    "cms:check": "tsx scripts/cms-fixtures.ts --check",
+    "cms:regenerate": "tsx scripts/cms-fixtures.ts --regenerate",
     "headless:negative-scan": "node scripts/check-headless-boundary.mjs",
     "contract:conformance": "node scripts/check-package-conformance.mjs",
     "contract:negative-scan": "node scripts/check-contract-boundary.mjs",
+    "consumer:boundary": "node scripts/check-consumer-boundary.mjs && node scripts/check-creator.mjs",
+    "creator:check": "node scripts/check-creator.mjs",
     "contract:external-install": "node scripts/verify-contract-install.mjs",
     "site-project:boundary": "node scripts/check-site-project-boundary.mjs",
     "provider:boundary": "node scripts/check-provider-boundary.mjs",
@@ -93,21 +107,28 @@
     "site-project:api": "tsx server/site-project-local/cli.ts",
     "site-project:check": "vitest run server/site-project-local plugins/__tests__/site-project-source-plugin.test.ts",
     "smoke:host-install": "node scripts/smoke-host-install.mjs",
+    "packed-host:matrix": "node scripts/packed-host-matrix.mjs",
+    "no-deploy:check": "node scripts/check-no-deploy.mjs",
     "test:browser:host": "node scripts/run-host-browser.mjs",
     "test:browser:dev": "node scripts/run-dev-browser.mjs",
     "test:browser:site-project": "node scripts/run-site-project-browser.mjs",
     "test:browser:hosted-demo": "node scripts/run-hosted-demo-browser.mjs",
     "test:browser:demos": "node scripts/run-demos-browser.mjs",
-    "build:hosted-demo": "vite build --config vite.hosted-demo.config.ts && node scripts/check-hosted-demo.mjs",
+    "build:hosted-demo": "pnpm studio:check && vite build --config vite.hosted-demo.config.ts && node scripts/check-hosted-demo.mjs",
     "hosted-demo:verify": "node scripts/check-hosted-demo.mjs",
     "hosted-demo:live-check": "node scripts/hosted-demo/live-check.mjs",
     "hosted-demo:workflow-guard": "node scripts/hosted-demo/workflow-guard.mjs",
     "hosted-demo:deploy": "node scripts/hosted-demo/deploy.mjs",
+    "demo:build-sites": "node scripts/build-demo-sites.mjs",
     "demo:build-site": "node scripts/build-site-static.mjs",
-    "site-static:verify": "node scripts/check-site-static.mjs"
+    "site-static:verify": "node scripts/check-site-static.mjs",
+    "build:public": "node scripts/build-public-entries.mjs",
+    "public:check": "node scripts/build-public-entries.mjs --check",
+    "public:installed": "node scripts/verify-public-install.mjs"
   },
   "peerDependencies": {
-    "@zudo-composer/component-contract": "1.0.0"
+    "@zudo-composer/component-contract": "^1.0.0",
+    "preact": "^10.29.8"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.0",
@@ -118,8 +139,6 @@
     "@lezer/highlight": "^1.2.3",
     "@preact/preset-vite": "^2.10.6",
     "@tailwindcss/vite": "^4.3.3",
-    "@zudo-sg/ui": "git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf",
-    "preact": "^10.29.8",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.2",
     "zod": "^4.0.0"
@@ -134,14 +153,19 @@
     "@zudo-composer/component-contract": "workspace:*",
     "@zudo-composer/fixture-themeset": "workspace:*",
     "@zudo-composer/image-editor": "workspace:*",
+    "@zudo-sg/ui": "git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf",
     "eslint": "^10.9.1",
     "jsdom": "^29.1.1",
+    "preact": "^10.29.8",
     "preact-render-to-string": "^6.6.6",
+    "rollup": "4.63.1",
+    "rollup-plugin-dts": "6.5.1",
     "sharp": "^0.35.4",
     "tsx": "^4.20.5",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11",
-    "wrangler": "4.130.0"
+    "wrangler": "4.130.0",
+    "yaml": "2.8.1"
   }
 }

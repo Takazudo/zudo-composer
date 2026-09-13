@@ -60,8 +60,11 @@ describe("host and tool CSS ownership", () => {
     const tokens = readFileSync(resolve("src/styles/app-tokens.css"), "utf8");
     expect(tokens).not.toMatch(/@import|--zd-|--palette-|syntax-highlight|prose-md/);
     const vite = readFileSync(resolve("vite.config.ts"), "utf8");
-    expect(vite).toContain("import tailwindcss from '@tailwindcss/vite'");
-    expect(vite).toContain("tailwindcss()");
+    expect(vite).toContain("import tailwindPlugin from './plugins/tailwind-plugin.mjs'");
+    expect(vite).toContain("tailwindPlugin()");
+    const tailwind = readFileSync(resolve("plugins/tailwind-plugin.mjs"), "utf8");
+    expect(tailwind).toContain('import tailwindcss from "@tailwindcss/vite"');
+    expect(tailwind).toContain("...tailwindcss()");
     const sitemapperTokens = readFileSync(resolve("src/features/sitemapper/styles/tokens.css"), "utf8");
     expect(sitemapperTokens).not.toContain("color-scheme:");
     for (const providerToken of [

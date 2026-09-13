@@ -1,0 +1,41 @@
+{
+  "id": "catalog",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "catalog",
+    "name": "Catalog",
+    "root": [
+      {
+        "componentId": "shop.section-heading",
+        "componentVersion": 1,
+        "id": "catalog-shop-section-heading-1",
+        "props": {
+          "as": "h1",
+          "eyebrow": "Nightjar Supply",
+          "heading": "All products",
+          "intro": "Twelve objects for quiet work. Filter by shelf, sort by price or search by name."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.product-grid",
+        "componentVersion": 1,
+        "id": "catalog",
+        "props": {
+          "chips": true,
+          "defaultSort": "featured",
+          "emptyText": "No products match. Try another shelf or a shorter search.",
+          "pageSize": 8,
+          "toolbar": true
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

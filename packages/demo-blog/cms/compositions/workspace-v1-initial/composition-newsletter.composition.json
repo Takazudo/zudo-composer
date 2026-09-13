@@ -1,0 +1,58 @@
+{
+  "id": "newsletter",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "newsletter",
+    "name": "Newsletter",
+    "root": [
+      {
+        "componentId": "blog.page-heading",
+        "componentVersion": 1,
+        "id": "newsletter-heading",
+        "props": {
+          "eyebrow": "Newsletter",
+          "heading": "The Sunday note",
+          "intro": "One short letter a week, on Sunday morning."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.prose-body",
+        "componentVersion": 1,
+        "id": "newsletter-body",
+        "props": {
+          "dropCap": false,
+          "markdown": "Each Sunday the note brings the newest essay, one passage from a book we are reading slowly, and one small thing to try in the week ahead. It is short enough to read with the first cup of tea.\n\nThere is no tracking, no sponsor and no second email. If a week has nothing worth sending, nothing is sent."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.newsletter",
+        "componentVersion": 1,
+        "id": "newsletter-form",
+        "props": {
+          "buttonLabel": "Subscribe",
+          "heading": "The Sunday note",
+          "lead": "One short letter a week with the newest essay and one thing worth reading slowly. Nothing else.",
+          "successText": "Subscribed locally — this demo keeps nothing."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.demo-note",
+        "componentVersion": 1,
+        "id": "newsletter-demo-note",
+        "props": {
+          "text": "Demo — no data is sent."
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

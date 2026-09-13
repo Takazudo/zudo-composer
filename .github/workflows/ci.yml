@@ -27,7 +27,15 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # Unit tests include an actual isolated package-install regression too.
+      - name: Expose pnpm to isolated hosts
+        run: node scripts/prepare-packed-pnpm.mjs
       - run: pnpm install --frozen-lockfile
+      - run: pnpm no-deploy:check
+      - run: pnpm public:check
+      - run: pnpm studio:check
+      - run: pnpm cms:check
+      - run: pnpm consumer:boundary
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm headless:negative-scan
@@ -46,8 +54,9 @@ jobs:
       - run: pnpm test:browser:dev
         env:
           CI: true
+      # Browser lanes verify these artifacts and never rebuild them.
+      - run: pnpm demo:build-sites
       - run: pnpm test:browser:site-project
-      - run: pnpm smoke:host-install
       - run: pnpm build:hosted-demo
       - run: pnpm hosted-demo:verify dist-hosted-demo "${{ github.sha }}"
       # This lane consumes the already-built artifact; it must stay after the
@@ -73,6 +82,56 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  packed-host-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      matrix: ${{ steps.hosts.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm no-deploy:check
+      - id: hosts
+        run: node scripts/packed-host-matrix.mjs --github-output
+
+  packed-host-install:
+    needs: packed-host-matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      # Disk discovery includes studio and any later configured package. The
+      # creator and existing synthesized proof receive their own jobs too.
+      matrix: ${{ fromJSON(needs.packed-host-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      # The isolated host PATH excludes node_modules, including action-setup's
+      # own bin directory. Expose only its pnpm executable through a clean shim.
+      - name: Expose pnpm to isolated hosts
+        run: node scripts/prepare-packed-pnpm.mjs
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm no-deploy:check
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm smoke:host-install -- --host "$PACKED_HOST"
+        env:
+          PACKED_HOST: ${{ matrix.host }}
+
   demo-sites-build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -93,6 +152,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # demo:build-site both builds and verifies the manifest (scripts/build-site-static.mjs).
       - run: pnpm demo:build-site ${{ matrix.site }}
+      - run: pnpm site-static:verify "packages/demo-${{ matrix.site }}/dist-site" "${{ github.sha }}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: demo-site-${{ matrix.site }}-${{ github.sha }}

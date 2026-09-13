@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "rain-cape",
+  "lifecycle": "published",
+  "modelId": "products",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "products-availability": "sold-out",
+    "products-category": {
+      "modelId": "categories",
+      "providerId": "content-filesystem",
+      "recordId": "carry"
+    },
+    "products-currency": "USD",
+    "products-description": "A lightweight cape in charcoal ripstop nylon with a 10,000 mm waterproof coating and taped seams. It is cut long and wide enough to cover you and a bag on your back, and it vents at the sides so you do not boil in it.\n\nPacked, it rolls into a stuff sack the size of a coffee cup. A hood with a stiffened brim keeps rain off glasses.\n\nThe first run sold through in a week. The next arrives in the autumn.",
+    "products-featured": false,
+    "products-image1": {
+      "products-image1-alt": "Folded charcoal rain cape beside its stuff sack",
+      "products-image1-src": "/uploaded-assets/asset-assets-e6a710b3-480d-4b62-8e8b-da45c4f29cd7"
+    },
+    "products-name": "Packable Rain Cape",
+    "products-price": 96,
+    "products-slug": "rain-cape",
+    "products-spec": {
+      "products-spec-care": "Rinse and hang to dry; do not tumble",
+      "products-spec-dimensions": "One size; 110 cm back length",
+      "products-spec-material": "Recycled ripstop nylon, PU coated; taped seams",
+      "products-spec-origin": "Made in Busan, South Korea",
+      "products-spec-warranty": "Two years on seams and coating",
+      "products-spec-weight": "310 g with sack"
+    },
+    "products-stock-label": "Sold out",
+    "products-subtitle": "A charcoal cape that folds into its own sack and covers a bag.",
+    "products-tag1": "rain",
+    "products-tag2": "outerwear",
+    "products-tag3": "travel",
+    "products-tags": [
+      "rain",
+      "outerwear",
+      "travel"
+    ]
+  }
+}

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
-import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./routes.mjs";
+import { AUTHORING_ROUTES } from "./routes.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 /** @param {string} path */
@@ -21,17 +21,10 @@ const browserRunner = read("scripts/run-site-project-browser.mjs");
 const browserConfig = read("playwright.site-project.config.ts");
 
 assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/assets"]);
-assert.deepEqual(SITE_ROUTES, [
-  "/site",
-  "/site/about",
-  "/site/services",
-  "/site/journal",
-  "/site/journal/map-the-moving-parts",
-  "/site/journal/review-in-small-loops",
-  "/site/journal/start-with-the-question",
-]);
-assert.deepEqual(SPA_ROUTES, [...AUTHORING_ROUTES, ...SITE_ROUTES]);
-for (const route of SITE_ROUTES) assert.ok(browser.includes(`"${route}"`) || browser.includes(`'${route}'`), `browser proof is missing ${route}`);
+assert.ok(browser.includes("process.env.SITE_PROJECT_LANE_ROUTES"), "browser proof must consume the runner's verified artifact routes");
+assert.ok(browser.includes("for (const route of SITE_ROUTES)"), "browser proof must crawl every manifest route");
+assert.ok(browserRunner.includes("readVerifiedHostManifest"), "browser runner must verify the host artifact before using its routes");
+assert.ok(read("scripts/run-demos-browser.mjs").includes("readVerifiedHostManifest"), "demo browser runner must use verified artifacts too");
 assert.ok(browser.includes("page.reload()"), "browser proof must include direct-refresh assertions");
 // Both lanes share one watcher now, so the proof is that the spec uses it and
 // that the watcher still watches both channels.
@@ -40,8 +33,23 @@ assert.ok(runtimeFailures.includes("requestfailed"), "the shared watcher must wa
 assert.ok(runtimeFailures.includes('message.type() !== "error"'), "the shared watcher must watch console errors");
 assert.ok(browserRunner.includes("mkdtemp"), "browser runner must create an isolated local-project root");
 assert.ok(browserRunner.includes("ZUDO_SITE_PROJECT_ROOT"), "browser runner must pass the isolated root to CLI and Vite");
-assert.ok(browserRunner.includes('operation: "apply"'), "browser runner must apply through the JSON CLI");
-assert.ok(browserRunner.includes('operation: "activate"'), "browser runner must activate through the JSON CLI");
+assert.match(browserRunner, /\[join\(root, "bin\/zudo-composer\.mjs"\), "seed", "--from", /, "browser runner must activate its committed fixture through the installed seed command");
+assert.match(read("scripts/run-host-browser.mjs"), /\[join\(root, "bin\/zudo-composer\.mjs"\), "seed"\]/, "host browser runner must use the installed seed command");
+const demoSeedCommand = "zudo-composer assets import images-src/manifest.json && zudo-composer seed";
+const demoHosts = readdirSync(join(root, "packages"), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name.startsWith("demo-"))
+  .map((entry) => entry.name)
+  .filter((name) => existsSync(join(root, "packages", name, "package.json"))
+    && ["ts", "mts", "js", "mjs", "cts", "cjs"].some((extension) => existsSync(join(root, "packages", name, `zudo-composer.config.${extension}`))))
+  .sort();
+assert.ok(demoHosts.length > 0, "at least one demo host must use the installed seed commands");
+for (const name of demoHosts) {
+  const file = `packages/${name}/package.json`;
+  assert.equal(readJson(file).scripts?.seed, demoSeedCommand, `${file} must use the installed asset-import and seed commands`);
+}
+for (const file of ["scripts/run-site-project-browser.mjs", "scripts/run-host-browser.mjs"]) {
+  assert.doesNotMatch(read(file), /operation:\s*["'](?:plan|apply|build|activate)["']/, "release orchestration must remain in the seed service");
+}
 assert.ok(browserRunner.includes("env: { ...process.env, ...environment }"), "browser runner must preserve the parent process environment");
 assert.ok(browserConfig.includes("reuseExistingServer: false"), "isolated dev browser config must own its server");
 assert.ok(browserConfig.includes("workers: 1"), "isolated browser config must use one deterministic worker");
@@ -135,4 +143,4 @@ for (const file of ["README.md", "CLAUDE.md", "docs/site-project.md"]) {
   assert.match(document, /diagnostic/i, `${file} must explain diagnostics`);
 }
 
-console.log("SiteProject boundary passed: exact routes, activated local source, disposable state, and browser proofs are wired.");
+console.log("SiteProject boundary passed: authoring contract and verified host routes, activated local source, disposable state, and browser proofs are wired.");

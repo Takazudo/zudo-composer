@@ -26,9 +26,13 @@ by `ProseMd`; this is not a zfb application dependency. A host is free to
 install a different themeset instead — see
 [Component packs and themesets](#component-packs-and-themesets).
 
+Create a populated standalone host with `zudo-composer init <new-directory>`.
+The [creator guide](./docs/creator.md) covers the installed command, the
+unpublished-package preview, and which generated files to commit.
+
 ## Routes and assets
 
-The Vite application has base `/` and these exact SPA routes:
+The authoring tool has Vite base `/` and these exact routes:
 
 - `/` — standalone product landing page
 - `/composer` — Composer library and editor
@@ -37,12 +41,14 @@ The Vite application has base `/` and these exact SPA routes:
 - `/mapping` — Content-to-Composition Mapping authoring
 - `/sitemapper` — Sitemapper library and editor
 - `/assets` — Assets library and upload/delivery status
-- `/site` — bundled/published sample home
-- `/site/about`, `/site/services`, `/site/journal` — canonical nested sample pages
-- `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
-  `/site/journal/start-with-the-question` — compiler-emitted Entry routes
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
 - `/uploaded-assets/` — committed images and PDFs from the host's `publicAssetsDir`
+
+A host's activated SiteProject is delivered under `/site`; its static website
+uses the same routes at `/`. Route assertions come from the host's verified
+`dist-site/site-manifest.json`, including pages emitted from collection entries.
+Sample Studio's frozen hosted Composer route data lives in
+`packages/demo-studio/hosted-routes.mjs` and is checked against its artifact.
 
 The preview route is an implementation boundary, not an independent public
 product. Build-emitted assets remain rooted at `/assets/`, while committed assets
@@ -76,15 +82,17 @@ needed, click a demo thumbnail to inspect it, then click **Preview**.
 
 ## Demo host projects
 
-`packages/demo-webshop`, `packages/demo-landing` and `packages/demo-blog` are
-three complete host projects, each with its own component pack and Tailwind
-theme, kept as workspace members so the tool is exercised the way a real host
-exercises it. `packages/demo-tools` is the private authoring/seeding helper
-they share. Full authoring and gate-wiring details are in
+`packages/demo-studio`, `packages/demo-webshop`, `packages/demo-landing` and
+`packages/demo-blog` are four complete host projects. Studio installs the pinned
+provider; the other three own their component packs and Tailwind themes. They
+are kept as workspace members so the tool is exercised the way a real host
+exercises it. Each host runs the installed `zudo-composer` commands directly.
+Full authoring and gate-wiring details are in
 [`docs/demo-sites/README.md`](./docs/demo-sites/README.md).
 
 | Package | Site | Hosted domain | Local dev port |
 | --- | --- | --- | --- |
+| `packages/demo-studio` | Sample Studio | hosted Composer sample | 4184 |
 | `packages/demo-webshop` | Nightjar Supply | `zc-demo-shop.zudolab.dev` | 4181 |
 | `packages/demo-landing` | Orrery | `zc-demo-landing.zudolab.dev` | 4182 |
 | `packages/demo-blog` | Margin Notes | `zc-demo-blog.zudolab.dev` | 4183 |
@@ -92,8 +100,9 @@ they share. Full authoring and gate-wiring details are in
 Run one locally:
 
 ```sh
-corepack pnpm --filter demo-webshop seed   # idempotent: assets, then an activated release
-corepack pnpm --filter demo-webshop dev --port 4181
+cd packages/demo-webshop
+corepack pnpm seed   # idempotent: assets, then an activated release
+corepack pnpm dev --port 4181
 ```
 
 `/site` serves the activated release; `/composer` and the rest of the
@@ -113,6 +122,10 @@ pnpm add -D \
   "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
   "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#b66d52bb273a10010485efb2d06f80cee8001bd6"
 ```
+
+Replace `<commit>` with a full 40-character tool commit. This consumer install
+reference is separate from the permanent provider and contract identities;
+abbreviated hashes remain forbidden in handoff documentation.
 
 The host also declares the package its `pack` comes from. A pack is resolved
 from the HOST root, and a release attests the dependency spec the host used, so
@@ -134,6 +147,20 @@ export default defineComposerConfig({
 // package.json
 { "scripts": { "dev": "zudo-composer dev" } }
 ```
+
+Hosts with an authored `site-project.ts` can run `zudo-composer generate` to
+write its canonical `site-project.json`; `zudo-composer generate --check`
+verifies that committed output is current. Hosts with a committed
+`site-project.json` can run `zudo-composer build-site` to build and verify
+`dist-site`, or pass `--root <dir>` from another directory.
+`build-site --print-routes` verifies an existing `dist-site` and prints its
+manifest routes as JSON; `build-site --verify <dir>` verifies another artifact
+without building. Each manifest records the installed tool's package name and
+version, plus its `gitHead` when present in the package metadata. Pass
+`--source-revision <revision>` to record or verify the host revision exactly;
+it defaults to a nonempty `GITHUB_SHA`, and is omitted otherwise. Builds work
+without Git. The [static build guide](docs/demo-sites/README.md#static-website-build)
+describes both modes and the revision model.
 
 ### Settings and host directory layout
 
@@ -299,13 +326,24 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm dev
 ```
 
-`pnpm check` is the bounded offline gate: lint, typecheck, the headless, handoff
-and class-name boundaries, the provider identity boundary, unit tests, one
-production build, and the built-artifact boundary.
+`pnpm check` runs the source, CMS, lint, type, boundary, unit and build gates,
+then the complete packed-install proof. It needs network access for disposable
+installs and Playwright Chromium, and owns browser port 4175 during that proof.
+Run it with the other browser lanes stopped.
 
 ```sh
 corepack pnpm check
 ```
+
+`consumer:boundary` scans all discovered repository hosts and the creator's
+verbatim templates with their generated configuration. The violation ledger
+must be empty; any new coupling fails. The packed creator lane also scans the
+complete newly generated output before replacing dependencies with tarballs.
+
+Each host's `pnpm test` owns its imagery count and per-file checks. Studio keeps
+its original project with no host images; its five optional repository Assets
+seed images are checked centrally alongside the 8 MiB combined source-image
+budget. Adding another host automatically includes its imagery in that budget.
 
 The provider boundary is split in two. `provider:boundary` checks the manifest
 spec, the lockfile resolution and the parity between the installed pack's
@@ -322,9 +360,16 @@ corepack pnpm contract:negative-scan
 corepack pnpm contract:external-install -- --exact
 corepack pnpm test:browser:host
 corepack pnpm test:browser:dev
+corepack pnpm demo:build-sites
 corepack pnpm test:browser:site-project
 corepack pnpm test:browser:demos
 ```
+
+`corepack pnpm demo:build-sites` discovers and builds all host artifacts before
+the SiteProject and demos browser lanes. Each lane verifies artifact checksums,
+the current project and tool identity, and sitemap route parity before crawling
+`manifest.routes`; stale artifacts fail with a preparation instruction. Browser
+lanes never rebuild.
 
 Each lane owns one port and one server, so none of them may run concurrently:
 
@@ -335,25 +380,37 @@ Each lane owns one port and one server, so none of them may run concurrently:
 | `test:browser:site-project` | this repository's own Vite, with a CLI-activated release | 4174 | `tests/browser/site-project-acceptance.pw.ts` |
 | `test:browser:demos` | `zudo-composer dev`, rooted at each `packages/demo-*` in turn | 4176 | `tests/browser-demos` |
 
-`test:browser:demos` seeds each demo host package's release in place — the
-committed `cms/assets` store gets a disposable copy for the run, so the lane
-never dirties it — boots `zudo-composer dev` for that one package, crawls
-every route the sitemap compiles to, and runs its one mock interaction (see
-[Demo host projects](#demo-host-projects)) before moving to the next demo.
+`test:browser:demos` copies each demo host package's committed `cms/` tree to a
+disposable host-local root and seeds its release under a separate temporary
+root, so the lane never dirties committed CMS data or a developer's own
+release. It boots `zudo-composer dev` for that one package, crawls every route
+its verified artifact declares, and runs its one mock interaction (see [Demo host
+projects](#demo-host-projects)) before moving to the next demo.
 
 The host lane is the one that runs the package the way a host does — through its
 `bin`, against a project it has never seen. It activates the sample SiteProject
 into that project first, because a library with no activated project has no rows
 to look at.
 
-`smoke:host-install` goes further and is the only proof that involves a real
-install: it packs the package, installs it into a bare project outside this
-repository, boots it with no sample activation, authors through the browser,
-restarts, and finally removes the tool to confirm the host keeps its data.
+`smoke:host-install` packs the tool and contract and independently installs
+every host discovered under `packages/`, including Studio, plus freshly
+generated creator output. It proves installed dev, source currency, seed,
+build and host tests. The generated host also proves its ready CMS in the
+browser before seeding and runs its own typecheck. The synthesized fixture
+retains browser authoring, restart, release portability and data ownership
+after removing the tool. CI runs each host as its own matrix job; new hosts
+are discovered automatically. See the [packed-install guide](docs/packed-host-install.md)
+for focused runs and deliberate negative proofs.
 
 ```sh
 corepack pnpm smoke:host-install
 ```
+
+`pnpm no-deploy:check` audits validation workflows, package aliases and local
+command wrappers before the aggregate or packed lane runs. Only explicit
+Wrangler `deploy --dry-run` may reach Cloudflare tooling; production deployment
+entry points and equivalent mutations fail the check. The independent trusted
+production workflow remains unchanged.
 
 Both `test:browser:host` and `test:browser:dev` route specs to a viewport by
 filename: `*.coarse.pw.ts` runs only on a 390x844 touch project, and

@@ -1,0 +1,181 @@
+{
+  "id": "product-page",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "product-page",
+    "name": "Product page",
+    "root": [
+      {
+        "componentId": "shop.breadcrumbs",
+        "componentVersion": 1,
+        "id": "product-page-shop-breadcrumbs-1",
+        "props": {
+          "items": [
+            {
+              "href": "/",
+              "label": "Home"
+            },
+            {
+              "href": "/products",
+              "label": "All products"
+            }
+          ]
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.product-hero",
+        "componentVersion": 1,
+        "id": "product-page-shop-product-hero-2",
+        "props": {
+          "ratio": "1/1"
+        },
+        "slots": {
+          "copy": [
+            {
+              "componentId": "shop.section-heading",
+              "componentVersion": 1,
+              "id": "product-heading",
+              "props": {
+                "as": "h1",
+                "eyebrow": "",
+                "heading": "",
+                "intro": ""
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.price-tag",
+              "componentVersion": 1,
+              "id": "product-price",
+              "props": {
+                "size": "h2"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.status-badge",
+              "componentVersion": 1,
+              "id": "product-status",
+              "props": {},
+              "slots": {}
+            },
+            {
+              "componentId": "shop.add-to-cart",
+              "componentVersion": 1,
+              "id": "product-cart",
+              "props": {
+                "maxQuantity": 10
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.prose",
+              "componentVersion": 1,
+              "id": "product-description",
+              "props": {},
+              "slots": {}
+            }
+          ],
+          "media": [
+            {
+              "componentId": "shop.product-gallery",
+              "componentVersion": 1,
+              "id": "product-gallery",
+              "props": {},
+              "slots": {
+                "images": [
+                  {
+                    "componentId": "shop.gallery-image",
+                    "componentVersion": 1,
+                    "id": "product-image-1",
+                    "props": {},
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "shop.gallery-image",
+                    "componentVersion": 1,
+                    "id": "product-image-2",
+                    "props": {},
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "shop.section",
+        "componentVersion": 1,
+        "id": "product-details",
+        "props": {
+          "tone": "bg"
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "shop.section-heading",
+              "componentVersion": 1,
+              "id": "product-page-shop-section-heading-3",
+              "props": {
+                "as": "h2",
+                "eyebrow": "Specification",
+                "heading": "Details",
+                "intro": ""
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.spec-table",
+              "componentVersion": 1,
+              "id": "product-spec",
+              "props": {},
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "shop.section",
+        "componentVersion": 1,
+        "id": "product-more",
+        "props": {
+          "tone": "bg"
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "shop.section-heading",
+              "componentVersion": 1,
+              "id": "product-page-shop-section-heading-4",
+              "props": {
+                "as": "h2",
+                "eyebrow": "Featured",
+                "heading": "More from the shelf",
+                "intro": ""
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "shop.related-products",
+              "componentVersion": 1,
+              "id": "product-related",
+              "props": {
+                "heading": "",
+                "limit": 3
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

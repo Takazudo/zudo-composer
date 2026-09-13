@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createSiteManifest, SITE_HEADERS, SITE_MANIFEST, siteHeaders } from "../site-static/artifact.mjs";
+import { createSiteManifest, SITE_HEADERS, SITE_MANIFEST, siteHeaders, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
 import { DEFAULT_TARGET_KEY, HOSTED_DEMO_LIVE_ROUTES, TARGET_KEYS, TARGETS, resolveTarget } from "./targets.mjs";
 
 const directories: string[] = [];
@@ -62,5 +62,14 @@ describe("hosted-demo deploy targets", () => {
     expect(artifact.files.find((file) => file.path === pinPath)).toMatchObject({ mime: "image/png" });
     expect(artifact.manifest.projectId).toBe("demo-webshop");
     expect(artifact.root.endsWith(directory.split("/").pop()!)).toBe(true);
+    await expect(TARGETS.webshop.verifyArtifact({ directory, expectedSourceRevision: "c".repeat(40) })).rejects.toThrow(/sourceRevision does not match/);
+    // Local artifacts can omit a revision or use another revision system;
+    // the existing production target contract still requires a full Git SHA.
+    for (const sourceRevision of [undefined, "release-local"]) {
+      await writeFile(join(directory, SITE_MANIFEST), JSON.stringify({ ...manifest, sourceRevision }));
+      await expect(verifySiteStaticArtifact({ directory })).resolves.toMatchObject({ projectId: "demo-webshop" });
+      await expect(TARGETS.webshop.verifyArtifact({ directory })).rejects.toThrow(/Deployed site artifact requires/);
+      await expect(TARGETS.webshop.verifyArtifact({ directory, expectedSourceRevision: "a".repeat(40) })).rejects.toThrow(/sourceRevision does not match/);
+    }
   });
 });

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "generation": 2,
+  "mutationToken": "fdc2b3e8b23a2c7976925e77c72371a602037ed19e81b2feaea3a39b01b1c3ea",
+  "entries": [
+    {
+      "id": "margin-notes-sitemap",
+      "digest": "6a61a7d567e4a240e7447a666606add9c80f9ed2df432ad76aa13e22c953cc87"
+    },
+    {
+      "id": "meta",
+      "digest": "23a6d11391bfe6ddbfa38648297c473c16065dea4dc32c8e97a5f20ad2c00e50"
+    }
+  ]
+}

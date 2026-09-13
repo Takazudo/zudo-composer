@@ -1,0 +1,37 @@
+{
+  "id": "faq-page",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "faq-page",
+    "name": "FAQ page",
+    "root": [
+      {
+        "componentId": "shop.section-heading",
+        "componentVersion": 1,
+        "id": "faq-page-shop-section-heading-1",
+        "props": {
+          "as": "h1",
+          "eyebrow": "Help",
+          "heading": "Questions",
+          "intro": "Short answers about the shop, the cart and this demo."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "shop.faq-accordion",
+        "componentVersion": 1,
+        "id": "faq-list",
+        "props": {
+          "allowMultiple": false
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

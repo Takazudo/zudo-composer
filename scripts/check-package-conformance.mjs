@@ -5,6 +5,8 @@ import { access, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertPackedConsumerBoundary } from './package-host-boundary.mjs';
+import { CONTRACT_IDENTITY_ENTRIES } from '../server/site-project-local/contract-entries.mjs';
 
 const execFile = promisify(execFileCallback);
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -47,7 +49,7 @@ const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
 assert(packageJson.name === '@zudo-composer/component-contract', 'package name changed');
 assert(packageJson.version === '1.0.0', 'contract package version must remain 1.0.0');
 assert(packageJson.sideEffects === false, 'contract package must remain side-effect free');
-assert(Array.isArray(packageJson.files) && packageJson.files.includes('dist'), 'package files must include dist');
+assert(JSON.stringify(packageJson.files) === JSON.stringify(CONTRACT_IDENTITY_ENTRIES.filter((entry) => entry !== 'package.json')), 'contract files must match the published release identity entries');
 assert(packageJson.dependencies === undefined || Object.keys(packageJson.dependencies).length === 0, 'generic contract must not have runtime dependencies');
 assert(packageJson.scripts?.prepare === 'pnpm run build', 'Git consumers must prepare from the package directory');
 
@@ -88,6 +90,24 @@ for (const output of [
 assert([...packedPaths].every((entry) => !entry.startsWith('src/')), 'packed artifact must not expose TypeScript sources');
 assert([...packedPaths].every((entry) => !entry.endsWith('.test.ts')), 'packed artifact must not expose package tests');
 
+// Compare the exact published inputs release identity hashes, including new
+// dist chunks and declarations. Documentation is not a release identity input.
+/** @param {string} entry @returns {Promise<string[]>} */
+async function contractIdentityFiles(entry) {
+  if (entry === 'package.json') return [entry];
+  const files = [];
+  for (const child of await readdir(path.join(packageRoot, entry), { withFileTypes: true })) {
+    const name = `${entry}/${child.name}`;
+    assert(!child.isSymbolicLink(), `contract identity must not follow a link: ${name}`);
+    if (child.isDirectory()) files.push(...await contractIdentityFiles(name));
+    else { assert(child.isFile(), `contract identity contains a non-regular file: ${name}`); files.push(name); }
+  }
+  return files;
+}
+const contractIdentityPaths = (await Promise.all(CONTRACT_IDENTITY_ENTRIES.map(contractIdentityFiles))).flat().sort();
+const packedContractIdentityPaths = [...packedPaths].filter((entry) => CONTRACT_IDENTITY_ENTRIES.some((root) => entry === root || entry.startsWith(`${root}/`))).sort();
+assert(JSON.stringify(packedContractIdentityPaths) === JSON.stringify(contractIdentityPaths), 'packed contract release identity entries must match disk exactly');
+
 console.log(`Package conformance passed: ${packageJson.name}@${packageJson.version}`);
 
 // ---------------------------------------------------------------------------
@@ -105,9 +125,11 @@ const rootPackageJson = JSON.parse(await readFile(path.join(repositoryRoot, 'pac
 assert(rootPackageJson.private === undefined, 'the root package must stay publishable (no `private`)');
 assert(rootPackageJson.bin?.['zudo-composer'] === './bin/zudo-composer.mjs', 'the `zudo-composer` bin must point at ./bin/zudo-composer.mjs');
 assert(
-  rootPackageJson.peerDependencies?.['@zudo-composer/component-contract'] === '1.0.0',
-  'the contract must be a peerDependency so a host resolves one instance',
+  rootPackageJson.peerDependencies?.['@zudo-composer/component-contract'] === '^1.0.0',
+  'the contract must be a 1.x peer, supplied by the host from the exact handoff or a packed artifact',
 );
+assert(rootPackageJson.dependencies?.['@zudo-sg/ui'] === undefined, 'the demo provider must not be a runtime dependency');
+assert(rootPackageJson.devDependencies?.['@zudo-sg/ui'] !== undefined, 'the demo provider must remain a development dependency');
 
 // Dev-only for this repository, runtime-required for a host: the installed
 // launcher imports all four.
@@ -125,6 +147,9 @@ const expectedRootExports = {
   '.': { types: './server/dev-server.d.mts', default: './server/dev-server.mjs' },
   './config': { types: './server/config/define.d.mts', default: './server/config/define.mjs' },
   './vite': { types: './plugins/index.d.mts', default: './plugins/index.mjs' },
+  './authoring': { types: './server/authoring.d.mts', default: './server/authoring.mjs' },
+  './site-build': { types: './server/site-build.d.mts', default: './server/site-build.mjs' },
+  './site-project': { types: './server/site-project.d.mts' },
   './styles': './src/style.css',
   './package.json': './package.json',
 };
@@ -140,6 +165,8 @@ try {
 }
 const rootPackedPaths = new Set((rootPackedMetadata.files ?? []).map((entry) => entry.path));
 
+assertPackedConsumerBoundary(rootPackedPaths, repositoryRoot);
+
 // Every `exports` and `bin` target, resolved against what actually ships.
 const exportTargets = Object.values(expectedRootExports).flatMap((entry) => (typeof entry === 'string' ? [entry] : Object.values(entry)));
 for (const target of [...exportTargets, rootPackageJson.bin['zudo-composer']]) {
@@ -154,44 +181,57 @@ for (const required of [
   'src/App.tsx',
   'server/cli/run.mjs',
   'server/cli/release-entry.mjs',
+  'server/cli/build-site-entry.mjs',
+  'server/cli/generate-entry.mjs',
+  'server/cli/generate.ts',
+  'server/cli/init-entry.mjs',
+  'server/creator/init.mjs',
+  'server/creator/project.mjs',
+  'server/cli/run.d.mts',
   'server/module-evaluator.mjs',
   'server/config/index.ts',
   'server/site-project-local/toolchain-config.ts',
+  'server/site-project-local/contract-entries.mjs',
   'server/host-context.mjs',
+  'server/public/authoring.mts',
+  'server/public/site-build.mts',
+  'server/public/site-project.mts',
+  'server/site-build/compile.ts',
+  'server/site-build/artifact.mjs',
+  'server/site-build/assets.ts',
+  'server/site-build/vite-config.ts',
+  'server/site-build/run.mjs',
+  'server/site-build/run.d.mts',
+  'server/site-build/source-revision.mjs',
+  'server/site-build/source-revision.d.mts',
+  'server/site-build/print-routes.ts',
+  'server/site-build/client/main.tsx',
+  'server/site-build/client/styles.css',
+  'server/site-build/client/site-static-project.d.ts',
   'plugins/component-pack.mjs',
   'plugins/component-pack-plugin.mjs',
   'plugins/host-styles-plugin.mjs',
   'plugins/roots.mjs',
   'plugins/composer-app-html.mjs',
-  'packages/component-contract/src/index.ts',
+  'templates/host/components/pack.ts',
+  'templates/host/components/page.tsx',
+  'templates/host/styles/base.css',
+  'templates/host/site-project.ts',
+  'templates/host/images-src/manifest.json',
+  'templates/host/images-src/starter.png',
+  'templates/host/tests/starter.spec.tsx',
+  'templates/host/README.md',
 ]) {
   assert(rootPackedPaths.has(required), `packed archive omits the runtime file ${required}`);
 }
 
-// `compilerIdentity()` hashes every non-test source under the contract's `src`,
-// so the archive must carry exactly that set. The allowlist names those files
-// one by one — a directory entry would drag the colocated test in, because the
-// nested `package.json` makes the parent's negations stop applying inside it —
-// and naming files is only safe while something notices a new one.
-const contractSources = (await readdir(path.join(packageRoot, 'src')))
-  .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
-  .sort();
-const packedContractSources = [...rootPackedPaths]
-  .filter((entry) => entry.startsWith('packages/component-contract/src/'))
-  .map((entry) => entry.slice('packages/component-contract/src/'.length))
-  .sort();
-assert(
-  JSON.stringify(packedContractSources) === JSON.stringify(contractSources),
-  `packed contract sources drifted from disk: add the missing file to the root \`files\` allowlist (packed ${JSON.stringify(packedContractSources)}, on disk ${JSON.stringify(contractSources)})`,
-);
-
 for (const packed of rootPackedPaths) {
+  assert(!packed.startsWith('packages/component-contract/'), `packed tool must use its contract peer: ${packed}`);
   assert(!/(?:^|\/)__tests__\//u.test(packed), `packed archive exposes a test directory: ${packed}`);
   assert(!/(?:^|\/)type-tests\//u.test(packed), `packed archive exposes type tests: ${packed}`);
+  assert(!/(?:^|\/)test-support\//u.test(packed), `packed archive exposes test support: ${packed}`);
   assert(!/\.test\./u.test(packed), `packed archive exposes a test file: ${packed}`);
   assert(!packed.startsWith('src/test/'), `packed archive exposes test helpers: ${packed}`);
-  assert(!packed.startsWith('fixtures/'), `packed archive exposes the host fixture: ${packed}`);
-  assert(!packed.startsWith('packages/demo-'), `packed archive exposes a demo host package: ${packed}`);
   assert(!packed.startsWith('tests/'), `packed archive exposes browser tests: ${packed}`);
   assert(!/^playwright[.a-z-]*\.config\.ts$/u.test(packed), `packed archive exposes Playwright configuration: ${packed}`);
   assert(!packed.startsWith('scripts/'), `packed archive exposes repository scripts: ${packed}`);
@@ -217,3 +257,12 @@ assert(JSON.stringify(editorSources) === JSON.stringify(packedEditorSources), 'p
 assert(editorSources.every(name => rootPackageJson.files.includes(name)), 'editor runtime sources must be individually allowlisted');
 assert(rootPackageJson.devDependencies?.['@zudo-composer/image-editor'] === 'workspace:*', 'private editor must be a workspace devDependency');
 assert(!rootPackageJson.dependencies?.['@zudo-composer/image-editor'] && !rootPackageJson.peerDependencies?.['@zudo-composer/image-editor'], 'private editor must not be a runtime dependency');
+
+// File-list checks cannot prove a Node import graph. Exercise the public APIs
+// and declarations from tarballs in a host outside this workspace as well.
+try {
+  const result = await execFile(process.execPath, [path.join(repositoryRoot, 'scripts/verify-public-install.mjs')], { cwd: repositoryRoot, maxBuffer: 16 * 1024 * 1024 });
+  console.log(result.stdout.trim());
+} catch (error) {
+  fail(`packed public entry proof failed: ${error instanceof Error ? error.message : String(error)}`);
+}

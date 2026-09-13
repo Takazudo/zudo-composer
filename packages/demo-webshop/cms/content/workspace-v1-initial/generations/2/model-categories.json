@@ -1,0 +1,72 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "description": "The three shelves of the shop.",
+    "fields": [
+      {
+        "id": "categories-name",
+        "key": "name",
+        "kind": "text",
+        "label": "Name",
+        "required": true
+      },
+      {
+        "id": "categories-slug",
+        "key": "slug",
+        "kind": "slug",
+        "label": "Slug",
+        "required": true
+      },
+      {
+        "id": "categories-order",
+        "key": "order",
+        "kind": "number",
+        "label": "Order",
+        "required": true
+      },
+      {
+        "id": "categories-intro",
+        "key": "intro",
+        "kind": "long-text",
+        "label": "Intro",
+        "required": true
+      },
+      {
+        "id": "categories-caption",
+        "key": "caption",
+        "kind": "text",
+        "label": "Caption",
+        "required": true
+      },
+      {
+        "fields": [
+          {
+            "id": "categories-image-src",
+            "key": "src",
+            "kind": "url",
+            "label": "Src",
+            "required": true
+          },
+          {
+            "id": "categories-image-alt",
+            "key": "alt",
+            "kind": "text",
+            "label": "Alt",
+            "required": true
+          }
+        ],
+        "id": "categories-image",
+        "key": "image",
+        "kind": "object",
+        "label": "Image",
+        "required": true
+      }
+    ],
+    "id": "categories",
+    "kind": "collection",
+    "name": "Categories",
+    "schemaVersion": 1
+  },
+  "id": "categories",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

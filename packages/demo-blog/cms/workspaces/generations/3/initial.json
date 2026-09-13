@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 1,
+  "id": "initial",
+  "mutationToken": 1,
+  "status": "ready",
+  "metadata": {
+    "activeSitemap": {
+      "providerId": "sitemap-filesystem",
+      "recordId": "margin-notes-sitemap"
+    },
+    "collectionAttachments": [
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "home"
+        },
+        "id": "article-cards-all-home-latest-articles",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "article-cards-all"
+        },
+        "order": 0,
+        "target": {
+          "nodeId": "home-latest",
+          "slotId": "articles"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "articles"
+        },
+        "id": "article-cards-all-articles-all-articles",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "article-cards-all"
+        },
+        "order": 1,
+        "target": {
+          "nodeId": "articles-all",
+          "slotId": "articles"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "tag-craft"
+        },
+        "id": "article-cards-craft-tag-craft-list-articles",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "article-cards-craft"
+        },
+        "order": 2,
+        "target": {
+          "nodeId": "tag-craft-list",
+          "slotId": "articles"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "tag-attention"
+        },
+        "id": "article-cards-attention-tag-attention-list-articles",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "article-cards-attention"
+        },
+        "order": 3,
+        "target": {
+          "nodeId": "tag-attention-list",
+          "slotId": "articles"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "tag-tools"
+        },
+        "id": "article-cards-tools-tag-tools-list-articles",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "article-cards-tools"
+        },
+        "order": 4,
+        "target": {
+          "nodeId": "tag-tools-list",
+          "slotId": "articles"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "authors"
+        },
+        "id": "author-cards-authors-grid-authors",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "author-cards"
+        },
+        "order": 5,
+        "target": {
+          "nodeId": "authors-grid",
+          "slotId": "authors"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "article-page"
+        },
+        "id": "article-cards-related-article-related-articles",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "article-cards-related"
+        },
+        "order": 6,
+        "target": {
+          "nodeId": "article-related",
+          "slotId": "articles"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "article-page"
+        },
+        "id": "comments-article-comments-comments",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "comments"
+        },
+        "order": 7,
+        "target": {
+          "nodeId": "article-comments",
+          "slotId": "comments"
+        }
+      },
+      {
+        "composition": {
+          "providerId": "files",
+          "recordId": "author-page"
+        },
+        "id": "article-cards-all-author-articles-articles",
+        "mapping": {
+          "providerId": "mapping-filesystem",
+          "recordId": "article-cards-all"
+        },
+        "order": 8,
+        "target": {
+          "nodeId": "author-articles",
+          "slotId": "articles"
+        }
+      }
+    ],
+    "componentPack": {
+      "contractVersion": 2,
+      "packId": "demo-blog",
+      "packVersion": "1.0.0"
+    },
+    "id": "demo-blog",
+    "name": "Margin Notes",
+    "providers": {
+      "compositions": [
+        {
+          "id": "files"
+        }
+      ],
+      "content": [
+        {
+          "id": "content-filesystem"
+        }
+      ],
+      "mappings": [
+        {
+          "id": "mapping-filesystem"
+        }
+      ],
+      "sitemaps": [
+        {
+          "id": "sitemap-filesystem"
+        }
+      ]
+    },
+    "schemaVersion": 2
+  },
+  "baselineRevision": "c252b5423515f3fe4f9c0e98f51cbd4a48899bf1d4a8cf6f485bd20eec9d0637"
+}

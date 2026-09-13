@@ -1,0 +1,199 @@
+{
+  "id": "features",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "features",
+    "name": "Features",
+    "root": [
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "features-land-section-1",
+        "props": {
+          "anchor": "",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.section-heading",
+              "componentVersion": 1,
+              "id": "features-land-section-heading-2",
+              "props": {
+                "align": "center",
+                "as": "h1",
+                "eyebrow": "Product",
+                "heading": "Features",
+                "intro": "Six things Orrery does so that nobody on your team has to do them by hand."
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.feature-grid",
+              "componentVersion": 1,
+              "id": "features-land-feature-grid-3",
+              "props": {
+                "columns": "3"
+              },
+              "slots": {
+                "items": [
+                  {
+                    "componentId": "land.feature-item",
+                    "componentVersion": 1,
+                    "id": "features-land-feature-item-4",
+                    "props": {
+                      "body": "Day, week and month are the same surface. Zoom out to see the quarter; zoom in to move a single meeting.",
+                      "emphasis": true,
+                      "icon": "calendar",
+                      "title": "One zoomable timeline"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.feature-item",
+                    "componentVersion": 1,
+                    "id": "features-land-feature-item-5",
+                    "props": {
+                      "body": "Layer any set of calendars and see shared free time highlighted, across time zones.",
+                      "emphasis": false,
+                      "icon": "people",
+                      "title": "Team overlay"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.feature-item",
+                    "componentVersion": 1,
+                    "id": "features-land-feature-item-6",
+                    "props": {
+                      "body": "Focus blocks show as busy to others and move out of the way when a real deadline needs the hour.",
+                      "emphasis": false,
+                      "icon": "clock",
+                      "title": "Protected focus"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.feature-item",
+                    "componentVersion": 1,
+                    "id": "features-land-feature-item-7",
+                    "props": {
+                      "body": "One summary before the day starts instead of a notification for every event.",
+                      "emphasis": false,
+                      "icon": "bell",
+                      "title": "Quiet reminders"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.feature-item",
+                    "componentVersion": 1,
+                    "id": "features-land-feature-item-8",
+                    "props": {
+                      "body": "Hours booked per person, per week. Spot the overloaded before the Friday crunch.",
+                      "emphasis": false,
+                      "icon": "layers",
+                      "title": "Workload view"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.feature-item",
+                    "componentVersion": 1,
+                    "id": "features-land-feature-item-9",
+                    "props": {
+                      "body": "Colleagues see busy, not details, unless you share them. Org adds SSO and an audit log.",
+                      "emphasis": false,
+                      "icon": "lock",
+                      "title": "Private by default"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "features-land-section-10",
+        "props": {
+          "anchor": "",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.split",
+              "componentVersion": 1,
+              "id": "features-land-split-11",
+              "props": {
+                "ratio": "1/1",
+                "reverse": false
+              },
+              "slots": {
+                "copy": [
+                  {
+                    "componentId": "land.section-heading",
+                    "componentVersion": 1,
+                    "id": "features-land-section-heading-13",
+                    "props": {
+                      "align": "start",
+                      "as": "h2",
+                      "eyebrow": "Views",
+                      "heading": "Move a block once, everywhere",
+                      "intro": ""
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.prose",
+                    "componentVersion": 1,
+                    "id": "features-land-prose-14",
+                    "props": {
+                      "markdown": "Every view reads from the same week. Drag a planning session from Tuesday to Thursday in the week view and it moves in the month view, on your colleague's overlay and in the calendar app on their phone.\n\nNo copies, no duplicate invites, no \"which version is right?\""
+                    },
+                    "slots": {}
+                  }
+                ],
+                "media": [
+                  {
+                    "componentId": "land.image",
+                    "componentVersion": 1,
+                    "id": "features-land-image-12",
+                    "props": {
+                      "alt": "Three overlapping cards for day, week and month views connected by arrows",
+                      "aspect": "16/10",
+                      "src": "/uploaded-assets/asset-assets-c0782606-10cc-42f1-a223-ff461548f313"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.cta-band",
+        "componentVersion": 1,
+        "id": "features-land-cta-band-15",
+        "props": {
+          "buttonHref": "/#signup",
+          "buttonLabel": "Start free",
+          "heading": "Plan next week in ten minutes",
+          "lead": "Free for one person, forever. No card needed."
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

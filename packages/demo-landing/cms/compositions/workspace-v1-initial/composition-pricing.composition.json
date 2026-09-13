@@ -1,0 +1,122 @@
+{
+  "id": "pricing",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "pricing",
+    "name": "Pricing",
+    "root": [
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "pricing-land-section-1",
+        "props": {
+          "anchor": "",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.section-heading",
+              "componentVersion": 1,
+              "id": "pricing-land-section-heading-2",
+              "props": {
+                "align": "center",
+                "as": "h1",
+                "eyebrow": "Plans",
+                "heading": "Pricing",
+                "intro": "Every plan includes the full calendar. You pay for sharing it."
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.pricing-table",
+              "componentVersion": 1,
+              "id": "pricing-table",
+              "props": {
+                "currency": "USD",
+                "defaultBilling": "monthly",
+                "yearlyNote": "Save 20% when billed yearly"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "pricing-land-section-3",
+        "props": {
+          "anchor": "",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.comparison-note",
+              "componentVersion": 1,
+              "id": "pricing-land-comparison-note-4",
+              "props": {
+                "markdown": "All plans include **unlimited events**, two-way sync and export to iCal at any time. Prices are per person per month in US dollars, before tax. Need more than 250 seats? [Talk to us](/about)."
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "pricing-land-section-5",
+        "props": {
+          "anchor": "",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.section-heading",
+              "componentVersion": 1,
+              "id": "pricing-land-section-heading-6",
+              "props": {
+                "align": "center",
+                "as": "h2",
+                "eyebrow": "Billing",
+                "heading": "Billing questions",
+                "intro": ""
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.faq-accordion",
+              "componentVersion": 1,
+              "id": "pricing-faq",
+              "props": {
+                "allowMultiple": false
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.cta-band",
+        "componentVersion": 1,
+        "id": "pricing-land-cta-band-7",
+        "props": {
+          "buttonHref": "/#signup",
+          "buttonLabel": "Start free",
+          "heading": "Plan next week in ten minutes",
+          "lead": "Free for one person, forever. No card needed."
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

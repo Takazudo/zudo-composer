@@ -46,6 +46,11 @@ export interface RecordTransactionSnapshot {
   readonly records: readonly RecordEnvelope[];
 }
 
+/** Only isolated reproducible generation supplies this; live stores use random tokens. */
+export type RecordMutationTokenSource = (next: Omit<RecordTransactionSnapshot, "mutationToken"> & {
+  readonly previousMutationToken: string;
+}) => string;
+
 interface PointerEntry {
   id: string;
   digest: string;
@@ -70,6 +75,8 @@ export interface TransactionalRecordStoreOptions<Operation extends string> {
   recordLabel: string;
   operations?: Partial<SafeRootFilesystemOperations & { link: typeof nodeLink }>;
   randomToken?: () => string;
+  /** Reproducible generation seam. Must return a new SHA-256-shaped token per commit. */
+  newMutationToken?: RecordMutationTokenSource;
   now?: () => string;
   /** Distinct operation names so failures name the phase that produced them. */
   phases: {
@@ -130,6 +137,7 @@ export class TransactionalRecordStore<Operation extends string> {
     private readonly phases: TransactionalRecordStoreOptions<Operation>["phases"],
     private readonly now: () => string,
     private readonly link: typeof nodeLink,
+    private readonly newMutationToken: RecordMutationTokenSource,
   ) {}
 
   static async create<Operation extends string>(
@@ -173,6 +181,7 @@ export class TransactionalRecordStore<Operation extends string> {
       options.phases,
       options.now ?? (() => new Date().toISOString()),
       link ?? nodeLink,
+      options.newMutationToken ?? (() => randomBytes(32).toString("hex")),
     );
   }
 
@@ -363,6 +372,11 @@ export class TransactionalRecordStore<Operation extends string> {
       );
     }
     const generation = before.generation + 1;
+    const ordered = [...records].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const mutationToken = this.newMutationToken({ schemaVersion: this.schemaVersion, generation, previousMutationToken: before.mutationToken, records: structuredClone(ordered) });
+    if (typeof mutationToken !== "string" || mutationToken.length !== 64 || !/^[a-f0-9]{64}$/.test(mutationToken) || mutationToken === before.mutationToken) {
+      throw this.filesystem.errors.create(operation, "write-failed", `${this.filesystem.ownerLabel} mutation token source must return a new SHA-256-shaped token.`);
+    }
     const directory = this.generationPath(generation);
     await this.purgeGeneration(generation);
     try {
@@ -379,7 +393,7 @@ export class TransactionalRecordStore<Operation extends string> {
     const carryForward = new Map(before.records.map((record) => [record.id, digestOf(record.json)]));
     const entries: PointerEntry[] = [];
     try {
-      for (const record of [...records].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+      for (const record of ordered) {
         signal?.throwIfAborted();
         const digest = digestOf(record.json);
         const path = this.recordPath(generation, record.id);
@@ -416,7 +430,7 @@ export class TransactionalRecordStore<Operation extends string> {
     return {
       schemaVersion: this.schemaVersion,
       generation,
-      mutationToken: randomBytes(32).toString("hex"),
+      mutationToken,
       entries,
     };
   }

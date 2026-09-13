@@ -3,7 +3,8 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
-import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./routes.mjs";
+import { AUTHORING_ROUTES } from "./routes.mjs";
+import { assertHandoffHashes } from "./handoff-identities.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 /** @param {string} path */
@@ -24,22 +25,12 @@ const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}
 const contractSpec = `git+https://github.com/Takazudo/zudo-composer.git#${contractPackageSha}`;
 
 assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/assets"]);
-assert.deepEqual(SITE_ROUTES, [
-  "/site",
-  "/site/about",
-  "/site/services",
-  "/site/journal",
-  "/site/journal/map-the-moving-parts",
-  "/site/journal/review-in-small-loops",
-  "/site/journal/start-with-the-question",
-]);
-assert.deepEqual(SPA_ROUTES, [...AUTHORING_ROUTES, ...SITE_ROUTES]);
-assert.equal(packageJson.dependencies["@zudo-sg/ui"], providerSpec);
+assert.equal(packageJson.devDependencies["@zudo-sg/ui"], providerSpec);
 // The contract is a peer of the published package and a workspace dev
 // dependency of this repository. Both halves are load-bearing: the peer keeps a
 // host on one contract instance, the dev spec keeps `workspace:*` out of what
 // ships.
-assert.equal(packageJson.peerDependencies["@zudo-composer/component-contract"], "1.0.0");
+assert.equal(packageJson.peerDependencies["@zudo-composer/component-contract"], "^1.0.0");
 assert.equal(packageJson.devDependencies["@zudo-composer/component-contract"], "workspace:*");
 assert.equal(packageJson.dependencies["@zudo-composer/component-contract"], undefined);
 assert.equal(contractHandoff.rootGitSpec, contractSpec);
@@ -99,28 +90,12 @@ for (const [name, document] of [["README.md", readme], ["CLAUDE.md", guidance]])
     "link:",
     "path:",
   ]) assert.ok(normalized.includes(phrase.toLowerCase()), `${name} is missing permanent handoff phrase: ${phrase}`);
-  for (const route of SPA_ROUTES) assert.ok(document.includes(`\`${route}\``), `${name} is missing route ${route}`);
+  for (const route of AUTHORING_ROUTES) assert.ok(document.includes(`\`${route}\``), `${name} is missing route ${route}`);
   assert.ok(document.includes("`/assets/`"), `${name} is missing the asset root`);
   assert.doesNotMatch(document, /e127c8a66a223472732e0cb1098296d07b1658ec|3070424cc8b55e63e8d44ee81b238b6777341bc3/, `${name} must not publish a provisional target SHA`);
 }
 
-// The exhaustive set of permanent identities this project may publish in prose:
-// the frozen zudo-sg provenance commit, the pinned provider commit/tree, and the
-// external component-contract package commit. A fifth hex string of hash length
-// appearing in either document is either an accidental provisional checkpoint or
-// an undocumented new identity — both are bugs the loose "includes" checks above
-// cannot catch.
-const documentedHashes = new Set(
-  [...`${readme}\n${guidance}`.matchAll(/\b[a-f0-9]{40}\b/gi)].map((match) => match[0].toLowerCase()),
-);
-assert.deepEqual(
-  documentedHashes,
-  new Set([frozenProvenance, providerSha, providerTree, contractPackageSha]),
-  "README/CLAUDE must contain only the four permanent provenance/provider/tree/contract identities",
-);
-const provisionalHashes = [...`${readme}\n${guidance}`.matchAll(/(?<![a-f0-9])[a-f0-9]{7,39}(?![a-f0-9])/gi)]
-  .map((match) => match[0]);
-assert.deepEqual(provisionalHashes, [], "README/CLAUDE must not publish abbreviated or provisional checkpoint hashes");
+assertHandoffHashes({ readme, guidance, permanent: [frozenProvenance, providerSha, providerTree, contractPackageSha] });
 
 // Ownership framing: the tool owns the five domains' models/UI over a shared
 // filesystem engine; a host project owns what it authors through them
@@ -248,7 +223,7 @@ for (const path of [
 assert.doesNotMatch(read("src/components/icons/index.ts"), /Composer\/styleguide/i, "icon ownership must remain standalone Composer/Sitemapper app chrome");
 
 for (const forbidden of ["workspace:", "file:", "link:", "path:", "packages/ui", "../zudo-sg"]) {
-  assert.ok(!packageJson.dependencies["@zudo-sg/ui"].includes(forbidden), `provider spec uses forbidden resolution: ${forbidden}`);
+  assert.ok(!packageJson.devDependencies["@zudo-sg/ui"].includes(forbidden), `provider spec uses forbidden resolution: ${forbidden}`);
 }
 
 console.log("Standalone handoff boundary passed: tool/host ownership framing, the bin/config/dataDir host contract, routes, provider/contract identities, and clean-break policy are locked.");

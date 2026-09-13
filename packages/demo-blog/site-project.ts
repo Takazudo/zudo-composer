@@ -1,17 +1,21 @@
-// The authored Margin Notes site (docs/demo-sites/blog.md). `pnpm generate`
-// turns this into `site-project.json`; the tests fail when the two disagree.
+// The authored Margin Notes site (docs/demo-sites/blog.md). `zudo-composer generate`
+// turns this into `site-project.json`; `zudo-composer generate --check` reports
+// when the committed output disagrees.
 // Article bodies live in content/articles/<slug>.md; images are looked up by
-// file name in the committed cms/assets store (`pnpm seed-assets` fills it).
+// file name in the configured Assets store (`pnpm seed` fills it).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { defineSite, entryRef, node, readAssetUrls, type CollectionModeInput, type Entry, type Page } from "demo-tools";
+import { defineSite, entryRef, node, readAssetUrls } from "zudo-composer/authoring";
+import type { CollectionModeInput, Entry, Page } from "zudo-composer/site-project";
+import { loadHostContext } from "zudo-composer/vite";
 import { componentPack } from "./components/pack";
 
 const packageRoot = import.meta.dirname;
-const assetUrls = readAssetUrls(packageRoot);
+const { composerConfig } = await loadHostContext({ workspaceRoot: packageRoot });
+const assetUrls = readAssetUrls(composerConfig);
 const assetUrl = (file: string): string => {
   const url = assetUrls[file];
-  if (!url) throw new Error(`cms/assets has no active asset named ${file}; run \`pnpm seed-assets\`.`);
+  if (!url) throw new Error(`${composerConfig.paths.assets} has no active asset named ${file}; run \`pnpm seed\`.`);
   return url;
 };
 const articleBody = (slug: string): string => readFileSync(resolve(packageRoot, "content/articles", `${slug}.md`), "utf8").trim();

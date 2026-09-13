@@ -1,0 +1,18 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "author-mina-okafor",
+  "lifecycle": "published",
+  "modelId": "authors",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "authors-avatar": {
+      "authors-avatar-alt": "Abstract painterly avatar in ochre and cream",
+      "authors-avatar-src": "/uploaded-assets/asset-assets-525defc4-6eb4-42da-8e0f-31276503cc9a"
+    },
+    "authors-bio": "Mina writes about attention and the small daily habits that protect it. She keeps one thing on her desk and a pencil in every book.",
+    "authors-name": "Mina Okafor",
+    "authors-slug": "mina-okafor"
+  }
+}

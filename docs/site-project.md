@@ -10,6 +10,118 @@ The current local release API is **protocol 2**. There are no protocol-1 readers
 migrations, compatibility adapters, or second active-build pointer. An old local
 layout is refused and preserved for explicit operator inspection/reset.
 
+## Committed ready workspace
+
+`zudo-composer seed --ready-workspace` produces a reproducible, selected CMS
+workspace from the host's committed `site-project.json`. Import the host's Assets
+first when the project references them, then generate the workspace:
+
+```sh
+zudo-composer assets import images-src/manifest.json
+zudo-composer seed --ready-workspace
+```
+
+`--root <host>` selects the host config and pack. `--from <file>` selects another
+committed JSON file, relative to the caller's working directory. Domain paths
+come from that config, including a moved `dataDir` and explicit domain overrides;
+the global Assets store stays separate. This mode uses the existing seed
+publish/plan/apply/build/activate service in disposable staging, so all committed
+entries are published and blocking release checks fail before CMS publication.
+It does not create or require the host's `.zudo-site-project` directory. Plain
+`seed` still activates a host-local release for website delivery.
+
+The generated `initial` workspace is selected through the real registry
+`complete()` operation. Its ready record has the completed mutation token and
+has no `seed`, `requiresBeforeComplete`, or `seedCleanupPending`. Transactional
+writers compute every current-generation document digest. All four scoped
+domain directories are included, even when empty; an empty Composition
+directory contains `.gitkeep` so Git retains it. Normal development opens this
+selected workspace without creation options, even when the dev source reports
+`no-active`. A ready workspace supplies authoring data; website delivery still
+requires its own activated release.
+
+The command prints one JSON object with `projectId`, `revision`, `buildId`,
+`workspaceId`, `status` (`created` or `unchanged`), `directories`, and `files`.
+`directories` lists every generated directory, including empty ones; `files`
+lists `{ "path": "…", "digest": "<sha256>" }` for every generated file. Both
+inventories are sorted and relative to the output root. Commit the listed files
+with their source. Fresh generation uses deterministic, domain-scoped tokens
+derived from the release identity, format/schema, generation, prior token, and
+canonical records. Ordinary authoring stores continue to use random tokens.
+
+Rerunning with identical source, Assets, toolchain, and destination bytes returns
+`unchanged` without rewriting files. Existing authored, partial, or otherwise
+different destinations are refused and preserved. Generate source changes into
+a fresh output tree for review before replacing previously generated files:
+
+```sh
+zudo-composer seed --ready-workspace --output /tmp/my-site-ready-review
+```
+
+`--output` is relative to the caller's working directory and retains the host's
+configured relative directory layout. The source host still provides its config,
+pack, and Assets. This command and its exact inventory support repository
+regeneration/check commands through the installed CLI. No generation or registry
+JSON should be edited by hand. The producer owns the four `workspace-v1-initial` directories and the
+whole `<dataDir>/workspaces` registry; it refuses to merge another workspace into
+that registry. Run generation while authoring is stopped. Publication copies the
+completed registry last and refuses destination collisions; an I/O failure may
+leave partial generated destinations requiring inspection and a fresh output
+tree, and is always a nonzero error.
+
+### Regenerating committed hosts
+
+For this repository's hosts, `site-project.ts` is authored source.
+`site-project.json`, the four ready CMS domain trees, and the workspace registry
+are generated material that happens to be tracked. Keep changes to content in
+the source file; never fix generated records or their digests by hand.
+
+From the repository root:
+
+```sh
+corepack pnpm cms:regenerate
+corepack pnpm cms:check
+```
+
+The check is also part of `corepack pnpm check`. It discovers source-bearing
+hosts under `packages/` and `fixtures/`, including a future `demo-studio`, and
+requires previously registered hosts to remain present. It runs the installed
+`zudo-composer generate --check`, then `seed --ready-workspace --output` in fresh
+staging. Every directory (including empty directories), filename and byte digest
+must match the producer. Extra generations, stale JSX, missing files and
+untracked files inside managed trees fail. The current registry reader and all
+four domain readers open copies of the committed records; incompatible schemas
+fail even if a file's transactional digest was updated to match. Reader repairs
+cannot alter committed files or conceal differences.
+
+Regeneration evaluates `site-project.ts` with installed `generate` in a
+disposable copy, then seeds fresh output using the original host's pack and
+Assets. It prepares and checks every host before replacing anything.
+`scripts/cms-fixtures.json` is automatically generated directory ownership,
+not a digest baseline. Old ownership comes from Git HEAD so moved or obsolete
+generated trees can be removed without decoding their old format. New hosts
+with absent or already-current generated trees register automatically.
+
+Stop authoring and preserve local CMS edits separately before regeneration.
+Only trees matching Git HEAD or fresh producer output may be replaced; edited,
+untracked, ignored, symlinked or overlapping destinations are refused.
+Assets, public uploads, other workspaces, release state and unrelated host files
+remain outside replacement. Identical reruns do not rewrite files. If a prior
+run's generated output has not been committed, commit or preserve that output
+before changing source again. Interrupted filesystem publication can leave
+partial output: inspect it and restore the generated trees from the committed
+baseline before retrying, while retaining any authored changes separately.
+
+For a clean break to a record schema or workspace layout, update the writers
+and current readers together, run both commands above, and commit **all hosts,
+their aggregate JSON, and ownership metadata in the same PR**. The same rule
+applies when compiler or pack bytes change a build identity without changing
+the aggregate. Do not exempt an old identity, add old-schema readers, or add
+migrations. Generated consumer repositories must use the new tool's installed
+`generate` and fresh-output `seed --ready-workspace` commands to replace their
+provisional generated data as part of adopting the break; this repository gate
+cannot update external repositories.
+
 ## Review, stage, build, activate
 
 1. `plan` constructs a detached delivery candidate, real Changes, Checks and
@@ -145,14 +257,14 @@ JSON
 ```
 
 For an initial release, explicitly select the intended entries. This example
-deliberately selects **all entries in the bundled synthetic sample**; normal
+deliberately selects **all entries in the repository's generated studio sample**; normal
 editorial releases should name only the entries being approved. Use the actual
 head revision and active triple from `list` for subsequent reviews.
 
 ```sh
 node --input-type=module <<'NODE' | corepack pnpm site-project:api > release-plan.json
 import { readFileSync } from 'node:fs';
-const project = JSON.parse(readFileSync('src/test/site-project-fixture.json', 'utf8'));
+const project = JSON.parse(readFileSync('packages/demo-studio/site-project.json', 'utf8'));
 const selection = project.providers.content.flatMap(p => p.entries.map(e => ({
   ref: { providerId: p.id, modelId: e.modelId, recordId: e.id }, action: 'publish'
 })));
