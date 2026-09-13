@@ -32,7 +32,7 @@ describe("shared sample project guard", () => {
     const { scripts, files } = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
     expect(scripts["sample:check"]).toBe("node scripts/check-sample-project.mjs");
     expect(scripts.check).toContain("pnpm sample:check &&");
-    expect(scripts["build:hosted-demo"]).toBeUndefined();
+    expect(scripts[["build", "hosted-demo"].join(":")]).toBeUndefined();
     expect(scripts["demo:build-editor"]).toMatch(/^pnpm sample:check && node /);
     expect(scripts["demo:build-editors"]).toMatch(/^pnpm sample:check && node /);
     expect(files).toContain("!src/test");

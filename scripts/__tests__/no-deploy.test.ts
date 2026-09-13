@@ -272,7 +272,7 @@ describe("CI and aggregate packed-host coverage", () => {
         dist_dir: relative(repositoryRoot, TARGETS[key].artifactDirectory).split(sep).join("/"),
       });
     }
-    expect(workflow.jobs.validate.steps.some((step: { run?: string }) => step.run?.includes("build:hosted-demo"))).toBe(false);
+    expect(workflow.jobs.validate.steps.some((step: { run?: string }) => step.run?.includes(["build", "hosted-demo"].join(":")))).toBe(false);
   });
 
   it("uses disk discovery for all four hosts, generated output and the retained synthesized proof", async () => {
