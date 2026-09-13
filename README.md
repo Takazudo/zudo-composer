@@ -30,6 +30,19 @@ Create a populated standalone host with `zudo-composer init <new-directory>`.
 The [creator guide](./docs/creator.md) covers the installed command, the
 unpublished-package preview, and which generated files to commit.
 
+## Deployed sites
+
+Five static targets are deployed from `main` (each is its own Worker; see
+`scripts/hosted-demo/targets.mjs`):
+
+| Site | URL | Worker config |
+| --- | --- | --- |
+| Hosted Composer sample (Sample Studio) | <https://zudo-composer.zudolab.dev> | [`wrangler.jsonc`](./wrangler.jsonc) |
+| Nightjar Supply webshop demo | <https://zc-demo-shop.zudolab.dev> | [`wrangler.demo-shop.jsonc`](./wrangler.demo-shop.jsonc) |
+| Orrery landing demo | <https://zc-demo-landing.zudolab.dev> | [`wrangler.demo-landing.jsonc`](./wrangler.demo-landing.jsonc) |
+| Margin Notes blog demo | <https://zc-demo-blog.zudolab.dev> | [`wrangler.demo-blog.jsonc`](./wrangler.demo-blog.jsonc) |
+| Developer documentation | <https://zc-doc.zudolab.dev> | [`wrangler.doc.jsonc`](./wrangler.doc.jsonc) |
+
 ## Documentation site
 
 The [`doc/`](./doc/) directory is the zudo-doc developer site at
@@ -100,10 +113,10 @@ Full authoring and gate-wiring details are in
 
 | Package | Site | Hosted domain | Local dev port |
 | --- | --- | --- | --- |
-| `packages/demo-studio` | Sample Studio | hosted Composer sample | 4184 |
-| `packages/demo-webshop` | Nightjar Supply | `zc-demo-shop.zudolab.dev` | 4181 |
-| `packages/demo-landing` | Orrery | `zc-demo-landing.zudolab.dev` | 4182 |
-| `packages/demo-blog` | Margin Notes | `zc-demo-blog.zudolab.dev` | 4183 |
+| `packages/demo-studio` | Sample Studio | <https://zudo-composer.zudolab.dev> | 4184 |
+| `packages/demo-webshop` | Nightjar Supply | <https://zc-demo-shop.zudolab.dev> | 4181 |
+| `packages/demo-landing` | Orrery | <https://zc-demo-landing.zudolab.dev> | 4182 |
+| `packages/demo-blog` | Margin Notes | <https://zc-demo-blog.zudolab.dev> | 4183 |
 
 Run one locally:
 
@@ -476,17 +489,21 @@ or used in place of, the immutable external UI-provider Git dependency.
 ## Scoped hosted demo exception
 
 The installed tool and ordinary local workflow remain local-first. Issue 414
-adds one disposable static sample at `https://zudo-composer.zudolab.dev`; it
-does not add hosted persistence, an API, authentication, arbitrary host-project
-access or a deployment target for installed applications. The target is the
-Worker named `zudo-composer` and the existing custom-domain binding in
-[`wrangler.jsonc`](./wrangler.jsonc) remains in place.
+adds one disposable static sample at <https://zudo-composer.zudolab.dev>, and
+issue 504 adds three static demo websites at <https://zc-demo-shop.zudolab.dev>,
+<https://zc-demo-landing.zudolab.dev> and <https://zc-demo-blog.zudolab.dev>;
+none of them adds hosted persistence, an API, authentication, arbitrary host-project
+access or a deployment target for installed applications. The sample is the
+Worker named `zudo-composer` with the existing custom-domain binding in
+[`wrangler.jsonc`](./wrangler.jsonc); each demo website has its own Worker in
+`wrangler.demo-shop.jsonc`, `wrangler.demo-landing.jsonc` and
+`wrangler.demo-blog.jsonc`.
 
 The same trusted-run pipeline also registers the documentation site as its
 fifth target: `pnpm doc:build-site` builds `doc/dist`, whose
 `doc-site-manifest.json` is verified and uploaded to the `zudo-composer-doc`
 Worker using [`wrangler.doc.jsonc`](./wrangler.doc.jsonc) at
-`https://zc-doc.zudolab.dev`. Its multi-page routes are checked against the
+<https://zc-doc.zudolab.dev>. Its multi-page routes are checked against the
 emitted HTML files, including extensionless pages, while Wrangler's default
 `auto-trailing-slash` HTML handling and explicit `404-page` behavior serve the
 static site.
