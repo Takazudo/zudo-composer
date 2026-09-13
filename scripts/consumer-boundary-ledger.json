@@ -1,4 +1,1 @@
-[
-  {"host":"fixtures/host","file":"styles/base.css","rule":"undeclared-package","detail":"@import: @zudo-sg/ui/styles/composer.css","count":1,"issue":551},
-  {"host":"fixtures/host","file":"zudo-composer.config.ts","rule":"undeclared-package","detail":"component pack: @zudo-sg/ui/composer-pack","count":1,"issue":551}
-]
+[]

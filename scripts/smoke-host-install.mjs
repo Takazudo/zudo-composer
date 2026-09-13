@@ -33,6 +33,8 @@ import { lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promise
 import { basename, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
 import { AUTHORING_ROUTES } from "./routes.mjs";
+import { authoringSiteRoutes } from "./host-site-routes.mjs";
+import { HOSTED_SITE_ROUTES } from "../packages/demo-studio/hosted-routes.mjs";
 import { verifyReleasePortability } from "./verify-release-portability.mjs";
 import {
   FIRST_PARTY, WRITABLE, assertConfinedWrites, assertInstalledHost,
@@ -71,11 +73,12 @@ function startHostServer(hostRoot) {
   return spawnHostServer(hostRoot, { env: environment });
 }
 
-/** @param {{output: () => string}} server */
-async function fetchAuthoringRoutes(server) {
-  for (const route of AUTHORING_ROUTES) {
+/** @param {{output: () => string}} server @param {string[]} [routes] */
+async function fetchAuthoringRoutes(server, routes = AUTHORING_ROUTES) {
+  for (const route of routes) {
     const response = await fetch(`${ORIGIN}${route}`, { headers: { accept: "text/html" }, signal: AbortSignal.timeout(30_000) });
     if (!response.ok) throw new Error(`${route} answered ${response.status} on a freshly installed host.`);
+    assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/, `${route} did not return an HTML document`);
     await response.arrayBuffer();
   }
   if (/Failed to resolve dependency/.test(server.output())) {
@@ -284,6 +287,30 @@ async function verifyInstalledSiteArtifact(hostRoot) {
   `], hostRoot);
   const manifest = JSON.parse(stdout);
   step(`${basename(hostRoot)}: verified installed artifact, ${manifest.routes.length} routes and ${manifest.files} files`);
+  return /** @type {{projectId: string, routes: string[], files: number}} */ (manifest);
+}
+
+/** Crawl the exact verified artifact routes through the activated installed
+ * host, including a refresh and a rendered heading for every emitted page.
+ * @param {string[]} routes */
+async function verifyInstalledSiteRoutes(routes) {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    /** @type {string[]} */
+    const failures = [];
+    page.on("pageerror", (error) => failures.push(error.message));
+    page.on("console", (message) => { if (message.type() === "error") failures.push(message.text()); });
+    page.on("requestfailed", (request) => { if (request.failure()?.errorText !== "net::ERR_ABORTED") failures.push(`${request.url()}: ${request.failure()?.errorText}`); });
+    for (const route of routes) {
+      assert.equal((await page.goto(`${ORIGIN}${route}`))?.status(), 200, `${route} direct navigation failed`);
+      await page.locator("h1").first().waitFor({ state: "visible", timeout: 90_000 });
+      assert.equal((await page.reload())?.status(), 200, `${route} refresh failed`);
+      await page.locator("h1").first().waitFor({ state: "visible", timeout: 90_000 });
+      assert.equal(await page.getByRole("heading", { name: "Page not found", exact: true }).count(), 0, `${route} is absent from the activated host`);
+    }
+    assert.deepEqual(failures, [], "Installed site routes reported runtime failures");
+  } finally { await browser.close(); }
 }
 
 /** Confirm ready state through the actual installed authoring UI before seed.
@@ -359,7 +386,15 @@ async function proveDiskHost(sourceHost, workspace, tarballs, toolPackage, negat
     step(`${name}: building its static site and running its own test suite`);
     await run(pnpm, ["exec", "zudo-composer", "build-site", "--source-revision", "packed-host-install"], hostRoot);
     await run(pnpm, ["run", "test"], hostRoot);
-    await assertConfinedWrites(hostRoot, installedTree, () => verifyInstalledSiteArtifact(hostRoot));
+    const artifact = await verifyInstalledSiteArtifact(hostRoot);
+    const routes = authoringSiteRoutes(artifact.routes);
+    if (name === "demo-studio") assert.deepEqual([...routes].sort(), [...HOSTED_SITE_ROUTES].sort(), "Studio artifact differs from its frozen production live-route data");
+    server = await startHostServer(hostRoot);
+    await fetchAuthoringRoutes(server, routes);
+    await verifyInstalledSiteRoutes(routes);
+    await server.stop();
+    server = undefined;
+    await assertConfinedWrites(hostRoot, installedTree, async () => { await verifyInstalledSiteArtifact(hostRoot); });
     step(`${name}: passed installed dev, generate, seed, build, tests and write confinement`);
   } finally {
     await server?.stop();

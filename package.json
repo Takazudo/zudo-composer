@@ -119,6 +119,7 @@
     "hosted-demo:live-check": "node scripts/hosted-demo/live-check.mjs",
     "hosted-demo:workflow-guard": "node scripts/hosted-demo/workflow-guard.mjs",
     "hosted-demo:deploy": "node scripts/hosted-demo/deploy.mjs",
+    "demo:build-sites": "node scripts/build-demo-sites.mjs",
     "demo:build-site": "node scripts/build-site-static.mjs",
     "site-static:verify": "node scripts/check-site-static.mjs",
     "build:public": "node scripts/build-public-entries.mjs",

@@ -265,39 +265,24 @@ describe('consumer boundary protocols and commands', () => {
 });
 
 describe('consumer boundary ledger and CLI', () => {
-  it('requires exact violation identities and counts; removal must shrink the ledger', () => {
+  it('requires zero violations and refuses even an exactly matching former ledger entry', () => {
     const host = fixture();
     host.write('entry.ts', `import '../../src/private';`);
-    const ledger = host.scan().map((entry) => ({ ...entry, issue: 538 }));
-    expect(checkConsumerLedger(host.scan(), ledger).ok).toBe(true);
-    expect(host.cli(ledger).status).toBe(0);
-    host.write('entry.ts', `import '../../src/private'; import '../../src/private';`);
-    expect(checkConsumerLedger(host.scan(), ledger)).toMatchObject({ ok: false, counts: [{ count: 2, expected: 1 }] });
-    host.write('entry.ts', `import '../../src/different';`);
-    expect(checkConsumerLedger(host.scan(), ledger)).toMatchObject({ ok: false, unexpected: [expect.anything()], stale: [expect.anything()] });
-    host.write('entry.ts', 'export const local = true;');
-    const stale = host.cli(ledger);
-    expect(stale.status).toBe(1);
-    expect(stale.stderr).toContain('STALE packages/demo-example/entry.ts');
-    expect(stale.stderr).toContain('issue 538');
-    const clean = host.cli([]);
-    expect(clean.status).toBe(0);
-    expect(clean.stdout).toContain('0 ledger entries remaining');
-  });
-
-  it('does not let a ledgered workspace dependency authorize a new workspace dependency', () => {
-    const host = fixture({ dependencies: { 'zudo-composer': 'workspace:*' } });
     const ledger = host.scan().map((entry) => ({ ...entry, issue: 551 }));
-    host.write('package.json', JSON.stringify({ name: 'demo-example', dependencies: { 'zudo-composer': 'workspace:*', sneaky: 'workspace:*' } }));
+    expect(checkConsumerLedger(host.scan(), [])).toMatchObject({ ok: false, unexpected: host.scan(), remaining: 0 });
+    expect(host.cli().status).toBe(1);
+    expect(host.cli().stderr).toContain('NEW packages/demo-example/entry.ts');
+    expect(() => checkConsumerLedger(host.scan(), ledger)).toThrow('must be empty');
+    expect(host.cli(ledger).stderr).toContain('must be empty');
+    host.write('entry.ts', 'export const local = true;');
     expect(host.cli(ledger).status).toBe(1);
-    expect(checkConsumerLedger(host.scan(), ledger).unexpected).toEqual([expect.objectContaining({ detail: 'dependencies.sneaky: workspace:*' })]);
+    const clean = host.cli();
+    expect(clean.status).toBe(0);
+    expect(clean.stdout).toContain('zero violations and an empty ledger');
   });
 
-  it('rejects malformed ledgers, duplicate entries and invalid ownership', () => {
-    const entry = { host: 'packages/demo-example', file: 'entry.ts', rule: 'undeclared-package', detail: 'import: hidden', count: 1, issue: 543 };
-    for (const ledger of [{}, [entry, entry], [{ ...entry, issue: 0 }], [{ ...entry, count: 0 }], [{ ...entry, extra: true }], [{ ...entry, host: '../elsewhere' }], [{ ...entry, rule: 'anything' }]]) {
-      expect(() => checkConsumerLedger([], ledger)).toThrow();
-    }
+  it.each([{}, null, [{}], [false]])('rejects a malformed or nonempty ledger: %j', (ledger) => {
+    expect(() => checkConsumerLedger([], ledger)).toThrow();
   });
 
   it('discovers all fixture and future host packages independently of workspace membership', () => {
@@ -326,9 +311,11 @@ describe('consumer boundary ledger and CLI', () => {
 
   it('matches the committed ledger, scans the demos and fixtures, and is included in check', () => {
     const hosts = discoverConsumerHosts(repositoryRoot);
-    expect(hosts.map((host) => host.slice(repositoryRoot.length + 1))).toEqual(expect.arrayContaining(['fixtures/self-host', 'fixtures/host', 'fixtures/themeset-host', 'packages/demo-blog', 'packages/demo-landing', 'packages/demo-webshop']));
+    expect(hosts.map((host) => host.slice(repositoryRoot.length + 1))).toEqual(expect.arrayContaining(['fixtures/self-host', 'fixtures/host', 'fixtures/themeset-host', 'packages/demo-blog', 'packages/demo-landing', 'packages/demo-studio', 'packages/demo-webshop']));
     const actual = hosts.flatMap((hostRoot) => scanConsumerHost({ root: repositoryRoot, hostRoot }));
     const ledger: unknown = JSON.parse(readFileSync(join(repositoryRoot, 'scripts/consumer-boundary-ledger.json'), 'utf8'));
+    expect(ledger).toEqual([]);
+    expect(actual).toEqual([]);
     expect(checkConsumerLedger(actual, ledger).ok).toBe(true);
     const manifest = JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
     expect(manifest.scripts['consumer:boundary']).toBe('node scripts/check-consumer-boundary.mjs && node scripts/check-creator.mjs');

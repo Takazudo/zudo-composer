@@ -11,7 +11,7 @@ import { parse } from "yaml";
 import { discoverConsumerHosts } from "./check-consumer-boundary.mjs";
 
 const self = fileURLToPath(import.meta.url);
-const localEntries = ["check", "smoke:host-install", "packed-host:matrix", "consumer:boundary", "creator:check", "cms:check", "cms:regenerate", "public:check", "public:installed", "studio:check", "demo:build-site", "site-static:verify"];
+const localEntries = ["check", "smoke:host-install", "packed-host:matrix", "consumer:boundary", "creator:check", "cms:check", "cms:regenerate", "public:check", "public:installed", "studio:check", "demo:build-sites", "demo:build-site", "site-static:verify"];
 const packageOperations = new Set(["install", "pack", "add", "remove", "rebuild"]);
 const localBinaries = new Set(["vite", "vitest", "tsc", "eslint", "playwright", "rollup", "zudo-composer"]);
 const shellBinaries = new Set(["sh", "bash", "zsh"]);
