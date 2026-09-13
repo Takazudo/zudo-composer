@@ -245,7 +245,7 @@ importers:
         specifier: workspace:*
         version: link:../..
 
-  packages/demo-studio:
+  packages/demo-sample:
     devDependencies:
       '@types/node':
         specifier: ^26.4.0

@@ -1,6 +1,6 @@
 # Sample Studio polish
 
-The sample SiteProject is authored in `packages/demo-studio/site-project.ts`
+The sample SiteProject is authored in `packages/demo-sample/site-project.ts`
 and generated into that host's sole `site-project.json`. Tests and the hosted
 demo consume this same JSON for the sample served at `/site/*` and on
 `zudo-composer.zudolab.dev`. This document says what to improve and within

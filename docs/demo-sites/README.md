@@ -13,7 +13,7 @@ published package.
 | `packages/demo-landing` | `zc-demo-landing.zudolab.dev` | `land-` | 4182 |
 | `packages/demo-blog` | `zc-demo-blog.zudolab.dev` | `blog-` | 4183 |
 
-Sample Studio is the fourth symmetric host, `packages/demo-studio`. It uses
+Sample Studio is the fourth symmetric host, `packages/demo-sample`. It uses
 the exact installed `@zudo-sg/ui` provider and preserves the original project
 JSON. The original contains no host-owned images: its provider placeholder is
 separate from the five optional Studio image rows in the repository Assets seed.
@@ -79,7 +79,7 @@ corepack pnpm dev --port 4181
    SiteProject aggregate, validates it against the package's pack manifest with
    the tool's own `validateSiteProject`, and writes `site-project.json` as
    canonical JSON (sorted keys, compact, trailing newline — the same form as
-   `packages/demo-studio/site-project.json`). Validation failures list the
+   `packages/demo-sample/site-project.json`). Validation failures list the
    diagnostics and write nothing.
 2. **seed** (`zudo-composer assets import images-src/manifest.json &&
    zudo-composer seed`) runs two idempotent installed commands:

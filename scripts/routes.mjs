@@ -1,5 +1,5 @@
 // @ts-check
-import { HOSTED_SITE_ROUTES } from "../packages/demo-studio/hosted-routes.mjs";
+import { HOSTED_SITE_ROUTES } from "../packages/demo-sample/hosted-routes.mjs";
 
 /** @type {string[]} */
 export const AUTHORING_ROUTES = ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/assets"];

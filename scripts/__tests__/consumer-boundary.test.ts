@@ -287,14 +287,14 @@ describe('consumer boundary ledger and CLI', () => {
 
   it('discovers all fixture and future host packages independently of workspace membership', () => {
     const host = fixture();
-    for (const directory of ['fixtures/self-host', 'packages/demo-studio', 'packages/custom-host', 'fixtures/configured']) {
+    for (const directory of ['fixtures/self-host', 'packages/demo-sample', 'packages/custom-host', 'fixtures/configured']) {
       host.write('package.json', JSON.stringify({ name: directory, ...(directory.endsWith('custom-host') ? { dependencies: { 'zudo-composer': '1' } } : {}) }), join(host.root, directory));
       if (directory.startsWith('fixtures/')) host.write('zudo-composer.config.ts', 'export default {};', join(host.root, directory));
     }
     host.write('package.json', '{"name":"internal-library"}', join(host.root, 'packages/internal-library'));
     expect(discoverConsumerHosts(host.root)).toHaveLength(5);
-    host.write('entry.ts', `import '../../src/private';`, join(host.root, 'packages/demo-studio'));
-    expect(host.cli().stderr).toContain('NEW packages/demo-studio/entry.ts');
+    host.write('entry.ts', `import '../../src/private';`, join(host.root, 'packages/demo-sample'));
+    expect(host.cli().stderr).toContain('NEW packages/demo-sample/entry.ts');
     expect(host.cli([], ['--host', host.hostRoot]).status).toBe(0);
     rmSync(join(host.hostRoot, 'package.json'));
     expect(host.cli().status).toBe(1);
@@ -311,7 +311,7 @@ describe('consumer boundary ledger and CLI', () => {
 
   it('matches the committed ledger, scans the demos and fixtures, and is included in check', () => {
     const hosts = discoverConsumerHosts(repositoryRoot);
-    expect(hosts.map((host) => host.slice(repositoryRoot.length + 1))).toEqual(expect.arrayContaining(['fixtures/self-host', 'fixtures/host', 'fixtures/themeset-host', 'packages/demo-blog', 'packages/demo-landing', 'packages/demo-studio', 'packages/demo-webshop']));
+    expect(hosts.map((host) => host.slice(repositoryRoot.length + 1))).toEqual(expect.arrayContaining(['fixtures/self-host', 'fixtures/host', 'fixtures/themeset-host', 'packages/demo-blog', 'packages/demo-landing', 'packages/demo-sample', 'packages/demo-webshop']));
     const actual = hosts.flatMap((hostRoot) => scanConsumerHost({ root: repositoryRoot, hostRoot }));
     const ledger: unknown = JSON.parse(readFileSync(join(repositoryRoot, 'scripts/consumer-boundary-ledger.json'), 'utf8'));
     expect(ledger).toEqual([]);

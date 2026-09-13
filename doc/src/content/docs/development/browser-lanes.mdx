@@ -61,7 +61,7 @@ Vite preview of the checkout. The development lane gives each spec file a
 fresh set of disposable filesystem roots so one spec's writes cannot leak into
 the next invocation.
 
-The SiteProject lane reads `packages/demo-studio/dist-site/site-manifest.json`
+The SiteProject lane reads `packages/demo-sample/dist-site/site-manifest.json`
 through its verified-manifest helper, compares the authoring routes with
 Studio's frozen production route data, and seeds a release in temporary roots.
 The demos lane copies each committed `cms/` tree into a temporary host-local

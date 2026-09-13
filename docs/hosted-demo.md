@@ -4,7 +4,7 @@
 The ordinary `pnpm build`, installed package and local development endpoints keep
 their existing behavior. The demo publishes no filesystem APIs or release server.
 
-The demo bundles `packages/demo-studio/site-project.json`, the public sample
+The demo bundles `packages/demo-sample/site-project.json`, the public sample
 generated from that host's `site-project.ts` and `content/`. Both the browser
 bootstrap and Vite's project-revision manifest use direct JSON module imports;
 the deployed demo needs no filesystem. It never reads an activated local
@@ -14,7 +14,7 @@ new independent tabs start from the sample. Export working JSON to retain edits.
 Review inspection/export works; local staging, build and activation remain disabled.
 
 The test fixture helper and isolated browser seed lanes use this same JSON.
-`pnpm studio:check`, included in `check` and `build:hosted-demo`, rejects duplicate
+`pnpm sample:check`, included in `check` and `build:hosted-demo`, rejects duplicate
 sample files, imports from a different source, and hand-edited generated JSON.
 `pnpm cms:check` also verifies the studio's derived ready CMS. Regenerate all
 hosts with `pnpm cms:regenerate` after changing authored content. The installed

@@ -5,7 +5,7 @@ export default defineConfig({
   // of the tool application's virtual module aliases.
   oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
   test: {
-    name: "demo-studio",
+    name: "demo-sample",
     include: ["__tests__/**/*.test.?(c|m)[jt]s?(x)"],
     environment: "node",
     testTimeout: 60_000,

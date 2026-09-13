@@ -7,7 +7,7 @@ import { compileStaticSite, createSiteManifest, SITE_HEADERS, SITE_MANIFEST, sit
 import { loadHostContext } from "../../server/host-context.mjs";
 import { authoringSiteRoutes, readVerifiedHostManifest } from "../host-site-routes.mjs";
 import { AUTHORING_ROUTES, SPA_ROUTES } from "../routes.mjs";
-import { HOSTED_SITE_ROUTES } from "../../packages/demo-studio/hosted-routes.mjs";
+import { HOSTED_SITE_ROUTES } from "../../packages/demo-sample/hosted-routes.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const temporary: string[] = [];
@@ -17,10 +17,10 @@ async function fixture() {
   await mkdir(join(root, ".artifacts"), { recursive: true });
   const host = await mkdtemp(join(root, ".artifacts/host-routes-"));
   temporary.push(host);
-  const metadata = JSON.parse(await readFile(join(root, "packages/demo-studio/package.json"), "utf8"));
+  const metadata = JSON.parse(await readFile(join(root, "packages/demo-sample/package.json"), "utf8"));
   await writeFile(join(host, "package.json"), JSON.stringify({ ...metadata, name: "route-proof" }));
   await writeFile(join(host, "zudo-composer.config.ts"), 'export default { pack: "@zudo-sg/ui/composer-pack" };');
-  const project = JSON.parse(await readFile(join(root, "packages/demo-studio/site-project.json"), "utf8")) as SiteProject;
+  const project = JSON.parse(await readFile(join(root, "packages/demo-sample/site-project.json"), "utf8")) as SiteProject;
   const source = () => writeFile(join(host, "site-project.json"), JSON.stringify(project));
   await source();
   const directory = join(host, "dist-site");

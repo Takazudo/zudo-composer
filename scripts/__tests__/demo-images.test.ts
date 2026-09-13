@@ -11,7 +11,7 @@ const MAX_FILE_BYTES = 250 * 1024;
 const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 
 // Studio's optional repository Assets seed stays central. The byte-identical
-// demo-studio host has no images of its own; each other host owns its shot count.
+// demo-sample host has no images of its own; each other host owns its shot count.
 const studio = { manifest: "scripts/demo/sample-studio.manifest.json", dir: "scripts/demo-assets", count: 5 };
 
 type Entry = { file: string; alt: string; use: string; aspect: string };

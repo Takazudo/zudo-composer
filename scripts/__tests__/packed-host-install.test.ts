@@ -59,7 +59,7 @@ it("preserves a location-dependent CI package-manager launcher without exposing 
 describe("packed host discovery and manifest isolation", () => {
   it("covers all four real hosts from disk and retains the default synthesized proof", () => {
     const hosts = discoverPackedHosts(repositoryRoot);
-    expect(hosts.map((host) => basename(host))).toEqual(expect.arrayContaining(["demo-blog", "demo-landing", "demo-studio", "demo-webshop"]));
+    expect(hosts.map((host) => basename(host))).toEqual(expect.arrayContaining(["demo-blog", "demo-landing", "demo-sample", "demo-webshop"]));
     expect(selectPackedHosts([], hosts)).toEqual({ hosts, fixture: true, generated: true, negative: undefined });
     expect(selectPackedHosts(["--host", "demo-blog"], hosts)).toEqual({ hosts: [hosts[0]], fixture: false, generated: false, negative: undefined });
     expect(selectPackedHosts(["--host", "generated"], hosts)).toEqual({ hosts: [], fixture: false, generated: true, negative: undefined });

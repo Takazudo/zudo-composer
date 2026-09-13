@@ -69,7 +69,7 @@ A host's activated SiteProject is delivered under `/site`; its static website
 uses the same routes at `/`. Route assertions come from the host's verified
 `dist-site/site-manifest.json`, including pages emitted from collection entries.
 Sample Studio's frozen hosted Composer route data lives in
-`packages/demo-studio/hosted-routes.mjs` and is checked against its artifact.
+`packages/demo-sample/hosted-routes.mjs` and is checked against its artifact.
 
 The preview route is an implementation boundary, not an independent public
 product. Build-emitted assets remain rooted at `/assets/`, while committed assets
@@ -103,7 +103,7 @@ needed, click a demo thumbnail to inspect it, then click **Preview**.
 
 ## Demo host projects
 
-`packages/demo-studio`, `packages/demo-webshop`, `packages/demo-landing` and
+`packages/demo-sample`, `packages/demo-webshop`, `packages/demo-landing` and
 `packages/demo-blog` are four complete host projects. Studio installs the pinned
 provider; the other three own their component packs and Tailwind themes. They
 are kept as workspace members so the tool is exercised the way a real host
@@ -113,7 +113,7 @@ Full authoring and gate-wiring details are in
 
 | Package | Site | Hosted domain | Local dev port |
 | --- | --- | --- | --- |
-| `packages/demo-studio` | Sample Studio | <https://zudo-composer.zudolab.dev> | 4184 |
+| `packages/demo-sample` | Sample Studio | <https://zudo-composer.zudolab.dev> | 4184 |
 | `packages/demo-webshop` | Nightjar Supply | <https://zc-demo-shop.zudolab.dev> | 4181 |
 | `packages/demo-landing` | Orrery | <https://zc-demo-landing.zudolab.dev> | 4182 |
 | `packages/demo-blog` | Margin Notes | <https://zc-demo-blog.zudolab.dev> | 4183 |

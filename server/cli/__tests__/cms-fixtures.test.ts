@@ -107,7 +107,7 @@ async function git(root: string, ...args: string[]) {
 }
 
 async function hostRepository() {
-  const root = await temporary(), hostName = "packages/demo-studio", host = join(root, hostName);
+  const root = await temporary(), hostName = "packages/demo-sample", host = join(root, hostName);
   await mkdir(host, { recursive: true });
   await mkdir(join(root, "scripts"));
   await writeFile(join(root, OWNERSHIP_FILE), json({ version: 1, hosts: {} }));
@@ -209,10 +209,10 @@ describe("installed fixture regeneration", () => {
     await expect(current.invoke(true)).rejects.toThrow(/ownership is stale/);
     await writeFile(metadataPath, metadata);
     await rm(join(current.host, "site-project.ts"));
-    await expect(current.invoke(true)).rejects.toThrow(/missing packages\/demo-studio\/site-project.ts/);
+    await expect(current.invoke(true)).rejects.toThrow(/missing packages\/demo-sample\/site-project.ts/);
     await rm(join(current.host, "site-project.json"));
     await writeFile(metadataPath, json({ version: 1, hosts: {} }));
-    await expect(current.invoke(true)).rejects.toThrow(/missing packages\/demo-studio\/site-project.ts/);
+    await expect(current.invoke(true)).rejects.toThrow(/missing packages\/demo-sample\/site-project.ts/);
   }, 120_000);
 
   it("refuses escaping and overlapping ownership metadata before running a producer", async () => {
