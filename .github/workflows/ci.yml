@@ -54,21 +54,11 @@ jobs:
       - run: pnpm test:browser:dev
         env:
           CI: true
-      # Browser lanes verify these artifacts and never rebuild them.
+      # The site-project and demo browser lanes verify artifacts prepared here
+      # and never rebuild them.
       - run: pnpm demo:build-sites
       - run: pnpm test:browser:site-project
-      - run: pnpm build:hosted-demo
-      - run: pnpm hosted-demo:verify dist-hosted-demo "${{ github.sha }}"
-      # This lane consumes the already-built artifact; it must stay after the
-      # build/manifest checks and before the artifact is handed to production.
-      - run: pnpm test:browser:hosted-demo
       - run: pnpm test:browser:demos
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: hosted-demo-${{ github.sha }}
-          path: dist-hosted-demo
-          if-no-files-found: error
-          retention-days: 7
       # A browser failure that only happens on a runner is undiagnosable from the log
       # alone: Playwright writes the page snapshot, trace and video to disk, and the
       # log prints only their paths. Without this, reproducing such a failure locally
@@ -138,7 +128,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        site: [webshop, landing, blog]
+        site: [sample, shop, landing, blog]
+        include:
+          # Keep these paths explicit: the public target key `shop` maps to
+          # the historical host directory packages/demo-webshop.
+          - site: sample
+            target: sample
+            host_dir: packages/demo-sample
+            dist_dir: packages/demo-sample/dist-site
+            artifact_name: demo-site-sample
+          - site: shop
+            target: shop
+            host_dir: packages/demo-webshop
+            dist_dir: packages/demo-webshop/dist-site
+            artifact_name: demo-site-shop
+          - site: landing
+            target: landing
+            host_dir: packages/demo-landing
+            dist_dir: packages/demo-landing/dist-site
+            artifact_name: demo-site-landing
+          - site: blog
+            target: blog
+            host_dir: packages/demo-blog
+            dist_dir: packages/demo-blog/dist-site
+            artifact_name: demo-site-blog
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
@@ -150,15 +163,75 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # demo:build-site both builds and verifies the manifest (scripts/build-site-static.mjs).
-      - run: pnpm demo:build-site ${{ matrix.site }}
-      - run: pnpm site-static:verify "packages/demo-${{ matrix.site }}/dist-site" "${{ github.sha }}"
+      # Build and verify the exact registry artifact. The explicit host_dir is
+      # required because `shop` is backed by packages/demo-webshop.
+      - run: pnpm demo:build-site "${{ matrix.host_dir }}"
+      - run: pnpm hosted-demo:verify "${{ matrix.dist_dir }}" "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: ${{ matrix.target }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: demo-site-${{ matrix.site }}-${{ github.sha }}
-          path: packages/demo-${{ matrix.site }}/dist-site
+          name: ${{ matrix.artifact_name }}-${{ github.sha }}
+          path: ${{ matrix.dist_dir }}
           if-no-files-found: error
           retention-days: 7
+
+  demo-editors-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [sample, shop, landing, blog]
+        include:
+          - name: sample
+            target: sample-editor
+            dist_dir: packages/demo-sample/dist-editor
+            artifact_name: demo-editor-sample
+          - name: shop
+            target: shop-editor
+            dist_dir: packages/demo-webshop/dist-editor
+            artifact_name: demo-editor-shop
+          - name: landing
+            target: landing-editor
+            dist_dir: packages/demo-landing/dist-editor
+            artifact_name: demo-editor-landing
+          - name: blog
+            target: blog-editor
+            dist_dir: packages/demo-blog/dist-editor
+            artifact_name: demo-editor-blog
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm demo:build-editor "${{ matrix.name }}"
+      - run: pnpm hosted-demo:verify "${{ matrix.dist_dir }}" "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: ${{ matrix.target }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ matrix.artifact_name }}-${{ github.sha }}
+          path: ${{ matrix.dist_dir }}
+          if-no-files-found: error
+          retention-days: 7
+      # Every editor host gets its own lane so one host cannot hide another's
+      # browser failure behind the serial all-host runner.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:browser:demo-editor "${{ matrix.name }}"
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-results-demo-editor-${{ matrix.name }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
   doc-site-build:
     runs-on: ubuntu-latest

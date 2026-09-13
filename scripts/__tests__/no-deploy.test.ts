@@ -1,11 +1,12 @@
 // @vitest-environment node
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { checkNoDeploy, shellCommands } from "../check-no-deploy.mjs";
 import { discoverPackedHosts, packedHostMatrix } from "../packed-host-helpers.mjs";
+import { TARGET_KEYS, TARGETS } from "../hosted-demo/targets.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const temporaries: string[] = [];
@@ -215,7 +216,7 @@ describe("reachable validation commands cannot deploy", () => {
 });
 
 describe("CI and aggregate packed-host coverage", () => {
-  it("builds and verifies the exact doc artifact before the five-target deployment handoff", async () => {
+  it("builds and verifies the exact doc artifact before the nine-target deployment handoff", async () => {
     const workflow = parse(await readFile(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8"));
     const job = workflow.jobs["doc-site-build"];
     const checkout = job.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/checkout@"));
@@ -229,15 +230,49 @@ describe("CI and aggregate packed-host coverage", () => {
     expect(upload.uses).toBe(workflow.jobs["demo-sites-build"].steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/upload-artifact@")).uses);
     expect(upload.with).toEqual({ name: "doc-site-${{ github.sha }}", path: "doc/dist", "if-no-files-found": "error", "retention-days": 7 });
     const production = parse(await readFile(join(repositoryRoot, ".github/workflows/hosted-demo-deploy.yml"), "utf8"));
-    expect(production.jobs.deploy.strategy.matrix.include).toEqual([
-      { target: "zudo-composer", artifact_name: "hosted-demo", dist_dir: "dist-hosted-demo" },
-      { target: "webshop", artifact_name: "demo-site-webshop", dist_dir: "packages/demo-webshop/dist-site" },
-      { target: "landing", artifact_name: "demo-site-landing", dist_dir: "packages/demo-landing/dist-site" },
-      { target: "blog", artifact_name: "demo-site-blog", dist_dir: "packages/demo-blog/dist-site" },
-      { target: "doc", artifact_name: "doc-site", dist_dir: "doc/dist" },
-    ]);
+    const sourceRevision = "a".repeat(40);
+    const artifactPrefix = (key: string) => TARGETS[key].ciArtifactName(sourceRevision).slice(0, -sourceRevision.length - 1);
+    const artifactDirectory = (key: string) => relative(repositoryRoot, TARGETS[key].artifactDirectory).split(sep).join("/");
+    expect(production.jobs.deploy.strategy.matrix.include).toEqual(TARGET_KEYS.map((key) => ({
+      target: key,
+      artifact_name: artifactPrefix(key),
+      dist_dir: artifactDirectory(key),
+    })));
+    const targetFilter = production.jobs.deploy.strategy.matrix.exclude as string;
+    expect(targetFilter).toContain("inputs.target");
+    expect(targetFilter).toContain("inputs.target == '' && '[]'");
+    for (const key of TARGET_KEYS) expect(targetFilter).toContain(`inputs.target == '${key}'`);
     const manifest = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"));
     expect(shellCommands(manifest.scripts.check).slice(-3)).toEqual([["pnpm", "doc:check"], ["pnpm", "doc:build-site"], ["pnpm", "smoke:host-install"]]);
+  });
+
+  it("covers every static-site and editor target in the CI build matrices", async () => {
+    const workflow = parse(await readFile(join(repositoryRoot, ".github/workflows/ci.yml"), "utf8"));
+    const staticTargets = TARGET_KEYS.filter((key) => TARGETS[key].kind === "site-static");
+    const editorTargets = TARGET_KEYS.filter((key) => TARGETS[key].kind === "demo-editor");
+    const siteMatrix = workflow.jobs["demo-sites-build"].strategy.matrix;
+    expect(siteMatrix.site).toEqual(staticTargets.map((key) => key));
+    expect(siteMatrix.include.map((entry: { target: string }) => entry.target)).toEqual(staticTargets);
+    for (const key of staticTargets) {
+      const entry = siteMatrix.include.find((candidate: { target: string }) => candidate.target === key);
+      expect(entry).toMatchObject({
+        target: key,
+        artifact_name: TARGETS[key].ciArtifactName("a".repeat(40)).slice(0, -41),
+        dist_dir: relative(repositoryRoot, TARGETS[key].artifactDirectory).split(sep).join("/"),
+      });
+    }
+    const editorMatrix = workflow.jobs["demo-editors-build"].strategy.matrix;
+    expect(editorMatrix.name).toEqual(staticTargets.map((key) => key));
+    expect(editorMatrix.include.map((entry: { target: string }) => entry.target)).toEqual(editorTargets);
+    for (const key of editorTargets) {
+      const entry = editorMatrix.include.find((candidate: { target: string }) => candidate.target === key);
+      expect(entry).toMatchObject({
+        target: key,
+        artifact_name: TARGETS[key].ciArtifactName("a".repeat(40)).slice(0, -41),
+        dist_dir: relative(repositoryRoot, TARGETS[key].artifactDirectory).split(sep).join("/"),
+      });
+    }
+    expect(workflow.jobs.validate.steps.some((step: { run?: string }) => step.run?.includes("build:hosted-demo"))).toBe(false);
   });
 
   it("uses disk discovery for all four hosts, generated output and the retained synthesized proof", async () => {
