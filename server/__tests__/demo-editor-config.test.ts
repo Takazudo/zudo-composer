@@ -9,7 +9,7 @@ import { resolveComponentPack } from "../../plugins/component-pack.mjs";
 import { resolveComposerModules } from "../../plugins/module-resolution.mjs";
 import { DEMO_EDITOR_ENTRY, resolveDemoEditorConfig } from "../../vite.demo-editor.config";
 import { serializeSiteProject } from "../../src/site-project/model/canonical";
-import { sha256 } from "../../scripts/hosted-demo/artifact.mjs";
+import { DEMO_EDITOR_MANIFEST, sha256 } from "../../scripts/hosted-demo/artifact.mjs";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -107,14 +107,14 @@ describe("per-host demo editor Vite config", () => {
     });
 
     const output = join(host, "dist-editor");
-    const manifest = JSON.parse(await readFile(join(output, "hosted-demo-manifest.json"), "utf8"));
+    const manifest = JSON.parse(await readFile(join(output, DEMO_EDITOR_MANIFEST), "utf8"));
     const project = JSON.parse(await readFile(join(host, "site-project.json"), "utf8"));
     expect(manifest.projectSourceRevision).toBe(sha256(serializeSiteProject(project)));
     expect(manifest.sourceRevision).toMatch(/^[a-f0-9]{40}$/);
-    expect(manifest.assets).toHaveProperty("index.html");
-    expect(manifest.assets).toHaveProperty("hosted-demo-assets-worker.js");
-    expect(manifest.assets).not.toHaveProperty("stale.txt");
-    expect(manifest.assets).not.toHaveProperty("uploaded-assets/private.txt");
+    expect(manifest.files).toHaveProperty("index.html");
+    expect(manifest.files).toHaveProperty("hosted-demo-assets-worker.js");
+    expect(manifest.files).not.toHaveProperty("stale.txt");
+    expect(manifest.files).not.toHaveProperty("uploaded-assets/private.txt");
     const html = await readFile(join(output, "index.html"), "utf8");
     expect(html).not.toContain("Host-owned HTML");
     expect(html).not.toContain("/@fs");
