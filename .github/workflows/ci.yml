@@ -29,6 +29,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm no-deploy:check
+      - run: pnpm public:check
+      - run: pnpm studio:check
+      - run: pnpm cms:check
+      - run: pnpm consumer:boundary
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm headless:negative-scan
