@@ -65,6 +65,13 @@ async function waitForDeliveryRoute(page: Page, projectName: string): Promise<vo
   await expect(page.getByText(projectName, { exact: true }).first()).toBeVisible();
 }
 
+async function navigateToReview(page: Page): Promise<void> {
+  const reviewLink = page.getByRole("link", { name: "Review & release", exact: true });
+  if (!(await reviewLink.isVisible())) await page.getByRole("button", { name: "Expand navigation", exact: true }).click();
+  await reviewLink.click();
+  await waitForAuthoringRoute(page, "Review & release");
+}
+
 function expectDemoNotice(page: Page): Promise<void> {
   return expect(page.getByText("Public demo of zudo-composer", { exact: true }).first()).toBeVisible();
 }
@@ -176,8 +183,7 @@ test.describe(`demo editor: ${context.name}`, () => {
     await page.getByRole("radio", { name: "Preview", exact: true }).click();
     await expect(page.locator("iframe").first().contentFrame().getByText(edited, { exact: true })).toBeVisible();
 
-    await page.goto("/review", { waitUntil: "domcontentloaded" });
-    await waitForAuthoringRoute(page, "Review & release");
+    await navigateToReview(page);
     const workingPreviewPopup = await openWorkingPreview(page);
     await expect(workingPreviewPopup.getByText(edited, { exact: true })).toBeVisible();
     await expect(workingPreviewPopup.getByText("Live working preview — not activated", { exact: true })).toBeVisible();
@@ -290,8 +296,7 @@ test.describe(`demo editor: ${context.name}`, () => {
     expect(await secondTab.evaluate(async (url) => (await fetch(url)).status, authoringUrl)).toBe(404);
     await secondTab.close();
 
-    await page.getByRole("link", { name: "Review & release", exact: true }).click();
-    await waitForAuthoringRoute(page, "Review & release");
+    await navigateToReview(page);
     const workingPreviewPopup = await openWorkingPreview(page);
     await expect(workingPreviewPopup.getByText("Live working preview — not activated", { exact: true })).toBeVisible();
     const uploadedPreview = await workingPreviewPopup.evaluate(async (path) => new Promise<{ width: number; height: number }>((resolve) => {
