@@ -6,7 +6,7 @@ import { NewProjectDialog } from "./app/new-project-dialog";
 import { createEmptySiteProject, computeSiteProjectRevision } from "./app/empty-site-project";
 import { WorkspaceContext } from "./app/workspace-context";
 import { parseIntent, formatIntent } from "./app/route-intents";
-import { Banner, Button } from "./components/ui";
+import { Button } from "./components/ui";
 import { PROJECT_USAGE_CHANNELS, subscribeAuthoringPersistenceChanges } from "./app/persistence-channels";
 import { createProjectAssetUsageInspection } from "./site-project/assets/usage";
 import { Shell } from "./app/shell";
@@ -20,6 +20,7 @@ import { ReleaseRoute, createReleaseController, createReleaseTransport } from ".
 import { createApplicationOperationGate } from "./app/operation-gate";
 import { SiteDelivery } from "./features/delivery/site-delivery";
 import { activatedDeliverySource } from "./features/delivery/activated-source";
+import { HostedDemoNotice } from "./features/delivery/hosted-demo-notice";
 import { isSitePath, isWorkingPreviewPath } from "./features/delivery/routing";
 import { bootstrapTheme, createThemeController, type ThemeController } from "./theme/theme";
 
@@ -208,8 +209,8 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   useEffect(() => () => workspaceSummary.dispose?.(), [workspaceSummary]);
   const path = new URL(location, window.location.origin).pathname;
   useEffect(() => { if (path === "/sitemapper") void providers.compositionCatalog.listCompositions().catch(() => undefined); }, [path, providers]);
-  if (isSitePath(path)) return <SiteDelivery source={hostedDemo ? { ...workingPreviewSource, basePath: "/site" } : activatedSource} pathname={path} />;
-  if (isWorkingPreviewPath(path)) return <SiteDelivery source={workingPreviewSource} pathname={path} />;
+  if (isSitePath(path)) return <SiteDelivery source={hostedDemo ? { ...workingPreviewSource, basePath: "/site" } : activatedSource} pathname={path} hostedDemo={hostedDemo} />;
+  if (isWorkingPreviewPath(path)) return <SiteDelivery source={workingPreviewSource} pathname={path} hostedDemo={hostedDemo} />;
   let content: ComponentChildren;
   const intent = parseIntent(location);
   const target = intent.status === "matched" ? intent.intent : null;
@@ -241,5 +242,5 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
     return item.domain === "assets" ? "/assets" : item.domain === "mappings" ? "/mapping" : item.domain === "sitemaps" ? "/sitemapper" : null;
   }} />;
   else content = <NotFound />;
-  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}>{hostedDemo && <Banner tone="info">Disposable hosted demo — edits and uploads stay in this tab and reset on reload. Export JSON to keep your project. Local release operations are unavailable.</Banner>}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
+  return <WorkspaceContext.Provider value={{ integration: providers, navigate, reset: () => replaceWorkspace(() => providers.workspace.reset()), open: (id) => replaceWorkspace(() => providers.workspace.open(id)), busy, error }}><Shell hostedDemo={hostedDemo} path={location} themeController={activeThemeController} themeSnapshot={themeSnapshot} summary={workspaceSummary}>{hostedDemo && <HostedDemoNotice includeExport />}<div key={`${providers.workspace.id ?? "opening"}:${routeEpoch}`} class="cms-route-content">{content}</div></Shell></WorkspaceContext.Provider>;
 }
