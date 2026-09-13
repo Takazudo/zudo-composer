@@ -141,6 +141,8 @@ adds one disposable static sample at `https://zudo-composer.zudolab.dev`; issue
 websites built from committed SiteProject content: `zc-demo-shop.zudolab.dev`
 (`packages/demo-webshop`), `zc-demo-landing.zudolab.dev`
 (`packages/demo-landing`) and `zc-demo-blog.zudolab.dev` (`packages/demo-blog`).
+The zudo-doc developer documentation site is the fifth target at
+`zc-doc.zudolab.dev`.
 None of this adds hosted persistence, a hosted API, authentication, arbitrary
 host project access or deployment support for installed applications. Each
 target is its own Worker with its own custom-domain binding, configured in
