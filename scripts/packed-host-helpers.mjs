@@ -212,12 +212,15 @@ export async function assertInstalledHost(hostRoot, env, roots) {
     import { createRequire } from 'node:module';
     import { realpath } from 'node:fs/promises';
     import { resolve, relative, isAbsolute, sep } from 'node:path';
+    import { fileURLToPath } from 'node:url';
     const require = createRequire(resolve('package.json'));
     const inside = (root, path) => { const part = relative(root, path); return part !== '..' && !part.startsWith('..' + sep) && !isAbsolute(part); };
     const roots = JSON.parse(process.argv[1]);
     const installed = {};
     for (const name of ${JSON.stringify(FIRST_PARTY)}) {
-      const path = await realpath(require.resolve(name + '/package.json'));
+      // Follow the public ESM entry: the contract exposes only import-conditioned
+      // entries and intentionally does not export its package.json.
+      const path = await realpath(fileURLToPath(import.meta.resolve(name)));
       assert.ok(inside(resolve('node_modules'), path), name + ' did not resolve from this host node_modules: ' + path);
       assert.ok(!roots.some(root => inside(root, path)), name + ' resolved into the repository');
       assert.ok(!require.resolve.paths(name).some(path => roots.some(root => inside(root, path))), 'Repository node_modules was in the host resolution path');
