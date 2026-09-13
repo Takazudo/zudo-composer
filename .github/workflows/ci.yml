@@ -98,7 +98,7 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      # Disk discovery includes studio and any later configured package. The
+      # Disk discovery includes Sample and any later configured package. The
       # creator and existing synthesized proof receive their own jobs too.
       matrix: ${{ fromJSON(needs.packed-host-matrix.outputs.matrix) }}
     steps:
