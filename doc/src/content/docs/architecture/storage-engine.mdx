@@ -4,6 +4,139 @@ sidebar_position: 2
 description: The filesystem storage model used by zudo-composer hosts and authoring domains.
 ---
 
-## Overview
+## Storage boundaries
 
-This page will cover the storage engine, its JSON domains, asset store, and host-controlled paths.
+The host owns inspectable files under its configured CMS directories. Browser
+editors use provider interfaces; development middleware connects those
+interfaces to Node filesystem stores. This supports the local authoring and
+committed-source workflow without requiring a hosted database.
+
+The shared filesystem code lives under `src/shared/node-fs/`.
+`src/shared/persistence/` has a different job: coordinating asynchronous editor
+saves. The concrete stores share primitives, but have three different on-disk
+formats and commit guarantees.
+
+| Module | Responsibility |
+| --- | --- |
+| [file: src/shared/node-fs/record-transaction.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/shared/node-fs/record-transaction.ts) | `TransactionalRecordStore`: whole-record-set transactions for Content, Mapping, Sitemapper, and the workspace registry. |
+| [file: src/shared/node-fs/safe-root.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/shared/node-fs/safe-root.ts) | `SafeRootFilesystem`: owned-path checks, regular-file/root verification, atomic replacement, and a process-local queue per real root. |
+| [file: src/shared/node-fs/mutation-lock.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/shared/node-fs/mutation-lock.ts) | Cross-process mutation locking, directory fsync, and durable document replacement for stores that opt into them. |
+| [file: src/shared/persistence/save-queue.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/shared/persistence/save-queue.ts) | Pending-save coordination used by editors and workspace flush barriers. |
+| [file: src/composer/storage/filesystem/store.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/composer/storage/filesystem/store.ts) | Canonical Composition JSON and separately derived JSX, with dependency checks and output repair. |
+| [file: src/assets/storage/filesystem/store.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/assets/storage/filesystem/store.ts) | Atomic Assets catalog, metadata revisions, retained immutable versions, and upload verification. |
+
+## Record transactions
+
+`TransactionalRecordStore` stores envelopes containing a stable `id` and
+serialized `json`. A transaction planner receives the complete before-state
+and returns the complete next record set plus its result. Domain adapters
+decode and validate their own graphs inside that planning step.
+
+```ts
+// Shape of the shared store's commit API; domain stores supply the planner.
+commit<T>(
+  plan: (context: RecordTransactionContext) =>
+    Promise<RecordTransactionPlan<T>> | RecordTransactionPlan<T>,
+  options?: { expectedMutationToken?: string; signal?: AbortSignal },
+): Promise<T>;
+```
+
+The store serializes writers in its root queue, acquires `.mutation.lock` using
+exclusive file creation, and reads the current generation. An optional expected
+mutation token is checked under that lock. It then stages a complete new
+`generations/<number>/` directory, hard-linking unchanged records and writing
+changed records. After syncing staged files and directories, it atomically
+renames `current.json` into place. That pointer records the generation, token,
+record IDs, and SHA-256 digests; readers see one whole generation.
+
+Failures before the pointer swap leave the old generation visible. A failed
+directory sync after the swap reports `commit-uncertain` and retains the lock,
+because the visible mutation's durability is unknown. Readers remain available;
+a retained lock is never automatically treated as stale. Missing or mismatched
+records with an unchanged pointer require recovery. Old unreferenced
+generations are pruned after commits, so they are not a history API.
+
+## Composer and Assets have separate formats
+
+Composer saves `composition-<id>.composition.json` and derives
+`composition-<id>.tsx`. Its ordinary `put` commits canonical JSON first and
+reports the derived output separately as current, repaired, or blocked. Reads
+can repair derived output. JSX planning can require a browser round trip, so
+the store captures dependencies, plans outside its queue, then rechecks those
+dependencies before writing. A stale read plan is retried a bounded number of
+times.
+
+Composer uses `SafeRootFilesystem` and its process-local queue, not
+`TransactionalRecordStore`'s generation swap and cross-process lock. Its
+`snapshot().mutationToken` fingerprints canonical content. The JSON/JSX pair
+must not be described as one atomic multi-file transaction.
+
+Assets keeps records, folders, and a durable random mutation token in
+`catalog.json`. Metadata mutations compare record revisions under
+`.mutation.lock`. Uploads are bounded, checked against the allowed MIME rules,
+hashed, and published as immutable files in `versions/` before the catalog references them. An atomic
+catalog rename changes the head and token together. Failed catalog commits can
+leave private unreferenced bytes; there is no automatic version garbage
+collection. A post-rename durability failure has the same `commit-uncertain`
+distinction as the generation store.
+
+## Development file-provider protocol
+
+[file: src/shared/file-provider/protocol.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/shared/file-provider/protocol.ts)
+and `client.ts` define the shared browser transport. The corresponding Node
+guards live in
+[file: plugins/file-provider-http.mjs](https://github.com/Takazudo/zudo-composer/blob/main/plugins/file-provider-http.mjs).
+They require the exact endpoint, POST, matching origin and fetch metadata, a
+development capability, and an accepted content type, with bounded bodies.
+
+`plugins/domain-file-provider-plugin.mjs` registers one endpoint per descriptor;
+`plugins/domain-file-provider.mjs` maps operations to stores and serializes
+domain errors. The Content, Mapping, Sitemapper, and workspace descriptors live
+in `plugins/content-domain-provider.mjs`, `mapping-domain-provider.mjs`,
+`sitemapper-domain-provider.mjs`, and `workspace-domain-provider.mjs`.
+Content has its own atomic `transact` operation. Mapping and Sitemapper adapt
+the shared `{ expectedMutationToken, steps }` transaction envelope.
+
+Composer and Assets retain separate request shapes in
+[file: plugins/composer-file-provider-plugin.mjs](https://github.com/Takazudo/zudo-composer/blob/main/plugins/composer-file-provider-plugin.mjs):
+`/__zudo_composer_file_provider` and
+`/__zudo_composer_asset_file_provider`. The plugin's browser configuration is
+`virtual:composer-file-provider-config`; the descriptor factory publishes
+`virtual:composer-domain-providers`. Build mode emits unavailable configurations
+and registers no development middleware. See the
+[plugin map](./dev-server-and-vite-plugins.mdx).
+
+## Host directory layout
+
+The default roots are defined in
+[file: server/config/settings.ts](https://github.com/Takazudo/zudo-composer/blob/main/server/config/settings.ts).
+Each of the four project domains gains a `workspace-v1-<id>/` directory;
+Assets remains shared across workspaces. The registry root is derived from
+`dataDir`, rather than being a separate setting.
+
+```text
+cms/
+  compositions/workspace-v1-<id>/
+    composition-<record-id>.composition.json
+    composition-<record-id>.tsx
+  content/workspace-v1-<id>/
+    current.json
+    generations/<generation>/<record-id>.json
+  mappings/workspace-v1-<id>/       # same generation layout
+  sitemaps/workspace-v1-<id>/       # same generation layout
+  workspaces/                     # registry, same generation layout
+  assets/
+    catalog.json
+    versions/sha256-<checksum>.<extension>
+public/uploaded-assets/           # separately configured committed public bytes
+```
+
+Changing `dataDir` rebases unspecified domain directories. `publicAssetsDir`
+and `styles` retain their own host-relative paths. Private Assets versions are
+served only through verified delivery paths; they are not Vite public files.
+See [Host Directory Layout](../setup/host-directory-layout.mdx) for configuration.
+
+The local filesystem adapter does not provide hosted persistence,
+authentication, or a hosted authoring API. Those remain future adapter work.
+The repository's [hosted demo](./hosted-demo-pipeline.mdx) is a separate static
+adapter with disposable in-tab edits.
