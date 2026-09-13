@@ -26,7 +26,7 @@
     "scripts/check-provider-boundary.mjs",
     "scripts/check-public-types.mjs",
     "scripts/check-site-project-boundary.mjs",
-    "scripts/check-studio-sample.mjs",
+    "scripts/check-sample-project.mjs",
     "scripts/check-creator.mjs",
     "scripts/check-no-deploy.mjs",
     "scripts/packed-host-matrix.mjs",

@@ -1,4 +1,4 @@
-import rawSiteProject from "../../packages/demo-studio/site-project.json";
+import rawSiteProject from "../../packages/demo-sample/site-project.json";
 import { validateSiteProject } from "../site-project/model/validation";
 import type { SiteProject, SiteProjectValidationContext } from "../site-project/model/types";
 

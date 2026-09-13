@@ -6,7 +6,7 @@ import { createProductionProviderIntegration } from "../../app/provider-integrat
 import { computeSiteProjectRevision } from "../../app/empty-site-project";
 import { validateSiteProject } from "../../site-project";
 import { activeSiteProjectValidationContext } from "../../app/site-project-manifest";
-import sample from "../../../packages/demo-studio/site-project.json";
+import sample from "../../../packages/demo-sample/site-project.json";
 import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { siteProject } from "virtual:site-project-source";
 import { createDemoWorkspaceProviders } from "../workspaces";

@@ -1,0 +1,32 @@
+[
+  {
+    "file": "studio-workbench.webp",
+    "alt": "A bright studio worktable with paper sketches, a closed laptop and a pot of pencils",
+    "use": "home split image",
+    "aspect": "4:3"
+  },
+  {
+    "file": "studio-wall.webp",
+    "alt": "A white wall covered in index cards connected by pencil lines",
+    "use": "about story image",
+    "aspect": "16:10"
+  },
+  {
+    "file": "studio-review.webp",
+    "alt": "Two printed interface drafts side by side with a pencil and sticky notes",
+    "use": "services lead image",
+    "aspect": "16:10"
+  },
+  {
+    "file": "journal-question.webp",
+    "alt": "A sheet of paper with a single handwritten question mark on a pale desk",
+    "use": "article: Start with the question",
+    "aspect": "16:10"
+  },
+  {
+    "file": "journal-map.webp",
+    "alt": "A hand-drawn diagram of boxes and arrows with a few boxes circled",
+    "use": "article: Map the moving parts; also Review in small loops",
+    "aspect": "16:10"
+  }
+]

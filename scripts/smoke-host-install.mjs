@@ -34,7 +34,7 @@ import { basename, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
 import { AUTHORING_ROUTES } from "./routes.mjs";
 import { authoringSiteRoutes } from "./host-site-routes.mjs";
-import { HOSTED_SITE_ROUTES } from "../packages/demo-studio/hosted-routes.mjs";
+import { HOSTED_SITE_ROUTES } from "../packages/demo-sample/hosted-routes.mjs";
 import { verifyReleasePortability } from "./verify-release-portability.mjs";
 import {
   FIRST_PARTY, WRITABLE, assertConfinedWrites, assertInstalledHost,
@@ -388,7 +388,7 @@ async function proveDiskHost(sourceHost, workspace, tarballs, toolPackage, negat
     await run(pnpm, ["run", "test"], hostRoot);
     const artifact = await verifyInstalledSiteArtifact(hostRoot);
     const routes = authoringSiteRoutes(artifact.routes);
-    if (name === "demo-studio") assert.deepEqual([...routes].sort(), [...HOSTED_SITE_ROUTES].sort(), "Studio artifact differs from its frozen production live-route data");
+    if (name === "demo-sample") assert.deepEqual([...routes].sort(), [...HOSTED_SITE_ROUTES].sort(), "Studio artifact differs from its frozen production live-route data");
     server = await startHostServer(hostRoot);
     await fetchAuthoringRoutes(server, routes);
     await verifyInstalledSiteRoutes(routes);

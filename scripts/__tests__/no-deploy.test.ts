@@ -253,7 +253,7 @@ describe("CI and aggregate packed-host coverage", () => {
     expect(invocation.run).toBe('pnpm smoke:host-install -- --host "$PACKED_HOST"');
     expect(invocation.env.PACKED_HOST).toBe("${{ matrix.host }}");
     const names = packedHostMatrix(repositoryRoot).host;
-    expect(names).toEqual(expect.arrayContaining(["demo-blog", "demo-landing", "demo-studio", "demo-webshop", "generated", "self-host"]));
+    expect(names).toEqual(expect.arrayContaining(["demo-blog", "demo-landing", "demo-sample", "demo-webshop", "generated", "self-host"]));
     expect(names.length).toBe(discoverPackedHosts(repositoryRoot).length + 2);
     const manifest = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"));
     expect(shellCommands(manifest.scripts.check)).toContainEqual(["pnpm", "smoke:host-install"]);

@@ -44,10 +44,10 @@ it("rejects planted reach-back, provider CSS and protocols in the real creator t
 
 it("excludes all discovered consumer trees from the tarball while preserving creator templates", async () => {
   const copy = await fixture();
-  for (const path of ["packages/demo-studio", "packages/new-consumer", "fixtures/new-fixture"]) {
+  for (const path of ["packages/demo-sample", "packages/new-consumer", "fixtures/new-fixture"]) {
     await put(copy, `${path}/package.json`, JSON.stringify({ name: path.replaceAll("/", "-"), dependencies: { "zudo-composer": "1" } }));
   }
-  for (const file of ["packages/demo-studio/site-project.json", "packages/new-consumer/components/pack.ts", "fixtures/new-fixture/data.json", "fixtures/nonhost/sample.json"]) {
+  for (const file of ["packages/demo-sample/site-project.json", "packages/new-consumer/components/pack.ts", "fixtures/new-fixture/data.json", "fixtures/nonhost/sample.json"]) {
     expect(() => assertPackedConsumerBoundary(["src/main.tsx", file], copy)).toThrow(/exposes/);
   }
   expect(() => assertPackedConsumerBoundary(["src/main.tsx", "templates/host/tests/starter.spec.tsx", "templates/host/site-project.ts"], copy)).not.toThrow();

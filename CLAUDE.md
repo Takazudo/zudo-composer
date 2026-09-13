@@ -38,7 +38,7 @@ The tool's authoring routes are `/`, `/composer`, same-origin
 An activated host site is delivered under `/site`; each static site's own routes
 come from its verified `dist-site/site-manifest.json`. Only Sample Studio's
 hosted Composer production target uses frozen route data in
-`packages/demo-studio/hosted-routes.mjs`, checked against the Studio artifact.
+`packages/demo-sample/hosted-routes.mjs`, checked against the Studio artifact.
 Emitted files live under `/assets/`, and committed images and PDFs from the
 host's `publicAssetsDir` are delivered under `/uploaded-assets/`. Upload
 authoring remains dev-only. Keep Vite base `/` and the preview graph isolated
