@@ -42,6 +42,22 @@ export function requireDemosLaneContext(environment: NodeJS.ProcessEnv): DemosLa
   if (environment.ZUDO_DATA_ROOT !== cmsRoot
     || environment.ZUDO_COMPOSITIONS_ROOT !== join(cmsRoot, "compositions")
     || realpathSync(environment.ZUDO_COMPOSITIONS_ROOT) !== environment.ZUDO_COMPOSITIONS_ROOT) return fail();
+  const composerRoots = {
+    ZUDO_COMPOSER_DATA_DIR: cmsRoot,
+    ZUDO_COMPOSER_COMPOSITIONS_DIR: join(cmsRoot, "compositions"),
+    ZUDO_COMPOSER_CONTENT_DIR: join(cmsRoot, "content"),
+    ZUDO_COMPOSER_MAPPINGS_DIR: join(cmsRoot, "mappings"),
+    ZUDO_COMPOSER_SITEMAPS_DIR: join(cmsRoot, "sitemaps"),
+    ZUDO_COMPOSER_ASSETS_DIR: join(cmsRoot, "assets"),
+    ZUDO_COMPOSER_PUBLIC_ASSETS_DIR: join(hostRoot, "public/uploaded-assets"),
+    ZUDO_COMPOSER_STYLES: join(hostRoot, "styles/base.css"),
+  } as const;
+  for (const [key, expected] of Object.entries(composerRoots)) {
+    const value = environment[key];
+    if (!value || isAbsolute(value) || value.includes("\\")) return fail();
+    const resolved = resolve(hostRoot, value);
+    if (resolved !== expected || realpathSync(resolved) !== resolved) return fail();
+  }
   let routes: unknown;
   try { routes = JSON.parse(environment.DEMOS_LANE_ROUTES ?? ""); }
   catch { return fail(); }
