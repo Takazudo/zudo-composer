@@ -30,6 +30,13 @@ Create a populated standalone host with `zudo-composer init <new-directory>`.
 The [creator guide](./docs/creator.md) covers the installed command, the
 unpublished-package preview, and which generated files to commit.
 
+## Documentation site
+
+The [`doc/`](./doc/) directory is the zudo-doc developer site at
+<https://zc-doc.zudolab.dev>; [`docs/`](./docs/) remains the repository's
+operator-reference surface. From the repository root, use `pnpm doc:dev`,
+`pnpm doc:build`, or `pnpm doc:check`.
+
 ## Routes and assets
 
 The authoring tool has Vite base `/` and these exact routes:

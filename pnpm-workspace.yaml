@@ -2,6 +2,7 @@ packages:
   - packages/*
   - fixtures/host
   - fixtures/themeset-host
+  - doc
 
 allowBuilds:
   esbuild: true
@@ -16,3 +17,5 @@ minimumReleaseAgeExclude:
   - miniflare@5.20260908.0-alpha
   - workerd@1.20260908.1
   - wrangler@4.130.0
+  - '@takazudo/zudo-doc-history-server@5.22.1'
+  - '@takazudo/zudo-doc@5.22.1'

@@ -1,75 +1,84 @@
-# Doc
+# Documentation Site (zudo-doc)
 
-Documentation site built with [zudo-doc](https://github.com/zudolab/zudo-doc) — a zfb-based documentation framework with MDX, Tailwind CSS v4, and Preact islands. This project is intentionally minimal: one config file (`zfb.config.ts`) plus markdown content — layout, chrome, and islands all ship from `@takazudo/zudo-doc` in `node_modules`.
+The `doc/` directory is the English developer documentation site for
+`zudo-composer`, built with [zudo-doc](https://github.com/zudolab/zudo-doc)
+5.22.1 on zfb. The Drift theme, layout, chrome, routes, and interactive islands
+come from the package; this workspace owns the config and MDX content.
 
-## Tech Stack
+## Structure
 
-- **zfb** — documentation build framework
-- **MDX** — content format, authored under `src/content/`
-- **Tailwind CSS v4** — compiled by zfb's embedded Tailwind engine (no `@tailwindcss/vite` plugin, no `tailwindcss` dependency); `src/styles/global.css` imports `tailwindcss/preflight` + `tailwindcss/utilities` and zfb's internal resolver serves both
-- **Preact** — for interactive islands only (with compat mode for React API)
-- **zfb semantic highlighting** — native build-time fenced-code rendering plus lazy `@takazudo/zfb-md-wasm` for HtmlPreview; both emit `hi-*` classes resolved through `--zd-syntax-*` design tokens
-- **@takazudo/zudo-doc** — the package that owns everything: layout, chrome, islands, default `@theme` design tokens, and (via `packageOwnedRoutes`, on by default) the doc routes themselves
+- `zfb.config.ts` — the site configuration and its intentional overrides
+- `src/content/docs/<category>/<page>.mdx` — English documentation pages; the
+  filesystem defines the sidebar
+- `src/styles/global.css` — the package CSS and Tailwind layer setup
+- `pages/index.tsx` — the package home route re-export
+- `pages/docs/[[...slug]].tsx` — the host-owned documentation route seam
+- `public/` — static site assets
+- `../.claude/skills/zudo-doc-writing/SKILL.md` — the writing and navigation
+  rules to consult before editing pages
 
-## Commands
+The header categories are `overview/`, `architecture/`, `setup/`, and
+`development/`. Each category has an `index.mdx` landing page and its sibling
+pages; add a page to the matching directory so the generated navigation stays
+in sync.
 
-- `pnpm dev` — runs the zfb dev server (port 4321) and the doc-history API server (port 4322) concurrently via `run-parallel` (a bin from @takazudo/zudo-doc) (`pnpm dev:zfb` / `pnpm dev:history` individually)
-- `pnpm dev:network` — same, but zfb binds `--host 0.0.0.0` for LAN access (`pnpm dev:zfb:network` individually); the doc-history server stays loopback-only and LAN clients reach it through zfb's `/doc-history/*` dev proxy
-- **Trusted networks only:** this also serves your git doc-history — including UNPUBLISHED local commits — to anyone on the LAN via the `/doc-history/*` proxy
-- `run-parallel` does not forward trailing args — it rejects them with an error rather than silently ignoring them, so pass other zfb flags directly instead: `pnpm run dev:zfb -- <flags>`
-- `pnpm build` — static HTML export to `dist/`
-- `pnpm check` — TypeScript type checking
-- `pnpm preview` — serve the built `dist/`
+## Development
 
-## Key Directories
+Run these commands from the repository root:
 
-```
-zfb.config.ts             # THE one config file — zudoDoc({ ...only fields you chose })
-pages/
-├── index.tsx             # 1-line re-export of the package home route
-└── docs/[[...slug]].tsx  # self-contained doc-route stub (required for `pnpm dev`)
-src/
-├── chrome-bindings.tsx   # optional typed primary chrome / named header / MDX bindings
-├── content/
-│   └── docs/             # English (default) MDX content (routes at /docs/; English starter prose)
-└── styles/
-    └── global.css        # @import chain + a token-override slot — that's it
+```sh
+pnpm doc:dev      # zfb dev server plus the document-history server
+pnpm doc:build    # static production build to doc/dist/
+pnpm doc:check    # zfb content and TypeScript checks
 ```
 
-Everything else — layout, header, sidebar, footer, doc chrome, islands, and the default design tokens — lives in `node_modules/@takazudo/zudo-doc`. For supported markup replacement, create `src/chrome-bindings.tsx` with `defineChromeBindings`, set `chromeBindingsModule`, and use the primary `Header` / `Footer` / `Sidebar` / `Toc` / `Breadcrumb` / `DocPager` slots or the named `headerRightComponents` registry. The generated default, locale, and doc-history route shapes already consume the same binding object; do not fork a route stub for presentational customization. `npx zudo-doc eject <component>` only copies source: heed its primary, nested-chrome, or content-layer remediation before expecting the copy to render. Settings you didn't set explicitly in `zfb.config.ts` use the package's documented defaults — hover `zudoDoc`'s `ZudoDocConfig` argument in your editor to see every field and its `@default`.
+The equivalent package-local commands are available with `pnpm -C doc`.
+Do not add the documentation checks to the root `check` chain until the
+deployment audit allowlist is updated by its follow-up work.
 
-## Content Conventions
+## Build output shape
 
-### Frontmatter
+`pnpm doc:build` writes the root-mounted static site to `doc/dist/`:
 
-- Required: `title` (string)
-- Optional: `description`, `sidebar_position` (number), `category`
-- Sidebar order is driven by `sidebar_position`
+- `doc/dist/index.html` and `doc/dist/404.html` are the root pages.
+- `doc/dist/docs/<category>/<page>/index.html` contains each category index and
+  content page.
+- `doc/dist/assets/` contains the generated CSS and JavaScript bundles.
+- The favicon files and package-owned routes (such as the sitemap, robots file,
+  and search index) are copied into the static output.
 
-### Admonitions
+Because `base` is `/`, emitted links and asset URLs are root-relative. Build
+output and zfb working directories are ignored; a build must not leave
+untracked `doc/dist/`, `doc/.zfb/`, or `doc/.zfb-build/` files.
 
-Available in all MDX files without imports, via directive syntax: `:::note`, `:::tip`, `:::info`, `:::warning`, `:::danger`, `:::caution`, `:::details`. Each accepts an optional **bracketed** title: `:::note[Custom Title]`.
+The eventual deployment target is the fifth trusted-run target in the hosted
+pipeline, served at [zc-doc.zudolab.dev](https://zc-doc.zudolab.dev/). The
+deployment wiring lives with the hosted-demo pipeline rather than in this
+workspace's local development commands.
 
-Docusaurus-style `{title="..."}` is **NOT supported**. MDX parses the braces as a JS expression, so it either fails the build with `ReferenceError: title is not defined` or is silently ignored. Always use the bracketed form.
+## Content conventions
 
-### Headings
+- Invoke `/zudo-doc-writing` before creating or editing any page.
+- Every page has YAML frontmatter with `title` and `sidebar_position`; content
+  pages also have a one-sentence `description`.
+- Category `index.mdx` files contain only a short introduction and
+  `<CategoryNav category="<category>" />`.
+- The frontmatter title supplies the page's h1. Start body content at `##`; do
+  not add a `#` heading.
+- Link between pages with relative paths that include `.mdx`, for example
+  `[Configuration](../setup/configuration.mdx)`.
+- Heading IDs are hierarchical. When linking to a heading, use the ID from the
+  built HTML rather than assuming a flat slug; stale anchors are build errors.
+- Leave a blank line after every opening admonition fence (and before its
+  closing `:::`):
 
-Do NOT use h1 (`#`) in doc content — the page title from frontmatter is rendered as h1. Start content headings from h2 (`##`).
+  ```mdx
+  :::note
 
-### Built-in MDX components
+  Body text.
 
-`@takazudo/zudo-doc` ships a few **globally-available MDX components** — usable in any `.mdx` file with **no import**. The seeded `getting-started/index.mdx` already uses one:
+  :::
+  ```
 
-- `<CategoryNav category="..." />` — a card-grid list of the pages in a docs category (this is the one seeded into `getting-started/index.mdx`).
-- `<CategoryTreeNav category="..." />` — the same listing as a compact nested tree, better for deeper hierarchies.
-- `<SiteTreeNavDemo />` — a full-site documentation tree (the MDX-available wrapper of the `SiteTreeNav` island).
-
-Admonitions (above), tabbed content (`<Tabs>` / `<TabItem>`, `<CodeGroup>`), and block math (`<MathBlock>`) work the same way — no import. Full reference: https://zudo-doc.takazudomodular.com/docs/components/
-
-## Enabled Features
-
-- **search** — Full-text search
-- **sidebarResizer** — Draggable sidebar width
-- **sidebarToggle** — Show/hide desktop sidebar
-- **docHistory** — Document edit history
-- **llmsTxt** — Generates llms.txt for LLM consumption
+The repository's `docs/` directory remains the operator-reference surface;
+`doc/` is the zudo-doc developer site.

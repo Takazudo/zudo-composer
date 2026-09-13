@@ -81,6 +81,9 @@
   },
   "scripts": {
     "dev": "vite",
+    "doc:dev": "pnpm -C doc dev",
+    "doc:build": "pnpm -C doc build",
+    "doc:check": "pnpm -C doc check",
     "assets:seed-demo": "tsx scripts/seed-demo-assets.ts",
     "demo:images": "node scripts/demo/optimise-images.mjs",
     "build": "tsc -b && vite build",
