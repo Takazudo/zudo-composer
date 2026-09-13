@@ -26,7 +26,7 @@ describe.each(Object.entries(DEMO_EDITOR_HOSTS))("disposable %s editor runtime",
     const validated = validateSiteProject(input, { componentPack: host.pack.manifest });
     if (!validated.ok) throw new Error(`${name} demo project is invalid`);
     project = validated.project;
-    seed = await prepareDemoAsset(host.composerConfig.paths.assets, { useHostCatalog: true });
+    seed = await prepareDemoAsset(host.composerConfig.paths.assets);
 
     // Production integration must see this host's real pack, including every
     // component schema. The app test lane's default sample aliases cannot

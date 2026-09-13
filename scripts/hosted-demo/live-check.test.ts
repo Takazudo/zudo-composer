@@ -5,39 +5,22 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HOSTED_DEMO_LIVE_ROUTES, verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
-import { HOSTED_DEMO_HEADERS, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
+import { verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
+import { HOSTED_DEMO_HEADERS, expectedMime, verifyDemoEditorArtifact } from "./artifact.mjs";
 import { TARGETS } from "./targets.mjs";
 import { createDocSiteManifest, DOC_SITE_MANIFEST } from "./doc-site-artifact.mjs";
 import { startHostedDemoStaticServer } from "./static-server.mjs";
-import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, readToolIdentity, siteHeaders } from "../../server/site-build/artifact.mjs";
-import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition, hostedAssetHeaders } from "../../src/assets/model/asset-kinds.mjs";
+import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, siteHeaders } from "../../server/site-build/artifact.mjs";
+import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
+
+import { writeEditorArtifact } from "./__fixtures__/editor-artifact";
 
 const SOURCE_REVISION = "c".repeat(40);
 const PROJECT_REVISION = "d".repeat(64);
 const BEACON = `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495" integrity="sha512-iIg7k2xntmwu6/uSb5tpc/hySgZc4eoL31yB29W6tJFo2akwjPWcEqnCEdJvGexCL0KEQwVYv5BlowfhVz26hg==" data-cf-beacon='{"version":"2024.11.0","token":"${"a".repeat(32)}","r":1,"spa":2}' crossorigin="anonymous"></script>\n`;
 
 async function writeArtifact() {
-  const root = await mkdtemp(join(tmpdir(), "hosted-live-check-"));
-  await mkdir(join(root, "assets"), { recursive: true });
-  await mkdir(join(root, "uploaded-assets"), { recursive: true });
-  const files = new Map<string, Buffer>([
-    ["index.html", Buffer.from("<!doctype html><html><body>live</body></html>\n")],
-    ["hosted-demo-assets-worker.js", Buffer.from("export default {};\n")],
-    ["assets/preview-entry-test.js", Buffer.from("export const preview = true;\n")],
-  ]);
-  for (const [content, extension] of [
-    [Buffer.from("one"), "png"], [Buffer.from("two"), "png"], [Buffer.from("three"), "png"], [Buffer.from("four"), "png"],
-    [Buffer.from("%PDF-1.7"), "pdf"], [Buffer.from([0x50, 0x4b, 0x03, 0x04]), "zip"],
-  ] as const) {
-    files.set(`uploaded-assets/sha256-${createHash("sha256").update(content).digest("hex")}.${extension}`, content);
-  }
-  files.set(HOSTED_DEMO_HEADERS, Buffer.from(hostedAssetHeaders([...files].filter(([path]) => path.startsWith("uploaded-assets/")).map(([path, bytes]) => ({ path, byteLength: bytes.byteLength })))));
-  const assets = Object.fromEntries([...files].map(([path, content]) => [path, createHash("sha256").update(content).digest("hex")]));
-  await Promise.all([...files].map(([path, content]) => writeFile(join(root, path), content)));
-  const manifest = { schemaVersion: 1, tool: await readToolIdentity(), sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, mode: "disposable-hosted-demo", assets };
-  await writeFile(join(root, "hosted-demo-manifest.json"), JSON.stringify(manifest));
-  return { root, manifest, files };
+  return writeEditorArtifact({ sourceRevision: SOURCE_REVISION });
 }
 
 function response(body: string | Buffer | null, mime: string, status = 200, headers: Record<string, string> = {}) {
@@ -50,11 +33,11 @@ function mockFetch(fixture: Awaited<ReturnType<typeof writeArtifact>>, options: 
     const url = new URL(input.toString());
     const path = url.pathname;
     requests.push({ url, path, init });
-    if (path === "/hosted-demo-manifest.json") {
+    if (path === "/demo-editor-manifest.json") {
       const manifest = options.staleManifest ? { ...fixture.manifest, sourceRevision: "e".repeat(40) } : fixture.manifest;
       return response(JSON.stringify(manifest), "application/json");
     }
-    if (HOSTED_DEMO_LIVE_ROUTES.includes(path)) {
+    if (fixture.manifest.routes.includes(path)) {
       const navigation = new Headers(init?.headers).get("sec-fetch-mode") === "navigate";
       const html = fixture.files.get("index.html")!.toString();
       return response(options.injectAnalytics && navigation ? html.replace("</body>", `${BEACON}</body>`) : html, "text/html");
@@ -63,7 +46,7 @@ function mockFetch(fixture: Awaited<ReturnType<typeof writeArtifact>>, options: 
     const bytes = fixture.files.get(relative);
     if (!bytes) return response("missing", "text/plain", 404);
     const asset = ASSET_CHECKSUM_URL_PATTERN.test(`/${relative}`);
-    const mime = asset ? expectedMime(relative) : relative.endsWith(".png") ? "image/png" : "text/javascript";
+    const mime = expectedMime(relative);
     const checksum = asset ? relative.slice("uploaded-assets/sha256-".length, relative.lastIndexOf(".")) : undefined;
     const headers = asset ? {
       "content-length": String((relative === options.corruptPath ? Buffer.from("changed") : bytes).byteLength),
@@ -85,14 +68,14 @@ describe("hosted demo live verification", () => {
   it("requires the tool identity and full Git SHA while retaining exact trusted revision comparison", async () => {
     const fixture = await writeArtifact();
     fixtures.push(fixture.root);
-    const path = join(fixture.root, "hosted-demo-manifest.json");
+    const path = join(fixture.root, "demo-editor-manifest.json");
     for (const changes of [{ tool: undefined }, { tool: { name: "zudo-composer" } }, { sourceRevision: undefined }, { sourceRevision: "release-local" }]) {
       await writeFile(path, JSON.stringify({ ...fixture.manifest, ...changes }));
-      await expect(verifyHostedDemoArtifact({ directory: fixture.root })).rejects.toThrow();
+      await expect(verifyDemoEditorArtifact({ directory: fixture.root })).rejects.toThrow();
     }
     await writeFile(path, JSON.stringify(fixture.manifest));
-    await expect(verifyHostedDemoArtifact({ directory: fixture.root, expectedSourceRevision: "0".repeat(40) })).rejects.toThrow(/sourceRevision does not match/);
-    expect((await verifyHostedDemoArtifact({ directory: fixture.root, expectedSourceRevision: SOURCE_REVISION })).manifest.tool).toEqual(fixture.manifest.tool);
+    await expect(verifyDemoEditorArtifact({ directory: fixture.root, expectedSourceRevision: "0".repeat(40) })).rejects.toThrow(/sourceRevision does not match/);
+    expect((await verifyDemoEditorArtifact({ directory: fixture.root, expectedSourceRevision: SOURCE_REVISION })).manifest.tool).toEqual(fixture.manifest.tool);
   });
 
   it("checks the exact manifest, routes and assets and separates navigation headers", async () => {
@@ -105,8 +88,8 @@ describe("hosted demo live verification", () => {
       expectedSourceRevision: SOURCE_REVISION,
       fetchImpl: mock.fetchImpl,
     });
-    expect(proof.routes.map(({ path }) => path)).toEqual(HOSTED_DEMO_LIVE_ROUTES);
-    expect(proof.assets).toHaveLength(9);
+    expect(proof.routes.map(({ path }) => path)).toEqual(fixture.manifest.routes);
+    expect(proof.assets).toHaveLength(fixture.files.size - 1);
     expect(mock.requests.some(({ path }) => path === "/_headers")).toBe(false);
     const routeRequest = mock.requests.find(({ path }) => path === "/composer");
     expect(routeRequest?.init?.headers).toEqual({ accept: "text/html", "sec-fetch-mode": "navigate" });
@@ -123,9 +106,9 @@ describe("hosted demo live verification", () => {
     expect(headers.match(/Content-Disposition:/g)).toHaveLength(1);
     for (const content of ["", headers.replaceAll("max-age=31536000, immutable", "max-age=0")]) {
       await writeFile(join(fixture.root, HOSTED_DEMO_HEADERS), content);
-      fixture.manifest.assets[HOSTED_DEMO_HEADERS] = createHash("sha256").update(content).digest("hex");
-      await writeFile(join(fixture.root, "hosted-demo-manifest.json"), JSON.stringify(fixture.manifest));
-      await expect(verifyHostedDemoArtifact({ directory: fixture.root })).rejects.toThrow("header rules must match");
+      fixture.manifest.files[HOSTED_DEMO_HEADERS] = createHash("sha256").update(content).digest("hex");
+      await writeFile(join(fixture.root, "demo-editor-manifest.json"), JSON.stringify(fixture.manifest));
+      await expect(verifyDemoEditorArtifact({ directory: fixture.root })).rejects.toThrow("header rules must match");
     }
   });
 
@@ -135,7 +118,7 @@ describe("hosted demo live verification", () => {
     const mock = mockFetch(fixture, { injectAnalytics: true });
     const proof = await verifyLiveDeployment({ baseUrl: "https://demo.example.test", artifactDirectory: fixture.root, fetchImpl: mock.fetchImpl });
     expect(proof.routes.every((route) => route.cloudflareAnalyticsInjected)).toBe(true);
-    expect(proof.assets.find((asset) => asset.path === "index.html")?.sha256).toBe(fixture.manifest.assets["index.html"]);
+    expect(proof.assets.find((asset) => asset.path === "index.html")?.sha256).toBe(fixture.manifest.files["index.html"]);
     expect(mock.requests.filter(({ path }) => path === "/").map(({ init }) => new Headers(init?.headers).get("sec-fetch-mode"))).toEqual(["navigate", null]);
   });
 
@@ -180,14 +163,14 @@ describe("hosted demo live verification", () => {
       expectedSourceRevision: SOURCE_REVISION,
       fetchImpl: async (input, init) => {
         const url = new URL(input.toString());
-        if (url.pathname === "/hosted-demo-manifest.json" && attempt++ === 0) return mockFetch(fixture, { staleManifest: true }).fetchImpl(input, init);
+        if (url.pathname === "/demo-editor-manifest.json" && attempt++ === 0) return mockFetch(fixture, { staleManifest: true }).fetchImpl(input, init);
         return mockFetch(fixture).fetchImpl(input, init);
       },
       retryDelaysMs: [25],
       delayImpl: async () => {},
       onRetry: ({ attempt: retryAttempt, delayMs }) => retries.push({ attempt: retryAttempt, delayMs }),
     });
-    expect(proof.routes).toHaveLength(HOSTED_DEMO_LIVE_ROUTES.length);
+    expect(proof.routes).toHaveLength(fixture.manifest.routes.length);
     expect(retries).toEqual([{ attempt: 1, delayMs: 25 }]);
   });
 });

@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { resolveDemoEditorHost } from "./demo-editor-hosts.mjs";
+import { verifyDemoEditorArtifact } from "./hosted-demo/artifact.mjs";
 
 const execFile = promisify(execFileCallback);
 const root = resolve(import.meta.dirname, "..");
@@ -32,6 +33,8 @@ export async function buildDemoEditor(hostDir) {
     if (failure.stderr) process.stderr.write(failure.stderr);
     throw error;
   }
+  const artifact = await verifyDemoEditorArtifact({ directory: resolve(host, "dist-editor") });
+  console.log(`Demo editor verified: ${artifact.manifest.hostId}, ${Object.keys(artifact.manifest.assets).length} asset files, ${artifact.manifest.routes.length} routes, source ${artifact.manifest.sourceRevision}.`);
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {

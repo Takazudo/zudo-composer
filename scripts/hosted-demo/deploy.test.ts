@@ -38,8 +38,12 @@ const artifactVerifier = async ({ directory }: { directory: string }) => ({
     tool: { name: "zudo-composer", version: "0.0.0" },
     sourceRevision: SOURCE_REVISION,
     projectSourceRevision: PROJECT_REVISION,
-    mode: "disposable-hosted-demo",
+    mode: "disposable-demo-editor",
+    hostId: "demo-sample",
+    projectId: "sample-studio",
+    routes: ["/"],
     assets: {},
+    files: {},
   },
   files: [],
 });

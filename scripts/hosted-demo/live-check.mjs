@@ -3,8 +3,9 @@
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import { HOSTED_DEMO_MANIFEST, sha256, verifyHostedDemoArtifact } from "./artifact.mjs";
-import { DEFAULT_TARGET_KEY, HOSTED_DEMO_LIVE_ROUTES, resolveTarget } from "./targets.mjs";
+import { DEMO_EDITOR_MANIFEST, sha256, verifyDemoEditorArtifact } from "./artifact.mjs";
+import { DEFAULT_TARGET_KEY, resolveTarget } from "./targets.mjs";
+import { verifiedDemoEditorRoutes } from "../routes.mjs";
 import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
 
 const DEFAULT_TARGET = resolveTarget(DEFAULT_TARGET_KEY);
@@ -14,9 +15,6 @@ export const LIVE_CHECK_TIMEOUT_MS = 120_000;
 // A deploy can take a short time to reach every edge. Keep retries bounded so
 // a broken production rollout cannot hold the workflow indefinitely.
 export const LIVE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
-// Re-exported for back-compat: the fixed route list belongs to the default
-// (zudo-composer) target; other targets read their routes from their manifest.
-export { HOSTED_DEMO_LIVE_ROUTES };
 
 /** @param {Response} response @returns {string} */
 export function responseMime(response) {
@@ -83,9 +81,9 @@ export async function verifyLiveDeployment({
   fetchImpl = globalThis.fetch,
   requestTimeoutMs = HTTP_TIMEOUT_MS,
   overallTimeoutMs = LIVE_CHECK_TIMEOUT_MS,
-  manifestFileName = HOSTED_DEMO_MANIFEST,
-  artifactVerifier = verifyHostedDemoArtifact,
-  liveRoutes = () => HOSTED_DEMO_LIVE_ROUTES,
+  manifestFileName = DEMO_EDITOR_MANIFEST,
+  artifactVerifier = verifyDemoEditorArtifact,
+  liveRoutes = verifiedDemoEditorRoutes,
   routeFile = () => "index.html",
   assetUrl = (path) => path === "index.html" ? "/" : `/${path}`,
 }) {
