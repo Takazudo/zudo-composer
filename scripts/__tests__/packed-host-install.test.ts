@@ -6,12 +6,13 @@ import { basename, delimiter, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  FIRST_PARTY, assertConfinedWrites, assertExternalWorkspace, assertInstalledHost,
+  FIRST_PARTY, PACKED_NPMRC, assertConfinedWrites, assertExternalWorkspace, assertInstalledHost,
   configurePackedHost, copyPackedHost, discoverPackedHosts, isolatedEnvironment,
-  packedHostManifest, packPackage, pnpm, repositoryRoots, run, selectPackedHosts,
+  packedHostManifest, packedHostMatrix, packPackage, pnpm, repositoryRoots, run, selectPackedHosts,
   startHostServer, tree,
 } from "../packed-host-helpers.mjs";
 import { MISSING_RUNTIME, packMissingRuntime, plantHoistedDependency } from "../packed-host-negatives.mjs";
+import { snapshotGeneratedHost } from "../packed-generated-host.mjs";
 import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, siteHeaders, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -41,9 +42,12 @@ const archiveSpecs = { "zudo-composer": "file:/tmp/tool.tgz", "@zudo-composer/co
 describe("packed host discovery and manifest isolation", () => {
   it("covers all four real hosts from disk and retains the default synthesized proof", () => {
     const hosts = discoverPackedHosts(repositoryRoot);
-    expect(hosts.map((host) => basename(host))).toEqual(["demo-blog", "demo-landing", "demo-studio", "demo-webshop"]);
-    expect(selectPackedHosts([], hosts)).toEqual({ hosts, fixture: true, negative: undefined });
-    expect(selectPackedHosts(["--host", "demo-blog"], hosts)).toEqual({ hosts: [hosts[0]], fixture: false, negative: undefined });
+    expect(hosts.map((host) => basename(host))).toEqual(expect.arrayContaining(["demo-blog", "demo-landing", "demo-studio", "demo-webshop"]));
+    expect(selectPackedHosts([], hosts)).toEqual({ hosts, fixture: true, generated: true, negative: undefined });
+    expect(selectPackedHosts(["--host", "demo-blog"], hosts)).toEqual({ hosts: [hosts[0]], fixture: false, generated: false, negative: undefined });
+    expect(selectPackedHosts(["--host", "generated"], hosts)).toEqual({ hosts: [], fixture: false, generated: true, negative: undefined });
+    expect(selectPackedHosts(["--host", "self-host"], hosts)).toEqual({ hosts: [], fixture: true, generated: false, negative: undefined });
+    expect(() => selectPackedHosts(["--host", "generated", "--negative", "missing-runtime"], hosts)).toThrow("disk host");
     expect(selectPackedHosts(["--host", "demo-blog", "--negative", "missing-runtime"], hosts).negative).toBe("missing-runtime");
     expect(() => selectPackedHosts(["--negative", "missing-runtime"], hosts)).toThrow("exactly one --host");
     expect(() => selectPackedHosts(["--host", "absent"], hosts)).toThrow("Unknown");
@@ -57,6 +61,10 @@ describe("packed host discovery and manifest isolation", () => {
     await put(root, "fixtures/self-host/package.json", JSON.stringify(declared()));
     await put(root, "packages/demo-missing-manifest/site-project.ts");
     expect(discoverPackedHosts(root).map((host) => basename(host))).toEqual(["demo-missing-manifest", "future-host"]);
+    expect(packedHostMatrix(root).host).toEqual(["demo-missing-manifest", "future-host", "generated", "self-host"]);
+    await put(root, "packages/fifth-host/package.json", JSON.stringify(declared()));
+    expect(packedHostMatrix(root).host).toContain("fifth-host");
+    for (const host of packedHostMatrix(root).host) expect(() => selectPackedHosts(["--host", host], discoverPackedHosts(root))).not.toThrow();
   });
 
   it("rewrites and overrides exactly the two first-party packages, preserving the host", () => {
@@ -138,6 +146,45 @@ describe("packed host discovery and manifest isolation", () => {
     expect(await tree(destination)).not.toContain(".zudo-composer-demos-browser");
     await symlink(join(source, "site-project.ts"), join(source, "linked.ts"));
     await expect(copyPackedHost(source, join(await temporary(), "unsafe"))).rejects.toThrow("filesystem link");
+  });
+
+  it("allows only the exact reviewed creator npmrc and keeps every isolation setting", async () => {
+    const host = await temporary();
+    await put(host, "package.json", JSON.stringify(declared()));
+    await put(host, ".npmrc", PACKED_NPMRC);
+    await configurePackedHost(host, archiveSpecs, packageManager);
+    expect(await readFile(join(host, ".npmrc"), "utf8")).toBe(PACKED_NPMRC);
+    const workspace = await readFile(join(host, "pnpm-workspace.yaml"), "utf8");
+    for (const setting of ["blockExoticSubdeps: false", "nodeLinker: isolated", "hoist: false", "shamefullyHoist: false", "strictPeerDependencies: true", "linkWorkspacePackages: false", "preferWorkspacePackages: false", "resolvePeersFromWorkspaceRoot: false"]) expect(workspace).toContain(setting);
+  });
+
+  it.each(["hoist=true\n", `${PACKED_NPMRC}shamefully-hoist=true\n`, `${PACKED_NPMRC}node-linker=hoisted\n`, "block-exotic-subdeps=true\n", ""])("rejects unreviewed npmrc settings before rewriting the host: %j", async (npmrc) => {
+    const host = await temporary();
+    const manifest = JSON.stringify(declared());
+    await put(host, "package.json", manifest);
+    await put(host, ".npmrc", npmrc);
+    await expect(configurePackedHost(host, archiveSpecs, packageManager)).rejects.toThrow("explicit packed-lane review");
+    expect(await readFile(join(host, "package.json"), "utf8")).toBe(manifest);
+    expect(await readdir(host)).not.toContain("pnpm-workspace.yaml");
+  });
+});
+
+describe("pristine generated-host snapshot", () => {
+  it("detects ready-state byte changes and refuses retained installed state, archives and links", async () => {
+    const host = await temporary();
+    await put(host, "site-project.json", "{}");
+    await put(host, "cms/workspaces/current.json", "{\"generation\":3}");
+    const before = await snapshotGeneratedHost(host);
+    await put(host, "cms/workspaces/current.json", "{\"generation\":4}");
+    expect(await snapshotGeneratedHost(host)).not.toEqual(before);
+    await mkdir(join(host, "node_modules"));
+    await expect(snapshotGeneratedHost(host)).rejects.toThrow("retained node_modules");
+    await rm(join(host, "node_modules"), { recursive: true });
+    await put(host, "tool.tgz");
+    await expect(snapshotGeneratedHost(host)).rejects.toThrow("retained a tarball");
+    await rm(join(host, "tool.tgz"));
+    await symlink(join(host, "site-project.json"), join(host, "linked.json"));
+    await expect(snapshotGeneratedHost(host)).rejects.toThrow("filesystem link");
   });
 });
 

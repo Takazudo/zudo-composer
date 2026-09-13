@@ -318,9 +318,10 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm dev
 ```
 
-`pnpm check` is the bounded offline gate: lint, typecheck, the headless, handoff
-and class-name boundaries, the provider identity boundary, unit tests, one
-production build, and the built-artifact boundary.
+`pnpm check` runs the source, CMS, lint, type, boundary, unit and build gates,
+then the complete packed-install proof. It needs network access for disposable
+installs and Playwright Chromium, and owns browser port 4175 during that proof.
+Run it with the other browser lanes stopped.
 
 ```sh
 corepack pnpm check
@@ -366,14 +367,25 @@ The host lane is the one that runs the package the way a host does — through i
 into that project first, because a library with no activated project has no rows
 to look at.
 
-`smoke:host-install` goes further and is the only proof that involves a real
-install: it packs the package, installs it into a bare project outside this
-repository, boots it with no sample activation, authors through the browser,
-restarts, and finally removes the tool to confirm the host keeps its data.
+`smoke:host-install` packs the tool and contract and independently installs
+every host discovered under `packages/`, including Studio, plus freshly
+generated creator output. It proves installed dev, source currency, seed,
+build and host tests. The generated host also proves its ready CMS in the
+browser before seeding and runs its own typecheck. The synthesized fixture
+retains browser authoring, restart, release portability and data ownership
+after removing the tool. CI runs each host as its own matrix job; new hosts
+are discovered automatically. See the [packed-install guide](docs/packed-host-install.md)
+for focused runs and deliberate negative proofs.
 
 ```sh
 corepack pnpm smoke:host-install
 ```
+
+`pnpm no-deploy:check` audits validation workflows, package aliases and local
+command wrappers before the aggregate or packed lane runs. Only explicit
+Wrangler `deploy --dry-run` may reach Cloudflare tooling; production deployment
+entry points and equivalent mutations fail the check. The independent trusted
+production workflow remains unchanged.
 
 Both `test:browser:host` and `test:browser:dev` route specs to a viewport by
 filename: `*.coarse.pw.ts` runs only on a 390x844 touch project, and

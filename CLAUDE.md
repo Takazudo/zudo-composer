@@ -107,7 +107,9 @@ relationship for the external UI-provider dependency.
 
 - Install: `corepack pnpm install --frozen-lockfile`.
 - Develop: `corepack pnpm dev`.
-- Main bounded gate: `corepack pnpm check`.
+- Aggregate gate: `corepack pnpm check`, including the complete packed-install
+  proof. It needs network access, Playwright Chromium and exclusive browser
+  port 4175; run it with the other browser lanes stopped.
 - Contract handoff: `corepack pnpm contract:conformance`, `corepack pnpm
   contract:negative-scan`, and `corepack pnpm contract:external-install --
   --exact`.
@@ -116,8 +118,11 @@ relationship for the external UI-provider dependency.
   pnpm test:browser:demos` (port 4176, the three `packages/demo-*` hosts). Each
   owns one machine-global port, so none may run concurrently, and no lane may
   rebuild.
-- Host install: `corepack pnpm smoke:host-install`, the only proof that packs the
-  package and installs it into a project outside this repository.
+- Host install: `corepack pnpm smoke:host-install` packs the tool and contract,
+  then proves all disk-discovered package hosts, freshly generated creator
+  output and the synthesized fixture outside this repository. CI uses one
+  matrix job per host. `corepack pnpm no-deploy:check` guards these validation
+  commands, including aliases and local wrappers; Cloudflare dry-runs only.
 
 Do not weaken frozen install, negative dependency scans, exact provider pin, or
 the 12-component runtime/CSS/WASM proof to make a gate pass.

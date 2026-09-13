@@ -88,7 +88,7 @@
     "typecheck:public": "tsc -p tsconfig.public-types.json --pretty false && node scripts/check-public-types.mjs",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json --pretty false",
     "test": "vitest run",
-    "check": "pnpm public:check && pnpm studio:check && pnpm cms:check && pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm consumer:boundary && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm provider:boundary && pnpm test && pnpm build && pnpm dist:boundary",
+    "check": "pnpm no-deploy:check && pnpm public:check && pnpm studio:check && pnpm cms:check && pnpm lint && pnpm typecheck && pnpm headless:negative-scan && pnpm consumer:boundary && pnpm site-project:boundary && pnpm handoff:boundary && pnpm styles:class-names && pnpm provider:boundary && pnpm test && pnpm build && pnpm dist:boundary && pnpm smoke:host-install",
     "studio:check": "node scripts/check-studio-sample.mjs",
     "cms:check": "tsx scripts/cms-fixtures.ts --check",
     "cms:regenerate": "tsx scripts/cms-fixtures.ts --regenerate",
@@ -106,6 +106,8 @@
     "site-project:api": "tsx server/site-project-local/cli.ts",
     "site-project:check": "vitest run server/site-project-local plugins/__tests__/site-project-source-plugin.test.ts",
     "smoke:host-install": "node scripts/smoke-host-install.mjs",
+    "packed-host:matrix": "node scripts/packed-host-matrix.mjs",
+    "no-deploy:check": "node scripts/check-no-deploy.mjs",
     "test:browser:host": "node scripts/run-host-browser.mjs",
     "test:browser:dev": "node scripts/run-dev-browser.mjs",
     "test:browser:site-project": "node scripts/run-site-project-browser.mjs",
@@ -161,6 +163,7 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11",
-    "wrangler": "4.130.0"
+    "wrangler": "4.130.0",
+    "yaml": "2.8.1"
   }
 }

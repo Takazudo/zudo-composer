@@ -29,7 +29,7 @@
 // are allowed only after the installed public artifact verifier accepts them.
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
 import { AUTHORING_ROUTES } from "./routes.mjs";
@@ -41,6 +41,8 @@ import {
   selectPackedHosts, startHostServer as spawnHostServer, tree,
 } from "./packed-host-helpers.mjs";
 import { MISSING_RUNTIME, packMissingRuntime, plantHoistedDependency } from "./packed-host-negatives.mjs";
+import { createPackedGeneratedHost, snapshotPackedFiles } from "./packed-generated-host.mjs";
+import { checkNoDeploy } from "./check-no-deploy.mjs";
 
 /** @typedef {import("@playwright/test").Page} Page */
 /** @typedef {import("./packed-host-helpers.mjs").HostManifest} HostManifest */
@@ -284,11 +286,34 @@ async function verifyInstalledSiteArtifact(hostRoot) {
   step(`${basename(hostRoot)}: verified installed artifact, ${manifest.routes.length} routes and ${manifest.files} files`);
 }
 
+/** Confirm ready state through the actual installed authoring UI before seed.
+ * @param {string} hostRoot */
+async function verifyGeneratedReadyHost(hostRoot) {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    /** @type {string[]} */
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    for (const [route, labels] of [
+      ["/composer", ["Home", "Site frame"]], ["/content", ["Welcome"]],
+      ["/mapping", ["Home"]], ["/sitemapper", ["My site"]], ["/assets", ["starter.png"]],
+    ]) {
+      await page.goto(`${ORIGIN}${route}`);
+      for (const label of labels) await page.getByText(label, { exact: true }).first().waitFor({ timeout: 90_000 });
+      assert.equal(await page.getByRole("button", { name: "Create project", exact: true }).count(), 0, "Generated output unexpectedly requires first activation");
+    }
+    assert.deepEqual(errors, [], "Generated host reported browser runtime errors");
+    await assert.rejects(lstat(join(hostRoot, ".zudo-site-project")), { code: "ENOENT" }, "Opening ready CMS must not create an activated release");
+  } finally { await browser.close(); }
+}
+
 /**
  * @param {string} sourceHost @param {string} workspace @param {Tarballs} tarballs
  * @param {ToolPackage} toolPackage @param {string | undefined} negative
+ * @param {boolean} [generated]
  */
-async function proveDiskHost(sourceHost, workspace, tarballs, toolPackage, negative) {
+async function proveDiskHost(sourceHost, workspace, tarballs, toolPackage, negative, generated = false) {
   const name = basename(sourceHost);
   const hostRoot = join(workspace, name);
   let server;
@@ -313,13 +338,20 @@ async function proveDiskHost(sourceHost, workspace, tarballs, toolPackage, negat
     step(`${name}: package resolution is confined to ${hostRoot}/node_modules (${FIRST_PARTY.length} packed packages)`);
     assert.equal(Object.keys(installed).length, FIRST_PARTY.length);
     const installedTree = await tree(hostRoot);
+    const readyCms = generated ? await snapshotPackedFiles(join(hostRoot, "cms")) : undefined;
 
     step(`${name}: booting the installed CLI and fetching all ${AUTHORING_ROUTES.length} authoring routes`);
     server = await startHostServer(hostRoot);
     await fetchAuthoringRoutes(server);
+    if (generated) await verifyGeneratedReadyHost(hostRoot);
     await server.stop();
     server = undefined;
 
+    if (generated) {
+      assert.deepEqual(await snapshotPackedFiles(join(hostRoot, "cms")), readyCms, "Opening generated ready CMS changed its bytes");
+      step(`${name}: checking generated-host types and its own checks before reseeding`);
+      await run(pnpm, ["run", "check"], hostRoot);
+    }
     step(`${name}: checking authored source, importing assets and seeding through the installed CLI`);
     await run(pnpm, ["exec", "zudo-composer", "generate", "--check"], hostRoot);
     // The host's self-contained seed script runs assets import followed by seed.
@@ -337,6 +369,7 @@ async function proveDiskHost(sourceHost, workspace, tarballs, toolPackage, negat
 }
 
 const selection = selectPackedHosts(process.argv.slice(2).filter((argument) => argument !== "--"), discoverPackedHosts(root));
+checkNoDeploy({ root });
 const workspace = await createPackedWorkspace(roots);
 try {
   step(`external workspace: ${workspace}`);
@@ -353,7 +386,16 @@ try {
   const toolPackage = /** @type {ToolPackage} */ (JSON.parse(await readFile(join(root, "package.json"), "utf8")));
   if (selection.fixture) await proveSynthesizedHost(workspace, tarballs, toolPackage);
   for (const host of selection.hosts) await proveDiskHost(host, workspace, tarballs, toolPackage, selection.negative);
-  step(`passed: ${selection.hosts.length} disk host(s)${selection.fixture ? " plus the synthesized fixture" : " (focused run)"}`);
+  if (selection.generated) {
+    step("generated: creating canonical ready output through a separately installed CLI");
+    const generated = await createPackedGeneratedHost({ root, workspace, roots, tarballs, env: environment });
+    const copies = join(workspace, "generated-proof");
+    await mkdir(copies);
+    await proveDiskHost(generated.source, copies, tarballs, toolPackage, undefined, true);
+    await generated.assertPristine();
+    step("generated: passed installed creation, strict pristine-output checks and the full packed-host proof");
+  }
+  step(`passed: ${selection.hosts.length} disk host(s)${selection.fixture ? " plus the synthesized fixture" : ""}${selection.generated ? " plus freshly generated output" : ""}`);
 } finally {
   await rm(workspace, { recursive: true, force: true });
 }
