@@ -47,6 +47,21 @@ function workspace(id = "one") {
 }
 afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, "", "/"); vi.clearAllMocks(); });
 describe("application workspace lifetime", () => {
+  it("shows the hosted demo notice on authoring routes and leaves local mode unchanged", async () => {
+    render(<App integration={workspace() as unknown as ProductionProviderIntegration} hostedDemo />);
+    await screen.findByRole("heading", { name: "Workspace one" });
+    expect(screen.getByText("Public demo of zudo-composer")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/edits and uploads stay in this browser tab and reset on reload/i);
+    expect(screen.getByRole("status")).toHaveTextContent(/nothing is published/i);
+    expect(screen.getByRole("status")).toHaveTextContent(/real authoring runs locally with pnpm dev/i);
+    expect(screen.getByRole("status")).toHaveTextContent("Export JSON to keep your project.");
+
+    cleanup();
+    render(<App integration={workspace() as unknown as ProductionProviderIntegration} />);
+    await screen.findByRole("heading", { name: "Workspace one" });
+    expect(screen.queryByText("Public demo of zudo-composer")).not.toBeInTheDocument();
+  });
+
   it("warns on closing throughout a workspace replacement and stops warning after the committed swap", async () => {
     let finish!: (value: ProductionProviderIntegration) => void;
     const integration = { ...workspace(), assetProvider: { descriptor: { id: "asset-files" } } };
