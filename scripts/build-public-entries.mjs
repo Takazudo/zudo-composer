@@ -13,8 +13,14 @@ import ts from "typescript";
 const root = resolve(import.meta.dirname, "..");
 const check = process.argv.includes("--check");
 const entries = { authoring: "server/public/authoring.mts", "site-build": "server/public/site-build.mts" };
-// A type-only subpath has no default runtime export or empty JavaScript stub.
-const declarationEntries = { ...entries, "site-project": "server/public/site-project.mts" };
+// Declaration-only inputs serve type-only subpaths or existing runtime entries;
+// neither needs a generated JavaScript stub.
+const declarationEntries = {
+  ...entries,
+  "site-project": "server/public/site-project.mts",
+  vite: "server/public/vite.mts",
+  "config-public": "server/public/config.mts",
+};
 const temporary = await mkdtemp(join(tmpdir(), "zudo-composer-public-build-"));
 const generated = join(temporary, "output");
 const declarations = join(temporary, "types");

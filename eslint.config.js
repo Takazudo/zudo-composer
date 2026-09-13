@@ -21,6 +21,8 @@ export default tseslint.config(
       'server/site-build.mjs',
       'server/site-build.d.mts',
       'server/site-project.d.mts',
+      'server/vite.d.mts',
+      'server/config-public.d.mts',
       '.vite/**',
       '.artifacts/**',
       'test-results/**',

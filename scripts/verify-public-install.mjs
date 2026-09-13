@@ -47,7 +47,8 @@ try {
     name: "public-entry-host", private: true, version: "0.0.0", type: "module", packageManager: toolPackage.packageManager,
     exports: { "./components": "./components/pack.mjs" },
     dependencies: { ...tarballs, preact: toolPackage.peerDependencies.preact ?? toolPackage.devDependencies.preact ?? toolPackage.dependencies.preact },
-    devDependencies: { typescript: toolPackage.devDependencies.typescript, "@types/node": toolPackage.devDependencies["@types/node"] },
+    // Public plugin/server type identity is compared with the host's Vite import.
+    devDependencies: { typescript: toolPackage.devDependencies.typescript, "@types/node": toolPackage.devDependencies["@types/node"], vite: toolPackage.dependencies.vite },
   }, null, 2));
   await writeFile(join(host, "pnpm-workspace.yaml"), `packages: []\nstrictPeerDependencies: true\noverrides:\n  zudo-composer: '${tarballs["zudo-composer"]}'\n  '@zudo-composer/component-contract': '${tarballs["@zudo-composer/component-contract"]}'\n`);
   await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "public-entry-host/components" });\n');
@@ -67,10 +68,10 @@ export const componentPack = defineComponentPack({ packId: "public-entry-host", 
   const probe = await execFile(process.execPath, [join(host, "probe.mjs")], { cwd: host, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
   console.log(probe.stdout.trim());
   await pnpm(["exec", "tsc", "--ignoreConfig", "--noEmit", "--strict", "--verbatimModuleSyntax", "--module", "ESNext", "--moduleResolution", "Bundler", "--target", "ES2023", "types.mts", "site-project.ts"], host);
-  // The generated Node entries also support a NodeNext consumer. The Vite
-  // plugin's existing declaration graph is checked in Bundler mode above.
-  await pnpm(["exec", "tsc", "--ignoreConfig", "--noEmit", "--strict", "--verbatimModuleSyntax", "--types", "node", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2023", "site-project.ts"], host);
-  console.log("Packed public declarations passed: strict Bundler consumer and NodeNext SiteProject demo, with no repository aliases.");
+  // Exercise the same public root/config/Vite/authoring/site-build contracts
+  // and SiteProject demo under both consumer resolution modes.
+  await pnpm(["exec", "tsc", "--ignoreConfig", "--noEmit", "--strict", "--verbatimModuleSyntax", "--types", "node", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2023", "types.mts", "site-project.ts"], host);
+  console.log("Packed public declarations passed: strict Bundler and NodeNext consumers and SiteProject demo, with no repository aliases.");
   await verifyReleasePortability({ checkoutRoot: root, hostRoot: host });
 } finally {
   await rm(temporary, { recursive: true, force: true });
