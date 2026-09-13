@@ -29,7 +29,7 @@ const PORT = 4176;
 const RESERVED_PORTS = [4173, 4174, 4175, 5173];
 if (RESERVED_PORTS.includes(PORT)) throw new Error(`Demos lane port ${PORT} collides with an existing browser lane.`);
 
-const DEMOS = ["webshop", "landing", "blog"];
+const DEMOS = ["sample", "webshop", "landing", "blog"];
 
 /**
  * @param {string} command

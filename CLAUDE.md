@@ -36,9 +36,9 @@ contract is interchangeable with it.
 The tool's authoring routes are `/`, `/composer`, same-origin
 `/composer/preview`, `/content`, `/mapping`, `/sitemapper`, and `/assets`.
 An activated host site is delivered under `/site`; each static site's own routes
-come from its verified `dist-site/site-manifest.json`. Only Sample Studio's
-hosted Composer production target uses frozen route data in
-`packages/demo-studio/hosted-routes.mjs`, checked against the Studio artifact.
+come from its verified `dist-site/site-manifest.json`. The SiteProject acceptance
+lane uses Sample Studio's frozen route data in
+`packages/demo-sample/hosted-routes.mjs`, checked against the Studio artifact.
 Emitted files live under `/assets/`, and committed images and PDFs from the
 host's `publicAssetsDir` are delivered under `/uploaded-assets/`. Upload
 authoring remains dev-only. Keep Vite base `/` and the preview graph isolated
@@ -129,10 +129,11 @@ relationship for the external UI-provider dependency.
   all host artifacts before the SiteProject and demos browser lanes; stale
   artifacts fail their read-only verification.
 - Browser lanes: `corepack pnpm test:browser:host`, `corepack pnpm
-  test:browser:dev`, `corepack pnpm test:browser:site-project`, and `corepack
-  pnpm test:browser:demos` (port 4176, the three `packages/demo-*` hosts). Each
-  owns one machine-global port, so none may run concurrently, and no lane may
-  rebuild.
+  test:browser:dev`, `corepack pnpm test:browser:site-project`, `corepack pnpm
+  test:browser:demos` (port 4176, the four `packages/demo-*` hosts), and
+  `corepack pnpm test:browser:demo-editor [sample|shop|landing|blog]` (port
+  4175, the prepared per-host editor artifacts). Each owns one machine-global
+  port, so none may run concurrently, and no lane may rebuild.
 - Consumer boundary: the ledger must contain zero entries. Scan actual creator
   templates and complete generated output before packed dependency rewriting.
 - Host install: `corepack pnpm smoke:host-install` packs the tool and contract,
@@ -146,63 +147,62 @@ the 12-component runtime/CSS/WASM proof to make a gate pass.
 
 ## Scoped hosted demo exception
 
-The installed tool and ordinary local workflow remain local-first. Issue 414
-adds one disposable static sample at `https://zudo-composer.zudolab.dev`; issue
-504 extends the same trusted-run pipeline to three further static demo
-websites built from committed SiteProject content: `zc-demo-shop.zudolab.dev`
-(`packages/demo-webshop`), `zc-demo-landing.zudolab.dev`
-(`packages/demo-landing`) and `zc-demo-blog.zudolab.dev` (`packages/demo-blog`).
-The `doc/` workspace is the zudo-doc developer documentation site and the
-fifth target at `zc-doc.zudolab.dev`; `docs/` remains the operator-reference
-surface. The documentation runtime stays in that separate workspace, outside
-the installed authoring tool.
-None of this adds hosted persistence, a hosted API, authentication, arbitrary
-host project access or deployment support for installed applications. Each
-target is its own Worker with its own custom-domain binding, configured in
-[`wrangler.jsonc`](./wrangler.jsonc) (`zudo-composer`),
-[`wrangler.demo-shop.jsonc`](./wrangler.demo-shop.jsonc),
-[`wrangler.demo-landing.jsonc`](./wrangler.demo-landing.jsonc),
-[`wrangler.demo-blog.jsonc`](./wrangler.demo-blog.jsonc), and
-[`wrangler.doc.jsonc`](./wrangler.doc.jsonc).
+The installed tool and ordinary local workflow remain local-first. The scoped
+exception publishes the documentation site, four static demo websites and
+four disposable per-host editors. None adds hosted persistence, a hosted API,
+authentication, arbitrary host project access or deployment support for
+installed applications. `scripts/hosted-demo/targets.mjs` is the source of
+truth for this nine-target registry:
 
-The hosted composer demo's `dist-hosted-demo` artifact is built, checked
-against the ordinary filesystem/server/test boundary, browser-tested, and
-uploaded by CI under the exact source SHA; the three static demo sites are
-each built and manifest-verified by CI with `pnpm demo:build-site <name>` into
-`packages/demo-<name>/dist-site` and uploaded the same way. The doc site is
-built with `pnpm doc:build-site` into `doc/dist`, verified by
-`doc-site-manifest.json`, and uploaded under the exact source SHA. It is a
-multi-page static site served by `zudo-composer-doc` from `wrangler.doc.jsonc`
-at `zc-doc.zudolab.dev`, with Workers Static Assets' default
-`auto-trailing-slash` HTML handling and `404-page` fallback. `scripts/hosted-demo/targets.mjs`
-is the one place naming each target's Worker, config file, artifact directory,
-domain and artifact contract; `deploy.mjs`, `live-check.mjs` and
-`check-hosted-demo.mjs` are generic over that target, while
-`workflow-guard.mjs`'s trusted-run checks needed no target parameter — they
-never touch an artifact or a Cloudflare config. The independent production
-workflow runs as a matrix of the five targets, each accepting only a
-successful same-repository `main` CI run, verifying its own run/SHA/artifact,
-capturing the active single-version deployment, performing a Wrangler dry run,
-uploading the verified directory with Wrangler 4.130.0, and activating only
-the version ID returned by that upload. It has no pull-request artifact path.
-Pull-request validation has no Cloudflare secrets, and production uses only
-the existing deployment secrets after its trusted-run gates, with a
-concurrency group per target so one target's rollout never blocks another's.
-Missing credentials, stale `main`, missing rollback state, split traffic or a
-source mismatch fail before mutation, for every target. The one exception is a
-target whose Worker does not exist yet: when both `deployments list` and
-`versions list` report it missing, the first rollout is created with a plain
-`wrangler deploy` — the only call that binds the config's custom domain — and
-has no rollback target by definition. Any other missing-state combination still
-fails closed.
+| Target key | Kind | Worker | Wrangler config | Domain |
+| --- | --- | --- | --- | --- |
+| `doc` | `doc-site` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` |
+| `sample` | `site-static` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` |
+| `shop` | `site-static` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` |
+| `landing` | `site-static` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` |
+| `blog` | `site-static` | `zc-demo-blog` | `wrangler.demo-blog.jsonc` | `zc-demo-blog.zudolab.dev` |
+| `sample-editor` | `demo-editor` | `zc-demo-sample-editor` | `wrangler.demo-sample-editor.jsonc` | `zc-demo-sample-editor.zudolab.dev` |
+| `shop-editor` | `demo-editor` | `zc-demo-shop-editor` | `wrangler.demo-shop-editor.jsonc` | `zc-demo-shop-editor.zudolab.dev` |
+| `landing-editor` | `demo-editor` | `zc-demo-landing-editor` | `wrangler.demo-landing-editor.jsonc` | `zc-demo-landing-editor.zudolab.dev` |
+| `blog-editor` | `demo-editor` | `zc-demo-blog-editor` | `wrangler.demo-blog-editor.jsonc` | `zc-demo-blog-editor.zudolab.dev` |
 
-Live checks cover the manifest, every emitted asset and every route with
-bounded HTTPS requests — the hosted composer demo's fixed authoring/sample
-route list for that target, and each static site's own manifest route list for
-the other four. Automatic rollback is allowed only while the exact uploaded
-version remains active, and a rollback that succeeds still leaves the
-deployment workflow red. Local OAuth credentials are never copied to
-repository or workflow secrets.
+The four static sites build to each host's `dist-site` with
+`pnpm demo:build-site <sample|webshop|landing|blog|dir>` or the discovering
+`pnpm demo:build-sites` command. Each `demo-editor` target is built from the
+matching host's own config, component pack, stylesheet and generated project:
+`pnpm demo:build-editor <sample|shop|landing|blog|dir>` builds one and
+`pnpm demo:build-editors` discovers and builds all four serially into
+`dist-editor`. The editor browser lane is
+`pnpm test:browser:demo-editor [sample|shop|landing|blog]`; it consumes those
+prepared artifacts on port 4175 and never rebuilds them.
+
+The `doc` target runs `pnpm doc:build-site`, verifies `doc/dist` with
+`doc-site-manifest.json`, and uses the default `auto-trailing-slash` HTML
+handling with an explicit `404-page` fallback. The target registry owns each
+Worker, config file, artifact directory, domain and verifier shape;
+`deploy.mjs`, `live-check.mjs` and `check-hosted-demo.mjs` are generic over
+that target, while `workflow-guard.mjs` validates the trusted run before
+artifact access. The production workflow is serialized per target and accepts
+only a successful same-repository `main` CI run, its exact SHA-named artifact,
+and the current `main` head. It captures the active single-version
+deployment, performs a Wrangler dry run, uploads the verified directory with
+Wrangler 4.130.0, and activates only the version returned by that upload.
+Pull-request validation has no Cloudflare secrets.
+
+Missing credentials, stale `main`, missing rollback state, split traffic or an
+artifact/source mismatch fail before mutation. A target whose Worker does not
+exist yet is the one exception: when both `deployments list` and `versions
+list` report it missing, the first rollout uses plain `wrangler deploy`, which
+binds the custom domain and has no rollback target. Any other missing-state
+combination fails closed. Live checks cover every manifest, emitted asset and
+route with bounded HTTPS requests; automatic rollback is allowed only while
+the exact uploaded version remains active, and a successful rollback still
+leaves the workflow red.
+
+The owner runbook for deleting retired Workers before the first rollout,
+partial-first-deploy recovery, token scopes, captured-version rollback and
+the `workflow_dispatch` target input is [`docs/hosted-demo.md`](./docs/hosted-demo.md).
+Local OAuth credentials are never copied to repository or workflow secrets.
 
 Do not claim a permanent target `main` SHA or a final CI URL before the Phase 3
 root merges and post-merge evidence exists. The integration owner records that

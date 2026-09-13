@@ -1,7 +1,8 @@
 # Landing demo — Orrery
 
-Package `packages/demo-landing`, domain `zc-demo-landing.zudolab.dev`, token
-namespace `land-`, component id prefix `land.`. Lists follow
+Package `packages/demo-landing`, site domain `zc-demo-landing.zudolab.dev`,
+editor domain `zc-demo-landing-editor.zudolab.dev`, token namespace `land-`,
+component id prefix `land.`. Lists follow
 [README § Lists](./README.md#lists); spacing axes follow
 `src/styles/README.md`; the `@theme` mechanism is the one in
 `src/styles/app-tokens.css` under a different namespace.

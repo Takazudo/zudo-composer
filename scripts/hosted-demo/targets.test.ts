@@ -1,42 +1,92 @@
 // @vitest-environment node
 
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSiteManifest, SITE_HEADERS, SITE_MANIFEST, siteHeaders, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
 import { createDocSiteManifest, DOC_SITE_MANIFEST, verifyDocSiteArtifact } from "./doc-site-artifact.mjs";
-import { DEFAULT_TARGET_KEY, HOSTED_DEMO_LIVE_ROUTES, TARGET_KEYS, TARGETS, resolveTarget } from "./targets.mjs";
+import { TARGET_KEYS, TARGETS, resolveTarget } from "./targets.mjs";
+
+import { demoEditorRoutes } from "../routes.mjs";
 
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
 
 describe("hosted-demo deploy targets", () => {
-  it("names every target's Worker, config file and custom domain", () => {
-    expect(DEFAULT_TARGET_KEY).toBe("zudo-composer");
-    expect(TARGET_KEYS).toEqual(["zudo-composer", "webshop", "landing", "blog", "doc"]);
-    expect(TARGETS["zudo-composer"]).toMatchObject({ workerName: "zudo-composer", configPath: "wrangler.jsonc", domain: "zudo-composer.zudolab.dev", kind: "hosted-demo" });
-    expect(TARGETS.webshop).toMatchObject({ workerName: "zudo-composer-demo-shop", configPath: "wrangler.demo-shop.jsonc", domain: "zc-demo-shop.zudolab.dev", kind: "site-static" });
-    expect(TARGETS.landing).toMatchObject({ workerName: "zudo-composer-demo-landing", configPath: "wrangler.demo-landing.jsonc", domain: "zc-demo-landing.zudolab.dev", kind: "site-static" });
-    expect(TARGETS.blog).toMatchObject({ workerName: "zudo-composer-demo-blog", configPath: "wrangler.demo-blog.jsonc", domain: "zc-demo-blog.zudolab.dev", kind: "site-static" });
-    expect(TARGETS.doc).toMatchObject({ workerName: "zudo-composer-doc", configPath: "wrangler.doc.jsonc", domain: "zc-doc.zudolab.dev", kind: "doc-site" });
-    for (const key of TARGET_KEYS) expect(TARGETS[key].artifactDirectory.endsWith("dist-site") || TARGETS[key].artifactDirectory.endsWith("dist-hosted-demo") || TARGETS[key].artifactDirectory.endsWith("doc/dist")).toBe(true);
+  it("names all nine Workers, configs, domains, host directories and artifact directories", () => {
+    expect(TARGET_KEYS).toEqual(["doc", "sample", "shop", "landing", "blog", "sample-editor", "shop-editor", "landing-editor", "blog-editor"]);
+    expect(TARGETS.doc).toMatchObject({ workerName: "zudo-composer", configPath: "wrangler.doc.jsonc", domain: "zudo-composer.zudolab.dev", kind: "doc-site" });
+    expect(TARGETS.sample).toMatchObject({ workerName: "zc-demo-sample", configPath: "wrangler.demo-sample.jsonc", domain: "zc-demo-sample.zudolab.dev", kind: "site-static" });
+    expect(TARGETS.shop).toMatchObject({ workerName: "zc-demo-shop", configPath: "wrangler.demo-shop.jsonc", domain: "zc-demo-shop.zudolab.dev", kind: "site-static" });
+    expect(TARGETS.landing).toMatchObject({ workerName: "zc-demo-landing", configPath: "wrangler.demo-landing.jsonc", domain: "zc-demo-landing.zudolab.dev", kind: "site-static" });
+    expect(TARGETS.blog).toMatchObject({ workerName: "zc-demo-blog", configPath: "wrangler.demo-blog.jsonc", domain: "zc-demo-blog.zudolab.dev", kind: "site-static" });
+    for (const [key, hostDirectory] of Object.entries({
+      sample: "packages/demo-sample",
+      shop: "packages/demo-webshop",
+      landing: "packages/demo-landing",
+      blog: "packages/demo-blog",
+      "sample-editor": "packages/demo-sample",
+      "shop-editor": "packages/demo-webshop",
+      "landing-editor": "packages/demo-landing",
+      "blog-editor": "packages/demo-blog",
+    })) {
+      const target = TARGETS[key];
+      expect(target.hostDirectory).toBe(resolve(import.meta.dirname, "../..", hostDirectory));
+      const artifactName = key.endsWith("-editor") ? "dist-editor" : "dist-site";
+      expect(target.artifactDirectory).toBe(resolve(target.hostDirectory!, artifactName));
+    }
+    for (const name of ["sample", "shop", "landing", "blog"]) {
+      expect(TARGETS[`${name}-editor`]).toMatchObject({
+        kind: "demo-editor",
+        workerName: `zc-demo-${name}-editor`,
+        configPath: `wrangler.demo-${name}-editor.jsonc`,
+        domain: `zc-demo-${name}-editor.zudolab.dev`,
+        manifestFileName: "demo-editor-manifest.json",
+        ciArtifactName: expect.any(Function),
+      });
+      expect(TARGETS[`${name}-editor`].ciArtifactName("a".repeat(40))).toBe(`demo-editor-${name}-${"a".repeat(40)}`);
+    }
+    expect(TARGETS.doc.ciArtifactName("a".repeat(40))).toBe(`doc-site-${"a".repeat(40)}`);
+    for (const name of ["sample", "shop", "landing", "blog"]) expect(TARGETS[name].ciArtifactName("a".repeat(40))).toBe(`demo-site-${name}-${"a".repeat(40)}`);
   });
 
   it("rejects an unknown target", () => {
     expect(() => resolveTarget("nope")).toThrow(/Unknown hosted-demo deploy target: nope/);
-    expect(resolveTarget("webshop")).toBe(TARGETS.webshop);
+    expect(() => resolveTarget(undefined)).toThrow(/target is required/i);
+    expect(resolveTarget("shop")).toBe(TARGETS.shop);
   });
 
-  it("gives the hosted composer demo its fixed authoring/sample route list", () => {
-    expect(TARGETS["zudo-composer"].liveRoutes({})).toBe(HOSTED_DEMO_LIVE_ROUTES);
-    expect(HOSTED_DEMO_LIVE_ROUTES).toContain("/composer");
-    expect(HOSTED_DEMO_LIVE_ROUTES).toContain("/review");
+  it("takes editor authoring and host routes from the verified editor manifest", () => {
+    const routes = demoEditorRoutes(["/", "/host-specific"]);
+    expect(TARGETS["sample-editor"].liveRoutes({ routes })).toEqual(routes);
+    expect(routes).toContain("/composer");
+    expect(routes).toContain("/review");
+    expect(routes).toContain("/site/host-specific");
+    expect(() => TARGETS["sample-editor"].liveRoutes({})).toThrow("routes must be an array");
   });
 
   it("reads a static demo site's live routes from its own manifest", () => {
-    expect(TARGETS.webshop.liveRoutes({ routes: ["/", "/about"] })).toEqual(["/", "/about"]);
+    expect(TARGETS.shop.liveRoutes({ routes: ["/", "/about"] })).toEqual(["/", "/about"]);
+  });
+
+  it("keeps every Wrangler config in parity with exactly one registered target", async () => {
+    const root = resolve(import.meta.dirname, "../..");
+    const configFiles = (await readdir(root)).filter((file) => /^wrangler.*\.jsonc$/u.test(file)).sort();
+    expect(new Set(configFiles)).toEqual(new Set(TARGET_KEYS.map((key) => TARGETS[key].configPath).sort()));
+    for (const key of TARGET_KEYS) {
+      const target = TARGETS[key];
+      const config = JSON.parse(await readFile(join(root, target.configPath), "utf8")) as {
+        name: string;
+        assets: { directory: string; not_found_handling: string };
+        routes: Array<{ pattern: string; custom_domain?: boolean }>;
+      };
+      expect(config.name).toBe(target.workerName);
+      expect(config.routes).toEqual([{ pattern: target.domain, custom_domain: true }]);
+      expect(config.assets.directory.replace(/^\.\//u, "").split("/").join(sep)).toBe(relative(root, target.artifactDirectory));
+      expect(config.assets.not_found_handling).toBe(target.kind === "doc-site" ? "404-page" : "single-page-application");
+    }
   });
 
   it("maps doc-site routes and assets and verifies a multi-page tree", async () => {
@@ -104,20 +154,20 @@ describe("hosted-demo deploy targets", () => {
     const manifest = await createSiteManifest({ directory, projectId: "demo-webshop", sourceRevision, projectSourceRevision: "b".repeat(64), routes: ["/", "/about"] });
     await writeFile(join(directory, SITE_MANIFEST), JSON.stringify(manifest));
 
-    const artifact = await TARGETS.webshop.verifyArtifact({ directory, expectedSourceRevision: sourceRevision });
+    const artifact = await TARGETS.shop.verifyArtifact({ directory, expectedSourceRevision: sourceRevision });
     expect(artifact.files.map((file) => file.path)).toEqual(["assets/index-abc.js", "index.html", pinPath].sort());
     expect(artifact.files.find((file) => file.path === "index.html")).toMatchObject({ mime: "text/html" });
     expect(artifact.files.find((file) => file.path === pinPath)).toMatchObject({ mime: "image/png" });
     expect(artifact.manifest.projectId).toBe("demo-webshop");
     expect(artifact.root.endsWith(directory.split("/").pop()!)).toBe(true);
-    await expect(TARGETS.webshop.verifyArtifact({ directory, expectedSourceRevision: "c".repeat(40) })).rejects.toThrow(/sourceRevision does not match/);
+    await expect(TARGETS.shop.verifyArtifact({ directory, expectedSourceRevision: "c".repeat(40) })).rejects.toThrow(/sourceRevision does not match/);
     // Local artifacts can omit a revision or use another revision system;
     // the existing production target contract still requires a full Git SHA.
     for (const sourceRevision of [undefined, "release-local"]) {
       await writeFile(join(directory, SITE_MANIFEST), JSON.stringify({ ...manifest, sourceRevision }));
       await expect(verifySiteStaticArtifact({ directory })).resolves.toMatchObject({ projectId: "demo-webshop" });
-      await expect(TARGETS.webshop.verifyArtifact({ directory })).rejects.toThrow(/Deployed site artifact requires/);
-      await expect(TARGETS.webshop.verifyArtifact({ directory, expectedSourceRevision: "a".repeat(40) })).rejects.toThrow(/sourceRevision does not match/);
+      await expect(TARGETS.shop.verifyArtifact({ directory })).rejects.toThrow(/Deployed site artifact requires/);
+      await expect(TARGETS.shop.verifyArtifact({ directory, expectedSourceRevision: "a".repeat(40) })).rejects.toThrow(/sourceRevision does not match/);
     }
   });
 });

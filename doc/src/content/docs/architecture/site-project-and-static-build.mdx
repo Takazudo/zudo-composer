@@ -158,8 +158,9 @@ every file except the manifest itself. Verification checks the exact inventory,
 digests, pinned asset filenames, header rules, safe paths, and forbidden
 server/authoring markers. It can inspect an artifact without rebuilding it.
 
-Static routes come from that artifact's manifest. The hosted Composer sample's
-frozen routes are specific to its demo adapter. The
+Static routes come from that artifact's manifest. Sample Studio's static-site
+routes are specific to its site artifact; its disposable editor has a separate
+route contract. The
 [hosted pipeline](./hosted-demo-pipeline.mdx) adds a trusted Git revision and
 deployment policy around selected repository artifacts; hosted authoring
 persistence, authentication, and a hosted release API remain future work.

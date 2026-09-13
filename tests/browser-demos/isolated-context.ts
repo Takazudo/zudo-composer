@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { DEMOS_LANE_DIRECTORY } from "../../scripts/demos-lane-paths.mjs";
 
-export const DEMOS_LANE_NAMES = ["webshop", "landing", "blog"] as const;
+export const DEMOS_LANE_NAMES = ["sample", "webshop", "landing", "blog"] as const;
 export type DemosLaneName = (typeof DEMOS_LANE_NAMES)[number];
 
 export interface DemosLaneContext {

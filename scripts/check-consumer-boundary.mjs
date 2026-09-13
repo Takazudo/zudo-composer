@@ -23,7 +23,7 @@ const defaultLedger = fileURLToPath(new URL('./consumer-boundary-ledger.json', i
 const sourceExtensions = new Set(['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts']);
 const textExtensions = new Set(['.md', '.mdx', '.yaml', '.yml', '.sh', '.bash', '.zsh', '.npmrc']);
 const ignoredDirectories = new Set([
-  'node_modules', '.git', 'dist', 'dist-site', 'dist-hosted-demo', '.zudo-site-project',
+  'node_modules', '.git', 'dist', 'dist-site', 'dist-editor', '.zudo-site-project',
   '.vite', '.artifacts', 'coverage', 'test-results', 'playwright-report',
 ]);
 const dependencySections = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];

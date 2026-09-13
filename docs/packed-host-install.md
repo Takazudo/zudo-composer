@@ -22,7 +22,7 @@ editor worker, restart into a fresh browser context, validate release portabilit
 in both directions, and confirm CMS data survives removal of the tool.
 
 It also discovers real host packages from disk. Currently these are
-`demo-blog`, `demo-landing`, `demo-studio`, and `demo-webshop`. Every copied host
+`demo-blog`, `demo-landing`, `demo-sample`, and `demo-webshop`. Every copied host
 keeps its source, component exports, styles, committed CMS, public assets,
 asset-import inputs and tests. Installed dependencies, prior build artifacts,
 derived releases and browser-lane scratch directories are excluded. Filesystem

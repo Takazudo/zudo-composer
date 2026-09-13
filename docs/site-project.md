@@ -84,7 +84,7 @@ corepack pnpm cms:check
 ```
 
 The check is also part of `corepack pnpm check`. It discovers source-bearing
-hosts under `packages/` and `fixtures/`, including a future `demo-studio`, and
+hosts under `packages/` and `fixtures/`, including a future `demo-sample`, and
 requires previously registered hosts to remain present. It runs the installed
 `zudo-composer generate --check`, then `seed --ready-workspace --output` in fresh
 staging. Every directory (including empty directories), filename and byte digest
@@ -264,7 +264,7 @@ head revision and active triple from `list` for subsequent reviews.
 ```sh
 node --input-type=module <<'NODE' | corepack pnpm site-project:api > release-plan.json
 import { readFileSync } from 'node:fs';
-const project = JSON.parse(readFileSync('packages/demo-studio/site-project.json', 'utf8'));
+const project = JSON.parse(readFileSync('packages/demo-sample/site-project.json', 'utf8'));
 const selection = project.providers.content.flatMap(p => p.entries.map(e => ({
   ref: { providerId: p.id, modelId: e.modelId, recordId: e.id }, action: 'publish'
 })));

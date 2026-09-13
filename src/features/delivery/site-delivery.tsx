@@ -12,6 +12,7 @@ import { normalizeDeliveryLink, normalizeDeliveryLinks, type DeliveryBasePath } 
 import { DeliveryRuntime, type DeliveryComponentError } from "./runtime";
 import { matchDeliveryRoute } from "./routing";
 import { validateActivatedDeliveryArtifact, type DeliverySourceContract } from "./source";
+import { HostedDemoNotice } from "./hosted-demo-notice";
 
 type DeliveryState =
   | { status: "loading" }
@@ -136,7 +137,7 @@ function DeliveryChrome({ project, build, sitemap, route, pack, report, focus, o
   </div>;
 }
 
-export function SiteDelivery({ source, pathname = window.location.pathname, onComponentError = (detail) => console.error("Delivery component failed", detail) }: { source: DeliverySourceContract; pathname?: string; onComponentError?: (detail: DeliveryComponentError) => void }): JSX.Element {
+export function SiteDelivery({ source, pathname = window.location.pathname, hostedDemo = false, onComponentError = (detail) => console.error("Delivery component failed", detail) }: { source: DeliverySourceContract; pathname?: string; hostedDemo?: boolean; onComponentError?: (detail: DeliveryComponentError) => void }): JSX.Element {
   const [state, setState] = useState<DeliveryState>({ status: "loading" });
   const request = useRef(0);
   const focusAfterRetry = useRef(false);
@@ -170,12 +171,18 @@ export function SiteDelivery({ source, pathname = window.location.pathname, onCo
     setState({ status: "loading" });
     void retryDeliverySnapshot(source).then((next) => { if (request.current === current) setState(next); });
   };
-  if (state.status === "loading") return <StateMessage heading="Loading site" message={source.kind === "activated" ? "Reading the completed activated local release…" : source.kind === "static" ? "Reading the published site…" : "Flushing and compiling the live working draft…"} busy />;
-  if (state.status === "provider-error") return <StateMessage heading="Site unavailable" message={<>{source.kind === "activated" ? "The activated local release could not be loaded. " : "The live working draft could not be loaded. "}{state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus}>{state.retryable && <button type="button" onClick={retry}>Retry loading site</button>}</StateMessage>;
-  if (state.status === "validation-error") return <StateMessage heading="Site data blocked" message={<>The latest site data did not pass validation. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />;
-  if (state.status === "compiler-error") return <StateMessage heading="Site build blocked" message={<>This site cannot be published until its configuration is fixed. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />;
-  if (!route) return <StateMessage heading="Page not found" message={source.kind === "static" ? "There is no page at this address." : "This page is not present in the selected delivery snapshot."} focus={focusAfterRetry.current} onFocused={completeRetryFocus}><a href={basePath}>Return to site home</a></StateMessage>;
+  const withHostedDemoNotice = (content: JSX.Element): JSX.Element => hostedDemo ? (
+    <div class="site-delivery-hosted-demo">
+      <HostedDemoNotice class="site-delivery-hosted-demo__notice" />
+      <div class="site-delivery-hosted-demo__content">{content}</div>
+    </div>
+  ) : content;
+  if (state.status === "loading") return withHostedDemoNotice(<StateMessage heading="Loading site" message={source.kind === "activated" ? "Reading the completed activated local release…" : source.kind === "static" ? "Reading the published site…" : "Flushing and compiling the live working draft…"} busy />);
+  if (state.status === "provider-error") return withHostedDemoNotice(<StateMessage heading="Site unavailable" message={<>{source.kind === "activated" ? "The activated local release could not be loaded. " : "The live working draft could not be loaded. "}{state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus}>{state.retryable && <button type="button" onClick={retry}>Retry loading site</button>}</StateMessage>);
+  if (state.status === "validation-error") return withHostedDemoNotice(<StateMessage heading="Site data blocked" message={<>The latest site data did not pass validation. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
+  if (state.status === "compiler-error") return withHostedDemoNotice(<StateMessage heading="Site build blocked" message={<>This site cannot be published until its configuration is fixed. {state.message}</>} focus={focusAfterRetry.current} onFocused={completeRetryFocus} />);
+  if (!route) return withHostedDemoNotice(<StateMessage heading="Page not found" message={source.kind === "static" ? "There is no page at this address." : "This page is not present in the selected delivery snapshot."} focus={focusAfterRetry.current} onFocused={completeRetryFocus}><a href={basePath}>Return to site home</a></StateMessage>);
   const componentProvider = source.kind === "working-preview" ? source.providers.componentProvider : source.componentProvider;
   const label = state.sourceKind === "working-preview" ? "Live working preview — not activated" : "Activated local release — not deployed";
-  return <DeliveryGuard><DeliveryChrome project={state.project} build={state.build} sitemap={state.sitemap} route={route} pack={componentProvider.pack} report={onComponentError} focus={focusAfterRetry.current} onFocused={completeRetryFocus} basePath={basePath} label={label} /></DeliveryGuard>;
+  return withHostedDemoNotice(<DeliveryGuard><DeliveryChrome project={state.project} build={state.build} sitemap={state.sitemap} route={route} pack={componentProvider.pack} report={onComponentError} focus={focusAfterRetry.current} onFocused={completeRetryFocus} basePath={basePath} label={label} /></DeliveryGuard>);
 }

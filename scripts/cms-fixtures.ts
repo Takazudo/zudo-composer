@@ -221,7 +221,7 @@ async function baselineInventory(root: string, host: string, roots: readonly str
  * still uses the original host config/pack/Assets, with --from pointing here.
  */
 async function stageSource(host: string, target: string, managedRoots: readonly string[]): Promise<string> {
-  const ignored = new Set(["node_modules", ".git", ".zudo-site-project", "dist", "dist-site", ".vite", "coverage", "test-results", "playwright-report"]);
+  const ignored = new Set(["node_modules", ".git", ".zudo-site-project", "dist", "dist-site", "dist-editor", ".vite", "coverage", "test-results", "playwright-report"]);
   await cp(host, target, {
     recursive: true, errorOnExist: true, force: false,
     filter: async (path) => {

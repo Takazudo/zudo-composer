@@ -47,3 +47,5 @@ pinned image URLs.
 
 The site is delivered at `/site` on the dev server and at
 `https://zc-demo-shop.zudolab.dev` from `corepack pnpm demo:build-site webshop`.
+Its disposable editor is published at
+`https://zc-demo-shop-editor.zudolab.dev` from `corepack pnpm demo:build-editor shop`.

@@ -1,24 +1,21 @@
 // @ts-check
 // The trusted-run deploy pipeline (deploy.mjs, live-check.mjs,
-// check-hosted-demo.mjs) is shared by five Cloudflare Workers: the disposable
-// hosted composer demo, three static demo websites and the documentation site.
-// This module is the single place that names each target's Worker, config file, artifact
-// directory, domain and artifact-verification shape so those scripts stay
-// generic. workflow-guard.mjs needs none of this: its trusted-run checks are
-// identical for every target.
+// check-hosted-demo.mjs) is shared by nine Cloudflare Workers: four static demo
+// websites, four per-host editors and the documentation site.
+// This module is the single place that names each target's Worker, config file,
+// host/artifact directories, domain and artifact-verification shape so those
+// scripts stay generic. workflow-guard.mjs needs none of this: its trusted-run
+// checks are identical for every target.
 
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import { HOSTED_DEMO_MANIFEST, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
+import { DEMO_EDITOR_MANIFEST, expectedMime, verifyDemoEditorArtifact } from "./artifact.mjs";
 import { SITE_HEADERS, SITE_MANIFEST, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
 import { DOC_SITE_MANIFEST, verifyDocSiteArtifact } from "./doc-site-artifact.mjs";
-import { SPA_ROUTES } from "../routes.mjs";
+import { verifiedDemoEditorRoutes } from "../routes.mjs";
 
 const root = resolve(fileURLToPath(new URL("../../", import.meta.url)));
-
-/** Fixed route list for the hosted composer demo; it carries no route data in its own manifest. */
-export const HOSTED_DEMO_LIVE_ROUTES = [...SPA_ROUTES, "/review", "/website-preview"];
 
 /** @typedef {{ path: string, sha256: string, mime: string, acceptedMimes?: string[] }} TargetFile */
 // Local doc artifacts may omit sourceRevision. Production preflight requires
@@ -30,15 +27,6 @@ export const HOSTED_DEMO_LIVE_ROUTES = [...SPA_ROUTES, "/review", "/website-prev
  * cannot know the target-specific manifest shape in advance.
  * @typedef {(options: { directory: string, expectedSourceRevision?: string }) => Promise<TargetArtifact>} ArtifactVerifier
  */
-
-/**
- * @param {{ directory: string, expectedSourceRevision?: string }} options
- * @returns {Promise<TargetArtifact>}
- */
-async function verifyHostedDemoTargetArtifact(options) {
-  // Already returns { root, manifest, files: [{ path, sha256, mime }] }.
-  return verifyHostedDemoArtifact(options);
-}
 
 /**
  * Adapt the static-site verifier's manifest (a `files` record keyed by path,
@@ -67,10 +55,11 @@ async function verifySiteStaticTargetArtifact({ directory, expectedSourceRevisio
  * request only when a verified route covers the same file.
  * @typedef {{
  *   key: string,
- *   kind: "hosted-demo" | "site-static" | "doc-site",
+ *   kind: "demo-editor" | "site-static" | "doc-site",
  *   workerName: string,
  *   configPath: string,
  *   domain: string,
+ *   hostDirectory?: string,
  *   artifactDirectory: string,
  *   manifestFileName: string,
  *   ciArtifactName: (sha: string) => string,
@@ -80,62 +69,55 @@ async function verifySiteStaticTargetArtifact({ directory, expectedSourceRevisio
  *   assetUrl?: (path: string) => string | null,
  * }} DeployTarget */
 
+/** @param {string} key @param {string} hostDirectory @returns {string} */
+function hostArtifactDirectory(hostDirectory, key) {
+  return resolve(root, hostDirectory, key.endsWith("-editor") ? "dist-editor" : "dist-site");
+}
+
+/** @param {string} key @param {string} hostDirectory @returns {DeployTarget} */
+function createDemoEditorTarget(key, hostDirectory) {
+  const name = key.slice(0, -"-editor".length);
+  const domain = `zc-demo-${name}-editor.zudolab.dev`;
+  return {
+    key,
+    kind: "demo-editor",
+    workerName: `zc-demo-${name}-editor`,
+    configPath: `wrangler.demo-${name}-editor.jsonc`,
+    domain,
+    hostDirectory: resolve(root, hostDirectory),
+    artifactDirectory: hostArtifactDirectory(hostDirectory, key),
+    manifestFileName: DEMO_EDITOR_MANIFEST,
+    ciArtifactName: (sha) => `demo-editor-${name}-${sha}`,
+    verifyArtifact: verifyDemoEditorArtifact,
+    liveRoutes: verifiedDemoEditorRoutes,
+  };
+}
+
+/** @param {string} key @param {string} hostDirectory @param {string} workerName @param {string} configPath @param {string} domain @returns {DeployTarget} */
+function createStaticTarget(key, hostDirectory, workerName, configPath, domain) {
+  return {
+    key,
+    kind: "site-static",
+    workerName,
+    configPath,
+    domain,
+    hostDirectory: resolve(root, hostDirectory),
+    artifactDirectory: hostArtifactDirectory(hostDirectory, key),
+    manifestFileName: SITE_MANIFEST,
+    ciArtifactName: (sha) => `demo-site-${key}-${sha}`,
+    verifyArtifact: verifySiteStaticTargetArtifact,
+    liveRoutes: (manifest) => /** @type {string[]} */ (manifest.routes),
+  };
+}
+
 /** @type {Record<string, DeployTarget>} */
 export const TARGETS = {
-  "zudo-composer": {
-    key: "zudo-composer",
-    kind: "hosted-demo",
-    workerName: "zudo-composer",
-    configPath: "wrangler.jsonc",
-    domain: "zudo-composer.zudolab.dev",
-    artifactDirectory: resolve(root, "dist-hosted-demo"),
-    manifestFileName: HOSTED_DEMO_MANIFEST,
-    ciArtifactName: (sha) => `hosted-demo-${sha}`,
-    verifyArtifact: verifyHostedDemoTargetArtifact,
-    liveRoutes: () => HOSTED_DEMO_LIVE_ROUTES,
-  },
-  webshop: {
-    key: "webshop",
-    kind: "site-static",
-    workerName: "zudo-composer-demo-shop",
-    configPath: "wrangler.demo-shop.jsonc",
-    domain: "zc-demo-shop.zudolab.dev",
-    artifactDirectory: resolve(root, "packages/demo-webshop/dist-site"),
-    manifestFileName: SITE_MANIFEST,
-    ciArtifactName: (sha) => `demo-site-webshop-${sha}`,
-    verifyArtifact: verifySiteStaticTargetArtifact,
-    liveRoutes: (manifest) => /** @type {string[]} */ (manifest.routes),
-  },
-  landing: {
-    key: "landing",
-    kind: "site-static",
-    workerName: "zudo-composer-demo-landing",
-    configPath: "wrangler.demo-landing.jsonc",
-    domain: "zc-demo-landing.zudolab.dev",
-    artifactDirectory: resolve(root, "packages/demo-landing/dist-site"),
-    manifestFileName: SITE_MANIFEST,
-    ciArtifactName: (sha) => `demo-site-landing-${sha}`,
-    verifyArtifact: verifySiteStaticTargetArtifact,
-    liveRoutes: (manifest) => /** @type {string[]} */ (manifest.routes),
-  },
-  blog: {
-    key: "blog",
-    kind: "site-static",
-    workerName: "zudo-composer-demo-blog",
-    configPath: "wrangler.demo-blog.jsonc",
-    domain: "zc-demo-blog.zudolab.dev",
-    artifactDirectory: resolve(root, "packages/demo-blog/dist-site"),
-    manifestFileName: SITE_MANIFEST,
-    ciArtifactName: (sha) => `demo-site-blog-${sha}`,
-    verifyArtifact: verifySiteStaticTargetArtifact,
-    liveRoutes: (manifest) => /** @type {string[]} */ (manifest.routes),
-  },
   doc: {
     key: "doc",
     kind: "doc-site",
-    workerName: "zudo-composer-doc",
+    workerName: "zudo-composer",
     configPath: "wrangler.doc.jsonc",
-    domain: "zc-doc.zudolab.dev",
+    domain: "zudo-composer.zudolab.dev",
     artifactDirectory: resolve(root, "doc/dist"),
     manifestFileName: DOC_SITE_MANIFEST,
     ciArtifactName: (sha) => `doc-site-${sha}`,
@@ -152,13 +134,21 @@ export const TARGETS = {
     // without navigation headers to verify its untransformed asset bytes.
     assetUrl: (path) => path === "index.html" || path.endsWith("/index.html") ? null : path.endsWith(".html") ? `/${path.slice(0, -".html".length)}` : `/${path}`,
   },
+  sample: createStaticTarget("sample", "packages/demo-sample", "zc-demo-sample", "wrangler.demo-sample.jsonc", "zc-demo-sample.zudolab.dev"),
+  shop: createStaticTarget("shop", "packages/demo-webshop", "zc-demo-shop", "wrangler.demo-shop.jsonc", "zc-demo-shop.zudolab.dev"),
+  landing: createStaticTarget("landing", "packages/demo-landing", "zc-demo-landing", "wrangler.demo-landing.jsonc", "zc-demo-landing.zudolab.dev"),
+  blog: createStaticTarget("blog", "packages/demo-blog", "zc-demo-blog", "wrangler.demo-blog.jsonc", "zc-demo-blog.zudolab.dev"),
+  "sample-editor": createDemoEditorTarget("sample-editor", "packages/demo-sample"),
+  "shop-editor": createDemoEditorTarget("shop-editor", "packages/demo-webshop"),
+  "landing-editor": createDemoEditorTarget("landing-editor", "packages/demo-landing"),
+  "blog-editor": createDemoEditorTarget("blog-editor", "packages/demo-blog"),
 };
 
-export const TARGET_KEYS = /** @type {const} */ (["zudo-composer", "webshop", "landing", "blog", "doc"]);
-export const DEFAULT_TARGET_KEY = "zudo-composer";
+export const TARGET_KEYS = /** @type {const} */ (["doc", "sample", "shop", "landing", "blog", "sample-editor", "shop-editor", "landing-editor", "blog-editor"]);
 
-/** @param {string} key @returns {DeployTarget} */
+/** @param {string | undefined} key @returns {DeployTarget} */
 export function resolveTarget(key) {
+  if (typeof key !== "string" || !key.trim()) throw new Error(`Hosted-demo deployment target is required. Set HOSTED_DEMO_TARGET or pass --target. Known targets: ${TARGET_KEYS.join(", ")}`);
   const target = TARGETS[key];
   if (!target) throw new Error(`Unknown hosted-demo deploy target: ${key}. Known targets: ${TARGET_KEYS.join(", ")}`);
   return target;

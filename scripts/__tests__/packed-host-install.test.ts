@@ -59,7 +59,7 @@ it("preserves a location-dependent CI package-manager launcher without exposing 
 describe("packed host discovery and manifest isolation", () => {
   it("covers all four real hosts from disk and retains the default synthesized proof", () => {
     const hosts = discoverPackedHosts(repositoryRoot);
-    expect(hosts.map((host) => basename(host))).toEqual(expect.arrayContaining(["demo-blog", "demo-landing", "demo-studio", "demo-webshop"]));
+    expect(hosts.map((host) => basename(host))).toEqual(expect.arrayContaining(["demo-blog", "demo-landing", "demo-sample", "demo-webshop"]));
     expect(selectPackedHosts([], hosts)).toEqual({ hosts, fixture: true, generated: true, negative: undefined });
     expect(selectPackedHosts(["--host", "demo-blog"], hosts)).toEqual({ hosts: [hosts[0]], fixture: false, generated: false, negative: undefined });
     expect(selectPackedHosts(["--host", "generated"], hosts)).toEqual({ hosts: [], fixture: false, generated: true, negative: undefined });
@@ -155,11 +155,12 @@ describe("packed host discovery and manifest isolation", () => {
     const included = ["package.json", "site-project.ts", "cms/workspaces/selected.json", "styles/base.css", "public/uploaded-assets/photo.webp", "__tests__/host.test.ts"];
     for (const path of included) await put(source, path);
     await writeFile(join(source, "public/uploaded-assets/photo.webp"), Buffer.from([0, 255, 128, 10]));
-    for (const path of ["node_modules/hoisted/index.js", "dist-site/index.html", ".zudo-site-project/active.json", ".zudo-composer-demos-browser/session/cms.json"]) await put(source, path);
+    for (const path of ["node_modules/hoisted/index.js", "dist-site/index.html", "dist-editor/index.html", ".zudo-site-project/active.json", ".zudo-composer-demos-browser/session/cms.json"]) await put(source, path);
     await copyPackedHost(source, destination);
     for (const path of included) expect(await readFile(join(destination, path))).toEqual(await readFile(join(source, path)));
     expect(await readdir(destination)).not.toContain("node_modules");
     expect(await tree(destination)).not.toContain("dist-site");
+    expect(await tree(destination)).not.toContain("dist-editor");
     expect(await tree(destination)).not.toContain(".zudo-composer-demos-browser");
     await symlink(join(source, "site-project.ts"), join(source, "linked.ts"));
     await expect(copyPackedHost(source, join(await temporary(), "unsafe"))).rejects.toThrow("filesystem link");

@@ -32,21 +32,25 @@ unpublished-package preview, and which generated files to commit.
 
 ## Deployed sites
 
-Five static targets are deployed from `main` (each is its own Worker; see
+Nine hosted targets are deployed from `main` (each is its own Worker; see
 `scripts/hosted-demo/targets.mjs`):
 
 | Site | URL | Worker config |
 | --- | --- | --- |
-| Hosted Composer sample (Sample Studio) | <https://zudo-composer.zudolab.dev> | [`wrangler.jsonc`](./wrangler.jsonc) |
-| Nightjar Supply webshop demo | <https://zc-demo-shop.zudolab.dev> | [`wrangler.demo-shop.jsonc`](./wrangler.demo-shop.jsonc) |
-| Orrery landing demo | <https://zc-demo-landing.zudolab.dev> | [`wrangler.demo-landing.jsonc`](./wrangler.demo-landing.jsonc) |
-| Margin Notes blog demo | <https://zc-demo-blog.zudolab.dev> | [`wrangler.demo-blog.jsonc`](./wrangler.demo-blog.jsonc) |
-| Developer documentation | <https://zc-doc.zudolab.dev> | [`wrangler.doc.jsonc`](./wrangler.doc.jsonc) |
+| Developer documentation (`doc`) | <https://zudo-composer.zudolab.dev> | [`wrangler.doc.jsonc`](./wrangler.doc.jsonc) |
+| Sample Studio site (`sample`) | <https://zc-demo-sample.zudolab.dev> | [`wrangler.demo-sample.jsonc`](./wrangler.demo-sample.jsonc) |
+| Nightjar Supply site (`shop`) | <https://zc-demo-shop.zudolab.dev> | [`wrangler.demo-shop.jsonc`](./wrangler.demo-shop.jsonc) |
+| Orrery site (`landing`) | <https://zc-demo-landing.zudolab.dev> | [`wrangler.demo-landing.jsonc`](./wrangler.demo-landing.jsonc) |
+| Margin Notes site (`blog`) | <https://zc-demo-blog.zudolab.dev> | [`wrangler.demo-blog.jsonc`](./wrangler.demo-blog.jsonc) |
+| Sample Studio editor (`sample-editor`) | <https://zc-demo-sample-editor.zudolab.dev> | [`wrangler.demo-sample-editor.jsonc`](./wrangler.demo-sample-editor.jsonc) |
+| Nightjar Supply editor (`shop-editor`) | <https://zc-demo-shop-editor.zudolab.dev> | [`wrangler.demo-shop-editor.jsonc`](./wrangler.demo-shop-editor.jsonc) |
+| Orrery editor (`landing-editor`) | <https://zc-demo-landing-editor.zudolab.dev> | [`wrangler.demo-landing-editor.jsonc`](./wrangler.demo-landing-editor.jsonc) |
+| Margin Notes editor (`blog-editor`) | <https://zc-demo-blog-editor.zudolab.dev> | [`wrangler.demo-blog-editor.jsonc`](./wrangler.demo-blog-editor.jsonc) |
 
 ## Documentation site
 
 The [`doc/`](./doc/) directory is the zudo-doc developer site at
-<https://zc-doc.zudolab.dev>; [`docs/`](./docs/) remains the repository's
+<https://zudo-composer.zudolab.dev>; [`docs/`](./docs/) remains the repository's
 operator-reference surface. From the repository root, use `pnpm doc:dev`,
 `pnpm doc:build`, or `pnpm doc:check`. `pnpm doc:build-site` also writes and
 verifies the deployment artifact manifest.
@@ -68,8 +72,8 @@ The authoring tool has Vite base `/` and these exact routes:
 A host's activated SiteProject is delivered under `/site`; its static website
 uses the same routes at `/`. Route assertions come from the host's verified
 `dist-site/site-manifest.json`, including pages emitted from collection entries.
-Sample Studio's frozen hosted Composer route data lives in
-`packages/demo-studio/hosted-routes.mjs` and is checked against its artifact.
+The SiteProject acceptance lane uses Sample Studio's frozen route data from
+`packages/demo-sample/hosted-routes.mjs` and checks it against the artifact.
 
 The preview route is an implementation boundary, not an independent public
 product. Build-emitted assets remain rooted at `/assets/`, while committed assets
@@ -103,7 +107,7 @@ needed, click a demo thumbnail to inspect it, then click **Preview**.
 
 ## Demo host projects
 
-`packages/demo-studio`, `packages/demo-webshop`, `packages/demo-landing` and
+`packages/demo-sample`, `packages/demo-webshop`, `packages/demo-landing` and
 `packages/demo-blog` are four complete host projects. Studio installs the pinned
 provider; the other three own their component packs and Tailwind themes. They
 are kept as workspace members so the tool is exercised the way a real host
@@ -111,12 +115,12 @@ exercises it. Each host runs the installed `zudo-composer` commands directly.
 Full authoring and gate-wiring details are in
 [`docs/demo-sites/README.md`](./docs/demo-sites/README.md).
 
-| Package | Site | Hosted domain | Local dev port |
+| Package | Site | Editor | Local dev port |
 | --- | --- | --- | --- |
-| `packages/demo-studio` | Sample Studio | <https://zudo-composer.zudolab.dev> | 4184 |
-| `packages/demo-webshop` | Nightjar Supply | <https://zc-demo-shop.zudolab.dev> | 4181 |
-| `packages/demo-landing` | Orrery | <https://zc-demo-landing.zudolab.dev> | 4182 |
-| `packages/demo-blog` | Margin Notes | <https://zc-demo-blog.zudolab.dev> | 4183 |
+| `packages/demo-sample` | <https://zc-demo-sample.zudolab.dev> | <https://zc-demo-sample-editor.zudolab.dev> | 4184 |
+| `packages/demo-webshop` | <https://zc-demo-shop.zudolab.dev> | <https://zc-demo-shop-editor.zudolab.dev> | 4181 |
+| `packages/demo-landing` | <https://zc-demo-landing.zudolab.dev> | <https://zc-demo-landing-editor.zudolab.dev> | 4182 |
+| `packages/demo-blog` | <https://zc-demo-blog.zudolab.dev> | <https://zc-demo-blog-editor.zudolab.dev> | 4183 |
 
 Run one locally:
 
@@ -128,8 +132,10 @@ corepack pnpm dev --port 4181
 
 `/site` serves the activated release; `/composer` and the rest of the
 authoring routes edit that package's own CMS data under its `cms/`. The
-`test:browser:demos` lane above crawls all three the same way, on port 4176,
-one at a time.
+`test:browser:demos` lane above crawls all four hosts the same way, on port
+4176, one at a time. The disposable editor artifact lane is
+`corepack pnpm test:browser:demo-editor [sample|shop|landing|blog]` on port
+4175; it serves the matching `dist-editor` artifact and runs the editor proof.
 
 ## Installing into a host project
 
@@ -372,8 +378,8 @@ generated component list and its sidecars — none of which needs a build, so it
 runs on a bare checkout. `dist:boundary` checks what `vite build` emitted and
 requires `pnpm build` first.
 
-CI additionally verifies the component-contract handoff and runs the three
-browser lanes:
+CI additionally verifies the component-contract handoff and runs the browser
+lanes:
 
 ```sh
 corepack pnpm contract:conformance
@@ -384,6 +390,8 @@ corepack pnpm test:browser:dev
 corepack pnpm demo:build-sites
 corepack pnpm test:browser:site-project
 corepack pnpm test:browser:demos
+corepack pnpm demo:build-editors
+corepack pnpm test:browser:demo-editor
 ```
 
 `corepack pnpm demo:build-sites` discovers and builds all host artifacts before
@@ -400,13 +408,16 @@ Each lane owns one port and one server, so none of them may run concurrently:
 | `test:browser:dev` | this repository's own `pnpm dev` | 5173 | `tests/browser-dev` |
 | `test:browser:site-project` | this repository's own Vite, with a CLI-activated release | 4174 | `tests/browser/site-project-acceptance.pw.ts` |
 | `test:browser:demos` | `zudo-composer dev`, rooted at each `packages/demo-*` in turn | 4176 | `tests/browser-demos` |
+| `test:browser:demo-editor` | Static server for each prepared `dist-editor` artifact in turn | 4175 | `tests/browser-hosted` |
 
-`test:browser:demos` copies each demo host package's committed `cms/` tree to a
-disposable host-local root and seeds its release under a separate temporary
-root, so the lane never dirties committed CMS data or a developer's own
-release. It boots `zudo-composer dev` for that one package, crawls every route
-its verified artifact declares, and runs its one mock interaction (see [Demo host
-projects](#demo-host-projects)) before moving to the next demo.
+`test:browser:demos` copies each of the four demo host packages' committed
+`cms/` tree to a disposable host-local root and seeds its release under a
+separate temporary root, so the lane never dirties committed CMS data or a
+developer's own release. It boots `zudo-composer dev` for that one package,
+crawls every route its verified artifact declares, and runs its one mock
+interaction (see [Demo host projects](#demo-host-projects)) before moving to the
+next demo. `test:browser:demo-editor` consumes the four corresponding
+`dist-editor` artifacts one at a time on port 4175; it does not rebuild them.
 
 The host lane is the one that runs the package the way a host does — through its
 `bin`, against a project it has never seen. It activates the sample SiteProject
@@ -488,47 +499,47 @@ or used in place of, the immutable external UI-provider Git dependency.
 
 ## Scoped hosted demo exception
 
-The installed tool and ordinary local workflow remain local-first. Issue 414
-adds one disposable static sample at <https://zudo-composer.zudolab.dev>, and
-issue 504 adds three static demo websites at <https://zc-demo-shop.zudolab.dev>,
-<https://zc-demo-landing.zudolab.dev> and <https://zc-demo-blog.zudolab.dev>;
-none of them adds hosted persistence, an API, authentication, arbitrary host-project
-access or a deployment target for installed applications. The sample is the
-Worker named `zudo-composer` with the existing custom-domain binding in
-[`wrangler.jsonc`](./wrangler.jsonc); each demo website has its own Worker in
-`wrangler.demo-shop.jsonc`, `wrangler.demo-landing.jsonc` and
-`wrangler.demo-blog.jsonc`.
+The installed tool and ordinary local workflow remain local-first. The scoped
+exception publishes four static demo sites, four disposable per-host editors,
+and the developer documentation site; none adds hosted persistence, an API,
+authentication, arbitrary host-project access or a deployment target for
+installed applications. The registry and Wrangler contracts are:
 
-The same trusted-run pipeline also registers the documentation site as its
-fifth target: `pnpm doc:build-site` builds `doc/dist`, whose
-`doc-site-manifest.json` is verified and uploaded to the `zudo-composer-doc`
-Worker using [`wrangler.doc.jsonc`](./wrangler.doc.jsonc) at
-<https://zc-doc.zudolab.dev>. Its multi-page routes are checked against the
-emitted HTML files, including extensionless pages, while Wrangler's default
-`auto-trailing-slash` HTML handling and explicit `404-page` behavior serve the
-static site.
+| Target key | Kind | Worker | Wrangler config | Domain |
+| --- | --- | --- | --- | --- |
+| `doc` | `doc-site` | `zudo-composer` | `wrangler.doc.jsonc` | `zudo-composer.zudolab.dev` |
+| `sample` | `site-static` | `zc-demo-sample` | `wrangler.demo-sample.jsonc` | `zc-demo-sample.zudolab.dev` |
+| `shop` | `site-static` | `zc-demo-shop` | `wrangler.demo-shop.jsonc` | `zc-demo-shop.zudolab.dev` |
+| `landing` | `site-static` | `zc-demo-landing` | `wrangler.demo-landing.jsonc` | `zc-demo-landing.zudolab.dev` |
+| `blog` | `site-static` | `zc-demo-blog` | `wrangler.demo-blog.jsonc` | `zc-demo-blog.zudolab.dev` |
+| `sample-editor` | `demo-editor` | `zc-demo-sample-editor` | `wrangler.demo-sample-editor.jsonc` | `zc-demo-sample-editor.zudolab.dev` |
+| `shop-editor` | `demo-editor` | `zc-demo-shop-editor` | `wrangler.demo-shop-editor.jsonc` | `zc-demo-shop-editor.zudolab.dev` |
+| `landing-editor` | `demo-editor` | `zc-demo-landing-editor` | `wrangler.demo-landing-editor.jsonc` | `zc-demo-landing-editor.zudolab.dev` |
+| `blog-editor` | `demo-editor` | `zc-demo-blog-editor` | `wrangler.demo-blog-editor.jsonc` | `zc-demo-blog-editor.zudolab.dev` |
 
-`pnpm build:hosted-demo` emits `dist-hosted-demo`, and `pnpm hosted-demo:verify`
-checks the final files, manifest identities, checksums, MIME types and the
-ordinary artifact boundary. CI then runs the hosted browser lane against that
-same directory and uploads an artifact named for the exact 40-character commit
-SHA. Production can consume only a successful `main` CI run from this
-repository, downloads that exact run/SHA artifact, verifies it again, captures
-the currently active single-version deployment, runs a Wrangler dry run, and
-uploads the same directory with Wrangler 4.130.0 before activating its returned
-version ID.
+`pnpm demo:build-site <sample|webshop|landing|blog|dir>` builds a static host
+artifact. `pnpm demo:build-editor <sample|shop|landing|blog|dir>` emits the
+selected host's `dist-editor`, using that host's config, component pack,
+stylesheet and generated project. `pnpm demo:build-editors` discovers all four
+demo hosts and builds their editors one at a time. The `demo-editor` artifact
+contract, browser lane, target-specific verification and CI handoff are
+described in [`docs/hosted-demo.md`](./docs/hosted-demo.md).
 
-The production workflow is serialized per target and refuses a stale `main`
-head, missing or partial Cloudflare credentials, a missing rollback target,
-a split-traffic deployment, or an artifact/source mismatch. A never-created
-Worker is the one missing-state exception: the pipeline creates it with
-`wrangler deploy` and has no prior version to roll back to. It checks the live
-manifest, every route and every asset with bounded HTTPS requests. On later
-rollouts, a smoke verification failure rolls back only when the active version
-is still the version this run uploaded; the workflow remains failed even after
-a verified rollback. A manual rollback uses the captured version ID with
-`wrangler rollback`; never copy local OAuth tokens into repository or workflow
-secrets.
+The `doc` target runs `pnpm doc:build-site`, verifies `doc/dist` with
+`doc-site-manifest.json`, and serves extensionless documentation routes with
+the default `auto-trailing-slash` handling and explicit `404-page` behavior.
+Production consumes only successful `main` CI artifacts named for the exact
+40-character commit SHA, verifies each target again, captures the current
+single-version deployment, runs a Wrangler dry run, and activates only the
+version ID returned by the upload. The workflow is serialized per target and
+fails closed on stale `main`, partial credentials, a missing rollback target,
+split traffic or an artifact/source mismatch.
+
+The first rollout of a never-created Worker uses plain `wrangler deploy` to
+bind its custom domain and has no rollback target. The owner runbook covers
+the pre-rollout cleanup of retired Workers, partial-first-deploy recovery,
+targeted `workflow_dispatch` runs, token scopes and captured-version rollback:
+[`docs/hosted-demo.md`](./docs/hosted-demo.md).
 
 Prove the exact local artifact with:
 
@@ -536,8 +547,7 @@ Prove the exact local artifact with:
 corepack pnpm install --frozen-lockfile
 corepack pnpm check
 corepack pnpm smoke:host-install
-corepack pnpm build:hosted-demo
-corepack pnpm hosted-demo:verify
+corepack pnpm demo:build-editors
 ```
 
 ## Destructive current-only policy

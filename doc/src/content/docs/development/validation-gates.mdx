@@ -15,7 +15,7 @@ by weakening an earlier boundary.
 | --- | --- | --- | --- |
 | 1 | `no-deploy:check` | Statically audits validation entry points, package aliases, local wrappers, workflows, and Cloudflare command arguments. | A reachable validation path is unresolved, an unknown command/action is encountered, or a Cloudflare call is not provably `wrangler deploy --dry-run`. |
 | 2 | `public:check` | Rebuilds the public Node entry modules and declarations in disposable storage and compares them with committed `server/` output. | A generated entry/chunk is stale or missing, a public graph imports a host-only module, or obsolete generated output remains. |
-| 3 | `studio:check` | Keeps Sample Studio's generated `packages/demo-studio/site-project.json` as the one bundled sample source and checks its importing modules plus canonical bytes. | A duplicate, retired, hand-edited, or stale Studio sample exists, or a required static import moved away from the generated file. |
+| 3 | `sample:check` | Keeps Sample Studio's generated `packages/demo-sample/site-project.json` as the one bundled sample source and checks its importing modules plus canonical bytes. | A duplicate, retired, hand-edited, or stale Studio sample exists, or a required static import moved away from the generated file. |
 | 4 | `cms:check` | Discovers source-bearing hosts and checks every generated ready-workspace directory, file digest, reader, and `scripts/cms-fixtures.json` ownership entry. | Generated CMS differs from the installed producer, ownership is stale, a managed file is extra/missing, or a current reader rejects the committed bytes. |
 | 5 | `lint` | Runs the repository ESLint configuration over source, scripts, hosts, and configuration. | ESLint reports an error. |
 | 6 | `typecheck` (including `typecheck:public`) | Runs the root TypeScript build, component-contract type tests, and the public type-surface check. `typecheck:public` compares source and generated declarations with the reviewed export list. | TypeScript diagnostics, contract type-test failures, unresolved host config types, or public named-type drift are found. |
@@ -60,3 +60,11 @@ The [packed-host install guide](https://github.com/Takazudo/zudo-composer/blob/m
 contains focused and deliberate-negative runs; the [workspace acceptance
 guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/workspace-acceptance.md)
 explains the browser evidence those gates complement.
+
+The hosted demo/editor checks are deliberately focused around their artifact
+contracts. `corepack pnpm demo:build-sites` prepares all four static host
+artifacts, while `corepack pnpm demo:build-editors` prepares each per-host
+`demo-editor` artifact. Their browser lanes are
+`corepack pnpm test:browser:demos` (port 4176) and
+`corepack pnpm test:browser:demo-editor` (port 4175); neither lane rebuilds an
+artifact or writes to a committed host CMS tree.
