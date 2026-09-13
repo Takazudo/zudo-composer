@@ -6,17 +6,11 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { verifyLiveWithRetries } from "./live-check.mjs";
-import { DEFAULT_TARGET_KEY, resolveTarget } from "./targets.mjs";
+import { resolveTarget } from "./targets.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(fileURLToPath(new URL("../../", import.meta.url)));
-const DEFAULT_TARGET = resolveTarget(DEFAULT_TARGET_KEY);
-// Back-compat single-target exports: these always describe the default
-// (zudo-composer) target. Multi-target callers pass an explicit `target`.
-export const WORKER_NAME = DEFAULT_TARGET.workerName;
-export const CONFIG_PATH = DEFAULT_TARGET.configPath;
 export const WRANGLER_BIN = resolve(root, "node_modules/.bin/wrangler");
-export const ARTIFACT_DIRECTORY = DEFAULT_TARGET.artifactDirectory;
 export const DEPLOYMENT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 // A first rollout is also waiting on a hostname that did not exist a moment
 // ago: the same call creates the custom domain's DNS records, and a resolver
@@ -26,6 +20,14 @@ export const DEPLOYMENT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 export const FIRST_DEPLOY_LIVE_RETRY_DELAYS_MS = [5_000, 10_000, 20_000, 30_000, 30_000, 30_000];
 export const FIRST_DEPLOY_LIVE_TIMEOUT_MS = 240_000;
 const VERSION_ID_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+
+/** @typedef {import("./targets.mjs").DeployTarget} DeployTarget */
+
+/** @param {DeployTarget | undefined} target @returns {DeployTarget} */
+function requireTarget(target) {
+  assert.ok(target, "Hosted-demo deployment target is required; pass a target explicitly or set HOSTED_DEMO_TARGET.");
+  return target;
+}
 
 /** @param {Record<string, string | undefined>} environment @returns {"absent" | "partial" | "complete"} */
 export function deploymentCredentialState(environment) {
@@ -200,8 +202,6 @@ async function settle(work) {
   }
 }
 
-/** @typedef {import("./targets.mjs").DeployTarget} DeployTarget */
-
 /** @param {DeployTarget} target @param {{ environment?: Record<string, string | undefined>, runner?: typeof runCommand }} [options] */
 async function listDeployments(target, options = {}) {
   const result = await runWrangler(["deployments", "list", "--name", target.workerName, "--config", target.configPath, "--json"], options);
@@ -260,15 +260,50 @@ async function captureRolloutState(target, options) {
     settle(() => listVersions(target, options)),
   ]);
   if (isWorkerNotFound(deployments.error) && isWorkerNotFound(versions.error)) return { firstDeploy: true };
-  if (deployments.error) throw deployments.error;
-  if (versions.error) throw versions.error;
-  return { firstDeploy: false, ...captureDeploymentState({ deployments: deployments.value, versions: versions.value }) };
+  // A single not-found response means Cloudflare has a partial first-deploy
+  // state (the Worker exists, but one of its deployment APIs cannot see a
+  // bound deployment). Never bootstrap that state with plain `deploy`: the
+  // operator must remove the partial Worker and rerun this target.
+  if (deployments.error || versions.error) {
+    const error = deployments.error ?? versions.error;
+    const notFoundError = [deployments.error, versions.error].find(isWorkerNotFound);
+    if (notFoundError) throw partialFirstDeploymentError(target, notFoundError);
+    throw error;
+  }
+  try {
+    return { firstDeploy: false, ...captureDeploymentState({ deployments: deployments.value, versions: versions.value }) };
+  } catch (error) {
+    // A Worker that was created without its custom-domain deployment has
+    // listings, but no safe active deployment to capture. Fail closed with
+    // the runbook instead of calling the first-deploy path.
+    throw partialFirstDeploymentError(target, error);
+  }
+}
+
+/** @param {DeployTarget} target @param {unknown} cause @returns {Error} */
+function partialFirstDeploymentError(target, cause) {
+  const failure = cause instanceof Error ? cause : new Error(String(cause));
+  return new Error(
+    `${failure.message}; ${target.workerName} has a partial first-deploy state. ${partialFirstDeploymentRunbook(target)}`,
+    { cause },
+  );
+}
+
+/** @param {DeployTarget} target @returns {string} */
+function partialFirstDeploymentRunbook(target) {
+  return `Runbook: delete the partial Worker, then rerun target ${target.key}.`;
 }
 
 /**
  * @param {{ target?: DeployTarget, artifactDirectory?: string, expectedSourceRevision?: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, artifactVerifier?: import("./targets.mjs").ArtifactVerifier }} [options]
  */
-export async function preflightDeployment({ target = DEFAULT_TARGET, artifactDirectory = target.artifactDirectory, expectedSourceRevision, environment = process.env, runner = runCommand, artifactVerifier = target.verifyArtifact } = {}) {
+export async function preflightDeployment(options = {}) {
+  const target = requireTarget(options.target);
+  const artifactDirectory = options.artifactDirectory ?? target.artifactDirectory;
+  const expectedSourceRevision = options.expectedSourceRevision;
+  const environment = options.environment ?? process.env;
+  const runner = options.runner ?? runCommand;
+  const artifactVerifier = options.artifactVerifier ?? target.verifyArtifact;
   const resolvedArtifactDirectory = resolve(artifactDirectory);
   const expectedArtifactDirectory = resolve(target.artifactDirectory);
   assert.equal(
@@ -288,22 +323,33 @@ export async function preflightDeployment({ target = DEFAULT_TARGET, artifactDir
   assert.ok(typeof sourceRevision === "string" && sourceRevision.length === 40 && /^[a-f0-9]{40}$/u.test(sourceRevision), `${target.workerName} deployment requires a full source Git SHA`);
   await runWrangler(["whoami", "--config", target.configPath], { environment, runner });
   const state = await captureRolloutState(target, { environment, runner });
-  await runWrangler([
-    "deploy",
-    "--dry-run",
-    "--no-bundle",
-    "--config",
-    target.configPath,
-    "--assets",
-    resolvedArtifactDirectory,
-  ], { environment, runner });
+  try {
+    await runWrangler([
+      "deploy",
+      "--dry-run",
+      "--no-bundle",
+      "--config",
+      target.configPath,
+      "--assets",
+      resolvedArtifactDirectory,
+    ], { environment, runner });
+  } catch (error) {
+    if (state.firstDeploy) throw error;
+    throw new Error(`${error instanceof Error ? error.message : String(error)}; ${partialFirstDeploymentRunbook(target)}`, { cause: error });
+  }
   return { artifact: { ...artifact, manifest: { ...artifact.manifest, sourceRevision } }, artifactDirectory: resolvedArtifactDirectory, state, credentials, target };
 }
 
 /**
  * @param {{ target?: DeployTarget, expectedVersionId: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, retryDelaysMs?: number[], delayImpl?: (milliseconds: number) => Promise<void> }} options
  */
-export async function waitForVersion({ target = DEFAULT_TARGET, expectedVersionId, environment, runner, retryDelaysMs = DEPLOYMENT_RETRY_DELAYS_MS, delayImpl = (milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)) }) {
+export async function waitForVersion(options) {
+  const target = requireTarget(options.target);
+  const expectedVersionId = options.expectedVersionId;
+  const environment = options.environment;
+  const runner = options.runner;
+  const retryDelaysMs = options.retryDelaysMs ?? DEPLOYMENT_RETRY_DELAYS_MS;
+  const delayImpl = options.delayImpl ?? ((milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)));
   let lastError;
   for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
     try {
@@ -388,27 +434,22 @@ async function createFirstDeployment({ preflight, target, baseUrl, environment, 
  *
  * @param {{ target?: DeployTarget, artifactDirectory?: string, expectedSourceRevision?: string, baseUrl?: string, environment?: Record<string, string | undefined>, runner?: typeof runCommand, artifactVerifier?: import("./targets.mjs").ArtifactVerifier, liveVerifier?: typeof verifyLiveWithRetries, retryDelaysMs?: number[], delayImpl?: (milliseconds: number) => Promise<void> }} [options]
  */
-export async function deployHostedDemo({
-  target = DEFAULT_TARGET,
-  artifactDirectory = target.artifactDirectory,
-  expectedSourceRevision,
-  baseUrl = `https://${target.domain}`,
-  environment = process.env,
-  runner = runCommand,
-  artifactVerifier = target.verifyArtifact,
+export async function deployHostedDemo(options = {}) {
+  const target = requireTarget(options.target);
+  const artifactDirectory = options.artifactDirectory ?? target.artifactDirectory;
+  const expectedSourceRevision = options.expectedSourceRevision;
+  const baseUrl = options.baseUrl ?? `https://${target.domain}`;
+  const environment = options.environment ?? process.env;
+  const runner = options.runner ?? runCommand;
+  const artifactVerifier = options.artifactVerifier ?? target.verifyArtifact;
   // Bind this invocation's target into the shared live verifier so callers
   // that override `liveVerifier` (tests) keep the plain three-key call below.
-  liveVerifier = (liveOptions) => verifyLiveWithRetries({
+  const liveVerifier = options.liveVerifier ?? ((liveOptions) => verifyLiveWithRetries({
     ...liveOptions,
-    manifestFileName: target.manifestFileName,
-    artifactVerifier: target.verifyArtifact,
-    liveRoutes: target.liveRoutes,
-    routeFile: target.routeFile,
-    assetUrl: target.assetUrl,
-  }),
-  retryDelaysMs = DEPLOYMENT_RETRY_DELAYS_MS,
-  delayImpl = (milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)),
-} = {}) {
+    target,
+  }));
+  const retryDelaysMs = options.retryDelaysMs ?? DEPLOYMENT_RETRY_DELAYS_MS;
+  const delayImpl = options.delayImpl ?? ((milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)));
   const preflight = await preflightDeployment({ target, artifactDirectory, expectedSourceRevision, environment, runner, artifactVerifier });
   if (preflight.state.firstDeploy) {
     return createFirstDeployment({ preflight, target, baseUrl, environment, runner, liveVerifier });
@@ -482,11 +523,11 @@ export async function deployHostedDemo({
         "--yes",
       ], { environment, runner });
       await waitForVersion({ target, expectedVersionId: preflight.state.rollbackVersionId, environment, runner, retryDelaysMs, delayImpl });
-      throw new Error(`${failure.message}; automatic rollback to ${preflight.state.rollbackVersionId} completed and was verified`, { cause: error });
+      throw new Error(`${failure.message}; automatic rollback to ${preflight.state.rollbackVersionId} completed and was verified; ${partialFirstDeploymentRunbook(target)}`, { cause: error });
     } catch (rollbackError) {
       const rollbackFailure = asError(rollbackError);
       if (rollbackFailure.message.startsWith(`${failure.message}; automatic rollback to ${preflight.state.rollbackVersionId} completed`)) throw rollbackFailure;
-      throw new Error(`${failure.message}; automatic rollback failed or was refused: ${rollbackFailure.message}`, { cause: rollbackError });
+      throw new Error(`${failure.message}; automatic rollback failed or was refused: ${rollbackFailure.message}; ${partialFirstDeploymentRunbook(target)}`, { cause: rollbackError });
     }
   }
 }
@@ -511,7 +552,7 @@ function parseArguments(argv) {
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const options = parseArguments(process.argv.slice(2));
-  const target = resolveTarget(options.target ?? process.env.HOSTED_DEMO_TARGET ?? DEFAULT_TARGET_KEY);
+  const target = resolveTarget(options.target ?? process.env.HOSTED_DEMO_TARGET);
   await deployHostedDemo({
     target,
     artifactDirectory: options.artifact ?? process.env.HOSTED_DEMO_ARTIFACT,

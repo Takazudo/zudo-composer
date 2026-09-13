@@ -6,14 +6,15 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
-import { HOSTED_DEMO_HEADERS, expectedMime, verifyDemoEditorArtifact } from "./artifact.mjs";
-import { TARGETS } from "./targets.mjs";
+import { HOSTED_DEMO_HEADERS, expectedMime, sha256, verifyDemoEditorArtifact } from "./artifact.mjs";
+import { TARGET_KEYS, TARGETS } from "./targets.mjs";
 import { createDocSiteManifest, DOC_SITE_MANIFEST } from "./doc-site-artifact.mjs";
 import { startHostedDemoStaticServer } from "./static-server.mjs";
 import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, siteHeaders } from "../../server/site-build/artifact.mjs";
 import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
 
 import { writeEditorArtifact } from "./__fixtures__/editor-artifact";
+import { demoEditorRoutes } from "../routes.mjs";
 
 const SOURCE_REVISION = "c".repeat(40);
 const PROJECT_REVISION = "d".repeat(64);
@@ -65,6 +66,33 @@ afterEach(async () => {
 });
 
 describe("hosted demo live verification", () => {
+  it.each(TARGET_KEYS)("uses the registered verifier and route contract for %s", async (key) => {
+    const target = TARGETS[key];
+    const index = Buffer.from("<!doctype html><html><body>target</body></html>\n");
+    const manifest = {
+      sourceRevision: SOURCE_REVISION,
+      routes: target.kind === "demo-editor" ? demoEditorRoutes(["/"]) : ["/"],
+    };
+    const files = [{ path: "index.html", sha256: sha256(index), mime: "text/html" }];
+    const requests: string[] = [];
+    const proof = await verifyLiveDeployment({
+      target,
+      baseUrl: `https://${target.domain}`,
+      artifactDirectory: `/test/${key}`,
+      expectedSourceRevision: SOURCE_REVISION,
+      artifactVerifier: async ({ directory }) => ({ root: directory, manifest, files }),
+      fetchImpl: async (input) => {
+        const path = new URL(input.toString()).pathname;
+        requests.push(path);
+        if (path === `/${target.manifestFileName}`) return response(JSON.stringify(manifest), "application/json");
+        return response(index, "text/html");
+      },
+    });
+    expect(proof.manifest).toEqual(manifest);
+    expect(proof.routes.length).toBe(manifest.routes.length);
+    expect(requests[0]).toBe(`/${target.manifestFileName}`);
+  });
+
   it("requires the tool identity and full Git SHA while retaining exact trusted revision comparison", async () => {
     const fixture = await writeArtifact();
     fixtures.push(fixture.root);
@@ -83,6 +111,7 @@ describe("hosted demo live verification", () => {
     fixtures.push(fixture.root);
     const mock = mockFetch(fixture);
     const proof = await verifyLiveDeployment({
+      target: TARGETS["sample-editor"],
       baseUrl: "https://demo.example.test",
       artifactDirectory: fixture.root,
       expectedSourceRevision: SOURCE_REVISION,
@@ -116,7 +145,7 @@ describe("hosted demo live verification", () => {
     const fixture = await writeArtifact();
     fixtures.push(fixture.root);
     const mock = mockFetch(fixture, { injectAnalytics: true });
-    const proof = await verifyLiveDeployment({ baseUrl: "https://demo.example.test", artifactDirectory: fixture.root, fetchImpl: mock.fetchImpl });
+    const proof = await verifyLiveDeployment({ target: TARGETS["sample-editor"], baseUrl: "https://demo.example.test", artifactDirectory: fixture.root, fetchImpl: mock.fetchImpl });
     expect(proof.routes.every((route) => route.cloudflareAnalyticsInjected)).toBe(true);
     expect(proof.assets.find((asset) => asset.path === "index.html")?.sha256).toBe(fixture.manifest.files["index.html"]);
     expect(mock.requests.filter(({ path }) => path === "/").map(({ init }) => new Headers(init?.headers).get("sec-fetch-mode"))).toEqual(["navigate", null]);
@@ -138,6 +167,7 @@ describe("hosted demo live verification", () => {
     const fixture = await writeArtifact();
     fixtures.push(fixture.root);
     await expect(verifyLiveDeployment({
+      target: TARGETS["sample-editor"],
       baseUrl: "https://demo.example.test",
       artifactDirectory: fixture.root,
       expectedSourceRevision: SOURCE_REVISION,
@@ -145,6 +175,7 @@ describe("hosted demo live verification", () => {
     })).rejects.toThrow(/manifest does not match/);
     const assetPath = [...fixture.files.keys()].find((path) => path.startsWith("uploaded-assets/"))!;
     await expect(verifyLiveDeployment({
+      target: TARGETS["sample-editor"],
       baseUrl: "https://demo.example.test",
       artifactDirectory: fixture.root,
       expectedSourceRevision: SOURCE_REVISION,
@@ -158,6 +189,7 @@ describe("hosted demo live verification", () => {
     let attempt = 0;
     const retries: Array<{ attempt: number; delayMs: number }> = [];
     const proof = await verifyLiveWithRetries({
+      target: TARGETS["sample-editor"],
       baseUrl: "https://demo.example.test",
       artifactDirectory: fixture.root,
       expectedSourceRevision: SOURCE_REVISION,
@@ -225,8 +257,9 @@ describe("static demo site live verification (a non-default target)", () => {
     const fixture = await writeSiteArtifact();
     fixtures.push(fixture.root);
     const mock = mockSiteFetch(fixture);
-    const target = TARGETS.webshop;
+    const target = TARGETS.shop;
     const proof = await verifyLiveDeployment({
+      target: TARGETS.shop,
       baseUrl: "https://zc-demo-shop.zudolab.dev",
       artifactDirectory: fixture.root,
       expectedSourceRevision: SOURCE_REVISION,
@@ -284,6 +317,7 @@ describe("multi-page static site live verification", () => {
       routeFile,
       assetUrl,
       options: {
+        target: TARGETS.shop,
         baseUrl: "https://multi-page.example.test",
         artifactDirectory: "/test/multi-page-artifact",
         expectedSourceRevision: SOURCE_REVISION,
@@ -378,6 +412,7 @@ describe("multi-page static site live verification", () => {
       const mock = mockFetch(fixture);
       const methods: string[] = [];
       const proof = verifyLiveDeployment({
+        target: TARGETS["sample-editor"],
         baseUrl: "https://demo.example.test",
         artifactDirectory: fixture.root,
         assetUrl: (path) => path === zipPath ? "/download.zip" : path === "index.html" ? "/" : `/${path}`,
@@ -438,7 +473,8 @@ describe("doc-site live verification", () => {
       return response(bytes, mime);
     };
     const proof = await verifyLiveDeployment({
-      baseUrl: "https://zc-doc.zudolab.dev",
+      target: TARGETS.doc,
+      baseUrl: "https://zudo-composer.zudolab.dev",
       artifactDirectory: root,
       expectedSourceRevision: SOURCE_REVISION,
       manifestFileName: target.manifestFileName,
@@ -457,7 +493,8 @@ describe("doc-site live verification", () => {
     // label on correct bytes. Hash failures must still reject accepted labels.
     for (const failure of ["mime", "bytes"]) {
       await expect(verifyLiveDeployment({
-        baseUrl: "https://zc-doc.zudolab.dev", artifactDirectory: root,
+        target: TARGETS.doc,
+        baseUrl: "https://zudo-composer.zudolab.dev", artifactDirectory: root,
         manifestFileName: target.manifestFileName, artifactVerifier: target.verifyArtifact,
         liveRoutes: target.liveRoutes, routeFile: target.routeFile, assetUrl: target.assetUrl,
         fetchImpl: async (input, init) => new URL(input.toString()).pathname === "/sitemap.xml"
@@ -484,6 +521,7 @@ describe("doc-site live verification", () => {
       expect(redirect.status).toBeLessThan(400);
       expect(redirect.headers.get("location")).toBe("/x");
       const proof = await verifyLiveDeployment({
+        target: TARGETS.doc,
         baseUrl: local.url, artifactDirectory: root, manifestFileName: target.manifestFileName,
         artifactVerifier: target.verifyArtifact, liveRoutes: target.liveRoutes, routeFile: target.routeFile, assetUrl: target.assetUrl,
       });

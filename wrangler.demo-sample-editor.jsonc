@@ -1,16 +1,16 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "zc-demo-landing",
+  "name": "zc-demo-sample-editor",
   "compatibility_date": "2026-09-08",
   "workers_dev": false,
   "preview_urls": false,
   "assets": {
-    "directory": "./packages/demo-landing/dist-site",
+    "directory": "./packages/demo-sample/dist-editor",
     "not_found_handling": "single-page-application"
   },
   "routes": [
     {
-      "pattern": "zc-demo-landing.zudolab.dev",
+      "pattern": "zc-demo-sample-editor.zudolab.dev",
       "custom_domain": true
     }
   ]
