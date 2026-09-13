@@ -1,31 +1,42 @@
 # Disposable hosted demo
 
-`pnpm build:hosted-demo` builds the explicit demo adapter into `dist-hosted-demo`.
+`pnpm demo:build-editor <sample|shop|landing|blog|dir>` builds the selected host's
+demo adapter into `<hostDir>/dist-editor`. Names map explicitly to demo hosts:
+`shop` selects `packages/demo-webshop`. `pnpm demo:build-editors` discovers the
+host fleet with `discoverPackedHosts` and builds each editor one at a time.
 The ordinary `pnpm build`, installed package and local development endpoints keep
 their existing behavior. The demo publishes no filesystem APIs or release server.
 
-The demo bundles `packages/demo-sample/site-project.json`, the public sample
-generated from that host's `site-project.ts` and `content/`. Both the browser
-bootstrap and Vite's project-revision manifest use direct JSON module imports;
-the deployed demo needs no filesystem. It never reads an activated local
-SiteProject, arbitrary host directories, or browser databases. Content, Mapping,
+Each editor bundles its host's `site-project.json`, generated from that host's
+`site-project.ts` and `content/`. The build reads and validates it against the
+host's pack, injects `virtual:demo-editor-project` into the browser bootstrap,
+and derives the manifest's project revision from that same snapshot.
+Vite is rooted at the host so dependency and stylesheet resolution follow the
+host's config. The builder loads the tool's shared HTML under a host-rooted
+module ID; no host `index.html` is required or changed. The deployed demo needs
+no filesystem. It never reads an activated local SiteProject, arbitrary host
+directories, or browser databases. Content, Mapping,
 Sitemap and Composition records live in this tab's memory. Reloading resets them;
-new independent tabs start from the sample. Export working JSON to retain edits.
+new independent tabs start from the selected host's project. Export working JSON
+to retain edits.
 Review inspection/export works; local staging, build and activation remain disabled.
 
-The test fixture helper and isolated browser seed lanes use this same JSON.
-`pnpm sample:check`, included in `check` and `build:hosted-demo`, rejects duplicate
-sample files, imports from a different source, and hand-edited generated JSON.
+The test fixture helper and isolated browser seed lanes use the sample host's JSON.
+`pnpm sample:check`, included in `check` and both editor build commands, rejects
+duplicate sample files, fixed project imports in the editor, and hand-edited
+generated JSON.
 `pnpm cms:check` also verifies the studio's derived ready CMS. Regenerate all
 hosts with `pnpm cms:regenerate` after changing authored content. The installed
 tool's `files` allowlist excludes demo hosts, `src/test`, and `src/hosted-demo`;
 repository test runners supply the sample to their disposable hosts explicitly.
 
-Assets export is explicit: `scripts/hosted-demo/prepare.ts` allowlists four exact
-committed `cms/assets` PNG records and SHA-256 values. It verifies record shape,
-MIME signature, length, checksum and real file paths, and exports only those
-immutable versions. Committing assets alone does not publish it: the hosted build
-must export and deploy the assets. No uploads are sent to a server.
+The editor reads assets from its host's configured store. The current adapter
+in `scripts/hosted-demo/prepare.ts` accepts the demo hosts' flat, active,
+single-version catalogs and verifies record shape, MIME signature, length,
+checksum and real file paths. The full per-host asset snapshot and verifier
+contract is tracked separately in [issue 611](https://github.com/Takazudo/zudo-composer/issues/611).
+Committing assets alone does not publish them: the editor build must export and
+deploy the assets. No uploads are sent to a server.
 
 Assets metadata retains the regular canonical `/uploaded-assets/` URLs. The demo-only
 service worker holds no data, cache or database. It requests bytes from the exact
@@ -49,9 +60,8 @@ identities and must never be substituted for one another.
 Verification for the deployment/acceptance lane:
 
 - `pnpm exec vitest run src/hosted-demo scripts/hosted-demo`
-- `pnpm build:hosted-demo`
-- `pnpm hosted-demo:verify` (optionally pass the artifact directory and expected Git SHA)
-- Serve `dist-hosted-demo` with SPA fallback and correct PNG/WASM MIME types on HTTPS
+- `pnpm demo:build-editors`
+- Serve the selected host's `dist-editor` with SPA fallback and correct asset MIME types on HTTPS
   (or loopback for testing), then verify all manifest hashes including `index.html`.
 - Check `/review`, `/composer`, `/assets`, `/website-preview`, `/site` and nested site
   routes at desktop/narrow widths and light/dark themes. Confirm four images, image

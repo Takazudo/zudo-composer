@@ -11,12 +11,17 @@ export const DEMO_ASSET = [
   ["demo-guide.pdf", "554f5147984d75fe7e43c6f15d08e3d52097907a122299c06613e84b3b4c8749"],
   ["demo-archive.zip", "0e44e3a01233931024a8f1161657823d7ac0bbc9cbcffbf300d48811926ecd35"],
 ] as const;
-export async function prepareDemoAsset(root: string) {
+export async function prepareDemoAsset(root: string, options: { useHostCatalog?: boolean } = {}) {
   const safeRead = async (relative: string) => { const path = resolve(root, relative); if ((await lstat(path)).isSymbolicLink() || await realpath(path) !== path) throw new Error(`Demo source must be a real committed file: ${relative}`); return readFile(path); };
   const catalog: unknown = JSON.parse((await safeRead("catalog.json")).toString());
   if (!validateAssetSnapshot(catalog)) throw new Error("Invalid committed demo assets catalog.");
   const records = []; const files: { fileName: string; source: Uint8Array }[] = [];
-  for (const [name, checksum] of DEMO_ASSET) {
+  // The demo hosts currently have flat, active, single-version catalogs. Keep
+  // this narrow adaptation until the per-host snapshot/manifest contract lands.
+  const expectedAssets = options.useHostCatalog
+    ? catalog.records.map((record) => [record.document.fileName, record.document.currentVersionId] as const)
+    : DEMO_ASSET;
+  for (const [name, checksum] of expectedAssets) {
     const mimeType = assetMimeTypeForExtension(name.slice(name.lastIndexOf(".") + 1));
     if (mimeType === undefined) throw new Error(`No MIME contract for allowlisted demo asset: ${name}`);
     const matches = catalog.records.filter((r) => r.document.fileName === name);

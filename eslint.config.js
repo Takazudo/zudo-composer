@@ -8,7 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist',
-      'dist-hosted-demo',
+      '**/dist-editor',
       '**/dist-site',
       '**/.zudo-site-project',
       'packages/*/cms/{compositions,content,mappings,sitemaps,workspaces}/**',

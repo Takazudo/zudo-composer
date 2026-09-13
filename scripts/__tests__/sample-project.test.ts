@@ -27,12 +27,14 @@ async function fixture() {
 }
 
 describe("shared sample project guard", () => {
-  it("checks the actual repository and runs before hosted builds and the main gate", async () => {
+  it("checks the actual repository and runs before editor builds and the main gate", async () => {
     await checkSampleProject(root);
     const { scripts, files } = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
     expect(scripts["sample:check"]).toBe("node scripts/check-sample-project.mjs");
     expect(scripts.check).toContain("pnpm sample:check &&");
-    expect(scripts["build:hosted-demo"]).toMatch(/^pnpm sample:check && vite build /);
+    expect(scripts["build:hosted-demo"]).toBeUndefined();
+    expect(scripts["demo:build-editor"]).toMatch(/^pnpm sample:check && node /);
+    expect(scripts["demo:build-editors"]).toMatch(/^pnpm sample:check && node /);
     expect(files).toContain("!src/test");
     expect(files).toContain("!src/hosted-demo");
     expect(files.filter((file: string) => file === "packages" || file.startsWith("packages/demo-sample"))).toEqual([]);
@@ -64,13 +66,38 @@ describe("shared sample project guard", () => {
     await expect(checkSampleProject(directory)).rejects.toThrow(/exactly one generated JSON source/);
   });
 
-  it.each(SAMPLE_PROJECT_MODULES)("rejects a dynamic load in %s even with the static import in a comment", async (file) => {
+  it.each(["src/test/site-project-fixture.ts", "src/hosted-demo/bootstrap.ts"])("rejects a dynamic load in %s even with the static import in a comment", async (file) => {
     const directory = await fixture();
     const path = join(directory, file);
     const source = await readFile(path, "utf8");
-    const importLine = source.split("\n").find((line) => line.includes("demo-sample/site-project.json"))!;
+    const importLine = source.split("\n").find((line) => line.includes("demo-sample/site-project.json") || line.includes("virtual:demo-editor-project"))!;
     const specifier = importLine.match(/from "([^"]+)"/)![1];
     await writeFile(path, `// ${importLine}\nconst sample = await import(${JSON.stringify(specifier)});\nexport default sample;\n`);
     await expect(checkSampleProject(directory)).rejects.toThrow(/must statically import.*bundled module/);
+  });
+
+  it.each(["src/hosted-demo/bootstrap.ts", "vite.demo-editor.config.ts"])("rejects a fixed project import alongside the host selection in %s", async (file) => {
+    const directory = await fixture();
+    const path = join(directory, file);
+    const source = await readFile(path, "utf8");
+    await writeFile(path, `${source}\nimport fixedProject from "./packages/demo-sample/site-project.json";\n`);
+    await expect(checkSampleProject(directory)).rejects.toThrow(/not import a fixed project JSON/);
+  });
+
+  it.each([
+    'export { default as fixedProject } from "./packages/demo-sample/site-project.json?raw";',
+    'const fixedProject = await import(`./packages/demo-sample/site-project.json`);',
+  ])("rejects fixed projects behind Vite queries and literal dynamic imports: %s", async (statement) => {
+    const directory = await fixture();
+    const path = join(directory, "vite.demo-editor.config.ts");
+    await writeFile(path, `${await readFile(path, "utf8")}\n${statement}\n`);
+    await expect(checkSampleProject(directory)).rejects.toThrow(/not import a fixed project JSON/);
+  });
+
+  it("ignores editor artifacts when checking for duplicate source JSON", async () => {
+    const directory = await fixture();
+    await mkdir(join(directory, "packages/demo-sample/dist-editor"));
+    await cp(join(directory, SAMPLE_PROJECT_PATH), join(directory, "packages/demo-sample/dist-editor/site-project.json"));
+    await checkSampleProject(directory);
   });
 });

@@ -22,7 +22,7 @@ export const WRITABLE = ["node_modules", "cms", "public", ".zudo-site-project"];
 // dependency. No other consumer package-manager settings may change isolation.
 export const PACKED_NPMRC = "block-exotic-subdeps=false\n";
 const dependencySections = /** @type {const} */ (["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]);
-const omittedDirectories = new Set(["node_modules", ".git", "dist", "dist-site", ".zudo-site-project", ".vite", "coverage", "test-results", "playwright-report", DEMOS_LANE_DIRECTORY]);
+const omittedDirectories = new Set(["node_modules", ".git", "dist", "dist-site", "dist-editor", ".zudo-site-project", ".vite", "coverage", "test-results", "playwright-report", DEMOS_LANE_DIRECTORY]);
 
 /** @param {string} root @param {string} candidate */
 export function inside(root, candidate) {
