@@ -17,10 +17,11 @@ corepack pnpm build:site
 ```
 
 The committed ready CMS opens the authoring libraries populated with Sample
-Studio. `pnpm seed` activates a local website release in the ignored
-`.zudo-site-project/` directory; it is needed for `/site` delivery.
-Its image manifest is empty:
-the sample uses the themeset's placeholder component and no uploaded images.
+Studio. `pnpm seed` imports the five Sample Studio image sources into the
+committed `cms/assets` store, then activates a local website release in the
+ignored `.zudo-site-project/` directory; it is needed for `/site` delivery.
+The current project still uses the themeset's placeholder component, so its
+generated JSON does not reference uploaded images.
 `build:site` emits the seven static routes from `/` into `dist-site` directly
 from the generated project, without a local release.
 

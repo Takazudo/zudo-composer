@@ -66,8 +66,9 @@ verifies this once at runtime:
   an Image component. No copying or patching of provider code.
 
 Images are seeded with `pnpm assets:seed-demo` from `scripts/demo-assets/`
-(registered in `scripts/seed-demo-assets.ts`) and allowlisted for the hosted
-build in `src/hosted-demo/assets.ts`.
+(registered in `scripts/seed-demo-assets.ts`) for the repository demo store and
+mirrored into `packages/demo-sample/images-src/` for the package-owned store.
+The five rows are allowlisted for the hosted build in `src/hosted-demo/assets.ts`.
 
 ## Page-by-page plan
 

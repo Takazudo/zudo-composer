@@ -15,12 +15,12 @@ published package.
 
 Sample Studio is the fourth symmetric host, `packages/demo-sample`. It uses
 the exact installed `@zudo-sg/ui` provider and preserves the original project
-JSON. The original contains no host-owned images: its provider placeholder is
-separate from the five optional Studio image rows in the repository Assets seed.
-Webshop, Landing and Blog assert their 16, 6 and 10 images in their own `pnpm test`
-suites, including metadata, encoding and the 250 KiB file limit. The central
-imagery test retains those Studio seed rows and the 8 MiB combined source budget,
-discovering every host's manifest automatically.
+JSON. The original project contains no uploaded-image URLs: its provider
+placeholder is separate from the five optional Studio image rows in the
+package-owned Assets store. Webshop, Landing and Blog assert their 16, 6 and 10
+images in their own `pnpm test` suites, including metadata, encoding and the 250
+KiB file limit. The central imagery test retains those Studio seed rows and the
+8 MiB combined source budget, discovering every host's manifest automatically.
 
 Generation, asset import, and release commands are provided directly by the
 installed `zudo-composer` tool in each host.
