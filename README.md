@@ -481,6 +481,15 @@ access or a deployment target for installed applications. The target is the
 Worker named `zudo-composer` and the existing custom-domain binding in
 [`wrangler.jsonc`](./wrangler.jsonc) remains in place.
 
+The same trusted-run pipeline also registers the documentation site as its
+fifth target: `pnpm doc:build-site` builds `doc/dist`, whose
+`doc-site-manifest.json` is verified and uploaded to the `zudo-composer-doc`
+Worker using [`wrangler.doc.jsonc`](./wrangler.doc.jsonc) at
+`https://zc-doc.zudolab.dev`. Its multi-page routes are checked against the
+emitted HTML files, including extensionless pages, while Wrangler's default
+`auto-trailing-slash` HTML handling and explicit `404-page` behavior serve the
+static site.
+
 `pnpm build:hosted-demo` emits `dist-hosted-demo`, and `pnpm hosted-demo:verify`
 checks the final files, manifest identities, checksums, MIME types and the
 ordinary artifact boundary. CI then runs the hosted browser lane against that

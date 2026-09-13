@@ -148,20 +148,26 @@ host project access or deployment support for installed applications. Each
 target is its own Worker with its own custom-domain binding, configured in
 [`wrangler.jsonc`](./wrangler.jsonc) (`zudo-composer`),
 [`wrangler.demo-shop.jsonc`](./wrangler.demo-shop.jsonc),
-[`wrangler.demo-landing.jsonc`](./wrangler.demo-landing.jsonc) and
-[`wrangler.demo-blog.jsonc`](./wrangler.demo-blog.jsonc).
+[`wrangler.demo-landing.jsonc`](./wrangler.demo-landing.jsonc),
+[`wrangler.demo-blog.jsonc`](./wrangler.demo-blog.jsonc), and
+[`wrangler.doc.jsonc`](./wrangler.doc.jsonc).
 
 The hosted composer demo's `dist-hosted-demo` artifact is built, checked
 against the ordinary filesystem/server/test boundary, browser-tested, and
 uploaded by CI under the exact source SHA; the three static demo sites are
 each built and manifest-verified by CI with `pnpm demo:build-site <name>` into
-`packages/demo-<name>/dist-site` and uploaded the same way. `scripts/hosted-demo/targets.mjs`
+`packages/demo-<name>/dist-site` and uploaded the same way. The doc site is
+built with `pnpm doc:build-site` into `doc/dist`, verified by
+`doc-site-manifest.json`, and uploaded under the exact source SHA. It is a
+multi-page static site served by `zudo-composer-doc` from `wrangler.doc.jsonc`
+at `zc-doc.zudolab.dev`, with Workers Static Assets' default
+`auto-trailing-slash` HTML handling and `404-page` fallback. `scripts/hosted-demo/targets.mjs`
 is the one place naming each target's Worker, config file, artifact directory,
 domain and artifact contract; `deploy.mjs`, `live-check.mjs` and
 `check-hosted-demo.mjs` are generic over that target, while
 `workflow-guard.mjs`'s trusted-run checks needed no target parameter — they
 never touch an artifact or a Cloudflare config. The independent production
-workflow runs as a matrix of the four targets, each accepting only a
+workflow runs as a matrix of the five targets, each accepting only a
 successful same-repository `main` CI run, verifying its own run/SHA/artifact,
 performing a Wrangler dry run, capturing the active single-version deployment,
 uploading the verified directory with Wrangler 4.130.0, and activating only
@@ -180,7 +186,7 @@ fails closed.
 Live checks cover the manifest, every emitted asset and every route with
 bounded HTTPS requests — the hosted composer demo's fixed authoring/sample
 route list for that target, and each static site's own manifest route list for
-the other three. Automatic rollback is allowed only while the exact uploaded
+the other four. Automatic rollback is allowed only while the exact uploaded
 version remains active, and a rollback that succeeds still leaves the
 deployment workflow red. Local OAuth credentials are never copied to
 repository or workflow secrets.

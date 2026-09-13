@@ -14,5 +14,7 @@ const artifact = await target.verifyArtifact({ directory, expectedSourceRevision
 console.log(
   target.kind === "hosted-demo"
     ? `Hosted demo verified: ${artifact.files.length} files, six asset files, source ${artifact.manifest.sourceRevision}.`
-    : `Static site verified: ${artifact.manifest.projectId}, ${Object.keys(artifact.manifest.files).length} files, ${artifact.manifest.routes.length} routes, source ${artifact.manifest.sourceRevision}.`,
+    : target.kind === "doc-site"
+      ? `Doc site verified: ${artifact.files.length} files, ${artifact.manifest.routes.length} routes${artifact.manifest.sourceRevision === undefined ? "" : `, source ${artifact.manifest.sourceRevision}`}.`
+      : `Static site verified: ${artifact.manifest.projectId}, ${Object.keys(artifact.manifest.files).length} files, ${artifact.manifest.routes.length} routes, source ${artifact.manifest.sourceRevision}.`,
 );

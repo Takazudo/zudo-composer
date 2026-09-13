@@ -159,3 +159,29 @@ jobs:
           path: packages/demo-${{ matrix.site }}/dist-site
           if-no-files-found: error
           retention-days: 7
+
+  doc-site-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # The doc-history preBuild is verified with the default shallow checkout.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
+        with:
+          version: 11.5.2
+          run_install: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm doc:build-site
+      - run: pnpm hosted-demo:verify doc/dist "${{ github.sha }}"
+        env:
+          HOSTED_DEMO_TARGET: doc
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: doc-site-${{ github.sha }}
+          path: doc/dist
+          if-no-files-found: error
+          retention-days: 7

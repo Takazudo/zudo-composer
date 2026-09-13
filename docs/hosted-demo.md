@@ -63,29 +63,48 @@ Verification for the deployment/acceptance lane:
 
 Deployment gates must validate this exact artifact before publishing its bytes.
 
-## Four deploy targets, one pipeline
+## Five deploy targets, one pipeline
 
 The trusted-run deploy pipeline (`scripts/hosted-demo/deploy.mjs`,
-`live-check.mjs` and `scripts/check-hosted-demo.mjs`) deploys four independent
+`live-check.mjs` and `scripts/check-hosted-demo.mjs`) deploys five independent
 Cloudflare Workers, each on its own custom domain:
 
-| Target key      | Worker                        | Config file                       | Domain                       | Artifact directory                    |
-| ---------------- | ------------------------------ | ---------------------------------- | ----------------------------- | -------------------------------------- |
-| `zudo-composer`  | `zudo-composer`                | `wrangler.jsonc`                   | `zudo-composer.zudolab.dev`  | `dist-hosted-demo`                     |
-| `webshop`        | `zudo-composer-demo-shop`      | `wrangler.demo-shop.jsonc`         | `zc-demo-shop.zudolab.dev`      | `packages/demo-webshop/dist-site`      |
-| `landing`        | `zudo-composer-demo-landing`   | `wrangler.demo-landing.jsonc`      | `zc-demo-landing.zudolab.dev`   | `packages/demo-landing/dist-site`      |
-| `blog`           | `zudo-composer-demo-blog`      | `wrangler.demo-blog.jsonc`         | `zc-demo-blog.zudolab.dev`      | `packages/demo-blog/dist-site`         |
+| Target key      | Worker                        | Config file                       | Domain                       | Artifact directory                    | Manifest                  |
+| ---------------- | ------------------------------ | ---------------------------------- | ----------------------------- | -------------------------------------- | ------------------------- |
+| `zudo-composer`  | `zudo-composer`                | `wrangler.jsonc`                   | `zudo-composer.zudolab.dev`  | `dist-hosted-demo`                     | `hosted-demo-manifest.json` |
+| `webshop`        | `zudo-composer-demo-shop`      | `wrangler.demo-shop.jsonc`         | `zc-demo-shop.zudolab.dev`   | `packages/demo-webshop/dist-site`      | `site-manifest.json`      |
+| `landing`        | `zudo-composer-demo-landing`   | `wrangler.demo-landing.jsonc`      | `zc-demo-landing.zudolab.dev` | `packages/demo-landing/dist-site`      | `site-manifest.json`      |
+| `blog`           | `zudo-composer-demo-blog`      | `wrangler.demo-blog.jsonc`         | `zc-demo-blog.zudolab.dev`   | `packages/demo-blog/dist-site`         | `site-manifest.json`      |
+| `doc`            | `zudo-composer-doc`             | `wrangler.doc.jsonc`               | `zc-doc.zudolab.dev`         | `doc/dist`                             | `doc-site-manifest.json`  |
 
-`scripts/hosted-demo/targets.mjs` is the single place naming these four rows
+`scripts/hosted-demo/targets.mjs` is the single place naming these five rows
 and each target's artifact-verification shape. The `zudo-composer` target
 verifies `dist-hosted-demo` against the hosted-demo manifest contract above;
-the other three verify a `dist-site` directory (built by `pnpm demo:build-site
+the three demo websites verify a `dist-site` directory (built by `pnpm demo:build-site
 <webshop|landing|blog>`, see [`docs/demo-sites/README.md`](./demo-sites/README.md))
 against the static-site manifest contract in
 [`server/site-build/artifact.mjs`](../server/site-build/artifact.mjs) —
 `site-manifest.json` instead of `hosted-demo-manifest.json`, and a live route
 list read from that manifest's own `routes` array instead of the fixed
-authoring/sample list. `deploy.mjs`'s `preflightDeployment`/`deployHostedDemo`
+authoring/sample list. The `doc` target verifies `doc-site-manifest.json` in
+`doc/dist`; its routes are derived from emitted HTML files (directory
+`index.html` files become trailing-slash routes and standalone HTML files keep
+extensionless routes). Its multi-page live check uses the target's `routeFile`
+and `assetUrl` hooks to map each route and canonical asset URL. Index HTML
+files are covered by their route checks; standalone `x.html` is fetched at
+`/x` and `404.html` at `/404`, because
+[Workers Static Assets redirects `.html` URLs](https://developers.cloudflare.com/workers/static-assets/routing/advanced/html-handling/).
+The config keeps the default `auto-trailing-slash` HTML handling and sets
+`404-page` for unknown routes. ICO and XML assets accept their explicit MIME
+alternatives while retaining exact hash checks. Local doc builds may omit
+`sourceRevision`; production preflight requires the full SHA selected by the
+trusted-run guard. The CI build uses the default shallow checkout, which also
+passes the doc-history preBuild.
+
+The doc target's first production rollout happens after merge to `main` through
+the pipeline's new-Worker path. It has no previous deployment to roll back to.
+
+`deploy.mjs`'s `preflightDeployment`/`deployHostedDemo`
 and `live-check.mjs`'s `verifyLiveDeployment`/`verifyLiveWithRetries` take an
 optional `target` (or the lower-level `manifestFileName`/`artifactVerifier`/
 `liveRoutes` a target supplies); every default falls back to the
@@ -103,13 +122,14 @@ webshop's Worker, config and artifact directory instead.
 ## Production rollout
 
 The production workflow is `.github/workflows/hosted-demo-deploy.yml`, run as
-a matrix of the four targets above. A successful `main` run of `CI` is its
+a matrix of the five targets above. A successful `main` run of `CI` is its
 only automatic trigger. Each matrix leg downloads the artifact whose name
-contains that target's prefix (`hosted-demo-` or `demo-site-<name>-`) and that
+contains that target's prefix (`hosted-demo-`, `demo-site-<name>-` or
+`doc-site-`) and that
 run's full commit SHA, verifies the artifact again, and passes the matching
 directory to Wrangler. Each target has its own concurrency group
 (`hosted-demo-production-<target>`), so two rollouts of the *same* target
-cannot overlap, but the four targets can roll out concurrently with each
+cannot overlap, but the five targets can roll out concurrently with each
 other. A manual run requires both `run_id` and `sha` for a successful
 same-repository `main` CI run; the guard is loaded from a fresh trusted `main`
 checkout before the selected artifact checkout is used, once per matrix leg.
@@ -119,8 +139,9 @@ token. It fails visibly when either is absent or partial. Local Wrangler OAuth
 sessions are useful for read-only checks and must never be copied into GitHub
 secrets. The checked-in [`wrangler.jsonc`](../wrangler.jsonc),
 [`wrangler.demo-shop.jsonc`](../wrangler.demo-shop.jsonc),
-[`wrangler.demo-landing.jsonc`](../wrangler.demo-landing.jsonc) and
-[`wrangler.demo-blog.jsonc`](../wrangler.demo-blog.jsonc) each keep
+[`wrangler.demo-landing.jsonc`](../wrangler.demo-landing.jsonc),
+[`wrangler.demo-blog.jsonc`](../wrangler.demo-blog.jsonc), and
+[`wrangler.doc.jsonc`](../wrangler.doc.jsonc) each keep
 `workers_dev: false`, `preview_urls: false`, and that target's own
 custom-domain binding. The compatibility date is pinned in each file; no
 account ID or credential is committed to any of them.
@@ -181,8 +202,8 @@ creates the record itself.
 
 After activation, the live checker fetches the manifest, every emitted asset,
 and every route over bounded HTTPS requests — the fixed authoring/sample list
-for `zudo-composer`, or that target's own manifest `routes` for the three
-static sites. Navigation route
+for `zudo-composer`, the static-site manifest `routes` for the three demo
+sites, or the doc-site manifest `routes` for the documentation site. Navigation route
 requests send `Accept: text/html` and `Sec-Fetch-Mode: navigate`; asset requests
 do not receive navigation headers. Responses must match the downloaded
 manifest's bytes, checksums and MIME types. Cloudflare Web Analytics can inject

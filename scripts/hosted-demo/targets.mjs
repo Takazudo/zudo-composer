@@ -1,8 +1,8 @@
 // @ts-check
 // The trusted-run deploy pipeline (deploy.mjs, live-check.mjs,
-// check-hosted-demo.mjs) is shared by four Cloudflare Workers: the disposable
-// hosted composer demo and three static demo websites. This module is the
-// single place that names each target's Worker, config file, artifact
+// check-hosted-demo.mjs) is shared by five Cloudflare Workers: the disposable
+// hosted composer demo, three static demo websites and the documentation site.
+// This module is the single place that names each target's Worker, config file, artifact
 // directory, domain and artifact-verification shape so those scripts stay
 // generic. workflow-guard.mjs needs none of this: its trusted-run checks are
 // identical for every target.
@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { HOSTED_DEMO_MANIFEST, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
 import { SITE_HEADERS, SITE_MANIFEST, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
+import { DOC_SITE_MANIFEST, verifyDocSiteArtifact } from "./doc-site-artifact.mjs";
 import { SPA_ROUTES } from "../routes.mjs";
 
 const root = resolve(fileURLToPath(new URL("../../", import.meta.url)));
@@ -19,15 +20,14 @@ const root = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 /** Fixed route list for the hosted composer demo; it carries no route data in its own manifest. */
 export const HOSTED_DEMO_LIVE_ROUTES = [...SPA_ROUTES, "/review", "/website-preview"];
 
-/** @typedef {{ path: string, sha256: string, mime: string }} TargetFile */
-// Every production target requires a full `sourceRevision`, including static
-// sites whose ordinary local artifacts may omit a host revision entirely;
-// every other field is target-kind-specific and stays untyped here.
-/** @typedef {{ root: string, manifest: Record<string, unknown> & { sourceRevision: string }, files: TargetFile[] }} TargetArtifact */
+/** @typedef {{ path: string, sha256: string, mime: string, acceptedMimes?: string[] }} TargetFile */
+// Local doc artifacts may omit sourceRevision. Production preflight requires
+// a full SHA before calling Wrangler; other fields depend on the target kind.
+/** @typedef {{ root: string, manifest: Record<string, unknown> & { sourceRevision?: string }, files: TargetFile[] }} TargetArtifact */
 /**
  * Every target's artifact verifier is widened to this shared, loosely typed
  * shape: `deploy.mjs` and `live-check.mjs` are generic over any target and
- * cannot know the manifest shape (hosted-demo vs. site-static) in advance.
+ * cannot know the target-specific manifest shape in advance.
  * @typedef {(options: { directory: string, expectedSourceRevision?: string }) => Promise<TargetArtifact>} ArtifactVerifier
  */
 
@@ -67,7 +67,7 @@ async function verifySiteStaticTargetArtifact({ directory, expectedSourceRevisio
  * request only when a verified route covers the same file.
  * @typedef {{
  *   key: string,
- *   kind: "hosted-demo" | "site-static",
+ *   kind: "hosted-demo" | "site-static" | "doc-site",
  *   workerName: string,
  *   configPath: string,
  *   domain: string,
@@ -130,9 +130,31 @@ export const TARGETS = {
     verifyArtifact: verifySiteStaticTargetArtifact,
     liveRoutes: (manifest) => /** @type {string[]} */ (manifest.routes),
   },
+  doc: {
+    key: "doc",
+    kind: "doc-site",
+    workerName: "zudo-composer-doc",
+    configPath: "wrangler.doc.jsonc",
+    domain: "zc-doc.zudolab.dev",
+    artifactDirectory: resolve(root, "doc/dist"),
+    manifestFileName: DOC_SITE_MANIFEST,
+    ciArtifactName: (sha) => `doc-site-${sha}`,
+    // The doc verifier keeps local builds usable without Git metadata. The
+    // production preflight requires an expected full SHA before any mutation.
+    verifyArtifact: verifyDocSiteArtifact,
+    liveRoutes: (manifest) => /** @type {string[]} */ (manifest.routes),
+    routeFile: (route) => {
+      if (route === "/") return "index.html";
+      const path = route.replace(/^\//, "").replace(/\/$/, "");
+      return route.endsWith("/") ? `${path}/index.html` : `${path}.html`;
+    },
+    // auto-trailing-slash redirects /x.html to /x. Fetch the canonical URL
+    // without navigation headers to verify its untransformed asset bytes.
+    assetUrl: (path) => path === "index.html" || path.endsWith("/index.html") ? null : path.endsWith(".html") ? `/${path.slice(0, -".html".length)}` : `/${path}`,
+  },
 };
 
-export const TARGET_KEYS = /** @type {const} */ (["zudo-composer", "webshop", "landing", "blog"]);
+export const TARGET_KEYS = /** @type {const} */ (["zudo-composer", "webshop", "landing", "blog", "doc"]);
 export const DEFAULT_TARGET_KEY = "zudo-composer";
 
 /** @param {string} key @returns {DeployTarget} */
