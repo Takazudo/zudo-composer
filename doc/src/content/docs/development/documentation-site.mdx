@@ -4,6 +4,96 @@ sidebar_position: 7
 description: How the zudo-doc documentation site is authored, checked, built, and deployed.
 ---
 
-## Overview
+## `doc/` and `docs/`
 
-This page will cover the `doc/` workspace, writing skill, content conventions, and documentation-site workflow.
+This site is the repository's English developer documentation. It is separate
+from the root `docs/` directory, which remains the operator-reference surface
+for creator bootstrap, SiteProject releases, packed installs, browser
+acceptance, demo sites, and hosted deployment. Use the operator references from
+their canonical GitHub URLs: [SiteProject](https://github.com/Takazudo/zudo-composer/blob/main/docs/site-project.md),
+[packed host install](https://github.com/Takazudo/zudo-composer/blob/main/docs/packed-host-install.md),
+[workspace acceptance](https://github.com/Takazudo/zudo-composer/blob/main/docs/workspace-acceptance.md),
+and [hosted demo](https://github.com/Takazudo/zudo-composer/blob/main/docs/hosted-demo.md).
+
+## Site layout
+
+The `doc/` workspace owns the configuration, content, route seams, static
+assets, and package CSS integration:
+
+```text
+doc/
+├── zfb.config.ts                 # zudo-doc config, Drift theme, header nav
+├── src/content/docs/             # filesystem-backed navigation and MDX
+│   ├── overview/<page>.mdx
+│   ├── architecture/<page>.mdx
+│   ├── setup/<page>.mdx
+│   └── development/<page>.mdx
+├── pages/index.tsx               # package home route
+├── pages/docs/[[...slug]].tsx    # host-owned docs route seam
+├── src/styles/global.css         # package CSS/Tailwind layer setup
+└── public/                       # static site assets and favicon files
+```
+
+The top-level content directories are the four header categories. A category
+`index.mdx` is its landing page, and each sibling page is a sidebar item. The
+header's `categoryMatch` values in `zfb.config.ts` match those directory names;
+there is no separate sidebar registry to update.
+
+## Author, check, and build
+
+Run the root wrappers from the repository root:
+
+| Command | Purpose |
+| --- | --- |
+| `corepack pnpm doc:dev` | Starts the zfb site and document-history server for local authoring. |
+| `corepack pnpm doc:build` | Builds the static zudo-doc site into `doc/dist/`. |
+| `corepack pnpm doc:check` | Runs zfb content and TypeScript checks. |
+| `corepack pnpm doc:build-site` | Planned deployment build wrapper for the doc-site artifact; its name is fixed by the sibling pipeline work and final wiring is reconciled in #593. |
+
+The package-local equivalents are `pnpm -C doc dev`, `pnpm -C doc build`, and
+`pnpm -C doc check`. The final doc deployment build is expected to preserve
+the root-mounted `doc/dist/` shape and write the target manifest
+`doc-site-manifest.json`; until the sibling wiring lands, use `doc:build` for
+the local static build and leave deployment reconciliation to #593.
+
+Build output is ignored. A clean build must not leave tracked or unexpected
+`doc/dist/`, `doc/.zfb/`, or `doc/.zfb-build/` files. Because the site's base is
+`/`, emitted links and asset URLs are root-relative; the output contains
+`index.html`, `404.html`, `docs/<category>/<page>/index.html`, and `assets/`.
+
+## Writing rules
+
+Before creating or editing an MDX page, invoke `/zudo-doc-writing`. Plan or
+re-read the complete navigation tree first, then place the page in the matching
+filesystem category. Follow these rules:
+
+- Every page has frontmatter `title` and `sidebar_position`; content pages also
+  have a one-sentence `description`.
+- Every category has an `index.mdx` with a short introduction and
+  `<CategoryNav category="<category>" />`; keep full content in sibling pages.
+- The frontmatter title supplies the h1. Start the body at `##`; do not add a
+  body h1 or a body `---` separator.
+- Link between site pages with relative paths including the `.mdx` extension,
+  such as `[Validation gates](./validation-gates.mdx)`. Use ordinary URLs for
+  external references, including the GitHub operator links above.
+- Use the supported admonitions without imports. Leave a blank line after an
+  opening `:::` and before its closing fence.
+- Keep directory and filename segments in kebab-case. The filesystem is the
+  navigation, so adding a directory or page changes the sidebar.
+
+## Theme, dependencies, and deployment
+
+`doc/zfb.config.ts` selects the **Drift** theme pack and the site URL
+`https://zc-doc.zudolab.dev`. `ZUDO_DEPS_PINS.md` records the generated
+`create-zudo-doc@5.22.1` scaffold, `@takazudo/zudo-doc` and history server
+5.22.1, and the pinned zfb/runtime/MD renderer dependencies at 2.16.0. Keep
+those provenance notes with the scaffold/config changes; do not silently
+upgrade the theme or runtime while editing prose.
+
+The hosted pipeline's planned documentation job is `doc-site-build`. It builds
+and verifies `doc/dist`, uploads the CI artifact `doc-site-<sha>`, and the
+planned trusted-run target is `doc` on Worker `zudo-composer-doc` using
+`wrangler.doc.jsonc` at `zc-doc.zudolab.dev`. Its artifact manifest is
+`doc-site-manifest.json`. These names are intentional epic wiring, not a claim
+that the current pre-wiring checkout has the job or Worker; #593 performs the
+final reconciliation after the sibling implementation lands.
