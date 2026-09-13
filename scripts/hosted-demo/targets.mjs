@@ -10,15 +10,12 @@
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import { HOSTED_DEMO_MANIFEST, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
+import { DEMO_EDITOR_MANIFEST, expectedMime, verifyDemoEditorArtifact } from "./artifact.mjs";
 import { SITE_HEADERS, SITE_MANIFEST, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
 import { DOC_SITE_MANIFEST, verifyDocSiteArtifact } from "./doc-site-artifact.mjs";
-import { SPA_ROUTES } from "../routes.mjs";
+import { verifiedDemoEditorRoutes } from "../routes.mjs";
 
 const root = resolve(fileURLToPath(new URL("../../", import.meta.url)));
-
-/** Fixed route list for the hosted composer demo; it carries no route data in its own manifest. */
-export const HOSTED_DEMO_LIVE_ROUTES = [...SPA_ROUTES, "/review", "/website-preview"];
 
 /** @typedef {{ path: string, sha256: string, mime: string, acceptedMimes?: string[] }} TargetFile */
 // Local doc artifacts may omit sourceRevision. Production preflight requires
@@ -37,7 +34,7 @@ export const HOSTED_DEMO_LIVE_ROUTES = [...SPA_ROUTES, "/review", "/website-prev
  */
 async function verifyHostedDemoTargetArtifact(options) {
   // Already returns { root, manifest, files: [{ path, sha256, mime }] }.
-  return verifyHostedDemoArtifact(options);
+  return verifyDemoEditorArtifact(options);
 }
 
 /**
@@ -89,10 +86,10 @@ export const TARGETS = {
     configPath: "wrangler.jsonc",
     domain: "zudo-composer.zudolab.dev",
     artifactDirectory: resolve(root, "dist-hosted-demo"),
-    manifestFileName: HOSTED_DEMO_MANIFEST,
+    manifestFileName: DEMO_EDITOR_MANIFEST,
     ciArtifactName: (sha) => `hosted-demo-${sha}`,
     verifyArtifact: verifyHostedDemoTargetArtifact,
-    liveRoutes: () => HOSTED_DEMO_LIVE_ROUTES,
+    liveRoutes: verifiedDemoEditorRoutes,
   },
   webshop: {
     key: "webshop",

@@ -6,8 +6,9 @@ import type { SiteProject } from "zudo-composer/site-project";
 import { compileStaticSite, createSiteManifest, SITE_HEADERS, SITE_MANIFEST, siteHeaders } from "../../server/site-build.mjs";
 import { loadHostContext } from "../../server/host-context.mjs";
 import { authoringSiteRoutes, readVerifiedHostManifest } from "../host-site-routes.mjs";
-import { AUTHORING_ROUTES, SPA_ROUTES } from "../routes.mjs";
-import { HOSTED_SITE_ROUTES } from "../../packages/demo-sample/hosted-routes.mjs";
+import { DEMO_EDITOR_AUTHORING_ROUTES, demoEditorRoutes, verifiedDemoEditorRoutes } from "../routes.mjs";
+import { createDemoEditorManifest, DEMO_EDITOR_MANIFEST, DEMO_EDITOR_SEED, verifyDemoEditorArtifact } from "../hosted-demo/artifact.mjs";
+import { writeEditorArtifact } from "../hosted-demo/__fixtures__/editor-artifact";
 
 const root = resolve(import.meta.dirname, "../..");
 const temporary: string[] = [];
@@ -41,8 +42,7 @@ it("takes added sitemap routes through the compiler and verified manifest withou
   const host = await fixture();
   await host.build();
   const original = await readVerifiedHostManifest(host.host, { env: {} });
-  expect(new Set(authoringSiteRoutes(original.routes))).toEqual(new Set(HOSTED_SITE_ROUTES));
-  expect(SPA_ROUTES).toEqual([...AUTHORING_ROUTES, ...HOSTED_SITE_ROUTES]);
+  expect(demoEditorRoutes(original.routes)).toEqual([...DEMO_EDITOR_AUTHORING_ROUTES, ...authoringSiteRoutes(original.routes)]);
   const sitemap = host.project.providers.sitemaps[0].records[0].document;
   const extra = structuredClone(sitemap.root[0].children[1]);
   extra.id = "new-host-page";
@@ -57,7 +57,7 @@ it("takes added sitemap routes through the compiler and verified manifest withou
   expect(updated.routes).toContain("/new-host-page");
   expect(updated.routes).toHaveLength(original.routes.length + 1);
   expect(authoringSiteRoutes(updated.routes)).toContain("/site/new-host-page");
-  expect(HOSTED_SITE_ROUTES).not.toContain("/site/new-host-page");
+  expect(authoringSiteRoutes(original.routes)).not.toContain("/site/new-host-page");
 });
 
 it("rejects a tampered route list, artifact bytes, project identity, tool identity and source revision", async () => {
@@ -88,4 +88,28 @@ it("wires disk-discovered preparation ahead of both browser lanes and keeps thei
     expect(script).not.toMatch(/\[.*["']build-site["']/);
   }
   expect(await readFile(join(root, "scripts/build-demo-sites.mjs"), "utf8")).toContain("discoverPackedHosts(root)");
+});
+
+it("recompiles editor routes from its own bundled project without a static-site manifest", async () => {
+  const fixture = await writeEditorArtifact();
+  temporary.push(fixture.root);
+  const original = await verifyDemoEditorArtifact({ directory: fixture.root });
+  expect(verifiedDemoEditorRoutes(original.manifest).slice(0, DEMO_EDITOR_AUTHORING_ROUTES.length)).toEqual(DEMO_EDITOR_AUTHORING_ROUTES);
+  expect(original.manifest.routes).toContain("/site");
+  const sitemap = fixture.seed.project.providers.sitemaps[0]!.records[0]!.document;
+  const extra = structuredClone(sitemap.root[0]!.children[1]!);
+  extra.id = "editor-added-page";
+  extra.slug = "editor-added-page";
+  extra.title = "Editor added page";
+  sitemap.root[0]!.children.push(extra);
+  await fixture.saveFile(DEMO_EDITOR_SEED, JSON.stringify(fixture.seed));
+  // A stale manifest cannot supply routes after the bundled project changes.
+  await expect(verifyDemoEditorArtifact({ directory: fixture.root })).rejects.toThrow("checksum");
+  const updated = await createDemoEditorManifest({ directory: fixture.root, sourceRevision: fixture.manifest.sourceRevision });
+  await writeFile(join(fixture.root, DEMO_EDITOR_MANIFEST), JSON.stringify(updated));
+  const verified = await verifyDemoEditorArtifact({ directory: fixture.root });
+  expect(verified.manifest.routes).toContain("/site/editor-added-page");
+  expect(verified.manifest.routes).toHaveLength(original.manifest.routes.length + 1);
+  expect(verified.manifest.projectSourceRevision).not.toBe(original.manifest.projectSourceRevision);
+  expect(verifiedDemoEditorRoutes(verified.manifest)).toEqual(verified.manifest.routes);
 });

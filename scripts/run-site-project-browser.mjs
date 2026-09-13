@@ -4,8 +4,6 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { authoringSiteRoutes, readVerifiedHostManifest } from "./host-site-routes.mjs";
-import { HOSTED_SITE_ROUTES } from "../packages/demo-sample/hosted-routes.mjs";
-import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 
 /** @typedef {import("node:child_process").SpawnOptions} SpawnOptions */
@@ -38,7 +36,6 @@ const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer
 try {
   const manifest = await readVerifiedHostManifest(join(root, "packages/demo-sample"));
   const routes = authoringSiteRoutes(manifest.routes);
-  assert.deepEqual([...routes].sort(), [...HOSTED_SITE_ROUTES].sort(), "Studio artifact differs from its frozen production live-route data");
   const releaseRoot = join(temporaryRoot, "release");
   const assetsRoot = join(temporaryRoot, "assets");
   // The data root covers content, mappings, sitemaps and the workspace

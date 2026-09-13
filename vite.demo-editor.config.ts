@@ -1,8 +1,7 @@
 import { defineConfig, normalizePath, type InlineConfig, type Plugin } from "vite";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
-import { readFile, readdir, writeFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
 import preact from "@preact/preset-vite";
 import tailwindPlugin from "./plugins/tailwind-plugin.mjs";
 import componentPackPlugin from "./plugins/component-pack-plugin.mjs";
@@ -13,12 +12,11 @@ import { APP_ROOT, resolveFsAllow, resolveWorkspaceRoot } from "./plugins/roots.
 import { resolveComposerModules } from "./plugins/module-resolution.mjs";
 import { loadHostConfig } from "./server/host-context.mjs";
 import { createModuleEvaluator } from "./server/module-evaluator.mjs";
-import { serializeSiteProject } from "./src/site-project/model/canonical";
 import { validateSiteProject } from "./src/site-project/model/validation";
 import { prepareDemoAsset } from "./scripts/hosted-demo/prepare";
 import { ASSET_AUTHORING_URL_PATTERN, ASSET_CHECKSUM_URL_SOURCE, ASSET_CONTENT_TYPE_BY_EXTENSION, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_KINDS, ASSET_NOSNIFF, hostedAssetHeaders } from "./src/assets/model/asset-kinds.mjs";
-import { HOSTED_DEMO_HEADERS, HOSTED_DEMO_MANIFEST } from "./scripts/hosted-demo/artifact.mjs";
-import { readToolIdentity } from "./server/site-build/artifact.mjs";
+import { HOSTED_DEMO_HEADERS, DEMO_EDITOR_MANIFEST, DEMO_EDITOR_SEED, createDemoEditorManifest } from "./scripts/hosted-demo/artifact.mjs";
+import type { DemoEditorSeed } from "./scripts/hosted-demo/seed";
 
 export const DEMO_EDITOR_ENTRY = "src/hosted-demo/main.tsx";
 const VIRTUAL_MODULES = ["virtual:demo-editor-project", "virtual:hosted-demo-seed", "virtual:composer-file-provider-config", "virtual:composer-domain-providers", "virtual:release-config", "virtual:site-project-source"];
@@ -36,10 +34,11 @@ export async function resolveDemoEditorConfig(hostDir: string): Promise<InlineCo
   const validated = validateSiteProject(JSON.parse(await readFile(projectPath, "utf8")), { componentPack: pack.manifest });
   if (!validated.ok) throw new Error(`Demo editor project ${projectPath} is incompatible with ${settings.pack}:\n${validated.diagnostics.map((diagnostic) => `${diagnostic.path}: ${diagnostic.message}`).join("\n")}`);
   const project = validated.project;
-  const projectSourceRevision = createHash("sha256").update(serializeSiteProject(project)).digest("hex");
   const sourceRevision = execFileSync("git", ["rev-parse", "HEAD"], { cwd: APP_ROOT, encoding: "utf8" }).trim();
   if (!/^[a-f0-9]{40}$/.test(sourceRevision)) throw new Error("A full source Git revision is required.");
-  const seed = await prepareDemoAsset(paths.assets, { useHostCatalog: true });
+  const seed = await prepareDemoAsset(paths.assets);
+  const { name: hostId } = JSON.parse(await readFile(resolve(hostRoot, "package.json"), "utf8"));
+  const bundledSeed: DemoEditorSeed = { hostId, project, componentPack: pack.manifest, assets: seed.snapshot };
   const outDir = resolve(hostRoot, "dist-editor");
   const htmlEntryId = normalizePath(resolve(hostRoot, "index.html"));
 
@@ -63,6 +62,7 @@ export async function resolveDemoEditorConfig(hostDir: string): Promise<InlineCo
       if (id === "\0virtual:site-project-source") return 'export const siteProject = null; export const siteProjectRevision = null; export const deliverySource = {status:"no-active",message:"Disposable hosted demo has no local release server."}; export default siteProject;';
     },
     async generateBundle() {
+      this.emitFile({ type: "asset", fileName: DEMO_EDITOR_SEED, source: JSON.stringify(bundledSeed) + "\n" });
       this.emitFile({ type: "asset", fileName: HOSTED_DEMO_HEADERS, source: hostedAssetHeaders(seed.files.map((file) => ({ path: file.fileName, byteLength: file.source.byteLength }))) });
       const assetConfig = `self.__zudoAssetConfig = { checksumUrlPattern: new RegExp(${JSON.stringify(`^${ASSET_CHECKSUM_URL_SOURCE}$`)}), authoringUrlPattern: new RegExp(${JSON.stringify(ASSET_AUTHORING_URL_PATTERN.source)}), contentTypeByExtension: ${JSON.stringify(ASSET_CONTENT_TYPE_BY_EXTENSION)}, kindsByMime: ${JSON.stringify(ASSET_KINDS)}, immutableCacheControl: ${JSON.stringify(ASSET_IMMUTABLE_CACHE_CONTROL)}, nosniff: ${JSON.stringify(ASSET_NOSNIFF)} };\n`;
       const worker = new TextEncoder().encode(assetConfig + `const bundledAssetPaths = ${JSON.stringify(seed.files.map((file) => "/" + file.fileName))};\n` + await readFile(resolve(APP_ROOT, "scripts/hosted-demo/assets-worker.js"), "utf8"));
@@ -70,16 +70,8 @@ export async function resolveDemoEditorConfig(hostDir: string): Promise<InlineCo
       for (const file of seed.files) this.emitFile({ type: "asset", ...file });
     },
     async writeBundle() {
-      const assets: Record<string, string> = {};
-      async function walk(directory: string, prefix = "") {
-        for (const entry of await readdir(directory, { withFileTypes: true })) {
-          const name = prefix + entry.name;
-          if (entry.isDirectory()) await walk(resolve(directory, entry.name), name + "/");
-          else if (name !== HOSTED_DEMO_MANIFEST) assets[name] = createHash("sha256").update(await readFile(resolve(directory, entry.name))).digest("hex");
-        }
-      }
-      await walk(outDir);
-      await writeFile(resolve(outDir, HOSTED_DEMO_MANIFEST), JSON.stringify({ schemaVersion: 1, tool: await readToolIdentity(), sourceRevision, projectSourceRevision, mode: "disposable-hosted-demo", assets }, null, 2) + "\n");
+      const manifest = await createDemoEditorManifest({ directory: outDir, sourceRevision });
+      await writeFile(resolve(outDir, DEMO_EDITOR_MANIFEST), JSON.stringify(manifest, null, 2) + "\n");
     },
   };
 

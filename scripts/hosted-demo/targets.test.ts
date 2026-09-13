@@ -7,7 +7,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createSiteManifest, SITE_HEADERS, SITE_MANIFEST, siteHeaders, verifySiteStaticArtifact } from "../../server/site-build/artifact.mjs";
 import { createDocSiteManifest, DOC_SITE_MANIFEST, verifyDocSiteArtifact } from "./doc-site-artifact.mjs";
-import { DEFAULT_TARGET_KEY, HOSTED_DEMO_LIVE_ROUTES, TARGET_KEYS, TARGETS, resolveTarget } from "./targets.mjs";
+import { DEFAULT_TARGET_KEY, TARGET_KEYS, TARGETS, resolveTarget } from "./targets.mjs";
+
+import { demoEditorRoutes } from "../routes.mjs";
 
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
@@ -29,10 +31,13 @@ describe("hosted-demo deploy targets", () => {
     expect(resolveTarget("webshop")).toBe(TARGETS.webshop);
   });
 
-  it("gives the hosted composer demo its fixed authoring/sample route list", () => {
-    expect(TARGETS["zudo-composer"].liveRoutes({})).toBe(HOSTED_DEMO_LIVE_ROUTES);
-    expect(HOSTED_DEMO_LIVE_ROUTES).toContain("/composer");
-    expect(HOSTED_DEMO_LIVE_ROUTES).toContain("/review");
+  it("takes editor authoring and host routes from the verified editor manifest", () => {
+    const routes = demoEditorRoutes(["/", "/host-specific"]);
+    expect(TARGETS["zudo-composer"].liveRoutes({ routes })).toEqual(routes);
+    expect(routes).toContain("/composer");
+    expect(routes).toContain("/review");
+    expect(routes).toContain("/site/host-specific");
+    expect(() => TARGETS["zudo-composer"].liveRoutes({})).toThrow("routes must be an array");
   });
 
   it("reads a static demo site's live routes from its own manifest", () => {
