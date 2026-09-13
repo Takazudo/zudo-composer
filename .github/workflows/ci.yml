@@ -27,6 +27,9 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # Unit tests include an actual isolated package-install regression too.
+      - name: Expose pnpm to isolated hosts
+        run: node scripts/prepare-packed-pnpm.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm no-deploy:check
       - run: pnpm public:check
