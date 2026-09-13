@@ -37,7 +37,7 @@ jobs:
        github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # One production deploy at a time per target; the four targets are
+    # One production deploy at a time per target; the five targets are
     # independent Workers/domains and may roll out concurrently with each other.
     concurrency:
       group: hosted-demo-production-${{ matrix.target }}
@@ -58,6 +58,9 @@ jobs:
           - target: blog
             artifact_name: demo-site-blog
             dist_dir: packages/demo-blog/dist-site
+          - target: doc
+            artifact_name: doc-site
+            dist_dir: doc/dist
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:

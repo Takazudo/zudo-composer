@@ -15,7 +15,7 @@ import {
   rolloutIdentity,
   sortDeploymentsNewestFirst,
 } from "./deploy.mjs";
-import { TARGETS } from "./targets.mjs";
+import { TARGET_KEYS, TARGETS } from "./targets.mjs";
 import { sha256 } from "./artifact.mjs";
 
 const SOURCE_REVISION = "a".repeat(40);
@@ -306,6 +306,56 @@ describe("hosted demo deployment guard", () => {
     expect(rollback).toEqual(expect.arrayContaining(["--name", "zudo-composer-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
   });
 
+  it.each(TARGET_KEYS)("deploys %s against its own Worker, config and domain", async (key) => {
+    const target = TARGETS[key];
+    const fake = fakeRunner();
+    const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: [], assets: [] }));
+    const result = await deployHostedDemo({
+      target,
+      expectedSourceRevision: SOURCE_REVISION,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier,
+      retryDelaysMs: [],
+      delayImpl: async () => {},
+    });
+    expect(result.deployedVersionId).toBe(NEW_VERSION);
+    expect(liveVerifier).toHaveBeenCalledWith({
+      baseUrl: `https://${target.domain}`,
+      artifactDirectory: target.artifactDirectory,
+      expectedSourceRevision: SOURCE_REVISION,
+    });
+    const upload = fake.calls.find((args) => args[0] === "versions" && args[1] === "upload");
+    const activate = fake.calls.find((args) => args[0] === "versions" && args[1] === "deploy");
+    expect(upload).toEqual(expect.arrayContaining(["--config", target.configPath, "--name", target.workerName]));
+    expect(activate).toEqual(expect.arrayContaining(["--name", target.workerName, "--config", target.configPath]));
+  });
+
+  it.each([undefined, "short", `${SOURCE_REVISION}\n`])("requires the doc site's full expected source SHA before any Wrangler call: %j", async (expectedSourceRevision) => {
+    const fake = fakeRunner();
+    await expect(deployHostedDemo({
+      target: TARGETS.doc,
+      expectedSourceRevision,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+    })).rejects.toThrow(/full expected source Git SHA/);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it.each([undefined, "b".repeat(40)])("refuses an unpinned or mismatched doc artifact before any Wrangler call: %j", async (sourceRevision) => {
+    const fake = fakeRunner();
+    await expect(preflightDeployment({
+      target: TARGETS.doc,
+      expectedSourceRevision: SOURCE_REVISION,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: async ({ directory }) => ({ root: directory, manifest: { kind: "doc-site", sourceRevision }, files: [] }),
+    })).rejects.toThrow(/must record the expected source Git SHA/);
+    expect(fake.calls).toEqual([]);
+  });
+
   it.each([["existing", fakeRunner], ["first", firstDeployRunner]] as const)("passes multi-page hooks to the default live verifier for an %s deployment", async (_label, createRunner) => {
     const fake = createRunner();
     const bodies = {
@@ -347,12 +397,13 @@ describe("hosted demo deployment guard", () => {
     }
   });
 
-  it("creates a never-deployed target with wrangler deploy, binding its custom domain", async () => {
-    const target = TARGETS.webshop;
+  it.each(TARGET_KEYS)("creates a never-deployed %s target with wrangler deploy, binding its custom domain", async (key) => {
+    const target = TARGETS[key];
     const fake = firstDeployRunner();
     const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: ["/"], assets: [] }));
     const result = await deployHostedDemo({
       target,
+      expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
       runner: fake.runner,
       artifactVerifier: siteArtifactVerifier,
@@ -365,7 +416,7 @@ describe("hosted demo deployment guard", () => {
     // A brand-new hostname gets a longer live-check budget than a rollout onto an
     // existing domain, whose DNS is already in place.
     expect(liveVerifier).toHaveBeenCalledWith({
-      baseUrl: "https://zc-demo-shop.zudolab.dev",
+      baseUrl: `https://${target.domain}`,
       artifactDirectory: target.artifactDirectory,
       expectedSourceRevision: SOURCE_REVISION,
       retryDelaysMs: FIRST_DEPLOY_LIVE_RETRY_DELAYS_MS,
@@ -374,21 +425,23 @@ describe("hosted demo deployment guard", () => {
     // `versions upload` never applies a config's routes, so the bootstrap must be
     // a plain `deploy` — and there is nothing to roll back from "no Worker".
     const create = fake.calls.find((args) => args[0] === "deploy" && !args.includes("--dry-run"));
-    expect(create).toEqual(expect.arrayContaining(["--config", "wrangler.demo-shop.jsonc", "--name", "zudo-composer-demo-shop", "--assets", target.artifactDirectory]));
+    expect(create).toEqual(expect.arrayContaining(["--config", target.configPath, "--name", target.workerName, "--assets", target.artifactDirectory]));
     expect(fake.calls.some((args) => args[0] === "versions" && args[1] === "upload")).toBe(false);
     expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
   });
 
-  it("leaves a failed first deployment in place and says why no rollback happened", async () => {
+  it.each(TARGET_KEYS)("leaves a failed first %s deployment in place and says why no rollback happened", async (key) => {
+    const target = TARGETS[key];
     const fake = firstDeployRunner();
     await expect(deployHostedDemo({
-      target: TARGETS.webshop,
+      target,
+      expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
       runner: fake.runner,
       artifactVerifier: siteArtifactVerifier,
       liveVerifier: async () => { throw new Error("live route mismatch"); },
       retryDelaysMs: [],
-    })).rejects.toThrow(new RegExp(`live route mismatch; first zudo-composer-demo-shop deployment ${NEW_VERSION} stays active`));
+    })).rejects.toThrow(new RegExp(`live route mismatch; first ${target.workerName} deployment ${NEW_VERSION} stays active`));
     expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
   });
 

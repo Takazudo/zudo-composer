@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { HOSTED_DEMO_LIVE_ROUTES, verifyLiveDeployment, verifyLiveWithRetries, verifyNavigationHtml } from "./live-check.mjs";
 import { HOSTED_DEMO_HEADERS, expectedMime, verifyHostedDemoArtifact } from "./artifact.mjs";
 import { TARGETS } from "./targets.mjs";
+import { createDocSiteManifest, DOC_SITE_MANIFEST } from "./doc-site-artifact.mjs";
+import { startHostedDemoStaticServer } from "./static-server.mjs";
 import { SITE_HEADERS, SITE_MANIFEST, createSiteManifest, readToolIdentity, siteHeaders } from "../../server/site-build/artifact.mjs";
 import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition, hostedAssetHeaders } from "../../src/assets/model/asset-kinds.mjs";
 
@@ -415,6 +417,103 @@ describe("multi-page static site live verification", () => {
         expect((await proof).assets.some(({ path }) => path === zipPath)).toBe(true);
         expect(methods).toEqual(["GET", "HEAD"]);
       }
+    }
+  });
+});
+
+describe("doc-site live verification", () => {
+  it("uses doc routes and accepts Cloudflare's ICO/XML MIME alternatives", async () => {
+    const root = await mkdtemp(join(tmpdir(), "doc-site-live-check-"));
+    fixtures.push(root);
+    const contents: Record<string, Buffer> = {
+      "index.html": Buffer.from("<!doctype html><html><body>Home</body></html>\n"),
+      "docs/guide/index.html": Buffer.from("<!doctype html><html><body>Guide</body></html>\n"),
+      "x.html": Buffer.from("<!doctype html><html><body>Standalone</body></html>\n"),
+      "404.html": Buffer.from("<!doctype html><html><body>Not found</body></html>\n"),
+      "assets/site.css": Buffer.from("body { color: black; }\n"),
+      "assets/favicon.ico": Buffer.from("ico bytes"),
+      "sitemap.xml": Buffer.from("<urlset />\n"),
+    };
+    for (const [path, bytes] of Object.entries(contents)) {
+      await mkdir(join(root, path, ".."), { recursive: true });
+      await writeFile(join(root, path), bytes);
+    }
+    const manifest = await createDocSiteManifest({ directory: root, sourceRevision: SOURCE_REVISION });
+    await writeFile(join(root, DOC_SITE_MANIFEST), JSON.stringify(manifest));
+    const target = TARGETS.doc;
+    const routeFiles = Object.fromEntries(manifest.routes.map((route) => [route, target.routeFile!(route, manifest)]));
+    const requests: string[] = [];
+    const fetchImpl = async (input: URL | string, init?: RequestInit) => {
+      const url = new URL(input.toString());
+      requests.push(url.pathname);
+      if (url.pathname === `/${DOC_SITE_MANIFEST}`) return response(JSON.stringify(manifest), "application/json");
+      const path = url.pathname === "/404" ? "404.html" : routeFiles[url.pathname] ?? url.pathname.slice(1);
+      const bytes = contents[path];
+      if (!bytes) return response("missing", "text/plain", 404);
+      const navigation = new Headers(init?.headers).get("sec-fetch-mode") === "navigate";
+      const mime = navigation ? "text/html" : path.endsWith(".ico") ? "image/x-icon" : path.endsWith(".xml") ? "text/xml" : path.endsWith(".css") ? "text/css" : "text/html";
+      return response(bytes, mime);
+    };
+    const proof = await verifyLiveDeployment({
+      baseUrl: "https://zc-doc.zudolab.dev",
+      artifactDirectory: root,
+      expectedSourceRevision: SOURCE_REVISION,
+      manifestFileName: target.manifestFileName,
+      artifactVerifier: target.verifyArtifact,
+      liveRoutes: target.liveRoutes,
+      routeFile: target.routeFile,
+      assetUrl: target.assetUrl,
+      fetchImpl,
+    });
+    expect(proof.routes.map(({ path }) => path)).toEqual(["/", "/docs/guide/", "/x"]);
+    expect(proof.assets.map(({ path }) => path)).toEqual(["404.html", "assets/favicon.ico", "assets/site.css", "sitemap.xml", "x.html"]);
+    expect(requests.slice(0, 5)).toEqual([`/${DOC_SITE_MANIFEST}`, "/", "/docs/guide/", "/x", "/404"]);
+    expect(requests.slice(5).sort()).toEqual(["/assets/favicon.ico", "/assets/site.css", "/sitemap.xml", "/x"].sort());
+
+    // MIME aliases are an explicit allowlist, not permission to accept any
+    // label on correct bytes. Hash failures must still reject accepted labels.
+    for (const failure of ["mime", "bytes"]) {
+      await expect(verifyLiveDeployment({
+        baseUrl: "https://zc-doc.zudolab.dev", artifactDirectory: root,
+        manifestFileName: target.manifestFileName, artifactVerifier: target.verifyArtifact,
+        liveRoutes: target.liveRoutes, routeFile: target.routeFile, assetUrl: target.assetUrl,
+        fetchImpl: async (input, init) => new URL(input.toString()).pathname === "/sitemap.xml"
+          ? response(failure === "bytes" ? "changed" : contents["sitemap.xml"], failure === "mime" ? "text/plain" : "text/xml")
+          : fetchImpl(input, init),
+      })).rejects.toThrow(failure === "mime" ? /sitemap.xml.*expected.*application\/xml/ : /sitemap.xml.*SHA-256/);
+    }
+  });
+
+  it("verifies local docs without a revision through canonical HTML URLs and serves real 404 bytes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "doc-site-canonical-"));
+    fixtures.push(root);
+    const notFound = "<!doctype html><h1>Not found</h1>";
+    for (const [path, bytes] of Object.entries({ "index.html": "Home", "docs/guide/index.html": "Guide", "x.html": "Standalone", "404.html": notFound })) {
+      await mkdir(join(root, path, ".."), { recursive: true });
+      await writeFile(join(root, path), bytes);
+    }
+    await writeFile(join(root, DOC_SITE_MANIFEST), JSON.stringify(await createDocSiteManifest({ directory: root })));
+    const local = await startHostedDemoStaticServer({ directory: root, port: 0 });
+    const target = TARGETS.doc;
+    try {
+      const redirect = await fetch(`${local.url}/x.html`, { redirect: "manual" });
+      expect(redirect.status).toBeGreaterThanOrEqual(300);
+      expect(redirect.status).toBeLessThan(400);
+      expect(redirect.headers.get("location")).toBe("/x");
+      const proof = await verifyLiveDeployment({
+        baseUrl: local.url, artifactDirectory: root, manifestFileName: target.manifestFileName,
+        artifactVerifier: target.verifyArtifact, liveRoutes: target.liveRoutes, routeFile: target.routeFile, assetUrl: target.assetUrl,
+      });
+      expect(proof.manifest).not.toHaveProperty("sourceRevision");
+      expect(proof.routes.map(({ path }) => path)).toEqual(["/", "/docs/guide/", "/x"]);
+      expect(proof.assets.map(({ path }) => path)).toEqual(["404.html", "x.html"]);
+      for (const [path, status] of [["/404", 200], ["/nope", 404]] as const) {
+        const result = await fetch(`${local.url}${path}`);
+        expect(result.status).toBe(status);
+        expect(await result.text()).toBe(notFound);
+      }
+    } finally {
+      await local.close();
     }
   });
 });

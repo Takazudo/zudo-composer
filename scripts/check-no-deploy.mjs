@@ -3,7 +3,7 @@
 // local workflow/actions, shell wrappers and JS/TS imports/command arguments.
 // Cloudflare commands must have statically provable dry-run arguments; opaque
 // Cloudflare wrappers and SDK/API calls are deliberately rejected.
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, globSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
@@ -11,14 +11,40 @@ import { parse } from "yaml";
 import { discoverConsumerHosts } from "./check-consumer-boundary.mjs";
 
 const self = fileURLToPath(import.meta.url);
-const localEntries = ["check", "smoke:host-install", "packed-host:matrix", "consumer:boundary", "creator:check", "cms:check", "cms:regenerate", "public:check", "public:installed", "studio:check", "demo:build-sites", "demo:build-site", "site-static:verify"];
+const localEntries = ["check", "smoke:host-install", "packed-host:matrix", "consumer:boundary", "creator:check", "cms:check", "cms:regenerate", "public:check", "public:installed", "studio:check", "demo:build-sites", "demo:build-site", "site-static:verify", "doc:build-site", "doc:build", "doc:check"];
 const packageOperations = new Set(["install", "pack", "add", "remove", "rebuild"]);
-const localBinaries = new Set(["vite", "vitest", "tsc", "eslint", "playwright", "rollup", "zudo-composer"]);
+// zfb is a static site generator; it never talks to Cloudflare.
+const localBinaries = new Set(["vite", "vitest", "tsc", "eslint", "playwright", "rollup", "zudo-composer", "zfb"]);
 const shellBinaries = new Set(["sh", "bash", "zsh"]);
 const ordinaryBinaries = new Set(["git", "tar", "find", "echo", "printf", "test", "true", "false", "mkdir", "rm", "cp", "mv", "cat", "pwd", "chmod"]);
 const processNames = new Set(["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "run", "runCommand", "runInitCommand"]);
 const nativeProcessNames = new Set(["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync"]);
 const unknown = "<dynamic>";
+
+/**
+ * Read pnpm's workspace package globs and return every matching package
+ * manifest, including brace patterns and exclusions. Only inspect matching
+ * directories; dependencies and unrelated nested checkouts are not members.
+ *
+ * @param {string} root
+ * @returns {string[]}
+ */
+function discoverWorkspaceManifests(root) {
+  const workspaceFile = join(root, "pnpm-workspace.yaml");
+  if (!existsSync(workspaceFile)) return [];
+  const workspace = object(parse(readFileSync(workspaceFile, "utf8")));
+  const patterns = workspace.packages === undefined ? [] : workspace.packages;
+  if (!Array.isArray(patterns) || !patterns.every((pattern) => typeof pattern === "string" && pattern.length > 0)) {
+    throw new Error("No-deploy assertion: pnpm workspace packages must be an array of nonempty glob strings");
+  }
+  /** @param {string[]} entries */
+  const expand = (entries) => globSync(entries.map((pattern) => `${pattern.replace(/\/+$/u, "")}/package.json`), {
+    cwd: root, exclude: (path) => path.split(/[/\\]/u).some((part) => ["node_modules", ".git", "bower_components"].includes(part)),
+  }).map((manifest) => resolve(root, manifest));
+  const included = expand(patterns.filter((pattern) => !pattern.startsWith("!")));
+  const excluded = new Set(expand(patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => pattern.slice(1))));
+  return [...new Set(included)].filter((manifest) => !excluded.has(manifest)).sort();
+}
 
 /** @param {unknown} value @returns {Record<string, any>} */
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -69,6 +95,16 @@ export function checkNoDeploy({ root = resolve(import.meta.dirname, ".."), entri
     }
   }
   for (const host of hostRoots) manifests.set(resolve(host), JSON.parse(readFileSync(join(host, "package.json"), "utf8")));
+  // Keep the existing package/fixture command discovery above, but include
+  // every pnpm workspace member when following lifecycle hooks. Documentation
+  // is a workspace package without a consumer-host role, so its ordinary
+  // development scripts are not treated as repository validation entries.
+  const lifecycleOnlyManifests = new Set();
+  for (const manifest of discoverWorkspaceManifests(root)) {
+    const directory = dirname(manifest);
+    if (!manifests.has(directory)) lifecycleOnlyManifests.add(directory);
+    manifests.set(directory, object(JSON.parse(readFileSync(manifest, "utf8"))));
+  }
   const visitedScripts = new Set(), visitedSources = new Set(), visitedWorkflows = new Set();
   const commands = new Set();
   let inlineSequence = 0;
@@ -475,7 +511,9 @@ export function checkNoDeploy({ root = resolve(import.meta.dirname, ".."), entri
   }
 
   for (const name of entries) script(root, name, "local installed-host validation");
-  for (const [directory, manifest] of manifests) if (directory !== root) for (const name of Object.keys(object(manifest.scripts))) script(directory, name, "discovered host commands");
+  for (const [directory, manifest] of manifests) if (directory !== root && !lifecycleOnlyManifests.has(directory)) {
+    for (const name of Object.keys(object(manifest.scripts))) script(directory, name, "discovered host commands");
+  }
   const workflows = join(root, ".github/workflows");
   if (existsSync(workflows)) for (const file of readdirSync(workflows)) {
     if (/\.ya?ml$/u.test(file) && file !== "hosted-demo-deploy.yml") workflow(join(workflows, file));

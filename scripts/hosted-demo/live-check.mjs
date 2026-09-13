@@ -44,10 +44,10 @@ async function fetchWithTimeout(fetchImpl, url, timeoutMs, headers = {}, deadlin
   });
 }
 
-/** @param {URL} url @param {string} sourceRevision @returns {URL} */
+/** @param {URL} url @param {string | undefined} sourceRevision @returns {URL} */
 function cacheBusted(url, sourceRevision) {
   const result = new URL(url);
-  result.searchParams.set("hosted-demo-revision", sourceRevision);
+  if (sourceRevision !== undefined) result.searchParams.set("hosted-demo-revision", sourceRevision);
   return result;
 }
 
@@ -105,6 +105,12 @@ export async function verifyLiveDeployment({
 
   const filesByPath = new Map(artifact.files.map((file) => [file.path, file]));
   assert.ok(filesByPath.has("index.html"), "Deploy artifact must include index.html");
+  /** @param {import("./targets.mjs").TargetFile} file @param {string} context @param {Response} response */
+  function assertMime(file, context, response) {
+    const acceptedMimes = [...new Set([file.mime, ...(file.acceptedMimes ?? [])])];
+    const actualMime = responseMime(response);
+    assert.ok(acceptedMimes.includes(actualMime), `${context}: expected ${acceptedMimes.join(" or ")}, received ${actualMime || "no Content-Type"}`);
+  }
   /** @type {Set<string>} */
   const verifiedRouteFiles = new Set();
   const routeResults = await Promise.all(liveRoutes(artifact.manifest).map(async (route) => {
@@ -124,7 +130,7 @@ export async function verifyLiveDeployment({
     } catch (error) {
       throw new Error(`${route}: navigation HTML does not match ${file.path}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
-    assert.equal(responseMime(response), file.mime, `${route}: expected ${file.mime}, received ${responseMime(response) || "no Content-Type"}`);
+    assertMime(file, route, response);
     verifiedRouteFiles.add(file.path);
     return { path: route, sha256: file.sha256, mime: file.mime, ...navigationProof };
   }));
@@ -142,7 +148,7 @@ export async function verifyLiveDeployment({
     assert.ok(response.ok, `/${file.path}: expected HTTP 2xx, received ${response.status}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.equal(sha256(bytes), file.sha256, `/${file.path}: response SHA-256 does not match the built artifact`);
-    assert.equal(responseMime(response), file.mime, `/${file.path}: expected ${file.mime}, received ${responseMime(response) || "no Content-Type"}`);
+    assertMime(file, `/${file.path}`, response);
     if (ASSET_CHECKSUM_URL_PATTERN.test(`/${file.path}`)) {
       const checksum = file.path.slice("uploaded-assets/sha256-".length, file.path.lastIndexOf("."));
       assert.equal(response.headers.get("cache-control"), ASSET_IMMUTABLE_CACHE_CONTROL, `/${file.path}: immutable cache policy is missing`);
@@ -226,5 +232,5 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     assetUrl: target.assetUrl,
     onRetry: ({ attempt, delayMs, error }) => console.warn(`${target.workerName} live check attempt ${attempt} failed (${error.message}); retrying in ${delayMs}ms.`),
   });
-  console.log(`${target.workerName} live check passed at ${baseUrl}: ${proof.routes.length} routes and ${proof.assets.length} assets matched source ${proof.manifest.sourceRevision}.`);
+  console.log(`${target.workerName} live check passed at ${baseUrl}: ${proof.routes.length} routes and ${proof.assets.length} assets matched${proof.manifest.sourceRevision === undefined ? "" : ` source ${proof.manifest.sourceRevision}`}.`);
 }
