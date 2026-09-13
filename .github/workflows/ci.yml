@@ -47,6 +47,8 @@ jobs:
       - run: pnpm test:browser:dev
         env:
           CI: true
+      # Browser lanes verify these artifacts and never rebuild them.
+      - run: pnpm demo:build-sites
       - run: pnpm test:browser:site-project
       - run: pnpm build:hosted-demo
       - run: pnpm hosted-demo:verify dist-hosted-demo "${{ github.sha }}"

@@ -1,10 +1,7 @@
 // @ts-check
 
-// Consumers must be usable without the repository around them. The temporary
-// ledger names exact violations (including their occurrence counts), not file
-// exemptions or patterns. Remove entries as their owning issues fix them; do
-// not regenerate the ledger to accept new coupling. Line numbers deliberately
-// are not identities, so unrelated edits do not churn the ledger.
+// Consumers must be usable without the repository around them. The retired
+// violation ledger must remain empty: no entry can authorize source coupling.
 //
 // With no arguments, discover demo-* and any package under packages/ or
 // fixtures/ with a host config or a direct
@@ -38,13 +35,7 @@ const authoringPackages = new Map([
   ['@zudo-composer/component-contract', 'packages/component-contract/package.json'],
   ['@zudo-composer/fixture-themeset', 'packages/fixture-themeset/package.json'],
 ]);
-const rules = new Set([
-  'outside-host-path', 'outside-host-import', 'dependency-protocol', 'workspace-command',
-  'repository-import', 'undeclared-package', 'computed-import', 'outside-host-symlink',
-]);
-
 /** @typedef {{host: string, file: string, rule: string, detail: string, count: number}} Violation */
-/** @typedef {Violation & {issue: number}} LedgerEntry */
 /** @param {unknown} value @returns {Record<string, unknown>} */
 function object(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? /** @type {Record<string, unknown>} */ (value) : {};
@@ -410,31 +401,8 @@ export function scanConsumerHost({ root, hostRoot }) {
 /** @param {Violation[]} violations @param {unknown} ledger */
 export function checkConsumerLedger(violations, ledger) {
   if (!Array.isArray(ledger)) throw new Error('Consumer boundary ledger must be an array.');
-  /** @type {Map<string, LedgerEntry>} */
-  const entries = new Map();
-  for (const value of ledger) {
-    const entry = object(value);
-    if (Object.keys(entry).sort().join(',') !== 'count,detail,file,host,issue,rule'
-      || !['host', 'file', 'rule', 'detail'].every((key) => typeof entry[key] === 'string' && entry[key].length > 0)
-      || !Number.isSafeInteger(entry.count) || Number(entry.count) < 1
-      || !Number.isSafeInteger(entry.issue) || Number(entry.issue) < 1
-      || !rules.has(String(entry.rule))) throw new Error(`Invalid consumer boundary ledger entry: ${JSON.stringify(value)}`);
-    const typed = /** @type {LedgerEntry} */ (entry);
-    for (const name of [typed.host, typed.file]) {
-      if (slash(name) !== name || path.posix.isAbsolute(name) || name.split('/').includes('..') || path.posix.normalize(name) !== name) throw new Error(`Non-canonical ledger path: ${name}`);
-    }
-    const key = identity(typed);
-    if (entries.has(key)) throw new Error(`Duplicate consumer boundary ledger entry: ${key}`);
-    entries.set(key, typed);
-  }
-  const actual = new Map(violations.map((entry) => [identity(entry), entry]));
-  const unexpected = violations.filter((entry) => !entries.has(identity(entry)));
-  const stale = [...entries.values()].filter((entry) => !actual.has(identity(entry)));
-  const counts = violations.flatMap((entry) => {
-    const expected = entries.get(identity(entry));
-    return expected && expected.count !== entry.count ? [{ ...entry, expected: expected.count, issue: expected.issue }] : [];
-  });
-  return { ok: unexpected.length === 0 && stale.length === 0 && counts.length === 0, unexpected, stale, counts, remaining: entries.size };
+  if (ledger.length !== 0) throw new Error('Consumer boundary ledger must be empty; violations cannot be grandfathered.');
+  return { ok: violations.length === 0, unexpected: violations, remaining: 0 };
 }
 
 /** @param {string[]} args */
@@ -459,9 +427,7 @@ export function runConsumerBoundary(args) {
   if (!result.ok) {
     console.error('Consumer boundary scan failed:');
     for (const entry of result.unexpected) console.error(`- NEW ${entry.host}/${entry.file}: ${entry.rule} (${entry.detail}) [${entry.count} occurrences]`);
-    for (const entry of result.stale) console.error(`- STALE ${entry.host}/${entry.file}: ${entry.rule} (${entry.detail}); remove the ledger entry owned by issue ${entry.issue}.`);
-    for (const entry of result.counts) console.error(`- COUNT ${entry.host}/${entry.file}: ${entry.rule} (${entry.detail}); ledger ${entry.expected}, found ${entry.count} (issue ${entry.issue}).`);
-  } else console.log('Consumer boundary scan passed: the known-violation ledger matches exactly.');
+  } else console.log('Consumer boundary scan passed: zero violations and an empty ledger.');
   return result.ok ? 0 : 1;
 }
 

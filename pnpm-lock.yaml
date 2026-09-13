@@ -117,6 +117,9 @@ importers:
       '@zudo-composer/component-contract':
         specifier: workspace:*
         version: link:../../packages/component-contract
+      '@zudo-sg/ui':
+        specifier: git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf
+        version: https://codeload.github.com/Takazudo/zudo-sg/tar.gz/6b0826cdaa14d9888e58c795ee015f70e2c5cbdf(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)
       preact:
         specifier: ^10.29.8
         version: 10.29.8(preact-render-to-string@6.7.0)

@@ -30,15 +30,16 @@ tool. Never copy provider components or add a fallback registry. `@zudo-sg/ui`
 is otherwise an ordinary component pack — any themeset that satisfies the same
 contract is interchangeable with it.
 
-Exact routes are `/`, `/composer`, same-origin `/composer/preview`, `/content`,
-`/mapping`, `/sitemapper`, `/assets`, and the sample SiteProject delivery routes
-`/site`, `/site/about`, `/site/services`, `/site/journal`,
-`/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
-and `/site/journal/start-with-the-question`; emitted files live under
-`/assets/`, while committed images and PDFs from this repository's own
-`publicAssetsDir` are delivered under `/uploaded-assets/`. Upload authoring
-remains dev-only. Keep Vite base `/` and the preview graph isolated from a
-consuming host project and its file-provider plumbing.
+The tool's authoring routes are `/`, `/composer`, same-origin
+`/composer/preview`, `/content`, `/mapping`, `/sitemapper`, and `/assets`.
+An activated host site is delivered under `/site`; each static site's own routes
+come from its verified `dist-site/site-manifest.json`. Only Sample Studio's
+hosted Composer production target uses frozen route data in
+`packages/demo-studio/hosted-routes.mjs`, checked against the Studio artifact.
+Emitted files live under `/assets/`, and committed images and PDFs from the
+host's `publicAssetsDir` are delivered under `/uploaded-assets/`. Upload
+authoring remains dev-only. Keep Vite base `/` and the preview graph isolated
+from a consuming host project and its file-provider plumbing.
 
 The SiteProject operator/API guide is [`docs/site-project.md`](./docs/site-project.md).
 It is the source for provider-scoped graph, whole-project apply, active
@@ -113,11 +114,16 @@ relationship for the external UI-provider dependency.
 - Contract handoff: `corepack pnpm contract:conformance`, `corepack pnpm
   contract:negative-scan`, and `corepack pnpm contract:external-install --
   --exact`.
+- Browser preparation: `corepack pnpm demo:build-sites` discovers and builds
+  all host artifacts before the SiteProject and demos browser lanes; stale
+  artifacts fail their read-only verification.
 - Browser lanes: `corepack pnpm test:browser:host`, `corepack pnpm
   test:browser:dev`, `corepack pnpm test:browser:site-project`, and `corepack
   pnpm test:browser:demos` (port 4176, the three `packages/demo-*` hosts). Each
   owns one machine-global port, so none may run concurrently, and no lane may
   rebuild.
+- Consumer boundary: the ledger must contain zero entries. Scan actual creator
+  templates and complete generated output before packed dependency rewriting.
 - Host install: `corepack pnpm smoke:host-install` packs the tool and contract,
   then proves all disk-discovered package hosts, freshly generated creator
   output and the synthesized fixture outside this repository. CI uses one

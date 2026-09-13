@@ -32,7 +32,7 @@ unpublished-package preview, and which generated files to commit.
 
 ## Routes and assets
 
-The Vite application has base `/` and these exact SPA routes:
+The authoring tool has Vite base `/` and these exact routes:
 
 - `/` — standalone product landing page
 - `/composer` — Composer library and editor
@@ -41,12 +41,14 @@ The Vite application has base `/` and these exact SPA routes:
 - `/mapping` — Content-to-Composition Mapping authoring
 - `/sitemapper` — Sitemapper library and editor
 - `/assets` — Assets library and upload/delivery status
-- `/site` — bundled/published sample home
-- `/site/about`, `/site/services`, `/site/journal` — canonical nested sample pages
-- `/site/journal/map-the-moving-parts`, `/site/journal/review-in-small-loops`,
-  `/site/journal/start-with-the-question` — compiler-emitted Entry routes
 - `/assets/` — emitted JavaScript, CSS, and the single focused render WASM/glue
 - `/uploaded-assets/` — committed images and PDFs from the host's `publicAssetsDir`
+
+A host's activated SiteProject is delivered under `/site`; its static website
+uses the same routes at `/`. Route assertions come from the host's verified
+`dist-site/site-manifest.json`, including pages emitted from collection entries.
+Sample Studio's frozen hosted Composer route data lives in
+`packages/demo-studio/hosted-routes.mjs` and is checked against its artifact.
 
 The preview route is an implementation boundary, not an independent public
 product. Build-emitted assets remain rooted at `/assets/`, while committed assets
@@ -80,15 +82,17 @@ needed, click a demo thumbnail to inspect it, then click **Preview**.
 
 ## Demo host projects
 
-`packages/demo-webshop`, `packages/demo-landing` and `packages/demo-blog` are
-three complete host projects, each with its own component pack and Tailwind
-theme, kept as workspace members so the tool is exercised the way a real host
+`packages/demo-studio`, `packages/demo-webshop`, `packages/demo-landing` and
+`packages/demo-blog` are four complete host projects. Studio installs the pinned
+provider; the other three own their component packs and Tailwind themes. They
+are kept as workspace members so the tool is exercised the way a real host
 exercises it. Each host runs the installed `zudo-composer` commands directly.
 Full authoring and gate-wiring details are in
 [`docs/demo-sites/README.md`](./docs/demo-sites/README.md).
 
 | Package | Site | Hosted domain | Local dev port |
 | --- | --- | --- | --- |
+| `packages/demo-studio` | Sample Studio | hosted Composer sample | 4184 |
 | `packages/demo-webshop` | Nightjar Supply | `zc-demo-shop.zudolab.dev` | 4181 |
 | `packages/demo-landing` | Orrery | `zc-demo-landing.zudolab.dev` | 4182 |
 | `packages/demo-blog` | Margin Notes | `zc-demo-blog.zudolab.dev` | 4183 |
@@ -118,6 +122,10 @@ pnpm add -D \
   "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
   "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#b66d52bb273a10010485efb2d06f80cee8001bd6"
 ```
+
+Replace `<commit>` with a full 40-character tool commit. This consumer install
+reference is separate from the permanent provider and contract identities;
+abbreviated hashes remain forbidden in handoff documentation.
 
 The host also declares the package its `pack` comes from. A pack is resolved
 from the HOST root, and a release attests the dependency spec the host used, so
@@ -327,6 +335,16 @@ Run it with the other browser lanes stopped.
 corepack pnpm check
 ```
 
+`consumer:boundary` scans all discovered repository hosts and the creator's
+verbatim templates with their generated configuration. The violation ledger
+must be empty; any new coupling fails. The packed creator lane also scans the
+complete newly generated output before replacing dependencies with tarballs.
+
+Each host's `pnpm test` owns its imagery count and per-file checks. Studio keeps
+its original project with no host images; its five optional repository Assets
+seed images are checked centrally alongside the 8 MiB combined source-image
+budget. Adding another host automatically includes its imagery in that budget.
+
 The provider boundary is split in two. `provider:boundary` checks the manifest
 spec, the lockfile resolution and the parity between the installed pack's
 generated component list and its sidecars — none of which needs a build, so it
@@ -342,9 +360,16 @@ corepack pnpm contract:negative-scan
 corepack pnpm contract:external-install -- --exact
 corepack pnpm test:browser:host
 corepack pnpm test:browser:dev
+corepack pnpm demo:build-sites
 corepack pnpm test:browser:site-project
 corepack pnpm test:browser:demos
 ```
+
+`corepack pnpm demo:build-sites` discovers and builds all host artifacts before
+the SiteProject and demos browser lanes. Each lane verifies artifact checksums,
+the current project and tool identity, and sitemap route parity before crawling
+`manifest.routes`; stale artifacts fail with a preparation instruction. Browser
+lanes never rebuild.
 
 Each lane owns one port and one server, so none of them may run concurrently:
 
@@ -359,7 +384,7 @@ Each lane owns one port and one server, so none of them may run concurrently:
 disposable host-local root and seeds its release under a separate temporary
 root, so the lane never dirties committed CMS data or a developer's own
 release. It boots `zudo-composer dev` for that one package, crawls every route
-the sitemap compiles to, and runs its one mock interaction (see [Demo host
+its verified artifact declares, and runs its one mock interaction (see [Demo host
 projects](#demo-host-projects)) before moving to the next demo.
 
 The host lane is the one that runs the package the way a host does — through its

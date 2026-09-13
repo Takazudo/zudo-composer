@@ -1,7 +1,7 @@
 # Demo sites
 
 zudo-composer is an installable authoring tool; a website built with it is a
-**host project**. The three demo sites under `packages/demo-*` are such host
+**host project**. The four demo sites under `packages/demo-*` are such host
 projects kept as workspace members of this repository, so the tool is exercised
 the way a real host exercises it — through its `bin`, its `zudo-composer/config`
 subpath and a host-owned component pack — without any of them leaking into the
@@ -13,12 +13,21 @@ published package.
 | `packages/demo-landing` | `zc-demo-landing.zudolab.dev` | `land-` | 4182 |
 | `packages/demo-blog` | `zc-demo-blog.zudolab.dev` | `blog-` | 4183 |
 
+Sample Studio is the fourth symmetric host, `packages/demo-studio`. It uses
+the exact installed `@zudo-sg/ui` provider and preserves the original project
+JSON. The original contains no host-owned images: its provider placeholder is
+separate from the five optional Studio image rows in the repository Assets seed.
+Webshop, Landing and Blog assert their 16, 6 and 10 images in their own `pnpm test`
+suites, including metadata, encoding and the 250 KiB file limit. The central
+imagery test retains those Studio seed rows and the 8 MiB combined source budget,
+discovering every host's manifest automatically.
+
 Generation, asset import, and release commands are provided directly by the
 installed `zudo-composer` tool in each host.
 
 ## What a demo package is
 
-Each demo is a complete host in the **self-reference** pack shape
+Webshop, Landing and Blog are complete hosts in the **self-reference** pack shape
 (`fixtures/self-host` is the minimal model; README section "Component packs and
 themesets" explains the rule):
 
@@ -206,11 +215,10 @@ export default site;
 package's committed `cms/` tree to a disposable host-local data root and seeds
 its release under a separate temporary root. It boots that package's own
 `zudo-composer dev` on port 4176, so the lane never dirties the committed CMS
-or a developer's own release, and crawls every route
-`server/site-build/compile.ts`'s `compileStaticSite` compiles the package's
-`site-project.json` to (the same compiler the static build uses, so the route
-list can never drift from what a route actually resolves to). For each route
-it checks: 200 on direct navigation and after a reload, an `h1`, and zero
+or a developer's own release, and crawls every route from its verified
+`dist-site/site-manifest.json`. The read-only check also compiles the current
+project and requires matching source identity, routes and pinned asset bytes.
+For each route it checks: 200 on direct navigation and after a reload, an `h1`, and zero
 console errors or failed requests across the whole crawl
 (`tests/runtime-failures.ts`). It also checks no horizontal overflow and a
 tappable (≥44px) primary nav at 375×812, and runs one mock interaction per
@@ -219,6 +227,21 @@ toggles yearly billing and checks a tier price changes; blog submits a
 comment and checks it appears with a success message. One demo at a time,
 like every other lane in this repository — this one owns port 4176 and none
 of the lanes may run concurrently.
+
+Before either the SiteProject or demos browser lane, prepare all discovered
+host artifacts from the repository root:
+
+```sh
+corepack pnpm demo:build-sites
+corepack pnpm test:browser:site-project
+corepack pnpm test:browser:demos
+```
+
+The lanes read `manifest.routes` only after verifying every artifact file and
+matching the current source, assets, tool identity and compiled sitemap. They
+never rebuild; changing one host's sitemap requires preparing its new artifact,
+with no central route-list edit. The production hosted Composer target keeps
+Studio's separate frozen route data, verified for parity with the Studio artifact.
 
 ## Static website build
 

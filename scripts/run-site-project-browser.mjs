@@ -3,6 +3,9 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { authoringSiteRoutes, readVerifiedHostManifest } from "./host-site-routes.mjs";
+import { HOSTED_SITE_ROUTES } from "../packages/demo-studio/hosted-routes.mjs";
+import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 
 /** @typedef {import("node:child_process").SpawnOptions} SpawnOptions */
@@ -33,6 +36,9 @@ function run(command, args, { input, ...options } = {}) {
 // a symlinked ancestor (e.g. macOS `os.tmpdir()` -> `/private/var/folders/...`).
 const temporaryRoot = await realpath(await mkdtemp(join(tmpdir(), "zudo-composer-site-project-browser-")));
 try {
+  const manifest = await readVerifiedHostManifest(join(root, "packages/demo-studio"));
+  const routes = authoringSiteRoutes(manifest.routes);
+  assert.deepEqual([...routes].sort(), [...HOSTED_SITE_ROUTES].sort(), "Studio artifact differs from its frozen production live-route data");
   const releaseRoot = join(temporaryRoot, "release");
   const assetsRoot = join(temporaryRoot, "assets");
   // The data root covers content, mappings, sitemaps and the workspace
@@ -40,7 +46,7 @@ try {
   // `cms/`, which both leaves state behind and makes the run order matter.
   const dataRoot = join(temporaryRoot, "data");
   await Promise.all([mkdir(releaseRoot), mkdir(assetsRoot), mkdir(dataRoot)]);
-  const environment = { ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_ASSETS_STORE_ROOT: assetsRoot, ZUDO_DATA_ROOT: dataRoot };
+  const environment = { SITE_PROJECT_LANE_ROUTES: JSON.stringify(routes), ZUDO_SITE_PROJECT_ROOT: releaseRoot, ZUDO_ASSETS_STORE_ROOT: assetsRoot, ZUDO_DATA_ROOT: dataRoot };
   const seeded = await run(process.execPath, [join(root, "bin/zudo-composer.mjs"), "seed", "--from", join(root, "packages/demo-studio/site-project.json")], {
     env: { ...process.env, ...environment },
   });

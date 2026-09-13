@@ -126,6 +126,18 @@ it("produces a complete portable starter through canonical writers and reopens i
     expect(invocationOrder).toEqual(["install", "generate", "assets import images-src/manifest.json", "seed --ready-workspace"]);
     expect(scanConsumerHost({ root: target, hostRoot: target })).toEqual([]);
     for (const path of inventory) expect(await readFile(join(target, path))).toEqual(await readFile(join(host, path)));
+    // The complete, freshly initialized output is scanned before any packed
+    // dependency rewrite. Plant violations in that actual canonical tree.
+    for (const [file, source] of [
+      ["injected.ts", "import '../../src/private';"],
+      ["injected.css", "@import '@zudo-sg/ui/styles/composer.css';"],
+      ["injected.json", '{"dependencies":{"hidden":"file:../tool"}}'],
+    ]) {
+      await writeFile(join(target, file), source);
+      await expect(promisify(execFile)(process.execPath, [join(APP_ROOT, "scripts/check-creator.mjs"), "--host", target], { timeout: 15_000 }))
+        .rejects.toThrow("Creator consumer boundary failed");
+      await rm(join(target, file));
+    }
     for (const path of ["pnpm-lock.yaml", "node_modules", ".zudo-site-project"]) await expect(lstat(join(target, path))).rejects.toMatchObject({ code: "ENOENT" });
     concurrent.target = join(root, "concurrent-target");
     await expect(initHostProject({ ...initOptions, target: concurrent.target }, { run })).rejects.toThrow("existing path was preserved");

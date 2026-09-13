@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
-import { AUTHORING_ROUTES, SITE_ROUTES, SPA_ROUTES } from "./routes.mjs";
+import { AUTHORING_ROUTES } from "./routes.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 /** @param {string} path */
@@ -21,17 +21,10 @@ const browserRunner = read("scripts/run-site-project-browser.mjs");
 const browserConfig = read("playwright.site-project.config.ts");
 
 assert.deepEqual(AUTHORING_ROUTES, ["/", "/composer", "/composer/preview", "/content", "/mapping", "/sitemapper", "/assets"]);
-assert.deepEqual(SITE_ROUTES, [
-  "/site",
-  "/site/about",
-  "/site/services",
-  "/site/journal",
-  "/site/journal/map-the-moving-parts",
-  "/site/journal/review-in-small-loops",
-  "/site/journal/start-with-the-question",
-]);
-assert.deepEqual(SPA_ROUTES, [...AUTHORING_ROUTES, ...SITE_ROUTES]);
-for (const route of SITE_ROUTES) assert.ok(browser.includes(`"${route}"`) || browser.includes(`'${route}'`), `browser proof is missing ${route}`);
+assert.ok(browser.includes("process.env.SITE_PROJECT_LANE_ROUTES"), "browser proof must consume the runner's verified artifact routes");
+assert.ok(browser.includes("for (const route of SITE_ROUTES)"), "browser proof must crawl every manifest route");
+assert.ok(browserRunner.includes("readVerifiedHostManifest"), "browser runner must verify the host artifact before using its routes");
+assert.ok(read("scripts/run-demos-browser.mjs").includes("readVerifiedHostManifest"), "demo browser runner must use verified artifacts too");
 assert.ok(browser.includes("page.reload()"), "browser proof must include direct-refresh assertions");
 // Both lanes share one watcher now, so the proof is that the spec uses it and
 // that the watcher still watches both channels.
@@ -150,4 +143,4 @@ for (const file of ["README.md", "CLAUDE.md", "docs/site-project.md"]) {
   assert.match(document, /diagnostic/i, `${file} must explain diagnostics`);
 }
 
-console.log("SiteProject boundary passed: exact routes, activated local source, disposable state, and browser proofs are wired.");
+console.log("SiteProject boundary passed: authoring contract and verified host routes, activated local source, disposable state, and browser proofs are wired.");

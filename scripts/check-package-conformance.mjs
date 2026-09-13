@@ -5,6 +5,7 @@ import { access, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertPackedConsumerBoundary } from './package-host-boundary.mjs';
 import { CONTRACT_IDENTITY_ENTRIES } from '../server/site-project-local/contract-entries.mjs';
 
 const execFile = promisify(execFileCallback);
@@ -164,25 +165,7 @@ try {
 }
 const rootPackedPaths = new Set((rootPackedMetadata.files ?? []).map((entry) => entry.path));
 
-// The repository keeps demo hosts beside the installable tool, but none of
-// those host packages belong in its archive. Discover configured demo hosts so
-// this exclusion follows a newly added host without carrying a deleted helper
-// package name in the conformance rule.
-const demoHostRoots = [];
-for (const entry of await readdir(path.join(repositoryRoot, 'packages'), { withFileTypes: true })) {
-  if (!entry.isDirectory() || !entry.name.startsWith('demo-')) continue;
-  const packageRoot = path.join(repositoryRoot, 'packages', entry.name);
-  let children;
-  try {
-    await access(path.join(packageRoot, 'package.json'));
-    children = await readdir(packageRoot, { withFileTypes: true });
-  } catch {
-    continue;
-  }
-  if (children.some((child) => /^zudo-composer\.config\.(?:ts|mts|js|mjs|cts|cjs)$/u.test(child.name))) {
-    demoHostRoots.push(`packages/${entry.name}/`);
-  }
-}
+assertPackedConsumerBoundary(rootPackedPaths, repositoryRoot);
 
 // Every `exports` and `bin` target, resolved against what actually ships.
 const exportTargets = Object.values(expectedRootExports).flatMap((entry) => (typeof entry === 'string' ? [entry] : Object.values(entry)));
@@ -249,8 +232,6 @@ for (const packed of rootPackedPaths) {
   assert(!/(?:^|\/)test-support\//u.test(packed), `packed archive exposes test support: ${packed}`);
   assert(!/\.test\./u.test(packed), `packed archive exposes a test file: ${packed}`);
   assert(!packed.startsWith('src/test/'), `packed archive exposes test helpers: ${packed}`);
-  assert(!packed.startsWith('fixtures/'), `packed archive exposes the host fixture: ${packed}`);
-  assert(!demoHostRoots.some((root) => packed.startsWith(root)), `packed archive exposes a demo host package: ${packed}`);
   assert(!packed.startsWith('tests/'), `packed archive exposes browser tests: ${packed}`);
   assert(!/^playwright[.a-z-]*\.config\.ts$/u.test(packed), `packed archive exposes Playwright configuration: ${packed}`);
   assert(!packed.startsWith('scripts/'), `packed archive exposes repository scripts: ${packed}`);

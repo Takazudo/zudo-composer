@@ -52,6 +52,10 @@ For each host, the runner:
    the host project and installed tool identities. Only then may `dist-site`
    join `node_modules`, `cms`, `public` and `.zudo-site-project` as writable
    top-level paths. Any other newly created host path fails confinement.
+6. Restarts the activated host and crawls every verified `manifest.routes` entry
+   under `/site`, fetching HTML explicitly and requiring a rendered heading on
+   both direct navigation and refresh, with no not-found page or runtime errors.
+   Studio's manifest also matches its host-owned frozen production route data.
 
 Consumer commands receive an environment with inherited Composer roots, Node
 loaders/module paths, production-only install settings and package-manager
@@ -71,8 +75,9 @@ The full command also creates a separate launcher project, installs the two
 tarballs there, and invokes its actual installed `zudo-composer init` with
 paired `--tool-tarball` and `--contract-tarball`. `check-creator --host` verifies
 the pristine output's current version references, full required inventory and
-strict consumer boundary before any dependency rewrite. Retained output must
-have real canonical ready CMS, no installed dependencies, no activated release,
+strict consumer boundary before any dependency rewrite. The repository ledger
+must be empty, and no template or generated-path exemption is allowed. Retained
+output must have real canonical ready CMS, no installed dependencies, no activated release,
 no archive and no temporary lockfile or override.
 
 The common runner copies that real output to another external directory and

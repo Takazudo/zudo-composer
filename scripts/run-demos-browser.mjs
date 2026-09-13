@@ -19,6 +19,7 @@ import { basename, isAbsolute, join, posix, relative, resolve, sep } from "node:
 import { tmpdir } from "node:os";
 import { loadHostConfig } from "../server/host-context.mjs";
 import { resolveWorkspaceRegistryRoot } from "../plugins/workspace-domain-provider.mjs";
+import { readVerifiedHostManifest } from "./host-site-routes.mjs";
 import { DEMOS_LANE_DIRECTORY } from "./demos-lane-paths.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -175,10 +176,7 @@ for (const name of DEMOS) {
     const seeded = await run(pnpm, ["run", "seed"], { cwd: packageRoot, env: environment });
     if (seeded.status !== 0) throw new Error(`Seeding demo-${name} exited ${seeded.status}.`);
 
-    const routesResult = await run(process.execPath, ["--import", "tsx", "server/site-build/print-routes.ts", packageRoot, assetsStoreRoot], { env: environment, capture: true });
-    if (routesResult.status !== 0) throw new Error(`Route discovery for demo-${name} exited ${routesResult.status}.`);
-    /** @type {string[]} */
-    const routes = JSON.parse(routesResult.stdout);
+    const { routes } = await readVerifiedHostManifest(packageRoot, { env: environment });
     console.log(`[demos-lane] demo-${name}: ${routes.length} routes to crawl on port ${PORT}.`);
 
     const playwrightEnv = { ...environment, DEMOS_LANE_NAME: name, DEMOS_LANE_ROUTES: JSON.stringify(routes) };

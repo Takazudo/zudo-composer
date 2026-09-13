@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@zudo-composer/component-contract": "workspace:*",
+    "@zudo-sg/ui": "git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf",
     "preact": "^10.29.8",
     "zudo-composer": "workspace:*"
   }
