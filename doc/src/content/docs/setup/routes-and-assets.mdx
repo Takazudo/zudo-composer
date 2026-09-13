@@ -6,4 +6,88 @@ description: The authoring, preview, static-site, and asset routes exposed by a 
 
 ## Overview
 
-This page will cover authoring routes, the isolated preview, emitted assets, uploaded assets, and `/site` delivery.
+The host-rooted Vite server keeps authoring, preview, site delivery, and asset
+surfaces on one origin. Vite's base is `/`; the route distinction is made by
+the path, not by a nested application base.
+
+## Route map
+
+The installed tool's authoring routes are the exact entries in
+`scripts/routes.mjs`:
+
+| Path | Surface |
+| --- | --- |
+| `/` | Standalone authoring product landing page. |
+| `/composer` | Composer library and editor. |
+| `/composer/preview` | Isolated, same-origin Composer preview document. |
+| `/content` | Content model and Entry authoring. |
+| `/mapping` | Content-to-Composition Mapping authoring. |
+| `/sitemapper` | Sitemapper library and editor. |
+| `/assets` | Assets library and upload/delivery status. |
+
+`/composer/preview` is an implementation boundary for the Composer iframe
+protocol, not a separate public product. It stays isolated from the consuming
+host project and from the host's file-provider plumbing.
+
+## Activated host site
+
+After a host activates a local SiteProject release, the selected website is
+delivered under `/site`. Its route list comes from the verified active release,
+not from a hard-coded tool route table. The local visitor uses the same
+compiled route pathnames that the host's `dist-site/site-manifest.json` records;
+the `/site` prefix is the delivery mount for the activated local release.
+
+For a static build, the visitor artifact owns the root route `/` and any other
+routes expanded from the host Sitemap. `zudo-composer build-site` writes and
+verifies that artifact under `<host>/dist-site`; its manifest includes the
+project identity, tool identity, source revision when supplied, route list, and
+SHA-256 digest for every emitted file. The static build is a detached visitor
+artifact and contains no authoring server or local release plumbing.
+
+## Emitted files
+
+| URL prefix | Contents | Mutability |
+| --- | --- | --- |
+| `/assets/` | Emitted JavaScript, CSS, and the focused render WASM/glue used by the tool or static visitor. | Build output; hashed files are immutable. |
+| `/uploaded-assets/` | Committed image and PDF bytes from the host's `publicAssetsDir`, addressed by retained asset versions. | Host-owned published bytes; the static artifact verifies their digests. |
+
+`/assets` (without a trailing slash) is the authoring library route; `/assets/`
+(with a trailing slash) is the emitted-file prefix. Keep those spellings
+distinct when linking or checking an artifact.
+
+The default `publicAssetsDir` is `public/uploaded-assets`, so the host's public
+directory maps its committed bytes to `/uploaded-assets/`. A custom
+`publicAssetsDir` changes the source location (and the basename Vite serves in
+development); static builds still emit committed public bytes under the fixed
+`/uploaded-assets/` prefix. It is never rebased by `dataDir`. See
+[Configuration](./configuration.mdx) and [Host directory layout](./host-directory-layout.mdx).
+
+Asset references stored in compositions resolve to retained checksum URLs such
+as `/uploaded-assets/sha256-<digest>.png`. The dev file-provider protects the
+private `assetsDir` catalog and version store: callers cannot read that store
+through Vite's ordinary source or `/@fs` paths. A legacy authoring reference of
+the form `/uploaded-assets/asset-<id>` is handled only by the local provider and
+redirects to the active checksum version when the record is active.
+
+## Upload authoring is development-only
+
+The `/assets` authoring UI can upload and edit local Assets records while
+`zudo-composer dev` is running. That transport writes the host's configured
+Assets store and is intentionally not part of a static build or a deployed
+visitor surface. A static build copies the compiled asset files and committed
+public bytes into its artifact and emits no upload mutation endpoint.
+
+Commit the host's intended published bytes under `publicAssetsDir` (the default
+is `public/uploaded-assets`) together with the CMS records that refer to them.
+The CLI's [asset import](./cli.mdx) command imports source files into the
+content-addressed store; release/build verification then binds delivery to
+exact versions rather than to whatever file happens to be latest.
+
+## Vite base and ownership boundary
+
+Both the dev server and static-site Vite configuration use base `/`. The dev
+server is rooted at the host project so it can read the host's `node_modules`,
+`public/`, and configured CMS paths, while the installed package owns the HTML
+shell and application modules. The host owns its component pack, styles entry,
+CMS data, and committed public assets. The package never falls back to a
+bundled pack or turns the host's private CMS directories into public files.
