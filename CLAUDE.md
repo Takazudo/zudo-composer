@@ -8,9 +8,12 @@ Composer document model, source generation, reuse rules, chrome, preview
 renderer and same-origin iframe protocol; the Content model, Entry library and
 authoring UI; the Mapping binding model, resolver and authoring UI; the
 Sitemapper page-tree model, library, authoring UI and Composer-catalog
-integration; the Assets metadata model, library route and upload/delivery
-boundaries; and the shared filesystem storage engine
-(`TransactionalRecordStore`) all five domains persist through.
+integration; and the Assets metadata model, library route and upload/delivery
+boundaries. All five domains use shared filesystem primitives, but only
+Content, Mapping, Sitemapper and the workspace registry use
+`TransactionalRecordStore`. Composer persists canonical composition JSON and
+derived JSX through `SafeRootFilesystem`; Assets maintains its own atomic
+catalog and immutable uploaded bytes.
 
 A host project installs this tool, writes one `zudo-composer.config.ts` at its
 own root, and owns everything the tool authors into that host: its
