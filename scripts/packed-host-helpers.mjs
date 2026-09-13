@@ -18,6 +18,9 @@ const execFile = promisify(execFileCallback);
 export const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 export const FIRST_PARTY = ["zudo-composer", "@zudo-composer/component-contract"];
 export const WRITABLE = ["node_modules", "cms", "public", ".zudo-site-project"];
+// This exact creator setting permits the reviewed provider's pinned Git
+// dependency. No other consumer package-manager settings may change isolation.
+export const PACKED_NPMRC = "block-exotic-subdeps=false\n";
 const dependencySections = /** @type {const} */ (["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]);
 const omittedDirectories = new Set(["node_modules", ".git", "dist", "dist-site", ".zudo-site-project", ".vite", "coverage", "test-results", "playwright-report", DEMOS_LANE_DIRECTORY]);
 
@@ -171,11 +174,18 @@ export function packedHostManifest(input, tarballs, packageManager) {
 
 /** @param {string} hostRoot @param {Tarballs} tarballs @param {string} packageManager */
 export async function configurePackedHost(hostRoot, tarballs, packageManager) {
+  const npmrc = join(hostRoot, ".npmrc");
+  if (await lstat(npmrc).catch(() => undefined)) {
+    if (!(await lstat(npmrc)).isFile() || await readFile(npmrc, "utf8") !== PACKED_NPMRC) {
+      throw new Error(`${hostRoot}: a consumer .npmrc needs explicit packed-lane review`);
+    }
+  }
   const manifest = packedHostManifest(JSON.parse(await readFile(join(hostRoot, "package.json"), "utf8")), tarballs, packageManager);
   await writeFile(join(hostRoot, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   // pnpm 11 reads these settings from the workspace file. Mirror the two exact
   // package.json pnpm.overrides here, without inheriting repository settings.
   await writeFile(join(hostRoot, "pnpm-workspace.yaml"), `packages: []
+blockExoticSubdeps: false
 nodeLinker: isolated
 hoist: false
 shamefullyHoist: false
@@ -189,8 +199,6 @@ allowBuilds:
 overrides:
 ${FIRST_PARTY.map((name) => `  ${JSON.stringify(name)}: ${JSON.stringify(tarballs[name])}`).join("\n")}
 `);
-  // Local package-manager settings may not undo the isolation policy above.
-  if (await lstat(join(hostRoot, ".npmrc")).catch(() => undefined)) throw new Error(`${hostRoot}: a consumer .npmrc needs explicit packed-lane review`);
   await rm(join(hostRoot, "pnpm-lock.yaml"), { force: true });
   return manifest;
 }
@@ -313,11 +321,22 @@ export function selectPackedHosts(args, discovered) {
     else if (option === "--negative" && ["missing-runtime", "hoisted-dependency"].includes(value) && !negative) negative = value;
     else throw new Error(`Usage: smoke-host-install.mjs [--host <name>]... [--negative missing-runtime|hoisted-dependency]; invalid option ${option}`);
   }
-  const hosts = requested.length ? [...new Set(requested.map((name) => {
+  if (discovered.some((host) => ["generated", "self-host"].includes(basename(host)))) throw new Error("Packed package host name collides with generated/self-host lanes");
+  const hosts = requested.length ? [...new Set(requested.filter((name) => !["generated", "self-host"].includes(name)).map((name) => {
     const matches = discovered.filter((host) => basename(host) === name || host === resolve(name));
     if (matches.length !== 1) throw new Error(`Unknown or ambiguous packed host: ${name}`);
     return matches[0];
   }))] : discovered;
-  if (negative && (!requested.length || hosts.length !== 1)) throw new Error("A negative proof requires exactly one --host");
-  return { hosts, negative, fixture: requested.length === 0 };
+  if (negative && (requested.length !== 1 || hosts.length !== 1)) throw new Error("A negative proof requires exactly one --host naming a disk host");
+  return { hosts, negative, fixture: requested.length === 0 || requested.includes("self-host"), generated: requested.length === 0 || requested.includes("generated") };
+}
+
+/** Same discovery and selection contract as the runner; CI never samples hosts.
+ * @param {string} root */
+export function packedHostMatrix(root) {
+  const discovered = discoverPackedHosts(root);
+  selectPackedHosts([], discovered);
+  const host = [...discovered.map((path) => basename(path)), "generated", "self-host"];
+  if (host.some((name) => !/^[a-z0-9][a-z0-9_-]*$/u.test(name))) throw new Error("Packed host names must be safe matrix identifiers");
+  return { host };
 }

@@ -28,6 +28,8 @@
     "scripts/check-site-project-boundary.mjs",
     "scripts/check-studio-sample.mjs",
     "scripts/check-creator.mjs",
+    "scripts/check-no-deploy.mjs",
+    "scripts/packed-host-matrix.mjs",
     "scripts/check-standalone-handoff.mjs",
     "scripts/routes.mjs",
     "scripts/seed-demo-assets.ts",

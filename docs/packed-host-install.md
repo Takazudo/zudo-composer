@@ -11,6 +11,10 @@ The lane owns port **4175** and runs hosts serially. It packs the actual tool
 and component-contract with `pnpm pack` once, then installs those archives into
 disposable projects outside both this checkout and any containing checkout.
 Its temporary parent must also have no ambient `node_modules` or pnpm workspace.
+The complete command is also part of `corepack pnpm check`; that aggregate
+therefore requires network access, installed Playwright Chromium and exclusive
+use of the browser lanes. Install Chromium with
+`corepack pnpm exec playwright install chromium` before the first local run.
 
 The default command retains the synthesized `fixtures/self-host` proof: boot
 without activation, author a sitemap in a browser, execute the installed image
@@ -35,6 +39,9 @@ For each host, the runner:
    frozen-install policy is unchanged. Module lookup must resolve both packages
    inside that host's own `node_modules`, with no repository path in the lookup
    list. The local install disables hoisting and workspace linking.
+   A consumer `.npmrc` is accepted only when its exact bytes are
+   `block-exotic-subdeps=false\n`, the reviewed creator setting for the exact
+   provider Git pin. Every additional or altered setting fails before rewriting.
 3. Boots the installed `zudo-composer dev` and fetches every canonical
    `AUTHORING_ROUTES` entry, including `/composer/preview`, as HTML.
 4. Stops the server, runs installed `generate --check`, the host's `seed`
@@ -58,18 +65,44 @@ The runner cleans temporary copies and archives in `finally` blocks. Startup
 failure also terminates the detached server process group, including descendants
 whose launcher has already exited. An occupied port fails before spawning.
 
+## Fresh creator output and CI
+
+The full command also creates a separate launcher project, installs the two
+tarballs there, and invokes its actual installed `zudo-composer init` with
+paired `--tool-tarball` and `--contract-tarball`. `check-creator --host` verifies
+the pristine output's current version references, full required inventory and
+strict consumer boundary before any dependency rewrite. Retained output must
+have real canonical ready CMS, no installed dependencies, no activated release,
+no archive and no temporary lockfile or override.
+
+The common runner copies that real output to another external directory and
+performs the same install/dev/generate/seed/build/test proof. Before seeding, it
+opens the five authoring libraries in Chromium, requires the starter records
+and image, rejects first-activation prompts and browser runtime errors, and
+checks that opening and closing the host changed no CMS bytes. It also runs
+the generated host's own `check`, including its typecheck. The untouched
+creator output is scanned again and compared byte for byte after the proof.
+
+`corepack pnpm packed-host:matrix` prints the matrix used by CI. Its host list
+comes from the same disk discovery and selector as the runner: currently the
+four package hosts, `generated`, and `self-host`. A later configured package is
+included automatically, regardless of workspace membership. CI has one job per
+entry with fail-fast disabled; it does not sample or duplicate the full lane
+in the main validation job.
+
 ## Focused and negative runs
 
 For diagnosis, select a host by name or its discovered package path:
 
 ```sh
 corepack pnpm smoke:host-install -- --host demo-blog
+corepack pnpm smoke:host-install -- --host generated
+corepack pnpm smoke:host-install -- --host self-host
 ```
 
-`--host` is repeatable. An explicit selection runs the selected real hosts;
-the default full command is the gate that also proves the synthesized fixture.
-Generated-host coverage belongs to the creator lane; the copy, manifest and
-install helpers also accept standalone source directories for that lane.
+`--host` is repeatable. An explicit selection runs exactly those entries. The
+default full command proves every discovered host and both special entries.
+Negative modes require exactly one disk host.
 
 These two commands must **exit nonzero** because of the injected runtime
 failure, after their installs complete. They do not convert arbitrary failures
@@ -112,8 +145,39 @@ artifact checksum rejection, environment isolation and process-group cleanup:
 
 ```sh
 corepack pnpm exec vitest run scripts/__tests__/packed-host-install.test.ts
+corepack pnpm exec vitest run scripts/__tests__/no-deploy.test.ts
 corepack pnpm typecheck:scripts
 ```
 
 These tests do not replace the full installed/browser lane, the exact provider
 pin and 12-component runtime/CSS/WASM gates, or the repository's other checks.
+
+## Deployment assertion
+
+`corepack pnpm no-deploy:check` is a bounded static check; it executes none of
+the commands it audits. It runs first in the aggregate, before packed installs,
+and in CI before matrix discovery and each selected host. Newly generated
+output receives the same audit before its scripts run.
+
+The audit reads every nonproduction workflow and job, local composite actions
+and all three Node-action lifecycle entries,
+the installed-host command roots, discovered package scripts and lifecycle
+hooks. It follows package aliases, local shell/Node wrappers, static imports,
+CLI dispatch paths, generated script maps and literal subprocess arguments,
+including imported aliases and local forwarding functions. ESM imports and
+CommonJS `require`/`createRequire` are checked. Only reviewed,
+pinned setup/artifact actions are allowed. A Wrangler invocation must be an
+explicit `wrangler deploy --dry-run`; other verbs, disabling flags, API/SDK
+calls and `hosted-demo:deploy` are rejected. Shell substitutions and unknown
+external actions/commands require a directly auditable command definition.
+The guarantee covers repository-controlled command definitions and these
+supported static data flows. Arbitrary runtime JavaScript evaluation and
+third-party tool internals are outside this static analysis.
+
+The production workflow is excluded only as an independent entry point. Any
+validation reference to that workflow or its deployment/live-check/guard
+commands fails. `.github/workflows/hosted-demo-deploy.yml` and
+`scripts/hosted-demo/*`, including the trusted-run guard, are unchanged by this
+gate. Focused tests plant violations through each supported route and require
+the ordinary assertion to fail; comments about deployment do not count as an
+executable invocation.
