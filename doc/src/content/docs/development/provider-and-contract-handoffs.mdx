@@ -4,6 +4,86 @@ sidebar_position: 5
 description: The revision and compatibility handoffs between zudo-composer, providers, and the component contract.
 ---
 
-## Overview
+## Keep the handoffs distinct
 
-This page will cover provider pins, contract revisions, handoff metadata, and compatibility verification.
+The UI provider and the component contract are different release identities.
+The provider supplies the installed runtime component pack and CSS; the
+contract supplies the framework-neutral package API that a host and provider
+share. Do not substitute one handoff for the other.
+
+The current provider identity is:
+
+| Identity | Value |
+| --- | --- |
+| Git spec | `git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf` |
+| Provider commit / root tree | `6b0826cdaa14d9888e58c795ee015f70e2c5cbdf` / `1c3cbfd3a25d1425f447cdadd5ba538916394309` |
+| Installed package metadata | `@zudo-sg/ui@0.1.0` |
+| Component-pack protocol identity | `@zudo-sg/ui@1.0.0` |
+
+The package metadata version, pack protocol version, Git commit, and root tree
+answer different questions. None can stand in for the immutable provider Git
+SHA.
+
+## Updating the UI provider
+
+An update is a permanent package-only handoff:
+
+1. Obtain the provider's full Git commit and independently verify its root tree
+   and advertised 12-component pack.
+2. Set the provider dependency to the exact full SHA and regenerate the lockfile.
+3. Prove `corepack pnpm install --frozen-lockfile` resolves the same codeload
+   commit and that the installed metadata and pack sidecars agree.
+4. Run the full unit, artifact, and browser gates, including the 12-component
+   runtime/CSS/focused-WASM proof.
+
+The provider must never resolve through a branch or moving tag, sibling
+checkout, `workspace:`, `file:`, `link:`, or `path:` relationship, copied
+provider source, or a pnpm Git subdirectory selector. Do not copy provider
+components into this repository and do not add a fallback registry. A host
+themeset remains swappable through the host's package `pack` value and
+stylesheet import; that does not change this repository's provider pin.
+
+## The component-contract handoff
+
+[`contract-handoff.json`](https://github.com/Takazudo/zudo-composer/blob/main/contract-handoff.json)
+records the package-only external handoff:
+
+| Field | Value |
+| --- | --- |
+| Package | `@zudo-composer/component-contract` |
+| Source path | `packages/component-contract` |
+| Package branch | `package/component-contract-v1` |
+| Package commit | `b66d52bb273a10010485efb2d06f80cee8001bd6` |
+| External Git spec | `git+https://github.com/Takazudo/zudo-composer.git#b66d52bb273a10010485efb2d06f80cee8001bd6` |
+| API/package version | `@zudo-composer/component-contract@1.0.0` |
+
+Inside this monorepo the contract source is intentionally a `workspace:*`
+development dependency. The published `zudo-composer` manifest declares it as
+the `^1.0.0` peer so an installed host supplies one contract instance. That
+local workspace relationship is not an external provider handoff and must not
+be copied into a consumer's package-only install.
+
+## Verify the contract and negative scans
+
+Run the three focused gates when changing either side of the handoff:
+
+```sh
+corepack pnpm contract:conformance
+corepack pnpm contract:negative-scan
+corepack pnpm contract:external-install -- --exact
+```
+
+`contract:conformance` checks the versioned package's exports, built runtime
+and declarations, packed file allowlist, and consumer boundary.
+`contract:negative-scan` rejects workspace/file/link protocols, sibling or
+root-workspace preparation, and application dependencies in generic contract
+sources. The exact external-install proof checks the advertised branch and
+package tree, creates a package-only temporary consumer with the full Git SHA,
+performs a frozen install, and imports both the contract and `./fixtures`.
+
+`provider:boundary` performs the corresponding provider identity, lockfile,
+pack/sidecar, and public-source checks on a bare checkout. `dist:boundary`
+performs the build-dependent runtime/CSS/WASM checks. A failed gate is a
+handoff problem to diagnose, not a reason to shorten a SHA or relax a negative
+scan. The [packed-install guide](https://github.com/Takazudo/zudo-composer/blob/main/docs/packed-host-install.md)
+shows how the exact contract is exercised in a real installed host.
