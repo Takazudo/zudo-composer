@@ -20,10 +20,12 @@ export const BUILD_SITE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/build-site-en
 export const ASSETS_IMPORT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/assets-import-entry.mjs");
 export const SEED_ENTRY_PATH = resolve(APP_ROOT, "server/cli/seed-entry.mjs");
 export const GENERATE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/generate-entry.mjs");
+export const INIT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/init-entry.mjs");
 
 export const USAGE = `Usage: zudo-composer <command> [options]
 
 Commands:
+  init <dir>  Create a populated host in a new directory.
   dev         Start the authoring dev server, rooted at the current project.
   release     Run the SiteProject release API (one JSON request on stdin, one
               canonical JSON response on stdout).
@@ -34,6 +36,14 @@ Commands:
   generate    Generate site-project.json from site-project.ts.
   seed        Publish and activate a committed SiteProject; print its release
               identity and status (activated or unchanged) as JSON.
+
+init options:
+  --name <name>   Lowercase npm package name (default: directory basename).
+  --tool-tarball <file> --contract-tarball <file>
+                  Preview unpublished matching packages using temporary,
+                  isolated overrides. Both archives are required together.
+                  Creation runs install, generate, assets import and the ready
+                  workspace producer; it never upgrades an existing project.
 
 dev options:
   --root <dir>     Host project root (default: the current directory).
@@ -81,6 +91,7 @@ export function parseArguments(argv) {
   const [command, ...rest] = argv;
   if (command === undefined || command === "--help" || command === "-h" || command === "help") return { command: "help" };
   if (command === "release") return { command: "release", rest };
+  if (command === "init") return parseInit(rest);
   if (command === "assets") return parseAssetsImport(rest);
   if (command !== "dev" && command !== "build-site" && command !== "seed" && command !== "generate") return { error: `Unknown command "${command}".` };
 
@@ -131,6 +142,29 @@ export function parseArguments(argv) {
   }
   if (command === "seed" && options.outputRoot !== undefined && !options.readyWorkspace) return { error: "--output requires --ready-workspace." };
   return { command, options };
+}
+
+/** @param {string[]} args @returns {import("./run.d.mts").ParsedComposerCommand} */
+function parseInit(args) {
+  /** @type {Partial<import("../creator/init.mjs").InitOptions>} */
+  const options = {};
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index];
+    if (argument === "--help" || argument === "-h") return { command: "help" };
+    if (["--name", "--tool-tarball", "--contract-tarball"].includes(argument)) {
+      const value = args[++index];
+      if (!value || value.trim() === "" || value.startsWith("-")) return { error: `${argument} requires ${argument === "--name" ? "a package name" : "a file"}.` };
+      const key = argument === "--name" ? "name" : argument === "--tool-tarball" ? "toolTarball" : "contractTarball";
+      if (options[key] !== undefined) return { error: `${argument} may be supplied only once.` };
+      options[key] = key === "name" ? value : resolve(value);
+    } else if (argument.startsWith("-")) return { error: `Unknown init option "${argument}".` };
+    else if (options.target !== undefined) return { error: "init accepts one new directory." };
+    else if (argument.trim() === "") return { error: "init requires a new directory." };
+    else options.target = resolve(argument);
+  }
+  if (options.target === undefined) return { error: "init requires a new directory." };
+  if ((options.toolTarball === undefined) !== (options.contractTarball === undefined)) return { error: "--tool-tarball and --contract-tarball must be supplied together." };
+  return { command: "init", options: { ...options, target: options.target } };
 }
 
 /** @param {string[]} rest @returns {import("./run.d.mts").ParsedComposerCommand} */
@@ -213,6 +247,20 @@ export async function runComposerCli(argv, deps = {}) {
       args: [RELEASE_ENTRY_PATH, ...parsed.rest],
       label: "the SiteProject release API",
       entryPath: RELEASE_ENTRY_PATH,
+      ...(deps.spawn ? { spawn: deps.spawn } : {}),
+      ...(deps.exists ? { exists: deps.exists } : {}),
+      proc,
+    });
+    return;
+  }
+  if (parsed.command === "init") {
+    const { target, name, toolTarball, contractTarball } = parsed.options;
+    const args = [INIT_ENTRY_PATH, target];
+    if (name !== undefined) args.push("--name", name);
+    if (toolTarball !== undefined) args.push("--tool-tarball", toolTarball);
+    if (contractTarball !== undefined) args.push("--contract-tarball", contractTarball);
+    spawnSupervised({
+      command: proc.execPath, args, label: "the host creator", entryPath: INIT_ENTRY_PATH,
       ...(deps.spawn ? { spawn: deps.spawn } : {}),
       ...(deps.exists ? { exists: deps.exists } : {}),
       proc,

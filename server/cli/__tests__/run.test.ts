@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
-import { ASSETS_IMPORT_ENTRY_PATH, BUILD_SITE_ENTRY_PATH, GENERATE_ENTRY_PATH, RELEASE_ENTRY_PATH, SEED_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
+import { ASSETS_IMPORT_ENTRY_PATH, BUILD_SITE_ENTRY_PATH, GENERATE_ENTRY_PATH, INIT_ENTRY_PATH, RELEASE_ENTRY_PATH, SEED_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
 import { forwardedSignals, superviseChild } from "../supervise.mjs";
 
 function fakeProcess(platform = "linux") {
@@ -140,10 +140,27 @@ describe("parseArguments", () => {
 });
 
 describe("runComposerCli", () => {
+  it("supervises creation with a normalized target and paired packed dependencies", async () => {
+    const proc = fakeProcess(), child = fakeChild(), spawn = vi.fn(() => child);
+    await runComposerCli(["init", "host with spaces", "--name", "@team/site", "--tool-tarball", "tool.tgz", "--contract-tarball", "contract.tgz"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [INIT_ENTRY_PATH, resolve("host with spaces"), "--name", "@team/site", "--tool-tarball", resolve("tool.tgz"), "--contract-tarball", resolve("contract.tgz")], { stdio: "inherit" });
+    proc.emitter.emit("SIGINT");
+    expect(child.kill).toHaveBeenCalledWith("SIGINT");
+  });
+
+  it("reports a missing creator entry before launching a partial installation", async () => {
+    const proc = fakeProcess(), spawn = vi.fn();
+    await runComposerCli(["init", "new-host"], { proc, spawn: spawn as never, exists: () => false });
+    expect(proc.err.join("")).toContain(INIT_ENTRY_PATH);
+    expect(proc.exits).toEqual([1]);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
   it("documents seed and the build-site artifact modes in the exact usage text", () => {
     expect(USAGE).toBe(`Usage: zudo-composer <command> [options]
 
 Commands:
+  init <dir>  Create a populated host in a new directory.
   dev         Start the authoring dev server, rooted at the current project.
   release     Run the SiteProject release API (one JSON request on stdin, one
               canonical JSON response on stdout).
@@ -154,6 +171,14 @@ Commands:
   generate    Generate site-project.json from site-project.ts.
   seed        Publish and activate a committed SiteProject; print its release
               identity and status (activated or unchanged) as JSON.
+
+init options:
+  --name <name>   Lowercase npm package name (default: directory basename).
+  --tool-tarball <file> --contract-tarball <file>
+                  Preview unpublished matching packages using temporary,
+                  isolated overrides. Both archives are required together.
+                  Creation runs install, generate, assets import and the ready
+                  workspace producer; it never upgrades an existing project.
 
 dev options:
   --root <dir>     Host project root (default: the current directory).

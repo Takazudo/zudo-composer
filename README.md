@@ -26,6 +26,10 @@ by `ProseMd`; this is not a zfb application dependency. A host is free to
 install a different themeset instead — see
 [Component packs and themesets](#component-packs-and-themesets).
 
+Create a populated standalone host with `zudo-composer init <new-directory>`.
+The [creator guide](./docs/creator.md) covers the installed command, the
+unpublished-package preview, and which generated files to commit.
+
 ## Routes and assets
 
 The Vite application has base `/` and these exact SPA routes:
