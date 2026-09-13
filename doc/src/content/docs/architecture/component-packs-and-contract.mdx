@@ -4,6 +4,150 @@ sidebar_position: 4
 description: The component-pack and component-contract interfaces that connect hosts to Composer.
 ---
 
-## Overview
+## The contract separates data from executable components
 
-This page will cover component-pack loading, contract versions, schemas, and provider ownership.
+`@zudo-composer/component-contract` defines how a host supplies components to
+Composer. A pack contains a serializable `manifest` and a trusted `runtime`
+registry. The manifest describes component IDs, schema versions, source imports,
+defaults, fields, and slots. The runtime supplies actual component functions
+and optional rendering or inline-editor adapters.
+
+Persisted documents contain component IDs, versions, JSON props, and named
+slots. They never contain the component functions or adapters. This same
+separation lets headless validation and source generation use a manifest while
+the [preview iframe](./composer-preview-protocol.mdx) renders trusted functions.
+
+| Module | Responsibility |
+| --- | --- |
+| [file: packages/component-contract/src/index.ts](https://github.com/Takazudo/zudo-composer/blob/main/packages/component-contract/src/index.ts) | Public contract exports, including authoring helpers, schemas, and runtime resolution. |
+| [file: packages/component-contract/src/types.ts](https://github.com/Takazudo/zudo-composer/blob/main/packages/component-contract/src/types.ts) | Manifest/runtime types and the typed authoring-definition contract. |
+| [file: packages/component-contract/src/validation.ts](https://github.com/Takazudo/zudo-composer/blob/main/packages/component-contract/src/validation.ts) | Validate serializable definitions, public source imports, JSON values, and manifest/runtime parity. |
+| [file: packages/component-contract/src/runtime.ts](https://github.com/Takazudo/zudo-composer/blob/main/packages/component-contract/src/runtime.ts) | Resolve a persisted component node against the trusted pack. |
+| [file: plugins/component-pack.mjs](https://github.com/Takazudo/zudo-composer/blob/main/plugins/component-pack.mjs) | Resolve and load the host's pack, then check its declared source modules. |
+| [file: src/features/composer/component-provider.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/features/composer/component-provider.ts) | Adapt a validated pack into the catalog and runtime entries used by Composer. |
+
+## Sidecars and authoring helpers
+
+A sidecar is a provider-owned module that pairs an existing component with its
+Composer metadata. `defineComponent<Props>()(Component, definition)` keeps the
+definition's prop names and values tied to the component's props.
+`defineComponentPack` projects those definitions into a JSON manifest and a
+runtime registry, then validates their identities, versions, and adapters.
+
+```tsx
+import {
+  defineComponent,
+  defineComponentPack,
+} from "@zudo-composer/component-contract";
+
+export function Banner({ headline }: { headline: string }) {
+  return <h2>{headline}</h2>;
+}
+
+const banner = defineComponent<{ headline: string }>()(Banner, {
+  id: "site.banner",
+  schemaVersion: 1,
+  title: "Banner",
+  category: "Content",
+  description: "A headline for the host site.",
+  source: {
+    module: "my-site/components",
+    exportKind: "named",
+    exportName: "Banner",
+  },
+  defaults: { headline: "Welcome" },
+  fields: [
+    { prop: "headline", label: "Headline", schema: { type: "string" }, editor: { kind: "text" } },
+  ],
+});
+
+export const componentPack = defineComponentPack({
+  packId: "my-site",
+  packVersion: "1.0.0",
+  components: [banner],
+});
+```
+
+This example belongs behind the host's `my-site/components` export. A pack
+entry must export the named `componentPack` value. The provider adapter calls
+`validateRuntimeParity`; a loose list of components is not the contract.
+
+The internal `parseSource` function in `validation.ts` restricts source modules
+to public bare-package imports and rejects any `src` path segment. It validates
+named/default export metadata and local identifiers. It is not a public export
+to import from the package; public manifest validation runs it for callers.
+
+## Two pack shapes, one resolver
+
+| Shape | Configured `pack` | Component `source.module` in the example | Repository fixture |
+| --- | --- | --- | --- |
+| Installed themeset | `@acme/themeset/composer-pack` | `@acme/themeset` | `fixtures/themeset-host/` |
+| Host self-reference | `my-site/components` | `my-site/components` | `fixtures/self-host/` |
+
+A self-reference uses the host's own package `name` and an `exports` entry such
+as `"./components": "./components/pack.ts"`. An installed themeset supplies the
+same public export contract through a dependency. Neither configuration uses
+a relative filesystem path for `pack`.
+
+`resolveComponentPack` uses `createRequire` anchored at the host's
+`package.json`. `assertPackSourcesResolvable` checks every distinct
+`source.module` from that same root because generated composition modules live
+in the host tree. Pack and component-source exports must be resolvable under
+that require-based lookup: use a string target or a suitable `default`
+condition, not only `import`/`types` conditions. An unresolved pack or source
+fails explicitly; there is no bundled fallback pack.
+
+`plugins/component-pack-plugin.mjs` publishes the chosen entry through
+`virtual:zudo-composer-pack`. `src/features/composer/active-pack.ts` is the
+production selection point used by the feature layer.
+
+## Styles belong to the host and provider
+
+The host's configured stylesheet, normally `styles/base.css`, imports pack CSS
+and declares the pack's Tailwind `@source` locations. The tool loads it through
+`virtual:zudo-composer-host-styles`.
+[file: plugins/host-styles-plugin.mjs](https://github.com/Takazudo/zudo-composer/blob/main/plugins/host-styles-plugin.mjs)
+resolves that module to the actual CSS path so relative imports retain the
+host's directory as their base.
+
+Tool chrome styles do not import a particular pack. Their custom-property
+defaults live in
+[file: src/styles/app-tokens.css](https://github.com/Takazudo/zudo-composer/blob/main/src/styles/app-tokens.css).
+Changing a themeset therefore means changing the configured pack and the
+host's CSS import/source declarations, with no provider-specific edit to
+Composer. See [Installing into a Host](../setup/installing-into-a-host.mdx).
+
+## The installed provider proof
+
+`@zudo-sg/ui` is this repository's ordinary dogfood pack. It owns its component
+sidecars, runtime pack, and canonical component CSS. The tool does not copy its
+components or consume its styleguide application. Its focused
+`@takazudo/zfb-md-wasm` dependency supports `ProseMd` rendering.
+
+The provider proof has several distinct parts:
+
+- `src/features/composer/__tests__/active-pack.test.ts` checks the advertised
+  twelve-component pack and its schema identities.
+- `scripts/check-provider-boundary.mjs` checks the exact installed provider
+  dependency, lockfile, and sidecar/runtime-list correspondence.
+- `src/app/__tests__/provider-render.test.tsx` exercises real component
+  rendering, named slots, and ProseMd WASM output; `provider-css.test.ts`
+  checks stylesheet ownership and integration.
+- `scripts/check-dist-artifact.mjs` checks emitted resources, including exactly
+  one focused render WASM file and its glue.
+
+The provider's package metadata version, its pack protocol identity, and the
+contract package version are separate values:
+
+| Identity | Current handoff |
+| --- | --- |
+| Installed provider package | `@zudo-sg/ui@0.1.0` |
+| Component-pack identity | `@zudo-sg/ui@1.0.0` |
+| Contract API/package | `@zudo-composer/component-contract@1.0.0` |
+
+[file: contract-handoff.json](https://github.com/Takazudo/zudo-composer/blob/main/contract-handoff.json)
+records the contract's external package commit and root Git spec; it is not
+the UI-provider pin. This monorepo uses `workspace:*` for its own contract
+source. The provider remains an exact external Git dependency. See
+[Provider and Contract Handoffs](../development/provider-and-contract-handoffs.mdx)
+for update procedures.

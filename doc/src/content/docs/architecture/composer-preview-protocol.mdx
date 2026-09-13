@@ -4,6 +4,150 @@ sidebar_position: 5
 description: The same-origin protocol that connects Composer authoring with its isolated preview document.
 ---
 
-## Overview
+## The iframe renders data with a trusted pack
 
-This page will cover the preview route, iframe messages, rendering handoff, and protocol boundaries.
+`/composer/preview` is a same-origin iframe with its own entry and render graph.
+The authoring chrome owns the canonical document and mutations. The iframe
+receives JSON snapshots and renders the already configured component pack;
+component functions, VNodes, and generated source text never travel in preview
+messages.
+
+```text
+Composer chrome                              /composer/preview
+canonical document + editor session          trusted component pack
+        |                                            |
+        |  render / mode / restore-focus             |
+        +------------------------------------------> |
+        |                         validate -> snapshot -> renderer
+        |                                            |
+        |  ready / selection / edit or move intent   |
+        <--------------------------------------------+
+        |
+revision checks -> controller commands -> next snapshot
+
+Source export is separate: document + manifest -> generated JSX
+```
+
+| Module | Responsibility |
+| --- | --- |
+| [file: src/features/composer/preview/protocol.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/features/composer/preview/protocol.ts) | Strict message schemas, envelope identity, constructors, and source/origin/pack guards. |
+| `src/features/composer/preview/bridge.ts` | Parent-side, per-iframe connection, newest-snapshot retention, replay, and intent callbacks. |
+| `src/features/composer/preview/client.ts` | Iframe-side listener and outbound messages to its exact parent. |
+| `src/features/composer/preview/snapshot-store.ts` | Pure revision-gated fold of document and session snapshots. |
+| `src/features/composer/preview/preview-entry.ts` | Mount the preview with the active pack and preview stylesheet graph. |
+| `src/features/composer/preview/renderer.ts` | Resolve component IDs locally, project named slots, and render stable keyed nodes. |
+| `src/features/composer/app/composer-canvas-host.tsx` | Connect preview intents to current controller state and reject stale document edits. |
+| `src/features/composer/preview/assets-snapshot.ts` | Resolve managed Assets in the owning host before sending detached preview JSON. |
+
+These feature modules are in the
+[Composer feature source](https://github.com/Takazudo/zudo-composer/tree/main/src/features/composer).
+
+## Envelope, messages, and ordering
+
+Every message carries `channel: "composer-preview"`, `v: 2`, `packId`, and
+`packVersion`. Inbound guards check the exact expected window, matching origin,
+strict payload schema, and pack identity. Outbound calls use the resolved exact
+origin. A valid message from the trusted peer with a different pack identity
+terminates the connection; later messages do not revive that bridge.
+
+The parent sends three message types. `render` includes a full document,
+`localRecordId`, optional resolved linked-template context, and a session with
+`mode`, `theme`, and `selectedId`. `mode` updates only the session. Both carry
+monotonic revisions. `restore-focus` echoes a menu's opaque focus token and is
+a one-shot command outside snapshot revision ordering.
+
+The preview answers with `ready`, `select`, `request-add`, `open-source`,
+`request-node-menu`, `request-insert-menu`, `commit-inline-edit`, `drop-node`,
+`request-history`, and `error`. Menu requests carry geometry and a focus token;
+the parent need not reach into the iframe DOM to restore focus.
+
+Each `createComposerPreviewBridge` call retains only its newest snapshot.
+Before `ready`, newer renders replace that retained value. On first load or
+reload, `ready` triggers a replay at a fresh revision. The iframe accepts a
+snapshot only when its revision is strictly greater than the current one.
+This also handles a session-only message arriving before the first document.
+Canvas and chooser iframes have separate connections and revision counters.
+
+Inline edits and drag/drop intents include `documentRevision`. The canvas host
+compares it with the latest document snapshot and routes accepted actions
+through existing controller commands. The iframe's drop highlight is advisory;
+slot compatibility, cardinality, cycles, and mutation rules are checked again
+by the controller. History requests address the controller's current history
+and deliberately have no document revision.
+
+## Rendering and graph isolation
+
+[file: src/main.tsx](https://github.com/Takazudo/zudo-composer/blob/main/src/main.tsx)
+branches to the preview entry before importing `App`. The preview loads the
+active pack, host stylesheet, base CSS, and preview CSS. Workspace selection,
+file-provider initialization, and the application shell belong to the parent
+graph.
+
+Inside `renderer.ts`, a component ID is a lookup key in the trusted provider,
+never a module specifier to evaluate. Stable slot IDs map to the component's
+real props. Owner-qualified keys distinguish local nodes from linked template
+nodes. Hover uses CSS, and keyed component/chrome children keep selection and
+Edit/Preview toggles from unnecessarily remounting component DOM.
+
+The frame attributes come from `composerPreviewFrameProps`: an accessible
+title, the exact preview URL, and `sandbox: "allow-same-origin allow-scripts"`.
+This is isolation for the tool's trusted preview graph; it is not a way to run
+an untrusted component pack. The host deliberately selects executable pack code.
+
+## Source generation is a separate output
+
+[file: src/composer/source/generate-jsx.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/composer/source/generate-jsx.ts)
+exports `generateJsx(document, manifest, options)`. It emits deterministic
+Preact JSX using the manifest's public imports, stable import ordering,
+collision-safe aliases, escaped values, and named-slot expressions. The virtual
+document root becomes a Fragment. Opaque or invalid nodes block export with
+diagnostics; unresolved managed download references must be captured first.
+
+[file: src/composer/source/plan-linked-jsx.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/composer/source/plan-linked-jsx.ts)
+exports `planLinkedJsxModules`. It accepts an already-loaded same-provider
+dependency closure and a record-ID-to-module-specifier function. It plans
+standalone, global-template, and linked-consumer modules without filesystem or
+provider I/O. Linked consumer modules import their template module; browser
+export can instead materialize an explicit standalone snapshot. None of this
+source is sent to or evaluated by the preview protocol.
+
+## Global templates and reuse
+
+A Global template is a Composition whose `document.publication.kind` is
+`"global-template"`, saved under the host's `compositionsDir` like any other
+Composition. There is no templates directory or separate template file format.
+[file: src/composer/model/types.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/composer/model/types.ts)
+defines its single outlet:
+
+```ts
+interface GlobalTemplateOutlet {
+  id: string;
+  label: string;
+  target: { parentId: string; slotId: string };
+}
+
+interface CompositionBinding {
+  sourceRecordId: RecordId;
+  outletId: string;
+}
+```
+
+The outlet points to a real component slot, and its ID stays stable when its
+label or target changes. A consumer keeps its local roots and a binding;
+provider identity comes from the consumer's containing provider. The source
+document remains separate.
+
+The resolver in
+[file: src/composer/reuse/resolver.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/composer/reuse/resolver.ts)
+checks the source, publication, outlet, and local-root compatibility. It rejects
+self-reference and nested templates. Failed resolution preserves both the
+binding and local content. `materialize.ts` constructs a transient view with
+read-only template ownership and editable local ownership; a broken binding
+blocks derived linked output while retaining local editing.
+
+Detaching a resolved template as a standalone snapshot is an explicit lifecycle
+operation that reissues node IDs. Removing a broken binding is also explicit.
+Patterns, represented by `publication.kind: "pattern"`, are detached clones
+rather than live template links. `src/composer/reuse/lifecycle.ts` delegates
+source deletion/unpublishing to provider-owned dependency checks so a template
+still used by consumers cannot be silently removed.
