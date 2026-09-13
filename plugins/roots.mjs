@@ -115,7 +115,7 @@ export function resolveAppWarmupFiles() {
       const normalized = file.split(sep).join("/");
       const relativePath = normalized.startsWith(`${sourceRootPath}/`) ? normalized.slice(sourceRootPath.length + 1) : normalized;
       const segments = relativePath.split("/");
-      return segments.includes("__tests__") || segments[0] === "hosted-demo";
+      return segments.includes("__tests__") || segments.includes("test-support") || segments[0] === "hosted-demo";
     },
   })
     .map((file) => resolve(sourceRoot, file))

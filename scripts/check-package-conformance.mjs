@@ -246,6 +246,7 @@ for (const packed of rootPackedPaths) {
   assert(!packed.startsWith('packages/component-contract/'), `packed tool must use its contract peer: ${packed}`);
   assert(!/(?:^|\/)__tests__\//u.test(packed), `packed archive exposes a test directory: ${packed}`);
   assert(!/(?:^|\/)type-tests\//u.test(packed), `packed archive exposes type tests: ${packed}`);
+  assert(!/(?:^|\/)test-support\//u.test(packed), `packed archive exposes test support: ${packed}`);
   assert(!/\.test\./u.test(packed), `packed archive exposes a test file: ${packed}`);
   assert(!packed.startsWith('src/test/'), `packed archive exposes test helpers: ${packed}`);
   assert(!packed.startsWith('fixtures/'), `packed archive exposes the host fixture: ${packed}`);

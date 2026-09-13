@@ -70,6 +70,7 @@
     "packages/image-editor/src/worker/worker.ts",
     "!**/__tests__",
     "!**/type-tests",
+    "!**/test-support",
     "!**/*.test.*",
     "!src/test",
     "!src/hosted-demo"

@@ -14,6 +14,7 @@ describe("resolveAppWarmupFiles()", () => {
 
     const relativePaths = files.map((file) => relative(APP_ROOT, file).split(sep).join("/"));
     expect(relativePaths.some((file) => file.split("/").includes("__tests__"))).toBe(false);
+    expect(relativePaths.some((file) => file.split("/").includes("test-support"))).toBe(false);
 
     for (const excludedTree of ["src/hosted-demo", "server/site-build/client"]) {
       expect(relativePaths.some((file) => file === excludedTree || file.startsWith(`${excludedTree}/`))).toBe(false);
