@@ -16,6 +16,7 @@ import {
   sortDeploymentsNewestFirst,
 } from "./deploy.mjs";
 import { TARGETS } from "./targets.mjs";
+import { sha256 } from "./artifact.mjs";
 
 const SOURCE_REVISION = "a".repeat(40);
 const PROJECT_REVISION = "b".repeat(64);
@@ -303,6 +304,47 @@ describe("hosted demo deployment guard", () => {
     expect(upload).toEqual(expect.arrayContaining(["--config", "wrangler.demo-shop.jsonc", "--name", "zudo-composer-demo-shop"]));
     expect(activate).toEqual(expect.arrayContaining(["--name", "zudo-composer-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
     expect(rollback).toEqual(expect.arrayContaining(["--name", "zudo-composer-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
+  });
+
+  it.each([["existing", fakeRunner], ["first", firstDeployRunner]] as const)("passes multi-page hooks to the default live verifier for an %s deployment", async (_label, createRunner) => {
+    const fake = createRunner();
+    const bodies = {
+      "index.html": "<!doctype html><html><body>Home</body></html>",
+      "docs/a/index.html": "<!doctype html><html><body>Document A</body></html>",
+      "404.html": "<!doctype html><html><body>Not found</body></html>",
+    };
+    const files = Object.entries(bodies).map(([path, body]) => ({ path, sha256: sha256(Buffer.from(body)), mime: "text/html" }));
+    const manifest = { sourceRevision: SOURCE_REVISION, routes: ["/", "/docs/a/"], files };
+    const routeFile = vi.fn((route: string) => route === "/" ? "index.html" : "docs/a/index.html");
+    const assetUrl = vi.fn((path: string) => path === "docs/a/index.html" ? null : path === "404.html" ? "/404" : "/");
+    const target = {
+      ...TARGETS.webshop,
+      manifestFileName: "test-multi-page-manifest.json",
+      verifyArtifact: async ({ directory }: { directory: string }) => ({ root: directory, manifest, files }),
+      liveRoutes: (routeManifest: Record<string, unknown>) => routeManifest.routes as string[],
+      routeFile,
+      assetUrl,
+    };
+    const requests: string[] = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = new URL(input.toString()).pathname;
+      requests.push(path);
+      if (path === "/test-multi-page-manifest.json") return new Response(JSON.stringify(manifest), { headers: { "content-type": "application/json" } });
+      const body = path === "/" ? bodies["index.html"] : path === "/docs/a/" ? bodies["docs/a/index.html"] : path === "/404" ? bodies["404.html"] : undefined;
+      if (!body) throw new Error(`Unexpected asset URL: ${path}`);
+      return new Response(body, { headers: { "content-type": "text/html" } });
+    });
+    try {
+      const result = await deployHostedDemo({ target, environment: ENVIRONMENT, runner: fake.runner, retryDelaysMs: [], delayImpl: async () => {} });
+      expect(result.deployedVersionId).toBe(NEW_VERSION);
+      expect(result.proof.routes.map(({ path }) => path)).toEqual(["/", "/docs/a/"]);
+      expect(result.proof.assets.map(({ path }) => path)).toEqual(["index.html", "404.html"]);
+      expect(routeFile.mock.calls).toEqual([["/", manifest], ["/docs/a/", manifest]]);
+      expect(assetUrl.mock.calls).toEqual([["index.html"], ["docs/a/index.html"], ["404.html"]]);
+      expect(requests).toEqual(["/test-multi-page-manifest.json", "/", "/docs/a/", "/", "/404"]);
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it("creates a never-deployed target with wrangler deploy, binding its custom domain", async () => {
