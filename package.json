@@ -18,11 +18,11 @@
       "default": "./server/dev-server.mjs"
     },
     "./config": {
-      "types": "./server/config/define.d.mts",
+      "types": "./server/config-public.d.mts",
       "default": "./server/config/define.mjs"
     },
     "./vite": {
-      "types": "./plugins/index.d.mts",
+      "types": "./server/vite.d.mts",
       "default": "./plugins/index.mjs"
     },
     "./authoring": {

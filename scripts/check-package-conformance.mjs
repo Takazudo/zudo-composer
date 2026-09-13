@@ -145,8 +145,8 @@ for (const [field, specs] of Object.entries({ dependencies: rootPackageJson.depe
 
 const expectedRootExports = {
   '.': { types: './server/dev-server.d.mts', default: './server/dev-server.mjs' },
-  './config': { types: './server/config/define.d.mts', default: './server/config/define.mjs' },
-  './vite': { types: './plugins/index.d.mts', default: './plugins/index.mjs' },
+  './config': { types: './server/config-public.d.mts', default: './server/config/define.mjs' },
+  './vite': { types: './server/vite.d.mts', default: './plugins/index.mjs' },
   './authoring': { types: './server/authoring.d.mts', default: './server/authoring.mjs' },
   './site-build': { types: './server/site-build.d.mts', default: './server/site-build.mjs' },
   './site-project': { types: './server/site-project.d.mts' },
@@ -196,6 +196,8 @@ for (const required of [
   'server/public/authoring.mts',
   'server/public/site-build.mts',
   'server/public/site-project.mts',
+  'server/public/vite.mts',
+  'server/public/config.mts',
   'server/site-build/compile.ts',
   'server/site-build/artifact.mjs',
   'server/site-build/assets.ts',

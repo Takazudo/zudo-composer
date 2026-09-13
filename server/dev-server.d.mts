@@ -1,5 +1,5 @@
 import type { InlineConfig, ViteDevServer } from "vite";
-import type { ResolvedComposerConfig } from "./config";
+import type { ResolvedComposerConfig } from "zudo-composer/config";
 
 export const OPTIMIZE_DEPS_EXCLUDE: readonly string[];
 
