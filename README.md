@@ -508,9 +508,11 @@ emitted HTML files, including extensionless pages, while Wrangler's default
 `auto-trailing-slash` HTML handling and explicit `404-page` behavior serve the
 static site.
 
-`pnpm build:hosted-demo` emits `dist-hosted-demo`, and `pnpm hosted-demo:verify`
-checks the final files, manifest identities, checksums, MIME types and the
-ordinary artifact boundary. CI then runs the hosted browser lane against that
+`pnpm demo:build-editor <sample|shop|landing|blog|dir>` emits the selected host's
+`dist-editor`, using its own config, component pack, stylesheet and generated
+project. `pnpm demo:build-editors` discovers all demo hosts and builds them one
+at a time. The artifact verifier and CI handoff are described in
+[`docs/hosted-demo.md`](./docs/hosted-demo.md). CI runs the hosted browser lane against the
 same directory and uploads an artifact named for the exact 40-character commit
 SHA. Production can consume only a successful `main` CI run from this
 repository, downloads that exact run/SHA artifact, verifies it again, captures
@@ -536,8 +538,7 @@ Prove the exact local artifact with:
 corepack pnpm install --frozen-lockfile
 corepack pnpm check
 corepack pnpm smoke:host-install
-corepack pnpm build:hosted-demo
-corepack pnpm hosted-demo:verify
+corepack pnpm demo:build-editors
 ```
 
 ## Destructive current-only policy
