@@ -6,4 +6,30 @@ description: Definitions for the domain terms used throughout the zudo-composer 
 
 ## Overview
 
-This page will cover the vocabulary used by Composer, its content domains, component packs, and host projects.
+These terms describe the boundaries between the authoring tool, a host
+project, and a delivered SiteProject. Names are intentionally capitalized when
+they identify a domain or persisted record type.
+
+## Terms
+
+| Term | Meaning |
+| --- | --- |
+| Composer | The core authoring domain and product. It validates Composition documents, generates component source, enforces reuse rules, and supplies the editor chrome, renderer, and isolated preview protocol. |
+| Composition | A persisted document of component nodes, props, and structural slots. A Composition may be published as a pattern or global template, or bound as a template consumer. |
+| Global template | A Composition whose `publication.kind` is exactly `"global-template"`. It exposes a published outlet for consumer Compositions and is stored under `compositionsDir` like any other Composition. |
+| Content / Entry | Content owns model definitions and the Entry library. An Entry is a record of field values for a Content model and can be selected for release publication. |
+| Mapping | The binding domain that connects Content values or Entries to targets in a Composition, including source resolution, projections, and transforms. |
+| Sitemapper | The page-tree domain. It owns sitemap records, navigation and route resolution, and the catalog integration that finds saved Composer records. |
+| Assets | The versioned, content-addressed asset store: `assetsDir` contains the catalog and immutable versions, while `publicAssetsDir` is the host-owned directory for committed delivery bytes. Immutable URLs are checksum-addressed; upload authoring is local-development only. |
+| Component pack | A package addressed by the host's `pack` module specifier. Its `componentPack` export provides the manifest and runtime entries that satisfy the component contract. |
+| Themeset | An independently installed package that supplies a component pack and usually its stylesheet. It is interchangeable with another pack that satisfies the same contract; `@zudo-sg/ui` is one ordinary themeset. |
+| Host | The project that installs zudo-composer, declares `zudo-composer.config.ts`, and owns component code, template data, CMS records, and public asset bytes. |
+| Self-reference pack | A host-local component pack reached through the host package's own `exports` map, for example `"./components": "./components/pack.ts"` with `pack: "my-site/components"`. It is a package specifier, not a filesystem path. |
+| Component contract | The versioned `@zudo-composer/component-contract` package that validates provider sidecars, produces a JSON-safe manifest and trusted runtime registry, and preserves unknown or mismatched nodes as opaque values. |
+| SiteProject | The portable JSON-safe aggregate of provider-qualified Compositions, Content models/Entries, Mappings, and Sitemaps, plus component-pack requirements, the active sitemap, and collection attachments. Assets remain a separate global store. |
+| Ready workspace | The selected `initial` workspace produced by `zudo-composer seed --ready-workspace` from a host's committed `site-project.json`. It is a deterministic, complete authoring workspace; it does not activate website delivery. |
+| Release / activation / CAS revision | A release is a detached candidate with project, Assets, and toolchain identities. `plan` describes it, `apply` stages it, `build` creates immutable output, and `activate` compare-and-swaps the exact `{projectId, revision, buildId}` into the sole `active.json` pointer. The project `revision` is the SHA-256 of canonical four-domain SiteProject UTF-8 JSON. |
+| `TransactionalRecordStore` | The shared filesystem transaction engine used by the five authoring domains. It stages complete immutable record generations and atomically swaps one pointer, so a failed commit never exposes a partial record set. |
+| File provider | The development transport between browser domain clients and host filesystem stores. It exposes typed domain operations over guarded same-origin requests; durable state remains on the host filesystem, not in browser storage. |
+| Hosted demo | The bundled Sample Studio production target that exercises the tool with frozen route data and a checked static artifact. It is a demo adapter, not hosted CMS persistence for arbitrary hosts. |
+| Trusted-run deploy target | A named hosted-demo deployment target selected by the guarded workflow. Its static artifact is checked and then subjected to bounded live verification; this operational target is separate from the installed tool's authoring-route contract. |
