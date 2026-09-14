@@ -26,6 +26,32 @@ the [preview iframe](./composer-preview-protocol.mdx) renders trusted functions.
 | [file: plugins/component-pack.mjs](https://github.com/Takazudo/zudo-composer/blob/main/plugins/component-pack.mjs) | Resolve and load the host's pack, then check its declared source modules. |
 | [file: src/features/composer/component-provider.ts](https://github.com/Takazudo/zudo-composer/blob/main/src/features/composer/component-provider.ts) | Adapt a validated pack into the catalog and runtime entries used by Composer. |
 
+## Slots, `accepts`, and bounds
+
+A `SlotDefinition` names a persisted slot `id`, the real component `prop` it
+projects to, a display `label`, and a `cardinality` of `"single"` or `"many"`.
+Two further fields narrow what that slot holds:
+
+- `accepts` — an ordered list of component ids the slot allows. Omitted means
+  every component in the pack is accepted; present, it is a hard restriction:
+  consumers reject an insert whose component id is not listed, exactly like a
+  cycle or a missing component.
+- `min` / `max` — optional non-negative integer bounds on the slot's direct
+  children. `cardinality: "single"` already holds at most one node, so
+  `min > 1` or `max > 1` is rejected when the manifest is validated
+  (`INVALID_SLOT_BOUNDS`).
+
+`max` is a **hard** cap: an insert that would exceed it is rejected the same
+way an insert outside `accepts` is. `min` is **soft** — a completeness
+requirement surfaced as a diagnostic (`describeSlotCompleteness` in
+`src/composer/model/validate.ts`) that never blocks rendering, export, or a
+published Global template outlet from staying empty in its own source. A
+consumer bound to that outlet is judged against its own roots instead; see
+[Page kinds](../guides/page-kinds.mdx) for the end-to-end mechanism and
+[`packages/component-contract/README.md`](https://github.com/Takazudo/zudo-composer/blob/main/packages/component-contract/README.md#slot-bounds)
+for the exact bound rules. Omitted `min`/`max` leave behavior unchanged from
+before these bounds existed.
+
 ## Sidecars and authoring helpers
 
 A sidecar is a provider-owned module that pairs an existing component with its

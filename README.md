@@ -6,7 +6,10 @@ components and a `zudo-composer.config.ts`, and gets five authoring products
 over a shared filesystem storage engine:
 
 - Composer owns its document model, source generation, reuse rules, chrome,
-  preview renderer, and same-origin iframe protocol.
+  preview renderer, and same-origin iframe protocol. A component's slot can
+  restrict what it accepts, and a Global template whose outlet targets such a
+  slot becomes a page kind — see the
+  [Page Kinds guide](./doc/src/content/docs/guides/page-kinds.mdx).
 - Content owns its model, Entry library, and authoring UI.
 - Mapping owns its binding model, resolver, preview handoff, and authoring UI.
 - Sitemapper owns its page-tree model, library, authoring UI, and the catalog

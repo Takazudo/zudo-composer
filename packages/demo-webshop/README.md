@@ -45,6 +45,14 @@ ids in `site-project.ts` are the record ids of the committed Assets store.
 build does and asserts every route, its h1, the materialised lists and the
 pinned image URLs.
 
+The three shelf pages are bound to the "Category page" Global template, whose
+outlet targets `shop.category-body`'s restricted `content` slot (accepts
+`shop.hero`, `shop.section-heading`, `shop.product-grid`, `shop.demo-note`;
+`min: 1`). That makes "Category page" a page kind: see the
+[Page Kinds guide](../../doc/src/content/docs/guides/page-kinds.mdx) for the
+full mechanism, worked from this exact host, and `zudo-composer grammar
+--template category-page` (run from this directory) to print its rule.
+
 The site is delivered at `/site` on the dev server and at
 `https://zc-demo-shop.zudolab.dev` from `corepack pnpm demo:build-site webshop`.
 Its disposable editor is published at

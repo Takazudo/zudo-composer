@@ -47,6 +47,14 @@ A slot may declare optional `min` and `max` bounds on its direct children:
 - Omitted bounds leave behaviour unchanged, and a manifest without bounds
   validates exactly as it did before they existed.
 
+Combined with `accepts`, these bounds are what the zudo-composer consumer
+calls a "page kind": a Global template whose outlet targets a restricted
+slot, so every bound consumer inherits that slot's `accepts`/cardinality/
+`min`/`max` as its own root policy. This package defines the bounds; the
+worked example and every authoring surface that displays them live in
+zudo-composer's own
+[Page Kinds guide](https://github.com/Takazudo/zudo-composer/blob/main/doc/src/content/docs/guides/page-kinds.mdx).
+
 The package is self-contained on the permanent package-only branch
 `package/component-contract-v1`. Its `prepare` script builds from the package
 root, and the package-local workspace boundary prevents preparation from

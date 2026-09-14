@@ -21,6 +21,7 @@ zudo-composer <command> [options]
 | `init <dir>` | Create a populated host in one new directory. | The supplied destination; it must not already exist. |
 | `dev` | Start the authoring Vite server. | The current directory. |
 | `generate` | Generate `site-project.json` from `site-project.ts`. | The current host directory. |
+| `grammar` | Print the composition grammar for agents: what each page kind's region accepts. | The resolved component pack and the active workspace's templates. |
 | `seed` | Publish and activate a committed SiteProject, or produce a ready workspace. | `site-project.json` under the host root. |
 | `build-site` | Build and verify the host's static website in `dist-site`. | `dist-site` under the host root. |
 | `release` | Run the SiteProject JSON-stdin release API. | The current host and its local release root. |
@@ -40,9 +41,10 @@ child, so relative paths are interpreted from the caller's current directory
 unless a command says otherwise.
 
 `dev` runs in the current process because the Vite server owns its listener.
-`init`, `generate`, `seed`, `build-site`, `release`, and `assets import` run in
-supervised child processes. A successful one-shot command exits 0; command
-failures are nonzero and the child status is preserved by the launcher.
+`init`, `generate`, `grammar`, `seed`, `build-site`, `release`, and `assets
+import` run in supervised child processes. A successful one-shot command
+exits 0; command failures are nonzero and the child status is preserved by
+the launcher.
 
 ## `dev`
 
@@ -133,6 +135,56 @@ missing or stale aggregate is an error, so use normal mode to update it.
 
 Parser, config, pack, evaluation, validation, missing-source, and stale-output
 errors exit 1. A successful write, no-op, or current check exits 0.
+
+## `grammar`
+
+Print what each [page kind](../guides/page-kinds.mdx) accepts, derived from
+the resolved component pack and the host's active workspace:
+
+```sh
+zudo-composer grammar
+```
+
+| Flag | Behavior |
+| --- | --- |
+| `--root <dir>` | Read the host from this root instead of the current directory. |
+| `--json` | Print the `Grammar` object as JSON instead of rendered Markdown. |
+| `--template <id>` | Narrow output to the one named Global template. |
+
+The command resolves the host's component pack and reads every Composition in
+its active workspace (a host with no selected workspace yet contributes no
+templates). It builds one `Grammar` entry per published Global template whose
+outlet targets a container slot: an `open` entry when that slot declares no
+`accepts`, otherwise a `region` naming the container, the slot, its
+cardinality/`min`/`max`, and the accepted component kinds (each with its own
+nested `accepts`, if any). Pages bound to no template always accept any
+component in the pack (`openRoot`). Markdown output closes every restricted
+region with "everything else in the pack is rejected by the model." so an
+agent reads a hard boundary, not a suggestion. Sample output for a host with
+one restricted page kind:
+
+```text
+# Category page (template category-page)
+Region "Main content" = shop.category-body › content
+- accepts (any order, at least 1):
+  - shop.hero             — Full-bleed image with eyebrow, heading, lead and up to two actions; wrap one heading word in *asterisks* to emphasise it.
+  - shop.section-heading  — Eyebrow, heading and optional intro; `as` sets the heading level.
+  - shop.product-grid     — List host for product cards with category chips, sort, search and pagination.; children: shop.product-card only
+  - shop.demo-note        — Muted caption saying the mock sends no data.
+- everything else in the pack is rejected by the model.
+
+# Pages without a template
+- accepts: any component in the pack.
+```
+
+| Invalid invocation | Error text |
+| --- | --- |
+| `zudo-composer grammar --template` | `--template requires an id.` |
+| `zudo-composer grammar --check` | `Unknown grammar option "--check".` |
+| `zudo-composer grammar --template missing-id` | `"missing-id" is not a published Global template in this host.` |
+
+Parser, config, pack, and template-lookup errors exit 1. A successful render
+(Markdown or JSON) exits 0.
 
 ## `seed`
 

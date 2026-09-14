@@ -99,6 +99,27 @@ When tool and contract versions are published, the same CLI can use the normal
 registry path and preserve the portable registry lockfile. There is no
 first-activation migration or separate creator release to coordinate.
 
+## Give agents the grammar
+
+Before pointing an agent at a host's Composer, print what it may insert
+where:
+
+```sh
+zudo-composer grammar
+```
+
+This reads the host's resolved component pack and active workspace and
+renders, per published Global template whose outlet targets a container's
+restricted slot (a [page kind](https://github.com/Takazudo/zudo-composer/blob/main/doc/src/content/docs/guides/page-kinds.mdx)),
+the exact set of component kinds that slot accepts — the same rule every
+Composer authoring surface enforces. `--json` emits the underlying `Grammar`
+object instead of Markdown, and `--template <id>` narrows output to one
+template. See the [CLI reference](https://github.com/Takazudo/zudo-composer/blob/main/doc/src/content/docs/setup/cli.mdx#grammar)
+for flags and sample output. The starter host has no restricted page kind, so
+a freshly created host's grammar has only the always-present "Pages without a
+template" section; the command is most useful once the host's own components
+declare slot rules.
+
 ## Checks
 
 `corepack pnpm consumer:boundary` also scans a verbatim template copy with its
