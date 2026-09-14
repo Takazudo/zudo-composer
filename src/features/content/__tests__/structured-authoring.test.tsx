@@ -13,10 +13,10 @@ import type { ContentAssetPickerRenderer } from "../structured-field-editor";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const stamp = "2026-01-01T00:00:00.000Z";
 const run = (action: () => void | Promise<void>) => void Promise.resolve(action());
-function Harness({ controller, renderAssetPicker }: { controller: ContentAuthoringController; renderAssetPicker?: ContentAssetPickerRenderer }): JSX.Element {
+function Harness({ controller, renderAssetPicker, assetPickerCapabilities }: { controller: ContentAuthoringController; renderAssetPicker?: ContentAssetPickerRenderer; assetPickerCapabilities?: { upload: boolean } }): JSX.Element {
   const [state, setState] = useState(controller.state);
   useEffect(() => controller.subscribe(setState), [controller]);
-  return <ContentEntryAuthor state={state} controller={controller} run={run} renderAssetPicker={renderAssetPicker} />;
+  return <ContentEntryAuthor state={state} controller={controller} run={run} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} />;
 }
 function SchemaHarness({ controller }: { controller: ContentAuthoringController }): JSX.Element {
   const [state, setState] = useState(controller.state);
@@ -165,6 +165,23 @@ describe("Content asset-use cards", () => {
     expect(request?.kind).toBe("image");
     fireEvent.click(screen.getByRole("button", { name: "Use image" }));
     expect(controller.state.entry?.values.hero).toEqual(imageUse);
+  });
+
+  it("offers Upload… only with the upload capability and passes the upload intent", async () => {
+    const { controller } = await createAssetController(null, { assets: [] });
+    let request: Parameters<ContentAssetPickerRenderer>[0] | undefined;
+    render(<Harness controller={controller} assetPickerCapabilities={{ upload: true }} renderAssetPicker={(next) => { request = next; return <div role="dialog" aria-label="Asset picker" />; }} />);
+    expect(screen.getByRole("button", { name: "Upload…" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Upload…" }));
+    expect(request?.intent).toBe("upload");
+    expect(request?.kind).toBe("image");
+  });
+
+  it("does not offer Upload… when a picker renderer exists without upload capability", async () => {
+    const { controller } = await createAssetController(null, { assets: [] });
+    render(<Harness controller={controller} renderAssetPicker={() => <div role="dialog" aria-label="Asset picker" />} assetPickerCapabilities={{ upload: false }} />);
+    expect(screen.getByRole("button", { name: "Choose from Assets" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Upload…" })).toBeNull();
   });
 
   it.each(["link", "download", "card"] as const)("names an empty %s use as an asset", async (kind) => {
