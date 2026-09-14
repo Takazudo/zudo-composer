@@ -276,6 +276,7 @@ export interface ContentEntryAuthorProps {
   controller: ContentAuthoringController;
   run: ContentAuthorRun;
   renderAssetPicker?: ContentAssetPickerRenderer;
+  assetPickerCapabilities?: { upload: boolean };
 }
 
 /**
@@ -285,7 +286,7 @@ export interface ContentEntryAuthorProps {
  * Entry's "used by" is resolved by the Mapping catalogue, which the inspector's
  * Usage tab owns; inventing a count here would mean guessing.
  */
-export function ContentEntryAuthor({ state, controller, run, renderAssetPicker }: ContentEntryAuthorProps): JSX.Element {
+export function ContentEntryAuthor({ state, controller, run, renderAssetPicker, assetPickerCapabilities }: ContentEntryAuthorProps): JSX.Element {
   const entry = state.entry!;
   const allFields = state.model!.document.fields;
   const view = state.model!.document.presentation?.views.find((item) => item.id === state.viewId);
@@ -339,7 +340,7 @@ export function ContentEntryAuthor({ state, controller, run, renderAssetPicker }
         const commit = (next: ContentEntryRecord["values"][string] | undefined) => run(() => controller.updateEntryValue(field.id, next));
 
         if (["choice", "reference", "reference-list", "object", "list", "asset-use"].includes(field.kind)) {
-          return <div class="sg-content-rich-field" data-content-field-id={field.id} data-content-value-path="/" key={field.id}><Field controlId={controlId} label={field.label} required={field.required} kind={kind}><StructuredValueEditor schema={field} field={field} value={value} path={[]} controller={controller} run={run} renderAssetPicker={renderAssetPicker} commit={(next) => controller.updateEntryValue(field.id, next)} /></Field></div>;
+          return <div class="sg-content-rich-field" data-content-field-id={field.id} data-content-value-path="/" key={field.id}><Field controlId={controlId} label={field.label} required={field.required} kind={kind}><StructuredValueEditor schema={field} field={field} value={value} path={[]} controller={controller} run={run} renderAssetPicker={renderAssetPicker} assetPickerCapabilities={assetPickerCapabilities} commit={(next) => controller.updateEntryValue(field.id, next)} /></Field></div>;
         }
 
         if (field.kind === "markdown") {
