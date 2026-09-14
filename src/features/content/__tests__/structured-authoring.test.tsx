@@ -7,6 +7,7 @@ import { ContentEntryAuthor, ContentSchemaAuthor } from "../content-author";
 import { ContentRawView } from "../content-workspace";
 import { createContentAuthoringController, type ContentAuthoringController } from "../controller";
 import { createMemoryContentProvider } from "../fixtures";
+import type { ContentAssetPickerRenderer } from "../structured-field-editor";
 
 afterEach(cleanup);
 const stamp = "2026-01-01T00:00:00.000Z";
@@ -77,11 +78,13 @@ describe("generic structured Content authoring", () => {
 
   it("consumes the callback-only Asset picker seam without importing Asset presentation", async () => {
     const model = createContentModelRecord({ name: "Cards", kind: "collection", fields: [{ id: "hero", key: "hero", label: "Hero", required: false, kind: "asset-use", use: "image" }] }, { id: "cards", timestamp: stamp });
-    const entry = createContentEntryRecord("cards", {}, { id: "card", timestamp: stamp });
+    const entry = createContentEntryRecord("cards", { hero: { kind: "image", asset: { providerId: "asset-files", assetId: "existing-hero" }, alt: "Existing hero", decorative: false, caption: "Existing caption" } }, { id: "card", timestamp: stamp });
     const controller = createContentAuthoringController(createMemoryContentProvider({ models: [model], entries: [entry] }));
     await controller.initialize(); await controller.openModel("cards"); await controller.openEntry("card");
-    render(<ContentEntryAuthor state={controller.state} controller={controller} run={run} renderAssetPicker={({ onSelect }) => <div role="dialog" aria-label="Asset picker"><button onClick={() => onSelect({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "", decorative: false, caption: "" })}>Choose hero</button></div>} />);
-    fireEvent.click(screen.getByRole("button", { name: "Choose from Assets" }));
+    let pickerRequest: Parameters<ContentAssetPickerRenderer>[0] | undefined;
+    render(<ContentEntryAuthor state={controller.state} controller={controller} run={run} renderAssetPicker={(request) => { pickerRequest = request; return <div role="dialog" aria-label="Asset picker"><button onClick={() => request.onSelect({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "", decorative: false, caption: "" })}>Choose hero</button></div>; }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Replace from Assets" }));
+    expect(pickerRequest?.current).toEqual({ providerId: "asset-files", assetId: "existing-hero" });
     fireEvent.click(screen.getByRole("button", { name: "Choose hero" }));
     expect(controller.state.entry?.values.hero).toMatchObject({ kind: "image", asset: { providerId: "asset-files", assetId: "hero" } });
   });
