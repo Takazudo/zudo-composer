@@ -8,6 +8,8 @@
  * and the inspector's own row shapes. The iframe imports preview.css instead.
  * ========================================================================== */
 
+@import "./ui/quick-insert/quick-insert.css";
+
 /* ── Editor regions ─────────────────────────────────────────────────────── */
 
 .sg-composer-editor { min-width: 0; }

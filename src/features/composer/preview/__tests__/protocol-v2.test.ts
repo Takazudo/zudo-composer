@@ -5,6 +5,7 @@ import {
   readParentToPreview,
   readPreviewToParent,
   readyMessage,
+  requestAddMessage,
   requestHistoryMessage,
   renderMessage,
 } from "../protocol";
@@ -42,6 +43,19 @@ describe("Composer preview protocol v2 pack handshake", () => {
     const withoutRecord: Record<string, unknown> = { ...message };
     delete withoutRecord.localRecordId;
     expect(readParentToPreview(event(withoutRecord), expected)).toMatchObject({ ok: false, reason: "invalid-payload" });
+  });
+});
+
+describe("Composer preview request-add", () => {
+  const target = { parentId: null, slotId: "root", index: 0 };
+
+  it("accepts an Add with or without the pressed control's rect", () => {
+    const rect = { x: 1, y: 2, width: 30, height: 12 };
+    expect(readPreviewToParent(event(requestAddMessage(pack, 1, target)), expected)).toMatchObject({ ok: true });
+    const withRect = readPreviewToParent(event(requestAddMessage(pack, 1, target, rect)), expected);
+    expect(withRect).toMatchObject({ ok: true, message: { rect } });
+    const badRect = { ...requestAddMessage(pack, 1, target), rect: { x: 1 } };
+    expect(readPreviewToParent(event(badRect), expected).ok).toBe(false);
   });
 });
 

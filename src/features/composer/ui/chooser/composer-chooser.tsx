@@ -107,6 +107,8 @@ export interface ComposerChooserProps {
   loadPattern?: (ref: CompositionRecordRef) => Promise<ReuseSelectionOutcome>;
   /** Current controller root policy, used for advisory full-forest eligibility. */
   rootPolicy?: RootPolicy;
+  /** Tab shown when the chooser opens; the canvas quick insert's "Pattern…" chip asks for Patterns. */
+  initialTab?: ChooserTab;
   /**
    * Revalidate and invoke the controller's one atomic forest command. The
    * dialog closes only for `inserted`; a rejection keeps the selected Pattern,
@@ -128,7 +130,7 @@ export type PatternInsertionOutcome =
   | { status: "inserted"; nodeId?: string }
   | { status: "rejected"; message: string };
 
-type ChooserTab = "components" | "patterns";
+export type ChooserTab = "components" | "patterns";
 
 interface LoadedPattern {
   key: string;
@@ -186,6 +188,7 @@ export function ComposerChooser({
   patternCatalogLoading = false,
   loadPattern,
   rootPolicy,
+  initialTab = "components",
   onInsertPattern,
   previewCreateBridge,
   previewLocation,
@@ -239,7 +242,7 @@ export function ComposerChooser({
     if (!open) patternRequestGeneration.current += 1;
     setQuery("");
     setCategory(ALL_CATEGORY);
-    setActiveTab("components");
+    setActiveTab(initialTab);
     setStatus("");
     setPreviewedComponentId(null);
     setSelectedPatternKey(null);

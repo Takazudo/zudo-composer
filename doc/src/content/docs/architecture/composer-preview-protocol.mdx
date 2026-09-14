@@ -59,7 +59,9 @@ a one-shot command outside snapshot revision ordering.
 The preview answers with `ready`, `select`, `request-add`, `open-source`,
 `request-node-menu`, `request-insert-menu`, `commit-inline-edit`, `drop-node`,
 `request-history`, and `error`. Menu requests carry geometry and a focus token;
-the parent need not reach into the iframe DOM to restore focus.
+the parent need not reach into the iframe DOM to restore focus. `request-add`
+may also carry the pressed control's geometry, which the parent uses to anchor
+the quick-insert popover for a restricted slot.
 
 Each `createComposerPreviewBridge` call retains only its newest snapshot.
 Before `ready`, newer renders replace that retained value. On first load or

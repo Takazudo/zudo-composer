@@ -324,6 +324,14 @@ export const LeafIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
   ]),
 );
 
+/** Restricted slot: a closed padlock — only the rule's component kinds may enter. */
+export const LockIcon: IconComponent = makeIcon((w, hgt, cls, style) =>
+  svgRoot(w, hgt, cls, style, stroked(1.5), [
+    h("rect", { x: 3.5, y: 7, width: 9, height: 6.5, rx: 1.25 }),
+    h("path", { d: "M5.5 7V5a2.5 2.5 0 0 1 5 0v2" }),
+  ]),
+);
+
 // ── Inventory helpers ───────────────────────────────────────────────────────
 
 /** Build a filled icon from one path while preserving the shared shell. */

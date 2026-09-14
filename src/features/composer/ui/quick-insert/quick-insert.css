@@ -1,0 +1,69 @@
+/* Canvas quick insert — rendered inside the shared `.cms-menu` panel. */
+
+.sg-quick-insert {
+  display: grid;
+  gap: var(--sp-2);
+  max-width: 20rem;
+  padding: var(--sp-1);
+}
+
+.sg-quick-insert__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--color-muted);
+  font-size: .6875rem;
+  font-weight: 650;
+}
+
+.sg-quick-insert__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.sg-quick-insert__chip {
+  cursor: pointer;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: .6875rem;
+  font-weight: 650;
+}
+
+.sg-quick-insert__chip:hover,
+.sg-quick-insert__chip:focus-visible {
+  color: var(--color-accent);
+  border-color: var(--color-accent-line);
+  background: var(--color-accent-soft);
+}
+
+.sg-quick-insert__chip--pattern {
+  border-style: dashed;
+  color: var(--color-muted);
+}
+
+.sg-quick-insert__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-2);
+  padding-block-start: var(--sp-1);
+  border-block-start: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font-size: .6875rem;
+}
+
+.sg-quick-insert__more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sg-quick-insert__more:hover,
+.sg-quick-insert__more:focus-visible {
+  text-decoration: underline;
+}
