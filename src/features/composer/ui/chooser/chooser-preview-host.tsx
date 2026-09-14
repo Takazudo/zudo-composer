@@ -29,7 +29,7 @@ import { useAssetResolvedPreviewSnapshot } from "../../preview/assets-snapshot";
 // out of the tab/click order — this pane is look-only.
 
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { JSX } from "preact";
+import type { ComponentChildren, JSX } from "preact";
 import type { CompositionDocument, CompositionNode } from "../../../../composer/browser";
 import { COMPOSITION_SCHEMA_VERSION } from "../../../../composer/browser";
 import type { ComponentDefinition, ComposerComponentProvider } from "../../active-pack";
@@ -100,6 +100,8 @@ export interface ChooserPreviewHostProps {
   sourceDocument?: CompositionDocument | null;
   /** Keeps the shared isolated-preview shell correctly labelled in each chooser tab. */
   label?: string;
+  /** Chooser-owned context shown between the description and the stage. */
+  notice?: ComponentChildren;
   /** Full catalog lookup, for resolving the PlaceholderBox preview child. */
   catalogById: ReadonlyMap<string, ComponentDefinition>;
 
@@ -115,6 +117,7 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
     entry,
     sourceDocument,
     label = "Live preview",
+    notice,
     catalogById,
     createBridge = createComposerPreviewBridge,
     location: locationProp,
@@ -209,6 +212,7 @@ export function ChooserPreviewHost(props: ChooserPreviewHostProps): JSX.Element 
         <h3 class="sg-composer-chooser-preview-title">{entry?.title ?? sourceDocument?.name}</h3>
       )}
       {entry && <p class="sg-composer-chooser-preview-description">{entry.description}</p>}
+      {notice}
       <div class="sg-composer-chooser-preview-stage">
         {fatalError && (
           <p class="sg-composer-chooser-pattern-error" role="alert" data-composer-preview-fatal="pack-mismatch">
