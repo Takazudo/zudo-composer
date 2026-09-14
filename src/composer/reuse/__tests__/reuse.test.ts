@@ -256,6 +256,47 @@ describe("live Global-template resolution", () => {
     });
   });
 
+  it("carries slot bounds and rule provenance, and resolves an intentionally empty min outlet", () => {
+    const boundedManifest = createComponentCatalog(createFixturePackManifest(entries.map((entry) => entry.id === "host"
+      ? {
+          ...entry,
+          title: "Category body",
+          slots: [...entry.slots, { id: "content", prop: "content", label: "Content", accepts: ["allowed"], cardinality: "many" as const, min: 1, max: 2 }],
+        }
+      : entry)));
+    const source = record("source", {
+      name: "Category page",
+      root: [host("owner", { single: [], many: [], content: [] })],
+      publication: {
+        kind: "global-template",
+        outlet: { id: "outlet-main", label: "Main", target: { parentId: "owner", slotId: "content" } },
+      },
+    });
+    const resolved = resolveGlobalTemplate({ consumer: consumer([node("allowed")]), source, manifest: boundedManifest });
+    expect(resolved).toMatchObject({ status: "resolved" });
+    if (resolved.status !== "resolved") return;
+    expect(resolved.rootPolicy).toEqual({
+      kind: "resolved",
+      accepts: ["allowed"],
+      cardinality: "many",
+      min: 1,
+      max: 2,
+      origin: {
+        componentId: "host",
+        componentTitle: "Category body",
+        slotId: "content",
+        slotLabel: "Content",
+        viaTemplate: { sourceName: "Category page", outletLabel: "Main" },
+      },
+    });
+
+    const tooMany = consumer([node("a"), node("b"), node("c")]);
+    expect(resolveGlobalTemplate({ consumer: tooMany, source, manifest: boundedManifest })).toMatchObject({
+      status: "incompatible-local-root",
+      message: expect.stringContaining("at most 2"),
+    });
+  });
+
   it("returns deterministic missing, invalid, nested, self, and incompatible outcomes without changing local roots", () => {
     const local = [node("kept", "other")];
     const bound = consumer(local);

@@ -373,6 +373,7 @@ export async function compileSiteProject(
       }
       const existing = targetNode.slots[attachment.target.slotId] ?? [];
       if (slot.cardinality === "single" && existing.length + roots.length > 1) { diagnostics.push({ severity: "blocking", code: "attachment-slot-cardinality", message: "Collection output exceeds the target slot's single cardinality.", path: attachmentPath, ...routeContext }); return undefined; }
+      if (slot.max !== undefined && existing.length + roots.length > slot.max) { diagnostics.push({ severity: "blocking", code: "attachment-slot-cardinality", message: `Collection output exceeds the target slot's maximum of ${slot.max} ${slot.max === 1 ? "child" : "children"}.`, path: attachmentPath, ...routeContext }); return undefined; }
       targetNode.slots[attachment.target.slotId] = [...existing, ...roots];
     }
     return document;
