@@ -75,7 +75,7 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   await expect(canvas.getByText("Static about body", { exact: true })).toBeVisible();
 
   await treeRowAction(structure, "Add component to the document");
-  const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
+  const chooser = page.getByRole("dialog", { name: /Add to Main content/i });
   await expect(chooser).toBeVisible();
   for (const title of COMPONENTS) {
     await expect(chooser.getByRole("button", { name: new RegExp(`^${title}\\b`, "i") })).toHaveCount(1);
@@ -171,7 +171,7 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
   await treeRowAction(structure, "Add component to the document");
   await page.setViewportSize({ width: 375, height: 812 });
   await expect(toolbar).toBeVisible();
-  const narrowChooser = page.getByRole("dialog", { name: /Add to Document root/i });
+  const narrowChooser = page.getByRole("dialog", { name: /Add to Main content/i });
   await expect(narrowChooser.getByText("12 of 12 components", { exact: true })).toBeVisible();
   await narrowChooser.getByRole("button", { name: "Cancel" }).click();
   await expectNoHorizontalOverflow(page);

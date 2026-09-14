@@ -59,7 +59,7 @@ test("Composer composes, edits, and recovers through toolbar and canvas history"
 
   // Compose a real provider node through the production chooser.
   await treeRowAction(structure, "Add component to the document");
-  const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
+  const chooser = page.getByRole("dialog", { name: /Add to Main content/i });
   await expect(chooser).toBeVisible();
   await chooser.getByRole("button", { name: "SectionHeading", exact: true }).click();
   await expect(canvas.getByRole("heading", { name: "Our approach", exact: true })).toBeVisible();
@@ -182,7 +182,7 @@ test("Hero structured actions persist, render, export, and undo structural edits
   });
   const structure = page.locator(".cms-editor__region--nav");
   await treeRowAction(structure, "Add component to the document");
-  const chooser = page.getByRole("dialog", { name: /Add to Document root/i });
+  const chooser = page.getByRole("dialog", { name: /Add to Main content/i });
   await chooser.getByRole("button", { name: "Hero", exact: true }).click();
 
   const toolbar = page.locator(".cms-editor__toolbar");
