@@ -3,7 +3,7 @@ import type { JSX } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { formatIntent } from "../../app/route-intents";
 import { assetByteLabel, assetTypeLabel } from "../../assets/model";
-import { CopyIcon, ExternalLinkIcon, FileIcon, LibraryIcon, RefreshIcon, TrashIcon, WarningIcon } from "../../components/icons";
+import { CopyIcon, ExternalLinkIcon, FileIcon, LibraryIcon, RefreshIcon, TrashIcon, UploadIcon, WarningIcon } from "../../components/icons";
 import { Button, Chip, Field, Input, Select, Switch, Textarea } from "../../components/ui";
 import type { ContentAssetUse } from "../../content";
 import type { ContentAssetCatalogItem, ContentAuthoringController } from "./controller";
@@ -35,11 +35,12 @@ function makeUse(kind: ContentAssetUse["kind"], item: ContentAssetCatalogItem): 
 const uploadedDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 /** Content owns the resting card; the host supplies the picker through callbacks. */
-export function AssetUseCard({ kind, value, controller, renderAssetPicker, commit }: AssetUseCardProps): JSX.Element {
+export function AssetUseCard({ kind, value, controller, renderAssetPicker, assetPickerCapabilities, commit }: AssetUseCardProps): JSX.Element {
   const [assets, setAssets] = useState<readonly ContentAssetCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerIntent, setPickerIntent] = useState<"upload" | undefined>(undefined);
   const [fallbackOpen, setFallbackOpen] = useState(false);
   const [pixels, setPixels] = useState<{ url: string; width: number; height: number } | null>(null);
   const [failedPreview, setFailedPreview] = useState<string | null>(null);
@@ -67,16 +68,18 @@ export function AssetUseCard({ kind, value, controller, renderAssetPicker, commi
   const extension = asset?.fileName.includes(".") ? asset.fileName.split(".").pop()!.toUpperCase() || typeLabel : typeLabel;
   const image = asset?.mimeType.startsWith("image/");
   const knownPixels = image && pixels?.url === asset?.url && failedPreview !== asset?.url ? pixels : null;
+  const canUpload = assetPickerCapabilities?.upload === true;
   const select = (next: ContentAssetUse) => {
     commit((use ? { ...use, asset: next.asset } : next) as unknown as JsonValue);
     setFailedPreview(null);
     setPickerOpen(false);
+    setPickerIntent(undefined);
     setFallbackOpen(false);
   };
   const unavailableOption = use ? `unavailable:${use.asset.providerId}:${use.asset.assetId}` : "";
   const update = (patch: object) => { if (use) commit({ ...use, ...patch } as unknown as JsonValue); };
-  const choose = () => { if (renderAssetPicker) setPickerOpen(true); else setFallbackOpen(true); };
-  const remove = () => { commit(undefined); setFailedPreview(null); setFallbackOpen(false); setPickerOpen(false); };
+  const choose = (intent?: "upload") => { if (renderAssetPicker) setPickerOpen(true); else setFallbackOpen(true); setPickerIntent(intent); };
+  const remove = () => { commit(undefined); setFailedPreview(null); setFallbackOpen(false); setPickerOpen(false); setPickerIntent(undefined); };
   const copy = async () => {
     if (!asset) return;
     try { await navigator.clipboard?.writeText(asset.authoringUrl); }
@@ -117,7 +120,7 @@ export function AssetUseCard({ kind, value, controller, renderAssetPicker, commi
         {asset ? <p class="sg-content-asset-card__meta">{typeLabel} · {assetByteLabel(asset.byteLength)}{knownPixels ? ` · ${knownPixels.width} × ${knownPixels.height}` : ""} · uploaded {uploadedDate.format(new Date(asset.createdAt))}</p> : null}
         {asset?.state === "trash" ? <p class="sg-content-asset-card__warning"><WarningIcon size="xs" /><span>This asset was moved to Trash in Assets. Choose another {kind === "image" ? "image" : "asset"} or restore it in Assets.</span></p> : null}
         <div class="sg-content-asset-card__actions">
-          <Button size="sm" onClick={choose}><RefreshIcon size="xs" />Replace…</Button>
+          <Button size="sm" onClick={() => choose()}><RefreshIcon size="xs" />Replace…</Button>
           {asset ? <a class="cms-btn cms-btn--sm" href={formatIntent({ route: "assets", providerId: asset.providerId, assetId: asset.assetId })}><ExternalLinkIcon size="xs" />Open in Assets</a> : null}
           <Button variant="danger" size="sm" class="cms-btn--ghost sg-content-asset-card__remove" onClick={remove}><TrashIcon size="xs" />Remove</Button>
         </div>
@@ -127,7 +130,10 @@ export function AssetUseCard({ kind, value, controller, renderAssetPicker, commi
     </div> : <div class="sg-content-asset-card sg-content-asset-card--empty">
       <ImagePlaceholder />
       <p class="sg-content-asset-card__empty-message">{kind === "image" ? "No image chosen." : "No asset chosen."}</p>
-      <div class="sg-content-asset-card__empty-actions">{renderAssetPicker ? <Button variant="primary" onClick={choose}><LibraryIcon size="xs" />Choose from Assets</Button> : fallback}</div>
+      <div class="sg-content-asset-card__empty-actions">{renderAssetPicker ? <>
+        <Button variant="primary" onClick={() => choose()}><LibraryIcon size="xs" />Choose from Assets</Button>
+        {canUpload ? <Button onClick={() => choose("upload")}><UploadIcon size="xs" />Upload…</Button> : null}
+      </> : fallback}</div>
     </div>}
     {error ? <p class="sg-content-field-error"><WarningIcon size="xs" />{error}</p> : null}
     {use ? <div class="sg-content-asset-card__fields">
@@ -144,6 +150,6 @@ export function AssetUseCard({ kind, value, controller, renderAssetPicker, commi
         <Field label="Card description"><Textarea value={use.description} onInput={(event) => update({ description: event.currentTarget.value })} /></Field>
       </>}
     </div> : null}
-    {pickerOpen && renderAssetPicker ? renderAssetPicker({ kind, current: use?.asset, onSelect: select, onClose: () => setPickerOpen(false) }) : null}
+    {pickerOpen && renderAssetPicker ? renderAssetPicker({ kind, current: use?.asset, ...(pickerIntent ? { intent: pickerIntent } : {}), onSelect: select, onClose: () => { setPickerOpen(false); setPickerIntent(undefined); } }) : null}
   </div>;
 }

@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { summarizeAsset, type AssetProvider } from "../../../assets";
+import { ASSET_MAX_BYTE_LENGTH, summarizeAsset, type AssetProvider } from "../../../assets";
 import { AssetPickerDialog } from "../asset-picker-dialog";
 import { nextEscapeAction } from "../asset-picker-panes";
 import { PDF, PNG, providerFixture } from "./versioned-fixture";
@@ -112,6 +112,55 @@ describe("Asset picker dialog", () => {
     expect(renderedNames()).toEqual(["hero.png", "guide.pdf", "alpha.png"]);
     fireEvent.change(sort, { target: { value: "size" } });
     expect(renderedNames()).toEqual(["guide.pdf", "alpha.png", "hero.png"]);
+  });
+
+  it("uploads through the picker input, refreshes the grid, selects the new image and uses it", async () => {
+    const { provider } = await providerFixture();
+    const choose = vi.fn();
+    const close = vi.fn();
+    render(<AssetPickerDialog provider={provider} kind="image" onSelect={choose} onClose={close} />);
+    const input = await screen.findByLabelText("Upload new file") as HTMLInputElement;
+    expect(input).toHaveAttribute("accept", "image/png,image/jpeg,image/gif,image/webp");
+    fireEvent.change(input, { target: { files: [new File([PNG], "uploaded.png", { type: "image/png" })] } });
+    const uploaded = await screen.findByRole("button", { name: "uploaded.png" });
+    await waitFor(() => expect(uploaded).toHaveAttribute("aria-pressed", "true"));
+    fireEvent.click(screen.getByRole("button", { name: "Use this image" }));
+    await waitFor(() => expect(choose).toHaveBeenCalledExactlyOnceWith({
+      kind: "image", asset: { providerId: provider.descriptor.id, assetId: expect.any(String) }, alt: "", decorative: false, caption: "",
+    }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("opens the file chooser immediately for an upload intent", async () => {
+    const { provider } = await providerFixture();
+    const click = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => undefined);
+    render(<AssetPickerDialog provider={provider} kind="image" intent="upload" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await waitFor(() => expect(click).toHaveBeenCalledOnce());
+  });
+
+  it("surfaces invalid image and oversized upload errors without changing the selection", async () => {
+    const { provider } = await libraryFixture();
+    render(<AssetPickerDialog provider={provider} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    const hero = await screen.findByRole("button", { name: "hero.png" });
+    fireEvent.click(hero);
+    const input = screen.getByLabelText("Upload new file") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File([PDF], "guide.pdf", { type: "application/pdf" })] } });
+    expect(await screen.findByText("Choose an image file for this picker.")).toBeVisible();
+    expect(hero).toHaveAttribute("aria-pressed", "true");
+    const oversized = new File([new Uint8Array(ASSET_MAX_BYTE_LENGTH + 1)], "oversized.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [oversized] } });
+    expect(await screen.findByText("Upload exceeds the 25 MB limit. Choose a smaller file.")).toBeVisible();
+    expect(hero).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("omits picker upload controls when the provider has no upload capability", async () => {
+    const { provider, filesystem } = await libraryFixture();
+    const plain: AssetProvider = { ...provider, store: { provider: provider.descriptor, list: () => filesystem.list(), get: (id) => filesystem.get(id), put: provider.store.put, delete: provider.store.delete, clear: provider.store.clear } };
+    render(<AssetPickerDialog provider={plain} kind="image" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByRole("button", { name: "hero.png" });
+    expect(screen.queryByText("Drop a file here to upload and use it")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Upload new file…" })).toBeNull();
+    expect(screen.queryByLabelText("Upload new file")).toBeNull();
   });
 
   it.each(["link", "download", "card"] as const)("double-clicks a file into a fresh %s use", async (kind) => {
