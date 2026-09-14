@@ -160,7 +160,15 @@ cardinality/`min`/`max`, and the accepted component kinds (each with its own
 nested `accepts`, if any). Pages bound to no template always accept any
 component in the pack (`openRoot`). Markdown output closes every restricted
 region with "everything else in the pack is rejected by the model." so an
-agent reads a hard boundary, not a suggestion. Sample output for a host with
+agent reads a hard boundary, not a suggestion.
+
+A published Global template whose outlet no longer resolves (a missing target
+node, an owner component absent from the pack, or an undeclared slot) is
+treated as unavailable rather than failing the command. It is left out of
+`templates` and listed in `unavailableTemplates` as `{ id, name, reason }`;
+Markdown output gives it its own section with an `- unavailable: <reason>`
+line. `--template` still selects any valid template when another one is
+broken. Sample output for a host with
 one restricted page kind:
 
 ```text
@@ -182,6 +190,7 @@ Region "Main content" = shop.category-body › content
 | `zudo-composer grammar --template` | `--template requires an id.` |
 | `zudo-composer grammar --check` | `Unknown grammar option "--check".` |
 | `zudo-composer grammar --template missing-id` | `"missing-id" is not a published Global template in this host.` |
+| `zudo-composer grammar --template stale-id` | `Global template "stale-id" is unavailable: outlet target "node-1" was not found.` |
 
 Parser, config, pack, and template-lookup errors exit 1. A successful render
 (Markdown or JSON) exits 0.

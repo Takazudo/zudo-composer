@@ -288,6 +288,7 @@ function grammarForRestrictedRule(
   return {
     pack: { id: manifest.pack.packId, version: manifest.pack.packVersion },
     templates: [{ id: `${identity.componentId}.${identity.slotId}`, name: `${identity.componentTitle} › ${identity.slotLabel}`, region, open: false }],
+    unavailableTemplates: [],
     openRoot: { accepts: "any" },
   };
 }
