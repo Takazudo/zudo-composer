@@ -55,8 +55,14 @@ export interface BuildGrammarOptions {
   templates: readonly CompositionDocument[];
 }
 
-/** Union, in first-seen order, of the `accepts` lists of a kind's own slots. */
-function describeKindChildren(kindId: string, manifest: ComponentCatalog): string[] | null {
+/**
+ * Union, in first-seen order, of the `accepts` lists of a kind's own slots.
+ * Exported so a surface that synthesizes a `GrammarRegion` for a rule not
+ * backed by a published Global template outlet (the inspector's plain
+ * restricted-slot and root-policy cases) can describe a kind's own children
+ * the same way `buildTemplateEntry` does, without a second traversal.
+ */
+export function describeKindChildren(kindId: string, manifest: ComponentCatalog): string[] | null {
   const entry = manifest.get(kindId);
   if (!entry) return null;
   const seen = new Set<string>();

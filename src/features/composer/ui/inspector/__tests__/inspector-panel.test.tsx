@@ -15,6 +15,12 @@ import {
 } from "../../test-support/composer-fixtures";
 import { InspectorPanel, type InspectorPanelProps } from "../inspector-panel";
 
+const copyTextMock = vi.fn<(text: string) => Promise<boolean>>();
+
+vi.mock("../../../../../shared/clipboard", () => ({
+  copyText: (text: string) => copyTextMock(text),
+}));
+
 function renderPanel(overrides: Partial<InspectorPanelProps> = {}) {
   const onUpdateProps = vi.fn();
   const onRemove = vi.fn();
@@ -108,6 +114,36 @@ describe("InspectorPanel — root/empty state", () => {
       />,
     );
     expect(screen.getByRole("tab", { name: /Slots/ })).not.toBeDisabled();
+  });
+
+  it("shows the Grammar-for-agents block for the document row when the root policy is restricted", () => {
+    const doc = makeDocument([]);
+    doc.binding = { sourceRecordId: "source", outletId: "outlet-main" };
+    renderPanel({
+      document: doc,
+      selectedId: null,
+      entries: testManifestEntries,
+      rootPolicy: {
+        kind: "resolved",
+        accepts: [TEST_COMPONENT_IDS.label],
+        cardinality: "many",
+        min: 1,
+        origin: {
+          componentId: TEST_COMPONENT_IDS.panel,
+          componentTitle: "Panel",
+          slotId: "left",
+          slotLabel: "Left",
+        },
+      },
+    });
+
+    expect(screen.getByText("Grammar for agents")).toBeInTheDocument();
+    expect(screen.getByText(/Region "Left" = test\.panel › left/)).toBeInTheDocument();
+  });
+
+  it("omits the Grammar-for-agents block for the document row when the root policy is unrestricted", () => {
+    renderPanel({ document: makeDocument([]), selectedId: null });
+    expect(screen.queryByText("Grammar for agents")).not.toBeInTheDocument();
   });
 });
 
@@ -474,12 +510,103 @@ describe("InspectorPanel — Slots tab", () => {
       kind: "global-template",
       outlet: { id: "outlet-body", label: "Body", target: { parentId: "region", slotId: "body" } },
     };
-    renderPanel({ document: doc, selectedId: "region", entries: testManifestEntries });
+    const { container } = renderPanel({ document: doc, selectedId: "region", entries: testManifestEntries });
     fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
 
-    expect(screen.getByText("Applies to: every page bound to this template")).toBeInTheDocument();
-    expect(screen.getByText(TEST_COMPONENT_IDS.label, { exact: false })).toBeInTheDocument();
+    const rule = container.querySelector(".sg-composer-inspector-rule")!;
+    expect(rule.textContent).toContain("Applies to: every page bound to this template");
+    expect(rule.textContent).toContain(TEST_COMPONENT_IDS.label);
     expect(screen.queryByText(/reserved for its consumers/)).not.toBeInTheDocument();
+  });
+});
+
+describe("InspectorPanel — Grammar for agents", () => {
+  beforeEach(() => {
+    copyTextMock.mockReset();
+  });
+
+  function regionDoc(children: ReturnType<typeof makeNode>[] = []) {
+    return makeDocument([makeNode(TEST_COMPONENT_IDS.region, {}, { body: children }, "region")]);
+  }
+
+  it("shows the block, below the Rule block, for a restricted slot", () => {
+    const { container } = renderPanel({
+      document: regionDoc(),
+      selectedId: "region",
+      entries: testManifestEntries,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    const slot = container.querySelector('[data-sg-inspector-slots] li[class="sg-composer-inspector-slot"]')!;
+    const rule = slot.querySelector(".sg-composer-inspector-rule")!;
+    const grammar = slot.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
+    expect(grammar).toBeInTheDocument();
+    // Below, in document order, the existing Rule block.
+    expect(rule.compareDocumentPosition(grammar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    expect(within(grammar).getByText("Grammar for agents")).toBeInTheDocument();
+    expect(grammar.textContent).toContain(TEST_COMPONENT_IDS.label);
+    expect(grammar.textContent).toContain(TEST_COMPONENT_IDS.card);
+    expect(grammar.textContent).toContain("Same output as");
+  });
+
+  it("omits the block for an open slot", () => {
+    const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.panel, {}, { left: [], right: [] }, "panel")]);
+    const { container } = renderPanel({ document: doc, selectedId: "panel", entries: testManifestEntries });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    expect(container.querySelector(".sg-composer-inspector-grammar")).not.toBeInTheDocument();
+  });
+
+  it("renders this document's own buildGrammar output for a published Global template outlet", () => {
+    const doc = regionDoc();
+    doc.publication = {
+      kind: "global-template",
+      outlet: { id: "outlet-body", label: "Body", target: { parentId: "region", slotId: "body" } },
+    };
+    const { container } = renderPanel({ document: doc, selectedId: "region", entries: testManifestEntries });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    const grammar = container.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
+    // The header `zudo-composer grammar` itself would print for this exact template.
+    expect(grammar.textContent).toContain(`${doc.name} (template ${doc.id})`);
+  });
+
+  it("swaps the rendered text between Markdown and JSON", () => {
+    const { container } = renderPanel({
+      document: regionDoc(),
+      selectedId: "region",
+      entries: testManifestEntries,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    const grammar = container.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
+    expect(grammar.querySelector("pre")?.textContent).toContain('Region "Body" = test.region › body');
+
+    fireEvent.click(within(grammar).getByRole("button", { name: "JSON" }));
+    expect(grammar.querySelector("pre")?.textContent).toContain('"slotId": "body"');
+    expect(grammar.querySelector("pre")?.textContent).not.toContain('Region "Body"');
+
+    fireEvent.click(within(grammar).getByRole("button", { name: "Markdown" }));
+    expect(grammar.querySelector("pre")?.textContent).toContain('Region "Body" = test.region › body');
+  });
+
+  it("copies whichever text is currently displayed", () => {
+    copyTextMock.mockResolvedValue(true);
+    const { container } = renderPanel({
+      document: regionDoc(),
+      selectedId: "region",
+      entries: testManifestEntries,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    const grammar = container.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
+
+    fireEvent.click(within(grammar).getByRole("button", { name: "Copy" }));
+    expect(copyTextMock).toHaveBeenCalledWith(expect.stringContaining('Region "Body" = test.region › body'));
+
+    fireEvent.click(within(grammar).getByRole("button", { name: "JSON" }));
+    fireEvent.click(within(grammar).getByRole("button", { name: "Copy" }));
+    expect(copyTextMock).toHaveBeenLastCalledWith(expect.stringContaining('"slotId": "body"'));
   });
 });
 
