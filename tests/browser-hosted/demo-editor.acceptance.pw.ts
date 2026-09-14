@@ -133,6 +133,18 @@ async function openWorkingPreview(page: Page): Promise<import("@playwright/test"
   return popupPromise;
 }
 
+/**
+ * A Structure tree row action lives in `.cms-tree-acts`, which is
+ * `width: 0; opacity: 0` until its row is `:focus-within` — Playwright's
+ * actionability check waits on a zero-size element forever. Focusing the
+ * button itself (no actionability check) gives it a box first.
+ */
+async function treeRowAction(structure: Locator, action: string): Promise<void> {
+  const button = structure.getByRole("button", { name: action, exact: true });
+  await button.focus();
+  await button.click();
+}
+
 test.describe(`demo editor: ${context.name}`, () => {
   test("serves every authoring and delivery route after direct navigation and refresh", async ({ page }) => {
     const failures = watchRuntimeFailures(page);
@@ -193,6 +205,57 @@ test.describe(`demo editor: ${context.name}`, () => {
     await expect(page.getByRole("textbox", { name: "Composition name", exact: true })).toHaveValue(context.editableText.compositionName);
     const resetField = await selectEditableTextField(page);
     await expect(resetField).toHaveValue(context.editableText.originalValue);
+    expect(localEndpointRequests, localEndpointRequests.join("\n")).toEqual([]);
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  test("shows the webshop's category-page region rule in the chooser, structure tree and new-composition dialog", async ({ page }) => {
+    test.skip(context.name !== "shop", "The Category page region rule belongs to the webshop host.");
+    const failures = watchRuntimeFailures(page);
+    const localEndpointRequests = watchLocalEndpointRequests(page);
+    // Pack size comes from the editor seed rather than a hardcoded count, so
+    // this test tracks the shop component pack instead of a number that would
+    // silently drift when a component is added or removed.
+    const packSize = context.seed.componentPack.components.length;
+
+    const detail = `/composer?provider=${encodeURIComponent(context.editableText.providerId)}&composition=cat-desk`;
+    await page.goto(detail, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("textbox", { name: "Composition name", exact: true })).toHaveValue("Desk shelf");
+
+    const structure = page.locator(".cms-editor__region--nav");
+    const documentRow = structure.getByRole("treeitem").filter({ hasText: "Document" });
+    await expect(documentRow.locator(".cms-tree-tag")).toHaveText("4 kinds");
+
+    await treeRowAction(structure, "Add component to the document");
+    // The composition root is bound to the Category page template's outlet,
+    // so the dialog names the outlet's own label ("Main content") rather than
+    // "Document root".
+    const chooser = page.getByRole("dialog", { name: /^Add to /i });
+    await expect(chooser).toBeVisible();
+    const ruleHeader = chooser.locator("[data-chooser-rule]");
+    await expect(ruleHeader).toBeVisible();
+    await expect(ruleHeader.locator(".sg-composer-chooser-rule-chips li")).toHaveCount(4);
+
+    const hiddenSummary = chooser.locator(".sg-composer-chooser-hidden-summary");
+    const hiddenSummaryText = await hiddenSummary.innerText();
+    const hiddenMatch = /^(\d+) hidden by this region's rule/.exec(hiddenSummaryText);
+    expect(hiddenMatch, hiddenSummaryText).not.toBeNull();
+    // The disclosure hides the rest of the pack minus the 4 accepted kinds
+    // and the origin component (`shop.category-body`) itself.
+    expect(Number(hiddenMatch![1])).toBe(packSize - 4 - 1);
+    await chooser.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(chooser).toHaveCount(0);
+
+    await page.goto("/composer", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "New composition", exact: true }).click();
+    const newCompositionDialog = page.getByRole("dialog", { name: "New composition", exact: true });
+    await expect(newCompositionDialog).toBeVisible();
+    const startFrom = newCompositionDialog.locator('[aria-label="Start from"]');
+    await expect(startFrom.getByRole("button", { name: /Category page/ })).toContainText("4 kind");
+    await expect(startFrom.getByRole("button", { name: /Site frame/ })).toContainText("Open");
+    await newCompositionDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(newCompositionDialog).toHaveCount(0);
+
     expect(localEndpointRequests, localEndpointRequests.join("\n")).toEqual([]);
     expect(failures, failures.join("\n")).toEqual([]);
   });
