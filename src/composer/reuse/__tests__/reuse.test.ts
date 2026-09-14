@@ -186,6 +186,44 @@ describe("reuse catalog", () => {
     });
   });
 
+  it("attaches the outlet's resolved slot rule for eligible Global templates, and omits it when the outlet target does not resolve", async () => {
+    const restricted = globalSource("restricted", "single");
+    const open = globalSource("open", "many");
+    const broken = record("broken", {
+      root: [host("owner", { single: [], many: [] })],
+      publication: {
+        kind: "global-template",
+        outlet: { id: "outlet-main", label: "Main", target: { parentId: "owner", slotId: "missing" } },
+      },
+    });
+    const service = createCompositionReuseService(
+      provider(
+        [restricted, open, broken],
+        ["restricted", "open", "broken"].map((id) =>
+          summary(id, { publicationKind: "global-template", outletId: "outlet-main", outletLabel: "Main" }),
+        ),
+      ),
+      manifest,
+    );
+
+    const outcome = await service.listCatalog();
+    if (outcome.status !== "listed") throw new Error("expected listed");
+    const byId = new Map(outcome.entries.map((entry) => [entry.ref.recordId, entry]));
+    expect(byId.get("restricted")?.outletRule).toEqual({
+      componentId: "host",
+      slotId: "single",
+      accepts: ["allowed"],
+      cardinality: "single",
+    });
+    expect(byId.get("open")?.outletRule).toEqual({
+      componentId: "host",
+      slotId: "many",
+      accepts: null,
+      cardinality: "many",
+    });
+    expect(byId.get("broken")?.outletRule).toBeUndefined();
+  });
+
   it("loads a selected record only on demand and preserves typed unavailable, invalid, and empty reasons", async () => {
     const empty = record("empty", { publication: { kind: "pattern" }, root: [] });
     const local = record("local");

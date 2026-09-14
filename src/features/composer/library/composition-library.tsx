@@ -730,6 +730,8 @@ export function CompositionLibrary({
         open={newDialogOpen}
         providerId={activeProviderId}
         intents={intents}
+        manifest={componentProvider.catalog}
+        entries={componentProvider.manifest.components}
         onSubmit={async (intent: CompositionLibraryCreateIntent) => {
           let created: CompositionSummary;
           try {

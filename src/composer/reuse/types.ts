@@ -1,3 +1,4 @@
+import type { SlotCardinality } from "@zudo-composer/component-contract";
 import type {
   ComponentCatalog,
   CompositionBinding,
@@ -16,6 +17,20 @@ import type {
   CompositionUnpublishOutcome,
 } from "../library/types";
 
+/**
+ * The exposed outlet slot's current rule, resolved from the source record and
+ * manifest so the New-composition dialog can show it before a consumer binds.
+ */
+export interface GlobalTemplateOutletRule {
+  componentId: string;
+  slotId: string;
+  /** `null` means the slot accepts every available component. */
+  accepts: string[] | null;
+  cardinality: SlotCardinality;
+  min?: number;
+  max?: number;
+}
+
 /** A lightweight reusable-source row; `None` is intentionally not a record. */
 export interface ReuseCatalogEntry {
   ref: CompositionRecordRef;
@@ -23,6 +38,8 @@ export interface ReuseCatalogEntry {
   kind: "global-template" | "pattern";
   /** Present only for a Global template and stable across label/target changes. */
   outlet?: Pick<GlobalTemplateOutlet, "id" | "label">;
+  /** The outlet's resolved slot rule; undefined when the outlet target cannot be resolved. */
+  outletRule?: GlobalTemplateOutletRule;
 }
 
 export type ReuseCatalogOutcome =
