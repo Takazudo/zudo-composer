@@ -367,13 +367,18 @@ export const selectMessageSchema = z
   })
   .strict();
 
-/** An insert point was activated. Carries Takazudo/zudo-sg#245's insert-at-index target. */
+/**
+ * An insert point was activated. Carries Takazudo/zudo-sg#245's insert-at-index target and,
+ * optionally, the pressed control's IFRAME-LOCAL rect so the host can anchor an
+ * inline quick-insert popover at it (issue #639).
+ */
 export const requestAddMessageSchema = z
   .object({
     ...envelope,
     type: z.literal("request-add"),
     revision: revisionSchema,
     target: insertionTargetSchema,
+    rect: rectSchema.optional(),
   })
   .strict();
 
@@ -646,8 +651,13 @@ export function selectMessage(pack: PreviewPackIdentity, revision: number, nodeI
   return { ...envelopeValue(pack), type: "select", revision, nodeId };
 }
 
-export function requestAddMessage(pack: PreviewPackIdentity, revision: number, target: InsertionTarget): RequestAddMessage {
-  return { ...envelopeValue(pack), type: "request-add", revision, target };
+export function requestAddMessage(
+  pack: PreviewPackIdentity,
+  revision: number,
+  target: InsertionTarget,
+  rect?: SerializedRect,
+): RequestAddMessage {
+  return { ...envelopeValue(pack), type: "request-add", revision, target, ...(rect ? { rect } : {}) };
 }
 
 export function openSourceMessage(pack: PreviewPackIdentity, sourceRecordId: string): OpenSourceMessage {

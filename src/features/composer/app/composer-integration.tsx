@@ -53,6 +53,7 @@ import type { ComposerSaveStatus } from "../chrome/controller-model";
 import type { UseComposerControllerOptions } from "../chrome/use-composer-controller";
 import { ComposerStructurePane, type SelectedSlot } from "../ui/tree/structure-pane";
 import { ComposerChooser } from "../ui/chooser/composer-chooser";
+import { QuickInsertPopover } from "../ui/quick-insert/quick-insert-popover";
 import { InspectorPanel } from "../ui/inspector/inspector-panel";
 import { ComposerExportDialog } from "../ui/export/export-dialog";
 import { ComposerRenameDialog } from "../ui/shared/rename-dialog";
@@ -450,6 +451,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
           viewport={viewport}
           onSelect={api.handleCanvasSelect}
           onRequestAdd={api.handleCanvasRequestAdd}
+          onRequestQuickInsert={menus.requestQuickInsert}
           onRequestNodeMenu={menus.openNodeMenu}
           onRequestInsertMenu={menus.openInsertMenu}
           onCommitInlineEdit={api.handleCommitInlineEdit}
@@ -490,7 +492,8 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
       {/* The canvas menu has no host-side trigger to measure, so it is anchored
           to this zero-size element, parked at the iframe-relayed rect. */}
       <span ref={menus.anchorRef} class="sg-composer-menu-anchor" aria-hidden="true" />
-      <Menu controller={menus.controller} label={menus.label}>
+      <Menu key={menus.menuKey} controller={menus.controller} label={menus.label}>
+        {menus.quickInsert && <QuickInsertPopover {...menus.quickInsert} />}
         {plainItems.map((item) => (
           <MenuItem key={item.id} disabled={item.disabled} closeOnSelect={false} onSelect={item.onSelect}>
             {item.label}
@@ -508,6 +511,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
         componentProvider={props.componentProvider}
         open={chooser.open}
         target={chooser.target}
+        initialTab={chooser.initialTab}
         document={state.document}
         manifest={controller.manifest}
         entries={manifestEntries}

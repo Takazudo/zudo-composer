@@ -33,6 +33,7 @@ import {
   type UseComposerControllerOptions,
 } from "../chrome/use-composer-controller";
 import type { PreviewSession, PreviewTheme } from "../preview";
+import type { ChooserTab } from "../ui/chooser/composer-chooser";
 import {
   useComposerExport,
   type UseComposerExportResult,
@@ -56,6 +57,7 @@ export interface ComposerChooserState {
   open: boolean;
   target: InsertionTarget | null;
   session?: ComposerInsertSession;
+  initialTab?: ChooserTab;
 }
 
 /** Composer projection of the shared tree's pending-insert transaction. */
@@ -76,7 +78,7 @@ export interface ComposerIntegrationApi {
   /** Set + persist the canvas viewport. */
   setViewport: (viewport: ComposerCanvasViewport) => void;
   chooser: ComposerChooserState;
-  openChooser: (target: InsertionTarget, session?: ComposerInsertSession) => void;
+  openChooser: (target: InsertionTarget, session?: ComposerInsertSession, initialTab?: ChooserTab) => void;
   closeChooser: () => void;
   completeChooser: (insertedId?: string) => void;
   exportState: UseComposerExportResult;
@@ -99,7 +101,7 @@ export interface ComposerIntegrationApi {
   /** Canvas selection: a real node reveals (selects + expands ancestors); `null` clears. */
   handleCanvasSelect: (nodeId: string | null) => void;
   /** Canvas insert point → open the shared parent chooser for that exact target. */
-  handleCanvasRequestAdd: (target: InsertionTarget) => void;
+  handleCanvasRequestAdd: (target: InsertionTarget, initialTab?: ChooserTab) => void;
   /** Chooser confirm → add the component at the captured target. */
   handleChooserAdd: (target: InsertionTarget, componentId: string) => { status: "inserted"; nodeId: string } | { status: "rejected"; message: string };
   /** Chooser expand-ancestors → reveal the freshly added node in the tree. */
@@ -231,10 +233,13 @@ export function useComposerIntegration(
   const [chooser, setChooser] = useState<ComposerChooserState>({ open: false, target: null });
   const chooserRef = useRef(chooser);
   chooserRef.current = chooser;
-  const openChooser = useCallback((target: InsertionTarget, session?: ComposerInsertSession) => {
-    chooserRef.current.session?.cancel();
-    setChooser({ open: true, target, ...(session ? { session } : {}) });
-  }, []);
+  const openChooser = useCallback(
+    (target: InsertionTarget, session?: ComposerInsertSession, initialTab?: ChooserTab) => {
+      chooserRef.current.session?.cancel();
+      setChooser({ open: true, target, ...(session ? { session } : {}), ...(initialTab ? { initialTab } : {}) });
+    },
+    [],
+  );
   const closeChooser = useCallback(() => {
     chooserRef.current.session?.cancel();
     setChooser({ open: false, target: null });
@@ -274,7 +279,7 @@ export function useComposerIntegration(
   );
 
   const handleCanvasRequestAdd = useCallback(
-    (target: InsertionTarget) => openChooser(target),
+    (target: InsertionTarget, initialTab?: ChooserTab) => openChooser(target, undefined, initialTab),
     [openChooser],
   );
 

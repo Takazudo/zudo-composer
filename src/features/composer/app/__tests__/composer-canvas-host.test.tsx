@@ -26,6 +26,14 @@ import {
 import type { PreviewSession, SerializedRect } from "../../preview";
 import { ComposerCanvasHost } from "../composer-canvas-host";
 import { makeTestBridge } from "../test-support/preview-harness";
+import { h } from "preact";
+import { within } from "@testing-library/preact";
+import { defineComponentPack, type ComponentManifest } from "@zudo-composer/component-contract";
+import { ChromeContext, createChromeStore } from "../../../../app/chrome-context";
+import { createComposerComponentProvider } from "../../component-provider";
+import { ComposerIntegration } from "../composer-integration";
+import { controllerOptions } from "../test-support/controller-fixtures";
+import { FIXTURE_IDS, fixtureCatalog, fixtureDocument, fixtureNode, resetFixtureIds } from "../../ui/tree/__tests__/fixtures";
 
 const EDIT: PreviewSession = { mode: "edit", theme: "light", selectedId: null };
 const RECT: SerializedRect = { x: 10, y: 20, width: 100, height: 24 };
@@ -521,5 +529,220 @@ describe("ComposerCanvasHost — drop-node revision validation (issue #258)", ()
     act(() => bridge.deliver(dropNodeMessage("box-1", TARGET, false, currentRev)));
     expect(onDropNode).toHaveBeenCalledWith("box-1", TARGET, false);
     expect(screen.queryByText(/not applied/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("ComposerCanvasHost — quick insert routing (#639)", () => {
+  const TARGET = { parentId: "gallery-1", slotId: "items", index: 0 };
+  const addWithRect = (revision: number) => protocolRequestAddMessage(PREVIEW_PACK, revision, TARGET, RECT);
+
+  it("offers a direct Add with its rect to onRequestQuickInsert; a handled request never opens the chooser", () => {
+    const onRequestQuickInsert = vi.fn(() => true);
+    const { bridge, onRequestAdd, container } = mount({ onRequestQuickInsert });
+    act(() => bridge.deliver(readyMessage()));
+
+    act(() => bridge.deliver(addWithRect(4)));
+
+    expect(onRequestAdd).not.toHaveBeenCalled();
+    const [request] = onRequestQuickInsert.mock.calls[0]! as unknown as [
+      { target: unknown; rect: SerializedRect; restoreFocus: () => void; openChooser: (tab?: string) => void },
+    ];
+    expect(request.target).toEqual(TARGET);
+    expect(request.rect).toEqual(RECT);
+
+    act(() => request.restoreFocus());
+    expect(document.activeElement).toBe(container.querySelector("iframe"));
+
+    act(() => request.openChooser("patterns"));
+    expect(onRequestAdd).toHaveBeenCalledWith(TARGET, "patterns");
+  });
+
+  it("falls through to the chooser when onRequestQuickInsert declines", () => {
+    const onRequestQuickInsert = vi.fn(() => false);
+    const { bridge, onRequestAdd, container } = mount({ onRequestQuickInsert });
+    act(() => bridge.deliver(readyMessage()));
+
+    act(() => bridge.deliver(addWithRect(4)));
+
+    expect(onRequestQuickInsert).toHaveBeenCalledTimes(1);
+    expect(onRequestAdd).toHaveBeenCalledWith(TARGET);
+    expect(document.activeElement).toBe(container.querySelector("iframe"));
+  });
+
+  it("a request-add without a rect has nothing to anchor to and opens the chooser as before", () => {
+    const onRequestQuickInsert = vi.fn(() => true);
+    const { bridge, onRequestAdd } = mount({ onRequestQuickInsert });
+    act(() => bridge.deliver(readyMessage()));
+
+    act(() => bridge.deliver(requestAddMessage(4, TARGET)));
+
+    expect(onRequestQuickInsert).not.toHaveBeenCalled();
+    expect(onRequestAdd).toHaveBeenCalledWith(TARGET);
+  });
+
+  it("the insert menu's addComponent offers quick insert with the menu rect and restores focus through its focusToken", () => {
+    const onRequestQuickInsert = vi.fn(() => true);
+    const { bridge, onRequestAdd, onRequestInsertMenu } = mount({ onRequestQuickInsert });
+    act(() => bridge.deliver(readyMessage()));
+    act(() => bridge.deliver(requestInsertMenuMessage(4, TARGET, RECT, "insert-menu:gallery-1:items:0")));
+    const [, , , addComponent] = onRequestInsertMenu.mock.calls[0]!;
+
+    act(() => addComponent());
+
+    expect(onRequestAdd).not.toHaveBeenCalled();
+    const [request] = onRequestQuickInsert.mock.calls[0]! as unknown as [{ rect: SerializedRect; restoreFocus: () => void }];
+    expect(request.rect).toEqual(RECT);
+    bridge.posts.length = 0;
+    act(() => request.restoreFocus());
+    expect(asAny(bridge.posts.at(-1)!.message)).toMatchObject({
+      type: "restore-focus",
+      focusToken: "insert-menu:gallery-1:items:0",
+    });
+  });
+});
+
+describe("ComposerIntegration — quick insert routing by slot rule (#639)", () => {
+  const REGION_ID = "test.region";
+  const regionDefinition: ComponentManifest = {
+    id: REGION_ID,
+    schemaVersion: 1,
+    title: "Region",
+    category: "Layout",
+    description: "A rule container with a narrow and a wide restricted slot.",
+    source: { module: "@fixtures/region", exportKind: "named", exportName: "Region" },
+    defaults: {},
+    fields: [],
+    slots: [
+      { id: "few", prop: "few", label: "Few", cardinality: "many", accepts: [FIXTURE_IDS.box, FIXTURE_IDS.text], max: 2 },
+      {
+        id: "wide",
+        prop: "children",
+        label: "Wide",
+        cardinality: "many",
+        accepts: [...fixtureCatalog.map((entry) => entry.id), REGION_ID],
+      },
+    ],
+  };
+  const pack = defineComponentPack({
+    packId: "@zudo-composer/quick-insert-fixtures",
+    packVersion: "1.0.0",
+    components: [...fixtureCatalog, regionDefinition].map((entry) => ({
+      ...entry,
+      component: (props: Record<string, unknown>) => h("div", props),
+    })),
+  });
+  const provider = createComposerComponentProvider(pack);
+
+  function setup(fewChildren = 0) {
+    resetFixtureIds();
+    const few = Array.from({ length: fewChildren }, () => fixtureNode(FIXTURE_IDS.box));
+    const sample = fixtureDocument([fixtureNode(REGION_ID, {}, { few, wide: [] }, "region")]);
+    const bridge = makeTestBridge();
+    const utils = render(
+      <ChromeContext.Provider value={createChromeStore()}>
+        <ComposerIntegration
+          componentProvider={provider}
+          controllerOptions={controllerOptions(sample)}
+          createBridge={bridge.createBridge}
+          previewLocation={bridge.location}
+        />
+      </ChromeContext.Provider>,
+    );
+    act(() => bridge.deliver(protocolReadyMessage(pack.manifest)));
+    let revision = 100;
+    const add = (target: { parentId: string | null; slotId: string; index: number }) =>
+      act(() => bridge.deliver(protocolRequestAddMessage(pack.manifest, revision++, target, RECT)));
+    const menu = () => document.querySelector(".cms-menu") as HTMLElement | null;
+    const chooser = () => utils.container.querySelector("dialog.sg-composer-chooser[open]") as HTMLElement | null;
+    const renders = () => bridge.posts.filter((post) => asAny(post.message).type === "render");
+    const canvasDoc = () => asAny(renders().at(-1)!.message).document;
+    return { ...utils, bridge, add, menu, chooser, canvasDoc };
+  }
+
+  it("a restricted slot with at most six kinds opens the quick-insert popover, not the chooser", () => {
+    const s = setup();
+    s.add({ parentId: "region", slotId: "few", index: 0 });
+
+    expect(s.chooser()).toBeNull();
+    const menu = s.menu()!;
+    expect(menu).toHaveAccessibleName("Few accepts");
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "Box",
+      "Text",
+      "Pattern…",
+      "More… (search, 5 hidden)",
+    ]);
+    expect(menu).toHaveTextContent("rule: Region › Few");
+  });
+
+  it("a chip inserts at the target, selects the new node and restores iframe focus", () => {
+    const s = setup();
+    s.add({ parentId: "region", slotId: "few", index: 0 });
+
+    fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Text" }));
+
+    expect(s.menu()).toBeNull();
+    const inserted = s.canvasDoc().root[0].slots.few[0];
+    expect(inserted.componentId).toBe(FIXTURE_IDS.text);
+    expect(asAny(s.bridge.posts.at(-1)!.message).session.selectedId).toBe(inserted.id);
+    expect(document.activeElement).toBe(s.container.querySelector("iframe"));
+  });
+
+  it("Pattern… opens the chooser on its Patterns tab and More… on Components, both for the same target", () => {
+    const s = setup();
+    s.add({ parentId: "region", slotId: "few", index: 0 });
+    fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Pattern…" }));
+
+    expect(s.menu()).toBeNull();
+    expect(within(s.chooser()!).getByRole("button", { name: "Patterns" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(s.chooser()!).getByRole("button", { name: "Cancel" }));
+
+    s.add({ parentId: "region", slotId: "few", index: 0 });
+    fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: /^More…/ }));
+    expect(within(s.chooser()!).getByRole("button", { name: "Components" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(s.chooser()!).getByRole("button", { name: "Text" }));
+    expect(s.canvasDoc().root[0].slots.few[0].componentId).toBe(FIXTURE_IDS.text);
+  });
+
+  it("the insert menu's Add component… hands off to the popover; Escape closes it and restores focus through the focusToken", () => {
+    const s = setup();
+    const target = { parentId: "region", slotId: "few", index: 0 };
+    act(() =>
+      s.bridge.deliver(protocolRequestInsertMenuMessage(pack.manifest, 200, target, RECT, "insert-menu:region:few:0")),
+    );
+    fireEvent.click(within(s.menu()!).getByRole("menuitem", { name: "Add component…" }));
+
+    const menu = s.menu()!;
+    expect(menu).toHaveAccessibleName("Few accepts");
+    expect(document.activeElement).toBe(within(menu).getByRole("menuitem", { name: "Box" }));
+    s.bridge.posts.length = 0;
+
+    fireEvent.keyDown(menu, { key: "Escape" });
+
+    expect(s.menu()).toBeNull();
+    expect(s.chooser()).toBeNull();
+    const restores = s.bridge.posts.filter((post) => asAny(post.message).type === "restore-focus");
+    expect(restores.map((post) => asAny(post.message).focusToken)).toEqual(["insert-menu:region:few:0"]);
+  });
+
+  it("a restricted slot with more than six kinds opens the chooser", () => {
+    const s = setup();
+    s.add({ parentId: "region", slotId: "wide", index: 0 });
+    expect(s.menu()).toBeNull();
+    expect(s.chooser()).not.toBeNull();
+  });
+
+  it("an open document root opens the chooser", () => {
+    const s = setup();
+    s.add({ parentId: null, slotId: "root", index: 1 });
+    expect(s.menu()).toBeNull();
+    expect(s.chooser()).not.toBeNull();
+  });
+
+  it("a full restricted slot opens the chooser's blocked state as before", () => {
+    const s = setup(2);
+    s.add({ parentId: "region", slotId: "few", index: 2 });
+    expect(s.menu()).toBeNull();
+    expect(s.chooser()).toHaveTextContent("This slot is full");
   });
 });

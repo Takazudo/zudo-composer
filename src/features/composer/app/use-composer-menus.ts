@@ -27,12 +27,22 @@
 // it hands off to the shared chooser, which owns its own focus capture, so it
 // closes SILENTLY rather than racing an asynchronous cross-frame focus round
 // trip against the chooser's synchronous `document.activeElement` capture.
+// The quick-insert popover's "Pattern…" and "More…" hand off the same way.
+//
+// ── Quick insert (issue #639) ───────────────────────────────────────────────
+// A canvas add into a restricted slot with few allowed kinds opens a third
+// subject whose content is the `QuickInsertPopover`, not an item list. Its
+// rule is derived from live state like every other menu's items.
 
 import { useCallback, useMemo, useRef, useState } from "preact/hooks";
 import type { InsertionTarget } from "../../../composer/browser";
 import { findLocation, isNodeOpaque } from "../../../composer/browser";
 import { useMenu, type MenuController } from "../../../components/overlay";
 import { buildCatalogById, summarizeNode } from "../ui/tree/tree-helpers";
+import { describeSlotRule, type SlotRule } from "../ui/slot-rules";
+import { offersQuickInsert, quickInsertSlotLabel } from "../ui/quick-insert/quick-insert-popover";
+import type { ChooserTab } from "../ui/chooser/composer-chooser";
+import type { CanvasQuickInsertRequest } from "./composer-canvas-host";
 import type { ComposerIntegrationApi } from "./use-composer-integration";
 
 /** A `getBoundingClientRect()`-shaped value in HOST viewport coordinates. */
@@ -68,7 +78,22 @@ interface InsertMenu {
   addComponent: () => void;
 }
 
-type MenuSubject = NodeMenu | InsertMenu | null;
+interface QuickInsertMenu {
+  kind: "quick-insert";
+  target: InsertionTarget;
+  restoreFocus: () => void;
+  openChooser: (initialTab?: ChooserTab) => void;
+}
+
+type MenuSubject = NodeMenu | InsertMenu | QuickInsertMenu | null;
+
+/** What the host renders inside the shared `Menu` while a quick insert is open. */
+export interface QuickInsertView {
+  rule: SlotRule;
+  onInsert: (componentId: string) => void;
+  onOpenPatterns: () => void;
+  onOpenChooser: () => void;
+}
 
 export interface ComposerMenusApi {
   /** Drives the shared `<Menu>`; the host renders one instance. */
@@ -76,6 +101,10 @@ export interface ComposerMenusApi {
   /** Accessible name for the current menu. */
   label: string;
   items: readonly ComposerMenuItemSpec[];
+  /** Set instead of `items` while the quick-insert popover is the open subject. */
+  quickInsert: QuickInsertView | null;
+  /** Changes with the subject kind, so a hand-off from one menu to another remounts and refocuses the panel. */
+  menuKey: string;
   /** Spread onto the host's single zero-size canvas anchor element. */
   anchorRef: (element: HTMLElement | null) => void;
   /** Dismiss from an item. Every close restores focus to whatever opened it. */
@@ -93,6 +122,9 @@ export interface ComposerMenusApi {
   // ── Structure-row wrappers — the `(id/target, trigger)` callback shape ──
   handleTreeOpenNodeMenu: (nodeId: string, trigger: HTMLElement) => void;
   handleTreeOpenInsertMenu: (target: InsertionTarget, trigger: HTMLElement, addComponent?: () => void) => void;
+
+  /** Canvas add: opens the quick-insert popover and returns true when the target's rule qualifies. */
+  requestQuickInsert: (request: CanvasQuickInsertRequest) => boolean;
 }
 
 export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi {
@@ -208,8 +240,50 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
     [api, openAt],
   );
 
+  const ruleFor = useCallback(
+    (target: InsertionTarget): SlotRule =>
+      describeSlotRule({
+        catalog: manifestEntries,
+        manifest,
+        document: controller.state.document,
+        target,
+        rootPolicy: controller.state.rootPolicy,
+      }),
+    [controller.state.document, controller.state.rootPolicy, manifest, manifestEntries],
+  );
+
+  const requestQuickInsert = useCallback(
+    ({ target, rect, restoreFocus, openChooser }: CanvasQuickInsertRequest): boolean => {
+      if (controller.state.mode !== "edit" || !offersQuickInsert(ruleFor(target))) return false;
+      openAt({ kind: "quick-insert", target, restoreFocus, openChooser }, null, rect);
+      return true;
+    },
+    [controller.state.mode, openAt, ruleFor],
+  );
+
+  const quickInsert = useMemo((): QuickInsertView | null => {
+    if (subject?.kind !== "quick-insert") return null;
+    const handOff = (initialTab?: ChooserTab) => {
+      closeSilently();
+      subject.openChooser(initialTab);
+    };
+    return {
+      rule: ruleFor(subject.target),
+      onInsert: (componentId) => {
+        const result = api.handleChooserAdd(subject.target, componentId);
+        if (result.status === "inserted") api.revealNode(result.nodeId);
+        close();
+      },
+      onOpenPatterns: () => handOff("patterns"),
+      onOpenChooser: () => handOff(),
+    };
+  }, [api, close, closeSilently, ruleFor, subject]);
+
   const derived = useMemo((): { label: string; items: readonly ComposerMenuItemSpec[] } => {
     if (subject === null) return { label: "Menu", items: [] };
+    if (subject.kind === "quick-insert") {
+      return { label: `${quickInsertSlotLabel(ruleFor(subject.target))} accepts`, items: [] };
+    }
 
     if (subject.kind === "node") {
       const location = findLocation(controller.state.document, manifest, subject.nodeId);
@@ -282,17 +356,20 @@ export function useComposerMenus(api: ComposerIntegrationApi): ComposerMenusApi 
         },
       ],
     };
-  }, [catalogById, close, closeSilently, controller, manifest, subject, titleFor]);
+  }, [catalogById, close, closeSilently, controller, manifest, ruleFor, subject, titleFor]);
 
   return {
     controller: menu,
     label: derived.label,
     items: derived.items,
+    quickInsert,
+    menuKey: subject?.kind ?? "closed",
     anchorRef: (element) => { canvasAnchor.current = element; },
     close,
     openNodeMenu,
     openInsertMenu,
     handleTreeOpenNodeMenu,
     handleTreeOpenInsertMenu,
+    requestQuickInsert,
   };
 }
