@@ -56,14 +56,20 @@ import { ancestorChainIds, buildCatalogById } from "../tree/tree-helpers";
 import {
   assessPatternForestInsertion,
   describeInsertionTarget,
-  eligibleEntries,
   matchesQuery,
 } from "./chooser-helpers";
+import { describeSlotRule } from "../slot-rules";
+import {
+  ChooserHiddenDisclosure,
+  ChooserRuleHeader,
+  chooserBlockedMessage,
+  hiddenComponentNote,
+} from "./chooser-rule";
 import { LibraryViewToggle } from "../../../../components/library-page/library-toolbar";
 import { ChooserCardGrid } from "./chooser-card-grid";
 import { ChooserPreviewHost } from "./chooser-preview-host";
 import { Dialog } from "../../../../components/overlay";
-import { Banner, Button, EmptyState, Input, SegmentedControl } from "../../../../components/ui";
+import { Banner, Button, CountBadge, EmptyState, Input, SegmentedControl } from "../../../../components/ui";
 import { DuplicateIcon, SearchIcon, XMarkIcon } from "../../../../components/icons";
 
 export interface ComposerChooserProps {
@@ -213,6 +219,8 @@ export function ComposerChooser({
   const [patternLoading, setPatternLoading] = useState(false);
   const [patternInsertError, setPatternInsertError] = useState<string | null>(null);
   const [insertingPattern, setInsertingPattern] = useState(false);
+  const [hiddenOpen, setHiddenOpen] = useState(false);
+  const fallThroughQuery = useRef<string | null>(null);
   const patternRequestGeneration = useRef(0);
 
   const catalogById = useMemo(() => buildCatalogById(entries), [entries]);
@@ -240,13 +248,32 @@ export function ComposerChooser({
     setPatternLoading(false);
     setPatternInsertError(null);
     setInsertingPattern(false);
+    setHiddenOpen(false);
+    fallThroughQuery.current = null;
   }
   const capturedTarget = capturedRef.current;
 
-  const { entries: eligible, blockedReason } = useMemo(() => {
-    if (!capturedTarget) return { entries: [] as ComponentDefinition[], blockedReason: null as string | null };
-    return eligibleEntries(document, manifest, entries, capturedTarget, rootPolicy);
-  }, [capturedTarget, document, manifest, entries, rootPolicy]);
+  const rule = useMemo(
+    () => capturedTarget ? describeSlotRule({ catalog: entries, manifest, document, target: capturedTarget, rootPolicy }) : null,
+    [capturedTarget, document, manifest, entries, rootPolicy],
+  );
+  const blockedReason = rule ? chooserBlockedMessage(rule) : null;
+  const eligible = useMemo(() => {
+    if (!rule || rule.blockedReason !== null) return [];
+    const accepted = new Set(rule.accepts.map((component) => component.id));
+    return entries.filter((entry) => accepted.has(entry.id));
+  }, [rule, entries]);
+  // Rule presentation is only for a restricted target; an open one renders exactly as before.
+  const restrictedRule = rule?.kind === "restricted" ? rule : null;
+  const ownRuleIds = useMemo(
+    () => restrictedRule ? new Set(restrictedRule.accepts.filter((component) => component.hasOwnRule).map((component) => component.id)) : undefined,
+    [restrictedRule],
+  );
+  // The rule's own container is never offered inside itself, so it is not listed as hidden either.
+  const hiddenByRule = useMemo(
+    () => restrictedRule?.hiddenByRule.filter((component) => component.id !== restrictedRule.origin?.componentId) ?? [],
+    [restrictedRule],
+  );
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -259,6 +286,23 @@ export function ComposerChooser({
       (entry) => (category === ALL_CATEGORY || entry.category === category) && matchesQuery(entry, query),
     );
   }, [eligible, category, query]);
+
+  const filteredHidden = useMemo(() => {
+    return hiddenByRule.filter((component) => {
+      if (category !== ALL_CATEGORY && component.category !== category) return false;
+      const definition = catalogById.get(component.id);
+      return definition ? matchesQuery(definition, query) : true;
+    });
+  }, [hiddenByRule, catalogById, category, query]);
+
+  // Search falls through to hidden rows: a query that matches nothing allowed
+  // but something hidden opens the disclosure once, instead of an empty state.
+  const fallThrough = query.trim().length > 0 && filtered.length === 0 && filteredHidden.length > 0;
+  if (!fallThrough) fallThroughQuery.current = null;
+  else if (fallThroughQuery.current !== query) {
+    fallThroughQuery.current = query;
+    if (!hiddenOpen) setHiddenOpen(true);
+  }
 
   const patterns = useMemo(() => {
     if (!patternCatalog || patternCatalog.status !== "listed") return [];
@@ -277,6 +321,9 @@ export function ComposerChooser({
   const targetLabel = capturedTarget ? describeInsertionTarget(document, manifest, catalogById, capturedTarget, rootPolicy) : "";
 
   const previewedEntry = previewedComponentId ? (catalogById.get(previewedComponentId) ?? null) : null;
+  const previewedHidden = restrictedRule && previewedComponentId
+    ? (hiddenByRule.find((component) => component.id === previewedComponentId) ?? null)
+    : null;
   const patternEligibility = useMemo(() => {
     if (!capturedTarget || !loadedPattern) return null;
     return assessPatternForestInsertion(document, manifest, capturedTarget, loadedPattern.roots, rootPolicy);
@@ -403,9 +450,16 @@ export function ComposerChooser({
         initialFocusRef={searchRef}
         onClose={onClose}
         footer={
-          <button type="button" class="cms-dialog__action" onClick={onClose}>
-            Cancel
-          </button>
+          <>
+            {restrictedRule?.origin?.viaTemplate && (
+              <p class="sg-composer-chooser-footer-note">
+                Rule applies because this page is bound to the {restrictedRule.origin.viaTemplate.sourceName} template.
+              </p>
+            )}
+            <button type="button" class="cms-dialog__action" onClick={onClose}>
+              Cancel
+            </button>
+          </>
         }
       >
         {/* Gated on `capturedTarget`, which every label below names. It is
@@ -413,6 +467,7 @@ export function ComposerChooser({
             dialog that is not open. */}
         {capturedTarget && (
           <>
+            {restrictedRule && <ChooserRuleHeader rule={restrictedRule} />}
             <div class="sg-composer-chooser-source">
               <SegmentedControl<ChooserTab>
                 label="Add source"
@@ -469,11 +524,17 @@ export function ComposerChooser({
                         </div>
                       </div>
 
+                      {restrictedRule && (
+                        <p class="sg-composer-chooser-section">
+                          Allowed here
+                          <CountBadge count={eligible.length} class="sg-composer-chooser-section-count" />
+                        </p>
+                      )}
                       <p class="sg-composer-chooser-count" aria-live="polite">
                         {filtered.length} of {eligible.length} component{eligible.length === 1 ? "" : "s"}
                       </p>
 
-                      {filtered.length === 0 ? (
+                      {filtered.length === 0 ? (fallThrough ? null : (
                         <EmptyState
                           inline
                           title="No matching components"
@@ -485,9 +546,9 @@ export function ComposerChooser({
                             </Button>
                           )}
                         />
-                      ) : viewMode === "cards" ? (
+                      )) : viewMode === "cards" ? (
                         <ChooserCardGrid entries={filtered} componentProvider={componentProvider} catalogById={catalogById}
-                          onPreview={setPreviewedComponentId} onConfirm={confirmAdd} location={previewLocation} />
+                          ownRuleIds={ownRuleIds} onPreview={setPreviewedComponentId} onConfirm={confirmAdd} location={previewLocation} />
                       ) : (
                         <ul class="sg-composer-chooser-list">
                           {filtered.map((entry) => (
@@ -504,6 +565,7 @@ export function ComposerChooser({
                               >
                                 <span class="sg-composer-chooser-card-title" aria-hidden="true">
                                   {entry.title}
+                                  {ownRuleIds?.has(entry.id) && <span class="sg-composer-chooser-rule-badge">rule</span>}
                                 </span>
                                 <span id={`${entry.id}-meta`} class="sg-composer-chooser-card-meta">
                                   <span class="sg-composer-chooser-card-category">{entry.category}</span>
@@ -513,6 +575,17 @@ export function ComposerChooser({
                             </li>
                           ))}
                         </ul>
+                      )}
+
+                      {restrictedRule && filteredHidden.length > 0 && (
+                        <ChooserHiddenDisclosure
+                          rule={restrictedRule}
+                          components={filteredHidden}
+                          open={hiddenOpen}
+                          onToggle={setHiddenOpen}
+                          previewedId={previewedComponentId}
+                          onPreview={setPreviewedComponentId}
+                        />
                       )}
                     </>
                   )}
@@ -593,6 +666,12 @@ export function ComposerChooser({
                   createBridge={previewCreateBridge}
                   location={previewLocation}
                   hostWindow={previewHostWindow}
+                  notice={restrictedRule && previewedHidden && (
+                    <div class="sg-composer-chooser-hidden-notice">
+                      <Banner tone="warn">{hiddenComponentNote(restrictedRule, targetLabel, previewedHidden)}</Banner>
+                      <Button variant="primary" disabled>Insert</Button>
+                    </div>
+                  )}
                 />
               ) : (
                 <div class="sg-composer-chooser-pattern-detail">
