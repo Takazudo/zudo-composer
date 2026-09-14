@@ -47,10 +47,7 @@
       {
         "id": "testimonial-avatar-src",
         "projection": {
-          "fieldIds": [
-            "testimonials-avatar-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "testimonials-avatar",
         "target": {
@@ -64,10 +61,8 @@
       {
         "id": "testimonial-avatar-alt",
         "projection": {
-          "fieldIds": [
-            "testimonials-avatar-alt"
-          ],
-          "kind": "object-field"
+          "field": "alt",
+          "kind": "asset-text"
         },
         "sourceFieldId": "testimonials-avatar",
         "target": {

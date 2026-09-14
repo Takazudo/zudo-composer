@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generation": 2,
-  "mutationToken": "da2d7d25b2204a93ec06acdf772f6ee3521b0c72480050eb6fd589eec265d970",
+  "mutationToken": "7bf4d072720ac2751e8d0034568398d831ca335ef0248aa31fa70b7bf259f053",
   "entries": [
     {
       "id": "about-page",
@@ -25,7 +25,7 @@
     },
     {
       "id": "testimonial",
-      "digest": "242c870cf987abbef435c546ba8c1fafc5048a6b3736d2f16bff1736b01a5e51"
+      "digest": "4b2da5a3452674a1806988140b0fbb9b4f195865b0e3bb69c3e49662d8db7961"
     }
   ]
 }

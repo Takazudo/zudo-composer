@@ -8,8 +8,14 @@
   "updatedAt": "2026-09-12T00:00:00.000Z",
   "values": {
     "testimonials-avatar": {
-      "testimonials-avatar-alt": "Abstract geometric avatar with cobalt glasses",
-      "testimonials-avatar-src": "/uploaded-assets/asset-assets-ecb0692c-6286-4cd7-814b-f78f201357c4"
+      "alt": "Abstract geometric avatar with cobalt glasses",
+      "asset": {
+        "assetId": "assets-ecb0692c-6286-4cd7-814b-f78f201357c4",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "testimonials-name": "Priya Natarajan",
     "testimonials-order": 3,

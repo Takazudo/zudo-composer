@@ -383,7 +383,7 @@ const testimonial = defineComponent<TestimonialProps>()(Testimonial, {
     alt: "Abstract geometric avatar in grey with a cobalt collar",
     order: 1,
   },
-  fields: [multiline("quote", "Quote"), text("name", "Name"), text("role", "Role"), text("src", "Avatar URL"), text("alt", "Avatar alt text"), number("order", "Order", 0)],
+  fields: [multiline("quote", "Quote"), text("name", "Name"), text("role", "Role"), text("src", "Avatar image"), text("alt", "Avatar alt text"), number("order", "Order", 0)],
 });
 
 const stats = defineComponent<StatsProps>()(Stats, {

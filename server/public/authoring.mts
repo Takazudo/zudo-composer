@@ -1,6 +1,7 @@
 // Node-only authoring primitives. The browser entry must never import this module.
 // Keep this list explicit; authoring input/handle types live at /site-project.
 export {
+  ASSET_PROVIDER_ID,
   COMPOSITION_PROVIDER_ID,
   CONTENT_PROVIDER_ID,
   DEFAULT_TIMESTAMP,
@@ -8,6 +9,7 @@ export {
   SITEMAP_PROVIDER_ID,
   defineSite,
   entryRef,
+  imageUse,
   node,
   slugify,
 } from "../../src/site-project/authoring.js";

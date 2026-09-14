@@ -67,6 +67,9 @@ describe("demo-landing compiled for release", () => {
     const quotes = findNodes(route("/").composition.document.root, "land.testimonial");
     expect(quotes.map(({ props }) => props.name)).toEqual(["Mara Lind", "Jonah Reyes", "Priya Natarajan"]);
     expect(quotes.every(({ props }) => String(props.src).startsWith("/uploaded-assets/sha256-") && String(props.alt).startsWith("Abstract geometric avatar"))).toBe(true);
+    const testimonials = compiled.project.providers.content[0]?.models.find(({ id }) => id === "testimonials");
+    expect(testimonials?.document.fields.find(({ key }) => key === "avatar")).toMatchObject({ kind: "asset-use", use: "image" });
+    expect(quotes.every(({ props }) => !String(props.src).includes("/uploaded-assets/asset-"))).toBe(true);
     expect(findNodes(route("/").composition.document.root, "land.faq-item")).toHaveLength(8);
     const billing = findNodes(route("/pricing").composition.document.root, "land.faq-item");
     expect(billing.length).toBe(4);
