@@ -262,6 +262,8 @@ type MappingSourceProjection = {
 } | {
     kind: "asset-ref";
 } | {
+    kind: "asset-url";
+} | {
     kind: "asset-download";
 } | {
     kind: "asset-text";

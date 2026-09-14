@@ -3,10 +3,12 @@ import { contentEntryLabel } from "../../content/presentation";
 import {
   buildBindingRows,
   compatibleSourceGroups,
+  compatibleTransformsForProjection,
   compatibleTargetGroups,
   entryLabel,
   firstCompatibleTransform,
   projectionKey,
+  projectionLabel,
   sourceProjectionOptions,
   parseRefKey,
   refKey,
@@ -127,6 +129,19 @@ describe("Mapping bind menu compatibility", () => {
 
     expect(firstCompatibleTransform("text", heading)).toEqual({ kind: "identity" });
     expect(firstCompatibleTransform("boolean", heading)).toBeNull();
+  });
+
+  it("offers asset-use image fields to text props through the Asset URL projection", async () => {
+    const { definition } = await resolved([]);
+    const heading = definition.targets.find((target) => targetKey(target.target) === targetKey(HEADING_TARGET))!;
+    const assetField = { id: "field-image", key: "image", label: "Image", required: false, kind: "asset-use" as const, use: "image" as const };
+    const groups = compatibleSourceGroups(heading, [...model.document.fields, assetField]);
+    expect(groups.find((group) => group.id === "asset-use")?.items.map((field) => field.id)).toEqual(["field-image"]);
+    const assetUrl = sourceProjectionOptions(assetField).find((option) => option.projection.kind === "asset-url")!;
+    expect(assetUrl.label).toBe("Asset URL");
+    expect(projectionLabel(assetUrl.projection, assetField)).toBe("Asset URL");
+    expect(assetUrl.kind).toBe("url");
+    expect(compatibleTransformsForProjection(assetUrl, heading)).toEqual(["identity", "truncate-160", "prefix"]);
   });
 });
 

@@ -1,4 +1,5 @@
 import { assetDownloadMarkdown } from "../../assets/integration/download";
+import { assetAuthoringUrl } from "../../assets/model";
 import type { JsonValue } from "@zudo-composer/component-contract";
 import type { ContentEntryRecord, ContentFieldDefinition, ContentFieldKind, ContentAssetUse } from "../../content/model";
 import { isValueValidForField } from "../../content/model";
@@ -31,6 +32,7 @@ export function resolveMappingProjectionDefinition(field: ContentFieldDefinition
   }
   if (projection.kind === "asset-download") return field.kind === "asset-use" && field.use === "download" ? { status: "ready", kind: "markdown" } : { status: "invalid", message: "asset-download requires a download use." };
   if (projection.kind === "asset-ref") return field.kind === "asset-use" ? { status: "ready", kind: "object" } : { status: "invalid", message: "asset-ref requires an asset-use field." };
+  if (projection.kind === "asset-url") return field.kind === "asset-use" ? { status: "ready", kind: "url" } : { status: "invalid", message: "asset-url requires an asset-use field." };
   if (projection.kind === "asset-text") {
     const supported = field.kind === "asset-use" && ({ image: ["alt", "caption"], link: ["label"], download: ["label"], card: ["title", "description"] } as const)[field.use].includes(projection.field as never);
     return supported ? { status: "ready", kind: "text" } : { status: "invalid", message: `asset-text ${projection.field} is unavailable for this field.` };
@@ -68,10 +70,11 @@ export function projectContentValue(options: {
     }
     return current === undefined ? { status: "invalid", message: "Structured field projection has no value." } : { status: "projected", value: current };
   }
-  if (projection.kind === "asset-ref" || projection.kind === "asset-text") {
+  if (projection.kind === "asset-ref" || projection.kind === "asset-url" || projection.kind === "asset-text") {
     if (options.field.kind !== "asset-use" || value === null || Array.isArray(value) || typeof value !== "object") return { status: "invalid", message: "Asset projection requires an asset-use value." };
     const asset = value as unknown as ContentAssetUse;
     if (projection.kind === "asset-ref") return { status: "projected", value: asset.asset as unknown as JsonValue };
+    if (projection.kind === "asset-url") return { status: "projected", value: assetAuthoringUrl(asset.asset.assetId) };
     const text = projection.field in asset ? (asset as unknown as Record<string, JsonValue>)[projection.field] : undefined;
     return typeof text === "string" ? { status: "projected", value: text } : { status: "invalid", message: `Asset ${projection.field} is unavailable for this use.` };
   }
