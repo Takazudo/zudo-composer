@@ -18,6 +18,7 @@
     "server/cli/**/*.ts",
     "server/cli/*.d.mts",
     "server/dev-server.d.mts",
-    "plugins/composer-app-html.d.mts"
+    "plugins/composer-app-html.d.mts",
+    "src/features/composer/pack-config.d.ts"
   ]
 }
