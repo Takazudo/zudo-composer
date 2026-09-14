@@ -17,10 +17,10 @@ come from the package; this workspace owns the config and MDX content.
 - `../.claude/skills/zudo-doc-writing/SKILL.md` — the writing and navigation
   rules to consult before editing pages
 
-The header categories are `overview/`, `architecture/`, `setup/`, and
-`development/`. Each category has an `index.mdx` landing page and its sibling
-pages; add a page to the matching directory so the generated navigation stays
-in sync.
+The header categories are `overview/`, `architecture/`, `setup/`, `guides/`,
+and `development/`. Each category has an `index.mdx` landing page and its
+sibling pages; add a page to the matching directory so the generated
+navigation stays in sync.
 
 ## Development
 

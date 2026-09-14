@@ -27,6 +27,7 @@ doc/
 │   ├── overview/<page>.mdx
 │   ├── architecture/<page>.mdx
 │   ├── setup/<page>.mdx
+│   ├── guides/<page>.mdx
 │   └── development/<page>.mdx
 ├── pages/index.tsx               # package home route
 ├── pages/docs/[[...slug]].tsx    # host-owned docs route seam
@@ -34,7 +35,7 @@ doc/
 └── public/                       # static site assets and favicon files
 ```
 
-The top-level content directories are the four header categories. A category
+The top-level content directories are the five header categories. A category
 `index.mdx` is its landing page, and each sibling page is a sidebar item. The
 header's `categoryMatch` values in `zfb.config.ts` match those directory names;
 there is no separate sidebar registry to update.
