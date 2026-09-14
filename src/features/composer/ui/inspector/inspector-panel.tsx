@@ -33,7 +33,14 @@ import type {
   LinkedEditorLifecycleActions,
   LinkedEditorPresentation,
 } from "../../../../composer/browser";
-import { canRepairNodeProps, classifyNode, findLocation, orderedSlotIds } from "../../../../composer/browser";
+import {
+  canRepairNodeProps,
+  classifyNode,
+  describeSlotCompleteness,
+  findLocation,
+  isPublishedOutletTarget,
+  orderedSlotIds,
+} from "../../../../composer/browser";
 import { RailCollapseButton } from "../../../../components/editor-chrome";
 import { CopyIcon, DuplicateIcon, PlusIcon, SlotIcon, TrashIcon } from "../../../../components/icons";
 import {
@@ -48,8 +55,10 @@ import {
   PaneTabs,
 } from "../../../../components/ui";
 import type { PaneTab } from "../../../../components/ui";
+import type { ComponentDefinition } from "../../active-pack";
 import type { ComposerMode } from "../../chrome/controller-model";
 import type { PropPath, PropCoalescing } from "../../chrome/history-model";
+import { describeSlotRule, partitionCatalog, type SlotRule } from "../slot-rules";
 import type { SelectedSlot } from "../tree/structure-pane";
 import { InspectorField, seedValue } from "./inspector-field";
 import { ReuseControls } from "./reuse-controls";
@@ -60,6 +69,8 @@ type InspectorTab = "props" | "slots" | "reuse";
 export interface InspectorPanelProps {
   document: CompositionDocument;
   manifest: ComponentCatalog;
+  /** Catalog used by the Slots tab's rule display. A restricted slot's accepted-component rows are empty without it. */
+  entries?: readonly ComponentDefinition[];
   selectedId: string | null;
   /** The slot chosen in Structure, when the selected row is a slot. */
   selectedSlot?: SelectedSlot | null;
@@ -127,6 +138,73 @@ function parentPath(
   return steps.length === 0 ? "Document root" : steps.join(" / ");
 }
 
+/**
+ * The rule for one of the selected node's own slots, for the read-only Slots
+ * tab. Mirrors `describeSlotRule`, with one deliberate difference: a
+ * published Global template outlet is always "unavailable" there (nothing
+ * may be added locally), which would hide the very rule this tab exists to
+ * show — the contract every bound consumer page inserts under. So the
+ * outlet case is partitioned directly from the declared slot instead.
+ */
+function describeInspectorSlotRule(
+  document: CompositionDocument,
+  manifest: ComponentCatalog,
+  catalog: readonly ComponentDefinition[],
+  parentId: string,
+  slotId: string,
+): SlotRule & { isOutlet: boolean } {
+  const isOutlet = isPublishedOutletTarget(document, parentId, slotId);
+  if (!isOutlet) {
+    return {
+      ...describeSlotRule({ catalog, manifest, document, target: { parentId, slotId, index: 0 } }),
+      isOutlet: false,
+    };
+  }
+
+  const location = findLocation(document, manifest, parentId);
+  const entry = location ? manifest.get(location.node.componentId) : undefined;
+  const slot = entry?.slots.find((candidate) => candidate.id === slotId);
+  const count = location?.node.slots[slotId]?.length ?? 0;
+  if (!entry || !slot) {
+    return {
+      kind: "unavailable",
+      accepts: [],
+      hiddenByRule: [],
+      cardinality: "many",
+      count,
+      full: false,
+      origin: null,
+      blockedReason: "This destination is no longer available.",
+      isOutlet: true,
+    };
+  }
+  return {
+    ...partitionCatalog(catalog, manifest, slot.accepts),
+    cardinality: slot.cardinality,
+    ...(slot.min === undefined ? {} : { min: slot.min }),
+    ...(slot.max === undefined ? {} : { max: slot.max }),
+    count,
+    full: false,
+    origin: {
+      componentId: entry.id,
+      componentTitle: catalog.find((definition) => definition.id === entry.id)?.title ?? entry.title,
+      slotId: slot.id,
+      slotLabel: slot.label,
+    },
+    blockedReason: null,
+    isOutlet: true,
+  };
+}
+
+/** "Cardinality: many · at least N · at most M", omitting absent bounds. */
+function describeCardinality(rule: SlotRule): string {
+  if (rule.cardinality === "single") return "Cardinality: exactly one";
+  const parts = ["many"];
+  if (rule.min !== undefined) parts.push(`at least ${rule.min}`);
+  if (rule.max !== undefined) parts.push(`at most ${rule.max}`);
+  return `Cardinality: ${parts.join(" · ")}`;
+}
+
 function InspectorShell({
   title,
   version,
@@ -159,6 +237,7 @@ function InspectorShell({
 export function InspectorPanel({
   document,
   manifest,
+  entries = [],
   selectedId,
   selectedSlot = null,
   mode,
@@ -286,7 +365,12 @@ export function InspectorPanel({
                 >
                   <ul class="sg-composer-inspector-diagnostics">
                     {diagnostic.reasons.map((reason, index) => (
-                      <li key={`${reason.code}-${index}`}>{reason.message}</li>
+                      <li key={`${reason.code}-${index}`}>
+                        {reason.message}
+                        {reason.code === "unaccepted-child" && (
+                          <> — rule from {parentPath(document, manifest, node.id, titleFor)}</>
+                        )}
+                      </li>
                     ))}
                   </ul>
                 </Banner>
@@ -398,31 +482,81 @@ export function InspectorPanel({
         {activeTab === "slots" && (
           <PaneSection title="Slots">
             <ul class="sg-composer-inspector-slots" data-sg-inspector-slots>
-              {slotIds.map((slotId) => {
-                const slot = entry?.slots.find((candidate) => candidate.id === slotId);
-                const count = (node.slots[slotId] ?? []).length;
-                const label = slot?.label ?? slotId;
-                return (
-                  <li key={slotId} class="sg-composer-inspector-slot">
-                    <SlotIcon size="sm" />
-                    <span class="sg-composer-inspector-slot-name">{label}</span>
-                    <span class="sg-composer-inspector-slot-meta">
-                      {count} {count === 1 ? "child" : "children"}
-                      {slot?.cardinality === "single" ? " · single" : ""}
-                    </span>
-                    {onJumpToSlot && (
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        aria-label={`Jump to ${label}`}
-                        onClick={() => onJumpToSlot({ parentId: node.id, slotId })}
-                      >
-                        Jump
-                      </Button>
-                    )}
-                  </li>
-                );
-              })}
+              {(() => {
+                // One document-wide walk, reused for every slot row below.
+                const completeness = describeSlotCompleteness(document, manifest);
+                return slotIds.map((slotId) => {
+                  const slot = entry?.slots.find((candidate) => candidate.id === slotId);
+                  const count = (node.slots[slotId] ?? []).length;
+                  const label = slot?.label ?? slotId;
+                  const rule = describeInspectorSlotRule(document, manifest, entries, node.id, slotId);
+                  const underMin = completeness.find(
+                    (candidate) => candidate.nodeId === node.id && candidate.slotId === slotId,
+                  );
+                  return (
+                    <li key={slotId} class="sg-composer-inspector-slot">
+                      <SlotIcon size="sm" />
+                      <span class="sg-composer-inspector-slot-name">{label}</span>
+                      <span class="sg-composer-inspector-slot-meta">
+                        {count} {count === 1 ? "child" : "children"}
+                        {slot?.cardinality === "single" ? " · single" : ""}
+                      </span>
+                      {onJumpToSlot && (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          aria-label={`Jump to ${label}`}
+                          onClick={() => onJumpToSlot({ parentId: node.id, slotId })}
+                        >
+                          Jump
+                        </Button>
+                      )}
+                      <div class="sg-composer-inspector-slot-detail">
+                        {underMin && (
+                          <Banner tone="warn">
+                            This slot needs at least {underMin.min} {underMin.min === 1 ? "component" : "components"}
+                            {" "}(has {underMin.count}).
+                          </Banner>
+                        )}
+                        {rule.kind === "open" && (
+                          <p class="sg-composer-inspector-note">Accepts any component in the pack.</p>
+                        )}
+                        {rule.kind === "restricted" && (
+                          <PaneSection title="Rule" class="sg-composer-inspector-rule">
+                            {rule.origin && (
+                              <p class="sg-composer-inspector-rule-origin">
+                                Rule from {rule.origin.componentTitle} › {rule.origin.slotLabel}
+                                {rule.origin.viaTemplate ? ` · template ${rule.origin.viaTemplate.sourceName}` : ""}
+                              </p>
+                            )}
+                            <ul class="sg-composer-inspector-rule-list">
+                              {rule.accepts.map((component) => (
+                                <li key={component.id} class="sg-composer-inspector-rule-row">
+                                  <span>{component.title}</span>
+                                  {component.hasOwnRule && (
+                                    <span class="sg-composer-inspector-rule-badge">has rule</span>
+                                  )}
+                                  <code>{component.id}</code>
+                                </li>
+                              ))}
+                            </ul>
+                            <p class="sg-composer-inspector-rule-bounds">{describeCardinality(rule)}</p>
+                            {rule.isOutlet && (
+                              <p class="sg-composer-inspector-rule-applies">
+                                Applies to: every page bound to this template
+                              </p>
+                            )}
+                            <p class="sg-composer-inspector-note">
+                              Read-only here. The rule is part of the component&rsquo;s schema, not of this
+                              composition. Change it in the host&rsquo;s component source and republish the pack.
+                            </p>
+                          </PaneSection>
+                        )}
+                      </div>
+                    </li>
+                  );
+                });
+              })()}
             </ul>
           </PaneSection>
         )}

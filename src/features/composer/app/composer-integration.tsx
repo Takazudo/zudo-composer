@@ -470,6 +470,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
         <InspectorPanel
           document={state.document}
           manifest={controller.manifest}
+          entries={manifestEntries}
           selectedId={state.selectedId}
           selectedSlot={activeSlot}
           mode={state.mode}
