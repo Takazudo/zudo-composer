@@ -7,6 +7,7 @@ import { breadcrumbsComponent } from "./breadcrumbs";
 import { cartButtonComponent } from "./cart-button";
 import { cartPageComponent } from "./cart-page";
 import { cartSummaryComponent } from "./cart-summary";
+import { categoryBodyComponent } from "./category-body";
 import { categoryTileComponent } from "./category-tile";
 import { checkoutFormComponent } from "./checkout-form";
 import { contactFormComponent } from "./contact-form";
@@ -48,6 +49,7 @@ export const componentPack = defineComponentPack({
     breadcrumbsComponent,
     demoNoteComponent,
     containerComponent,
+    categoryBodyComponent,
     stackComponent,
     gridComponent,
     splitComponent,
@@ -83,6 +85,7 @@ export { Breadcrumbs } from "./breadcrumbs";
 export { CartButton } from "./cart-button";
 export { CartPage } from "./cart-page";
 export { CartSummary } from "./cart-summary";
+export { CategoryBody } from "./category-body";
 export { CategoryTile } from "./category-tile";
 export { CheckoutForm } from "./checkout-form";
 export { ContactForm } from "./contact-form";

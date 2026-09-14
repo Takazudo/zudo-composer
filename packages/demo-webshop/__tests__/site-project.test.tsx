@@ -1,10 +1,20 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { SiteProject } from "zudo-composer/site-project";
+import type { CompositionNode, SiteProject } from "zudo-composer/site-project";
 import { componentPack } from "../components/pack";
 
 const packageRoot = resolve(import.meta.dirname, "..");
+
+/** Deep-equal comparator for a template's duplicated chrome nodes, ignoring node ids. */
+function stripNodeIds(list: readonly CompositionNode[]): unknown {
+  return list.map((node) => ({
+    componentId: node.componentId,
+    componentVersion: node.componentVersion,
+    props: node.props,
+    slots: Object.fromEntries(Object.entries(node.slots).map(([slotId, children]) => [slotId, stripNodeIds(children)])),
+  }));
+}
 
 const SHIPPED = [
   "shop.header",
@@ -14,6 +24,7 @@ const SHIPPED = [
   "shop.breadcrumbs",
   "shop.demo-note",
   "shop.container",
+  "shop.category-body",
   "shop.stack",
   "shop.grid",
   "shop.split",
@@ -74,5 +85,30 @@ describe("demo-webshop", () => {
     expect(slot("shop.related-products", "items")).toMatchObject({ cardinality: "many", accepts: ["shop.product-card"] });
     expect(slot("shop.product-hero", "media")).toMatchObject({ cardinality: "single", accepts: ["shop.product-gallery"] });
     expect(slot("shop.product-gallery", "images")).toMatchObject({ cardinality: "many", accepts: ["shop.gallery-image"] });
+  });
+
+  it("binds the three category pages to the Category page template's shop.category-body outlet", async () => {
+    const project = JSON.parse(await readFile(resolve(packageRoot, "site-project.json"), "utf8")) as SiteProject;
+    const compositions = project.providers.compositions.flatMap((provider) => provider.records);
+    const categoryTemplate = compositions.find((record) => record.document.name === "Category page");
+    expect(categoryTemplate?.document.publication).toMatchObject({ kind: "global-template", outlet: { target: { parentId: "category-main", slotId: "content" } } });
+    const outletId = categoryTemplate?.document.publication?.kind === "global-template" ? categoryTemplate.document.publication.outlet.id : undefined;
+    const categoryMainNode = categoryTemplate?.document.root.flatMap((node) => node.slots.content ?? []).find((node) => node.id === "category-main");
+    expect(categoryMainNode?.componentId).toBe("shop.category-body");
+    for (const pageId of ["cat-desk", "cat-carry", "cat-light"]) {
+      const page = compositions.find((record) => record.id === pageId);
+      expect(page?.document.binding, pageId).toEqual({ sourceRecordId: categoryTemplate?.id, outletId });
+    }
+  });
+
+  it("duplicates Site frame's header and footer on Category page without drift", async () => {
+    const project = JSON.parse(await readFile(resolve(packageRoot, "site-project.json"), "utf8")) as SiteProject;
+    const compositions = project.providers.compositions.flatMap((provider) => provider.records);
+    const siteFrame = compositions.find((record) => record.document.name === "Site frame")!;
+    const categoryTemplate = compositions.find((record) => record.document.name === "Category page")!;
+    const header = (root: readonly CompositionNode[]) => root.find((node) => node.componentId === "shop.header")!;
+    const footer = (root: readonly CompositionNode[]) => root.find((node) => node.componentId === "shop.footer")!;
+    expect(stripNodeIds([header(categoryTemplate.document.root)])).toEqual(stripNodeIds([header(siteFrame.document.root)]));
+    expect(stripNodeIds([footer(categoryTemplate.document.root)])).toEqual(stripNodeIds([footer(siteFrame.document.root)]));
   });
 });

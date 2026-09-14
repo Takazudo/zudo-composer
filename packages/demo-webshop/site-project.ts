@@ -497,31 +497,52 @@ site.entry(about, {
 
 const navLink = (label: string, href: string, exact = false) => node("shop.nav-link", { label, href, exact });
 
+// Shared between "Site frame" and "Category page": schema v2 forbids nested
+// templates and exposes one outlet per template, so a second page kind that
+// needs the same chrome duplicates it as its own root nodes rather than
+// nesting. These builders keep the two duplicates byte-for-byte identical
+// apart from node id; a structural-parity test in site-project.test.tsx
+// guards them from drifting apart.
+const siteHeader = (id: string) =>
+  node(
+    "shop.header",
+    { brand: "Nightjar Supply", brandHref: "/" },
+    {
+      nav: [navLink("Desk", "/desk"), navLink("Carry", "/carry"), navLink("Light", "/light"), navLink("All products", "/products"), navLink("About", "/about")],
+      actions: [node("shop.cart-button", { label: "Cart", href: "/cart" })],
+    },
+    id,
+  );
+const siteFooter = (id: string) =>
+  node(
+    "shop.footer",
+    {
+      smallPrint: "Nightjar Supply is a demo shop. Nothing here is for sale, and no data you enter is sent anywhere.",
+      creditLabel: "Built with zudo-composer",
+      creditHref: "https://github.com/Takazudo/zudo-composer",
+    },
+    { nav: [navLink("About", "/about"), navLink("FAQ", "/faq"), navLink("Cart", "/cart"), navLink("Checkout", "/checkout")] },
+    id,
+  );
+
 const frame = site.template({
   name: "Site frame",
-  root: [
-    node(
-      "shop.header",
-      { brand: "Nightjar Supply", brandHref: "/" },
-      {
-        nav: [navLink("Desk", "/desk"), navLink("Carry", "/carry"), navLink("Light", "/light"), navLink("All products", "/products"), navLink("About", "/about")],
-        actions: [node("shop.cart-button", { label: "Cart", href: "/cart" })],
-      },
-      "frame-header",
-    ),
-    node("shop.container", { width: "page" }, {}, "frame-main"),
-    node(
-      "shop.footer",
-      {
-        smallPrint: "Nightjar Supply is a demo shop. Nothing here is for sale, and no data you enter is sent anywhere.",
-        creditLabel: "Built with zudo-composer",
-        creditHref: "https://github.com/Takazudo/zudo-composer",
-      },
-      { nav: [navLink("About", "/about"), navLink("FAQ", "/faq"), navLink("Cart", "/cart"), navLink("Checkout", "/checkout")] },
-      "frame-footer",
-    ),
-  ],
+  root: [siteHeader("frame-header"), node("shop.container", { width: "page" }, {}, "frame-main"), siteFooter("frame-footer")],
   outlet: { target: { parentId: "frame-main", slotId: "content" } },
+});
+
+// Page kind for the category shelves: its outlet is `shop.category-body`'s
+// "content" slot, so the three category pages below inherit that slot's rule
+// (accepts hero / section-heading / product-grid / demo-note, min 1) as their
+// root policy (Component Restriction epic #629).
+const categoryTemplate = site.template({
+  name: "Category page",
+  root: [
+    siteHeader("category-header"),
+    node("shop.container", { width: "page" }, { content: [node("shop.category-body", {}, {}, "category-main")] }, "category-frame-main"),
+    siteFooter("category-footer"),
+  ],
+  outlet: { target: { parentId: "category-main", slotId: "content" } },
 });
 
 // ---------------------------------------------------------------- list items
@@ -661,7 +682,7 @@ const categoryPages = (["desk", "carry", "light"] as const).map((id) => {
   const page = site.page({
     name: `${name} shelf`,
     id: `cat-${id}`,
-    template: frame,
+    template: categoryTemplate,
     root: [
       node("shop.hero", {
         src: imageObject[`${categories.fieldId("image")}-src`]!,

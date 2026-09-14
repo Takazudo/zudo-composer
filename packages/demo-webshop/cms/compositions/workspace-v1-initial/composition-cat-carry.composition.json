@@ -4,8 +4,8 @@
   "updatedAt": "2026-09-12T00:00:00.000Z",
   "document": {
     "binding": {
-      "outletId": "site-frame-outlet",
-      "sourceRecordId": "site-frame"
+      "outletId": "category-page-outlet",
+      "sourceRecordId": "category-page"
     },
     "id": "cat-carry",
     "name": "Carry shelf",

@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   Breadcrumbs,
   CartButton,
+  CategoryBody,
   CategoryTile,
+  componentPack,
   Container,
   DemoNote,
   FaqAccordion,
@@ -89,6 +91,19 @@ describe("layout", () => {
 
   it("renders the section tone", () => {
     expect(render(<Section tone="surface">x</Section>)).toContain("bg-shop-surface");
+  });
+
+  it("renders the category body as a padded column", () => {
+    expect(render(<CategoryBody>x</CategoryBody>)).toContain("flex flex-col gap-shop-vsp-lg py-shop-vsp-lg");
+  });
+
+  it("restricts the category body's content slot to the kinds a category page is built from", () => {
+    const slot = componentPack.manifest.components.find((component) => component.id === "shop.category-body")?.slots.find((candidate) => candidate.id === "content");
+    expect(slot).toMatchObject({
+      cardinality: "many",
+      min: 1,
+      accepts: ["shop.hero", "shop.section-heading", "shop.product-grid", "shop.demo-note"],
+    });
   });
 
   it("renders a section heading at the requested level", () => {
