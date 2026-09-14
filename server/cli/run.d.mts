@@ -8,6 +8,7 @@ export const BUILD_SITE_ENTRY_PATH: string;
 export const ASSETS_IMPORT_ENTRY_PATH: string;
 export const SEED_ENTRY_PATH: string;
 export const GENERATE_ENTRY_PATH: string;
+export const GRAMMAR_ENTRY_PATH: string;
 export const INIT_ENTRY_PATH: string;
 export const CLOSE_GRACE_MS: number;
 export const USAGE: string;
@@ -30,6 +31,15 @@ export interface GenerateOptions {
   check?: boolean;
 }
 
+export interface GrammarOptions {
+  /** Absolute resolved host path; defaults to the current working directory. */
+  workspaceRoot?: string;
+  /** Print the grammar object as JSON instead of Markdown. */
+  json?: boolean;
+  /** Narrow output to the one named template id. */
+  template?: string;
+}
+
 export type ParsedComposerCommand =
   | { command: "init"; options: import("../creator/init.mjs").InitOptions }
   | { command: "dev"; options: Record<string, unknown> }
@@ -37,6 +47,7 @@ export type ParsedComposerCommand =
   | { command: "build-site"; options: BuildSiteOptions }
   | { command: "assets-import"; options: { workspaceRoot?: string; manifest?: string } }
   | { command: "generate"; options: GenerateOptions }
+  | { command: "grammar"; options: GrammarOptions }
   | { command: "seed"; options: SeedOptions }
   | { command: "help" }
   | { error: string };

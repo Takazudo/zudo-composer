@@ -135,6 +135,16 @@ export type {
 } from "./source/plan-linked-jsx";
 export { planLinkedJsxModules, generateBrowserJsxExport } from "./source/plan-linked-jsx";
 
+// ── Composition grammar for agents ──────────────────────────────────────────
+export type {
+  Grammar,
+  GrammarAcceptedKind,
+  GrammarRegion,
+  GrammarTemplate,
+  BuildGrammarOptions,
+} from "./grammar";
+export { buildGrammar, renderGrammarMarkdown } from "./grammar";
+
 // ── Persistence providers ────────────────────────────────────────────────────
 export * from "./storage";
 
