@@ -66,8 +66,10 @@ export async function buildHostGrammar(options: BuildHostGrammarOptions): Promis
 /** Narrow a built grammar to the one named template. */
 export function selectGrammarTemplate(grammar: Grammar, templateId: string): Grammar {
   const template = grammar.templates.find((entry) => entry.id === templateId);
-  if (!template) {
-    throw new Error(`"${templateId}" is not a published Global template in this host.`);
+  if (template) return { ...grammar, templates: [template], unavailableTemplates: [] };
+  const unavailable = grammar.unavailableTemplates.find((entry) => entry.id === templateId);
+  if (unavailable) {
+    throw new Error(`Global template "${templateId}" is unavailable: ${unavailable.reason}`);
   }
-  return { ...grammar, templates: [template] };
+  throw new Error(`"${templateId}" is not a published Global template in this host.`);
 }

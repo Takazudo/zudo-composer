@@ -103,6 +103,17 @@ function ordinaryPage(): CompositionDocument {
   return { schemaVersion: 2, id: "ordinary", name: "Ordinary page", root: [] };
 }
 
+function staleTemplate(): CompositionDocument {
+  const stale = categoryPageTemplate();
+  stale.id = "stale-page";
+  stale.name = "Stale page";
+  stale.publication = {
+    kind: "global-template",
+    outlet: { id: "main", label: "Main content", target: { parentId: "missing", slotId: "content" } },
+  };
+  return stale;
+}
+
 describe("buildGrammar", () => {
   it("carries the pack identity and an always-present openRoot", () => {
     const grammar = buildGrammar({ manifest, templates: [categoryPageTemplate()] });
@@ -146,13 +157,12 @@ describe("buildGrammar", () => {
     expect(grammar.templates[0]).toEqual({ id: "open-page", name: "Open page", region: null, open: true });
   });
 
-  it("throws a descriptive error for a stale outlet target", () => {
-    const stale = categoryPageTemplate();
-    stale.publication = {
-      kind: "global-template",
-      outlet: { id: "main", label: "Main content", target: { parentId: "missing", slotId: "content" } },
-    };
-    expect(() => buildGrammar({ manifest, templates: [stale] })).toThrow(/outlet target "missing" was not found/);
+  it("skips a template whose outlet target does not resolve and reports it as unavailable", () => {
+    const grammar = buildGrammar({ manifest, templates: [staleTemplate(), openPageTemplate()] });
+    expect(grammar.templates.map((template) => template.id)).toEqual(["open-page"]);
+    expect(grammar.unavailableTemplates).toEqual([
+      { id: "stale-page", name: "Stale page", reason: 'outlet target "missing" was not found.' },
+    ]);
   });
 });
 
@@ -174,6 +184,13 @@ describe("renderGrammarMarkdown", () => {
     expect(markdown).toContain("# Open page (template open-page)");
     expect(markdown).toContain("- open: this template's root accepts any component in the pack.");
     expect(markdown).not.toContain("rejected by the model");
+  });
+
+  it("adds an unavailable note for each skipped template", () => {
+    const grammar = buildGrammar({ manifest, templates: [staleTemplate()] });
+    expect(renderGrammarMarkdown(grammar)).toBe(
+      '# Stale page (template stale-page)\n- unavailable: outlet target "missing" was not found.\n\n# Pages without a template\n- accepts: any component in the pack.',
+    );
   });
 
   it("always closes with the openRoot note for pages bound to no template", () => {

@@ -100,6 +100,15 @@ function templateRecord(id: string, name: string): CompositionRecord {
   };
 }
 
+function staleTemplateRecord(id: string, name: string): CompositionRecord {
+  const record = templateRecord(id, name);
+  record.document.publication = {
+    kind: "global-template",
+    outlet: { id: "main", label: "Main content", target: { parentId: "missing", slotId: "content" } },
+  };
+  return record;
+}
+
 function ordinaryRecord(id: string, name: string): CompositionRecord {
   return {
     id,
@@ -164,5 +173,33 @@ describe("selectGrammarTemplate", () => {
     const grammar = await buildHostGrammar({ componentPack: pack(), paths });
     expect(selectGrammarTemplate(grammar, "landing-page").templates.map((template) => template.id)).toEqual(["landing-page"]);
     expect(() => selectGrammarTemplate(grammar, "missing-page")).toThrow(/is not a published Global template/);
+  });
+
+  it("narrows to a valid template even when another template's outlet is broken", async () => {
+    const paths = await makePaths();
+    const scopedRoot = await activateWorkspace(paths);
+    const store = await createFilesystemCompositionStore({ compositionsRoot: scopedRoot, provideJsx: () => "export default null;" });
+    await store.put(templateRecord("category-page", "Category page"), "export default null;");
+    await store.put(staleTemplateRecord("stale-page", "Stale page"), "export default null;");
+
+    const grammar = await buildHostGrammar({ componentPack: pack(), paths });
+    expect(grammar.templates.map((template) => template.id)).toEqual(["category-page"]);
+    expect(grammar.unavailableTemplates.map((template) => template.id)).toEqual(["stale-page"]);
+
+    const selected = selectGrammarTemplate(grammar, "category-page");
+    expect(selected.templates.map((template) => template.id)).toEqual(["category-page"]);
+    expect(selected.unavailableTemplates).toEqual([]);
+  });
+
+  it("throws a clear error when the named template itself is unavailable", async () => {
+    const paths = await makePaths();
+    const scopedRoot = await activateWorkspace(paths);
+    const store = await createFilesystemCompositionStore({ compositionsRoot: scopedRoot, provideJsx: () => "export default null;" });
+    await store.put(staleTemplateRecord("stale-page", "Stale page"), "export default null;");
+
+    const grammar = await buildHostGrammar({ componentPack: pack(), paths });
+    expect(() => selectGrammarTemplate(grammar, "stale-page")).toThrow(
+      'Global template "stale-page" is unavailable: outlet target "missing" was not found.',
+    );
   });
 });

@@ -42,9 +42,18 @@ export interface GrammarTemplate {
   open: boolean;
 }
 
+/** A published Global template left out because its outlet does not resolve against the manifest. */
+export interface GrammarUnavailableTemplate {
+  id: string;
+  name: string;
+  reason: string;
+}
+
 export interface Grammar {
   pack: { id: string; version: string };
   templates: GrammarTemplate[];
+  /** Skipped templates, mirroring the resolver treating an unresolvable template as unavailable. */
+  unavailableTemplates: GrammarUnavailableTemplate[];
   /** Pages bound to no template use the ordinary unrestricted virtual root. */
   openRoot: { accepts: "any" };
 }
@@ -79,27 +88,23 @@ export function describeKindChildren(kindId: string, manifest: ComponentCatalog)
   return merged.length > 0 ? merged : null;
 }
 
-function buildTemplateEntry(document: CompositionDocument, manifest: ComponentCatalog): GrammarTemplate {
+type TemplateEntryResult = { entry: GrammarTemplate } | { unavailable: string };
+
+function buildTemplateEntry(document: CompositionDocument, manifest: ComponentCatalog): TemplateEntryResult {
   const publication = document.publication;
   if (publication?.kind !== "global-template") {
     throw new Error(`buildGrammar: Composition "${document.id}" is not a published Global template.`);
   }
   const { parentId, slotId } = publication.outlet.target;
   const parent = findLocation(document, manifest, parentId)?.node;
-  if (!parent) {
-    throw new Error(`buildGrammar: Global template "${document.id}" outlet target "${parentId}" was not found.`);
-  }
+  if (!parent) return { unavailable: `outlet target "${parentId}" was not found.` };
   const containerEntry = manifest.get(parent.componentId);
-  if (!containerEntry) {
-    throw new Error(`buildGrammar: Global template "${document.id}" outlet owner "${parent.componentId}" is not in the manifest.`);
-  }
+  if (!containerEntry) return { unavailable: `outlet owner "${parent.componentId}" is not in the manifest.` };
   const slot = containerEntry.slots.find((candidate) => candidate.id === slotId);
-  if (!slot) {
-    throw new Error(`buildGrammar: Global template "${document.id}" outlet slot "${slotId}" is not declared on "${parent.componentId}".`);
-  }
+  if (!slot) return { unavailable: `outlet slot "${slotId}" is not declared on "${parent.componentId}".` };
 
   if (!slot.accepts) {
-    return { id: document.id, name: document.name, region: null, open: true };
+    return { entry: { id: document.id, name: document.name, region: null, open: true } };
   }
 
   const accepts: GrammarAcceptedKind[] = slot.accepts.map((kindId) => {
@@ -124,16 +129,24 @@ function buildTemplateEntry(document: CompositionDocument, manifest: ComponentCa
     accepts,
   };
 
-  return { id: document.id, name: document.name, region, open: false };
+  return { entry: { id: document.id, name: document.name, region, open: false } };
 }
 
 /** Build the composition grammar from a resolved component pack and the host's templates. */
 export function buildGrammar(options: BuildGrammarOptions): Grammar {
   const { manifest, templates } = options;
-  const globalTemplates = templates.filter((document) => document.publication?.kind === "global-template");
+  const entries: GrammarTemplate[] = [];
+  const unavailableTemplates: GrammarUnavailableTemplate[] = [];
+  for (const document of templates) {
+    if (document.publication?.kind !== "global-template") continue;
+    const result = buildTemplateEntry(document, manifest);
+    if ("entry" in result) entries.push(result.entry);
+    else unavailableTemplates.push({ id: document.id, name: document.name, reason: result.unavailable });
+  }
   return {
     pack: { id: manifest.pack.packId, version: manifest.pack.packVersion },
-    templates: globalTemplates.map((document) => buildTemplateEntry(document, manifest)),
+    templates: entries,
+    unavailableTemplates,
     openRoot: { accepts: "any" },
   };
 }

@@ -3,7 +3,7 @@
 // bound to no template. Pure string formatting — no knowledge of the manifest
 // or documents that produced the grammar.
 
-import type { Grammar, GrammarAcceptedKind, GrammarRegion, GrammarTemplate } from "./index";
+import type { Grammar, GrammarAcceptedKind, GrammarRegion, GrammarTemplate, GrammarUnavailableTemplate } from "./index";
 
 function acceptsHeader(region: GrammarRegion): string {
   if (region.cardinality === "single") return "accepts (exactly one):";
@@ -36,9 +36,13 @@ function renderTemplate(template: GrammarTemplate): string {
   return [header, ...renderRegion(template.region)].join("\n");
 }
 
+function renderUnavailableTemplate(template: GrammarUnavailableTemplate): string {
+  return [`# ${template.name} (template ${template.id})`, `- unavailable: ${template.reason}`].join("\n");
+}
+
 /** Render the grammar as Markdown, one section per template plus the openRoot note. */
 export function renderGrammarMarkdown(grammar: Grammar): string {
-  const sections = grammar.templates.map(renderTemplate);
+  const sections = [...grammar.templates.map(renderTemplate), ...grammar.unavailableTemplates.map(renderUnavailableTemplate)];
   sections.push(["# Pages without a template", "- accepts: any component in the pack."].join("\n"));
   return sections.join("\n\n");
 }
