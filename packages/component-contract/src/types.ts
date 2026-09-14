@@ -225,6 +225,10 @@ interface AuthorSlotDefinitionBase<TProp extends string, TComponentId extends st
   /** Omitted means any component in the pack is accepted. */
   readonly accepts?: readonly TComponentId[];
   readonly cardinality: TCardinality;
+  /** Completeness requirement surfaced as a diagnostic; never blocks rendering or export. */
+  readonly min?: number;
+  /** Hard cap on direct children. */
+  readonly max?: number;
 }
 
 export type AuthorSlotDefinition<TProps extends object = Record<string, unknown>, TComponentId extends string = string> =
@@ -237,6 +241,8 @@ export interface SlotDefinition<TComponentId extends string = string, TProp exte
   readonly label: string;
   readonly accepts?: readonly TComponentId[];
   readonly cardinality: SlotCardinality;
+  readonly min?: number;
+  readonly max?: number;
 }
 
 /** Explicitly documents a prop that is intentionally not authorable. */
@@ -518,6 +524,7 @@ export type ContractIssueCode =
   | 'INVALID_JSON_VALUE'
   | 'INVALID_PUBLIC_EXPORT'
   | 'INVALID_PUBLIC_IMPORT'
+  | 'INVALID_SLOT_BOUNDS'
   | 'INVALID_VALUE'
   | 'INVALID_VALUE_SCHEMA'
   | 'MISSING_RUNTIME_ENTRY'

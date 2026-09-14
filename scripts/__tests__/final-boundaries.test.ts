@@ -58,7 +58,7 @@ it("excludes all discovered consumer trees from the tarball while preserving cre
 it("separates full consumer tool install refs from the exact permanent identity set", async () => {
   const readme = await readFile(join(root, "README.md"), "utf8");
   const guidance = await readFile(join(root, "CLAUDE.md"), "utf8");
-  const permanent = ["f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2", "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf", "1c3cbfd3a25d1425f447cdadd5ba538916394309", "b66d52bb273a10010485efb2d06f80cee8001bd6"];
+  const permanent = ["f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2", "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf", "1c3cbfd3a25d1425f447cdadd5ba538916394309", "2abd65184102f332dc97b5768f4adcb1edf4104c"];
   const check = (text: string, guide = guidance) => assertHandoffHashes({ readme: text, guidance: guide, permanent });
   expect(() => check(readme)).not.toThrow();
   const consumer = "a".repeat(40);

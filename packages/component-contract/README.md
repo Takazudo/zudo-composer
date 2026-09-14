@@ -32,6 +32,21 @@ editable key. Slots have a stable persisted `id` distinct from their real
 component `prop`; changing either persisted meaning requires incrementing the
 component's `schemaVersion`.
 
+## Slot bounds
+
+A slot may declare optional `min` and `max` bounds on its direct children:
+
+- Both are non-negative safe integers, and `min <= max` when both are given.
+- A `cardinality: "single"` slot already holds at most one node, so `min > 1`
+  or `max > 1` is rejected with `INVALID_SLOT_BOUNDS`.
+- `max` is a hard cap: consumers reject inserts beyond it and treat documents
+  that exceed it as violations, exactly as a second node in a `single` slot.
+- `min` is a completeness requirement: consumers surface it as a diagnostic, but
+  it never blocks rendering or export. A published global-template outlet's slot
+  is intentionally empty in its source and stays valid.
+- Omitted bounds leave behaviour unchanged, and a manifest without bounds
+  validates exactly as it did before they existed.
+
 The package is self-contained on the permanent package-only branch
 `package/component-contract-v1`. Its `prepare` script builds from the package
 root, and the package-local workspace boundary prevents preparation from
