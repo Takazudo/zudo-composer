@@ -92,7 +92,7 @@ function rootPolicyError(error: string): CommandResult {
   return commandError("root-accepts", error);
 }
 
-/** `max` is a hard cap next to `single`; a slot already at its bound rejects `incoming` more children. */
+/** `max` is a hard cap like `single`: reject when `incoming` children would overflow the slot. */
 function slotMaxError(slot: ComponentDefinition["slots"][number], existingCount: number, incoming: number): CommandResult | undefined {
   if (slot.max === undefined || existingCount + incoming <= slot.max) return undefined;
   return commandError(
