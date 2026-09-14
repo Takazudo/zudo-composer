@@ -8,6 +8,7 @@
     "../browser-hosted/**/*.ts",
     "../browser-dev/**/*.ts",
     "../browser-demos/**/*.ts",
-    "../*.ts"
+    "../*.ts",
+    "../../src/features/composer/pack-config.d.ts"
   ]
 }

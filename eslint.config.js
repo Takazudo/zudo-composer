@@ -45,4 +45,20 @@ export default tseslint.config(
   },
   eslint.configs.recommended,
   tseslint.configs.recommended,
+  {
+    // These are the only files that import the two virtual modules declared in
+    // `src/features/composer/pack-config.d.ts`; each carries an explicit
+    // triple-slash reference so every `tsc -b` program that reaches it also
+    // sees the declaration (issue #667/#668). Scoped narrowly rather than a
+    // blanket allowance for the rule.
+    files: [
+      'src/main.tsx',
+      'src/hosted-demo/main.tsx',
+      'src/features/composer/active-pack.ts',
+      'src/features/composer/preview/preview-entry.ts',
+    ],
+    rules: {
+      '@typescript-eslint/triple-slash-reference': 'off',
+    },
+  },
 );
