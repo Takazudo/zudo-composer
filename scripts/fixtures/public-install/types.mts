@@ -21,7 +21,7 @@ import type { InlineConfig, Plugin, ViteDevServer } from "vite";
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
-export type AuthoringExports = Assert<Equal<keyof typeof authoring, "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "defineSite" | "entryRef" | "node" | "readAssetUrls" | "slugify" | "validateSiteProject">>;
+export type AuthoringExports = Assert<Equal<keyof typeof authoring, "ASSET_PROVIDER_ID" | "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "defineSite" | "entryRef" | "imageUse" | "node" | "readAssetUrls" | "slugify" | "validateSiteProject">>;
 export type RootExports = Assert<Equal<keyof typeof rootPublic, "OPTIMIZE_DEPS_EXCLUDE" | "loadHostConfig" | "resolveComposerDevConfig" | "startComposerDevServer">>;
 export type ConfigExports = Assert<Equal<keyof typeof configPublic, "defineComposerConfig">>;
 export type ViteExports = Assert<Equal<keyof typeof vitePublic,

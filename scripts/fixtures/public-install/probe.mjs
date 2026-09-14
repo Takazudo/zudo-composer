@@ -6,11 +6,12 @@ import * as authoring from "zudo-composer/authoring";
 import * as siteBuild from "zudo-composer/site-build";
 import { loadHostContext } from "zudo-composer/vite";
 
-assert.deepEqual(Object.keys(authoring).sort(), ["COMPOSITION_PROVIDER_ID", "CONTENT_PROVIDER_ID", "DEFAULT_TIMESTAMP", "MAPPING_PROVIDER_ID", "SITEMAP_PROVIDER_ID", "assetAuthoringUrl", "assetMimeTypeForExtension", "canonicalStringifyJson", "createFilesystemAssetStore", "defineSite", "entryRef", "node", "readAssetUrls", "slugify", "validateSiteProject"]);
+assert.deepEqual(Object.keys(authoring).sort(), ["ASSET_PROVIDER_ID", "COMPOSITION_PROVIDER_ID", "CONTENT_PROVIDER_ID", "DEFAULT_TIMESTAMP", "MAPPING_PROVIDER_ID", "SITEMAP_PROVIDER_ID", "assetAuthoringUrl", "assetMimeTypeForExtension", "canonicalStringifyJson", "createFilesystemAssetStore", "defineSite", "entryRef", "imageUse", "node", "readAssetUrls", "slugify", "validateSiteProject"]);
 assert.deepEqual(Object.keys(siteBuild).sort(), ["SITE_HEADERS", "SITE_MANIFEST", "compileStaticSite", "createSiteManifest", "siteHeaders", "verifySiteStaticArtifact"]);
 assert.equal(authoring.assetAuthoringUrl("proof"), "/uploaded-assets/asset-proof");
 assert.equal(authoring.assetMimeTypeForExtension("PDF"), "application/pdf");
 assert.equal(authoring.canonicalStringifyJson({ z: 1, a: [2] }), '{"a":[2],"z":1}\n');
+assert.deepEqual(authoring.imageUse("proof", "Proof image"), { kind: "image", asset: { providerId: authoring.ASSET_PROVIDER_ID, assetId: "proof" }, alt: "Proof image", decorative: false, caption: "" });
 
 const { composerConfig, pack, packIdentity, workspaceRoot } = await loadHostContext({ workspaceRoot: process.cwd() });
 assert.equal(workspaceRoot, process.cwd());
