@@ -75,7 +75,7 @@ const container = defineComponent<ContainerProps>()((props: ContainerProps) => {
     },
   ],
   slots: [
-    { id: 'content', prop: 'children', label: 'Content', accepts: ['prose', 'badge'], cardinality: 'many' },
+    { id: 'content', prop: 'children', label: 'Content', accepts: ['prose', 'badge'], cardinality: 'many', min: 1, max: 4 },
     { id: 'aside', prop: 'aside', label: 'Aside', accepts: ['badge'], cardinality: 'single' },
   ],
   adapters: {

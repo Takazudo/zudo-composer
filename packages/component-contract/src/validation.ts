@@ -80,6 +80,13 @@ function positiveIntegerAt(input: unknown, path: string): number {
   return input as number;
 }
 
+function slotBoundAt(input: unknown, path: string): number {
+  if (!Number.isSafeInteger(input) || (input as number) < 0) {
+    fail('INVALID_SLOT_BOUNDS', path, 'expected a non-negative safe integer');
+  }
+  return input as number;
+}
+
 function exactKeys(value: Record<string, unknown>, allowed: readonly string[], path: string): void {
   const allow = new Set(allowed);
   if (Object.getOwnPropertySymbols(value).length > 0) fail('UNKNOWN_KEY', path, 'symbol keys are not part of the contract');
@@ -310,7 +317,7 @@ function parseField(input: unknown, path: string): FieldDefinition {
 
 function parseSlot(input: unknown, path: string): SlotDefinition {
   const value = objectAt(input, path);
-  exactKeys(value, ['id', 'prop', 'label', 'accepts', 'cardinality'], path);
+  exactKeys(value, ['id', 'prop', 'label', 'accepts', 'cardinality', 'min', 'max'], path);
   const accepts = value.accepts === undefined
     ? undefined
     : arrayAt(value.accepts, `${path}.accepts`).map((accepted, index) => stringAt(accepted, `${path}.accepts[${index}]`));
@@ -318,12 +325,21 @@ function parseSlot(input: unknown, path: string): SlotDefinition {
   if (value.cardinality !== 'single' && value.cardinality !== 'many') {
     fail('INVALID_VALUE', `${path}.cardinality`, 'expected single or many');
   }
+  const min = value.min === undefined ? undefined : slotBoundAt(value.min, `${path}.min`);
+  const max = value.max === undefined ? undefined : slotBoundAt(value.max, `${path}.max`);
+  if (min !== undefined && max !== undefined && min > max) fail('INVALID_SLOT_BOUNDS', `${path}.min`, 'min must not exceed max');
+  if (value.cardinality === 'single') {
+    if (min !== undefined && min > 1) fail('INVALID_SLOT_BOUNDS', `${path}.min`, 'a single slot holds at most one node');
+    if (max !== undefined && max > 1) fail('INVALID_SLOT_BOUNDS', `${path}.max`, 'a single slot holds at most one node');
+  }
   return {
     id: stringAt(value.id, `${path}.id`),
     prop: persistedPropAt(value.prop, `${path}.prop`),
     label: stringAt(value.label, `${path}.label`),
     ...(accepts === undefined ? {} : { accepts }),
     cardinality: value.cardinality,
+    ...(min === undefined ? {} : { min }),
+    ...(max === undefined ? {} : { max }),
   };
 }
 
