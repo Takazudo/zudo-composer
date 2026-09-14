@@ -14,6 +14,7 @@ export type {
   CompositionPublication,
   CompositionBinding,
   RootPolicy,
+  RootPolicyOrigin,
   ResolvedGlobalTemplateOutletContract,
   PublicationDependencyGuard,
   CompositionDocument,
@@ -53,6 +54,7 @@ export type {
   NodeDiagnostic,
   DocumentDiagnostics,
   TargetValidation,
+  SlotCompletenessEntry,
 } from "./model/validate";
 export type { NodePropIssueCode, NodePropIssue, NodePropValidation } from "./model/node-props";
 export { validateNodeProps } from "./model/node-props";
@@ -61,6 +63,7 @@ export {
   classifyNode,
   canRepairNodeProps,
   diagnoseDocument,
+  describeSlotCompleteness,
   isNodeOpaque,
   UNRESTRICTED_ROOT_POLICY,
   UNRESOLVED_ROOT_POLICY,

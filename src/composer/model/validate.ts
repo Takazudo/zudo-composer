@@ -244,6 +244,13 @@ export function classifyNode(
         slotId: slot.id,
       });
     }
+    if (slot.max !== undefined && children.length > slot.max) {
+      reasons.push({
+        code: "cardinality-violation",
+        message: `Slot "${slot.id}" holds at most ${slot.max} ${slot.max === 1 ? "child" : "children"} but holds ${children.length}`,
+        slotId: slot.id,
+      });
+    }
     if (slot.accepts) {
       const allowed = new Set(slot.accepts);
       for (const child of children) {
@@ -357,6 +364,52 @@ export function diagnoseDocument(
   };
 }
 
+/** One slot holding fewer direct children than its declared `min`. */
+export interface SlotCompletenessEntry {
+  /** `null` addresses the virtual consumer root judged against a resolved root policy. */
+  nodeId: string | null;
+  slotId: string;
+  min: number;
+  count: number;
+}
+
+/**
+ * List under-filled slots. Completeness is advisory: it never makes a node
+ * opaque and never affects export. A Global template's published outlet slot
+ * is intentionally empty in its source, so it is judged only through each
+ * bound consumer's own roots (`rootPolicy`).
+ */
+export function describeSlotCompleteness(
+  document: CompositionDocument,
+  manifest: ComponentCatalog,
+  rootPolicy?: RootPolicy,
+): SlotCompletenessEntry[] {
+  const entries: SlotCompletenessEntry[] = [];
+  if (!isStructurallyValidDocument(document)) return entries;
+  const policy = effectiveRootPolicy(document, rootPolicy);
+  if (policy.kind === "resolved" && policy.min !== undefined && document.root.length < policy.min) {
+    entries.push({ nodeId: null, slotId: VIRTUAL_ROOT_SLOT_ID, min: policy.min, count: document.root.length });
+  }
+  const walk = (children: CompositionNode[]): void => {
+    for (const node of children) {
+      const entry = manifest.get(node.componentId);
+      for (const slot of entry?.slots ?? []) {
+        const count = node.slots[slot.id]?.length ?? 0;
+        if (
+          slot.min !== undefined
+          && count < slot.min
+          && !isPublishedOutletTarget(document, node.id, slot.id)
+        ) {
+          entries.push({ nodeId: node.id, slotId: slot.id, min: slot.min, count });
+        }
+      }
+      for (const slotId of orderedSlotIds(node, entry)) walk(node.slots[slotId] ?? []);
+    }
+  };
+  walk(document.root);
+  return entries;
+}
+
 /** True when the given node is editable (known component, matching version). */
 export function isNodeOpaque(node: CompositionNode, manifest: ComponentCatalog): boolean {
   return classifyNode(node, manifest).opaque;
@@ -396,6 +449,10 @@ export function effectiveRootPolicy(
   return supplied?.kind === "resolved" ? supplied : UNRESOLVED_ROOT_POLICY;
 }
 
+function rootMaxError(max: number): string {
+  return `The bound Global template outlet holds at most ${max} root ${max === 1 ? "component" : "components"}`;
+}
+
 /** Validate an existing consumer-root forest against a resolved source outlet. */
 export function validateRootForest(
   roots: readonly CompositionNode[],
@@ -414,6 +471,9 @@ export function validateRootForest(
       ok: false,
       error: "The bound Global template outlet accepts only one root component",
     };
+  }
+  if (policy.max !== undefined && roots.length > policy.max) {
+    return { ok: false, error: rootMaxError(policy.max) };
   }
   if (policy.accepts) {
     for (const root of roots) {
@@ -446,6 +506,9 @@ export function validateRootInsertion(
       ok: false,
       error: "The bound Global template outlet accepts only one root component",
     };
+  }
+  if (policy.max !== undefined && existingRootCount >= policy.max) {
+    return { ok: false, error: rootMaxError(policy.max) };
   }
   if (policy.accepts && !policy.accepts.includes(componentId)) {
     return {

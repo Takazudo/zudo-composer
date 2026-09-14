@@ -17,6 +17,7 @@ import {
 } from "@zudo-composer/component-contract";
 import type {
   ComponentCatalog,
+  ComponentDefinition,
   CompositionBinding,
   CompositionDocument,
   CompositionNode,
@@ -75,7 +76,8 @@ export type CommandErrorCode =
   | "empty-forest"
   | "forest-component-unavailable"
   | "forest-cardinality"
-  | "forest-node-id-collision";
+  | "forest-node-id-collision"
+  | "slot-full";
 
 function commandError(code: CommandErrorCode, error: string): CommandResult {
   return { ok: false, code, error };
@@ -86,7 +88,17 @@ function rootPolicyError(error: string): CommandResult {
     return commandError("unresolved-root-policy", error);
   }
   if (/only one root component/i.test(error)) return commandError("root-cardinality", error);
+  if (/holds at most \d+ root/i.test(error)) return commandError("slot-full", error);
   return commandError("root-accepts", error);
+}
+
+/** `max` is a hard cap next to `single`; a slot already at its bound rejects `incoming` more children. */
+function slotMaxError(slot: ComponentDefinition["slots"][number], existingCount: number, incoming: number): CommandResult | undefined {
+  if (slot.max === undefined || existingCount + incoming <= slot.max) return undefined;
+  return commandError(
+    "slot-full",
+    `Slot "${slot.id}" holds at most ${slot.max} ${slot.max === 1 ? "child" : "children"}`,
+  );
 }
 
 function insertionTargetError(error: string): CommandResult {
@@ -177,6 +189,8 @@ export function addNode(
         error: `Slot "${target.slotId}" is single-child and already occupied`,
       };
     }
+    const full = slotMaxError(slot, existing.length, 1);
+    if (full) return full;
   }
 
   const id = idFactory(componentId);
@@ -894,6 +908,8 @@ export function insertForest(
         `Slot "${target.slotId}" is single-child and requires exactly one root in an empty slot`,
       );
     }
+    const full = slotMaxError(slot, existing.length, sourceRoots.length);
+    if (full) return full;
   }
 
   let cloned: ClonedForestWithNewIds;
@@ -976,6 +992,8 @@ export function insertSubtree(
         error: `Slot "${target.slotId}" is single-child and already occupied`,
       };
     }
+    const full = slotMaxError(slot, existing.length, 1);
+    if (full) return full;
   }
 
   const clone = cloneJson(subtree) as CompositionNode;
@@ -1096,6 +1114,8 @@ export function moveSubtree(
         error: `Slot "${target.slotId}" is single-child and already occupied`,
       };
     }
+    const full = slotMaxError(slot, (parent.slots[target.slotId] ?? []).length, 1);
+    if (full) return full;
   }
 
   // Remove the source subtree from its current slot, then insert it at the

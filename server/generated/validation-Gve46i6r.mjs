@@ -2016,6 +2016,11 @@ function classifyNode(node, manifest) {
 			message: `Slot "${slot.id}" is single but holds ${children.length} children`,
 			slotId: slot.id
 		});
+		if (slot.max !== void 0 && children.length > slot.max) reasons.push({
+			code: "cardinality-violation",
+			message: `Slot "${slot.id}" holds at most ${slot.max} ${slot.max === 1 ? "child" : "children"} but holds ${children.length}`,
+			slotId: slot.id
+		});
 		if (slot.accepts) {
 			const allowed = new Set(slot.accepts);
 			for (const child of children) if (!allowed.has(child.componentId)) reasons.push({
@@ -2104,6 +2109,9 @@ function diagnoseDocument(document, manifest, options = {}) {
 		hasReuseIssues: reuseReasons.length > 0
 	};
 }
+function rootMaxError(max) {
+	return `The bound Global template outlet holds at most ${max} root ${max === 1 ? "component" : "components"}`;
+}
 /** Validate an existing consumer-root forest against a resolved source outlet. */
 function validateRootForest(roots, policy) {
 	if (policy.kind === "unrestricted") return { ok: true };
@@ -2114,6 +2122,10 @@ function validateRootForest(roots, policy) {
 	if (policy.cardinality === "single" && roots.length > 1) return {
 		ok: false,
 		error: "The bound Global template outlet accepts only one root component"
+	};
+	if (policy.max !== void 0 && roots.length > policy.max) return {
+		ok: false,
+		error: rootMaxError(policy.max)
 	};
 	if (policy.accepts) {
 		for (const root of roots) if (!policy.accepts.includes(root.componentId)) return {
