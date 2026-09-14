@@ -20,7 +20,7 @@ const appTokens = read("src/styles/app-tokens.css");
 const providerSha = "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf";
 const providerTree = "1c3cbfd3a25d1425f447cdadd5ba538916394309";
 const frozenProvenance = "f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2";
-const contractPackageSha = "b66d52bb273a10010485efb2d06f80cee8001bd6";
+const contractPackageSha = "2abd65184102f332dc97b5768f4adcb1edf4104c";
 const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}`;
 const contractSpec = `git+https://github.com/Takazudo/zudo-composer.git#${contractPackageSha}`;
 
