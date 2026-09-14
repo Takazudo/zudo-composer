@@ -45,7 +45,7 @@ defineComponent<ExampleProps>()(ExampleComponent, {
     { kind: 'color', prop: 'mixedColor', label: 'Mixed color-capable value' },
     { kind: 'text', prop: 'mixedScalar', label: 'Mixed scalar text' },
   ],
-  slots: [{ id: 'content', prop: 'children', label: 'Content', cardinality: 'many' }],
+  slots: [{ id: 'content', prop: 'children', label: 'Content', cardinality: 'many', min: 1, max: 3 }],
   adapters: { inlineEditor: { field: 'title', resolveElement: (root: unknown) => root } },
 });
 
@@ -359,6 +359,14 @@ defineComponent<ExampleProps>()(ExampleComponent, {
   ...base,
   fields: [
     { kind: 'select', prop: 'tone', label: 'Tone', options: ['former-value'] },
+  ],
+});
+
+// @ts-expect-error Slot bounds are numbers.
+defineComponent<ExampleProps>()(ExampleComponent, {
+  ...base,
+  slots: [
+    { id: 'content', prop: 'children', label: 'Content', cardinality: 'many', max: '3' },
   ],
 });
 
