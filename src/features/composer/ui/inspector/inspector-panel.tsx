@@ -167,12 +167,10 @@ function describeInspectorSlotRule(
   slotId: string,
 ): SlotRule & { isOutlet: boolean } {
   const isOutlet = isPublishedOutletTarget(document, parentId, slotId);
-  if (!isOutlet) {
-    return {
-      ...describeSlotRule({ catalog, manifest, document, target: { parentId, slotId, index: 0 } }),
-      isOutlet: false,
-    };
-  }
+  const insertionRule = describeSlotRule({ catalog, manifest, document, target: { parentId, slotId, index: 0 } });
+  // An opaque owner (e.g. one holding a child its own rule rejects) is "unavailable" for
+  // insertion, but this read-only tab must still show the declared rule it violates.
+  if (!isOutlet && insertionRule.kind !== "unavailable") return { ...insertionRule, isOutlet: false };
 
   const location = findLocation(document, manifest, parentId);
   const entry = location ? manifest.get(location.node.componentId) : undefined;
@@ -188,7 +186,7 @@ function describeInspectorSlotRule(
       full: false,
       origin: null,
       blockedReason: "This destination is no longer available.",
-      isOutlet: true,
+      isOutlet,
     };
   }
   return {
@@ -205,7 +203,7 @@ function describeInspectorSlotRule(
       slotLabel: slot.label,
     },
     blockedReason: null,
-    isOutlet: true,
+    isOutlet,
   };
 }
 
@@ -503,7 +501,7 @@ export function InspectorPanel({
                       <li key={`${reason.code}-${index}`}>
                         {reason.message}
                         {reason.code === "unaccepted-child" && (
-                          <> — rule from {parentPath(document, manifest, node.id, titleFor)}</>
+                          <> — rule from {title} › {entry?.slots.find((slot) => slot.id === reason.slotId)?.label ?? reason.slotId}</>
                         )}
                       </li>
                     ))}

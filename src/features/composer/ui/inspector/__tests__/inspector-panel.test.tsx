@@ -623,7 +623,7 @@ describe("InspectorPanel — unaccepted-child diagnostics", () => {
     renderPanel({ document: doc, selectedId: "region", entries: testManifestEntries });
 
     expect(screen.getByText(/does not accept "test\.widget"/)).toBeInTheDocument();
-    expect(screen.getByText(/rule from Document root/)).toBeInTheDocument();
+    expect(screen.getByText(/rule from test\.region › /)).toBeInTheDocument();
   });
 });
 
