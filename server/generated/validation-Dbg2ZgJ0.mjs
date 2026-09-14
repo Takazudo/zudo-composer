@@ -2786,6 +2786,7 @@ function validateMappingSourceProjection(value) {
 	if ([
 		"value",
 		"asset-ref",
+		"asset-url",
 		"asset-download",
 		"reference-id",
 		"reference-list-ids",
