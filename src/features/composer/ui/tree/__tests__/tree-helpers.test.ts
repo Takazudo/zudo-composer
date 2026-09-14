@@ -23,7 +23,7 @@ describe("tree-helpers", () => {
     const catalogById = buildCatalogById(fixtureCatalog);
     const node = fixtureNode(FIXTURE_IDS.box, { label: "A" });
     const summary = summarizeNode(node, manifest, catalogById);
-    expect(summary).toEqual({ title: "Box", subtitle: "A", opaque: false, reasonText: null });
+    expect(summary).toEqual({ title: "Box", subtitle: "A", opaque: false, reasonText: null, isRuleViolation: false });
   });
 
   it("summarizeNode falls back to the raw componentId and reports opaque diagnostics for an unknown component", () => {
@@ -35,6 +35,18 @@ describe("tree-helpers", () => {
     expect(summary.title).toBe("unknown.widget");
     expect(summary.opaque).toBe(true);
     expect(summary.reasonText).toMatch(/unknown component/i);
+    expect(summary.isRuleViolation).toBe(false);
+  });
+
+  it("summarizeNode flags a slot-rule violation (a container holding a child its own slot rejects) distinctly from an unknown/unsupported component", () => {
+    resetFixtureIds();
+    const manifest = buildManifestIndex(fixturePackManifest);
+    const catalogById = buildCatalogById(fixtureCatalog);
+    const gallery = fixtureNode(FIXTURE_IDS.gallery, {}, { items: [fixtureNode(FIXTURE_IDS.text)] });
+    const summary = summarizeNode(gallery, manifest, catalogById);
+    expect(summary.opaque).toBe(true);
+    expect(summary.isRuleViolation).toBe(true);
+    expect(summary.reasonText).toMatch(/does not accept/i);
   });
 
   it("countDescendants counts every nested node, not just direct children", () => {

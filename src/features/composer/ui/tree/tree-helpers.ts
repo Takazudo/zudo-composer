@@ -59,6 +59,12 @@ export interface NodeSummary {
   opaque: boolean;
   /** Human-readable diagnostic reasons, joined — null when the node is not opaque. */
   reasonText: string | null;
+  /**
+   * True when at least one reason is a slot-rule violation (`unaccepted-child`
+   * or `cardinality-violation`) rather than an unknown component or version
+   * mismatch — the structure tree repairs these differently (#636).
+   */
+  isRuleViolation: boolean;
 }
 
 const SUBTITLE_PROP_CANDIDATES = ["label", "children", "heading", "title"] as const;
@@ -86,6 +92,9 @@ export function summarizeNode(
     subtitle: pickSubtitle(node),
     opaque: diagnostic.opaque,
     reasonText: diagnostic.opaque ? diagnostic.reasons.map((r) => r.message).join("; ") : null,
+    isRuleViolation: diagnostic.reasons.some(
+      (reason) => reason.code === "unaccepted-child" || reason.code === "cardinality-violation",
+    ),
   };
 }
 
