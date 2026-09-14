@@ -245,8 +245,8 @@ export function ComposerChooser({
 
   const { entries: eligible, blockedReason } = useMemo(() => {
     if (!capturedTarget) return { entries: [] as ComponentDefinition[], blockedReason: null as string | null };
-    return eligibleEntries(document, manifest, entries, capturedTarget);
-  }, [capturedTarget, document, manifest, entries]);
+    return eligibleEntries(document, manifest, entries, capturedTarget, rootPolicy);
+  }, [capturedTarget, document, manifest, entries, rootPolicy]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -274,7 +274,7 @@ export function ComposerChooser({
     });
   }, [patterns, query]);
 
-  const targetLabel = capturedTarget ? describeInsertionTarget(document, manifest, catalogById, capturedTarget) : "";
+  const targetLabel = capturedTarget ? describeInsertionTarget(document, manifest, catalogById, capturedTarget, rootPolicy) : "";
 
   const previewedEntry = previewedComponentId ? (catalogById.get(previewedComponentId) ?? null) : null;
   const patternEligibility = useMemo(() => {

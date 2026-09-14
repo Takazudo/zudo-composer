@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CompositionDocument, RootPolicy } from "../../../../../composer/browser";
 import { VIRTUAL_ROOT_SLOT_ID } from "../../../../../composer/browser";
 import {
   assessPatternForestInsertion,
@@ -17,6 +18,26 @@ import {
   resetFixtureIds,
 } from "../../tree/__tests__/fixtures";
 
+const ROOT_TARGET = { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: 0 } as const;
+
+function bound(document: CompositionDocument): CompositionDocument {
+  return { ...document, binding: { sourceRecordId: "source-template", outletId: "main" } };
+}
+
+const boxOnlyRootPolicy: RootPolicy = {
+  kind: "resolved",
+  accepts: [FIXTURE_IDS.box, FIXTURE_IDS.text],
+  cardinality: "many",
+  max: 2,
+  origin: {
+    componentId: FIXTURE_IDS.stack,
+    componentTitle: "Stack",
+    slotId: "content",
+    slotLabel: "Content",
+    viaTemplate: { sourceName: "Site shell", outletLabel: "Main content" },
+  },
+};
+
 describe("eligibleEntries", () => {
   it("the virtual root accepts every catalog entry", () => {
     resetFixtureIds();
@@ -33,17 +54,63 @@ describe("eligibleEntries", () => {
     );
   });
 
+  it("applies a resolved root policy's accepts at the root and reports what it hides", () => {
+    resetFixtureIds();
+    const document = bound(fixtureDocument([fixtureNode(FIXTURE_IDS.box)]));
+    const manifest = buildManifestIndex(fixturePackManifest);
+    const { entries, hiddenByRule, blockedReason } = eligibleEntries(
+      document, manifest, fixtureCatalog, ROOT_TARGET, boxOnlyRootPolicy,
+    );
+    expect(blockedReason).toBeNull();
+    expect(entries.map((e) => e.id)).toEqual([FIXTURE_IDS.box, FIXTURE_IDS.text]);
+    expect(hiddenByRule.map((e) => e.id)).toEqual([
+      FIXTURE_IDS.split, FIXTURE_IDS.stack, FIXTURE_IDS.gallery, FIXTURE_IDS.button,
+    ]);
+  });
+
+  it("blocks a full root policy with the model's reason", () => {
+    resetFixtureIds();
+    const document = bound(fixtureDocument([fixtureNode(FIXTURE_IDS.box), fixtureNode(FIXTURE_IDS.text)]));
+    const manifest = buildManifestIndex(fixturePackManifest);
+    const { entries, blockedReason } = eligibleEntries(document, manifest, fixtureCatalog, ROOT_TARGET, boxOnlyRootPolicy);
+    expect(entries).toEqual([]);
+    expect(blockedReason).toMatch(/holds at most 2 root components/);
+  });
+
+  it("blocks a bound root whose policy is unresolved", () => {
+    resetFixtureIds();
+    const manifest = buildManifestIndex(fixturePackManifest);
+    const { entries, blockedReason } = eligibleEntries(
+      bound(fixtureDocument([])), manifest, fixtureCatalog, ROOT_TARGET, { kind: "unresolved" },
+    );
+    expect(entries).toEqual([]);
+    expect(blockedReason).toMatch(/until its Global template outlet is resolved/);
+  });
+
+  it("leaves an unbound root open even when a policy is supplied", () => {
+    resetFixtureIds();
+    const manifest = buildManifestIndex(fixturePackManifest);
+    const { entries, hiddenByRule, blockedReason } = eligibleEntries(
+      makeAbcDocument(), manifest, fixtureCatalog, ROOT_TARGET, boxOnlyRootPolicy,
+    );
+    expect(blockedReason).toBeNull();
+    expect(hiddenByRule).toEqual([]);
+    expect(entries).toHaveLength(fixtureCatalog.length);
+  });
+
   it("filters by an accepts whitelist", () => {
     resetFixtureIds();
     const document = fixtureDocument([fixtureNode(FIXTURE_IDS.gallery, {}, { items: [] }, "gallery")]);
     const manifest = buildManifestIndex(fixturePackManifest);
-    const { entries, blockedReason } = eligibleEntries(document, manifest, fixtureCatalog, {
+    const { entries, hiddenByRule, blockedReason } = eligibleEntries(document, manifest, fixtureCatalog, {
       parentId: "gallery",
       slotId: "items",
       index: 0,
     });
     expect(blockedReason).toBeNull();
     expect(entries.map((e) => e.id)).toEqual([FIXTURE_IDS.box]);
+    expect(hiddenByRule.map((e) => e.id)).not.toContain(FIXTURE_IDS.box);
+    expect(hiddenByRule).toHaveLength(fixtureCatalog.length - 1);
   });
 
   it("blocks with a reason when a single-cardinality slot is already occupied", () => {
@@ -165,6 +232,15 @@ describe("describeInsertionTarget", () => {
         index: 0,
       }),
     ).toBe("Document root");
+  });
+
+  it("names the bound template outlet at a resolved root", () => {
+    resetFixtureIds();
+    const manifest = buildManifestIndex(fixturePackManifest);
+    const catalogById = buildCatalogById(fixtureCatalog);
+    expect(
+      describeInsertionTarget(bound(fixtureDocument([])), manifest, catalogById, ROOT_TARGET, boxOnlyRootPolicy),
+    ).toBe("Main content");
   });
 
   it("describes a real parent/slot as 'Title › Slot label'", () => {
