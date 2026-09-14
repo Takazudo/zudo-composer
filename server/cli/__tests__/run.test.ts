@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { resolve } from "node:path";
-import { ASSETS_IMPORT_ENTRY_PATH, BUILD_SITE_ENTRY_PATH, GENERATE_ENTRY_PATH, INIT_ENTRY_PATH, RELEASE_ENTRY_PATH, SEED_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
+import { ASSETS_IMPORT_ENTRY_PATH, BUILD_SITE_ENTRY_PATH, GENERATE_ENTRY_PATH, GRAMMAR_ENTRY_PATH, INIT_ENTRY_PATH, RELEASE_ENTRY_PATH, SEED_ENTRY_PATH, CLOSE_GRACE_MS, USAGE, parseArguments, runComposerCli, superviseDevServer } from "../run.mjs";
 import { forwardedSignals, superviseChild } from "../supervise.mjs";
 
 function fakeProcess(platform = "linux") {
@@ -39,7 +39,7 @@ function fakeChild() {
 
 describe("parseArguments", () => {
   it("treats no arguments and every help spelling as the usage request", () => {
-    for (const argv of [[], ["--help"], ["-h"], ["help"], ["dev", "--help"], ["build-site", "--help"], ["build-site", "-h"], ["seed", "--help"], ["seed", "-h"], ["generate", "--help"], ["generate", "-h"]]) {
+    for (const argv of [[], ["--help"], ["-h"], ["help"], ["dev", "--help"], ["build-site", "--help"], ["build-site", "-h"], ["seed", "--help"], ["seed", "-h"], ["generate", "--help"], ["generate", "-h"], ["grammar", "--help"], ["grammar", "-h"]]) {
       expect(parseArguments(argv)).toEqual({ command: "help" });
     }
   });
@@ -74,6 +74,16 @@ describe("parseArguments", () => {
     expect(parseArguments(["generate", "--check", "--check"]))
       .toEqual({ command: "generate", options: { check: true } });
     expect(parseArguments(["generate", "--from", "project.json"])).toEqual({ error: 'Unknown generate option "--from".' });
+  });
+
+  it("accepts grammar with an optional host root, JSON output and a narrowing template id", () => {
+    expect(parseArguments(["grammar"])).toEqual({ command: "grammar", options: {} });
+    expect(parseArguments(["grammar", "--root", "host/..", "--json"]))
+      .toEqual({ command: "grammar", options: { workspaceRoot: resolve("host/.."), json: true } });
+    expect(parseArguments(["grammar", "--template", "category-page"]))
+      .toEqual({ command: "grammar", options: { template: "category-page" } });
+    expect(parseArguments(["grammar", "--template"])).toEqual({ error: "--template requires an id." });
+    expect(parseArguments(["grammar", "--from", "project.json"])).toEqual({ error: 'Unknown grammar option "--from".' });
   });
 
   it("reads build-site paths relative to the caller and allows verification with route printing", () => {
@@ -169,6 +179,9 @@ Commands:
               Import a host asset manifest, or read { "manifest": "path" } on
               stdin; write one canonical JSON response on stdout.
   generate    Generate site-project.json from site-project.ts.
+  grammar     Print the composition grammar for agents: what each page kind's
+              region accepts, derived from the component pack and the host's
+              Global templates.
   seed        Publish and activate a committed SiteProject; print its release
               identity and status (activated or unchanged) as JSON.
 
@@ -216,6 +229,11 @@ assets import options:
 generate options:
   --root <dir>     Host project root (default: the current directory).
   --check          Verify site-project.json is current without writing it.
+
+grammar options:
+  --root <dir>     Host project root (default: the current directory).
+  --json           Print the grammar object as JSON instead of Markdown.
+  --template <id>  Narrow output to the one named template.
 `);
   });
 
@@ -319,6 +337,31 @@ generate options:
     expect(proc.exits).toEqual([1]);
     const bad = fakeProcess();
     await runComposerCli(["generate", "--from", "project.json"], { proc: bad, spawn: spawn as never });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(bad.exitCode).toBe(1);
+  });
+
+  it("supervises grammar and forwards the host root, JSON flag and narrowing template id", async () => {
+    const proc = fakeProcess();
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    await runComposerCli(["grammar", "--root", "host with spaces", "--json", "--template", "category-page"], { proc, spawn: spawn as never, exists: () => true });
+    expect(spawn).toHaveBeenCalledWith("/usr/bin/node", [GRAMMAR_ENTRY_PATH, "--root", resolve("host with spaces"), "--json", "--template", "category-page"], { stdio: "inherit" });
+    proc.emitter.emit("SIGTERM");
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    child.emit("exit", 1, null);
+    expect(proc.exits).toEqual([1]);
+  });
+
+  it("refuses a missing grammar entry and rejects invalid grammar flags before spawning", async () => {
+    const proc = fakeProcess();
+    const spawn = vi.fn();
+    await runComposerCli(["grammar"], { proc, spawn: spawn as never, exists: () => false });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(proc.err.join("")).toContain(GRAMMAR_ENTRY_PATH);
+    expect(proc.exits).toEqual([1]);
+    const bad = fakeProcess();
+    await runComposerCli(["grammar", "--from", "project.json"], { proc: bad, spawn: spawn as never });
     expect(spawn).not.toHaveBeenCalled();
     expect(bad.exitCode).toBe(1);
   });
