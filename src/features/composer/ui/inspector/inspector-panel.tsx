@@ -28,18 +28,26 @@ import { useState } from "preact/hooks";
 import type {
   ComponentCatalog,
   CompositionDocument,
+  Grammar,
+  GrammarAcceptedKind,
+  GrammarRegion,
   GlobalTemplateOutletTarget,
   JsonObject,
   LinkedEditorLifecycleActions,
   LinkedEditorPresentation,
+  RootPolicy,
+  RootPolicyOrigin,
 } from "../../../../composer/browser";
 import {
+  buildGrammar,
   canRepairNodeProps,
   classifyNode,
+  describeKindChildren,
   describeSlotCompleteness,
   findLocation,
   isPublishedOutletTarget,
   orderedSlotIds,
+  renderGrammarMarkdown,
 } from "../../../../composer/browser";
 import { RailCollapseButton } from "../../../../components/editor-chrome";
 import { CopyIcon, DuplicateIcon, PlusIcon, SlotIcon, TrashIcon } from "../../../../components/icons";
@@ -53,6 +61,7 @@ import {
   PaneHeader,
   PaneSection,
   PaneTabs,
+  SegmentedControl,
 } from "../../../../components/ui";
 import type { PaneTab } from "../../../../components/ui";
 import type { ComponentDefinition } from "../../active-pack";
@@ -60,11 +69,13 @@ import type { ComposerMode } from "../../chrome/controller-model";
 import type { PropPath, PropCoalescing } from "../../chrome/history-model";
 import { describeSlotRule, partitionCatalog, type SlotRule } from "../slot-rules";
 import type { SelectedSlot } from "../tree/structure-pane";
+import { ComposerCopyButton } from "../export/copy-button";
 import { InspectorField, seedValue } from "./inspector-field";
 import { ReuseControls } from "./reuse-controls";
 import type { ReuseAuthoringActionResult } from "../shared/reuse-authoring-contract";
 
 type InspectorTab = "props" | "slots" | "reuse";
+type GrammarFormat = "markdown" | "json";
 
 export interface InspectorPanelProps {
   document: CompositionDocument;
@@ -74,6 +85,8 @@ export interface InspectorPanelProps {
   selectedId: string | null;
   /** The slot chosen in Structure, when the selected row is a slot. */
   selectedSlot?: SelectedSlot | null;
+  /** The document's effective root policy — drives the document row's Grammar-for-agents block. */
+  rootPolicy?: RootPolicy;
   mode: ComposerMode;
   onUpdateProps: (
     nodeId: string,
@@ -205,6 +218,115 @@ function describeCardinality(rule: SlotRule): string {
   return `Cardinality: ${parts.join(" · ")}`;
 }
 
+/** A region's container/slot identity, for both the synthesized-grammar label and the real one. */
+interface RegionIdentity {
+  componentId: string;
+  componentTitle: string;
+  slotId: string;
+  slotLabel: string;
+  outletLabel: string;
+}
+
+/** The generic virtual-root identity, for a resolved root policy with no display origin. */
+const DOCUMENT_ROOT_IDENTITY: RegionIdentity = {
+  componentId: "document",
+  componentTitle: "Document",
+  slotId: "root",
+  slotLabel: "Document root",
+  outletLabel: "Document root",
+};
+
+/** A rule's origin, as the region identity `grammarForRestrictedRule` needs — `fallback` covers a root policy with no display origin. */
+function regionIdentity(origin: RootPolicyOrigin | null, fallback: RegionIdentity): RegionIdentity {
+  if (!origin) return fallback;
+  return {
+    componentId: origin.componentId,
+    componentTitle: origin.componentTitle,
+    slotId: origin.slotId,
+    slotLabel: origin.slotLabel,
+    outletLabel: origin.viaTemplate?.outletLabel ?? origin.slotLabel,
+  };
+}
+
+/**
+ * The agent-facing grammar for one restricted rule, scoped to that region only —
+ * "same output as `zudo-composer grammar`" but never the whole pack.
+ *
+ * A rule backed by this very document's own published Global template outlet
+ * reuses #634's `buildGrammar` over the manifest and this one document, which
+ * is already the exact template `zudo-composer grammar --template` would
+ * select. Every other restricted rule (an ordinary nested slot, or a bound
+ * consumer's root policy) has no template document to hand `buildGrammar` —
+ * its region is synthesized straight from the rule #633 already computed,
+ * using the same `describeKindChildren` `buildGrammar` uses for a kind's own
+ * children so the two paths read identically.
+ */
+function grammarForRestrictedRule(
+  rule: SlotRule,
+  manifest: ComponentCatalog,
+  document: CompositionDocument,
+  identity: RegionIdentity,
+  isOutlet: boolean,
+): Grammar {
+  if (isOutlet) return buildGrammar({ manifest, templates: [document] });
+
+  const accepts: GrammarAcceptedKind[] = rule.accepts.map((component) => ({
+    id: component.id,
+    title: component.title,
+    description: manifest.get(component.id)?.description ?? "",
+    accepts: describeKindChildren(component.id, manifest),
+  }));
+  const region: GrammarRegion = {
+    outletLabel: identity.outletLabel,
+    componentId: identity.componentId,
+    componentTitle: identity.componentTitle,
+    slotId: identity.slotId,
+    slotLabel: identity.slotLabel,
+    cardinality: rule.cardinality,
+    ...(rule.min === undefined ? {} : { min: rule.min }),
+    ...(rule.max === undefined ? {} : { max: rule.max }),
+    accepts,
+  };
+  return {
+    pack: { id: manifest.pack.packId, version: manifest.pack.packVersion },
+    templates: [{ id: `${identity.componentId}.${identity.slotId}`, name: `${identity.componentTitle} › ${identity.slotLabel}`, region, open: false }],
+    openRoot: { accepts: "any" },
+  };
+}
+
+/** The Slots tab's "Grammar for agents" block: a Markdown/JSON toggle over one region's grammar, with Copy. */
+function GrammarForAgentsSection({ grammar }: { grammar: Grammar }): JSX.Element {
+  const [format, setFormat] = useState<GrammarFormat>("markdown");
+  const text = format === "markdown" ? renderGrammarMarkdown(grammar) : JSON.stringify(grammar, null, 2);
+
+  return (
+    <PaneSection
+      title="Grammar for agents"
+      class="sg-composer-inspector-grammar"
+      action={
+        <SegmentedControl<GrammarFormat>
+          label="Grammar format"
+          mode="pressed"
+          size="sm"
+          value={format}
+          onChange={setFormat}
+          options={[
+            { value: "markdown", label: "Markdown" },
+            { value: "json", label: "JSON" },
+          ]}
+        />
+      }
+    >
+      <pre class="sg-composer-export__code">{text}</pre>
+      <ComposerCopyButton text={text} label="Copy" size="sm" />
+      <p class="sg-composer-inspector-note">
+        Same output as <code>zudo-composer grammar</code>. Derived from the manifest and the template; nothing
+        authored by hand.
+      </p>
+    </PaneSection>
+  );
+}
+
 function InspectorShell({
   title,
   version,
@@ -258,6 +380,7 @@ export function InspectorPanel({
   titleFor,
   linkedPresentation = { state: "local" },
   linkedActions,
+  rootPolicy,
 }: InspectorPanelProps): JSX.Element {
   const [requestedTab, setRequestedTab] = useState<InspectorTab>("props");
   const readOnly = mode === "preview";
@@ -300,21 +423,33 @@ export function InspectorPanel({
   const activeTab: InspectorTab = requestedTab === "slots" && slotIds.length === 0 ? "props" : requestedTab;
 
   if (!node || !location) {
+    // The document row shares this same "nothing selected" state, so its
+    // Grammar-for-agents block lives here rather than behind a selection.
+    const rootRule = selectedId === null
+      ? describeSlotRule({ catalog: entries, manifest, document, target: { parentId: null, slotId: "", index: 0 }, rootPolicy })
+      : null;
+    const rootGrammar = rootRule?.kind === "restricted"
+      ? grammarForRestrictedRule(rootRule, manifest, document, regionIdentity(rootRule.origin, DOCUMENT_ROOT_IDENTITY), false)
+      : null;
+
     return (
       <InspectorShell title="Inspector" tabs={tabs} activeTab={activeTab} onSelectTab={setRequestedTab}>
         <div data-sg-inspector-state="empty">
           {activeTab === "reuse" ? (
             reuse
           ) : (
-            <EmptyState
-              inline
-              title="Nothing selected"
-              description={
-                document.root.length === 0
-                  ? "The composition is empty. Add a component from Structure to start editing."
-                  : "Select a component in the canvas or in Structure to edit its properties."
-              }
-            />
+            <>
+              <EmptyState
+                inline
+                title="Nothing selected"
+                description={
+                  document.root.length === 0
+                    ? "The composition is empty. Add a component from Structure to start editing."
+                    : "Select a component in the canvas or in Structure to edit its properties."
+                }
+              />
+              {rootGrammar && <GrammarForAgentsSection grammar={rootGrammar} />}
+            </>
           )}
         </div>
       </InspectorShell>
@@ -551,6 +686,17 @@ export function InspectorPanel({
                               composition. Change it in the host&rsquo;s component source and republish the pack.
                             </p>
                           </PaneSection>
+                        )}
+                        {rule.kind === "restricted" && (
+                          <GrammarForAgentsSection
+                            grammar={grammarForRestrictedRule(
+                              rule,
+                              manifest,
+                              document,
+                              regionIdentity(rule.origin, { componentId: node.componentId, componentTitle: title, slotId, slotLabel: label, outletLabel: label }),
+                              rule.isOutlet,
+                            )}
+                          />
                         )}
                       </div>
                     </li>

@@ -6,7 +6,7 @@
 import type { JSX } from "preact";
 import { useState } from "preact/hooks";
 import { CopyIcon } from "../../../../components/icons";
-import { Button } from "../../../../components/ui";
+import { Button, type ButtonSize } from "../../../../components/ui";
 import { copyText } from "../../../../shared/clipboard";
 
 export type ComposerCopyStatus = "idle" | "copied" | "failed";
@@ -14,9 +14,10 @@ export type ComposerCopyStatus = "idle" | "copied" | "failed";
 export interface ComposerCopyButtonProps {
   text: string;
   label?: string;
+  size?: ButtonSize;
 }
 
-export function ComposerCopyButton({ text, label = "Copy JSX" }: ComposerCopyButtonProps): JSX.Element {
+export function ComposerCopyButton({ text, label = "Copy JSX", size = "md" }: ComposerCopyButtonProps): JSX.Element {
   const [status, setStatus] = useState<ComposerCopyStatus>("idle");
 
   async function handleClick(): Promise<void> {
@@ -31,6 +32,7 @@ export function ComposerCopyButton({ text, label = "Copy JSX" }: ComposerCopyBut
   return (
     <Button
       variant="primary"
+      size={size}
       onClick={() => void handleClick()}
       data-sg-copy-status={status}
     >

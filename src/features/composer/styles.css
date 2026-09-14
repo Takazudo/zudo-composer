@@ -359,6 +359,18 @@
   margin: 0 0 var(--spacing-vsp-3xs);
 }
 
+.sg-composer-inspector-grammar {
+  margin-block-start: var(--spacing-vsp-2xs);
+}
+
+.sg-composer-inspector-grammar .sg-composer-export__code {
+  margin-block-end: var(--spacing-vsp-3xs);
+}
+
+.sg-composer-inspector-grammar .sg-composer-inspector-note {
+  margin-block-start: var(--spacing-vsp-3xs);
+}
+
 /* ── Reuse tab ──────────────────────────────────────────────────────────── */
 
 /* One card per reusable role: a glyph, one line of scope, and its action. */

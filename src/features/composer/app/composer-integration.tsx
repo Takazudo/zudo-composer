@@ -473,6 +473,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
           entries={manifestEntries}
           selectedId={state.selectedId}
           selectedSlot={activeSlot}
+          rootPolicy={state.rootPolicy}
           mode={state.mode}
           onUpdateProps={controller.updateProps}
           onUpdatePropsDebounced={controller.updatePropsDebounced}
