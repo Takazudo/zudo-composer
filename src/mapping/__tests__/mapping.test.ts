@@ -7,7 +7,7 @@ import type { CompositionRecord } from "../../composer/library";
 import { createContentCatalog } from "../../content/catalog";
 import type { ContentEntryRecord, ContentFieldKind, ContentModelRecord } from "../../content/model";
 import { CONTENT_ENTRY_SCHEMA_VERSION, CONTENT_FIELD_KINDS, CONTENT_MODEL_SCHEMA_VERSION } from "../../content/model";
-import { MAPPING_PROVIDERS, createCompositionCatalog, createMappingCatalog, createMappingRecord, discoverMappingTargets, evaluateCollectionQuery, evaluateMapping, evaluateResolvedMapping, isMappingCompatible, projectContentValue, resolveMappingDefinition, validateMappingRecord, validateMappingSourceProjection } from "..";
+import { MAPPING_PROVIDERS, createCompositionCatalog, createMappingCatalog, createMappingRecord, discoverMappingTargets, evaluateCollectionQuery, evaluateMapping, evaluateResolvedMapping, isMappingCompatible, projectContentValue, resolveMappingDefinition, resolveMappingProjectionDefinition, validateMappingRecord, validateMappingSourceProjection } from "..";
 import type { MappingSeedOptions, MappingTransform, ScalarMappingTargetField } from "..";
 import { createFilesystemMappingStore } from "../storage/filesystem";
 
@@ -118,6 +118,7 @@ describe("Mapping model and resolver", () => {
     const assetField = { id: "image", key: "image", label: "Image", required: false, kind: "asset-use" as const, use: "image" as const };
     const assetEntry = { ...entry({}), values: { image: { kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "Hero", decorative: false, caption: "Caption" } } };
     expect(projectContentValue({ field: assetField, entry: assetEntry, projection: { kind: "asset-ref" }, providerId: "content" })).toEqual({ status: "projected", value: { providerId: "asset-files", assetId: "hero" } });
+    expect(projectContentValue({ field: assetField, entry: assetEntry, projection: { kind: "asset-url" }, providerId: "content" })).toEqual({ status: "projected", value: "/uploaded-assets/asset-hero" });
     expect(projectContentValue({ field: assetField, entry: assetEntry, projection: { kind: "asset-text", field: "alt" }, providerId: "content" })).toEqual({ status: "projected", value: "Hero" });
     const referenceField = { id: "related", key: "related", label: "Related", required: false, kind: "reference" as const, target: { providerId: "content", recordId: "articles" } };
     const referenceEntry = { ...entry({}), values: { related: { providerId: "content", modelId: "articles", recordId: "next" } } };
@@ -125,7 +126,26 @@ describe("Mapping model and resolver", () => {
     expect(projectContentValue({ field: referenceField, entry: referenceEntry, projection: { kind: "route-link" }, providerId: "content", routeResolver: { resolve: () => ({ status: "resolved", href: "/next" }) } })).toEqual({ status: "projected", value: "/next" });
     expect(projectContentValue({ field: referenceField, entry: referenceEntry, projection: { kind: "reference-list-ids" }, providerId: "content" }).status).toBe("invalid");
     expect(validateMappingSourceProjection({ kind: "object-field", fieldIds: [] })).toBe(false);
+    expect(validateMappingSourceProjection({ kind: "asset-url" })).toBe(true);
+    expect(validateMappingSourceProjection({ kind: "asset-url", extra: 1 })).toBe(false);
     expect(validateMappingSourceProjection({ kind: "route-link", fallback: "/fake" })).toBe(false);
+  });
+  it("resolves asset-url as a URL for every asset use and rejects non-asset fields", () => {
+    const uses = ["image", "link", "download", "card"] as const;
+    for (const use of uses) {
+      expect(resolveMappingProjectionDefinition({ id: "asset", key: "asset", label: "Asset", required: true, kind: "asset-use", use }, { kind: "asset-url" })).toEqual({ status: "ready", kind: "url" });
+    }
+    expect(resolveMappingProjectionDefinition({ id: "title", key: "title", label: "Title", required: true, kind: "text" }, { kind: "asset-url" })).toEqual({ status: "invalid", message: "asset-url requires an asset-use field." });
+  });
+  it("evaluates an asset-url binding alongside asset text into URL and text props", async () => {
+    const assetModel: ContentModelRecord = { ...model, document: { ...model.document, fields: [{ id: "hero", key: "hero", label: "Hero", required: true, kind: "asset-use", use: "image" }] } };
+    const assetComposition: CompositionRecord = { ...composition, document: { ...composition.document, root: [{ id: "hero", componentId: "hero", componentVersion: 1, props: { src: "Static source", alt: "Static alt" }, slots: {} }] } };
+    const assetManifest = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "asset-test", packVersion: "1", components: [{ id: "hero", schemaVersion: 1, title: "Hero", category: "Test", description: "", source: { module: "x", exportKind: "named", exportName: "Hero" }, defaults: {}, fields: [{ schema: { type: "string" }, editor: { kind: "text" }, prop: "src", label: "Source" }, { schema: { type: "string" }, editor: { kind: "text" }, prop: "alt", label: "Alt" }], slots: [] }] });
+    const assetRecord = { kind: "image" as const, asset: { providerId: "asset-files", assetId: "hero" }, alt: "Hero", decorative: false, caption: "" };
+    const assetMapping = mapping([{ id: "url", sourceFieldId: "hero", projection: { kind: "asset-url" }, target: { nodeId: "hero", prop: "src" }, transform: { kind: "identity" } }, { id: "alt", sourceFieldId: "hero", projection: { kind: "asset-text", field: "alt" }, target: { nodeId: "hero", prop: "alt" }, transform: { kind: "identity" } }]);
+    const result = await evaluateMapping(assetMapping, entry({ hero: assetRecord }), catalogs(assetModel, assetComposition), assetManifest);
+    expect(result.status).toBe("ready");
+    expect(result.document?.root[0]?.props).toMatchObject({ src: "/uploaded-assets/asset-hero", alt: "Hero" });
   });
   it("resolves and evaluates persisted structured, asset, reference, and route-link projections", async () => {
     const cases = [

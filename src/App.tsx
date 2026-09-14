@@ -14,7 +14,7 @@ import { createWorkspaceSummary } from "./app/workspace-summary";
 import ComposerApp from "./features/composer/chrome/composer-app";
 import { ContentRouteContent } from "./features/content";
 import { MappingRouteContent } from "./features/mapping";
-import { AssetFieldPicker, AssetRouteContent, createAssetContentServices } from "./features/assets";
+import { AssetFieldPicker, AssetRouteContent, createAssetContentServices, versionedAssetStore } from "./features/assets";
 import { SitemapperRouteContent } from "./features/sitemapper";
 import { ReleaseRoute, createReleaseController, createReleaseTransport } from "./features/release";
 import { createApplicationOperationGate } from "./app/operation-gate";
@@ -205,6 +205,11 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
       },
     }),
   ), [providers]);
+  const assetPickerCapabilities = useMemo(() => {
+    const provider = providers.assetProvider;
+    const store = provider?.store ? versionedAssetStore(provider) : undefined;
+    return { upload: store?.capabilities.replace === true && typeof store.upload === "function" };
+  }, [providers.assetProvider]);
   const mappingAttachmentService = useMemo(() => providers.mappingAttachmentService, [providers]);
   useEffect(() => () => workspaceSummary.dispose?.(), [workspaceSummary]);
   const path = new URL(location, window.location.origin).pathname;
@@ -229,7 +234,7 @@ export function App({ themeController, integration, hostedDemo = false, onIntegr
   </main>;
   else if (intent.status === "invalid" || !providerKnown) content = <main class="route-placeholder"><h1>Invalid workspace link</h1><p role="alert">{intent.status === "invalid" ? intent.message : "The requested provider is unavailable. No other record was selected."}</p></main>;
   else if (path === "/composer") content = <ComposerApp componentProvider={providers.componentProvider} providers={providers.compositionProviders} />;
-  else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} renderAssetPicker={(request) => <AssetFieldPicker provider={providers.assetProvider} {...request} />} />;
+  else if (path === "/content") content = <ContentRouteContent provider={target?.route === "content" ? providers.contentProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.contentProvider} componentProvider={providers.componentProvider} createPreviewSource={providers.createContentPreviewSource} renderAssetPicker={(request) => <AssetFieldPicker provider={providers.assetProvider} {...request} />} assetPickerCapabilities={assetPickerCapabilities} />;
   else if (path === "/mapping") content = <MappingRouteContent provider={target?.route === "mapping" ? providers.mappingProviders.find((provider) => provider.descriptor.id === target.providerId)! : providers.mappingProvider} contentCatalog={providers.contentCatalog} compositionCatalog={providers.mappingCompositionCatalog} contentEntries={providers.mappingContentEntries} componentProvider={providers.componentProvider} attachmentCallbacks={mappingAttachmentService} />;
   else if (path === "/sitemapper") content = <SitemapperRouteContent provider={providers.sitemapProvider} catalog={providers.compositionCatalog} mappingCatalog={providers.sitemapperMappingCatalog} />;
   else if (path === "/assets") content = <AssetRouteContent provider={providers.assetProvider} contentServices={assetContentServices} usageHref={({ valuePath, ...location }) => formatIntent({ route: "content", ...location, ...(valuePath.length ? { valuePath } : {}) })} />;

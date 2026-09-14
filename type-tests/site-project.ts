@@ -1,6 +1,6 @@
 // This small demo is also copied into an installed host outside the repository.
 // Every tool import must resolve through a published bare specifier.
-import { defineSite, entryRef, node, type validateSiteProject } from "zudo-composer/authoring";
+import { ASSET_PROVIDER_ID, defineSite, entryRef, imageUse, node, type validateSiteProject } from "zudo-composer/authoring";
 import type { StaticSiteCompilation } from "zudo-composer/site-build";
 import type {
   Attachment,
@@ -142,10 +142,12 @@ export type RejectedInternalImports = [SiteProjectStoreAdapter, PrivateProject];
 // The DSL's named inputs and handles keep their relationship to both runtime
 // functions and portable records across independently generated subpaths.
 export type AuthoringRelationships = [
+  Assert<Equal<typeof ASSET_PROVIDER_ID, "asset-files">>,
   Assert<Equal<Parameters<typeof defineSite>[0], SiteOptions>>,
   Assert<Equal<ReturnType<typeof defineSite>, Site>>,
   Assert<Equal<ReturnType<typeof node>, NodeInput>>,
   Assert<Equal<Parameters<typeof entryRef>[0], Entry>>,
+  Assert<Equal<ReturnType<typeof imageUse>["kind"], "image">>,
   Assert<Equal<Parameters<Site["template"]>[0], TemplateInput>>,
   Assert<Equal<ReturnType<Site["template"]>, Template>>,
   Assert<Equal<Parameters<Site["page"]>[0], PageInput>>,
@@ -179,6 +181,8 @@ export function authorProject(options: SiteOptions): SiteProject {
   site.sitemap({ name: "Routes", root: { title: "Home", page: home } });
   return site.toSiteProject();
 }
+
+export const typedImageUse = imageUse("asset-example", "A sample image", { caption: "Caption" });
 
 // @ts-expect-error A site must explicitly identify its component pack.
 defineSite({ id: "missing-pack", name: "Invalid" });

@@ -251,17 +251,34 @@ describe("Asset workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Restore asset" }));
     await waitFor(async () => expect(await filesystem.get(asset.id)).toMatchObject({ record: { document: { state: "active" } } }));
   });
-  it("returns typed field values with per-use accessible text separate from notes", async () => {
+  it("chooses an image and returns fresh field text separate from asset notes", async () => {
     const { provider, filesystem } = await providerFixture();
     const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG, note: "Asset note" });
     const choose = vi.fn(); const close = vi.fn();
     render(<AssetFieldPicker provider={provider} kind="image" onSelect={choose} onClose={close} />);
-    await screen.findByRole("option", { name: "hero.png" });
-    fireEvent.change(screen.getByLabelText("Asset"), { target: { value: record.id } });
-    fireEvent.input(screen.getByLabelText("Alternative text for this usage"), { target: { value: "A contextual image description" } });
-    fireEvent.click(screen.getByRole("button", { name: "Use in content" }));
-    await waitFor(() => expect(choose).toHaveBeenCalledWith(expect.objectContaining({ kind: "image", asset: { providerId: provider.descriptor.id, assetId: record.id }, alt: "A contextual image description" })));
+    const dialog = screen.getByRole("dialog", { name: "Choose an image" });
+    expect(within(dialog).getByRole("complementary", { name: "Library" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("complementary", { name: "Asset details" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("searchbox", { name: "Search assets" })).toHaveFocus();
+    fireEvent.click(await within(dialog).findByRole("button", { name: "hero.png" }));
+    expect(within(dialog).queryByLabelText("Alternative text for this usage")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use this image" }));
+    await waitFor(() => expect(choose).toHaveBeenCalledWith({ kind: "image", asset: { providerId: provider.descriptor.id, assetId: record.id }, alt: "", decorative: false, caption: "" }));
     expect(await filesystem.get(record.id)).toMatchObject({ record: { document: { note: "Asset note" } } });
     expect(close).toHaveBeenCalledTimes(1);
+  });
+  it("hides non-images and marks the current image as preselected", async () => {
+    const { provider, filesystem } = await providerFixture();
+    const record = await filesystem.upload({ fileName: "hero.png", declaredMimeType: "image/png", bytes: PNG });
+    await filesystem.upload({ fileName: "guide.pdf", declaredMimeType: "application/pdf", bytes: PDF });
+    const choose = vi.fn();
+    render(<AssetFieldPicker provider={provider} kind="image" current={{ providerId: provider.descriptor.id, assetId: record.id }} onSelect={choose} onClose={vi.fn()} />);
+    const item = await screen.findByRole("button", { name: "hero.png" });
+    expect(item).toHaveAttribute("aria-pressed", "true");
+    expect(within(item).getByText("Current")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "guide.pdf" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Asset type" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Keep this image" }));
+    await waitFor(() => expect(choose).toHaveBeenCalledWith({ kind: "image", asset: { providerId: provider.descriptor.id, assetId: record.id }, alt: "", decorative: false, caption: "" }));
   });
 });

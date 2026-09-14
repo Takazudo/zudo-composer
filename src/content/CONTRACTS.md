@@ -20,13 +20,19 @@ depth is bounded at 16. Models retain collection/single cardinality.
 - `reference-list`: same target plus required `ordered: boolean`. Values are
   unique references. Stored order is always preserved, including ordered edits.
 - `object`: nested `fields`; `list`: recursive `item` schema.
-- `asset-use`: schema selects `use: "image" | "link" | "card"`. Values contain
-  `{kind,asset:{providerId,assetId}}` plus image `{alt,decorative,caption}`, link `{label}`,
-  or card `{title,description}`. Decorative image alt must be empty. Asset notes
-  never supply alt. The provider-qualified asset identity is stable authoring
-  data; it deliberately has no version ID. The Asset/release layer resolves the
-  current active head under a durable mutation token and pins the exact
-  immutable version in a release candidate.
+- `asset-use`: schema selects `use: "image" | "link" | "download" | "card"`.
+  Values contain `{kind,asset:{providerId,assetId}}` plus image
+  `{alt,decorative,caption}`, link `{label}`, download
+  `{label,showSize,showType}`, or card `{title,description}`. Decorative image
+  alt must be empty. Asset notes never supply alt. The provider-qualified asset
+  identity is stable authoring data; it deliberately has no version ID. The
+  Asset/release layer resolves the current active head under a durable mutation
+  token and pins the exact immutable version in a release candidate. The
+  Content editor renders each asset-use field as a card with a thumbnail, file
+  name, metadata, and `Replace`, `Open in Assets`, and `Remove` actions; image
+  alt/caption and other per-use text are edited on the field, not on the Asset.
+  The picker is a chooser that returns an asset-use value; the field owns its
+  persistence.
 
 `isValueValidForField` validates saved types and date/URL/choice/ref/asset
 semantics. Date/URL empty strings and absent required fields remain savable.

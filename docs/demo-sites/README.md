@@ -22,6 +22,10 @@ package-owned Assets store. Webshop, Landing and Blog assert their 16, 6 and 10
 images in their own `pnpm test` suites, including metadata, encoding and the 250
 KiB file limit. The central imagery test retains those Studio seed rows and the
 8 MiB combined source budget, discovering every host's manifest automatically.
+Landing now uses an image `asset-use`; Webshop and Blog retain their URL-shaped
+image fields, while Sample's Markdown image destinations remain URL-based. The
+follow-up [#657](https://github.com/Takazudo/zudo-composer/issues/657) tracks
+migrating those remaining demo image paths to `asset-use`.
 
 Generation, asset import, and release commands are provided directly by the
 installed `zudo-composer` tool in each host.
@@ -447,21 +451,23 @@ mapping targets (`structured-target-unsupported`). The compatibility matrix is
 | Category / author id as a variant | `reference` | `reference-id` → `identity` | `select` (options = record ids) or `text` |
 | Number (price, stock, columns) | `number` | `value` → `identity` | `number` |
 | Flag (featured, published-in-nav) | `boolean` | `value` → `identity` | `boolean` |
-| Image URL | `url` field holding `/uploaded-assets/asset-<id>` (nested in an `object` image field is fine: `object-field` projection) | `value` / `object-field` → `identity` | `text` (a prop named `src`, `href`, `poster` or `url`) |
-| Image alt | `text` field beside the URL (same `object`) | `object-field` → `identity` | `text` |
+| Image | `asset-use` field (`use: "image"`) | `asset-url` → `identity` | `text` (a prop named `src`, `href`, `poster` or `url`) |
+| Image alt | `asset-use` field (`use: "image"`) | `asset-text alt` → `identity` | `text` |
 | Tag list as filter data | `list<text>` | not bindable — see below | — |
 
-Images: the asset pass (`src/site-project/assets/impact.ts`) recognises the
-canonical authoring URL `/uploaded-assets/asset-<id>` in Content `url` fields
-and in component props named `src` / `href` / `poster` / `url`, records the
-reference for the exact-version Assets lock, and rewrites it to the immutable
-`/uploaded-assets/sha256-….webp` URL at release. That is the only path from an
-asset to an `<img>`. `asset-ref` projects the `{ providerId, assetId }` object
-and `reference-list-ids` projects an id array; neither is accepted by any
-scalar target (`incompatible-binding`), so the demo content models keep images
-as `object { src: url, alt: text }` and expose related items through a second
-attachment rather than a `reference-list` binding (tool gap tracked in #506;
-the demos do not wait for it).
+Images: `asset-url` is the path from an `asset-use` value to an `<img>`: it
+projects the canonical authoring URL `/uploaded-assets/asset-<id>` and the
+asset pass rewrites it to the immutable `/uploaded-assets/sha256-….webp` URL at
+release. The asset pass still only pins URL-valued props named `src` / `href` /
+`poster` / `url`; a mapped asset URL on any other prop name makes impact
+inspection incomplete and blocks release with `asset-impact-incomplete`.
+Webshop and Blog still use the `object { src: url, alt: text }` pattern, and
+Sample's Markdown image destinations remain URL-based; Landing uses
+`asset-use` with `asset-url` / `asset-text`. `asset-ref` remains object-only and
+`reference-list-ids` projects an id array; neither is accepted by any scalar
+target (`incompatible-binding`), so related items stay on a second attachment
+rather than a `reference-list` binding (tool gap tracked in #506; the demos do
+not wait for it).
 
 Lists inside an entry (tags, spec rows, feature bullets) that must reach a
 component are flattened at authoring time into fixed scalar fields (`tag1`,

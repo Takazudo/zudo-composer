@@ -25,11 +25,14 @@ import {
 } from "../../content";
 import { createUuidIdFactory, type IdFactory } from "../../shared";
 import { createSaveQueue, type SaveQueue } from "../../shared/persistence";
+import type { AssetSummary } from "../../assets";
 
 export const CONTENT_ENTRY_PAGE_SIZE = 25;
 export type ContentWorkMode = "entries" | "model-fields" | "relationships";
 export type ContentSaveStatus = "pristine" | "saved" | "dirty" | "saving" | "error";
-export interface ContentAssetCatalogSource { descriptor: { id: string; label: string }; store: { list(): Promise<readonly { id: string; fileName: string; state: "active" | "trash" }[]> } }
+type ContentAssetSummary = Pick<AssetSummary, "id" | "fileName" | "mimeType" | "byteLength" | "url" | "authoringUrl" | "createdAt" | "state">;
+export type ContentAssetCatalogItem = Omit<ContentAssetSummary, "id"> & { providerId: string; assetId: string; label: string };
+export interface ContentAssetCatalogSource { descriptor: { id: string; label: string }; store: { list(): Promise<readonly ContentAssetSummary[]> } }
 
 export interface ContentAuthoringState {
   viewId: string | null;
@@ -430,10 +433,14 @@ export class ContentAuthoringController {
     return results.flatMap((result) => result.status === "fulfilled" ? result.value.models.map((model) => ({ ref: { providerId: result.value.provider.descriptor.id, recordId: model.id }, label: model.name, providerLabel: result.value.provider.descriptor.label })) : []);
   }
 
-  async assetAssets(): Promise<{ providerId: string; assetId: string; label: string }[]> {
+  async assetAssets(): Promise<ContentAssetCatalogItem[]> {
     if (!this.assetProvider) throw new Error("The Assets provider is unavailable. Open Assets after connecting a provider.");
     const assets = await this.assetProvider.store.list();
-    return assets.filter((asset) => asset.state === "active").map((asset) => ({ providerId: this.assetProvider!.descriptor.id, assetId: asset.id, label: asset.fileName }));
+    return assets.map((asset) => ({
+      providerId: this.assetProvider!.descriptor.id, assetId: asset.id, label: asset.fileName,
+      fileName: asset.fileName, mimeType: asset.mimeType, byteLength: asset.byteLength,
+      url: asset.url, authoringUrl: asset.authoringUrl, createdAt: asset.createdAt, state: asset.state,
+    }));
   }
 
   async applyInverse(inverseId: string, selectedOwnerIds: readonly string[]): Promise<void> {

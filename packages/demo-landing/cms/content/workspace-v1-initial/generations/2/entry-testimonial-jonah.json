@@ -8,8 +8,14 @@
   "updatedAt": "2026-09-12T00:00:00.000Z",
   "values": {
     "testimonials-avatar": {
-      "testimonials-avatar-alt": "Abstract geometric avatar on a cobalt disc",
-      "testimonials-avatar-src": "/uploaded-assets/asset-assets-97c31942-4c4e-4da3-a8d0-c7b0777b29fb"
+      "alt": "Abstract geometric avatar on a cobalt disc",
+      "asset": {
+        "assetId": "assets-97c31942-4c4e-4da3-a8d0-c7b0777b29fb",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "testimonials-name": "Jonah Reyes",
     "testimonials-order": 2,

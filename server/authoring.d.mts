@@ -265,6 +265,8 @@ type MappingSourceProjection = {
 } | {
     kind: "asset-ref";
 } | {
+    kind: "asset-url";
+} | {
     kind: "asset-download";
 } | {
     kind: "asset-text";
@@ -524,6 +526,7 @@ declare const COMPOSITION_PROVIDER_ID = "files";
 declare const CONTENT_PROVIDER_ID = "content-filesystem";
 declare const MAPPING_PROVIDER_ID = "mapping-filesystem";
 declare const SITEMAP_PROVIDER_ID = "sitemap-filesystem";
+declare const ASSET_PROVIDER_ID: "asset-files";
 /** Every generated record carries one fixed timestamp so regeneration is byte-stable. */
 declare const DEFAULT_TIMESTAMP = "2026-09-12T00:00:00.000Z";
 /** `Product card` → `product-card`; matches the tool's safe record-id pattern. */
@@ -738,6 +741,13 @@ declare function entryRef(entry: Entry): {
     modelId: string;
     recordId: string;
 };
+/** Create an image asset use using the project's filesystem asset provider. */
+declare function imageUse(assetId: string, alt: string, options?: {
+    decorative?: boolean;
+    caption?: string;
+}): Extract<ContentAssetUse, {
+    kind: "image";
+}>;
 
 /**
  * File name → canonical authoring URL for the active assets in a resolved host
@@ -1103,4 +1113,4 @@ declare function canonicalStringifyJson(value: JsonValue): string;
 /** Strictly validates a SiteProject and every cross-domain graph edge. */
 declare function validateSiteProject(value: unknown, context: SiteProjectValidationContext): SiteProjectValidation;
 
-export { COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, createFilesystemAssetStore, defineSite, entryRef, node, readAssetUrls, slugify, validateSiteProject };
+export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, createFilesystemAssetStore, defineSite, entryRef, imageUse, node, readAssetUrls, slugify, validateSiteProject };

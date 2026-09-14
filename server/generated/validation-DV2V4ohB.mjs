@@ -5,6 +5,35 @@ import { createHash, randomBytes } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 import { link } from "node:fs/promises";
 import { ContractValidationError, RESERVED_PERSISTED_KEYS, componentPackManifestSchema, validateFieldValue } from "@zudo-composer/component-contract";
+//#region src/assets/library/types.ts
+var ASSET_PROVIDERS = { files: {
+	id: "asset-files",
+	label: "Project files"
+} };
+/** Provider-neutral persistence failure. */
+var AssetPersistenceError = class extends Error {
+	operation;
+	code;
+	retryable;
+	name = "AssetPersistenceError";
+	constructor(operation, code, message, retryable, options) {
+		super(message, options);
+		this.operation = operation;
+		this.code = code;
+		this.retryable = retryable;
+	}
+};
+var ASSET_VERSIONED_CAPABILITIES = Object.freeze({
+	folders: true,
+	metadata: true,
+	replace: true,
+	trash: true,
+	restore: true,
+	exactVersions: true,
+	snapshot: true,
+	permanentDelete: false
+});
+//#endregion
 //#region src/assets/model/asset-kinds.mjs
 /** @typedef {"image" | "document" | "archive" | "text"} AssetKindName */
 /** @typedef {{ extension: string, kind: AssetKindName, previewable: boolean, inline: boolean }} AssetKindDescriptor */
@@ -205,31 +234,6 @@ function sniffAsset(bytes, declaredMimeType) {
 		extension: descriptor.extension
 	};
 }
-//#endregion
-//#region src/assets/library/types.ts
-/** Provider-neutral persistence failure. */
-var AssetPersistenceError = class extends Error {
-	operation;
-	code;
-	retryable;
-	name = "AssetPersistenceError";
-	constructor(operation, code, message, retryable, options) {
-		super(message, options);
-		this.operation = operation;
-		this.code = code;
-		this.retryable = retryable;
-	}
-};
-var ASSET_VERSIONED_CAPABILITIES = Object.freeze({
-	folders: true,
-	metadata: true,
-	replace: true,
-	trash: true,
-	restore: true,
-	exactVersions: true,
-	snapshot: true,
-	permanentDelete: false
-});
 //#endregion
 //#region src/shared/id-factory.ts
 /** Lower-cases a hint into an id-safe fragment (letters, digits, dashes). */
@@ -2786,6 +2790,7 @@ function validateMappingSourceProjection(value) {
 	if ([
 		"value",
 		"asset-ref",
+		"asset-url",
 		"asset-download",
 		"reference-id",
 		"reference-list-ids",
@@ -3547,4 +3552,4 @@ function compareDiagnostics(left, right) {
 	return compareUnicodeCodePoints$1(left.path, right.path) || compareUnicodeCodePoints$1(left.code, right.code) || compareUnicodeCodePoints$1(left.message, right.message);
 }
 //#endregion
-export { validateAssetSnapshot as A, assetMimeTypeForExtension as B, assetDownloadFileName as C, isValidAssetChecksum as D, isValidAssetByteLength as E, assetAuthoringUrl as F, assetVersionUrl as I, ASSET_CHECKSUM_URL_PATTERN as L, validateAssetVersionRef as M, cloneJson as N, isValidAssetFileName as O, ASSET_MAX_BYTE_LENGTH as P, ASSET_IMMUTABLE_CACHE_CONTROL as R, assetByteLabel as S, assetPinKey as T, hostedAssetHeaders as V, canonicalStringifyJson as _, discoverMappingTargets as a, serializeSiteProject as b, isContentAssetUse as c, isStructurallyValidDocument$1 as d, validateRootForest as f, createComponentCatalog as g, VIRTUAL_ROOT_SLOT_ID as h, isSitemapDisplayTitleFieldKind as i, validateAssetVersionPin as j, validateAssetAssetRef as k, isValueValidForField as l, orderedSlotIds as m, browserProviderIdFor as n, validateMappingSourceProjection as o, findLocation as p, safeNavigationUrl as r, validateMappingTransform as s, validateSiteProject as t, diagnoseDocument as u, canonicalizeSiteProject as v, assetTypeLabel as w, createFilesystemAssetStore as x, compareUnicodeCodePoints$1 as y, assetKindForMime as z };
+export { validateAssetSnapshot as A, assetMimeTypeForExtension as B, assetDownloadFileName as C, isValidAssetChecksum as D, isValidAssetByteLength as E, assetAuthoringUrl as F, ASSET_PROVIDERS as H, assetVersionUrl as I, ASSET_CHECKSUM_URL_PATTERN as L, validateAssetVersionRef as M, cloneJson as N, isValidAssetFileName as O, ASSET_MAX_BYTE_LENGTH as P, ASSET_IMMUTABLE_CACHE_CONTROL as R, assetByteLabel as S, assetPinKey as T, hostedAssetHeaders as V, canonicalStringifyJson as _, discoverMappingTargets as a, serializeSiteProject as b, isContentAssetUse as c, isStructurallyValidDocument$1 as d, validateRootForest as f, createComponentCatalog as g, VIRTUAL_ROOT_SLOT_ID as h, isSitemapDisplayTitleFieldKind as i, validateAssetVersionPin as j, validateAssetAssetRef as k, isValueValidForField as l, orderedSlotIds as m, browserProviderIdFor as n, validateMappingSourceProjection as o, findLocation as p, safeNavigationUrl as r, validateMappingTransform as s, validateSiteProject as t, diagnoseDocument as u, canonicalizeSiteProject as v, assetTypeLabel as w, createFilesystemAssetStore as x, compareUnicodeCodePoints$1 as y, assetKindForMime as z };
