@@ -46,6 +46,17 @@ export const componentCatalog = createComponentCatalog({
       fields: [],
       slots: [{ id: "body", prop: "body", label: "Body", cardinality: "single", accepts: ["leaf"] }],
     },
+    {
+      id: "bounded-shell",
+      schemaVersion: 1,
+      title: "Bounded shell",
+      category: "Test",
+      description: "",
+      source: { module: "@test/bounded-shell", exportKind: "named", exportName: "BoundedShell" },
+      defaults: {},
+      fields: [],
+      slots: [{ id: "body", prop: "body", label: "Body", cardinality: "many", accepts: ["leaf"], max: 2 }],
+    },
   ],
 });
 

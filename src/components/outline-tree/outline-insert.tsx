@@ -149,6 +149,10 @@ export function OutlineAddRow({ parent, target, depth }: AddRowProps) {
             <PlusIcon size="xs" />
           </span>
           {label}
+          {/* The parent slot/document row already carries the allowed-kinds hint
+              (`outline-model.ts`'s `describeRuleDisplay`) — the Add row just echoes
+              it so the affordance names what it accepts without a second lookup. */}
+          {parent.hint === undefined ? null : <span class="cms-tree-hint">{parent.hint}</span>}
         </button>
       )}
     </div>

@@ -9,6 +9,7 @@ export * from "./library";
 export * from "./reuse";
 export * from "./source/generate-jsx";
 export * from "./source/plan-linked-jsx";
+export * from "./grammar";
 export * from "./storage/file-provider";
 export * from "../shared/id-factory";
 export * from "../shared/json";

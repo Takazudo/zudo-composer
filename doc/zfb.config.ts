@@ -40,6 +40,7 @@ export default defineConfig(
       { label: "Overview", path: "/docs/overview", categoryMatch: "overview" },
       { label: "Architecture", path: "/docs/architecture", categoryMatch: "architecture" },
       { label: "Setup", path: "/docs/setup", categoryMatch: "setup" },
+      { label: "Guides", path: "/docs/guides", categoryMatch: "guides" },
       { label: "Development", path: "/docs/development", categoryMatch: "development" },
     ],
     headerRightItems: [

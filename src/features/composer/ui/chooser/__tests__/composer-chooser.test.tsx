@@ -3,12 +3,12 @@
 import "../../../test-support/cleanup";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "preact/test-utils";
-import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { useState } from "preact/hooks";
 import { h } from "preact";
 import { defineComponentPack, type ComponentManifest } from "@zudo-composer/component-contract";
 import { VIRTUAL_ROOT_SLOT_ID } from "../../../../../composer/browser";
-import type { CompositionDocument, InsertionTarget, ReuseCatalogOutcome } from "../../../../../composer/browser";
+import type { CompositionDocument, InsertionTarget, ReuseCatalogOutcome, RootPolicy } from "../../../../../composer/browser";
 import { createComposerComponentProvider } from "../../../component-provider";
 import type { ComposerPreviewLocation } from "../../../preview";
 import { activeComponentProvider } from "../../../active-pack";
@@ -267,10 +267,11 @@ describe("ComposerChooser — search / category / constraint filters", () => {
       slots: { items: [] },
     });
     const props = baseProps({ document, target: { parentId: "gallery", slotId: "items", index: 0 } });
-    render(<ComposerChooser {...props} />);
-    expect(screen.getByRole("button", { name: /^Box/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Stack/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Button/ })).not.toBeInTheDocument();
+    const { container } = render(<ComposerChooser {...props} />);
+    const allowed = within(container.ownerDocument.querySelector<HTMLElement>(".sg-composer-chooser-grid")!);
+    expect(allowed.getByRole("button", { name: /^Box/ })).toBeInTheDocument();
+    expect(allowed.queryByRole("button", { name: /^Stack/ })).not.toBeInTheDocument();
+    expect(allowed.queryByRole("button", { name: /^Button/ })).not.toBeInTheDocument();
   });
 
   it("blocks a chooser opened on an already-occupied single-cardinality slot", () => {
@@ -302,6 +303,107 @@ describe("ComposerChooser — search / category / constraint filters", () => {
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.getByRole("button", { name: /^Button/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Box/ })).not.toBeInTheDocument();
+  });
+});
+
+const categoryRootPolicy: RootPolicy = {
+  kind: "resolved",
+  accepts: [FIXTURE_IDS.gallery, FIXTURE_IDS.box, FIXTURE_IDS.text],
+  cardinality: "many",
+  max: 2,
+  origin: {
+    componentId: FIXTURE_IDS.stack,
+    componentTitle: "Stack",
+    slotId: "content",
+    slotLabel: "Content",
+    viaTemplate: { sourceName: "Site shell", outletLabel: "Main content" },
+  },
+};
+
+function boundProps(rootCount = 0) {
+  const nodes = Array.from({ length: rootCount }, (_, index) => fixtureNode(FIXTURE_IDS.box, {}, {}, `root-${index}`));
+  const document = { ...fixtureDocument(nodes), binding: { sourceRecordId: "source-template", outletId: "main" } };
+  return baseProps({ document, target: { ...rootTarget, index: rootCount }, rootPolicy: categoryRootPolicy });
+}
+
+function hiddenDisclosure(): HTMLDetailsElement | null {
+  return document.querySelector<HTMLDetailsElement>(".sg-composer-chooser-hidden");
+}
+
+describe("ComposerChooser — restricted target rule", () => {
+  it("renders no rule header, allowed section, disclosure, or footer note for an open target", () => {
+    render(<ComposerChooser {...baseProps()} />);
+    expect(document.querySelector("[data-chooser-rule]")).toBeNull();
+    expect(screen.queryByText("Allowed here")).not.toBeInTheDocument();
+    expect(hiddenDisclosure()).toBeNull();
+    expect(screen.queryByText(/Rule applies because/)).not.toBeInTheDocument();
+    expect(document.querySelector(".sg-composer-chooser-rule-badge")).toBeNull();
+  });
+
+  it("shows the rule header with one chip per allowed kind in rule order and its source", () => {
+    render(<ComposerChooser {...boundProps()} />);
+    expect(screen.getByRole("heading", { name: "Add to Main content" })).toBeInTheDocument();
+    const header = document.querySelector<HTMLElement>("[data-chooser-rule]")!;
+    expect(header).toHaveTextContent("This region accepts 3 kinds");
+    const chips = within(within(header).getByRole("list", { name: "Allowed components" })).getAllByRole("listitem");
+    expect(chips.map((chip) => chip.textContent)).toEqual(["Gallery", "Box", "Text"]);
+    expect(header).toHaveTextContent("rule from Stack › Content · template Site shell");
+    expect(screen.getByText("Rule applies because this page is bound to the Site shell template.")).toBeInTheDocument();
+  });
+
+  it("lists allowed cards with a count badge, badges kinds with their own rule, and discloses the hidden rest", () => {
+    render(<ComposerChooser {...boundProps()} />);
+    expect(screen.getByText("Allowed here").querySelector(".cms-count-badge")).toHaveTextContent("3");
+    const badges = [...document.querySelectorAll(".sg-composer-chooser-rule-badge")];
+    expect(badges).toHaveLength(1);
+    expect(badges[0]!.closest("li")).toHaveTextContent("Gallery");
+
+    const disclosure = hiddenDisclosure()!;
+    expect(disclosure.open).toBe(false);
+    // The rule's own container (Stack) is never listed as hidden.
+    expect(disclosure.querySelector("summary")).toHaveTextContent(
+      "2 hidden by this region's rule — shown so you know they exist, not offered",
+    );
+    const rows = within(disclosure).getAllByRole("button");
+    expect(rows.map((row) => row.getAttribute("aria-label"))).toEqual(["Split Layout", "Button"]);
+    expect(rows[0]).toHaveTextContent("not in Stack › Content");
+  });
+
+  it("falls search through to hidden rows by opening the disclosure instead of an empty state", () => {
+    render(<ComposerChooser {...boundProps()} />);
+    const search = screen.getByPlaceholderText("Search components…");
+    fireEvent.input(search, { target: { value: "button" } });
+    expect(hiddenDisclosure()!.open).toBe(true);
+    expect(within(hiddenDisclosure()!).getAllByRole("button")).toHaveLength(1);
+    expect(screen.queryByText(/No matching components/)).not.toBeInTheDocument();
+
+    fireEvent.input(search, { target: { value: "zzz-no-match" } });
+    expect(hiddenDisclosure()).toBeNull();
+    expect(screen.getByText(/No matching components/)).toBeInTheDocument();
+  });
+
+  it("previews a selected hidden row with the not-offered note while Insert stays disabled", () => {
+    const props = boundProps();
+    render(<ComposerChooser {...props} />);
+    fireEvent.click(within(hiddenDisclosure()!).getByRole("button", { name: "Button" }));
+
+    expect(screen.getByRole("heading", { name: "Button", level: 3 })).toBeInTheDocument();
+    expect(screen.getByText(/^Not offered here\./)).toHaveTextContent(
+      "Not offered here. Main content is Stack › Content, which accepts Gallery, Box, Text. "
+        + "To allow Button on Site shell pages, add `test.button` to that slot's `accepts` in the host's component source.",
+    );
+    expect(screen.getByRole("button", { name: "Insert" })).toBeDisabled();
+    expect(props.onAdd).not.toHaveBeenCalled();
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Box", exact: true }));
+    expect(screen.queryByText(/^Not offered here\./)).not.toBeInTheDocument();
+  });
+
+  it("keeps the blocked banner for a full slot, naming its bound", () => {
+    render(<ComposerChooser {...boundProps(2)} />);
+    expect(screen.getByText("This slot is full (max 2).")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Box", exact: true })).not.toBeInTheDocument();
+    expect(hiddenDisclosure()).toBeNull();
   });
 });
 

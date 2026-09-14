@@ -148,6 +148,47 @@ describe('serializable component-pack contract v2', () => {
     expectCode(() => componentPackManifestSchema.parse(unresolved), 'UNRESOLVED_ACCEPTS');
   });
 
+  it('round-trips optional slot min/max bounds and leaves omitted bounds absent', () => {
+    const slots = fixtureComponentPack.manifest.components[0]?.slots;
+    expect(slots?.[0]).toMatchObject({ id: 'content', min: 1, max: 4 });
+    expect(slots?.[1]).not.toHaveProperty('min');
+    expect(slots?.[1]).not.toHaveProperty('max');
+    const parsed = componentPackManifestSchema.parse(JSON.parse(JSON.stringify(fixtureComponentPack.manifest)));
+    expect(parsed.components[0]?.slots[0]).toMatchObject({ min: 1, max: 4 });
+
+    const omitted = manifest();
+    const firstSlot = (container(omitted).slots as Record<string, unknown>[])[0];
+    delete firstSlot.min;
+    delete firstSlot.max;
+    const unbounded = componentPackManifestSchema.parse(omitted).components[0]?.slots[0];
+    expect(unbounded).toEqual({ id: 'content', prop: 'children', label: 'Content', accepts: ['prose', 'badge'], cardinality: 'many' });
+
+    const zero = manifest();
+    Object.assign((container(zero).slots as Record<string, unknown>[])[0], { min: 0, max: 0 });
+    expect(componentPackManifestSchema.parse(zero).components[0]?.slots[0]).toMatchObject({ min: 0, max: 0 });
+
+    const singleBounds = manifest();
+    Object.assign((container(singleBounds).slots as Record<string, unknown>[])[1], { min: 1, max: 1 });
+    expect(componentPackManifestSchema.parse(singleBounds).components[0]?.slots[1]).toMatchObject({ min: 1, max: 1 });
+  });
+
+  it.each([
+    ['negative min', 0, { min: -1 }, '.min'],
+    ['fractional max', 0, { max: 1.5 }, '.max'],
+    ['string max', 0, { max: '2' }, '.max'],
+    ['min above max', 0, { min: 3, max: 2 }, '.min'],
+    ['single min above one', 1, { min: 2 }, '.min'],
+    ['single max above one', 1, { max: 2 }, '.max'],
+  ] as const)('rejects slot bounds: %s', (_name, slotIndex, bounds, suffix) => {
+    const value = manifest();
+    const slots = container(value).slots as Record<string, unknown>[];
+    const slot = slots[slotIndex] as Record<string, unknown>;
+    delete slot.min;
+    delete slot.max;
+    Object.assign(slot, bounds);
+    expectIssue(() => componentPackManifestSchema.parse(value), 'INVALID_SLOT_BOUNDS', `$.components[0].slots[${slotIndex}]${suffix}`);
+  });
+
   it.each(['dangerouslySetInnerHTML', 'key', 'ref', '__proto__', 'constructor'])('rejects reserved persisted prop %s', (prop) => {
     const value = manifest();
     (container(value).fields as Record<string, unknown>[])[0].prop = prop;

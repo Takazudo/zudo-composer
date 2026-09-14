@@ -57,6 +57,15 @@ export function resolveGlobalTemplate(
     kind: "resolved",
     ...(slot.accepts ? { accepts: [...slot.accepts] } : {}),
     cardinality: slot.cardinality,
+    ...(slot.min === undefined ? {} : { min: slot.min }),
+    ...(slot.max === undefined ? {} : { max: slot.max }),
+    origin: {
+      componentId: entry.id,
+      componentTitle: entry.title,
+      slotId: slot.id,
+      slotLabel: slot.label,
+      viaTemplate: { sourceName: source.document.name, outletLabel: outlet.label },
+    },
   };
   const localValidation = validateRootForest(consumer.document.root, rootPolicy);
   if (!localValidation.ok) {

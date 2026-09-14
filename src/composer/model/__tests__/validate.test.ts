@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyNode,
+  describeSlotCompleteness,
   diagnoseDocument,
   isNodeOpaque,
   isStructurallyValidDocument,
@@ -313,5 +314,64 @@ describe("validateInsertionTarget", () => {
 describe("schema version constant", () => {
   it("is 2", () => {
     expect(COMPOSITION_SCHEMA_VERSION).toBe(2);
+  });
+});
+
+describe("slot bounds", () => {
+  const BOUNDED = "fixture.bounded";
+  const bounded = createComponentCatalog(createFixturePackManifest([
+    ...M.pack.components,
+    {
+      ...M.get(C.stack)!,
+      id: BOUNDED,
+      title: "Bounded",
+      source: { module: "@fixtures/bounded", exportName: "Bounded", exportKind: "named" },
+      slots: [{ id: "items", prop: "children", label: "Items", cardinality: "many", min: 1, max: 2 }],
+    },
+  ]));
+  const boundedNode = (count: number) =>
+    node(BOUNDED, { gap: "md" }, { items: Array.from({ length: count }, (_, i) => node(X.box, {}, {}, `child-${i}`)) }, "bounded");
+  const bound = (root: CompositionNode[]) => {
+    const value = doc(root);
+    value.binding = { sourceRecordId: "source-record", outletId: "outlet-main" };
+    return value;
+  };
+
+  it("reports cardinality-violation as opaque when a slot holds more than max", () => {
+    const diagnostic = classifyNode(boundedNode(3), bounded);
+    expect(diagnostic.opaque).toBe(true);
+    expect(diagnostic.reasons).toEqual([
+      expect.objectContaining({ code: "cardinality-violation", slotId: "items", message: expect.stringContaining("at most 2") }),
+    ]);
+    expect(classifyNode(boundedNode(2), bounded).opaque).toBe(false);
+  });
+
+  it("lists an empty min slot as incomplete without making it opaque or blocking export", () => {
+    const document = doc([boundedNode(0)]);
+    expect(describeSlotCompleteness(document, bounded)).toEqual([{ nodeId: "bounded", slotId: "items", min: 1, count: 0 }]);
+    const diagnostics = diagnoseDocument(document, bounded);
+    expect(diagnostics.hasOpaque).toBe(false);
+    expect(diagnostics.canExport).toBe(true);
+    expect(describeSlotCompleteness(doc([boundedNode(1)]), bounded)).toEqual([]);
+  });
+
+  it("skips a published outlet slot that is intentionally empty in its template source", () => {
+    const source = doc([boundedNode(0)]);
+    source.publication = {
+      kind: "global-template",
+      outlet: { id: "outlet-main", label: "Main", target: { parentId: "bounded", slotId: "items" } },
+    };
+    expect(describeSlotCompleteness(source, bounded)).toEqual([]);
+    expect(diagnoseDocument(source, bounded).canExport).toBe(true);
+  });
+
+  it("judges a bound consumer's own roots against the resolved policy min", () => {
+    const policy = { kind: "resolved", cardinality: "many", min: 1 } as const;
+    expect(describeSlotCompleteness(bound([]), bounded, policy)).toEqual([
+      { nodeId: null, slotId: VIRTUAL_ROOT_SLOT_ID, min: 1, count: 0 },
+    ]);
+    expect(describeSlotCompleteness(bound([node(X.box, {}, {}, "r")]), bounded, policy)).toEqual([]);
+    expect(describeSlotCompleteness(doc([]), bounded, policy)).toEqual([]);
+    expect(describeSlotCompleteness(bound([]), bounded, { kind: "unresolved" })).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import LinkedTemplate from "./composition-site-frame";
+import LinkedTemplate from "./composition-category-page";
 
 import { Hero, ProductGrid } from "demo-webshop/components";
 
@@ -15,7 +15,7 @@ export default function Composition() {
   return (
     <LinkedTemplate
       outlets={{
-        "site-frame-outlet": <LocalCompositionContent />,
+        "category-page-outlet": <LocalCompositionContent />,
       }}
     />
   );

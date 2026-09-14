@@ -242,7 +242,9 @@ describe("ProductionComposerApp", () => {
     await screen.findByRole("link", { name: "Site shell" });
     fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
-    fireEvent.click(within(dialog).getByRole("button", { name: /Site shell/ }));
+    // Listing templates now resolves each outlet's rule, which needs a further
+    // provider.get() round trip before the template tile appears.
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Site shell/ }));
     fireEvent.input(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "Bound page" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));
 
@@ -326,7 +328,9 @@ describe("ProductionComposerApp", () => {
     await screen.findByRole("link", { name: "Site shell" });
     fireEvent.click(screen.getAllByRole("button", { name: "New composition" })[0]);
     const dialog = await screen.findByRole("dialog", { name: "New composition" });
-    fireEvent.click(within(dialog).getByRole("button", { name: /Site shell/ }));
+    // Listing templates now resolves each outlet's rule, which needs a further
+    // provider.get() round trip before the template tile appears.
+    fireEvent.click(await within(dialog).findByRole("button", { name: /Site shell/ }));
     alternate.records.delete("site-shell");
     vi.mocked(alternate.store.put).mockClear();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create composition" }));

@@ -14,6 +14,7 @@ export type {
   CompositionPublication,
   CompositionBinding,
   RootPolicy,
+  RootPolicyOrigin,
   ResolvedGlobalTemplateOutletContract,
   PublicationDependencyGuard,
   CompositionDocument,
@@ -53,6 +54,7 @@ export type {
   NodeDiagnostic,
   DocumentDiagnostics,
   TargetValidation,
+  SlotCompletenessEntry,
 } from "./model/validate";
 export type { NodePropIssueCode, NodePropIssue, NodePropValidation } from "./model/node-props";
 export { validateNodeProps } from "./model/node-props";
@@ -61,6 +63,7 @@ export {
   classifyNode,
   canRepairNodeProps,
   diagnoseDocument,
+  describeSlotCompleteness,
   isNodeOpaque,
   UNRESTRICTED_ROOT_POLICY,
   UNRESOLVED_ROOT_POLICY,
@@ -131,6 +134,16 @@ export type {
   GenerateBrowserJsxExportOptions,
 } from "./source/plan-linked-jsx";
 export { planLinkedJsxModules, generateBrowserJsxExport } from "./source/plan-linked-jsx";
+
+// ── Composition grammar for agents ──────────────────────────────────────────
+export type {
+  Grammar,
+  GrammarAcceptedKind,
+  GrammarRegion,
+  GrammarTemplate,
+  BuildGrammarOptions,
+} from "./grammar";
+export { buildGrammar, renderGrammarMarkdown } from "./grammar";
 
 // ── Persistence providers ────────────────────────────────────────────────────
 export * from "./storage";

@@ -188,6 +188,25 @@ describe("SiteProject compiler", () => {
     expect(result).toMatchObject({ status: "blocked", diagnostics: [expect.objectContaining({ code: "attachment-slot-cardinality", pathname: "/" })] });
   });
 
+  it("enforces the attachment slot max bound", async () => {
+    const owner = globalTemplate("owner");
+    delete owner.document.publication;
+    owner.document.root[0]!.componentId = "bounded-shell";
+    const itemMapping = mapping("landing");
+    const value = (limit: number, entries: string[]) => {
+      itemMapping.document.mode = { kind: "collection", query: { publication: "published-only", conditions: [], sort: [], pins: [], limit } };
+      return project({
+        root: page("home", undefined, { kind: "composition", ref: { providerId: "files", recordId: "owner" } }),
+        compositions: [owner, composition("landing")], entries: entries.map((id) => entry(id)), mappings: [itemMapping],
+        attachments: [{ id: "feed", order: 0, composition: { providerId: "files", recordId: "owner" }, target: { nodeId: "owner-root", slotId: "body" }, mapping: { providerId: "mapping-filesystem", recordId: "article-page" } }],
+      });
+    };
+    const blocked = await compile(value(3, ["a", "b", "c"]));
+    expect(blocked).toMatchObject({ status: "blocked", diagnostics: [expect.objectContaining({ code: "attachment-slot-cardinality", pathname: "/", message: expect.stringContaining("maximum of 2") })] });
+    const fits = await compile(value(2, ["a", "b"]));
+    expect(fits.status).not.toBe("blocked");
+  });
+
   it("rejects recursive collection attachment graphs", async () => {
     const ownerA = globalTemplate("owner-a"); delete ownerA.document.publication;
     const ownerB = globalTemplate("owner-b"); delete ownerB.document.publication;

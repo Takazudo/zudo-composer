@@ -21,10 +21,12 @@ import type {
   CompositionDocument,
   CompositionNode,
   InsertionTarget,
+  RootPolicy,
 } from "../../../../composer/browser";
-import { findLocation, isPublishedOutletTarget, orderedSlotIds, VIRTUAL_ROOT_SLOT_ID } from "../../../../composer/browser";
+import { describeSlotCompleteness, findLocation, isPublishedOutletTarget, orderedSlotIds, VIRTUAL_ROOT_SLOT_ID } from "../../../../composer/browser";
 import type { OutlineNode } from "../../../../components/outline-tree";
 import type { ComponentDefinition } from "../../active-pack";
+import { describeSlotRule, type SlotRule } from "../slot-rules";
 import { countDescendants, summarizeNode } from "./tree-helpers";
 
 /** The outline id of the document row. A node id is a UUID, so this cannot collide. */
@@ -71,8 +73,49 @@ export interface BuildComposerOutlineOptions {
   manifest: ComponentCatalog;
   /** The richer catalog, for component titles. */
   catalogById: ReadonlyMap<string, ComponentDefinition>;
+  /** The same richer catalog as `catalogById`, as an array — `describeSlotRule` partitions it by id. */
+  catalog: readonly ComponentDefinition[];
+  /** The document's effective root policy; omitted for an ordinary unbound document. */
+  rootPolicy?: RootPolicy;
   /** Suppresses every Add affordance — Preview mode and linked documents. */
   readOnly?: boolean;
+}
+
+/** First three allowed titles joined by " · ", with a trailing ellipsis when more are allowed. */
+function allowedTitlesHint(accepts: readonly { title: string }[]): string {
+  const titles = accepts.map((component) => component.title);
+  const shown = titles.slice(0, 3).join(" · ");
+  return titles.length > 3 ? `${shown}…` : shown;
+}
+
+/** The rule tag's native-tooltip text: every allowed title, plus where the rule comes from. */
+function ruleTagDetail(rule: SlotRule): string {
+  const titles = rule.accepts.map((component) => component.title).join(", ");
+  const origin = rule.origin;
+  if (!origin) return titles;
+  const template = origin.viaTemplate ? ` via "${origin.viaTemplate.sourceName}"` : "";
+  return `${titles} — rule from ${origin.componentTitle} › ${origin.slotLabel}${template}`;
+}
+
+interface RuleTagDisplay {
+  tag: string;
+  tagDetail: string;
+  hint: string;
+}
+
+/** The slot-rule tag/hint/tooltip for a restricted slot or root — null for an open or unavailable target (no tag either way). */
+function describeRuleDisplay(rule: SlotRule): RuleTagDisplay | null {
+  if (rule.kind !== "restricted") return null;
+  return {
+    tag: `${rule.accepts.length} kinds`,
+    tagDetail: ruleTagDetail(rule),
+    hint: allowedTitlesHint(rule.accepts),
+  };
+}
+
+/** Lookup key for a `describeSlotCompleteness` entry — `nodeId: null` addresses the virtual root. */
+function completenessKey(nodeId: string | null, slotId: string): string {
+  return `${nodeId ?? "__root__"}:${slotId}`;
 }
 
 /** Translate one composition into outline rows plus the lookup back to the document. */
@@ -80,10 +123,18 @@ export function buildComposerOutline({
   document,
   manifest,
   catalogById,
+  catalog,
+  rootPolicy,
   readOnly = false,
 }: BuildComposerOutlineOptions): ComposerOutline {
   const rows = new Map<string, ComposerOutlineRow>();
   const expandableIds: string[] = [];
+  const underMinBySlot = new Map(
+    describeSlotCompleteness(document, manifest, rootPolicy).map((entry) => [
+      completenessKey(entry.nodeId, entry.slotId),
+      entry,
+    ]),
+  );
 
   const visitComponent = (node: CompositionNode): OutlineNode => {
     rows.set(node.id, { kind: "component", nodeId: node.id });
@@ -94,7 +145,11 @@ export function buildComposerOutline({
       id: node.id,
       title: summary.title,
       ...(summary.subtitle === null ? {} : { hint: summary.subtitle }),
-      ...(summary.opaque ? { tag: "Unavailable" } : {}),
+      ...(summary.opaque
+        ? summary.isRuleViolation
+          ? { tag: "Not accepted here", status: { tone: "warn" as const, label: summary.reasonText ?? "Not accepted here" } }
+          : { tag: "Unavailable" }
+        : {}),
     };
 
     if (slotIds.length === 0) return { ...base, kind: "leaf" };
@@ -134,6 +189,16 @@ export function buildComposerOutline({
     });
     expandableIds.push(id);
 
+    const rule = describeSlotRule({
+      catalog,
+      manifest,
+      document,
+      target: { parentId: parent.id, slotId, index: children.length },
+      rootPolicy,
+    });
+    const ruleDisplay = describeRuleDisplay(rule);
+    const underMin = underMinBySlot.get(completenessKey(parent.id, slotId));
+
     return {
       id,
       kind: "group",
@@ -141,7 +206,12 @@ export function buildComposerOutline({
       title: label,
       slug: "slot",
       count: children.length,
-      ...(isOutlet ? { tag: "Outlet" } : {}),
+      ...(isOutlet
+        ? { tag: "Outlet" }
+        : ruleDisplay
+          ? { tag: ruleDisplay.tag, tagVariant: "rule" as const, tagDetail: ruleDisplay.tagDetail, hint: ruleDisplay.hint }
+          : {}),
+      ...(underMin ? { status: { tone: "warn" as const, label: `needs at least ${underMin.min}` } } : {}),
       children: children.map(visitComponent),
     };
   };
@@ -151,6 +221,16 @@ export function buildComposerOutline({
   rows.set(DOCUMENT_ROW_ID, { kind: "document", childCount: document.root.length });
   expandableIds.unshift(DOCUMENT_ROW_ID);
 
+  const rootRule = describeSlotRule({
+    catalog,
+    manifest,
+    document,
+    target: { parentId: null, slotId: VIRTUAL_ROOT_SLOT_ID, index: document.root.length },
+    rootPolicy,
+  });
+  const rootRuleDisplay = describeRuleDisplay(rootRule);
+  const rootUnderMin = underMinBySlot.get(completenessKey(null, VIRTUAL_ROOT_SLOT_ID));
+
   return {
     nodes: [
       {
@@ -159,6 +239,10 @@ export function buildComposerOutline({
         title: "Document",
         slug: document.id,
         count: total,
+        ...(rootRuleDisplay
+          ? { tag: rootRuleDisplay.tag, tagVariant: "rule" as const, tagDetail: rootRuleDisplay.tagDetail, hint: rootRuleDisplay.hint }
+          : {}),
+        ...(rootUnderMin ? { status: { tone: "warn" as const, label: `needs at least ${rootUnderMin.min}` } } : {}),
         children,
       },
     ],

@@ -1,0 +1,121 @@
+---
+title: Page Kinds
+sidebar_position: 1
+description: How a rule container plus a Global template becomes a page kind, using the webshop's Category page as a worked example.
+---
+
+## A rule container plus a Global template is a page kind
+
+A [rule container](../overview/glossary.mdx) is a component that declares
+`accepts` (and optionally `min`/`max`) on one of its slots, so that slot
+admits only an ordered, fixed set of component kinds instead of the whole
+pack. By itself a rule container is just one more component: its restricted
+slot affects only insertions inside it.
+
+A [page kind](../overview/glossary.mdx) appears once a
+[Global template](../overview/glossary.mdx)'s published outlet targets that
+restricted slot. Every consumer Composition bound to the template inherits
+the slot's `accepts`, `cardinality`, `min`, and `max` as its own root policy
+(`RootPolicy` in `src/composer/model/types.ts`, resolved through
+`effectiveRootPolicy`). The consumer's root is no longer an unrestricted
+document root — it is governed by the same region rule the container's slot
+declares, even though the consumer never sees the container node itself.
+
+Schema v2 forbids nested templates and exposes exactly one outlet per
+template, so a page kind cannot borrow another template's outlet. A second
+page kind that needs the same chrome (header, footer, frame) duplicates that
+chrome as its own root nodes instead of nesting — the page kind carries its
+own frame.
+
+## Worked example: the webshop's Category page
+
+`packages/demo-webshop` defines `shop.category-body`
+(`packages/demo-webshop/components/category-body.tsx`) as a rule container. Its
+one slot, `content`, is `cardinality: "many"` with `min: 1` and:
+
+```ts
+accepts: ["shop.hero", "shop.section-heading", "shop.product-grid", "shop.demo-note"]
+```
+
+The "Category page" Global template
+(`packages/demo-webshop/site-project.ts`, built with `site.template(...)`)
+wraps a `shop.header`, a `shop.container` holding one `shop.category-body`
+node, and a `shop.footer`. Its outlet targets that `shop.category-body`
+node's `content` slot. That makes "Category page" a page kind: any page bound
+to it inherits `content`'s rule as its root policy.
+
+Three pages are bound to it — the Desk, Carry, and Light category shelves,
+built from the same `categoryTemplate` in `site-project.ts`. Each one's root
+holds only `shop.hero` and `shop.product-grid` nodes: components the rule
+accepts. A page bound to this template cannot gain a root-level
+`shop.breadcrumbs` or any other component the rule omits — the same
+`validateRootInsertion` guard that rejects it inside `shop.category-body`
+itself rejects it at these pages' virtual root.
+
+Printing the grammar for this host (`zudo-composer grammar --template
+category-page`, see [CLI](../setup/cli.mdx#grammar)) shows the same rule an
+agent or a human author would read on any Composer surface:
+
+```text
+# Category page (template category-page)
+Region "Main content" = shop.category-body › content
+- accepts (any order, at least 1):
+  - shop.hero             — Full-bleed image with eyebrow, heading, lead and up to two actions; wrap one heading word in *asterisks* to emphasise it.
+  - shop.section-heading  — Eyebrow, heading and optional intro; `as` sets the heading level.
+  - shop.product-grid     — List host for product cards with category chips, sort, search and pagination.; children: shop.product-card only
+  - shop.demo-note        — Muted caption saying the mock sends no data.
+- everything else in the pack is rejected by the model.
+```
+
+`shop.product-grid` itself declares its own `items` slot rule
+(`accepts: ["shop.product-card"]`), which is why the grammar line above nests
+"children: shop.product-card only" — a region's accepted kinds can be rule
+containers of their own.
+
+## What each Composer surface shows
+
+Every authoring surface derives its display from the same pure function,
+`describeSlotRule` (`src/features/composer/ui/slot-rules.ts`), so none of them
+can promise an insertion the model would then reject:
+
+- **Chooser** — inserting into a restricted region opens with a rule header
+  ("This region accepts N kind(s)", one chip per accepted component, and
+  "rule from Category body › Content"). Components the rule excludes are
+  collapsed under a "N hidden by this region's rule" disclosure; selecting one
+  explains which kinds are allowed instead and where to widen the rule. A full
+  or blocked region shows a banner instead of the catalog.
+- **Structure tree** — a restricted slot's row carries a `"N kinds"` tag with
+  a hover detail listing the accepted titles and the rule's origin; a node
+  sitting somewhere a rule no longer accepts is tagged "Not accepted here".
+- **Inspector → Slots** — each slot shows its child count, a warning when it
+  is below `min`, and a read-only "Rule" section: the accepted components (a
+  badge marks one that is itself a rule container), the cardinality in words
+  ("at least 1", "exactly one", …), and a note that changing the rule means
+  editing the component's source and republishing the pack.
+- **New composition dialog** — "Start from" lists "Blank" (no rule, whole pack
+  at root) alongside every eligible Global template, each showing a
+  🔒 N kind(s) chip for a page kind or an "Open" chip for an unrestricted
+  template, plus a side panel describing exactly what that choice accepts.
+- **Canvas quick insert** — clicking an empty restricted region shows the
+  region's accepted kinds directly as clickable chips (when there are few
+  enough to fit), with "More… (search, N hidden)" opening the full chooser for
+  the same target.
+
+## Changing a rule
+
+A region rule lives on the component's slot definition, not on any
+Composition. To change what a page kind (or any other rule container's slot)
+accepts:
+
+1. Edit the `accepts` list (and `min`/`max` if needed) in the component's
+   source — for example `shop.category-body`'s `content` slot in
+   `packages/demo-webshop/components/category-body.tsx`.
+2. Republish the pack: an installed themeset bumps its package version; a
+   host self-reference pack picks up the change on its next build.
+3. Regenerate every host whose build identity depends on that pack, per
+   [CMS regeneration](../development/cms-regeneration.mdx) — a rule change is
+   a component-pack change, which is one of the triggers that requires it.
+
+There is no separate "rule" record to edit in the Composer UI; every surface
+above is read-only with respect to the rule itself, by design — see
+[Component packs and contract](../architecture/component-packs-and-contract.mdx#slots-accepts-and-bounds).

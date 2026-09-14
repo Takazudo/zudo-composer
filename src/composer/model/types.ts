@@ -99,7 +99,22 @@ export type RootPolicy =
       /** Omitted means the exposed slot accepts every available component. */
       accepts?: readonly string[];
       cardinality: SlotCardinality;
+      /** Completeness requirement copied from the outlet slot; never blocks edits or export. */
+      min?: number;
+      /** Hard cap on consumer roots copied from the outlet slot. */
+      max?: number;
+      /** Where the rule comes from, for display only. */
+      origin?: RootPolicyOrigin;
     };
+
+/** Display provenance of a resolved root policy: the owning container slot and template. */
+export interface RootPolicyOrigin {
+  componentId: string;
+  componentTitle: string;
+  slotId: string;
+  slotLabel: string;
+  viaTemplate?: { sourceName: string; outletLabel: string };
+}
 
 /** A successfully resolved source/outlet contract supplied by the parent app. */
 export interface ResolvedGlobalTemplateOutletContract {

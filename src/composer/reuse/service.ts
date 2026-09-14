@@ -8,10 +8,12 @@ import type {
   CompositionRecordRef,
   CompositionSummary,
 } from "../library";
+import { findLocation } from "../model/index-model";
 import type { ComponentCatalog } from "../model/types";
 import { resolveGlobalTemplateLoad } from "./resolver";
 import type {
   CompositionReuseService,
+  GlobalTemplateOutletRule,
   GlobalTemplateResolutionOutcome,
   ReuseCatalogEntry,
   ReuseCatalogOutcome,
@@ -66,6 +68,34 @@ export function catalogEntryFromSummary(
   return undefined;
 }
 
+/**
+ * Resolve a Global template's exposed outlet slot into its display rule.
+ * Mirrors `resolveGlobalTemplate`'s location/slot lookup, but it has no
+ * consumer to validate against here, so it stops once the slot itself is
+ * found — and returns undefined (not an `unavailable`/error outcome) for an
+ * invalid outlet target: the listing still shows the template either way.
+ */
+function outletRuleFromRecord(
+  record: CompositionRecord,
+  manifest: ComponentCatalog,
+): GlobalTemplateOutletRule | undefined {
+  const publication = record.document.publication;
+  if (publication?.kind !== "global-template") return undefined;
+  const location = findLocation(record.document, manifest, publication.outlet.target.parentId);
+  const owner = location?.node;
+  const entry = owner ? manifest.get(owner.componentId) : undefined;
+  const slot = entry?.slots.find((candidate) => candidate.id === publication.outlet.target.slotId);
+  if (!owner || !entry || !slot) return undefined;
+  return {
+    componentId: entry.id,
+    slotId: slot.id,
+    accepts: slot.accepts ? [...slot.accepts] : null,
+    cardinality: slot.cardinality,
+    ...(slot.min === undefined ? {} : { min: slot.min }),
+    ...(slot.max === undefined ? {} : { max: slot.max }),
+  };
+}
+
 function selectionFromLoad(
   load: CompositionLoadOutcome,
   current: CompositionRecordRef | undefined,
@@ -106,10 +136,19 @@ export function createCompositionReuseService(
     async listCatalog(current): Promise<ReuseCatalogOutcome> {
       try {
         const summaries = await provider.list();
-        const entries = summaries
+        const candidates = summaries
           .map((summary) => catalogEntryFromSummary(provider, summary, current))
-          .filter((entry): entry is ReuseCatalogEntry => entry !== undefined)
-          .sort((a, b) => compareCompositionSummariesNewestFirst(a.summary, b.summary));
+          .filter((entry): entry is ReuseCatalogEntry => entry !== undefined);
+        const entries = await Promise.all(
+          candidates.map(async (entry) => {
+            if (entry.kind !== "global-template") return entry;
+            const outcome = await provider.get(entry.ref.recordId);
+            if (outcome.status !== "loaded") return entry;
+            const outletRule = outletRuleFromRecord(outcome.record, manifest);
+            return outletRule ? { ...entry, outletRule } : entry;
+          }),
+        );
+        entries.sort((a, b) => compareCompositionSummariesNewestFirst(a.summary, b.summary));
         return { status: "listed", entries };
       } catch (error) {
         return failure(error);

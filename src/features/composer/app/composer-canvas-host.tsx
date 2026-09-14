@@ -41,10 +41,18 @@ import { useAssetResolvedPreviewSnapshot } from "../preview/assets-snapshot";
 // that generic restore — it reuses the EXISTING `onRequestAdd` focus sequence
 // (focus the iframe first, so the shared chooser captures IT as the trigger)
 // via the `addComponent` thunk passed to `onRequestInsertMenu`.
+//
+// ── Quick insert (issue #639) ───────────────────────────────────────────────
+// Both a direct Add and the insert menu's "Add component…" first offer the
+// request to `onRequestQuickInsert` with the translated rect. It returns true
+// when it opened inline chips for a restricted slot; otherwise the chooser
+// opens exactly as before. A direct Add has no focus token, so its popover
+// restores focus by focusing the iframe, which keeps its own active control.
 
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { JSX } from "preact";
 import type { CompositionDocument, InsertionTarget } from "../../../composer/browser";
+import type { ChooserTab } from "../ui/chooser/composer-chooser";
 import type { ComposerCanvasViewport } from "../chrome/controller-model";
 import type { ComposerComponentProvider } from "../active-pack";
 import { ErrorIcon, InfoIcon, WarningIcon, XMarkIcon } from "../../../components/icons";
@@ -74,6 +82,15 @@ function translateRect(rect: SerializedRect, frame: HTMLIFrameElement | null): S
   };
 }
 
+export interface CanvasQuickInsertRequest {
+  target: InsertionTarget;
+  /** The pressed control's rect, already translated to host coordinates. */
+  rect: SerializedRect;
+  restoreFocus: () => void;
+  /** Open the shared chooser for the same target, with the iframe focused as its trigger. */
+  openChooser: (initialTab?: ChooserTab) => void;
+}
+
 export interface ComposerCanvasHostProps {
   componentProvider: ComposerComponentProvider;
   document: CompositionDocument;
@@ -84,7 +101,9 @@ export interface ComposerCanvasHostProps {
   /** A canvas node (or the empty canvas, `null`) was selected in Edit mode. */
   onSelect: (nodeId: string | null) => void;
   /** An insert point was activated — carries Takazudo/zudo-sg#245's index-bearing target. */
-  onRequestAdd: (target: InsertionTarget) => void;
+  onRequestAdd: (target: InsertionTarget, initialTab?: ChooserTab) => void;
+  /** Offered every canvas add first; returns true when it opened a quick-insert popover instead of the chooser. */
+  onRequestQuickInsert?: (request: CanvasQuickInsertRequest) => boolean;
   /** Explicit navigation for the linked source affordance. */
   onOpenSource?: (sourceRecordId: string) => void;
   /** The selected node's chrome "⋯" was activated — rect already translated to host coordinates (issue Takazudo/zudo-sg#256). */
@@ -132,6 +151,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
     viewport,
     onSelect,
     onRequestAdd,
+    onRequestQuickInsert,
     onOpenSource,
     onRequestNodeMenu,
     onRequestInsertMenu,
@@ -165,6 +185,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
     mode: session.mode,
     onSelect,
     onRequestAdd,
+    onRequestQuickInsert,
     onOpenSource,
     onRequestNodeMenu,
     onRequestInsertMenu,
@@ -177,6 +198,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
     mode: session.mode,
     onSelect,
     onRequestAdd,
+    onRequestQuickInsert,
     onOpenSource,
     onRequestNodeMenu,
     onRequestInsertMenu,
@@ -200,6 +222,22 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
+    const requestAdd = (
+      target: InsertionTarget,
+      rect: SerializedRect | undefined,
+      restoreFocus: () => void,
+    ): void => {
+      const openChooser = (initialTab?: ChooserTab) => {
+        // Focus the iframe BEFORE the chooser opens so it becomes the chooser's
+        // captured trigger — focus then returns here on close.
+        frameRef.current?.focus();
+        if (initialTab) handlersRef.current.onRequestAdd(target, initialTab);
+        else handlersRef.current.onRequestAdd(target);
+      };
+      const quick = handlersRef.current.onRequestQuickInsert;
+      if (rect && quick?.({ target, rect: translateRect(rect, frameRef.current), restoreFocus, openChooser })) return;
+      openChooser();
+    };
     const bridge = createBridge({
       frame,
       location,
@@ -210,11 +248,8 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
       },
       onReady: () => setReady(true),
       onSelect: (nodeId) => handlersRef.current.onSelect(nodeId),
-      onRequestAdd: (target) => {
-        // Focus the iframe BEFORE the chooser opens so it becomes the chooser's
-        // captured trigger — focus then returns here on close.
-        frameRef.current?.focus();
-        handlersRef.current.onRequestAdd(target);
+      onRequestAdd: (target, _revision, rect) => {
+        requestAdd(target, rect, () => frameRef.current?.focus());
       },
       onOpenSource: (sourceRecordId) => handlersRef.current.onOpenSource?.(sourceRecordId),
       onRequestNodeMenu: (nodeId, rect, focusToken) => {
@@ -227,12 +262,7 @@ export function ComposerCanvasHost(props: ComposerCanvasHostProps): JSX.Element 
           target,
           translateRect(rect, frameRef.current),
           () => bridgeRef.current?.restoreFocus(focusToken),
-          () => {
-            // Same focus sequence as a direct request-add: focus the iframe
-            // FIRST so the shared chooser captures it as its trigger.
-            frameRef.current?.focus();
-            handlersRef.current.onRequestAdd(target);
-          },
+          () => requestAdd(target, rect, () => bridgeRef.current?.restoreFocus(focusToken)),
         );
       },
       onCommitInlineEdit: (nodeId, fieldKey, value, documentRevision) => {

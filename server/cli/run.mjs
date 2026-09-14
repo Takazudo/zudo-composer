@@ -20,6 +20,7 @@ export const BUILD_SITE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/build-site-en
 export const ASSETS_IMPORT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/assets-import-entry.mjs");
 export const SEED_ENTRY_PATH = resolve(APP_ROOT, "server/cli/seed-entry.mjs");
 export const GENERATE_ENTRY_PATH = resolve(APP_ROOT, "server/cli/generate-entry.mjs");
+export const GRAMMAR_ENTRY_PATH = resolve(APP_ROOT, "server/cli/grammar-entry.mjs");
 export const INIT_ENTRY_PATH = resolve(APP_ROOT, "server/cli/init-entry.mjs");
 
 export const USAGE = `Usage: zudo-composer <command> [options]
@@ -34,6 +35,9 @@ Commands:
               Import a host asset manifest, or read { "manifest": "path" } on
               stdin; write one canonical JSON response on stdout.
   generate    Generate site-project.json from site-project.ts.
+  grammar     Print the composition grammar for agents: what each page kind's
+              region accepts, derived from the component pack and the host's
+              Global templates.
   seed        Publish and activate a committed SiteProject; print its release
               identity and status (activated or unchanged) as JSON.
 
@@ -81,6 +85,11 @@ assets import options:
 generate options:
   --root <dir>     Host project root (default: the current directory).
   --check          Verify site-project.json is current without writing it.
+
+grammar options:
+  --root <dir>     Host project root (default: the current directory).
+  --json           Print the grammar object as JSON instead of Markdown.
+  --template <id>  Narrow output to the one named template.
 `;
 
 /**
@@ -93,9 +102,9 @@ export function parseArguments(argv) {
   if (command === "release") return { command: "release", rest };
   if (command === "init") return parseInit(rest);
   if (command === "assets") return parseAssetsImport(rest);
-  if (command !== "dev" && command !== "build-site" && command !== "seed" && command !== "generate") return { error: `Unknown command "${command}".` };
+  if (command !== "dev" && command !== "build-site" && command !== "seed" && command !== "generate" && command !== "grammar") return { error: `Unknown command "${command}".` };
 
-  /** @type {Record<string, unknown> & import("../site-build/run.d.mts").BuildSiteOptions & import("./run.d.mts").SeedOptions & import("./run.d.mts").GenerateOptions} */
+  /** @type {Record<string, unknown> & import("../site-build/run.d.mts").BuildSiteOptions & import("./run.d.mts").SeedOptions & import("./run.d.mts").GenerateOptions & import("./run.d.mts").GrammarOptions} */
   const options = {};
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
@@ -132,6 +141,13 @@ export function parseArguments(argv) {
     } else if (command === "generate") {
       if (argument === "--check") options.check = true;
       else return { error: `Unknown generate option "${argument}".` };
+    } else if (command === "grammar") {
+      if (argument === "--json") options.json = true;
+      else if (argument === "--template") {
+        const template = value();
+        if (template === undefined) return { error: "--template requires an id." };
+        options.template = template;
+      } else return { error: `Unknown grammar option "${argument}".` };
     } else if (argument === "--strict-port") options.strictPort = true;
     else if (argument === "--host") options.host = value() ?? true;
     else if (argument === "--port") {
@@ -328,6 +344,23 @@ export async function runComposerCli(argv, deps = {}) {
       args,
       label: "the SiteProject generator",
       entryPath: GENERATE_ENTRY_PATH,
+      ...(deps.spawn ? { spawn: deps.spawn } : {}),
+      ...(deps.exists ? { exists: deps.exists } : {}),
+      proc,
+    });
+    return;
+  }
+  if (parsed.command === "grammar") {
+    const { workspaceRoot, json, template } = parsed.options;
+    const args = [GRAMMAR_ENTRY_PATH];
+    if (workspaceRoot !== undefined) args.push("--root", workspaceRoot);
+    if (json) args.push("--json");
+    if (template !== undefined) args.push("--template", template);
+    spawnSupervised({
+      command: proc.execPath,
+      args,
+      label: "the composition grammar",
+      entryPath: GRAMMAR_ENTRY_PATH,
       ...(deps.spawn ? { spawn: deps.spawn } : {}),
       ...(deps.exists ? { exists: deps.exists } : {}),
       proc,

@@ -6,7 +6,10 @@ components and a `zudo-composer.config.ts`, and gets five authoring products
 over a shared filesystem storage engine:
 
 - Composer owns its document model, source generation, reuse rules, chrome,
-  preview renderer, and same-origin iframe protocol.
+  preview renderer, and same-origin iframe protocol. A component's slot can
+  restrict what it accepts, and a Global template whose outlet targets such a
+  slot becomes a page kind — see the
+  [Page Kinds guide](./doc/src/content/docs/guides/page-kinds.mdx).
 - Content owns its model, Entry library, and authoring UI.
 - Mapping owns its binding model, resolver, preview handoff, and authoring UI.
 - Sitemapper owns its page-tree model, library, authoring UI, and the catalog
@@ -147,7 +150,7 @@ contract, which the package declares as a **peer dependency** so the host's own
 ```sh
 pnpm add -D \
   "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
-  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#b66d52bb273a10010485efb2d06f80cee8001bd6"
+  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#2abd65184102f332dc97b5768f4adcb1edf4104c"
 ```
 
 Replace `<commit>` with a full 40-character tool commit. This consumer install
@@ -488,9 +491,9 @@ consumers use the package-only commit recorded by
 [`contract-handoff.json`](./contract-handoff.json):
 
 - API/package version: `@zudo-composer/component-contract@1.0.0`
-- package commit: `b66d52bb273a10010485efb2d06f80cee8001bd6`
+- package commit: `2abd65184102f332dc97b5768f4adcb1edf4104c`
 - exact external Git spec:
-  `git+https://github.com/Takazudo/zudo-composer.git#b66d52bb273a10010485efb2d06f80cee8001bd6`
+  `git+https://github.com/Takazudo/zudo-composer.git#2abd65184102f332dc97b5768f4adcb1edf4104c`
 
 The monorepo itself intentionally resolves this contract with `workspace:*`, as
 a dev dependency; the published manifest declares it as a peer dependency so a
