@@ -255,7 +255,7 @@ Kinds as in the webshop doc (`text`, `select[…]`, `number`, `boolean`,
 | `order` | number | 1–3 |
 
 **testimonials** (collection) — 3 entries: `quote` long-text, `name` text,
-`role` text, `avatar` object { `src` url, `alt` text }, `order` number.
+`role` text, `avatar: asset-use` (`use: "image"`), `order` number.
 
 **faq** (collection) — 8 entries: `question` text, `answer` markdown, `topic`
 choice `general` / `billing` / `security`, `order` number.
@@ -277,8 +277,9 @@ entries.
 Bindings: `name`, `tagline`, `ctaLabel`, `ctaHref`, `currency` → `value →
 identity → text`; `priceMonthly`, `priceYearly`, `order` → `number`;
 `popular` → `boolean`; `features` flattened to `feature1…6` text fields by
-the `site-project.ts` authoring source; `avatar object-field[src] → src`, `[alt] → alt`; `topic value →
-identity → select topic`. No `entry-field` routes exist on this site.
+the `site-project.ts` authoring source; `avatar` asset-url → src, `asset-text alt
+→ alt`; `topic value → identity → select topic`. No `entry-field` routes exist
+on this site.
 
 ## 8. Mock interaction list
 

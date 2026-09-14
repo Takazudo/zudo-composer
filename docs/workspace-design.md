@@ -154,10 +154,10 @@ same protocol to Composition, Mapping, and Sitemap stores.
 The current authoring transaction boundary is one Content provider. Complete
 provider-qualified graph reads are supported, but a relation write requiring
 multiple provider transactions fails before the first write. Rich Content
-kinds require explicit supported Mapping projections (object field, Asset text/
-asset, reference identity/list or route link), never silent stringification. Content and Assets
-schemas fail through their typed recovery paths; there are no compatibility
-readers or migrations.
+kinds require explicit supported Mapping projections (object field, `asset-url`,
+`asset-text`, `asset-ref`, reference identity/list or route link), never silent
+stringification. Content and Assets schemas fail through their typed recovery
+paths; there are no compatibility readers or migrations.
 
 ## Workspace lifetime and capture
 
