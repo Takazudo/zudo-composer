@@ -429,6 +429,7 @@ export function ComposerIntegration(props: ComposerIntegrationProps): JSX.Elemen
           document={state.document}
           manifest={controller.manifest}
           entries={manifestEntries}
+          rootPolicy={state.rootPolicy}
           selectedId={state.selectedId}
           revealEpoch={api.revealEpoch}
           selectedSlot={activeSlot}

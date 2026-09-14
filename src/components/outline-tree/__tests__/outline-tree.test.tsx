@@ -86,6 +86,58 @@ describe("structure", () => {
     expect(withStatus.container.querySelector(".cms-tree-tag")?.textContent).toBe("single");
   });
 
+  it("renders a rule tag with its own class and native tooltip, distinct from a plain tag", () => {
+    const nodes: readonly OutlineNode[] = [
+      {
+        id: "doc",
+        kind: "category",
+        title: "Document",
+        children: [
+          {
+            id: "content",
+            kind: "group",
+            title: "Content",
+            slug: "slot",
+            variant: "slot",
+            tag: "2 kinds",
+            tagVariant: "rule",
+            tagDetail: "Heading, Note — rule from ProductCard › Content",
+            children: [],
+          },
+        ],
+      },
+    ];
+    const { container } = render(<OutlineTree nodes={nodes} />);
+    const tag = container.querySelector(".cms-tree-tag--rule");
+    expect(tag).toHaveClass("cms-tree-tag");
+    expect(tag?.textContent).toBe("2 kinds");
+    expect(tag).toHaveAttribute("title", "Heading, Note — rule from ProductCard › Content");
+  });
+
+  it("insets a warn rail on a row whose status tone is warn, leaf and group alike", () => {
+    const nodes: readonly OutlineNode[] = [
+      {
+        id: "doc",
+        kind: "category",
+        title: "Document",
+        status: { tone: "warn", label: "needs at least 1" },
+        children: [
+          {
+            id: "group",
+            kind: "group",
+            title: "Box",
+            status: { tone: "warn", label: "Slot \"items\" does not accept \"test.text\"" },
+            children: [{ id: "leaf", kind: "leaf", title: "Text", status: { tone: "warn", label: "Not accepted" } }],
+          },
+        ],
+      },
+    ];
+    const { container } = render(<OutlineTree nodes={nodes} />);
+    expect(container.querySelector(".cms-tree-cat__row")).toHaveClass("cms-tree-row--warn-rail");
+    expect(container.querySelector(".cms-tree-group__header")).toHaveClass("cms-tree-row--warn-rail");
+    expect(container.querySelector(".cms-tree-leaf-wrap")).toHaveClass("cms-tree-row--warn-rail");
+  });
+
   it("keeps every row's own metadata inside the treeitem, where it is announced", () => {
     render(<OutlineTree nodes={NODES} />);
     // Only the treeitem is in the accessibility tree, so the slug, the count and

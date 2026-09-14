@@ -54,7 +54,11 @@ function RowMeta({ node }: { node: OutlineNode }) {
     <Fragment>
       {node.slug === undefined ? null : <span class="cms-tree-slug">{node.slug}</span>}
       {node.count === undefined ? null : <span class="cms-tree-count">({node.count})</span>}
-      {node.tag === undefined ? null : <span class="cms-tree-tag">{node.tag}</span>}
+      {node.tag === undefined ? null : (
+        <span class={cx("cms-tree-tag", node.tagVariant === "rule" && "cms-tree-tag--rule")} title={node.tagDetail}>
+          {node.tag}
+        </span>
+      )}
       {node.status === undefined ? null : (
         <Fragment>
           <span class={`cms-tree-dot cms-tree-dot--${node.status.tone}`} title={node.status.label} aria-hidden="true" />
@@ -118,7 +122,7 @@ function CategoryRow({ node, placement, expanded }: { node: OutlineNode; placeme
   const itemProps = useTreeItemProps(node, placement, expandable, expanded);
   return (
     <section class="cms-tree-cat">
-      <div class="cms-tree-cat__row">
+      <div class={cx("cms-tree-cat__row", node.status?.tone === "warn" && "cms-tree-row--warn-rail")}>
         <button class="cms-tree-cat__link" {...itemProps}>
           <span class="cms-tree-mark" aria-hidden="true">
             »
@@ -149,7 +153,10 @@ function GroupNode({ node, placement, expanded }: { node: OutlineNode; placement
           next sibling still hangs off an unbroken line. A last group closes the
           branch instead, and has none. */}
       {placement.isLast ? null : <span class="cms-tree-spine" style={{ "--depth": depth }} />}
-      <div class={cx("cms-tree-group__header", placement.isLast && "is-last")} style={{ "--depth": depth }}>
+      <div
+        class={cx("cms-tree-group__header", placement.isLast && "is-last", node.status?.tone === "warn" && "cms-tree-row--warn-rail")}
+        style={{ "--depth": depth }}
+      >
         <span class="cms-tree-vline" />
         <span class="cms-tree-hline" />
         <button
@@ -174,7 +181,10 @@ function GroupNode({ node, placement, expanded }: { node: OutlineNode; placement
 function LeafRow({ node, placement }: { node: OutlineNode; placement: RowPlacement }) {
   const itemProps = useTreeItemProps(node, placement, false, false);
   return (
-    <div class={cx("cms-tree-leaf-wrap", placement.isLast && "is-last")} style={{ "--depth": String(placement.depth) }}>
+    <div
+      class={cx("cms-tree-leaf-wrap", placement.isLast && "is-last", node.status?.tone === "warn" && "cms-tree-row--warn-rail")}
+      style={{ "--depth": String(placement.depth) }}
+    >
       <span class="cms-tree-vline" />
       <span class="cms-tree-hline" />
       <button class="cms-tree-leaf" {...itemProps}>

@@ -22,6 +22,7 @@ import type {
   InsertionTarget,
   LinkedEditorLifecycleActions,
   LinkedEditorPresentation,
+  RootPolicy,
 } from "../../../../composer/browser";
 import { RailCollapseButton, useEditorChrome } from "../../../../components/editor-chrome";
 import { ArrowRightIcon, EllipsisIcon, PlusIcon, RefreshIcon } from "../../../../components/icons";
@@ -56,6 +57,8 @@ export interface ComposerStructurePaneProps {
   manifest: ComponentCatalog;
   /** The richer catalog backing component titles — the same array `manifest` came from. */
   entries: readonly ComponentDefinition[];
+  /** The document's effective root policy — drives the root row's own rule tag/hint. */
+  rootPolicy?: RootPolicy;
   selectedId: string | null;
   /** Bumped on every reveal, including a repeat of the current selection. */
   revealEpoch?: number;
@@ -129,6 +132,7 @@ export function ComposerStructurePane({
   document,
   manifest,
   entries,
+  rootPolicy,
   selectedId,
   revealEpoch = 0,
   selectedSlot,
@@ -145,8 +149,8 @@ export function ComposerStructurePane({
   const { setActivePane } = useEditorChrome();
   const catalogById = useMemo(() => buildCatalogById(entries), [entries]);
   const outline = useMemo<ComposerOutline>(
-    () => buildComposerOutline({ document, manifest, catalogById, readOnly }),
-    [catalogById, document, manifest, readOnly],
+    () => buildComposerOutline({ document, manifest, catalogById, catalog: entries, rootPolicy, readOnly }),
+    [catalogById, document, entries, manifest, readOnly, rootPolicy],
   );
   const outlineRef = useRef(outline);
   outlineRef.current = outline;
