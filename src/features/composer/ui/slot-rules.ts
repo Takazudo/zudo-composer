@@ -87,7 +87,14 @@ function isFull(cardinality: "single" | "many", max: number | undefined, count: 
   return (cardinality === "single" && count >= 1) || (max !== undefined && count >= max);
 }
 
-function partitionCatalog(
+/**
+ * Split the catalog into what a slot's `accepts` list allows vs. hides.
+ * Exported so a surface that must describe a slot's rule without asking
+ * "can I insert here right now" (the inspector's read-only view of a
+ * published-outlet slot, which `describeSlotRule` always blocks for local
+ * insertion) can reuse the same partitioning.
+ */
+export function partitionCatalog(
   catalog: readonly ComponentDefinition[],
   manifest: ComponentCatalog,
   accepts: readonly string[] | undefined,

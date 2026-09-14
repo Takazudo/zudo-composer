@@ -20,6 +20,8 @@ export const TEST_COMPONENT_IDS = {
   panel: "test.panel",
   widget: "test.widget",
   label: "test.label",
+  card: "test.card",
+  region: "test.region",
 } as const;
 
 export const testManifestEntries: ComponentManifest[] = [
@@ -84,6 +86,41 @@ export const testManifestEntries: ComponentManifest[] = [
     defaults: { text: "Hello" },
     fields: [{ schema: { type: "string" }, editor: { kind: "text" }, prop: "text", label: "Text" } as FieldDefinition],
     slots: [],
+  },
+  {
+    // Itself restricts a slot, so an accepted-component row referencing it
+    // exercises the inspector's "has rule" badge.
+    id: TEST_COMPONENT_IDS.card,
+    schemaVersion: 1,
+    title: "Card",
+    category: "Layout",
+    description: "One-slot test card with its own restricted slot.",
+    source: src("@fixtures/card", "Card"),
+    defaults: {},
+    fields: [],
+    slots: [{ id: "inner", prop: "inner", label: "Inner", cardinality: "many", accepts: [TEST_COMPONENT_IDS.label] }],
+  },
+  {
+    // A restricted, min-bound slot for inspector Slots-tab rule tests.
+    id: TEST_COMPONENT_IDS.region,
+    schemaVersion: 1,
+    title: "Region",
+    category: "Layout",
+    description: "Restricted-slot test region.",
+    source: src("@fixtures/region", "Region"),
+    defaults: {},
+    fields: [],
+    slots: [
+      {
+        id: "body",
+        prop: "body",
+        label: "Body",
+        cardinality: "many",
+        min: 2,
+        max: 3,
+        accepts: [TEST_COMPONENT_IDS.label, TEST_COMPONENT_IDS.card],
+      },
+    ],
   },
 ];
 
