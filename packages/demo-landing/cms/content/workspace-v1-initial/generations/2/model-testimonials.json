@@ -25,27 +25,12 @@
         "required": true
       },
       {
-        "fields": [
-          {
-            "id": "testimonials-avatar-src",
-            "key": "src",
-            "kind": "url",
-            "label": "Image URL",
-            "required": true
-          },
-          {
-            "id": "testimonials-avatar-alt",
-            "key": "alt",
-            "kind": "text",
-            "label": "Alt text",
-            "required": true
-          }
-        ],
         "id": "testimonials-avatar",
         "key": "avatar",
-        "kind": "object",
+        "kind": "asset-use",
         "label": "Avatar",
-        "required": true
+        "required": true,
+        "use": "image"
       },
       {
         "id": "testimonials-order",

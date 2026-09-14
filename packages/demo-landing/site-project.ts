@@ -1,7 +1,7 @@
 // The authored Orrery site (docs/demo-sites/landing.md). `zudo-composer generate` turns
 // this into `site-project.json`; `zudo-composer generate --check` reports when
 // the committed output disagrees.
-import { defineSite, node } from "zudo-composer/authoring";
+import { defineSite, imageUse, node } from "zudo-composer/authoring";
 import type { JsonObject, Page, SiteProject } from "zudo-composer/site-project";
 import { componentPack } from "./components/pack";
 
@@ -13,9 +13,11 @@ const IMAGES = {
   heroApp: asset("assets-465686d0-7f71-43d2-ae46-d8e56a175a30"),
   workflow: asset("assets-c0782606-10cc-42f1-a223-ff461548f313"),
   team: asset("assets-55d857f5-fce8-4c86-827e-1de0a811a209"),
-  mara: asset("assets-dc0233ae-9bc8-4a34-b641-e29785e46143"),
-  jonah: asset("assets-97c31942-4c4e-4da3-a8d0-c7b0777b29fb"),
-  priya: asset("assets-ecb0692c-6286-4cd7-814b-f78f201357c4"),
+};
+const ASSET_IDS = {
+  mara: "assets-dc0233ae-9bc8-4a34-b641-e29785e46143",
+  jonah: "assets-97c31942-4c4e-4da3-a8d0-c7b0777b29fb",
+  priya: "assets-ecb0692c-6286-4cd7-814b-f78f201357c4",
 };
 
 const navLink = (label: string, href: string) => node("land.nav-link", { label, href });
@@ -129,20 +131,17 @@ const testimonials = site.model({
     { key: "quote", kind: "long-text" },
     { key: "name", kind: "text" },
     { key: "role", kind: "text" },
-    { key: "avatar", kind: "object", fields: [{ key: "src", kind: "url", label: "Image URL" }, { key: "alt", kind: "text", label: "Alt text" }] },
+    { key: "avatar", kind: "asset-use", use: "image", label: "Avatar", required: true },
     { key: "order", kind: "number" },
   ],
 });
-const avatarSrc = testimonials.fieldId("avatar") + "-src";
-const avatarAlt = testimonials.fieldId("avatar") + "-alt";
-const avatar = (src: string, alt: string) => ({ src, alt });
 
 site.entry(testimonials, {
   id: "testimonial-mara",
   values: {
     quote: "We used to spend Monday morning arguing about when to meet. Now the week is already on one screen when we sit down, and the argument never starts.",
     name: "Mara Lind", role: "Operations lead, Quarto",
-    avatar: avatar(IMAGES.mara, "Abstract geometric avatar in grey with a cobalt collar"), order: 1,
+    avatar: imageUse(ASSET_IDS.mara, "Abstract geometric avatar in grey with a cobalt collar"), order: 1,
   },
 });
 site.entry(testimonials, {
@@ -150,7 +149,7 @@ site.entry(testimonials, {
   values: {
     quote: "Focus blocks are the feature I didn't know I needed. Orrery keeps my mornings clear, and meetings land in the afternoon without anyone asking.",
     name: "Jonah Reyes", role: "Staff engineer, Tessera",
-    avatar: avatar(IMAGES.jonah, "Abstract geometric avatar on a cobalt disc"), order: 2,
+    avatar: imageUse(ASSET_IDS.jonah, "Abstract geometric avatar on a cobalt disc"), order: 2,
   },
 });
 site.entry(testimonials, {
@@ -158,7 +157,7 @@ site.entry(testimonials, {
   values: {
     quote: "Forty people across three time zones, and the workload view shows me who is overbooked before they tell me. Planning takes ten minutes instead of an hour.",
     name: "Priya Natarajan", role: "Head of delivery, Brightwater",
-    avatar: avatar(IMAGES.priya, "Abstract geometric avatar with cobalt glasses"), order: 3,
+    avatar: imageUse(ASSET_IDS.priya, "Abstract geometric avatar with cobalt glasses"), order: 3,
   },
 });
 
@@ -239,8 +238,8 @@ const testimonialMapping = site.mapping({
     { field: "quote", nodeId: "testimonial", prop: "quote" },
     { field: "name", nodeId: "testimonial", prop: "name" },
     { field: "role", nodeId: "testimonial", prop: "role" },
-    { field: "avatar", nodeId: "testimonial", prop: "src", projection: { kind: "object-field", fieldIds: [avatarSrc] } },
-    { field: "avatar", nodeId: "testimonial", prop: "alt", projection: { kind: "object-field", fieldIds: [avatarAlt] } },
+    { field: "avatar", nodeId: "testimonial", prop: "src", projection: { kind: "asset-url" } },
+    { field: "avatar", nodeId: "testimonial", prop: "alt", projection: { kind: "asset-text", field: "alt" } },
     { field: "order", nodeId: "testimonial", prop: "order" },
   ],
 });

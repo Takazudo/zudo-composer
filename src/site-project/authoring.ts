@@ -12,7 +12,9 @@
 import type { ComponentPackManifest, JsonValue, TrustedComponentPack } from "@zudo-composer/component-contract";
 import type { CompositionRecord } from "../composer/library/types";
 import type { CompositionNode, GlobalTemplateOutlet, JsonObject } from "../composer/model/types";
+import { ASSET_PROVIDERS } from "../assets/library/types";
 import type {
+  ContentAssetUse,
   ContentEntryRecord,
   ContentFieldDefinition,
   ContentModelRecord,
@@ -33,6 +35,7 @@ export const COMPOSITION_PROVIDER_ID = "files";
 export const CONTENT_PROVIDER_ID = "content-filesystem";
 export const MAPPING_PROVIDER_ID = "mapping-filesystem";
 export const SITEMAP_PROVIDER_ID = "sitemap-filesystem";
+export const ASSET_PROVIDER_ID = ASSET_PROVIDERS.files.id;
 
 /** Every generated record carries one fixed timestamp so regeneration is byte-stable. */
 export const DEFAULT_TIMESTAMP = "2026-09-12T00:00:00.000Z";
@@ -499,6 +502,22 @@ function valueByFieldId(schema: ContentValueSchema, value: JsonValue): JsonValue
 /** The provider-qualified value a `reference` field stores (a `reference-list` stores an array of them). */
 export function entryRef(entry: Entry): { providerId: string; modelId: string; recordId: string } {
   return { providerId: CONTENT_PROVIDER_ID, modelId: entry.modelId, recordId: entry.id };
+}
+
+/** Create an image asset use using the project's filesystem asset provider. */
+export function imageUse(
+  assetId: string,
+  alt: string,
+  options: { decorative?: boolean; caption?: string } = {},
+): Extract<ContentAssetUse, { kind: "image" }> {
+  const decorative = options.decorative ?? false;
+  return {
+    kind: "image",
+    asset: { providerId: ASSET_PROVIDER_ID, assetId },
+    alt: decorative ? "" : alt,
+    decorative,
+    caption: options.caption ?? "",
+  };
 }
 
 /** An entry id from its first slug/text value; explicit ids are preferred in real content. */
