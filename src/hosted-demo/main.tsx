@@ -1,3 +1,4 @@
+/// <reference path="../features/composer/pack-config.d.ts" />
 // Dedicated hosted build entry; never imported by the installed local tool.
 import { render } from "preact";
 import { bootstrapTheme, createThemeController } from "../theme/theme";

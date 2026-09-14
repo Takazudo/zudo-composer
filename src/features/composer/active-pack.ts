@@ -1,3 +1,7 @@
+/// <reference path="./pack-config.d.ts" />
+// Explicit ambient reference: the cli/scripts/site-project-local `tsc -b`
+// programs reach this file without including pack-config.d.ts themselves
+// (issue #667/#668).
 import { componentPack } from "virtual:zudo-composer-pack";
 import { createComposerComponentProvider } from "./component-provider";
 
