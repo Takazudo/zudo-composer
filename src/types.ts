@@ -52,8 +52,10 @@ export interface ObjectFieldBase<TKey extends string = string> {
   readonly required?: boolean;
 }
 
+export type StringFormat = 'url';
+
 export interface StringTextValueDefinition {
-  readonly schema: { readonly type: 'string' };
+  readonly schema: { readonly type: 'string'; readonly format?: StringFormat };
   readonly editor: {
     readonly kind: 'text';
     readonly multiline?: boolean;
@@ -115,6 +117,7 @@ export type FieldDefinition<TProp extends string = string> = FieldBase<TProp> & 
 type AuthorScalarShorthand<TProp extends string, TValue> = [TValue] extends [never] ? never : null extends TValue ? never :
   | (Extract<TValue, string> extends never ? never : FieldBase<TProp> & {
       readonly kind: 'text';
+      readonly format?: StringFormat;
       readonly inlineEdit?: AuthorInlineEditMetadata;
     })
   | (Extract<TValue, string> extends never ? never : FieldBase<TProp> & { readonly kind: 'color' })
