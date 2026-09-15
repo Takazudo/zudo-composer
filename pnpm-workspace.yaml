@@ -4,6 +4,16 @@ packages:
   - fixtures/themeset-host
   - doc
 
+# packages/ui declares @zudo-composer/component-contract, preact and
+# tailwindcss as peers only (#686 C0: no devDependencies/workspace: spec in
+# that package, unlike packages/fixture-themeset's precedent). With
+# autoInstallPeers on, pnpm tries to fetch the unpublished workspace-only
+# contract package from the npm registry instead of resolving it from this
+# root project's own devDependency. Node's ancestor node_modules walk still
+# finds it there at runtime (typecheck, vitest) since packages/ui is nested
+# under the repo root.
+autoInstallPeers: false
+
 allowBuilds:
   esbuild: true
   workerd: true

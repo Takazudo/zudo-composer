@@ -1,7 +1,7 @@
 lockfileVersion: '9.0'
 
 settings:
-  autoInstallPeers: true
+  autoInstallPeers: false
   excludeLinksFromLockfile: false
 
 importers:
@@ -306,6 +306,15 @@ importers:
         version: 10.29.8(preact-render-to-string@6.7.0)
 
   packages/image-editor: {}
+
+  packages/ui:
+    dependencies:
+      '@takazudo/zfb-md-wasm':
+        specifier: 2.10.1
+        version: 2.10.1
+      dompurify:
+        specifier: ^3.4.11
+        version: 3.4.14
 
 packages:
 

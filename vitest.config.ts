@@ -77,6 +77,19 @@ export default defineConfig({
           exclude: [...configDefaults.exclude, '**/worktrees/**'],
         },
       },
+      {
+        // packages/ui is a standalone handoff package (#686 C0): its own
+        // colocated tests, no `src/test` setup and none of the app project's
+        // `virtual:*` aliases, which a pack must never depend on.
+        oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
+        test: {
+          name: 'ui',
+          include: ['packages/ui/src/**/*.test.{ts,tsx}'],
+          environment: 'jsdom',
+          setupFiles: ['./packages/ui/src/test/setup.ts'],
+          exclude: [...configDefaults.exclude, '**/worktrees/**'],
+        },
+      },
     ],
   },
 });

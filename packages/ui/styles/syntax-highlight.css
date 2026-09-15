@@ -1,0 +1,56 @@
+/* Portable class-mode highlighting for zfb markdown output. Unlayered so the
+ * provider owns the final token paint in every consumer. */
+:root {
+  --zfb-hi-fg: var(--color-fg);
+  --zfb-hi-bg: color-mix(in oklch, var(--color-bg) 80%, var(--color-surface-2));
+  --zfb-hi-esc: var(--color-success);
+  --zfb-hi-op: var(--color-fg);
+  --zfb-hi-com: var(--color-muted);
+  --zfb-hi-str: var(--color-success);
+  --zfb-hi-num: var(--color-warning);
+  --zfb-hi-const: var(--color-warning);
+  --zfb-hi-kw: var(--color-accent);
+  --zfb-hi-fn: var(--color-info);
+  --zfb-hi-ty: var(--color-warning);
+  --zfb-hi-ns: var(--color-warning);
+  --zfb-hi-prop: var(--color-fg);
+  --zfb-hi-var: var(--color-fg);
+  --zfb-hi-tag: var(--color-fg);
+  --zfb-hi-attr: var(--color-fg);
+  --zfb-hi-punct: var(--color-fg);
+  --zfb-hi-ins: var(--color-success);
+  --zfb-hi-ins-bg: color-mix(in srgb, var(--color-success) 15%, var(--zfb-hi-bg));
+  --zfb-hi-del: var(--color-danger);
+  --zfb-hi-del-bg: color-mix(in srgb, var(--color-danger) 15%, var(--color-bg));
+  --zfb-hi-hd: var(--color-accent);
+}
+
+pre.hi-root {
+  color: var(--zfb-hi-fg);
+  background-color: var(--zfb-hi-bg);
+}
+
+.hi-esc { color: var(--zfb-hi-esc); }
+.hi-op { color: var(--zfb-hi-op); }
+.hi-com { color: var(--zfb-hi-com); }
+.hi-str { color: var(--zfb-hi-str); }
+.hi-num { color: var(--zfb-hi-num); }
+.hi-const { color: var(--zfb-hi-const); }
+.hi-kw { color: var(--zfb-hi-kw); }
+.hi-fn { color: var(--zfb-hi-fn); }
+.hi-ty { color: var(--zfb-hi-ty); }
+.hi-ns { color: var(--zfb-hi-ns); }
+.hi-prop { color: var(--zfb-hi-prop); }
+.hi-var { color: var(--zfb-hi-var); }
+.hi-tag { color: var(--zfb-hi-tag); }
+.hi-attr { color: var(--zfb-hi-attr); }
+.hi-punct { color: var(--zfb-hi-punct); }
+.hi-ins {
+  color: var(--zfb-hi-ins);
+  background-color: var(--zfb-hi-ins-bg);
+}
+.hi-del {
+  color: var(--zfb-hi-del);
+  background-color: var(--zfb-hi-del-bg);
+}
+.hi-hd { color: var(--zfb-hi-hd); }

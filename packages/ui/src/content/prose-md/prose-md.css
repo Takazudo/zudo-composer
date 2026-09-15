@@ -1,0 +1,239 @@
+/*
+ * Scoped typography for ProseMd's rendered markdown blob (#373).
+ *
+ * `renderMarkdown()` (`./markdown-runtime.ts`) returns an opaque HTML fragment
+ * of plain `<h2>/<p>/<ul>/...` tags — none of the per-element `Prose*`
+ * overrides (prose-h2, prose-p, prose-a, ...) can be injected into it, and
+ * `.zd-content`'s flow-space stylesheet is shipped by @takazudo/zudo-doc and
+ * absent on the /composer routes. So this file ports the same Tailwind
+ * utility VALUES those components use, as plain descendant selectors scoped
+ * off `.zc-prose-md`, bound to @zudo-sg/ui's Tier-2 semantic tokens only
+ * (never the Tier-1 `--palette-*` values, never Tailwind `dark:` — this
+ * project themes via `data-theme` + `light-dark()`, baked into the tokens
+ * themselves).
+ *
+ * `hi-*` fence token colors are owned by the public provider stylesheet,
+ * `@zudo-sg/ui/styles/composer.css`.
+ * This file only lays out the `pre`/`code` box (padding, radius,
+ * overflow-x, background), mirroring `.zd-content`'s own code-block rules
+ * (@takazudo/zudo-doc/content.css) but bound to @zudo-sg/ui's own portable
+ * `--color-surface-2` rather than the root-only `--color-code-bg` — this
+ * component ships from @zudo-sg/ui and must render correctly in any consumer,
+ * not just this repo's root app.
+ *
+ * External consumers import the canonical `@zudo-sg/ui/styles/composer.css`
+ * entrypoint, which supplies tokens, highlighting, and this component CSS.
+ */
+
+.zc-prose-md {
+  color: var(--color-fg);
+  font-size: var(--text-small);
+  line-height: var(--leading-normal);
+}
+
+/* Flow spacing between top-level blocks — `.zd-content` owns this rhythm for
+   real MDX doc pages, but this blob renders outside that stylesheet's reach
+   (see header), so it needs its own. */
+.zc-prose-md > * + * {
+  margin-top: var(--spacing-vsp-sm);
+}
+
+.zc-prose-md > :first-child {
+  margin-top: 0;
+}
+
+/* ── Headings (values ported from prose-h2..h6) ── */
+.zc-prose-md h2 {
+  margin-top: var(--spacing-vsp-xl);
+  padding-bottom: var(--spacing-vsp-2xs);
+  border-bottom: 2px solid var(--color-border);
+  font-size: var(--text-title);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--leading-tight);
+  color: var(--color-fg);
+}
+
+.zc-prose-md h3 {
+  margin-top: var(--spacing-vsp-lg);
+  padding-left: var(--spacing-hsp-sm);
+  border-left: 3px solid var(--color-accent);
+  font-size: var(--text-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-snug);
+  color: var(--color-fg);
+}
+
+.zc-prose-md h4 {
+  margin-top: var(--spacing-vsp-md);
+  font-size: var(--text-small);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-snug);
+  color: var(--color-fg);
+}
+
+.zc-prose-md h5,
+.zc-prose-md h6 {
+  margin-top: var(--spacing-vsp-md);
+  font-size: var(--text-caption);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-snug);
+  color: var(--color-muted);
+}
+
+/* ── Links (values ported from prose-a) ── */
+.zc-prose-md a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.zc-prose-md a:hover {
+  color: var(--color-accent-hover);
+}
+
+/* The runtime's always-on heading-links plugin appends a permalink anchor
+   (`<a class="hash-link"></a>`) inside each heading — EMPTY, with its visible
+   "#" glyph, hover-reveal, and focus treatment supplied entirely by
+   `.zd-content`'s CSS (ProseA's own `hash-link` exception relies on that same
+   stylesheet being present). `.zd-content` never loads where ProseMd renders
+   (Composer canvas, catalog preview) — without it the anchor would be a
+   zero-size element that's still in the tab order: focusable, but invisible.
+   Suppressing it outright (rather than reimplementing the hover-reveal
+   permalink UI, which nothing here needs — this content has no stable,
+   bookmarkable URL to link into) is the correct fix, not a style choice. */
+.zc-prose-md a.hash-link {
+  display: none;
+}
+
+/* ── Lists (values ported from prose-ul/ol/li) ── */
+.zc-prose-md ul {
+  list-style-type: disc;
+  padding-left: var(--spacing-hsp-xl);
+}
+
+.zc-prose-md ol {
+  list-style-type: decimal;
+  padding-left: var(--spacing-hsp-xl);
+}
+
+.zc-prose-md li {
+  margin-bottom: var(--spacing-vsp-xs);
+}
+
+.zc-prose-md li::marker {
+  color: var(--color-muted);
+}
+
+.zc-prose-md li > ul,
+.zc-prose-md li > ol {
+  margin-top: var(--spacing-vsp-xs);
+  margin-bottom: 0;
+}
+
+/* ── Blockquotes (values ported from prose-blockquote) ── */
+.zc-prose-md blockquote {
+  padding-left: var(--spacing-hsp-lg);
+  border-left: 3px solid var(--color-border);
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.zc-prose-md blockquote p {
+  margin-bottom: var(--spacing-vsp-xs);
+}
+
+/* ── Emphasis (values ported from prose-strong/em) ── */
+.zc-prose-md strong {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg);
+}
+
+.zc-prose-md em {
+  font-style: italic;
+}
+
+/* ── Tables (values ported from prose-table) ── */
+.zc-prose-md table {
+  width: 100%;
+  font-size: var(--text-caption);
+  border-collapse: collapse;
+}
+
+.zc-prose-md th,
+.zc-prose-md td {
+  padding: var(--spacing-vsp-xs) var(--spacing-hsp-md);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.zc-prose-md th {
+  border-bottom-width: 2px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+  background-color: var(--color-surface);
+}
+
+/* ── Code — layout only, hi-* token colors come from the site bridge (see header) ── */
+.zc-prose-md code:not(pre code) {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  font-weight: var(--font-weight-medium);
+  background-color: var(--color-surface-2);
+  border-radius: var(--radius-DEFAULT);
+  padding: 2px var(--spacing-hsp-xs);
+}
+
+.zc-prose-md pre {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  line-height: var(--leading-relaxed);
+  /* Bind to the provider-owned code surface, falling back to a bg/surface-2
+     mix only where no code
+     surface is defined. A surface-2-only fallback is a mid tone in dark and
+     pushes hi-* tokens under WCAG AA — see src/styles/preview.css. */
+  background-color: var(
+    --zfb-hi-bg,
+    color-mix(in oklch, var(--color-bg) 80%, var(--color-surface-2))
+  );
+  border-radius: var(--radius-md);
+  padding: var(--spacing-vsp-sm) var(--spacing-hsp-lg);
+  overflow-x: auto;
+}
+
+.zc-prose-md pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+  color: inherit;
+  font-size: inherit;
+}
+
+/* ── Media / rules — sane defaults for arbitrary author markdown ── */
+.zc-prose-md img {
+  max-width: 100%;
+  height: auto;
+}
+
+.zc-prose-md hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Pending (raw-source placeholder) and error states ── */
+.zc-prose-md--pending {
+  color: var(--color-muted);
+}
+
+.zc-prose-md-raw {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.zc-prose-md--error {
+  color: var(--color-danger);
+  font-size: var(--text-small);
+}

@@ -1,0 +1,208 @@
+/*
+ * @zudo-sg/ui — shared design tokens
+ *
+ * Single source of truth for the tight-token @theme system.
+ * Consumed by the styleguide host (root), packages/ui, and apps/demo.
+ *
+ * Strategy: Tailwind v4 Approach B — import preflight + utilities only,
+ * never @import "tailwindcss" (which pulls in the default theme with 30+
+ * spacing steps and full Tailwind color palette). After these imports,
+ * only the tokens defined here exist; `p-4` or `bg-gray-500` cause build errors.
+ *
+ * What is shared:
+ *   - Spacing axes: hsp (horizontal) / vsp (vertical)
+ *   - Typography: 6 abstract font sizes xs–2xl with paired line-heights
+ *     (Tier 1), plus the semantic aliases micro/caption/small/body/title/
+ *     heading/display that reference them (Tier 2), 4 weights, 4 line-heights
+ *     (tight/snug/normal/relaxed)
+ *   - Radius: DEFAULT / sm / md / lg / full
+ *   - Shadows: card / raised / overlay
+ *   - Breakpoints: sm / md / lg / xl
+ *   - Transition defaults
+ *   - Z-index: the semantic --z-index-ui-* scale (see the block below)
+ *
+ * What is NOT shared (context-specific):
+ *   - Colors: the shared semantic set lives in ./colors.css; the root host
+ *     RE-ASSERTS the overlapping names to its --zd-* palette (zudo-doc
+ *     injection) so doc-chrome is unchanged. Each consumer imports colors.css.
+ *   - Z-index: the `--z-index-ui-*` set below is the shared @zudo-sg/ui scale;
+ *     the root host and apps/demo ALSO keep their own context-specific scales
+ *     (the `ui-` prefix keeps all three collision-free).
+ *
+ * --text-body / --text-caption / --text-small are an external API contract:
+ * @takazudo/zudo-doc's content.css renders doc prose via var(--text-body),
+ * var(--text-caption), var(--text-small). These names and pixel values must
+ * survive any future rework of this file.
+ *
+ * Values are sized for a compact documentation / UI context.
+ * Seeded from: $HOME/repos/myoss/zudo-doc/src/styles/global.css (root baseline)
+ * and reconciled with: $HOME/repos/zfb-ex/zfb-example-webshop/styles/global.css
+ */
+
+@theme {
+  /* ========================================
+   * Spacing — tight semantic axes
+   *
+   * Two axes encode intent at the class-name level:
+   *   hsp = horizontal spacing (inline gaps, horizontal padding/margin)
+   *   vsp = vertical spacing   (block gaps, vertical padding/margin)
+   *
+   * Each axis has 7 named steps (2xs → 2xl) plus 0 and 1px anchors.
+   * `p-4`, `m-8`, `gap-6` and any other numeric spacing utilities are
+   * build errors because --spacing-4 etc. no longer exist.
+   * ======================================== */
+
+  --spacing-0: 0;
+  --spacing-px: 1px;
+
+  /* Horizontal spacing (7 steps) */
+  --spacing-hsp-2xs: 0.125rem;   /*  2px — tight inline */
+  --spacing-hsp-xs:  0.375rem;   /*  6px — compact inline */
+  --spacing-hsp-sm:  0.5rem;     /*  8px — small padding */
+  --spacing-hsp-md:  0.75rem;    /* 12px — default gaps */
+  --spacing-hsp-lg:  1rem;       /* 16px — standard padding */
+  --spacing-hsp-xl:  1.5rem;     /* 24px — generous padding */
+  --spacing-hsp-2xl: 2rem;       /* 32px — large padding */
+
+  /* Vertical spacing (8 steps — includes 3xs for hairline gaps) */
+  --spacing-vsp-3xs: 0.25rem;    /*  4px — hairline gap */
+  --spacing-vsp-2xs: 0.4375rem;  /*  7px — tight gap */
+  --spacing-vsp-10: 0.625rem;    /* 10px — numeric infill between 2xs (7px) and xs (14px); dense tool-chrome padding (#277). Future t-shirt-ladder infills follow this px-numeric naming. */
+  --spacing-vsp-xs:  0.875rem;   /* 14px — small gap */
+  --spacing-vsp-sm:  1.25rem;    /* 20px — compact gap */
+  --spacing-vsp-md:  1.5rem;     /* 24px — standard gap */
+  --spacing-vsp-lg:  1.75rem;    /* 28px — section gap */
+  --spacing-vsp-xl:  2.5rem;     /* 40px — large section gap */
+  --spacing-vsp-2xl: 3.5rem;     /* 56px — page-level gap */
+
+  /* ========================================
+   * Typography — Tier 1 abstract scale + Tier 2 semantic aliases
+   *
+   * Tier 1: 6 abstract font sizes (xs → 2xl) with paired line-heights, in
+   * the --text-* namespace (Tailwind v4 generates text-* font-size utilities
+   * from --text-*, not --font-size-*). Abstract names rather than semantic
+   * names (caption, body…) so any element that needs a given size can use
+   * the token without forcing a misleading role name. The role comes from
+   * context. Each font-size token is paired with an optimal line-height via
+   * the --text-*--line-height convention. `text-base` sets both
+   * font-size: 1rem and line-height: 1.75 in one utility class.
+   *
+   * Tier 2: semantic aliases (micro/caption/small/body/heading/display),
+   * each a var() reference onto a Tier 1 rung. --text-body / --text-caption
+   * / --text-small are consumed by @takazudo/zudo-doc's content.css for doc
+   * prose — see the file header note above.
+   * ======================================== */
+
+  /* Tier 1 — abstract font sizes (xs → 2xl, 6 steps) */
+  --text-xs:   0.75rem;   /* 12px */
+  --text-xs--line-height: 1.5;
+  --text-sm:   0.875rem;  /* 14px */
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem;      /* 16px */
+  --text-base--line-height: 1.75;
+  --text-lg:   1.25rem;   /* 20px */
+  --text-lg--line-height: 1.5;
+  --text-xl:   1.75rem;   /* 28px */
+  --text-xl--line-height: 1.25;
+  --text-2xl:  2.5rem;    /* 40px */
+  --text-2xl--line-height: 1.1;
+
+  /* Tier 2 — semantic aliases (no paired line-heights; content.css / host
+     prose rules own line-height for these) */
+  --text-micro:   var(--text-xs);   /* 12px */
+  --text-caption: var(--text-sm);   /* 14px */
+  --text-small:   var(--text-base); /* 16px */
+  --text-body:    var(--text-lg);   /* 20px */
+  --text-title:   var(--text-lg);   /* 20px — card/section title (target-site components use text-title) */
+  --text-heading: var(--text-xl);   /* 28px */
+  --text-display: var(--text-2xl);  /* 40px */
+
+  /* Font weights (3 steps + semibold) */
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  /* Line heights (4 steps — Tailwind v4 --leading-* namespace for leading-* utilities.
+     Also used directly as var(--leading-*) in component CSS for manual overrides.)
+     `snug` is used by the target-site components; the root host re-declares it at
+     its own denser value in src/styles/global.css. */
+  --leading-tight:   1.25;
+  --leading-snug:    1.4;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.75;
+
+  /* Font families — --font-* generates font-* Tailwind utilities in v4.
+     Used both as Tailwind utilities (font-sans, font-mono) and as raw CSS vars
+     (var(--font-sans), var(--font-mono)) in component styles. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+
+  /* ========================================
+   * Border radius (4 steps)
+   * ======================================== */
+
+  --radius-DEFAULT: 0.25rem; /*  4px — bare `rounded`; target-site components use it */
+  --radius-sm:   0.25rem;   /*  4px */
+  --radius-md:   0.5rem;    /*  8px */
+  --radius-lg:   1rem;      /* 16px */
+  --radius-full: 9999px;    /* pill */
+
+  /* ========================================
+   * Shadows — layered, oklch-matched to base ink color
+   *
+   * Three elevation levels. Shadow color matches the dark ink tone
+   * (oklch(.185 .005 65)) for perceptually accurate depth perception.
+   * ======================================== */
+
+  --shadow-card:
+    0 0.5px 1px  oklch(.185 .005 65 / 0.05),
+    0 2px   4px  oklch(.185 .005 65 / 0.05),
+    0 5px   10px oklch(.185 .005 65 / 0.05);
+
+  --shadow-raised:
+    0 1px   2px  oklch(.185 .005 65 / 0.06),
+    0 4px   8px  oklch(.185 .005 65 / 0.06),
+    0 12px  24px oklch(.185 .005 65 / 0.07);
+
+  --shadow-overlay:
+    0 2px   4px  oklch(.185 .005 65 / 0.08),
+    0 8px   16px oklch(.185 .005 65 / 0.08),
+    0 24px  48px oklch(.185 .005 65 / 0.10);
+
+  /* ========================================
+   * Breakpoints (4 steps)
+   * ======================================== */
+
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+
+  /* ========================================
+   * Transition defaults (required when importing preflight + utilities only;
+   * `transition-colors` etc. rely on these internal Tailwind variables)
+   * ======================================== */
+
+  --default-transition-duration: 0.15s;
+  --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ========================================
+   * Z-index — semantic single-namespace scale for @zudo-sg/ui components.
+   *
+   * Names describe ROLES, not magnitudes (zudo-css-wisdom z-index-strategy).
+   * The `ui-` prefix is deliberate: it keeps this scale collision-free with
+   * BOTH the root host's generated `--z-index-*` scale (content/sidebar/toolbar/
+   * dropdown/popover/modal-backdrop/modal/toast/tooltip/drag — see
+   * src/config/z-index-tokens.ts; note `dropdown`/`modal`/`toast` would otherwise
+   * clash) AND the apps/demo local set (base/raised/modal). Tailwind v4 reads the
+   * `--z-index-<name>` key and emits a `z-<name>` utility, so these produce
+   * `z-ui-base` … `z-ui-toast`.
+   * ======================================== */
+  --z-index-ui-base:     0;
+  --z-index-ui-sticky:   10;   /* sticky header */
+  --z-index-ui-dropdown: 20;   /* nav dropdowns / mega-menu */
+  --z-index-ui-overlay:  30;   /* backdrops / scrims */
+  --z-index-ui-modal:    40;   /* dialogs / drawers */
+  --z-index-ui-toast:    50;   /* transient notifications */
+}
