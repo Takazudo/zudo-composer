@@ -17,8 +17,14 @@
     "products-description": "Three pillar candles poured from a blend of rapeseed and beeswax, in 7, 10 and 13 cm heights. They are unscented, so they sit quietly beside dinner and do not argue with coffee.\n\nThe wax burns clean and slowly, about 40 hours for the tallest. Cotton wicks are pre-trimmed and stay centred to the end.\n\nThey arrive wrapped in paper, not plastic, in a box you can keep them in between evenings.",
     "products-featured": false,
     "products-image1": {
-      "products-image1-alt": "Three ivory pillar candles of different heights",
-      "products-image1-src": "/uploaded-assets/asset-assets-29940c85-15d2-4c6e-bcce-2233d97bb497"
+      "alt": "Three ivory pillar candles of different heights",
+      "asset": {
+        "assetId": "assets-29940c85-15d2-4c6e-bcce-2233d97bb497",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-name": "Candle Set",
     "products-price": 28,

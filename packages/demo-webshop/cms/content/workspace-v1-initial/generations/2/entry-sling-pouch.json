@@ -17,8 +17,14 @@
     "products-description": "A small cross-body pouch in black waxed cotton canvas that sheds rain and softens with use. It carries a phone, a wallet, keys and a notebook, and refuses anything more, which is the point.\n\nThe strap adjusts through a matte steel buckle and sits flat against the body. Inside, one slip pocket keeps cards apart from keys.\n\nThe wax wears in where you touch it. Re-wax once a year and the canvas will keep its shape for a decade.",
     "products-featured": true,
     "products-image1": {
-      "products-image1-alt": "Small black waxed-canvas sling pouch",
-      "products-image1-src": "/uploaded-assets/asset-assets-27d2cd6e-0874-455b-91a5-784bf79c8d14"
+      "alt": "Small black waxed-canvas sling pouch",
+      "asset": {
+        "assetId": "assets-27d2cd6e-0874-455b-91a5-784bf79c8d14",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-name": "Sling Pouch",
     "products-price": 64,
