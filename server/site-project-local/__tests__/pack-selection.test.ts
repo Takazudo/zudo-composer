@@ -5,9 +5,9 @@
 // authored against one pack cannot pass a server validating against the other.
 
 import { createRequire } from "node:module";
-import { cp, mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { TrustedComponentPack } from "@zudo-composer/component-contract";
 import type { CompositionRecord } from "../../../src/composer/library/types";
@@ -52,7 +52,7 @@ describe("server-side validation follows the configured pack", () => {
 describe("release toolchain identity", () => {
   it("attests the pack as a package — specifier, install spec, and resolved bytes", async () => {
     const identity = resolveComponentPack(themesetHost, themesetSpecifier);
-    const resolved = await resolveLocalReleaseToolchain({ pack, packIdentity: identity, workspaceRoot: themesetHost });
+    const resolved = await resolveLocalReleaseToolchain({ pack, packIdentity: identity, workspaceRoot: themesetHost, stylesPath: join(themesetHost, "styles/base.css") });
     expect(validateReleaseToolchain(resolved)).toBe(true);
     expect(resolved).toMatchObject({
       componentPack: { packId: "@zudo-composer/fixture-themeset", packVersion: "1.0.0" },
@@ -64,18 +64,24 @@ describe("release toolchain identity", () => {
     expect(resolved.installedPackDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(resolved.contractDigest).toMatch(/^[a-f0-9]{64}$/);
     // Digesting is deterministic, so a second call over the same install agrees.
-    expect((await resolveLocalReleaseToolchain({ pack, packIdentity: identity, workspaceRoot: themesetHost })).installedPackDigest).toBe(resolved.installedPackDigest);
+    expect((await resolveLocalReleaseToolchain({ pack, packIdentity: identity, workspaceRoot: themesetHost, stylesPath: join(themesetHost, "styles/base.css") })).installedPackDigest).toBe(resolved.installedPackDigest);
   });
 
   it("refuses to invent a toolchain without a resolved pack", async () => {
-    await expect(resolveLocalReleaseToolchain({ workspaceRoot: themesetHost })).rejects.toThrow(/never falls back to a bundled provider pack/);
+    await expect(resolveLocalReleaseToolchain({ workspaceRoot: themesetHost, stylesPath: join(themesetHost, "styles/base.css") })).rejects.toThrow(/never falls back to a bundled provider pack/);
+  });
+
+  it("refuses to guess the host stylesheet when a caller omits it", async () => {
+    const identity = resolveComponentPack(themesetHost, themesetSpecifier);
+    const untyped = { pack, packIdentity: identity, workspaceRoot: themesetHost } as unknown as Parameters<typeof resolveLocalReleaseToolchain>[0];
+    await expect(resolveLocalReleaseToolchain(untyped)).rejects.toThrow(/configured `styles` path/);
   });
 
   it("names a self-reference's install spec `self`", async () => {
     const selfHost = resolve("fixtures/self-host");
     const identity = resolveComponentPack(selfHost, "self-host/components");
     const { componentPack: selfPack } = (await import("../../../fixtures/self-host/components/pack")) as { componentPack: TrustedComponentPack };
-    const resolved = await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: selfHost });
+    const resolved = await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: selfHost, stylesPath: join(selfHost, "styles/base.css") });
     expect(resolved.packSource).toBe("self");
     expect(resolved.packSpecifier).toBe("self-host/components");
     expect(validateReleaseToolchain(resolved)).toBe(true);
@@ -118,7 +124,7 @@ describe("host-self pack graph identity (root-entry fixture)", () => {
     const identity = resolveComponentPack(selfHostRootFixture, "self-host-root/pack");
     expect(identity.packageRoot).toBe(selfHostRootFixture);
     const selfPack = await loadSelfHostRootPack();
-    const resolved = await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: selfHostRootFixture });
+    const resolved = await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: selfHostRootFixture, stylesPath: join(selfHostRootFixture, "styles/base.css") });
     expect(resolved.packSource).toBe("self");
     expect(resolved.packSpecifier).toBe("self-host-root/pack");
     expect(validateReleaseToolchain(resolved)).toBe(true);
@@ -128,7 +134,7 @@ describe("host-self pack graph identity (root-entry fixture)", () => {
     const selfPack = await loadSelfHostRootPack();
     const root = await copySelfHostRoot();
     const identity = resolveComponentPack(root, "self-host-root/pack");
-    const digestOf = async () => (await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root })).installedPackDigest;
+    const digestOf = async () => (await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root, stylesPath: join(root, "styles", "base.css") })).installedPackDigest;
     const initial = await digestOf();
 
     await mkdir(join(root, "cms", "content"), { recursive: true });
@@ -147,7 +153,7 @@ describe("host-self pack graph identity (root-entry fixture)", () => {
     const selfPack = await loadSelfHostRootPack();
     const root = await copySelfHostRoot();
     const identity = resolveComponentPack(root, "self-host-root/pack");
-    const digestOf = async () => (await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root })).installedPackDigest;
+    const digestOf = async () => (await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root, stylesPath: join(root, "styles", "base.css") })).installedPackDigest;
     const initial = await digestOf();
     const target = join(root, relative);
     await writeFile(target, `${await readFile(target, "utf8")}\n/* edited for the test */\n`);
@@ -158,12 +164,30 @@ describe("host-self pack graph identity (root-entry fixture)", () => {
     const selfPack = await loadSelfHostRootPack();
     const root = await copySelfHostRoot();
     const identity = resolveComponentPack(root, "self-host-root/pack");
-    // No `stylesPath` override: this also proves the default `styles`
-    // setting ("styles/base.css") is what a caller gets without one.
-    const digestOf = async () => (await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root })).installedPackDigest;
+    const digestOf = async () => (await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root, stylesPath: join(root, "styles", "base.css") })).installedPackDigest;
     const initial = await digestOf();
     const stylesPath = join(root, "styles", "base.css");
     await writeFile(stylesPath, `${await readFile(stylesPath, "utf8")}\n.extra {}\n`);
+    expect(await digestOf()).not.toBe(initial);
+  });
+
+  it("attests a non-default configured stylesheet and ignores an unrelated styles/base.css", async () => {
+    const selfPack = await loadSelfHostRootPack();
+    const root = await copySelfHostRoot();
+    await rm(join(root, "styles"), { recursive: true });
+    const appCss = join(root, "src", "app.css");
+    await mkdir(dirname(appCss), { recursive: true });
+    await writeFile(appCss, "@import \"tailwindcss/preflight\";\n.app {}\n");
+    const identity = resolveComponentPack(root, "self-host-root/pack");
+    const digestOf = async () => (await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root, stylesPath: appCss })).installedPackDigest;
+    const initial = await digestOf();
+    expect(initial).toMatch(/^[a-f0-9]{64}$/);
+
+    await mkdir(join(root, "styles"), { recursive: true });
+    await writeFile(join(root, "styles", "base.css"), ".stale {}\n");
+    expect(await digestOf()).toBe(initial);
+
+    await writeFile(appCss, `${await readFile(appCss, "utf8")}\n.extra {}\n`);
     expect(await digestOf()).not.toBe(initial);
   });
 
@@ -171,7 +195,7 @@ describe("host-self pack graph identity (root-entry fixture)", () => {
     const selfPack = await loadSelfHostRootPack();
     const root = await copySelfHostRoot();
     const identity = resolveComponentPack(root, "self-host-root/pack");
-    const digestOf = async () => (await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root })).installedPackDigest;
+    const digestOf = async () => (await resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root, stylesPath: join(root, "styles", "base.css") })).installedPackDigest;
     const initial = await digestOf();
     const preactManifest = join(root, "node_modules", "preact", "package.json");
     const manifest = JSON.parse(await readFile(preactManifest, "utf8")) as Record<string, unknown>;
@@ -196,7 +220,7 @@ describe("host-self pack graph identity (root-entry fixture)", () => {
     };
     const value = project({ compositions: [composition], mappings: [] });
     value.componentPack = { contractVersion: 2, packId: "self-host-root", packVersion: "1.0.0" };
-    const options = { pack: selfPack, packIdentity: identity, workspaceRoot: selfHostRootFixture, testRoot: context.testRoot, assetsStoreRoot: context.assetRoot };
+    const options = { pack: selfPack, packIdentity: identity, workspaceRoot: selfHostRootFixture, stylesPath: join(selfHostRootFixture, "styles/base.css"), testRoot: context.testRoot, assetsStoreRoot: context.assetRoot };
     const service = createLocalSiteProjectApiService(options);
     const plan = await review(service, value);
     const applied = await call<{ buildId: string }>(service, "apply", { plan });

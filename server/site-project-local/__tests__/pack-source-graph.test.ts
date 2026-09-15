@@ -113,6 +113,16 @@ describe("collectPackSourceGraph", () => {
     expect((await collect(root, { extraRoots: [join(root, "styles/base.css")] })).files).toEqual(["pack.ts", "styles/base.css", "styles/more.css"]);
   });
 
+  it("resolves CSS url() fragments and cache-busting queries to the file", async () => {
+    const root = await host({
+      "pack.ts": 'import "./icons.css";\n',
+      "icons.css": ".icon { background: url(sprite.svg#icon); }\n@font-face { src: url(font.eot?#iefix) format(\"embedded-opentype\"); }\n",
+      "sprite.svg": "<svg/>",
+      "font.eot": "",
+    });
+    expect((await collect(root)).files).toEqual(["font.eot", "icons.css", "pack.ts", "sprite.svg"]);
+  });
+
   it.each([
     ["a computed dynamic import", "const name = './x'; export const load = () => import(name);", /dynamic import\(\)/],
     ["an interpolated template import", "const n = 'x'; export const load = () => import(`./${n}`);", /dynamic import\(\)/],

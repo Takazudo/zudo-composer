@@ -18,6 +18,7 @@ try {
     pack,
     packIdentity: identity,
     workspaceRoot: config.workspaceRoot,
+    stylesPath: config.paths.styles,
     assetsStoreRoot: validateAssetStoreRoot(process.env.ZUDO_ASSETS_STORE_ROOT) ?? config.paths.assets,
   }), {
     stdin: process.stdin,

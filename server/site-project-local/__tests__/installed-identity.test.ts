@@ -183,6 +183,14 @@ describe("pack source graph attestation", () => {
     await expect(digest({ ...graph, dependencies: [...graph.dependencies].reverse() })).rejects.toThrow(/sorted/);
   });
 
+  it("accepts one dependency name at two versions sorted by name then version, and rejects exact duplicates", async () => {
+    const { graph, digest } = await host();
+    const twoVersions = [{ name: "react", version: "18.3.1" }, { name: "react", version: "19.0.0" }];
+    expect(await digest({ ...graph, dependencies: twoVersions })).toMatch(/^[a-f0-9]{64}$/);
+    await expect(digest({ ...graph, dependencies: [...twoVersions].reverse() })).rejects.toThrow(/sorted/);
+    await expect(digest({ ...graph, dependencies: [twoVersions[1]!, twoVersions[1]!] })).rejects.toThrow(/unique/);
+  });
+
   it("refuses listed links, escaping or non-normalized paths, directories and missing files", async () => {
     const { root, parent, digest } = await host();
     await writeFile(join(parent, "outside.ts"), "export {};");
