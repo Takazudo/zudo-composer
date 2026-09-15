@@ -171,6 +171,15 @@ describe("host-self pack graph identity (root-entry fixture)", () => {
     expect(await digestOf()).not.toBe(initial);
   });
 
+  it("refuses a host whose configured stylesheet does not exist, like the dev server and site build", async () => {
+    const selfPack = await loadSelfHostRootPack();
+    const root = await copySelfHostRoot();
+    await rm(join(root, "styles"), { recursive: true });
+    const identity = resolveComponentPack(root, "self-host-root/pack");
+    await expect(resolveLocalReleaseToolchain({ pack: selfPack, packIdentity: identity, workspaceRoot: root, stylesPath: join(root, "styles", "base.css") }))
+      .rejects.toThrow(/configured `styles` stylesheet does not exist/);
+  });
+
   it("attests a non-default configured stylesheet and ignores an unrelated styles/base.css", async () => {
     const selfPack = await loadSelfHostRootPack();
     const root = await copySelfHostRoot();

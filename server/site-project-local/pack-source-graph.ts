@@ -3,6 +3,7 @@ import { isBuiltin } from "node:module";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { BuildEnvironment, createIdResolver, parseAst, resolveConfig, transformWithOxc } from "vite";
 import { resolveComposerModules } from "../../plugins/module-resolution.mjs";
+import { tailwindResolverAlias } from "../../plugins/tailwind-plugin.mjs";
 
 export interface PackSourceDependency {
   readonly name: string;
@@ -51,8 +52,17 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
   const hostRoot = await realpath(resolve(options.hostRoot));
   // preserveSymlinks keeps an installed dependency on its `node_modules/<name>`
   // link path, so a workspace-linked package is still recognised as installed.
+  // The Tailwind alias resolves `tailwindcss/*` from the tool root, exactly as
+  // the site build and dev server do: an isolated host install has no
+  // `tailwindcss` of its own.
+  const composerModules = resolveComposerModules();
   const config = await resolveConfig(
-    { configFile: false, root: hostRoot, logLevel: "silent", resolve: { ...resolveComposerModules(), preserveSymlinks: true } },
+    {
+      configFile: false,
+      root: hostRoot,
+      logLevel: "silent",
+      resolve: { ...composerModules, alias: [...composerModules.alias, tailwindResolverAlias()], preserveSymlinks: true },
+    },
     "serve",
   );
   const environment = new BuildEnvironment("ssr", config);
