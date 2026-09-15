@@ -88,9 +88,10 @@ describe("host and tool CSS ownership", () => {
     const vite = readFileSync(resolve("vite.config.ts"), "utf8");
     expect(vite).toContain("publicDir: resolvePublicDir(composerConfig.workspaceRoot, composerConfig.paths.publicAssets)");
     // Derived, never spelled out: a literal here would re-hardcode the very
-    // provider that `pack` exists to make swappable.
+    // provider that `pack` exists to make swappable. The exact exclude list is
+    // pinned; the #703 pre-bundle `include` may follow it.
     expect(vite).toMatch(
-      /optimizeDeps\s*:\s*\{\s*exclude\s*:\s*\[\s*componentPack\.identity\.packageName\s*,\s*["']@takazudo\/zfb-md-wasm["']\s*\]\s*,?\s*\}/s,
+      /optimizeDeps\s*:\s*\{\s*exclude\s*:\s*\[\s*componentPack\.identity\.packageName\s*,\s*["']@takazudo\/zfb-md-wasm["']\s*\]\s*,/s,
     );
   });
 
