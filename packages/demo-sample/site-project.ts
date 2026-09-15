@@ -189,7 +189,14 @@ const servicesPage = site.page({
     node("ui.section-heading", { as: "h1", eyebrow: "Services", heading: "Ways to work together", intro: "Three fixed-shape offers, from a two-week framing sprint to a steady delivery rhythm." }, {}, "services-heading"),
     node("ui.split-layout", { gap: "lg", ratio: "60/40" }, {
       left: [
-        node("ui.prose-md", { markdown: readContent("services-engagement.md") }, {}, "services-engagement"),
+        node("ui.stack", { align: "start", direction: "vertical", gap: "md", justify: "start" }, {
+          content: [
+            // studio-review.webp is reserved for this spot (see docs/demo-sites/sample.md)
+            // but out of scope; ui.placeholder-box keeps it a real demonstrated component.
+            node("ui.placeholder-box", { aspect: "16/9", label: "Interface review sketches", size: "lg" }, {}, "services-lead-placeholder"),
+            node("ui.prose-md", { markdown: readContent("services-engagement.md") }, {}, "services-engagement"),
+          ],
+        }, "services-engagement-stack"),
       ],
       right: [
         node("ui.stack", { align: "start", direction: "vertical", gap: "md", justify: "start" }, {
