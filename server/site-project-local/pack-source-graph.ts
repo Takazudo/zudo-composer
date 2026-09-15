@@ -290,7 +290,8 @@ function cssSpecifiers(source: string): { imports: string[]; urls: string[]; plu
   for (const match of rest.matchAll(CSS_URL)) {
     const value = match[2]!.trim();
     if (value === "" || /^(?:data:|#|[a-z][a-z\d+.-]*:\/\/|\/\/)/i.test(value)) continue;
-    urls.push(value);
+    // A fragment or cache-busting query (`sprite.svg#icon`, `font.eot?#iefix`) addresses the same file.
+    urls.push(value.replace(/[?#].*$/, ""));
   }
   return { imports: imports.filter((value) => !/^(?:[a-z][a-z\d+.-]*:\/\/|\/\/)/i.test(value)), urls, plugins };
 }

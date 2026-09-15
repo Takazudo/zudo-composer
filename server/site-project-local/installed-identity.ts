@@ -62,7 +62,7 @@ function graphFiles(root: string, graph: PackSourceGraphInput): string[] {
 
 function graphDependencies(graph: PackSourceGraphInput): [string, string, number, string][] {
   for (const { name, version } of graph.dependencies) if (typeof name !== "string" || !name || typeof version !== "string" || !version) throw new Error("Pack source graph dependencies need a resolved name and version.");
-  assertStrictlySorted(graph.dependencies.map(({ name }) => name), "dependencies");
+  assertStrictlySorted(graph.dependencies.map(({ name, version }) => `${name}\0${version}`), "dependencies");
   return graph.dependencies.map(({ name, version }) => [name, "dependency", 0, version]);
 }
 
