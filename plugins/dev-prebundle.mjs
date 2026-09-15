@@ -19,14 +19,29 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { resolveComponentPack } from "./component-pack.mjs";
+import { APP_ROOT } from "./roots.mjs";
 
 /** Dev-only entries `@preact/preset-vite` and compiled JSX pull in without a static import the scanner can see. */
 export const PREACT_DEV_ENTRIES = Object.freeze(["preact/debug", "preact/devtools", "preact/jsx-runtime"]);
 
 /**
+ * The tool's own package and everything it declares as a dependency or peer.
+ * A pack that is the host itself (a generated host's `<name>/components`)
+ * lists the tool, the contract and preact as runtime dependencies; nesting
+ * those would pre-bundle the whole tool, server code included, for the
+ * browser, and they already reach the dev graph through the tool's own entry.
+ * @returns {Set<string>}
+ */
+function toolProvidedPackages() {
+  /** @type {{name: string, dependencies?: Record<string, string>, peerDependencies?: Record<string, string>}} */
+  const tool = JSON.parse(readFileSync(resolve(APP_ROOT, "package.json"), "utf8"));
+  return new Set([tool.name, ...Object.keys(tool.dependencies ?? {}), ...Object.keys(tool.peerDependencies ?? {})]);
+}
+
+/**
  * The nested `optimizeDeps.include` form (`"packageName > dep"`) for every
- * runtime dependency the resolved component pack declares, minus whatever the
- * caller already excludes (for example `@takazudo/zfb-md-wasm`, whose
+ * runtime dependency the resolved component pack declares, minus what the tool
+ * itself provides and whatever the caller already excludes (for example `@takazudo/zfb-md-wasm`, whose
  * glue/wasm must stay unbundled). Returns an empty list when the pack, or its
  * `package.json`, can't be resolved — for example a consumer host outside
  * this repository whose pack isn't installed yet.
@@ -47,7 +62,7 @@ export function componentPackNestedIncludes({ workspaceRoot, pack, exclude = [] 
   } catch {
     return [];
   }
-  const excluded = new Set(exclude);
+  const excluded = new Set([...toolProvidedPackages(), ...exclude]);
   return Object.keys(dependencies)
     .filter((dependency) => !excluded.has(dependency))
     .map((dependency) => `${identity.packageName} > ${dependency}`);
