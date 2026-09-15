@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "generation": 2,
+  "mutationToken": "2f7ea6e24c997090b442ca8625fc4e4e7e35ddb55220fa66a8c21ac4cf5df29f",
+  "entries": [
+    {
+      "id": "about-page-mapping",
+      "digest": "d81a9f7a413a6a40a980a9d928549cc3262abb87bdaa9c8002a8f413dcbf9357"
+    },
+    {
+      "id": "journal-entry-mapping",
+      "digest": "69a04c2781073b591d690522e0082e95bc48d7b24fd5d77f8ad443edf192c57d"
+    },
+    {
+      "id": "meta",
+      "digest": "8ab7fe6c10be0c98598a53b71315bd15bb7e50a9d71bfa2247ee4fd7efa966c8"
+    }
+  ]
+}

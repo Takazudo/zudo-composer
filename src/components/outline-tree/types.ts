@@ -23,6 +23,10 @@ export interface OutlineNode {
   count?: number;
   status?: OutlineStatus;
   tag?: string;
+  /** `rule` renders `tag` with a lock glyph and its own tone, distinct from the default warning badge. */
+  tagVariant?: "rule";
+  /** Native tooltip for `tag` — e.g. the full allowed-component list and where the rule comes from. */
+  tagDetail?: string;
   /** Quiet trailing note, e.g. "72 more entries…". */
   hint?: string;
   /** `slot` renders the quiet group the Composer uses for a composition slot. */

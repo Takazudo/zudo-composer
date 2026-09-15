@@ -35,7 +35,7 @@ export async function loadHostConfig(workspaceRoot, env) {
 export async function loadHostContext(options = {}) {
   const workspaceRoot = resolveWorkspaceRoot(options.workspaceRoot);
   const composerConfig = await loadHostConfig(workspaceRoot, options.env);
-  const evaluateApp = createModuleEvaluator(APP_ROOT);
-  const { identity, pack } = await loadComponentPack(workspaceRoot, composerConfig.settings.pack, evaluateApp);
+  const evaluateHost = createModuleEvaluator(workspaceRoot);
+  const { identity, pack } = await loadComponentPack(workspaceRoot, composerConfig.settings.pack, evaluateHost);
   return { composerConfig, pack, packIdentity: identity, workspaceRoot };
 }

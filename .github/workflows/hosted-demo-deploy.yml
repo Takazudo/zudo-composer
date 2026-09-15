@@ -18,14 +18,14 @@ on:
         description: "Full main commit SHA built by that CI run"
         required: true
         type: string
+      target:
+        description: "Optional target key to deploy (defaults to all targets)"
+        required: false
+        type: string
 
 permissions:
   contents: read
   actions: read
-
-concurrency:
-  group: hosted-demo-production
-  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -33,14 +33,67 @@ jobs:
     # file is present on main. Keep the Cloudflare-secret job unreachable for
     # those events; workflow-guard repeats the checks before artifact access.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.head_repository.full_name == github.repository &&
-       github.event.workflow_run.conclusion == 'success')
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        github.event.workflow_run.conclusion == 'success'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # One production deploy at a time per target; the nine targets are
+    # independent Workers/domains and may roll out concurrently with each other.
+    concurrency:
+      group: hosted-demo-production-${{ matrix.target }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: doc
+            artifact_name: doc-site
+            dist_dir: doc/dist
+          - target: sample
+            artifact_name: demo-site-sample
+            dist_dir: packages/demo-sample/dist-site
+          - target: shop
+            artifact_name: demo-site-shop
+            dist_dir: packages/demo-webshop/dist-site
+          - target: landing
+            artifact_name: demo-site-landing
+            dist_dir: packages/demo-landing/dist-site
+          - target: blog
+            artifact_name: demo-site-blog
+            dist_dir: packages/demo-blog/dist-site
+          - target: sample-editor
+            artifact_name: demo-editor-sample
+            dist_dir: packages/demo-sample/dist-editor
+          - target: shop-editor
+            artifact_name: demo-editor-shop
+            dist_dir: packages/demo-webshop/dist-editor
+          - target: landing-editor
+            artifact_name: demo-editor-landing
+            dist_dir: packages/demo-landing/dist-editor
+          - target: blog-editor
+            artifact_name: demo-editor-blog
+            dist_dir: packages/demo-blog/dist-editor
+        # `jobs.<job_id>.if` is evaluated before matrix expansion, so filter
+        # dispatches in the matrix itself. Workflow-run events have no target
+        # input and therefore retain every entry.
+        exclude: >-
+          ${{ fromJSON(
+            inputs.target == '' && '[]' ||
+            inputs.target == 'doc' && '[{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"}]' ||
+            inputs.target == 'sample' && '[{"target":"doc"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"}]' ||
+            inputs.target == 'shop' && '[{"target":"doc"},{"target":"sample"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"}]' ||
+            inputs.target == 'landing' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"}]' ||
+            inputs.target == 'blog' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"}]' ||
+            inputs.target == 'sample-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"}]' ||
+            inputs.target == 'shop-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"landing-editor"},{"target":"blog-editor"}]' ||
+            inputs.target == 'landing-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"blog-editor"}]' ||
+            inputs.target == 'blog-editor' && '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"}]' ||
+            '[{"target":"doc"},{"target":"sample"},{"target":"shop"},{"target":"landing"},{"target":"blog"},{"target":"sample-editor"},{"target":"shop-editor"},{"target":"landing-editor"},{"target":"blog-editor"}]'
+          ) }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -98,23 +151,26 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Download exact hosted-demo artifact from trusted CI run
+      - name: Download exact ${{ matrix.target }} artifact from trusted CI run
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: hosted-demo-${{ steps.trust.outputs.sha }}
-          path: dist-hosted-demo
+          name: ${{ matrix.artifact_name }}-${{ steps.trust.outputs.sha }}
+          path: ${{ matrix.dist_dir }}
           repository: ${{ github.repository }}
           run-id: ${{ steps.trust.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify downloaded artifact bytes and source identity
-        run: pnpm hosted-demo:verify dist-hosted-demo "${EXPECTED_SHA}"
+        run: pnpm hosted-demo:verify "${DIST_DIR}" "${EXPECTED_SHA}"
         env:
+          HOSTED_DEMO_TARGET: ${{ matrix.target }}
+          DIST_DIR: ${{ matrix.dist_dir }}
           EXPECTED_SHA: ${{ steps.trust.outputs.sha }}
 
-      - name: Deploy and verify hosted demo
+      - name: Deploy and verify ${{ matrix.target }}
         run: pnpm hosted-demo:deploy
         env:
+          HOSTED_DEMO_TARGET: ${{ matrix.target }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

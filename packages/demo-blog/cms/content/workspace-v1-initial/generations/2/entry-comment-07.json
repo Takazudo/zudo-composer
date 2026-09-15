@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "comment-07",
+  "lifecycle": "published",
+  "modelId": "comments",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "comments-article": {
+      "modelId": "articles",
+      "providerId": "content-filesystem",
+      "recordId": "article-notes-that-survive-the-week"
+    },
+    "comments-article-slug": "notes-that-survive-the-week",
+    "comments-body": "Letting the scrap pad go to the recycling without review sounds terrifying and freeing at the same time. Trying it this Friday.",
+    "comments-date": "2026-04-16",
+    "comments-name": "Priya",
+    "comments-order": 7
+  }
+}

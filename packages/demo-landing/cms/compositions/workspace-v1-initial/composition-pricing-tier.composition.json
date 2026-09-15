@@ -1,0 +1,19 @@
+{
+  "id": "pricing-tier",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "pricing-tier",
+    "name": "Pricing tier",
+    "root": [
+      {
+        "componentId": "land.pricing-tier",
+        "componentVersion": 1,
+        "id": "tier",
+        "props": {},
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

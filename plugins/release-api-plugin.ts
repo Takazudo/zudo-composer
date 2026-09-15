@@ -25,7 +25,7 @@ export function trustedReleaseRequest(req: Pick<IncomingMessage, "headers" | "so
   try { const url = new URL(`${https ? "https" : "http"}://${host}`); return url.host === host && origin === url.origin && Number(url.port || (https ? 443 : 80)) === req.socket.localPort; } catch { return false; }
 }
 /** Serve-only loopback operator capability; no secret is emitted in build mode. */
-export default function releaseApiPlugin(options: { assetsStoreRoot?: string; workspaceRoot?: string; packIdentity?: ResolvedComponentPack } = {}): Plugin {
+export default function releaseApiPlugin(options: { assetsStoreRoot?: string; workspaceRoot?: string; packIdentity?: ResolvedComponentPack; stylesPath?: string } = {}): Plugin {
   const assetsStoreRoot = validateAssetStoreRoot(options.assetsStoreRoot);
   let serving = false;
   const capability = nonce();
@@ -48,6 +48,7 @@ export default function releaseApiPlugin(options: { assetsStoreRoot?: string; wo
         pack: packModule.componentPack,
         packIdentity: options.packIdentity,
         workspaceRoot: options.workspaceRoot,
+        stylesPath: options.stylesPath,
         assetsStoreRoot,
         isWorkingCurrent: async (project: unknown, precondition: unknown) => (await contexts.getStore()?.ask({ kind: "current", project, precondition })) === true,
         reconcilePublication: async (active: unknown, changes: unknown, activationGeneration: number) => { const result = await contexts.getStore()?.ask({ kind: "reconcile", active, changes, activationGeneration }); return result === "applied" || result === "changed" ? result : "unavailable"; },

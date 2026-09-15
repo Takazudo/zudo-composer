@@ -128,7 +128,7 @@ export interface ComposerPreviewBridgeOptions {
 
   onReady?: () => void;
   onSelect?: (nodeId: string | null, revision: number) => void;
-  onRequestAdd?: (target: InsertionTarget, revision: number) => void;
+  onRequestAdd?: (target: InsertionTarget, revision: number, rect?: SerializedRect) => void;
   /** Linked-source navigation request; source nodes never route through local selection. */
   onOpenSource?: (sourceRecordId: string) => void;
   /** The selected node's chrome "⋯" was activated inside the iframe (issue Takazudo/zudo-sg#256). */
@@ -256,7 +256,7 @@ export function createComposerPreviewBridge(
         options.onSelect?.(message.nodeId, message.revision);
         return;
       case "request-add":
-        options.onRequestAdd?.(message.target, message.revision);
+        options.onRequestAdd?.(message.target, message.revision, message.rect);
         return;
       case "open-source":
         options.onOpenSource?.(message.sourceRecordId);

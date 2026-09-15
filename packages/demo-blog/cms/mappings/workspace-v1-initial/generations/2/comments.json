@@ -1,0 +1,91 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "comments-name-name",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "comments-name",
+        "target": {
+          "nodeId": "comment",
+          "prop": "name"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "comments-date-date",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "comments-date",
+        "target": {
+          "nodeId": "comment",
+          "prop": "date"
+        },
+        "transform": {
+          "kind": "date-medium"
+        }
+      },
+      {
+        "id": "comments-body-body",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "comments-body",
+        "target": {
+          "nodeId": "comment",
+          "prop": "body"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "comments-articleslug-articleslug",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "comments-article-slug",
+        "target": {
+          "nodeId": "comment",
+          "prop": "articleSlug"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "comment"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "comments"
+    },
+    "id": "comments",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "asc",
+            "fieldId": "comments-order"
+          }
+        ]
+      }
+    },
+    "name": "Comments",
+    "schemaVersion": 2
+  },
+  "id": "comments",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

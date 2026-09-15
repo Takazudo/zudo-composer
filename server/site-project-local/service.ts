@@ -5,24 +5,24 @@ import { basename, join, resolve } from "node:path";
 import { createComponentCatalog } from "../../src/composer/model/types";
 import { createSiteProjectApiService } from "../../src/site-project/api/service";
 import type { TrustedComponentPack } from "@zudo-composer/component-contract";
-import type { ResolvedComponentPack } from "../../plugins/component-pack.d.mts";
-import type { SiteProjectApiService, ReleaseToolchain, SiteProjectApiDependencies } from "../../src/site-project/api/types";
+import type { SiteProjectApiService, SiteProjectApiDependencies } from "../../src/site-project/api/types";
 import { createFilesystemAssetStore } from "../../src/assets/storage/filesystem";
 import type { VersionedAssetStore } from "../../src/assets/library";
 import { createLocalSiteProjectStore, type LocalSiteProjectStoreOptions } from "./store";
 import { DEFAULT_SETTINGS } from "../config/settings";
 import { resolveWorkspaceRoot } from "../../plugins/roots.mjs";
 import { releaseJson } from "../../src/site-project/api/review";
-import { resolveLocalReleaseToolchain } from "./toolchain-config";
+import { resolveLocalReleaseToolchain, type LocalReleaseToolchainOptions } from "./toolchain-config";
 export { resolveLocalReleaseToolchain } from "./toolchain-config";
 
 /**
  * `pack` is required and has no default: server-side validation must run
  * against the pack the host configured, or it would accept components the
  * browser cannot render. `packIdentity` is what the release is stamped with,
- * so it is required unless the caller supplies a `toolchain` outright.
+ * so it — and the host's configured `stylesPath` — is required unless the
+ * caller supplies a `toolchain` outright.
  */
-export interface LocalSiteProjectServiceOptions extends LocalSiteProjectStoreOptions { pack: TrustedComponentPack; packIdentity?: ResolvedComponentPack; workspaceRoot?: string; assetsStoreRoot?: string; assetStore?: VersionedAssetStore; toolchain?: ReleaseToolchain; isWorkingCurrent?: SiteProjectApiDependencies["isWorkingCurrent"]; reconcilePublication?: SiteProjectApiDependencies["reconcilePublication"] }
+export type LocalSiteProjectServiceOptions = LocalSiteProjectStoreOptions & LocalReleaseToolchainOptions & { pack: TrustedComponentPack; assetsStoreRoot?: string; assetStore?: VersionedAssetStore; isWorkingCurrent?: SiteProjectApiDependencies["isWorkingCurrent"]; reconcilePublication?: SiteProjectApiDependencies["reconcilePublication"] };
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 export function createLocalSiteProjectApiService(options: LocalSiteProjectServiceOptions): SiteProjectApiService {
   // The host's configured `assetsDir`. Every lane resolves it from the config

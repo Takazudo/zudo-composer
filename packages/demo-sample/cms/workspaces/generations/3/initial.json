@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "initial",
+  "mutationToken": 1,
+  "status": "ready",
+  "metadata": {
+    "activeSitemap": {
+      "providerId": "sitemap-filesystem",
+      "recordId": "sample-studio-sitemap"
+    },
+    "collectionAttachments": [],
+    "componentPack": {
+      "contractVersion": 2,
+      "packId": "@zudo-sg/ui",
+      "packVersion": "1.0.0"
+    },
+    "id": "sample-studio-site",
+    "name": "Sample Studio",
+    "providers": {
+      "compositions": [
+        {
+          "id": "files"
+        }
+      ],
+      "content": [
+        {
+          "id": "content-filesystem"
+        }
+      ],
+      "mappings": [
+        {
+          "id": "mapping-filesystem"
+        }
+      ],
+      "sitemaps": [
+        {
+          "id": "sitemap-filesystem"
+        }
+      ]
+    },
+    "schemaVersion": 2
+  },
+  "baselineRevision": "595ac0a346bc2fdb9300968bcab1e2d5c007ce32753be21e763908c0f532ebba"
+}

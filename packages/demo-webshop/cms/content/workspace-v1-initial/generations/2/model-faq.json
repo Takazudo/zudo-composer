@@ -1,0 +1,35 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "description": "",
+    "fields": [
+      {
+        "id": "faq-question",
+        "key": "question",
+        "kind": "text",
+        "label": "Question",
+        "required": true
+      },
+      {
+        "id": "faq-answer",
+        "key": "answer",
+        "kind": "markdown",
+        "label": "Answer",
+        "required": true
+      },
+      {
+        "id": "faq-order",
+        "key": "order",
+        "kind": "number",
+        "label": "Order",
+        "required": true
+      }
+    ],
+    "id": "faq",
+    "kind": "collection",
+    "name": "FAQ",
+    "schemaVersion": 1
+  },
+  "id": "faq",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-8",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "Every page is a Composer composition. Products, categories and these questions are Content entries, bound to components through Mappings and placed in a Sitemapper tree.",
+    "faq-order": 8,
+    "faq-question": "How was this site built?"
+  }
+}

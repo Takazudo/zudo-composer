@@ -1,0 +1,45 @@
+{
+  "ready_runtime": [
+    "cms/assets/catalog.json",
+    "cms/assets/versions/sha256-c62b425177a0c01dba4bd49fec9b57efe0bce6632eeb5963d3cf1a66c60a62c6.png",
+    "cms/compositions/workspace-v1-initial/composition-home.composition.json",
+    "cms/compositions/workspace-v1-initial/composition-home.tsx",
+    "cms/compositions/workspace-v1-initial/composition-site-frame.composition.json",
+    "cms/compositions/workspace-v1-initial/composition-site-frame.tsx",
+    "cms/content/workspace-v1-initial/current.json",
+    "cms/content/workspace-v1-initial/generations/2/entry-welcome.json",
+    "cms/content/workspace-v1-initial/generations/2/meta.json",
+    "cms/content/workspace-v1-initial/generations/2/model-welcome.json",
+    "cms/mappings/workspace-v1-initial/current.json",
+    "cms/mappings/workspace-v1-initial/generations/2/home.json",
+    "cms/mappings/workspace-v1-initial/generations/2/meta.json",
+    "cms/sitemaps/workspace-v1-initial/current.json",
+    "cms/sitemaps/workspace-v1-initial/generations/2/meta.json",
+    "cms/sitemaps/workspace-v1-initial/generations/2/my-site.json",
+    "cms/workspaces/current.json",
+    "cms/workspaces/generations/3/initial.json",
+    "cms/workspaces/generations/3/meta.json",
+    "cms/workspaces/generations/3/selection.json",
+    "components/pack.ts",
+    "components/page.tsx",
+    "package.json",
+    "public/uploaded-assets/sha256-c62b425177a0c01dba4bd49fec9b57efe0bce6632eeb5963d3cf1a66c60a62c6.png",
+    "styles/base.css",
+    "zudo-composer.config.ts"
+  ],
+  "authoring_regeneration_build": [
+    "images-src/manifest.json",
+    "images-src/starter.png",
+    "site-project.json",
+    "site-project.ts"
+  ],
+  "tests_types_docs_hygiene": [
+    ".gitignore",
+    ".npmrc",
+    "README.md",
+    "pnpm-workspace.yaml",
+    "tests/starter.spec.tsx",
+    "tsconfig.json",
+    "vitest.config.ts"
+  ]
+}

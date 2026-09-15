@@ -305,6 +305,22 @@
   font-weight: 650;
 }
 
+/* A rule tag is informational, not a problem: a component-restriction slot
+ * that is working as declared, not one in need of repair. */
+.cms-tree-tag--rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+.cms-tree-tag--rule::before { content: "🔒"; font-size: .625rem; line-height: 1; }
+
+/* A 2px inset rail flags a row needing attention without reflowing its
+ * connectors or indent — a violation's repair path is the Remove action, not
+ * a rewrite of the row's own layout. */
+.cms-tree-row--warn-rail { box-shadow: inset 2px 0 0 var(--color-warning); }
+
 /* --------------------------------------------------------------------------
  * Add rows: one terminal row per children list, and the dashed root button.
  * -------------------------------------------------------------------------- */
@@ -477,6 +493,7 @@
  */
 @media (pointer: coarse) {
   .cms-tree { --tree-row: 44px; --tree-cat-row: 44px; }
+  .cms-tree__toolbar .cms-btn { min-width: 44px; }
   .cms-tree-toggle { width: 44px; height: 44px; }
   .cms-tree-add__btn { width: 32px; height: 32px; }
   .cms-tree-add-root { min-height: 44px; }

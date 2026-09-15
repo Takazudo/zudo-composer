@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "comment-03",
+  "lifecycle": "published",
+  "modelId": "comments",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "comments-article": {
+      "modelId": "articles",
+      "providerId": "content-filesystem",
+      "recordId": "article-sharpen-before-you-cut"
+    },
+    "comments-article-slug": "sharpen-before-you-cut",
+    "comments-body": "\"Stop sharpening when it cuts\" is going on a card above my desk. I lose far too many afternoons rebuilding my setup instead of using it.",
+    "comments-date": "2026-03-19",
+    "comments-name": "Ruth",
+    "comments-order": 3
+  }
+}

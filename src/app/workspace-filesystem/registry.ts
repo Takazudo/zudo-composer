@@ -118,6 +118,7 @@ export class FilesystemWorkspaceRegistry {
       phases: PHASES,
       ...(options.operations === undefined ? {} : { operations: options.operations }),
       ...(options.randomToken === undefined ? {} : { randomToken: options.randomToken }),
+      ...(options.newMutationToken === undefined ? {} : { newMutationToken: options.newMutationToken }),
       ...(options.now === undefined ? {} : { now: options.now }),
     });
     const registry = new FilesystemWorkspaceRegistry(records, options.newWorkspaceId ?? (() => crypto.randomUUID()));

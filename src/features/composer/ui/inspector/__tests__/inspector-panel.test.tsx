@@ -11,8 +11,15 @@ import {
   makeNode,
   resetTestIds,
   testManifest,
+  testManifestEntries,
 } from "../../test-support/composer-fixtures";
 import { InspectorPanel, type InspectorPanelProps } from "../inspector-panel";
+
+const copyTextMock = vi.fn<(text: string) => Promise<boolean>>();
+
+vi.mock("../../../../../shared/clipboard", () => ({
+  copyText: (text: string) => copyTextMock(text),
+}));
 
 function renderPanel(overrides: Partial<InspectorPanelProps> = {}) {
   const onUpdateProps = vi.fn();
@@ -107,6 +114,36 @@ describe("InspectorPanel — root/empty state", () => {
       />,
     );
     expect(screen.getByRole("tab", { name: /Slots/ })).not.toBeDisabled();
+  });
+
+  it("shows the Grammar-for-agents block for the document row when the root policy is restricted", () => {
+    const doc = makeDocument([]);
+    doc.binding = { sourceRecordId: "source", outletId: "outlet-main" };
+    renderPanel({
+      document: doc,
+      selectedId: null,
+      entries: testManifestEntries,
+      rootPolicy: {
+        kind: "resolved",
+        accepts: [TEST_COMPONENT_IDS.label],
+        cardinality: "many",
+        min: 1,
+        origin: {
+          componentId: TEST_COMPONENT_IDS.panel,
+          componentTitle: "Panel",
+          slotId: "left",
+          slotLabel: "Left",
+        },
+      },
+    });
+
+    expect(screen.getByText("Grammar for agents")).toBeInTheDocument();
+    expect(screen.getByText(/Region "Left" = test\.panel › left/)).toBeInTheDocument();
+  });
+
+  it("omits the Grammar-for-agents block for the document row when the root policy is unrestricted", () => {
+    renderPanel({ document: makeDocument([]), selectedId: null });
+    expect(screen.queryByText("Grammar for agents")).not.toBeInTheDocument();
   });
 });
 
@@ -385,7 +422,7 @@ describe("InspectorPanel — identity, parent and position", () => {
 });
 
 describe("InspectorPanel — Slots tab", () => {
-  it("lists every slot with its child count and jumps to one", () => {
+  it("lists every slot with its child count, an open-slot line, and jumps to one", () => {
     const doc = makeDocument([
       makeNode(
         TEST_COMPONENT_IDS.panel,
@@ -404,10 +441,189 @@ describe("InspectorPanel — Slots tab", () => {
     const items = Array.from(container.querySelectorAll("[data-sg-inspector-slots] li")).map(
       (li) => li.textContent,
     );
-    expect(items).toEqual(["Left1 child · singleJump", "Right2 childrenJump"]);
+    expect(items[0]).toContain("Left1 child · single");
+    expect(items[1]).toContain("Right2 children");
+    // Neither panel slot declares `accepts`, so both are open.
+    expect(items[0]).toContain("Accepts any component in the pack.");
+    expect(items[1]).toContain("Accepts any component in the pack.");
 
     fireEvent.click(screen.getByRole("button", { name: "Jump to Right" }));
     expect(onJumpToSlot).toHaveBeenCalledWith({ parentId: "panel", slotId: "right" });
+  });
+
+  function regionDoc(children: ReturnType<typeof makeNode>[] = []) {
+    return makeDocument([makeNode(TEST_COMPONENT_IDS.region, {}, { body: children }, "region")]);
+  }
+
+  it("shows a restricted slot's rule: accepted rows with ids, a 'has rule' badge, and the bounds sentence", () => {
+    const { container } = renderPanel({
+      document: regionDoc(),
+      selectedId: "region",
+      entries: testManifestEntries,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    const slot = container.querySelector('[data-sg-inspector-slots] li[class="sg-composer-inspector-slot"]')!;
+    expect(slot.textContent).toContain("Rule from Region › Body");
+    expect(slot.textContent).toContain(TEST_COMPONENT_IDS.label);
+    expect(slot.textContent).toContain(TEST_COMPONENT_IDS.card);
+    expect(slot.textContent).toContain("has rule");
+    expect(slot.textContent).toContain("Cardinality: many · at least 2 · at most 3");
+    expect(slot.textContent).toContain("Read-only here.");
+
+    // Only the card accepted-component row restricts its own slot.
+    const rows = Array.from(container.querySelectorAll(".sg-composer-inspector-rule-row"));
+    const cardRow = rows.find((row) => row.textContent?.includes(TEST_COMPONENT_IDS.card));
+    const labelRow = rows.find((row) => row.textContent?.includes(TEST_COMPONENT_IDS.label));
+    expect(cardRow?.textContent).toContain("has rule");
+    expect(labelRow?.textContent).not.toContain("has rule");
+  });
+
+  it("warns when a restricted slot holds fewer children than its declared minimum", () => {
+    renderPanel({
+      document: regionDoc([makeNode(TEST_COMPONENT_IDS.label, { text: "A" })]),
+      selectedId: "region",
+      entries: testManifestEntries,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    expect(screen.getByText(/needs at least 2/)).toBeInTheDocument();
+  });
+
+  it("does not warn once the restricted slot meets its declared minimum", () => {
+    renderPanel({
+      document: regionDoc([
+        makeNode(TEST_COMPONENT_IDS.label, { text: "A" }),
+        makeNode(TEST_COMPONENT_IDS.label, { text: "B" }),
+      ]),
+      selectedId: "region",
+      entries: testManifestEntries,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    expect(screen.queryByText(/needs at least/)).not.toBeInTheDocument();
+  });
+
+  it("shows the consumer-facing rule for a published Global template outlet instead of a blocked verdict", () => {
+    const doc = regionDoc();
+    doc.publication = {
+      kind: "global-template",
+      outlet: { id: "outlet-body", label: "Body", target: { parentId: "region", slotId: "body" } },
+    };
+    const { container } = renderPanel({ document: doc, selectedId: "region", entries: testManifestEntries });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    const rule = container.querySelector(".sg-composer-inspector-rule")!;
+    expect(rule.textContent).toContain("Applies to: every page bound to this template");
+    expect(rule.textContent).toContain(TEST_COMPONENT_IDS.label);
+    expect(screen.queryByText(/reserved for its consumers/)).not.toBeInTheDocument();
+  });
+});
+
+describe("InspectorPanel — Grammar for agents", () => {
+  beforeEach(() => {
+    copyTextMock.mockReset();
+  });
+
+  function regionDoc(children: ReturnType<typeof makeNode>[] = []) {
+    return makeDocument([makeNode(TEST_COMPONENT_IDS.region, {}, { body: children }, "region")]);
+  }
+
+  it("shows the block, below the Rule block, for a restricted slot", () => {
+    const { container } = renderPanel({
+      document: regionDoc(),
+      selectedId: "region",
+      entries: testManifestEntries,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    const slot = container.querySelector('[data-sg-inspector-slots] li[class="sg-composer-inspector-slot"]')!;
+    const rule = slot.querySelector(".sg-composer-inspector-rule")!;
+    const grammar = slot.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
+    expect(grammar).toBeInTheDocument();
+    // Below, in document order, the existing Rule block.
+    expect(rule.compareDocumentPosition(grammar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    expect(within(grammar).getByText("Grammar for agents")).toBeInTheDocument();
+    expect(grammar.textContent).toContain(TEST_COMPONENT_IDS.label);
+    expect(grammar.textContent).toContain(TEST_COMPONENT_IDS.card);
+    expect(grammar.textContent).toContain("Same output as");
+  });
+
+  it("omits the block for an open slot", () => {
+    const doc = makeDocument([makeNode(TEST_COMPONENT_IDS.panel, {}, { left: [], right: [] }, "panel")]);
+    const { container } = renderPanel({ document: doc, selectedId: "panel", entries: testManifestEntries });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    expect(container.querySelector(".sg-composer-inspector-grammar")).not.toBeInTheDocument();
+  });
+
+  it("renders this document's own buildGrammar output for a published Global template outlet", () => {
+    const doc = regionDoc();
+    doc.publication = {
+      kind: "global-template",
+      outlet: { id: "outlet-body", label: "Body", target: { parentId: "region", slotId: "body" } },
+    };
+    const { container } = renderPanel({ document: doc, selectedId: "region", entries: testManifestEntries });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    const grammar = container.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
+    // The header `zudo-composer grammar` itself would print for this exact template.
+    expect(grammar.textContent).toContain(`${doc.name} (template ${doc.id})`);
+  });
+
+  it("swaps the rendered text between Markdown and JSON", () => {
+    const { container } = renderPanel({
+      document: regionDoc(),
+      selectedId: "region",
+      entries: testManifestEntries,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+
+    const grammar = container.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
+    expect(grammar.querySelector("pre")?.textContent).toContain('Region "Body" = test.region › body');
+
+    fireEvent.click(within(grammar).getByRole("button", { name: "JSON" }));
+    expect(grammar.querySelector("pre")?.textContent).toContain('"slotId": "body"');
+    expect(grammar.querySelector("pre")?.textContent).not.toContain('Region "Body"');
+
+    fireEvent.click(within(grammar).getByRole("button", { name: "Markdown" }));
+    expect(grammar.querySelector("pre")?.textContent).toContain('Region "Body" = test.region › body');
+  });
+
+  it("copies whichever text is currently displayed", () => {
+    copyTextMock.mockResolvedValue(true);
+    const { container } = renderPanel({
+      document: regionDoc(),
+      selectedId: "region",
+      entries: testManifestEntries,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: /Slots/ }));
+    const grammar = container.querySelector<HTMLElement>(".sg-composer-inspector-grammar")!;
+
+    fireEvent.click(within(grammar).getByRole("button", { name: "Copy" }));
+    expect(copyTextMock).toHaveBeenCalledWith(expect.stringContaining('Region "Body" = test.region › body'));
+
+    fireEvent.click(within(grammar).getByRole("button", { name: "JSON" }));
+    fireEvent.click(within(grammar).getByRole("button", { name: "Copy" }));
+    expect(copyTextMock).toHaveBeenLastCalledWith(expect.stringContaining('"slotId": "body"'));
+  });
+});
+
+describe("InspectorPanel — unaccepted-child diagnostics", () => {
+  it("points at the slot rule when a node holds a child its own slot rejects", () => {
+    const doc = makeDocument([
+      makeNode(
+        TEST_COMPONENT_IDS.region,
+        {},
+        { body: [makeNode(TEST_COMPONENT_IDS.widget, {}, {}, "bad-child")] },
+        "region",
+      ),
+    ]);
+    renderPanel({ document: doc, selectedId: "region", entries: testManifestEntries });
+
+    expect(screen.getByText(/does not accept "test\.widget"/)).toBeInTheDocument();
+    expect(screen.getByText(/rule from test\.region › /)).toBeInTheDocument();
   });
 });
 

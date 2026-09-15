@@ -6,12 +6,14 @@ interface ChooserCardGridProps {
   entries: readonly ComponentDefinition[];
   componentProvider: ComposerComponentProvider;
   catalogById: ReadonlyMap<string, ComponentDefinition>;
+  /** Kinds that restrict one of their own slots, badged under a restricted target. */
+  ownRuleIds?: ReadonlySet<string>;
   onPreview: (id: string) => void;
   onConfirm: (id: string) => void;
   location?: ChooserThumbProps["location"];
 }
 
-export function ChooserCardGrid({ entries, componentProvider, catalogById, onPreview, onConfirm, location }: ChooserCardGridProps) {
+export function ChooserCardGrid({ entries, componentProvider, catalogById, ownRuleIds, onPreview, onConfirm, location }: ChooserCardGridProps) {
   const scrollerRef = useRef<HTMLUListElement>(null);
   return <ul ref={scrollerRef} class="sg-composer-chooser-grid">
     {entries.map((entry, index) => <li key={entry.id} class="sg-composer-chooser-tile">
@@ -22,7 +24,10 @@ export function ChooserCardGrid({ entries, componentProvider, catalogById, onPre
         {entry.title}
       </button>
       <span id={`${entry.id}-meta`} class="sg-composer-chooser-tile-meta">
-        <span class="sg-composer-chooser-tile-category">{entry.category}</span>
+        <span class="sg-composer-chooser-tile-category">
+          {entry.category}
+          {ownRuleIds?.has(entry.id) && <span class="sg-composer-chooser-rule-badge">rule</span>}
+        </span>
         <span class="sg-composer-chooser-tile-description">{entry.description}</span>
       </span>
     </li>)}

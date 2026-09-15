@@ -1,0 +1,45 @@
+{
+  "id": "about-page",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "about-page",
+    "name": "About page",
+    "root": [
+      {
+        "componentId": "blog.page-heading",
+        "componentVersion": 1,
+        "id": "about-heading",
+        "props": {
+          "eyebrow": "About"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.prose-body",
+        "componentVersion": 1,
+        "id": "about-body",
+        "props": {
+          "dropCap": false
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.callout",
+        "componentVersion": 1,
+        "id": "about-callout",
+        "props": {
+          "markdown": "Margin Notes is a demo site built with [zudo-composer](https://zudo-composer.zudolab.dev). The essays are real; the comments, forms and newsletter are mocks that keep nothing.",
+          "title": "About this site",
+          "tone": "soft"
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

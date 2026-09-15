@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "mutationToken": "abb4127a4f2c8264f6c808dcf404517949551d9e3af8767415d31d304906736f",
+  "records": [
+    {
+      "id": "assets-d69f531b-c600-45c5-a6bf-13d40a19b734",
+      "revision": 1,
+      "createdAt": "2026-09-13T12:22:04.739Z",
+      "updatedAt": "2026-09-13T12:22:04.739Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-d69f531b-c600-45c5-a6bf-13d40a19b734",
+        "fileName": "studio-workbench.webp",
+        "folderId": null,
+        "note": "A bright studio worktable with paper sketches, a closed laptop and a pot of pencils",
+        "state": "active",
+        "currentVersionId": "af74def4ba9314c9c8c8e71dd8a46a68b3efe38d5a2ad50dd6f9fa336427a0be",
+        "versions": [
+          {
+            "id": "af74def4ba9314c9c8c8e71dd8a46a68b3efe38d5a2ad50dd6f9fa336427a0be",
+            "checksum": "af74def4ba9314c9c8c8e71dd8a46a68b3efe38d5a2ad50dd6f9fa336427a0be",
+            "mimeType": "image/webp",
+            "byteLength": 41422,
+            "url": "/uploaded-assets/sha256-af74def4ba9314c9c8c8e71dd8a46a68b3efe38d5a2ad50dd6f9fa336427a0be.webp",
+            "createdAt": "2026-09-13T12:22:04.739Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-23e178e6-6e99-4985-ace6-66b31fc5a2f6",
+      "revision": 1,
+      "createdAt": "2026-09-13T12:22:04.785Z",
+      "updatedAt": "2026-09-13T12:22:04.785Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-23e178e6-6e99-4985-ace6-66b31fc5a2f6",
+        "fileName": "studio-wall.webp",
+        "folderId": null,
+        "note": "A white wall covered in index cards connected by pencil lines",
+        "state": "active",
+        "currentVersionId": "1989ec467fed4722154de8be04a07a41dc939f37eb4393fb86aa3380db0e57f3",
+        "versions": [
+          {
+            "id": "1989ec467fed4722154de8be04a07a41dc939f37eb4393fb86aa3380db0e57f3",
+            "checksum": "1989ec467fed4722154de8be04a07a41dc939f37eb4393fb86aa3380db0e57f3",
+            "mimeType": "image/webp",
+            "byteLength": 39880,
+            "url": "/uploaded-assets/sha256-1989ec467fed4722154de8be04a07a41dc939f37eb4393fb86aa3380db0e57f3.webp",
+            "createdAt": "2026-09-13T12:22:04.785Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-d48aec21-f1e3-4e35-b76a-0da3e5fa887e",
+      "revision": 1,
+      "createdAt": "2026-09-13T12:22:04.828Z",
+      "updatedAt": "2026-09-13T12:22:04.828Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-d48aec21-f1e3-4e35-b76a-0da3e5fa887e",
+        "fileName": "studio-review.webp",
+        "folderId": null,
+        "note": "Two printed interface drafts side by side with a pencil and sticky notes",
+        "state": "active",
+        "currentVersionId": "e050310c87452cd6282a89b1bbe3bfad4d91a27b844edc3aa7914135e1a35a5d",
+        "versions": [
+          {
+            "id": "e050310c87452cd6282a89b1bbe3bfad4d91a27b844edc3aa7914135e1a35a5d",
+            "checksum": "e050310c87452cd6282a89b1bbe3bfad4d91a27b844edc3aa7914135e1a35a5d",
+            "mimeType": "image/webp",
+            "byteLength": 48260,
+            "url": "/uploaded-assets/sha256-e050310c87452cd6282a89b1bbe3bfad4d91a27b844edc3aa7914135e1a35a5d.webp",
+            "createdAt": "2026-09-13T12:22:04.828Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-2a0d4438-ed77-4f52-8c3b-1a79e0a49af2",
+      "revision": 1,
+      "createdAt": "2026-09-13T12:22:04.880Z",
+      "updatedAt": "2026-09-13T12:22:04.880Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-2a0d4438-ed77-4f52-8c3b-1a79e0a49af2",
+        "fileName": "journal-question.webp",
+        "folderId": null,
+        "note": "A sheet of paper with a single handwritten question mark on a pale desk",
+        "state": "active",
+        "currentVersionId": "14cafb407b4dd0273646c3221d38497da6571588a3a2cbcecaec5a98cdea5f3d",
+        "versions": [
+          {
+            "id": "14cafb407b4dd0273646c3221d38497da6571588a3a2cbcecaec5a98cdea5f3d",
+            "checksum": "14cafb407b4dd0273646c3221d38497da6571588a3a2cbcecaec5a98cdea5f3d",
+            "mimeType": "image/webp",
+            "byteLength": 25222,
+            "url": "/uploaded-assets/sha256-14cafb407b4dd0273646c3221d38497da6571588a3a2cbcecaec5a98cdea5f3d.webp",
+            "createdAt": "2026-09-13T12:22:04.880Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-73126e8e-0797-47b4-b609-d260e231f234",
+      "revision": 1,
+      "createdAt": "2026-09-13T12:22:04.918Z",
+      "updatedAt": "2026-09-13T12:22:04.918Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-73126e8e-0797-47b4-b609-d260e231f234",
+        "fileName": "journal-map.webp",
+        "folderId": null,
+        "note": "A hand-drawn diagram of boxes and arrows with a few boxes circled",
+        "state": "active",
+        "currentVersionId": "645fca7ce0242a099e00718d9e0639e0a51242916c1a32f5a89963e770a8a670",
+        "versions": [
+          {
+            "id": "645fca7ce0242a099e00718d9e0639e0a51242916c1a32f5a89963e770a8a670",
+            "checksum": "645fca7ce0242a099e00718d9e0639e0a51242916c1a32f5a89963e770a8a670",
+            "mimeType": "image/webp",
+            "byteLength": 32940,
+            "url": "/uploaded-assets/sha256-645fca7ce0242a099e00718d9e0639e0a51242916c1a32f5a89963e770a8a670.webp",
+            "createdAt": "2026-09-13T12:22:04.918Z"
+          }
+        ]
+      }
+    }
+  ],
+  "folders": []
+}

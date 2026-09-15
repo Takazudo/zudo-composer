@@ -17,4 +17,5 @@ coverage/
 /cms/assets/.upload-*.stage
 /cms/assets/.*.tmp
 
-/dist-hosted-demo/
+dist-editor/
+dist-site/

@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-calendars",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "Google Calendar, Microsoft 365 and any calendar that publishes an **iCal feed**. Events sync both ways within a minute.",
+    "faq-order": 1,
+    "faq-question": "Which calendars does Orrery work with?",
+    "faq-topic": "general"
+  }
+}

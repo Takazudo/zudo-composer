@@ -14,5 +14,9 @@
     "jsx": "react-jsx",
     "jsxImportSource": "preact"
   },
-  "include": ["server/site-project-local/**/*.ts", "plugins/site-project-source-plugin.d.mts"]
+  "include": [
+    "server/site-project-local/**/*.ts",
+    "plugins/site-project-source-plugin.d.mts",
+    "src/features/composer/pack-config.d.ts"
+  ]
 }

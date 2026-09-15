@@ -30,13 +30,19 @@ describe("immutable UI provider dependency", () => {
       devDependencies: Record<string, string>;
       peerDependencies: Record<string, string>;
     };
-    expect(pkg.dependencies["@zudo-sg/ui"]).toBe(SPEC);
+    expect(pkg.dependencies["@zudo-sg/ui"]).toBeUndefined();
+    expect(pkg.devDependencies["@zudo-sg/ui"]).toBe(SPEC);
     // The contract is consumed from the workspace here but published as a peer, so it
     // must never appear in `dependencies` — a `workspace:*` spec there would ship.
     expect(pkg.dependencies["@zudo-composer/component-contract"]).toBeUndefined();
     expect(pkg.devDependencies["@zudo-composer/component-contract"]).toBe("workspace:*");
-    expect(pkg.peerDependencies["@zudo-composer/component-contract"]).toBe("1.0.0");
-    expect(pkg.dependencies["@zudo-sg/ui"]).not.toMatch(/(?:^|:)(?:file|link|path):|\.\.|packages\/ui/);
+    expect(pkg.peerDependencies["@zudo-composer/component-contract"]).toBe("^1.0.0");
+    // The host supplies the runtime shared by the tool and its component pack.
+    // Keeping a tool-owned dependency would allow a second physical copy.
+    expect(pkg.dependencies.preact).toBeUndefined();
+    expect(pkg.peerDependencies.preact).toBe("^10.29.8");
+    expect(pkg.devDependencies.preact).toBe(pkg.peerDependencies.preact);
+    expect(pkg.devDependencies["@zudo-sg/ui"]).not.toMatch(/(?:^|:)(?:file|link|path):|\.\.|packages\/ui/);
   });
 
   it("normalizes the lock to the exact full commit without local path leakage", () => {

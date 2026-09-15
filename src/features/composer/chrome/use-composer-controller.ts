@@ -210,7 +210,8 @@ function derivedOutputFromQueue(state: CompositionSaveQueueState): CompositionDe
 function sameRootPolicy(left: RootPolicy, right: RootPolicy): boolean {
   if (left.kind !== right.kind) return false;
   if (left.kind !== "resolved" || right.kind !== "resolved") return true;
-  if (left.cardinality !== right.cardinality) return false;
+  if (left.cardinality !== right.cardinality || left.min !== right.min || left.max !== right.max) return false;
+  if (JSON.stringify(left.origin ?? null) !== JSON.stringify(right.origin ?? null)) return false;
   const leftAccepts = left.accepts ? [...left.accepts].sort() : null;
   const rightAccepts = right.accepts ? [...right.accepts].sort() : null;
   if (leftAccepts === null || rightAccepts === null) return leftAccepts === rightAccepts;

@@ -170,8 +170,8 @@ export default function ComposerPreviewApp({ provider }: ComposerPreviewAppProps
     clientRef.current?.emitSelect(nodeId);
   }, []);
 
-  const onRequestAdd = useCallback((target: InsertionTarget) => {
-    clientRef.current?.emitRequestAdd(target);
+  const onRequestAdd = useCallback((target: InsertionTarget, rect?: SerializedRect) => {
+    clientRef.current?.emitRequestAdd(target, rect);
   }, []);
 
   const onOpenSource = useCallback((sourceRecordId: string) => {

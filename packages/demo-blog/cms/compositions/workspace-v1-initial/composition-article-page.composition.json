@@ -1,0 +1,157 @@
+{
+  "id": "article-page",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "article-page",
+    "name": "Article page",
+    "root": [
+      {
+        "componentId": "blog.article-header",
+        "componentVersion": 1,
+        "id": "article-header",
+        "props": {},
+        "slots": {
+          "avatar": [
+            {
+              "componentId": "blog.avatar",
+              "componentVersion": 1,
+              "id": "article-avatar",
+              "props": {},
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "blog.prose-body",
+        "componentVersion": 1,
+        "id": "article-body",
+        "props": {
+          "dropCap": true
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.tag-list",
+        "componentVersion": 1,
+        "id": "article-tags",
+        "props": {
+          "basePath": "/"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.author-card",
+        "componentVersion": 1,
+        "id": "article-author",
+        "props": {
+          "variant": "inline"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.section",
+        "componentVersion": 1,
+        "id": "article-related-section",
+        "props": {
+          "rule": true
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "blog.section-heading",
+              "componentVersion": 1,
+              "id": "article-related-heading",
+              "props": {
+                "as": "h2",
+                "eyebrow": "",
+                "heading": "Keep reading"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "blog.related-articles",
+              "componentVersion": 1,
+              "id": "article-related",
+              "props": {
+                "heading": "",
+                "limit": 3
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "blog.section",
+        "componentVersion": 1,
+        "id": "article-comments-section",
+        "props": {
+          "rule": true
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "blog.container",
+              "componentVersion": 1,
+              "id": "article-comments-column",
+              "props": {
+                "width": "measure"
+              },
+              "slots": {
+                "content": [
+                  {
+                    "componentId": "blog.section-heading",
+                    "componentVersion": 1,
+                    "id": "article-comments-heading",
+                    "props": {
+                      "as": "h2",
+                      "eyebrow": "",
+                      "heading": "Comments"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "blog.comment-list",
+                    "componentVersion": 1,
+                    "id": "article-comments",
+                    "props": {
+                      "emptyText": "No comments yet. Be the first."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "blog.comment-form",
+                    "componentVersion": 1,
+                    "id": "article-comment-form",
+                    "props": {
+                      "buttonLabel": "Post comment",
+                      "heading": "Leave a comment",
+                      "successText": "Posted locally — this demo keeps nothing."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "blog.demo-note",
+                    "componentVersion": 1,
+                    "id": "article-demo-note",
+                    "props": {
+                      "text": "Demo — no data is sent."
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

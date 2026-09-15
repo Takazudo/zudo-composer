@@ -1,3 +1,4 @@
+/// <reference path="../pack-config.d.ts" />
 import { h, render } from "preact";
 import ComposerPreviewApp from "./preview-app";
 import { activeComponentProvider } from "../active-pack";

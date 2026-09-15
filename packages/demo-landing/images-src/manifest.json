@@ -1,0 +1,38 @@
+[
+  {
+    "file": "land-hero-app.webp",
+    "alt": "Stylised calendar app window with a week grid and one highlighted block",
+    "use": "hero screenshot",
+    "aspect": "16:10"
+  },
+  {
+    "file": "land-workflow.webp",
+    "alt": "Three overlapping cards for day, week and month views connected by arrows",
+    "use": "home and features split image",
+    "aspect": "16:10"
+  },
+  {
+    "file": "land-team.webp",
+    "alt": "Four abstract figures around a table beneath a large wall calendar",
+    "use": "about page image",
+    "aspect": "4:3"
+  },
+  {
+    "file": "avatar-mara.webp",
+    "alt": "Abstract geometric avatar in grey with a cobalt collar",
+    "use": "testimonial 1",
+    "aspect": "1:1"
+  },
+  {
+    "file": "avatar-jonah.webp",
+    "alt": "Abstract geometric avatar on a cobalt disc",
+    "use": "testimonial 2",
+    "aspect": "1:1"
+  },
+  {
+    "file": "avatar-priya.webp",
+    "alt": "Abstract geometric avatar with cobalt glasses",
+    "use": "testimonial 3",
+    "aspect": "1:1"
+  }
+]

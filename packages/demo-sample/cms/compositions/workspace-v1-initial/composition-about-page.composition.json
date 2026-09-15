@@ -1,0 +1,142 @@
+{
+  "id": "about-page",
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "updatedAt": "2026-08-31T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "main-content",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "about-page",
+    "name": "About page",
+    "root": [
+      {
+        "componentId": "ui.section-heading",
+        "componentVersion": 1,
+        "id": "about-heading",
+        "props": {
+          "as": "h1",
+          "eyebrow": "Studio note",
+          "heading": "Static about heading",
+          "intro": "Static about introduction"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "ui.prose-md",
+        "componentVersion": 1,
+        "id": "about-body",
+        "props": {
+          "markdown": "Static about body"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "ui.auto-grid",
+        "componentVersion": 1,
+        "id": "about-grid",
+        "props": {
+          "fill": false,
+          "gap": "sm",
+          "min": "16rem"
+        },
+        "slots": {
+          "items": [
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "about-card-direction",
+              "props": {
+                "padding": "sm",
+                "title": "Direction",
+                "variant": "muted"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "about-card-direction-copy",
+                    "props": {
+                      "children": "We frame the decision before we design anything."
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            },
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "about-card-design",
+              "props": {
+                "padding": "sm",
+                "title": "Design",
+                "variant": "muted"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "about-card-design-copy",
+                    "props": {
+                      "children": "We shape interfaces and words together, in visible drafts."
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            },
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "about-card-delivery",
+              "props": {
+                "padding": "sm",
+                "title": "Delivery",
+                "variant": "muted"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "about-card-delivery-copy",
+                    "props": {
+                      "children": "We build on a fixed rhythm and hand over everything."
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "ui.callout",
+        "componentVersion": 1,
+        "id": "about-callout",
+        "props": {
+          "title": "Office hours",
+          "tone": "muted"
+        },
+        "slots": {
+          "body": [
+            {
+              "componentId": "ui.prose-p",
+              "componentVersion": 1,
+              "id": "about-callout-copy",
+              "props": {
+                "children": "We keep Thursday afternoons open for short calls with teams who are not yet sure what they need."
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

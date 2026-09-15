@@ -8,6 +8,8 @@ export interface SiteProjectSourcePluginOptions {
   readDevAsset?: (pathname: string) => Promise<{ bytes: Uint8Array; mimeType: AssetType; identity: CompletedRelease["identity"] } | null>;
   workspaceRoot?: string;
   packIdentity?: import("./component-pack.d.mts").ResolvedComponentPack;
+  /** The host's configured `styles` path, attested by a host-self pack's release toolchain. */
+  stylesPath?: string;
 }
 
 export declare const SITE_PROJECT_SOURCE_ID = "virtual:site-project-source";

@@ -1,0 +1,63 @@
+{
+  "id": "terms",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "terms",
+    "name": "Terms",
+    "root": [
+      {
+        "componentId": "land.section",
+        "componentVersion": 1,
+        "id": "terms-land-section-1",
+        "props": {
+          "anchor": "",
+          "band": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "land.container",
+              "componentVersion": 1,
+              "id": "terms-land-container-2",
+              "props": {
+                "width": "narrow"
+              },
+              "slots": {
+                "content": [
+                  {
+                    "componentId": "land.section-heading",
+                    "componentVersion": 1,
+                    "id": "terms-land-section-heading-3",
+                    "props": {
+                      "align": "start",
+                      "as": "h1",
+                      "eyebrow": "Legal",
+                      "heading": "Terms",
+                      "intro": "Last updated 1 September 2026."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "land.prose",
+                    "componentVersion": 1,
+                    "id": "terms-land-prose-4",
+                    "props": {
+                      "markdown": "These terms describe a fictional service on a demo site. They are sample copy, not an offer or a contract.\n\n## Your account\n\nYou are responsible for the calendars you connect and for the people you invite. Keep your password to yourself; Org workspaces can require single sign-on instead.\n\n## Plans and billing\n\n- Solo is free. Studio and Org are billed per person, monthly or yearly.\n- Yearly plans are paid up front and cost about 20% less per month.\n- You can cancel at any time. Your plan runs to the end of the paid period.\n\n## Your data\n\nYour events stay yours. You can export everything at any time, and we delete it when you close the workspace.\n\n## Changes\n\nIf these terms change, we tell workspace owners by email 30 days before the change applies."
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

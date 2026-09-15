@@ -73,3 +73,23 @@ export function assetContentDisposition(mimeType, checksum) {
   if (!descriptor || descriptor.inline) return undefined;
   return `attachment; filename="${checksum}.${descriptor.extension}"`;
 }
+
+/** @param {Array<{ path: string, byteLength: number }>} files @returns {string} */
+export function hostedAssetHeaders(files) {
+  return [...files].sort((a, b) => a.path.localeCompare(b.path)).map(({ path, byteLength }) => {
+    if (!Number.isSafeInteger(byteLength) || byteLength <= 0) throw new Error(`Invalid asset byte length: ${path}`);
+    if (!ASSET_CHECKSUM_URL_PATTERN.test(`/${path}`)) throw new Error(`Invalid hosted asset path: ${path}`);
+    const mime = assetMimeTypeForExtension(path.slice(path.lastIndexOf(".") + 1));
+    if (!mime) throw new Error(`Missing asset MIME: ${path}`);
+    const checksum = path.slice("uploaded-assets/sha256-".length, path.lastIndexOf("."));
+    const disposition = assetContentDisposition(mime, checksum);
+    return [
+      `/${path}`,
+      `  Content-Type: ${mime}`,
+      `  Content-Length: ${byteLength}`,
+      `  Cache-Control: ${ASSET_IMMUTABLE_CACHE_CONTROL}`,
+      `  X-Content-Type-Options: ${ASSET_NOSNIFF}`,
+      ...(disposition ? [`  Content-Disposition: ${disposition}`] : []),
+    ].join("\n");
+  }).join("\n\n") + "\n";
+}

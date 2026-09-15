@@ -1,0 +1,12 @@
+{
+  "layout": {
+    "layoutVersion": 1,
+    "modelRecordPrefix": "model-",
+    "entryRecordPrefix": "entry-",
+    "modelRecordSchemaVersion": 1,
+    "entryRecordSchemaVersion": 1,
+    "entryOrder": "modelId-createdAt-id"
+  },
+  "mutationToken": 1,
+  "activationGeneration": 0
+}

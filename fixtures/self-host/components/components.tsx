@@ -1,7 +1,10 @@
+import { useId } from "preact/hooks";
+
 export interface BannerProps {
   headline: string;
 }
 
 export function Banner({ headline }: BannerProps) {
-  return <h1 class="self-host-banner">{headline}</h1>;
+  const id = useId();
+  return <h1 id={id} class="self-host-banner">{headline}</h1>;
 }

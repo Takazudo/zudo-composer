@@ -1,0 +1,123 @@
+---
+title: Dev Server and Vite Plugins
+sidebar_position: 3
+description: How the local development server and Vite plugins assemble the authoring application.
+---
+
+## Installed-host boot path
+
+The CLI starts an authoring server rooted at the host project. The installed
+package supplies the application shell, source modules, and plugins; the host
+supplies dependencies, configuration, styles, public assets, and authored data.
+
+```text
+bin/zudo-composer.mjs
+  -> server/cli/run.mjs: runComposerCli
+     -> server/dev-server.mjs: startComposerDevServer
+        -> resolveComposerDevConfig
+           -> host config + configured component pack
+           -> inline Vite config + tool plugins
+        -> createServer -> server.listen()
+```
+
+`resolveComposerDevConfig` returns `{ composerConfig, inlineConfig }` without
+starting a server. `startComposerDevServer` returns `{ server, composerConfig }`
+after listening. Their public signatures are in
+[file: server/dev-server.d.mts](https://github.com/Takazudo/zudo-composer/blob/main/server/dev-server.d.mts).
+The CLI runs `dev` in its own process and supervises one-shot commands such as
+`generate`, `seed`, `release`, and `build-site` in child processes.
+
+The inline Vite config sets `configFile: false`, `root: workspaceRoot`, and
+`appType: "custom"`. `composerAppHtmlPlugin` supplies the package's `index.html`
+and rewrites its entry to a package-absolute `/@fs` URL. The installed lane does
+not rely on a host `vite.config.ts` or host-owned application shell.
+
+## Configuration resolution
+
+[file: server/host-context.mjs](https://github.com/Takazudo/zudo-composer/blob/main/server/host-context.mjs)
+loads `zudo-composer.config.ts` through the module evaluator.
+`server/config/load.ts` reads its default export, and `server/config/config.ts`
+resolves and validates it. `defineComposerConfig`, exported by
+`zudo-composer/config`, is the host's plain-JavaScript identity helper.
+
+For every setting, precedence is explicit config, then its
+`ZUDO_COMPOSER_*` environment override, then the default. For example,
+`ZUDO_COMPOSER_DATA_DIR` and `ZUDO_COMPOSER_PACK` supply omitted values;
+`pack` still has no default. Path settings must remain relative to the host
+root. The resolved object separates serializable `settings` from absolute
+Node-side `paths`.
+
+`server/config/settings.ts` defines every environment name and the `dataDir`
+rebasing rule. Installed-server plugins receive resolved roots explicitly, so
+their low-level fallback variables do not override that configuration.
+The repository's own
+[file: vite.config.ts](https://github.com/Takazudo/zudo-composer/blob/main/vite.config.ts)
+also supports absolute disposable-root overrides such as `ZUDO_DATA_ROOT`,
+`ZUDO_COMPOSITIONS_ROOT`, and `ZUDO_ASSETS_STORE_ROOT` for local validation
+lanes. The derived release root separately supports `ZUDO_SITE_PROJECT_ROOT`.
+See [Configuration](../setup/configuration.mdx) for the host-facing table.
+
+## Plugin and helper map
+
+[file: plugins/index.mjs](https://github.com/Takazudo/zudo-composer/blob/main/plugins/index.mjs)
+is the `zudo-composer/vite` entry. It exports the app-HTML, Composer
+file-provider, SiteProject source, component-pack, and host-style plugins,
+plus selected pack/root helpers and `loadHostContext`. The server also
+assembles internal plugins and helpers listed below; an internal file's
+presence does not make its function a public package export.
+
+| File under `plugins/` | Responsibility |
+| --- | --- |
+| `component-pack-plugin.mjs` | Publish the configured pack through its virtual module, validate it at server setup, allow its package root, and exclude it from dependency optimization. |
+| `component-pack.mjs` | Resolve the pack and every declared public source from the host's `package.json`; this helper is independent of Vite. |
+| `host-styles-plugin.mjs` | Resolve the host stylesheet to its actual path and fail when that configured file is missing. |
+| `tailwind-plugin.mjs` | Run Tailwind's Vite plugin and resolve tool-owned Tailwind CSS exports while retaining host-owned stylesheet/source bases. |
+| `composer-app-html.mjs` | Serve and transform the package shell in the installed-host lane. |
+| `module-resolution.mjs` | Share Preact deduplication and image-editor aliases between the host development graph and server evaluation. |
+| `roots.mjs` | Distinguish package and host roots; derive `/@fs` module IDs, public directories, filesystem allowlists, warmup files, and watch exclusions. |
+| `image-editor-aliases.mjs` | Resolve image-editor core, worker-client, and UI entries to source shipped inside the tool package. |
+| `release-api-plugin.ts` | Provide the serve-only, direct-loopback release endpoint and its browser operator handshake. |
+| `site-project-source-plugin.mjs` | Expose the verified active local release, watch delivery dependencies, and serve its pinned Assets. |
+| `composer-file-provider-plugin.mjs` | Register Composer and Assets authoring transports and verified development asset delivery. |
+| `domain-file-provider-plugin.mjs` | Register shared domain transports and publish their browser configurations. |
+| `domain-file-provider.mjs` | Dispatch domain operations and preserve structured domain errors over HTTP. |
+| `file-provider-http.mjs` | Apply shared development request guards, capability checks, and body limits. |
+| `content-domain-provider.mjs` | Bind Content operations, including its native atomic `transact`, to a workspace-scoped store. |
+| `mapping-domain-provider.mjs` | Bind Mapping operations and shared transaction batches to a workspace-scoped store. |
+| `sitemapper-domain-provider.mjs` | Bind Sitemap operations and shared transaction batches to a workspace-scoped store. |
+| `workspace-domain-provider.mjs` | Bind the unscoped workspace registry at `<dataDir>/workspaces`; it takes no workspace header. |
+
+These files are in the
+[plugins source directory](https://github.com/Takazudo/zudo-composer/tree/main/plugins).
+`@preact/preset-vite` completes the application transform pipeline.
+
+## Virtual modules
+
+| Module ID | Browser-facing value |
+| --- | --- |
+| `virtual:zudo-composer-pack` | Named `componentPack` re-export from the resolved pack entry. |
+| `virtual:zudo-composer-host-styles` | The real host CSS entry, so relative imports and Tailwind sources keep their original base. |
+| `virtual:release-config` | Default export containing the development release endpoint/capability, or `null` in build mode. |
+| `virtual:site-project-source` | `deliverySource`, `siteProject`, `siteProjectRevision`, and the default project export; unavailable release state is represented explicitly. |
+| `virtual:composer-file-provider-config` | `fileProviderConfig` for Composer and Assets, or `undefined` in build mode. |
+| `virtual:composer-domain-providers` | `domainProviderConfig` containing the shared domain configurations, or `undefined` in build mode. |
+
+## Root URLs and preview isolation
+
+Keep the application at Vite base `/`. The core authoring routes, preview URL,
+virtual transport endpoints, and `/uploaded-assets/` all use that root boundary.
+The installed server relies on Vite's default `/` base; a custom host integration
+must preserve it.
+
+[file: src/main.tsx](https://github.com/Takazudo/zudo-composer/blob/main/src/main.tsx)
+chooses `/composer/preview` before importing the application. That entry loads
+the configured component pack, host styles, base CSS, and preview code. It does
+not initialize the consuming application's shell or file-provider stores.
+Package modules and the configured pack are deliberately reachable, while the
+preview receives authoring state only through its
+[message protocol](./composer-preview-protocol.mdx).
+
+The server excludes authored directories from normal Vite watching: saving CMS
+records or derived JSX must not remount the editor through HMR. Workspace
+persistence notifications handle authoring refreshes; the SiteProject source
+plugin separately watches active-release delivery dependencies.

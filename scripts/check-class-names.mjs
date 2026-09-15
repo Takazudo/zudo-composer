@@ -54,9 +54,10 @@ function code(line) {
 
 const styleSheets = [
   ...find("src", "-name", "*.css"),
+  ...find("server/site-build/client", "-name", "*.css"),
   ...find("node_modules/@zudo-sg/ui/styles", "-name", "*.css"),
 ];
-const scriptFiles = find("src", "-type", "f", "(", "-name", "*.ts", "-o", "-name", "*.tsx", ")");
+const scriptFiles = ["src", "server/site-build/client"].flatMap((directory) => find(directory, "-type", "f", "(", "-name", "*.ts", "-o", "-name", "*.tsx", ")"));
 const sourceFiles = scriptFiles.filter((path) => !isTest(path));
 const testFiles = [...find("tests", "-type", "f", "-name", "*.ts"), ...scriptFiles.filter(isTest)];
 

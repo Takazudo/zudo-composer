@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "comment-11",
+  "lifecycle": "published",
+  "modelId": "comments",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "comments-article": {
+      "modelId": "articles",
+      "providerId": "content-filesystem",
+      "recordId": "article-choosing-tools-you-can-repair"
+    },
+    "comments-article-slug": "choosing-tools-you-can-repair",
+    "comments-body": "\"Can I get my work out in a plain format?\" should be the first question for every piece of software. Thanks for the checklist.",
+    "comments-date": "2026-06-12",
+    "comments-name": "Ines",
+    "comments-order": 11
+  }
+}

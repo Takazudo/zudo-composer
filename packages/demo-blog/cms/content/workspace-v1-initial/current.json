@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "generation": 2,
+  "mutationToken": "d6307ba77cc9cbdc0ed5f926731695ea136c530979e4fcae33c13bd7c0debfa9",
+  "entries": [
+    {
+      "id": "entry-about-margin-notes",
+      "digest": "d1ad994d25f3248df76f9c564c22bb221d1182a8b585bcb4608dd62da3cdee5c"
+    },
+    {
+      "id": "entry-article-a-desk-with-one-thing-on-it",
+      "digest": "0b3e5c521fa4bff44cec1ee81a1fb96b900303c8086bd539a59c9c7e68bdec75"
+    },
+    {
+      "id": "entry-article-choosing-tools-you-can-repair",
+      "digest": "145033c86dccf4bba436546ca50807b1e68313ab7ccdb172b6c9e6927a2f602c"
+    },
+    {
+      "id": "entry-article-notes-that-survive-the-week",
+      "digest": "011c9b8e2f9d8d5d7a15048c8f6968d565f726dba6f3ae2c29bb7b2f47f3a46c"
+    },
+    {
+      "id": "entry-article-reading-slowly-on-purpose",
+      "digest": "d8e94a48a88d686f067cdcc0a8c70a6b1c18ff2653572b6ac51d6b111017c933"
+    },
+    {
+      "id": "entry-article-sharpen-before-you-cut",
+      "digest": "6f771abdf50a90fa3b1c5aa02d8d222235884d09ff8536153eb7d75d48342dc2"
+    },
+    {
+      "id": "entry-article-the-half-finished-list",
+      "digest": "9d6f379a318c78ebcede227336d953922bd89751c48a4d5597f9646050f35deb"
+    },
+    {
+      "id": "entry-article-the-quiet-hour",
+      "digest": "cca047fbc17f3be79fac5be3a3a2dd29e4085e31542ed2a7481479b3d674f13a"
+    },
+    {
+      "id": "entry-article-why-drafts-should-look-unfinished",
+      "digest": "f93e6e3057d7d3b6d403e4f6947ac0f76b00627ac232cb87764ba97a9c531ee6"
+    },
+    {
+      "id": "entry-author-mina-okafor",
+      "digest": "5c7d0771f30209ea5362d19b6ffc142ea75782c3f47f3c0dc01155557142fa1f"
+    },
+    {
+      "id": "entry-author-teodor-lindqvist",
+      "digest": "016fb1958681f7e10797a7ccbd579c9f6cd61c38f7638054a2f2e8f817bc8839"
+    },
+    {
+      "id": "entry-comment-01",
+      "digest": "183b06b686c358415afc3e119c1507f11c61810b439f676728ae9f85b520cd23"
+    },
+    {
+      "id": "entry-comment-02",
+      "digest": "d5f221d3d395fdcf1d2bf0aaba59aed6a6367eabc40895776164c65e9ca21a0f"
+    },
+    {
+      "id": "entry-comment-03",
+      "digest": "f4d22c0b43755f6811c3ffc51048c8f4003aaf4787591d2a01c6b197e14a1a28"
+    },
+    {
+      "id": "entry-comment-04",
+      "digest": "7d032eeee38e0ec58a486f4656569deaceeab827c0749cb7b50a913b3e2a3d0b"
+    },
+    {
+      "id": "entry-comment-05",
+      "digest": "6bd3240ece9c0d857dfc9296051efcdd21e8d19632719ef659e2e9dbe4e7f3bd"
+    },
+    {
+      "id": "entry-comment-06",
+      "digest": "871c240d77960f89bf770787b870b974eda2ad95e052b210dca14f2e6631ae3e"
+    },
+    {
+      "id": "entry-comment-07",
+      "digest": "5fb42d9f2f3a82c237cc5613cf0e7089bd496fb6bfaf1431dbe8c6b6b0cac541"
+    },
+    {
+      "id": "entry-comment-08",
+      "digest": "8e59cc93d4e7874640318a078e27a152f3dc848b9087f7119dd09467510b5a5e"
+    },
+    {
+      "id": "entry-comment-09",
+      "digest": "15b57011c48a1c38526ca078ffa33a0bb19815715db27414c463792e5f7e9e9f"
+    },
+    {
+      "id": "entry-comment-10",
+      "digest": "c6529ff788312f3042d5a25b13a0e05c38b0cbd25f00de2eff1b342abbc8a3d5"
+    },
+    {
+      "id": "entry-comment-11",
+      "digest": "53fe17feb8fffa963b2fb5c51d629d716767c3fcb3487b2e5f91fe95b3ea99b5"
+    },
+    {
+      "id": "entry-comment-12",
+      "digest": "b8f6916b7837ff2b12002c351cf4dc61fc0f5d40cf7ecbca4b27110eb37557f6"
+    },
+    {
+      "id": "meta",
+      "digest": "b255ca7253ef36ec344aec94031102fe0f8a270aab37dea1b6e0a1b6138eaacf"
+    },
+    {
+      "id": "model-about",
+      "digest": "62d93a8c381e19ad8d073a5a392e4aaceef3a8f393743a68ec5653e4c7aa58bd"
+    },
+    {
+      "id": "model-articles",
+      "digest": "1b7c90d996dfe4d738e474cb4d62cfb814484446f73bd3ed7023a4763ec69f2a"
+    },
+    {
+      "id": "model-authors",
+      "digest": "f65e28b6ec74155381743297f9b4d054108a4c9dd785122f6997ad1c1a025bc1"
+    },
+    {
+      "id": "model-comments",
+      "digest": "7373ba027d24af2402983dc1fda838e222d3a14dd475eaabf6096d4350a45381"
+    }
+  ]
+}

@@ -32,6 +32,7 @@ export {
   TransactionalRecordStore,
   createTransactionalRecordStore,
   type RecordEnvelope,
+  type RecordMutationTokenSource,
   type RecordTransactionContext,
   type RecordTransactionPlan,
   type RecordTransactionSnapshot,

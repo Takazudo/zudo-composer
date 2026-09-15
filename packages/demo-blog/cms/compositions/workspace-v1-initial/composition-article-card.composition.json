@@ -1,0 +1,19 @@
+{
+  "id": "article-card",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "article-card",
+    "name": "Article card",
+    "root": [
+      {
+        "componentId": "blog.article-card",
+        "componentVersion": 1,
+        "id": "article-card",
+        "props": {},
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

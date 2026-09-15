@@ -1,0 +1,237 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "nightjar-supply-sitemap",
+    "name": "Nightjar Supply sitemap",
+    "navigation": {
+      "footer": [
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "about"
+          },
+          "id": "nav-about",
+          "label": "About",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "faq"
+          },
+          "id": "nav-faq",
+          "label": "FAQ",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "cart"
+          },
+          "id": "nav-cart",
+          "label": "Cart",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "checkout"
+          },
+          "id": "nav-checkout",
+          "label": "Checkout",
+          "visible": true
+        }
+      ],
+      "primary": [
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "cat-desk"
+          },
+          "id": "nav-cat-desk",
+          "label": "Desk",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "cat-carry"
+          },
+          "id": "nav-cat-carry",
+          "label": "Carry",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "cat-light"
+          },
+          "id": "nav-cat-light",
+          "label": "Light",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "catalog"
+          },
+          "id": "nav-catalog",
+          "label": "All products",
+          "visible": true
+        },
+        {
+          "destination": {
+            "kind": "route",
+            "nodeId": "about"
+          },
+          "id": "nav-about",
+          "label": "About",
+          "visible": true
+        }
+      ]
+    },
+    "root": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "children": [],
+                "id": "product",
+                "source": {
+                  "kind": "mapping",
+                  "ref": {
+                    "providerId": "mapping-filesystem",
+                    "recordId": "product-page"
+                  },
+                  "route": {
+                    "fieldId": "products-slug",
+                    "kind": "entry-field",
+                    "titleFieldId": "products-name"
+                  }
+                },
+                "title": "Product"
+              }
+            ],
+            "id": "catalog",
+            "slug": "products",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "catalog"
+              }
+            },
+            "title": "All products"
+          },
+          {
+            "children": [],
+            "id": "cat-desk",
+            "slug": "desk",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "cat-desk"
+              }
+            },
+            "title": "Desk"
+          },
+          {
+            "children": [],
+            "id": "cat-carry",
+            "slug": "carry",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "cat-carry"
+              }
+            },
+            "title": "Carry"
+          },
+          {
+            "children": [],
+            "id": "cat-light",
+            "slug": "light",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "cat-light"
+              }
+            },
+            "title": "Light"
+          },
+          {
+            "children": [],
+            "id": "cart",
+            "slug": "cart",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "cart"
+              }
+            },
+            "title": "Cart"
+          },
+          {
+            "children": [],
+            "id": "checkout",
+            "slug": "checkout",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "checkout"
+              }
+            },
+            "title": "Checkout"
+          },
+          {
+            "children": [],
+            "id": "about",
+            "slug": "about",
+            "source": {
+              "kind": "mapping",
+              "ref": {
+                "providerId": "mapping-filesystem",
+                "recordId": "about-page"
+              },
+              "route": {
+                "kind": "single"
+              }
+            },
+            "title": "About"
+          },
+          {
+            "children": [],
+            "id": "faq",
+            "slug": "faq",
+            "source": {
+              "kind": "composition",
+              "ref": {
+                "providerId": "files",
+                "recordId": "faq-page"
+              }
+            },
+            "title": "FAQ"
+          }
+        ],
+        "id": "home",
+        "source": {
+          "kind": "composition",
+          "ref": {
+            "providerId": "files",
+            "recordId": "home"
+          }
+        },
+        "title": "Home"
+      }
+    ],
+    "schemaVersion": 3
+  },
+  "id": "nightjar-supply-sitemap",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

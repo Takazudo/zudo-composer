@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "generation": 2,
+  "mutationToken": "fd1f5c121a261ac50dac029a0a26e2c246b946887f102eaa18c8ae0ded261a97",
+  "entries": [
+    {
+      "id": "about-page",
+      "digest": "26500b21d4ef759afc0f9f941355f6de3a5e6d33d88fd151722ae2a09a308e61"
+    },
+    {
+      "id": "article-cards-all",
+      "digest": "a617524b4a8083ec229c64ff299ae8e56dbd8197f7aa6093cf6312c0abe92003"
+    },
+    {
+      "id": "article-cards-attention",
+      "digest": "e524099928d18bdfba63d21f4d613b410e6c4f39692fe945422e850c37789157"
+    },
+    {
+      "id": "article-cards-craft",
+      "digest": "34b4dab31e267d57ace34ac7bfd53c649ba964c37a8e1b880d2d185563562f0c"
+    },
+    {
+      "id": "article-cards-related",
+      "digest": "fa3c7164aed17af504299094e421051236abc52a8c5f0356436c73c444e47fd7"
+    },
+    {
+      "id": "article-cards-tools",
+      "digest": "de27f88d305a03c39c300b434ed2894c76f1e98919655152460bea3fc1b7cecf"
+    },
+    {
+      "id": "article-page",
+      "digest": "2c9f43f5174150a7eb0591b4d92c1bd5b674f5aa4ebdafe75d3006399892be3c"
+    },
+    {
+      "id": "author-cards",
+      "digest": "628a53d810c5b53fe4b34bcb4f641e13d342f8845def435ac16c4a745122cb65"
+    },
+    {
+      "id": "author-page",
+      "digest": "0d033f2acb38d2ead4c4d9bba84522377cf34b597231b2be0afafcd9d207f1a5"
+    },
+    {
+      "id": "comments",
+      "digest": "05a731ad9ad35ae098554dc295c682faf5af1522c623ee7c939a3b13092599e0"
+    },
+    {
+      "id": "meta",
+      "digest": "8ab7fe6c10be0c98598a53b71315bd15bb7e50a9d71bfa2247ee4fd7efa966c8"
+    }
+  ]
+}

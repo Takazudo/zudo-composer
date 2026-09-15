@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "comment-06",
+  "lifecycle": "published",
+  "modelId": "comments",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "comments-article": {
+      "modelId": "articles",
+      "providerId": "content-filesystem",
+      "recordId": "article-a-desk-with-one-thing-on-it"
+    },
+    "comments-article-slug": "a-desk-with-one-thing-on-it",
+    "comments-body": "The walk across the room is the genius part. Friction in the right place instead of none anywhere.",
+    "comments-date": "2026-04-03",
+    "comments-name": "Sol",
+    "comments-order": 6
+  }
+}

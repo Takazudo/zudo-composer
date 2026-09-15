@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "about-orrery",
+  "lifecycle": "published",
+  "modelId": "about",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "about-body": "## Why we started\n\nWe ran operations for teams that shipped on time and still lost Monday mornings to scheduling. The information was all there, split across five calendars and a spreadsheet nobody trusted.\n\nAn orrery is a model of the solar system: every part moving on its own orbit, and all of them visible at once. That is what we wanted for a team's week.\n\n## How we work\n\n- We are eleven people in Lisbon, Toronto and remote.\n- We plan our own week in Orrery, every Monday, in about ten minutes.\n- We ship small changes every week and write about them in the changelog.",
+    "about-heading": "We make the week legible",
+    "about-intro": "Orrery is a small team building one calendar for the people who have to make everyone else's calendar work."
+  }
+}

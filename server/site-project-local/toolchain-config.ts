@@ -18,19 +18,31 @@ import type { TrustedComponentPack } from "@zudo-composer/component-contract";
 import type { ResolvedComponentPack } from "../../plugins/component-pack.d.mts";
 import type { ReleaseToolchain } from "../../src/site-project/api/types";
 import { releaseJson } from "../../src/site-project/api/review";
-import { installedPackageDigest } from "./installed-identity";
+import { installedContractDigest, installedPackGraphDigest, installedPackageDigest } from "./installed-identity";
+import { collectPackSourceGraph } from "./pack-source-graph";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
-export interface LocalReleaseToolchainOptions {
-  /** A caller-supplied toolchain wins outright; every test fixture uses it. */
-  toolchain?: ReleaseToolchain;
+interface PackToolchainInputs {
   /** The loaded pack. Its manifest, not a literal, names the component pack. */
   pack?: TrustedComponentPack;
   packIdentity?: ResolvedComponentPack;
   /** Host project root, whose `package.json` records how the pack was installed. */
   workspaceRoot?: string;
 }
+
+/**
+ * Either a caller-supplied `toolchain` (every test fixture uses it), or the
+ * inputs to derive one — which always include `stylesPath`: the absolute path
+ * of the host's configured `styles` setting (`composerConfig.paths.styles`). A
+ * host-self pack does not import its own Tailwind entry — the generated
+ * composition modules do — so the graph digest adds it as an extra root. It has
+ * no default: a guessed path would attest a stale file, or fail on a host whose
+ * stylesheet lives elsewhere.
+ */
+export type LocalReleaseToolchainOptions =
+  | (PackToolchainInputs & { toolchain: ReleaseToolchain; stylesPath?: string })
+  | (PackToolchainInputs & { toolchain?: ReleaseToolchain; stylesPath: string });
 
 /**
  * Sources that decide a release's compiler identity. Tests are excluded — both
@@ -86,25 +98,62 @@ async function packSourceSpec(workspaceRoot: string, packageName: string, specif
   );
 }
 
+/** Every component's public `source.module`, deduped and sorted: exactly the
+ * specifiers `collectPackSourceGraph` must resolve and walk as roots, since
+ * every generated composition module imports one of them. */
+function sourceModulesOf(manifest: TrustedComponentPack["manifest"]): string[] {
+  return [...new Set(manifest.components.map((component) => component.source.module))].sort();
+}
+
+/**
+ * The attested source boundary for a host-self pack: the module graph reached
+ * from the pack entry plus every component `source.module`, the host's
+ * configured stylesheet root, the host `package.json` projection, and the
+ * resolved bare dependencies that graph reaches. A published pack keeps the
+ * whole-directory digest below — its published `files` allowlist is already
+ * the boundary, and it carries no host CMS state to leak into the hash.
+ */
+async function hostSelfPackDigest(workspaceRoot: string, pack: TrustedComponentPack, packIdentity: ResolvedComponentPack, stylesPath: string): Promise<string> {
+  // The dev server and site build refuse to start without it (host-styles
+  // plugin), so a release never attests a host that could not be built.
+  if (!existsSync(stylesPath)) {
+    throw new Error(`The host's configured \`styles\` stylesheet does not exist at ${stylesPath}. It is the host's base stylesheet — the only importer of the component pack's CSS. Create it, or set \`styles\` in zudo-composer.config.ts.`);
+  }
+  const graph = await collectPackSourceGraph({
+    hostRoot: workspaceRoot,
+    entryPath: packIdentity.entryPath,
+    sourceModules: sourceModulesOf(pack.manifest),
+    extraRoots: [stylesPath],
+  });
+  return installedPackGraphDigest(workspaceRoot, graph);
+}
+
 /**
  * Resolve exact installed release identity. The installed pack digest covers
  * component metadata and bytes; the client also checks the loaded pack identity.
  */
-export async function resolveLocalReleaseToolchain(options: LocalReleaseToolchainOptions = {}): Promise<ReleaseToolchain> {
+export async function resolveLocalReleaseToolchain(options: LocalReleaseToolchainOptions): Promise<ReleaseToolchain> {
   if (options.toolchain) return JSON.parse(JSON.stringify(options.toolchain)) as ReleaseToolchain;
   const { pack, packIdentity } = options;
   if (!pack || !packIdentity) throw new Error("Release toolchain requires the resolved component pack; zudo-composer never falls back to a bundled provider pack.");
+  if (!options.stylesPath) throw new Error("Release toolchain requires the host's configured `styles` path (`composerConfig.paths.styles`); it is never guessed.");
   const workspaceRoot = resolve(options.workspaceRoot ?? process.cwd());
   const { packId, packVersion, contractVersion } = pack.manifest;
-  const packRoot = packIdentity.packageRoot === workspaceRoot ? dirname(packIdentity.entryPath) : packIdentity.packageRoot;
+  const isHostSelfPack = packIdentity.packageRoot === workspaceRoot;
   return {
     compiler: await compilerIdentity(),
     componentPack: { packId, packVersion, contractVersion },
     packSpecifier: packIdentity.specifier,
     packSource: await packSourceSpec(workspaceRoot, packIdentity.packageName, packIdentity.specifier),
-    // Realpath first: a package manager reaches an installed package through a
-    // symlink, and the digest refuses to hash a link.
-    installedPackDigest: await installedPackageDigest(await realpath(packRoot)),
-    contractDigest: await installedPackageDigest(await realpath(contractPackageRoot(import.meta.dirname))),
+    // A host-self pack is attested by its resolved source graph, scoped to
+    // exactly the files and dependencies it reaches — never the whole host
+    // root, which would also cover unrelated CMS/build state. Everything else
+    // (a themeset installed as a normal package) keeps hashing its installed
+    // directory; realpath first, because a package manager reaches an
+    // installed package through a symlink and the digest refuses to hash one.
+    installedPackDigest: isHostSelfPack
+      ? await hostSelfPackDigest(workspaceRoot, pack, packIdentity, resolve(workspaceRoot, options.stylesPath))
+      : await installedPackageDigest(await realpath(packIdentity.packageRoot)),
+    contractDigest: await installedContractDigest(await realpath(contractPackageRoot(import.meta.dirname))),
   };
 }

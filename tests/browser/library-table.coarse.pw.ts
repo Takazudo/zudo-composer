@@ -16,7 +16,8 @@
  * they check is switched off and all of them would pass while proving nothing.
  */
 
-import { expect, test } from "@playwright/test";
+import { test, type DocumentReady } from "./host-test";
+import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 const SAMPLE_SITEMAP = "Sample Studio sitemap";
@@ -24,20 +25,41 @@ const SAMPLE_SITEMAP = "Sample Studio sitemap";
 /** What the coarse block raises `th`'s 34px and `td`'s 40px to. */
 const COARSE_HEIGHT = 44;
 
-async function openSitemapLibrary(page: Page): Promise<void> {
-  await page.goto("/sitemapper");
+async function openSitemapLibrary(page: Page, documentReady: DocumentReady): Promise<void> {
+  await documentReady({
+    id: "library-table.coarse-sitemapper", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/sitemapper", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "Sitemaps", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: SAMPLE_SITEMAP, exact: true })).toHaveCount(1);
 }
 
-async function openMappingLibrary(page: Page): Promise<void> {
-  await page.goto("/mapping");
+async function openMappingLibrary(page: Page, documentReady: DocumentReady): Promise<void> {
+  await documentReady({
+    id: "library-table.coarse-mapping", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/mapping", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("heading", { name: "Mappings", exact: true })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   await expect(page.getByRole("heading", { name: "Mappings", exact: true })).toBeVisible();
   await expect(page.locator(".cms-table-scroll-shell")).toHaveCount(1);
 }
 
-test("the coarse lane is genuinely coarse, or nothing below proves anything", async ({ page }) => {
-  await page.goto("/");
+test("the coarse lane is genuinely coarse, or nothing below proves anything", async ({ page, documentReady }) => {
+  await documentReady({
+    id: "library-table.coarse-overview", kind: "goto",
+    transition: ({ remainingMs }) => page.goto("/", { timeout: remainingMs() }),
+    ready: async ({ remainingMs }) => {
+      await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening)\.$/ })).toBeVisible({ timeout: remainingMs() });
+    },
+    settle: "shell",
+  });
   expect(
     await page.evaluate(() => ({
       coarse: window.matchMedia("(pointer: coarse)").matches,
@@ -48,8 +70,8 @@ test("the coarse lane is genuinely coarse, or nothing below proves anything", as
   ).toEqual({ coarse: true, fine: false, hover: false, width: 390 });
 });
 
-test("every library table cell is a 44px touch target", async ({ page }) => {
-  await openSitemapLibrary(page);
+test("every library table cell is a 44px touch target", async ({ page, documentReady }) => {
+  await openSitemapLibrary(page, documentReady);
 
   const cells = await page.evaluate(() => {
     const table = document.querySelector(".cms-table");
@@ -74,8 +96,8 @@ test("every library table cell is a 44px touch target", async ({ page }) => {
   expect([...new Set(cells!.td)], "body cell heights").toEqual([COARSE_HEIGHT]);
 });
 
-test("row actions are visible without a hover that this screen cannot produce", async ({ page }) => {
-  await openSitemapLibrary(page);
+test("row actions are visible without a hover that this screen cannot produce", async ({ page, documentReady }) => {
+  await openSitemapLibrary(page, documentReady);
 
   const trigger = page.getByRole("button", { name: `More actions for ${SAMPLE_SITEMAP}` });
   await expect(trigger).toBeVisible();
@@ -86,8 +108,8 @@ test("row actions are visible without a hover that this screen cannot produce", 
   await expect(page.getByRole("menu", { name: `${SAMPLE_SITEMAP} actions` })).toBeVisible();
 });
 
-test("the library does not scroll sideways at 390px — the table scrolls inside its wrapper", async ({ page }) => {
-  await openSitemapLibrary(page);
+test("the library does not scroll sideways at 390px — the table scrolls inside its wrapper", async ({ page, documentReady }) => {
+  await openSitemapLibrary(page, documentReady);
 
   await expect(page.locator(".cms-table-wrap")).toHaveCSS("overflow-x", "auto");
   const overflow = await page.evaluate(() => {
@@ -105,8 +127,8 @@ test("the library does not scroll sideways at 390px — the table scrolls inside
   expect(overflow, "the sitemap library scrolls horizontally").toBeNull();
 });
 
-test("the mapping table signals each horizontal scroll edge without blocking its sticky header", async ({ page }) => {
-  await openMappingLibrary(page);
+test("the mapping table signals each horizontal scroll edge without blocking its sticky header", async ({ page, documentReady }) => {
+  await openMappingLibrary(page, documentReady);
 
   const shell = page.locator(".cms-table-scroll-shell");
   const scrollport = page.locator(".cms-table-wrap");

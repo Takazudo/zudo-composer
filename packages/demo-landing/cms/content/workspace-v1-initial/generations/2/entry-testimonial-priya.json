@@ -1,0 +1,25 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "testimonial-priya",
+  "lifecycle": "published",
+  "modelId": "testimonials",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "testimonials-avatar": {
+      "alt": "Abstract geometric avatar with cobalt glasses",
+      "asset": {
+        "assetId": "assets-ecb0692c-6286-4cd7-814b-f78f201357c4",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
+    },
+    "testimonials-name": "Priya Natarajan",
+    "testimonials-order": 3,
+    "testimonials-quote": "Forty people across three time zones, and the workload view shows me who is overbooked before they tell me. Planning takes ten minutes instead of an hour.",
+    "testimonials-role": "Head of delivery, Brightwater"
+  }
+}

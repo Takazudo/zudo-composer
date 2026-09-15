@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "generation": 2,
+  "mutationToken": "fd25948622d67d9e501dacff8987c745ed793e22ec17c80ad5b5cd27c53bda8c",
+  "entries": [
+    {
+      "id": "about-page",
+      "digest": "26500b21d4ef759afc0f9f941355f6de3a5e6d33d88fd151722ae2a09a308e61"
+    },
+    {
+      "id": "billing-faq-item",
+      "digest": "63b9954c13dd96126b534c7acfd13c3efc137076ba22722fe2fa09f50115d303"
+    },
+    {
+      "id": "faq-item",
+      "digest": "6ae88af0425246c5dc745bf114f479c14d7e1f3721b829afccf16dcff664dbf3"
+    },
+    {
+      "id": "meta",
+      "digest": "8ab7fe6c10be0c98598a53b71315bd15bb7e50a9d71bfa2247ee4fd7efa966c8"
+    },
+    {
+      "id": "pricing-tier",
+      "digest": "eb4e683e2a743dc95628e9460502c8691a2594b851bdd27163a31b92ffae7d7b"
+    },
+    {
+      "id": "testimonial",
+      "digest": "4b2da5a3452674a1806988140b0fbb9b4f195865b0e3bb69c3e49662d8db7961"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import type { SafeRootFilesystemOperations } from "../../shared/node-fs";
+import type { RecordMutationTokenSource, SafeRootFilesystemOperations } from "../../shared/node-fs";
 
 /** Pointer/generation protocol version owned by the transactional record store. */
 export const WORKSPACE_REGISTRY_SCHEMA_VERSION = 1;
@@ -60,6 +60,8 @@ export interface FilesystemWorkspaceRegistryOptions {
   operations?: Partial<SafeRootFilesystemOperations>;
   /** Test-only random source seam; values must contain only URL-safe characters. */
   randomToken?: () => string;
+  /** Only isolated reproducible workspace generation overrides live random tokens. */
+  newMutationToken?: RecordMutationTokenSource;
   now?: () => string;
   /** Identity source for `create()`; defaults to `crypto.randomUUID()`. */
   newWorkspaceId?: () => string;

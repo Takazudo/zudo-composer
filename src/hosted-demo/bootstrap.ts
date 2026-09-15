@@ -1,5 +1,5 @@
 import { assets as bundledAsset } from "virtual:hosted-demo-seed";
-import sample from "./sample-project.json";
+import { project } from "virtual:demo-editor-project";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "../app/provider-integration";
 import { computeSiteProjectRevision } from "../app/empty-site-project";
 import { validateSiteProject, type SiteProject } from "../site-project";
@@ -22,7 +22,7 @@ async function incomingHandoff(): Promise<Handoff | null> {
 }
 export async function bootstrapHostedDemo() {
   const handoff = await incomingHandoff();
-  const validated = validateSiteProject(handoff?.project ?? sample, activeSiteProjectValidationContext);
+  const validated = validateSiteProject(handoff?.project ?? project, activeSiteProjectValidationContext);
   if (!validated.ok) throw new Error("Bundled demo project is incompatible with the configured component pack.");
   const assetSeed: DemoAssetSeed = handoff?.assets ?? { snapshot: bundledAsset, bytes: {} };
   if (!handoff) await Promise.all(bundledAsset.records.flatMap((r) => r.document.versions).map(async (v) => { const response = await fetch(`${v.url}?hosted-demo-seed=1`, { signal: AbortSignal.timeout(15000) }); if (!response.ok) throw new Error(`Demo assets could not load: ${v.url}`); assetSeed.bytes[v.checksum] = new Uint8Array(await response.arrayBuffer()); }));

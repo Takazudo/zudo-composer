@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "generation": 2,
+  "mutationToken": "6401cac50a6c770472be1a07a8f207bac40cc1a1ab4c4a5277e3db0edfa2b133",
+  "entries": [
+    {
+      "id": "about-page",
+      "digest": "26500b21d4ef759afc0f9f941355f6de3a5e6d33d88fd151722ae2a09a308e61"
+    },
+    {
+      "id": "carry-product-cards",
+      "digest": "c1a0fd7e6f81ea2d62df00a1df72edf11021e0452bede948b42840c7f10c738c"
+    },
+    {
+      "id": "category-tile",
+      "digest": "e733e8faae5f15606401f7d3cc02612323616148a68ac6310290a25041dc6f48"
+    },
+    {
+      "id": "desk-product-cards",
+      "digest": "858273643c18b700cdd1ace40b9cb31ded5bd90ba0b0c74850c81827dc06f418"
+    },
+    {
+      "id": "faq-item",
+      "digest": "6411819fc408aab36aefbcd384770b0cfdab163f925b2475ba3cd7881db931fd"
+    },
+    {
+      "id": "featured-product-cards",
+      "digest": "c4221a825b823fa968aa04a700526fdfa4613284a1746b83f42c5dbda5705396"
+    },
+    {
+      "id": "light-product-cards",
+      "digest": "e1b19ea74edba927f8a2aeb5b1b88f7e3c1efc1cd096a111c5797d65960a8751"
+    },
+    {
+      "id": "meta",
+      "digest": "8ab7fe6c10be0c98598a53b71315bd15bb7e50a9d71bfa2247ee4fd7efa966c8"
+    },
+    {
+      "id": "product-card",
+      "digest": "1ff331c1fa081e7df7a2c1c9ffe00077dcbe86e57d7d0302e12ad9b862dc9464"
+    },
+    {
+      "id": "product-page",
+      "digest": "30b8892a1211e360bf7329b945fa2ad8cffced53cd16eaf594ffef490048ea58"
+    },
+    {
+      "id": "related-product-cards",
+      "digest": "39cd814ca4d103f662d42d000de1f0bb3a89df5fd2ce9140b745f58b4ccd28e0"
+    }
+  ]
+}

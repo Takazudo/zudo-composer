@@ -1,0 +1,5 @@
+export const demoPack = {
+  source: { module: "demo-blog/components", exportName: "ArticleCard" },
+  description: "A styleguide for projects/ and builds/ with .stories examples",
+  help: "Components can live in ./src/components",
+};

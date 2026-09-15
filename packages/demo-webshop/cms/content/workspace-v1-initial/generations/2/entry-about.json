@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "about",
+  "lifecycle": "published",
+  "modelId": "about",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "about-body": "## Twelve objects, no more\n\nNightjar Supply started with a lamp, a notebook and a pen on a workbench late at night. We wanted a shop that sold only the things that earn their place on that bench: tools for writing, carrying and seeing by.\n\nEvery object here is made by a small workshop we have visited. We keep the range to twelve so we can know each one well, and we would rather sell out than fill the shelf with things we do not use ourselves.\n\n## How we choose\n\n- It must do one job well and be quiet about it.\n- It must get better with use, or at least not worse.\n- It must be repairable, refillable or built to outlast its warranty.\n\n## A demo, honestly\n\nThis shop is a demonstration of *zudo-composer*. The products, workshops and prices are invented, and the checkout sends nothing anywhere. The contact form below behaves the same way.",
+    "about-heading": "About Nightjar Supply",
+    "about-intro": "A small shop for the hours after everyone else has gone home."
+  }
+}

@@ -33,6 +33,7 @@ const manifest = createComponentCatalog(createFixturePackManifest([
     slots: [
       { id: "body", prop: "body", label: "Body", cardinality: "many" },
       { id: "secondary", prop: "secondary", label: "Secondary", cardinality: "many" },
+      { id: "children", prop: "children", label: "Children", cardinality: "many" },
     ],
   },
   {
@@ -128,7 +129,7 @@ function typecheckLinkedModules(sourceCode: string, consumerCode: string): strin
   const virtual = new Map<string, string>([
     [sourcePath, sourceCode],
     [consumerPath, consumerCode],
-    [shellPath, 'import type { ComponentChildren } from "preact"; export function Composition(props: { body?: ComponentChildren; secondary?: ComponentChildren }): any { return props.body ?? props.secondary ?? null; }'],
+    [shellPath, 'import type { ComponentChildren } from "preact"; export function Composition(props: { body?: ComponentChildren; secondary?: ComponentChildren; children?: ComponentChildren }): any { return props.body ?? props.secondary ?? props.children ?? null; }'],
     [leafPath, 'export function LinkedTemplate(props: { label?: string }): any { return props.label ?? null; }'],
   ]);
   const modules = new Map([
@@ -178,7 +179,7 @@ function renderLinkedModules(sourceCode: string, consumerCode: string): string {
   const compile = (code: string) => ts.transpileModule(code, { compilerOptions }).outputText;
   const modules = new Map<string, Record<string, unknown>>();
   modules.set("@linked-test/shell", {
-    Composition: (props: { body?: ComponentChildren; secondary?: ComponentChildren }) => h("section", { "data-linked-source": "shell" }, props.body ?? props.secondary),
+    Composition: (props: { body?: ComponentChildren; secondary?: ComponentChildren; children?: ComponentChildren }) => h("section", { "data-linked-source": "shell" }, props.body ?? props.secondary ?? props.children),
   });
   modules.set("@linked-test/leaf", {
     LinkedTemplate: (props: { label?: string }) => h("span", { "data-linked-local": "leaf" }, props.label),
@@ -199,6 +200,17 @@ function renderLinkedModules(sourceCode: string, consumerCode: string): string {
 }
 
 describe("planLinkedJsxModules", () => {
+  it.each(["body", "children"])("renders linked content when the declared %s outlet slot has no stored key", (slotId) => {
+    const sourceRecord = source("Shared shell", "Content", { parentId: "source-shell", slotId });
+    sourceRecord.document.root[0]!.slots = {};
+    const batch = plan(sourceRecord, consumer());
+    const sourcePlan = batch.byRecordId.get("source");
+    const consumerPlan = batch.byRecordId.get("consumer");
+    if (sourcePlan?.status !== "generated" || consumerPlan?.status !== "generated") throw new Error("expected generated plans");
+    expect(renderLinkedModules(sourcePlan.code, consumerPlan.code)).toContain("Projected local content");
+    expect(sourceRecord.document.root[0]!.slots).toEqual({});
+  });
+
   it("emits a type-safe source default module and a linked consumer that projects local JSX at the stable outlet id", () => {
     const sourceRecord = source();
     const consumerRecord = consumer();

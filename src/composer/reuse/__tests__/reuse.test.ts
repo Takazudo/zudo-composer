@@ -186,6 +186,44 @@ describe("reuse catalog", () => {
     });
   });
 
+  it("attaches the outlet's resolved slot rule for eligible Global templates, and omits it when the outlet target does not resolve", async () => {
+    const restricted = globalSource("restricted", "single");
+    const open = globalSource("open", "many");
+    const broken = record("broken", {
+      root: [host("owner", { single: [], many: [] })],
+      publication: {
+        kind: "global-template",
+        outlet: { id: "outlet-main", label: "Main", target: { parentId: "owner", slotId: "missing" } },
+      },
+    });
+    const service = createCompositionReuseService(
+      provider(
+        [restricted, open, broken],
+        ["restricted", "open", "broken"].map((id) =>
+          summary(id, { publicationKind: "global-template", outletId: "outlet-main", outletLabel: "Main" }),
+        ),
+      ),
+      manifest,
+    );
+
+    const outcome = await service.listCatalog();
+    if (outcome.status !== "listed") throw new Error("expected listed");
+    const byId = new Map(outcome.entries.map((entry) => [entry.ref.recordId, entry]));
+    expect(byId.get("restricted")?.outletRule).toEqual({
+      componentId: "host",
+      slotId: "single",
+      accepts: ["allowed"],
+      cardinality: "single",
+    });
+    expect(byId.get("open")?.outletRule).toEqual({
+      componentId: "host",
+      slotId: "many",
+      accepts: null,
+      cardinality: "many",
+    });
+    expect(byId.get("broken")?.outletRule).toBeUndefined();
+  });
+
   it("loads a selected record only on demand and preserves typed unavailable, invalid, and empty reasons", async () => {
     const empty = record("empty", { publication: { kind: "pattern" }, root: [] });
     const local = record("local");
@@ -253,6 +291,47 @@ describe("live Global-template resolution", () => {
       status: "resolved",
       outlet: { id: "outlet-main", label: "Main" },
       rootPolicy: { kind: "resolved", accepts: ["allowed"], cardinality: "single" },
+    });
+  });
+
+  it("carries slot bounds and rule provenance, and resolves an intentionally empty min outlet", () => {
+    const boundedManifest = createComponentCatalog(createFixturePackManifest(entries.map((entry) => entry.id === "host"
+      ? {
+          ...entry,
+          title: "Category body",
+          slots: [...entry.slots, { id: "content", prop: "content", label: "Content", accepts: ["allowed"], cardinality: "many" as const, min: 1, max: 2 }],
+        }
+      : entry)));
+    const source = record("source", {
+      name: "Category page",
+      root: [host("owner", { single: [], many: [], content: [] })],
+      publication: {
+        kind: "global-template",
+        outlet: { id: "outlet-main", label: "Main", target: { parentId: "owner", slotId: "content" } },
+      },
+    });
+    const resolved = resolveGlobalTemplate({ consumer: consumer([node("allowed")]), source, manifest: boundedManifest });
+    expect(resolved).toMatchObject({ status: "resolved" });
+    if (resolved.status !== "resolved") return;
+    expect(resolved.rootPolicy).toEqual({
+      kind: "resolved",
+      accepts: ["allowed"],
+      cardinality: "many",
+      min: 1,
+      max: 2,
+      origin: {
+        componentId: "host",
+        componentTitle: "Category body",
+        slotId: "content",
+        slotLabel: "Content",
+        viaTemplate: { sourceName: "Category page", outletLabel: "Main" },
+      },
+    });
+
+    const tooMany = consumer([node("a"), node("b"), node("c")]);
+    expect(resolveGlobalTemplate({ consumer: tooMany, source, manifest: boundedManifest })).toMatchObject({
+      status: "incompatible-local-root",
+      message: expect.stringContaining("at most 2"),
     });
   });
 

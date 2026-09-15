@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-4",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "In this demo, a flat 8 USD on every order, shown in the cart summary. A real shop would quote by weight and destination.",
+    "faq-order": 4,
+    "faq-question": "How much is shipping?"
+  }
+}

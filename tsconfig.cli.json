@@ -5,6 +5,7 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowJs": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
@@ -17,6 +18,7 @@
     "server/cli/**/*.ts",
     "server/cli/*.d.mts",
     "server/dev-server.d.mts",
-    "plugins/composer-app-html.d.mts"
+    "plugins/composer-app-html.d.mts",
+    "src/features/composer/pack-config.d.ts"
   ]
 }

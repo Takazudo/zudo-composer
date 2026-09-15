@@ -5,3 +5,5 @@ export { default as componentPackPlugin, COMPONENT_PACK_ID } from "./component-p
 export { default as hostStylesPlugin, HOST_STYLES_ID } from "./host-styles-plugin.mjs";
 export { assertPackSourcesResolvable, resolveComponentPack } from "./component-pack.mjs";
 export { APP_ROOT, appModuleId, fsModuleId, resolveWorkspaceRoot } from "./roots.mjs";
+export { loadHostContext, type HostContext } from "../server/host-context.mjs";
+export type { ResolvedComponentPack } from "./component-pack.mjs";

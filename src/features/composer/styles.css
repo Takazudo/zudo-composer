@@ -8,6 +8,8 @@
  * and the inspector's own row shapes. The iframe imports preview.css instead.
  * ========================================================================== */
 
+@import "./ui/quick-insert/quick-insert.css";
+
 /* ── Editor regions ─────────────────────────────────────────────────────── */
 
 .sg-composer-editor { min-width: 0; }
@@ -286,9 +288,9 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: var(--spacing-hsp-xs);
+  gap: var(--spacing-hsp-xs) var(--spacing-hsp-xs);
   min-height: 2rem;
-  padding-inline: var(--spacing-hsp-xs);
+  padding: var(--spacing-vsp-2xs) var(--spacing-hsp-xs);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   color: var(--color-muted);
@@ -305,6 +307,68 @@
 
 .sg-composer-inspector-slot-meta {
   white-space: nowrap;
+}
+
+/* The rule/completeness block is read-only detail under a slot's summary
+ * row, so it spans every grid column instead of sitting in the last one. */
+.sg-composer-inspector-slot-detail {
+  grid-column: 1 / -1;
+}
+
+.sg-composer-inspector-slot-detail:empty {
+  display: none;
+}
+
+.sg-composer-inspector-rule {
+  margin-block-start: var(--spacing-vsp-2xs);
+}
+
+.sg-composer-inspector-rule-origin {
+  margin: 0 0 var(--spacing-vsp-3xs);
+  color: var(--color-fg);
+}
+
+.sg-composer-inspector-rule-list {
+  display: grid;
+  gap: var(--spacing-vsp-3xs);
+  margin: 0 0 var(--spacing-vsp-3xs);
+  padding: 0;
+  list-style: none;
+}
+
+.sg-composer-inspector-rule-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-hsp-2xs);
+}
+
+.sg-composer-inspector-rule-row > code {
+  margin-inline-start: auto;
+}
+
+.sg-composer-inspector-rule-badge {
+  padding: 0 var(--spacing-hsp-2xs);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+}
+
+.sg-composer-inspector-rule-bounds,
+.sg-composer-inspector-rule-applies {
+  margin: 0 0 var(--spacing-vsp-3xs);
+}
+
+.sg-composer-inspector-grammar {
+  margin-block-start: var(--spacing-vsp-2xs);
+}
+
+.sg-composer-inspector-grammar .sg-composer-export__code {
+  margin-block-end: var(--spacing-vsp-3xs);
+}
+
+.sg-composer-inspector-grammar .sg-composer-inspector-note {
+  margin-block-start: var(--spacing-vsp-3xs);
 }
 
 /* ── Reuse tab ──────────────────────────────────────────────────────────── */
@@ -372,19 +436,172 @@
 
 /* ── Component chooser ──────────────────────────────────────────────────── */
 
-/* The dialog body carries the two-pane surface edge to edge, with the
- * Components / Patterns switch as its own row above it. `overflow: hidden`
- * rather than the shared `auto`: the catalog list is what scrolls, and a
- * scrolling body would break the height chain that lets it. */
+/* The dialog body carries the two-pane surface edge to edge, with an optional
+ * rule header and the Components / Patterns switch as nonshrinking rows above
+ * it. `overflow: hidden` rather than the shared `auto`: the catalog list is
+ * what scrolls, and a scrolling body would break the height chain that lets it. */
 .sg-composer-chooser .cms-dialog__body {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   padding: 0;
   overflow: hidden;
 }
 
+.sg-composer-chooser-rule {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  padding: var(--sp-2) var(--spacing-hsp-lg);
+  border-block-end: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  font-size: var(--text-small);
+}
+
+.sg-composer-chooser-rule-icon {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+}
+
+.sg-composer-chooser-rule-lead {
+  font-weight: 600;
+}
+
+.sg-composer-chooser-rule-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sg-composer-chooser-rule-source {
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+}
+
+.sg-composer-chooser-footer-note {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+}
+
+.sg-composer-chooser-section {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--text-small);
+  font-weight: 600;
+}
+
+.sg-composer-chooser-section .sg-composer-chooser-section-count {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.sg-composer-chooser-rule-badge {
+  margin-inline-start: var(--sp-1);
+  padding-inline: var(--sp-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  font-size: var(--text-micro);
+  font-weight: 400;
+}
+
+/* The disclosure shares the catalog column with the scrolling results, so it
+ * is bounded and scrolls on its own rather than pushing the results away. */
+.sg-composer-chooser-hidden {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 45%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-block-start: var(--sp-2);
+  border-block-start: 1px solid var(--color-border);
+}
+
+.sg-composer-chooser-hidden-summary {
+  padding-block: var(--sp-2);
+  color: var(--color-muted);
+  font-size: var(--text-small);
+  cursor: pointer;
+}
+
+.sg-composer-chooser-hidden-list {
+  display: grid;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0 0 var(--sp-2);
+  list-style: none;
+}
+
+.sg-composer-chooser-hidden-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  font-size: var(--text-small);
+  text-align: start;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+@media (hover: hover) {
+  .sg-composer-chooser-hidden-row:hover {
+    background: var(--color-surface-2);
+  }
+}
+
+.sg-composer-chooser-hidden-row[aria-pressed="true"] {
+  border-color: var(--color-border);
+  background: var(--color-surface-2);
+  opacity: 1;
+}
+
+.sg-composer-chooser-hidden-row:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.sg-composer-chooser-hidden-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sg-composer-chooser-hidden-meta {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  min-width: 0;
+  font-size: var(--text-micro);
+}
+
+.sg-composer-chooser-hidden-where {
+  margin-inline-start: auto;
+}
+
+.sg-composer-chooser-hidden-notice {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+
 .sg-composer-chooser-source {
+  flex: 0 0 auto;
   padding: var(--spacing-vsp-2xs) var(--spacing-hsp-lg);
   border-block-end: 1px solid var(--color-border);
 }

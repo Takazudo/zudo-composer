@@ -1,0 +1,14 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "about-margin-notes",
+  "lifecycle": "published",
+  "modelId": "about",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "about-body": "![A bare wooden desk with one closed notebook in the centre](/uploaded-assets/asset-assets-8eb1c7be-6575-4ab5-9570-387c3c496145 \"Where most of these essays start.\")\n\nMargin Notes is written by Mina Okafor and Teodor Lindqvist. Mina writes mostly about attention: the lists, desks and reading habits that decide where a day goes. Teodor writes mostly about tools and craft: sharpening, repairing, and the notes that make work repeatable.\n\n## What we write about\n\nEvery essay is short enough to read in one sitting and tries to leave you with one thing to try. The three threads run into each other constantly:\n\n- **Craft** — how good work gets made, slowly and on purpose.\n- **Attention** — where it goes, and the small habits that protect it.\n- **Tools** — choosing, maintaining and repairing the things we work with.\n\n## How often\n\nRoughly one essay a fortnight. If you would rather have them arrive than come looking, [the Sunday note](/newsletter) sends the newest one each week.",
+    "about-heading": "About Margin Notes",
+    "about-intro": "A two-author journal about working with attention: short essays on craft, focus and the tools that hold up."
+  }
+}

@@ -181,8 +181,8 @@ export interface CompositionCanvasProps {
   revision?: number;
   /** A node (or the empty canvas, `null`) was activated in Edit mode. */
   onSelect: (nodeId: string | null) => void;
-  /** An insert point was activated. Carries Takazudo/zudo-sg#245's insert-at-index target. */
-  onRequestAdd: (target: InsertionTarget) => void;
+  /** An insert point was activated. Carries Takazudo/zudo-sg#245's insert-at-index target and the button's rect. */
+  onRequestAdd: (target: InsertionTarget, rect?: SerializedRect) => void;
   /** Explicit linked-source navigation — never a source-node selection. */
   onOpenSource?: (sourceRecordId: string) => void;
   /** The SELECTED node's chrome "⋯" was activated (issue Takazudo/zudo-sg#256). */
@@ -761,7 +761,8 @@ export function CompositionCanvas(props: CompositionCanvasProps): JSX.Element {
           // of the accessible name — WCAG 2.5.3 Label in Name — so speech input
           // ("click Add component") resolves. The article "a" broke that match.
           "aria-label": `Add component to ${position}`,
-          onClick: () => onRequestAdd(target),
+          onClick: (event: MouseEvent) =>
+            onRequestAdd(target, serializeRect((event.currentTarget as HTMLElement).getBoundingClientRect())),
         },
         h(PlusIcon, { class: "zc-insert-plus", width: 12, height: 12 }),
         // The visible "Add component" label is END-only (issue Takazudo/zudo-sg#283) — the

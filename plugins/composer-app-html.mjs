@@ -25,12 +25,14 @@ export const APP_ENTRY_HTML_SRC = `"/${APP_ENTRY_MODULE}"`;
 /**
  * Rewrite the shell's entry script to a package-absolute `/@fs` id.
  * @param {string} html
+ * @param {string} [entryModule]
  */
-export function rewriteAppEntry(html) {
-  if (!html.includes(APP_ENTRY_HTML_SRC)) {
-    throw new Error(`zudo-composer: ${APP_HTML_PATH} no longer references ${APP_ENTRY_HTML_SRC}; the dev shell entry rewrite has nothing to replace.`);
+export function rewriteAppEntry(html, entryModule = APP_ENTRY_MODULE) {
+  const source = `src=${APP_ENTRY_HTML_SRC}`;
+  if (html.split(source).length !== 2) {
+    throw new Error(`zudo-composer: ${APP_HTML_PATH} no longer references ${source} exactly once; the shell entry rewrite requires one application entry.`);
   }
-  return html.replace(APP_ENTRY_HTML_SRC, JSON.stringify(appModuleId(APP_ENTRY_MODULE)));
+  return html.replace(source, `src=${JSON.stringify(appModuleId(entryModule))}`);
 }
 
 /** @param {string | undefined} accept */

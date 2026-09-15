@@ -1,0 +1,35 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "tier-studio",
+  "lifecycle": "published",
+  "modelId": "tiers",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "tiers-cta-href": "/#signup",
+    "tiers-cta-label": "Start trial",
+    "tiers-currency": "USD",
+    "tiers-feature1": "Everything in Solo",
+    "tiers-feature2": "Shared team calendar",
+    "tiers-feature3": "Unlimited calendar sync",
+    "tiers-feature4": "Meeting slots that respect focus time",
+    "tiers-feature5": "Workload view per person",
+    "tiers-feature6": "14-day free trial",
+    "tiers-features": [
+      "Everything in Solo",
+      "Shared team calendar",
+      "Unlimited calendar sync",
+      "Meeting slots that respect focus time",
+      "Workload view per person",
+      "14-day free trial"
+    ],
+    "tiers-name": "Studio",
+    "tiers-order": 2,
+    "tiers-popular": true,
+    "tiers-price-monthly": 12,
+    "tiers-price-yearly": 10,
+    "tiers-slug": "studio",
+    "tiers-tagline": "For teams up to 25 who plan the week together."
+  }
+}

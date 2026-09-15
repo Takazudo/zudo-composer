@@ -2,7 +2,7 @@ import { resolveImageEditorAliases } from './plugins/image-editor-aliases.mjs';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
-import tailwindcss from '@tailwindcss/vite';
+import tailwindPlugin from './plugins/tailwind-plugin.mjs';
 import composerFileProviderPlugin from './plugins/composer-file-provider-plugin.mjs';
 import siteProjectSourcePlugin from './plugins/site-project-source-plugin.mjs';
 import releaseApiPlugin from './plugins/release-api-plugin';
@@ -93,12 +93,12 @@ export default defineConfig({
     // release toolchain cannot resolve — it never falls back to a bundled pack —
     // and every release request answers `unavailable`, which is how this
     // repository's own dev server had no working Review route at all.
-    releaseApiPlugin({ assetsStoreRoot, workspaceRoot: composerConfig.workspaceRoot, packIdentity: componentPack.identity }),
+    releaseApiPlugin({ assetsStoreRoot, workspaceRoot: composerConfig.workspaceRoot, packIdentity: componentPack.identity, stylesPath: composerConfig.paths.styles }),
     // The release reader re-derives the current toolchain to compare it with
     // the activated release's, so it needs the same pack the service stamped
     // with. `dev-server.mjs` passes both; without them here the reader throws
     // and every route reports that no SiteProject is activated.
-    siteProjectSourcePlugin({ workspaceRoot: composerConfig.workspaceRoot, packIdentity: componentPack.identity }),
+    siteProjectSourcePlugin({ workspaceRoot: composerConfig.workspaceRoot, packIdentity: componentPack.identity, stylesPath: composerConfig.paths.styles }),
     composerFileProviderPlugin({
       assetsStoreRoot,
       compositionsRoot,
@@ -113,7 +113,7 @@ export default defineConfig({
         sitemapperDomainProvider({ sitemapsRoot: domainRoots.sitemaps }),
       ],
     }),
-    tailwindcss(),
+    tailwindPlugin(),
     preact(),
   ],
 });

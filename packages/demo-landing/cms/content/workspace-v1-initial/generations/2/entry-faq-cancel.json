@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-cancel",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "Yes. Cancel from the billing page and your plan runs to the end of the period you paid for. Export your data first if you want a copy.",
+    "faq-order": 7,
+    "faq-question": "Can I cancel at any time?",
+    "faq-topic": "billing"
+  }
+}

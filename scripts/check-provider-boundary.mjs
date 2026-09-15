@@ -41,7 +41,8 @@ function indentedBlock(source, key, indent) {
   return source.slice(start, next < 0 ? source.length : start + prefix.length + next);
 }
 
-assert.equal(packageJson.dependencies["@zudo-sg/ui"], providerSpec, "provider dependency must use the exact Git SHA");
+assert.equal(packageJson.devDependencies["@zudo-sg/ui"], providerSpec, "provider dependency must use the exact Git SHA");
+assert.equal(packageJson.dependencies["@zudo-sg/ui"], undefined, "the demo provider must not be a runtime dependency");
 const tarball = `https://codeload.github.com/Takazudo/zudo-sg/tar.gz/${providerSha}`;
 const rootImporter = indentedBlock(section(lock, "importers", "packages"), ".", 2);
 const importer = indentedBlock(rootImporter, "'@zudo-sg/ui'", 6);

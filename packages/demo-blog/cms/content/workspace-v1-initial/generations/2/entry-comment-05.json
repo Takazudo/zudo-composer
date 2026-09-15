@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "comment-05",
+  "lifecycle": "published",
+  "modelId": "comments",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "comments-article": {
+      "modelId": "articles",
+      "providerId": "content-filesystem",
+      "recordId": "article-sharpen-before-you-cut"
+    },
+    "comments-article-slug": "sharpen-before-you-cut",
+    "comments-body": "As a furniture maker I can confirm the forearm test. The rest of the essay made me look at my inbox rules differently.",
+    "comments-date": "2026-03-30",
+    "comments-name": "Anneke",
+    "comments-order": 5
+  }
+}

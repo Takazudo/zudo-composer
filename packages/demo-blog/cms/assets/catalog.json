@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 1,
+  "mutationToken": "54534c5258b30e6bd486dd316b7b8e1b472bba056be2303466b7afa378ccda76",
+  "records": [
+    {
+      "id": "assets-70f66e49-6960-4c05-a6c9-6574cd0f6b9b",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:03:45.566Z",
+      "updatedAt": "2026-09-12T06:03:45.566Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-70f66e49-6960-4c05-a6c9-6574cd0f6b9b",
+        "fileName": "cover-half-finished-list.webp",
+        "folderId": null,
+        "note": "A handwritten to-do list with half its items crossed out and a pencil across it",
+        "state": "active",
+        "currentVersionId": "0ef9bbb7530c42eea5341f2850fbabb8eeb4bb9f6cd3cf2fd9a42034fbb30142",
+        "versions": [
+          {
+            "id": "0ef9bbb7530c42eea5341f2850fbabb8eeb4bb9f6cd3cf2fd9a42034fbb30142",
+            "checksum": "0ef9bbb7530c42eea5341f2850fbabb8eeb4bb9f6cd3cf2fd9a42034fbb30142",
+            "mimeType": "image/webp",
+            "byteLength": 54310,
+            "url": "/uploaded-assets/sha256-0ef9bbb7530c42eea5341f2850fbabb8eeb4bb9f6cd3cf2fd9a42034fbb30142.webp",
+            "createdAt": "2026-09-12T06:03:45.566Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-7db0ed41-a622-4acf-ac08-e8b1a888d9a4",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:03:45.590Z",
+      "updatedAt": "2026-09-12T06:03:45.590Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-7db0ed41-a622-4acf-ac08-e8b1a888d9a4",
+        "fileName": "cover-sharpen.webp",
+        "folderId": null,
+        "note": "A wet whetstone beside a chisel on a wooden bench",
+        "state": "active",
+        "currentVersionId": "79b36210044c00da795a0e901308fc02d53a64b62a2c49f8e80475276fd93021",
+        "versions": [
+          {
+            "id": "79b36210044c00da795a0e901308fc02d53a64b62a2c49f8e80475276fd93021",
+            "checksum": "79b36210044c00da795a0e901308fc02d53a64b62a2c49f8e80475276fd93021",
+            "mimeType": "image/webp",
+            "byteLength": 36136,
+            "url": "/uploaded-assets/sha256-79b36210044c00da795a0e901308fc02d53a64b62a2c49f8e80475276fd93021.webp",
+            "createdAt": "2026-09-12T06:03:45.590Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-8eb1c7be-6575-4ab5-9570-387c3c496145",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:03:45.612Z",
+      "updatedAt": "2026-09-12T06:03:45.612Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-8eb1c7be-6575-4ab5-9570-387c3c496145",
+        "fileName": "cover-one-thing.webp",
+        "folderId": null,
+        "note": "A bare wooden desk with one closed notebook in the centre",
+        "state": "active",
+        "currentVersionId": "4b6f49c2e56c9f88ec6ad0bdf8c0ef982b7e9136cb7296cbc47c9320a3d6f3f4",
+        "versions": [
+          {
+            "id": "4b6f49c2e56c9f88ec6ad0bdf8c0ef982b7e9136cb7296cbc47c9320a3d6f3f4",
+            "checksum": "4b6f49c2e56c9f88ec6ad0bdf8c0ef982b7e9136cb7296cbc47c9320a3d6f3f4",
+            "mimeType": "image/webp",
+            "byteLength": 34932,
+            "url": "/uploaded-assets/sha256-4b6f49c2e56c9f88ec6ad0bdf8c0ef982b7e9136cb7296cbc47c9320a3d6f3f4.webp",
+            "createdAt": "2026-09-12T06:03:45.612Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-df4f36c8-c6d6-4477-9857-9e113f977559",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:03:45.634Z",
+      "updatedAt": "2026-09-12T06:03:45.634Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-df4f36c8-c6d6-4477-9857-9e113f977559",
+        "fileName": "cover-notes-survive.webp",
+        "folderId": null,
+        "note": "A stack of index cards in a binder clip with one card pulled out",
+        "state": "active",
+        "currentVersionId": "8b051566309256370b0419417cf626f065ab657d456784119bd97af71e364d33",
+        "versions": [
+          {
+            "id": "8b051566309256370b0419417cf626f065ab657d456784119bd97af71e364d33",
+            "checksum": "8b051566309256370b0419417cf626f065ab657d456784119bd97af71e364d33",
+            "mimeType": "image/webp",
+            "byteLength": 46924,
+            "url": "/uploaded-assets/sha256-8b051566309256370b0419417cf626f065ab657d456784119bd97af71e364d33.webp",
+            "createdAt": "2026-09-12T06:03:45.634Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-cb66ffdb-9e19-4b89-97c0-7ec9c0857bf1",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:03:45.659Z",
+      "updatedAt": "2026-09-12T06:03:45.659Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-cb66ffdb-9e19-4b89-97c0-7ec9c0857bf1",
+        "fileName": "cover-unfinished-drafts.webp",
+        "folderId": null,
+        "note": "Pencil sketch pages with erasing marks and margin notes, fanned out",
+        "state": "active",
+        "currentVersionId": "269c8d7ef164cd2049672e95da826edca1f0aaa2fd7130639d2709c6b5d3055f",
+        "versions": [
+          {
+            "id": "269c8d7ef164cd2049672e95da826edca1f0aaa2fd7130639d2709c6b5d3055f",
+            "checksum": "269c8d7ef164cd2049672e95da826edca1f0aaa2fd7130639d2709c6b5d3055f",
+            "mimeType": "image/webp",
+            "byteLength": 40024,
+            "url": "/uploaded-assets/sha256-269c8d7ef164cd2049672e95da826edca1f0aaa2fd7130639d2709c6b5d3055f.webp",
+            "createdAt": "2026-09-12T06:03:45.659Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-ec164add-dbb0-47ae-b50f-e54f783f1a2e",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:03:45.682Z",
+      "updatedAt": "2026-09-12T06:03:45.682Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-ec164add-dbb0-47ae-b50f-e54f783f1a2e",
+        "fileName": "cover-quiet-hour.webp",
+        "folderId": null,
+        "note": "An empty chair beside a window at dawn with a steaming cup on the sill",
+        "state": "active",
+        "currentVersionId": "6a5c45dda826b6b5a6c3444da76d4f2633fa5ea518cc1491f361d4f020e475bd",
+        "versions": [
+          {
+            "id": "6a5c45dda826b6b5a6c3444da76d4f2633fa5ea518cc1491f361d4f020e475bd",
+            "checksum": "6a5c45dda826b6b5a6c3444da76d4f2633fa5ea518cc1491f361d4f020e475bd",
+            "mimeType": "image/webp",
+            "byteLength": 34996,
+            "url": "/uploaded-assets/sha256-6a5c45dda826b6b5a6c3444da76d4f2633fa5ea518cc1491f361d4f020e475bd.webp",
+            "createdAt": "2026-09-12T06:03:45.682Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-ef74294b-4999-49e7-b44f-72c9fcec23a8",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:03:45.703Z",
+      "updatedAt": "2026-09-12T06:03:45.703Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-ef74294b-4999-49e7-b44f-72c9fcec23a8",
+        "fileName": "cover-repairable-tools.webp",
+        "folderId": null,
+        "note": "A fountain pen disassembled into parts on a cloth beside a small screwdriver",
+        "state": "active",
+        "currentVersionId": "2a43c53a9ea1bfe38f2d34afa4e3c4ffea553728ff6859fe20e6e6ba0affc98e",
+        "versions": [
+          {
+            "id": "2a43c53a9ea1bfe38f2d34afa4e3c4ffea553728ff6859fe20e6e6ba0affc98e",
+            "checksum": "2a43c53a9ea1bfe38f2d34afa4e3c4ffea553728ff6859fe20e6e6ba0affc98e",
+            "mimeType": "image/webp",
+            "byteLength": 36014,
+            "url": "/uploaded-assets/sha256-2a43c53a9ea1bfe38f2d34afa4e3c4ffea553728ff6859fe20e6e6ba0affc98e.webp",
+            "createdAt": "2026-09-12T06:03:45.703Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-e788cb9d-a98f-4818-be0e-993300c6a1f9",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:03:45.724Z",
+      "updatedAt": "2026-09-12T06:03:45.724Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-e788cb9d-a98f-4818-be0e-993300c6a1f9",
+        "fileName": "cover-reading-slowly.webp",
+        "folderId": null,
+        "note": "An open book with a ribbon bookmark and folded reading glasses on the page",
+        "state": "active",
+        "currentVersionId": "581d29a01cc5dab0f38fb61d28584a5ffd0a001db4f2cf464c074139fee05bbd",
+        "versions": [
+          {
+            "id": "581d29a01cc5dab0f38fb61d28584a5ffd0a001db4f2cf464c074139fee05bbd",
+            "checksum": "581d29a01cc5dab0f38fb61d28584a5ffd0a001db4f2cf464c074139fee05bbd",
+            "mimeType": "image/webp",
+            "byteLength": 50144,
+            "url": "/uploaded-assets/sha256-581d29a01cc5dab0f38fb61d28584a5ffd0a001db4f2cf464c074139fee05bbd.webp",
+            "createdAt": "2026-09-12T06:03:45.724Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-525defc4-6eb4-42da-8e0f-31276503cc9a",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:03:45.746Z",
+      "updatedAt": "2026-09-12T06:03:45.746Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-525defc4-6eb4-42da-8e0f-31276503cc9a",
+        "fileName": "avatar-mina-okafor.webp",
+        "folderId": null,
+        "note": "Abstract painterly avatar in ochre and cream",
+        "state": "active",
+        "currentVersionId": "d3f38973954dbc5bba77734e4e9506809951b6106b695f7c64dd93f3aef43328",
+        "versions": [
+          {
+            "id": "d3f38973954dbc5bba77734e4e9506809951b6106b695f7c64dd93f3aef43328",
+            "checksum": "d3f38973954dbc5bba77734e4e9506809951b6106b695f7c64dd93f3aef43328",
+            "mimeType": "image/webp",
+            "byteLength": 4832,
+            "url": "/uploaded-assets/sha256-d3f38973954dbc5bba77734e4e9506809951b6106b695f7c64dd93f3aef43328.webp",
+            "createdAt": "2026-09-12T06:03:45.746Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "assets-b36741ff-7dd4-4c15-9135-25c274e61e39",
+      "revision": 1,
+      "createdAt": "2026-09-12T06:03:45.767Z",
+      "updatedAt": "2026-09-12T06:03:45.767Z",
+      "document": {
+        "schemaVersion": 1,
+        "id": "assets-b36741ff-7dd4-4c15-9135-25c274e61e39",
+        "fileName": "avatar-teodor-lindqvist.webp",
+        "folderId": null,
+        "note": "Abstract painterly avatar in slate blue and cream",
+        "state": "active",
+        "currentVersionId": "167f615a50695a5b4333b92b18c11060d1449cd5c325ed844618c17500376416",
+        "versions": [
+          {
+            "id": "167f615a50695a5b4333b92b18c11060d1449cd5c325ed844618c17500376416",
+            "checksum": "167f615a50695a5b4333b92b18c11060d1449cd5c325ed844618c17500376416",
+            "mimeType": "image/webp",
+            "byteLength": 4720,
+            "url": "/uploaded-assets/sha256-167f615a50695a5b4333b92b18c11060d1449cd5c325ed844618c17500376416.webp",
+            "createdAt": "2026-09-12T06:03:45.767Z"
+          }
+        ]
+      }
+    }
+  ],
+  "folders": []
+}

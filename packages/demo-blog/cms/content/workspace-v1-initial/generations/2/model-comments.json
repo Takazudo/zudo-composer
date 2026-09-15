@@ -1,0 +1,60 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "description": "Prefilled mock comments. The comment form never writes here.",
+    "fields": [
+      {
+        "id": "comments-name",
+        "key": "name",
+        "kind": "text",
+        "label": "Name",
+        "required": true
+      },
+      {
+        "id": "comments-date",
+        "key": "date",
+        "kind": "date",
+        "label": "Date",
+        "required": true
+      },
+      {
+        "id": "comments-body",
+        "key": "body",
+        "kind": "long-text",
+        "label": "Body",
+        "required": true
+      },
+      {
+        "id": "comments-article",
+        "key": "article",
+        "kind": "reference",
+        "label": "Article",
+        "required": true,
+        "target": {
+          "providerId": "content-filesystem",
+          "recordId": "articles"
+        }
+      },
+      {
+        "id": "comments-article-slug",
+        "key": "articleSlug",
+        "kind": "slug",
+        "label": "Article slug",
+        "required": true
+      },
+      {
+        "id": "comments-order",
+        "key": "order",
+        "kind": "number",
+        "label": "Order",
+        "required": true
+      }
+    ],
+    "id": "comments",
+    "kind": "collection",
+    "name": "Comments",
+    "schemaVersion": 1
+  },
+  "id": "comments",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

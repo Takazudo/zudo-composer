@@ -1,0 +1,35 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "description": "",
+    "fields": [
+      {
+        "id": "about-heading",
+        "key": "heading",
+        "kind": "text",
+        "label": "Heading",
+        "required": true
+      },
+      {
+        "id": "about-intro",
+        "key": "intro",
+        "kind": "long-text",
+        "label": "Intro",
+        "required": true
+      },
+      {
+        "id": "about-body",
+        "key": "body",
+        "kind": "markdown",
+        "label": "Body",
+        "required": true
+      }
+    ],
+    "id": "about",
+    "kind": "single",
+    "name": "About",
+    "schemaVersion": 1
+  },
+  "id": "about",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

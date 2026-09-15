@@ -1,0 +1,97 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "billing-faq-item-question-question",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "faq-question",
+        "target": {
+          "nodeId": "faq-item",
+          "prop": "question"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "billing-faq-item-answer-answer",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "faq-answer",
+        "target": {
+          "nodeId": "faq-item",
+          "prop": "answer"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "billing-faq-item-order-order",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "faq-order",
+        "target": {
+          "nodeId": "faq-item",
+          "prop": "order"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "billing-faq-item-topic-topic",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "faq-topic",
+        "target": {
+          "nodeId": "faq-item",
+          "prop": "topic"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "faq-item"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "faq"
+    },
+    "id": "billing-faq-item",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [
+          {
+            "fieldId": "faq-topic",
+            "operator": "equals",
+            "value": "billing"
+          }
+        ],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "asc",
+            "fieldId": "faq-order"
+          }
+        ]
+      }
+    },
+    "name": "Billing FAQ item",
+    "schemaVersion": 2
+  },
+  "id": "billing-faq-item",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

@@ -1,0 +1,46 @@
+{
+  "id": "authors",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "site-frame-outlet",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "authors",
+    "name": "Authors",
+    "root": [
+      {
+        "componentId": "blog.page-heading",
+        "componentVersion": 1,
+        "id": "authors-heading",
+        "props": {
+          "eyebrow": "",
+          "heading": "Authors",
+          "intro": "Margin Notes has two writers. Each essay is signed."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "blog.section",
+        "componentVersion": 1,
+        "id": "authors-section",
+        "props": {
+          "rule": false
+        },
+        "slots": {
+          "content": [
+            {
+              "componentId": "blog.author-grid",
+              "componentVersion": 1,
+              "id": "authors-grid",
+              "props": {},
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

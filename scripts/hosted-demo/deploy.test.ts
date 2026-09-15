@@ -3,16 +3,19 @@
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
-  ARTIFACT_DIRECTORY,
   captureDeploymentState,
   deployHostedDemo,
   deploymentCredentialState,
+  FIRST_DEPLOY_LIVE_RETRY_DELAYS_MS,
+  FIRST_DEPLOY_LIVE_TIMEOUT_MS,
   parseUploadedVersionId,
   preflightDeployment,
   requireDeploymentCredentials,
   rolloutIdentity,
   sortDeploymentsNewestFirst,
 } from "./deploy.mjs";
+import { TARGET_KEYS, TARGETS } from "./targets.mjs";
+import { sha256 } from "./artifact.mjs";
 
 const SOURCE_REVISION = "a".repeat(40);
 const PROJECT_REVISION = "b".repeat(64);
@@ -26,15 +29,22 @@ const ENVIRONMENT = {
   CLOUDFLARE_ACCOUNT_ID: "test-account",
   HOSTED_DEMO_RUN_ID: "12345",
 };
+const EDITOR_TARGET = TARGETS["sample-editor"];
+const ARTIFACT_DIRECTORY = EDITOR_TARGET.artifactDirectory;
 
 const artifactVerifier = async ({ directory }: { directory: string }) => ({
   root: directory,
   manifest: {
     schemaVersion: 1,
+    tool: { name: "zudo-composer", version: "0.0.0" },
     sourceRevision: SOURCE_REVISION,
     projectSourceRevision: PROJECT_REVISION,
-    mode: "disposable-hosted-demo",
+    mode: "disposable-demo-editor",
+    hostId: "demo-sample",
+    projectId: "sample-studio",
+    routes: ["/"],
     assets: {},
+    files: {},
   },
   files: [],
 });
@@ -72,6 +82,40 @@ function fakeRunner(options: { uploadOutput?: string; failAfterAccept?: boolean 
     throw new Error(`Unexpected Wrangler command: ${args.join(" ")}`);
   };
   return { calls, runner, get activeVersion() { return activeVersion; }, set activeVersion(value: string) { activeVersion = value; } };
+}
+
+const siteArtifactVerifier = async ({ directory }: { directory: string }) => ({
+  root: directory,
+  manifest: { schemaVersion: 1, projectId: "demo-webshop", tool: { name: "zudo-composer", version: "0.0.0" }, sourceRevision: SOURCE_REVISION, projectSourceRevision: PROJECT_REVISION, routes: ["/", "/about"], files: {} },
+  files: [],
+});
+
+/** A Worker Cloudflare has never seen: both listings fail until `deploy` creates it. */
+function firstDeployRunner(options: { versionsListExists?: boolean; partial?: boolean } = {}) {
+  const notFound = () => new Error("wrangler deployments list failed with exit 1:\nA request to the Cloudflare API failed. Worker not found. [code: 10007]");
+  let exists = false;
+  const calls: string[][] = [];
+  const runner = async (_file: string, args: string[]) => {
+    calls.push(args);
+    if (args[0] === "whoami") return { stdout: "", stderr: "" };
+    if (args[0] === "deploy" && args.includes("--dry-run")) return { stdout: "", stderr: "" };
+    if (args[0] === "deploy") {
+      exists = true;
+      return { stdout: `Current Version ID: ${NEW_VERSION}\n`, stderr: "" };
+    }
+    if (args[0] === "deployments" && args[1] === "list") {
+      if (!exists && options.partial) return { stdout: JSON.stringify([]), stderr: "" };
+      if (!exists) throw notFound();
+      return { stdout: JSON.stringify([deployment(NEW_VERSION, NEW_DEPLOYMENT, "2026-09-12T08:00:00Z")]), stderr: "" };
+    }
+    if (args[0] === "versions" && args[1] === "list") {
+      if (!exists && options.partial) return { stdout: JSON.stringify([{ id: NEW_VERSION }]), stderr: "" };
+      if (!exists && !options.versionsListExists) throw notFound();
+      return { stdout: JSON.stringify([{ id: NEW_VERSION }]), stderr: "" };
+    }
+    throw new Error(`Unexpected Wrangler command: ${args.join(" ")}`);
+  };
+  return { calls, runner };
 }
 
 describe("hosted demo deployment guard", () => {
@@ -130,6 +174,7 @@ describe("hosted demo deployment guard", () => {
 
   it("rejects an artifact directory that differs from the Wrangler config", async () => {
     await expect(preflightDeployment({
+      target: EDITOR_TARGET,
       artifactDirectory: join(ARTIFACT_DIRECTORY, "other"),
       environment: ENVIRONMENT,
       runner: vi.fn(),
@@ -140,6 +185,7 @@ describe("hosted demo deployment guard", () => {
     const fake = fakeRunner();
     const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: [], assets: [] }));
     const result = await deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -151,7 +197,7 @@ describe("hosted demo deployment guard", () => {
     });
     expect(result.deployedVersionId).toBe(NEW_VERSION);
     expect(liveVerifier).toHaveBeenCalledWith({
-      baseUrl: "https://zudo-composer.zudolab.dev",
+      baseUrl: `https://${EDITOR_TARGET.domain}`,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
     });
@@ -164,6 +210,7 @@ describe("hosted demo deployment guard", () => {
   it("fails safely without activation when upload output has no known version ID", async () => {
     const fake = fakeRunner({ uploadOutput: "Total Upload: 1 KiB\n" });
     await expect(deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -184,6 +231,7 @@ describe("hosted demo deployment guard", () => {
       return result;
     };
     await expect(deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -198,6 +246,7 @@ describe("hosted demo deployment guard", () => {
   it("rolls back the captured active version after a live failure", async () => {
     const fake = fakeRunner();
     await expect(deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -214,6 +263,7 @@ describe("hosted demo deployment guard", () => {
   it("recovers a CLI failure after Cloudflare accepted the known replacement", async () => {
     const fake = fakeRunner({ failAfterAccept: true });
     await expect(deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -228,6 +278,7 @@ describe("hosted demo deployment guard", () => {
   it("refuses rollback when production no longer serves this run's version", async () => {
     const fake = fakeRunner();
     await expect(deployHostedDemo({
+      target: EDITOR_TARGET,
       artifactDirectory: ARTIFACT_DIRECTORY,
       expectedSourceRevision: SOURCE_REVISION,
       environment: ENVIRONMENT,
@@ -240,5 +291,219 @@ describe("hosted demo deployment guard", () => {
       retryDelaysMs: [],
     })).rejects.toThrow(/Refusing automatic rollback/);
     expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
+  });
+
+  it("deploys the shop target against its own Worker, config and domain", async () => {
+    const target = TARGETS.shop;
+    const fake = fakeRunner();
+    const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: [], assets: [] }));
+    const result = await deployHostedDemo({
+      target,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier,
+      retryDelaysMs: [],
+      delayImpl: async () => {},
+    });
+    expect(result.deployedVersionId).toBe(NEW_VERSION);
+    expect(liveVerifier).toHaveBeenCalledWith({
+      baseUrl: "https://zc-demo-shop.zudolab.dev",
+      artifactDirectory: target.artifactDirectory,
+      expectedSourceRevision: SOURCE_REVISION,
+    });
+    const upload = fake.calls.find((args) => args[0] === "versions" && args[1] === "upload");
+    const activate = fake.calls.find((args) => args[0] === "versions" && args[1] === "deploy");
+    const rollback = fake.calls.find((args) => args[0] === "deployments" && args[1] === "list");
+    expect(upload).toEqual(expect.arrayContaining(["--config", "wrangler.demo-shop.jsonc", "--name", "zc-demo-shop"]));
+    expect(activate).toEqual(expect.arrayContaining(["--name", "zc-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
+    expect(rollback).toEqual(expect.arrayContaining(["--name", "zc-demo-shop", "--config", "wrangler.demo-shop.jsonc"]));
+  });
+
+  it.each(TARGET_KEYS)("deploys %s against its own Worker, config and domain", async (key) => {
+    const target = TARGETS[key];
+    const fake = fakeRunner();
+    const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: [], assets: [] }));
+    const result = await deployHostedDemo({
+      target,
+      expectedSourceRevision: SOURCE_REVISION,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier,
+      retryDelaysMs: [],
+      delayImpl: async () => {},
+    });
+    expect(result.deployedVersionId).toBe(NEW_VERSION);
+    expect(liveVerifier).toHaveBeenCalledWith({
+      baseUrl: `https://${target.domain}`,
+      artifactDirectory: target.artifactDirectory,
+      expectedSourceRevision: SOURCE_REVISION,
+    });
+    const upload = fake.calls.find((args) => args[0] === "versions" && args[1] === "upload");
+    const activate = fake.calls.find((args) => args[0] === "versions" && args[1] === "deploy");
+    expect(upload).toEqual(expect.arrayContaining(["--config", target.configPath, "--name", target.workerName]));
+    expect(activate).toEqual(expect.arrayContaining(["--name", target.workerName, "--config", target.configPath]));
+  });
+
+  it.each([undefined, "short", `${SOURCE_REVISION}\n`])("requires the doc site's full expected source SHA before any Wrangler call: %j", async (expectedSourceRevision) => {
+    const fake = fakeRunner();
+    await expect(deployHostedDemo({
+      target: TARGETS.doc,
+      expectedSourceRevision,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+    })).rejects.toThrow(/full expected source Git SHA/);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it.each([undefined, "b".repeat(40)])("refuses an unpinned or mismatched doc artifact before any Wrangler call: %j", async (sourceRevision) => {
+    const fake = fakeRunner();
+    await expect(preflightDeployment({
+      target: TARGETS.doc,
+      expectedSourceRevision: SOURCE_REVISION,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: async ({ directory }) => ({ root: directory, manifest: { kind: "doc-site", sourceRevision }, files: [] }),
+    })).rejects.toThrow(/must record the expected source Git SHA/);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it.each([["existing", fakeRunner], ["first", firstDeployRunner]] as const)("passes multi-page hooks to the default live verifier for an %s deployment", async (_label, createRunner) => {
+    const fake = createRunner();
+    const bodies = {
+      "index.html": "<!doctype html><html><body>Home</body></html>",
+      "docs/a/index.html": "<!doctype html><html><body>Document A</body></html>",
+      "404.html": "<!doctype html><html><body>Not found</body></html>",
+    };
+    const files = Object.entries(bodies).map(([path, body]) => ({ path, sha256: sha256(Buffer.from(body)), mime: "text/html" }));
+    const manifest = { sourceRevision: SOURCE_REVISION, routes: ["/", "/docs/a/"], files };
+    const routeFile = vi.fn((route: string) => route === "/" ? "index.html" : "docs/a/index.html");
+    const assetUrl = vi.fn((path: string) => path === "docs/a/index.html" ? null : path === "404.html" ? "/404" : "/");
+    const target = {
+      ...TARGETS.shop,
+      manifestFileName: "test-multi-page-manifest.json",
+      verifyArtifact: async ({ directory }: { directory: string }) => ({ root: directory, manifest, files }),
+      liveRoutes: (routeManifest: Record<string, unknown>) => routeManifest.routes as string[],
+      routeFile,
+      assetUrl,
+    };
+    const requests: string[] = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = new URL(input.toString()).pathname;
+      requests.push(path);
+      if (path === "/test-multi-page-manifest.json") return new Response(JSON.stringify(manifest), { headers: { "content-type": "application/json" } });
+      const body = path === "/" ? bodies["index.html"] : path === "/docs/a/" ? bodies["docs/a/index.html"] : path === "/404" ? bodies["404.html"] : undefined;
+      if (!body) throw new Error(`Unexpected asset URL: ${path}`);
+      return new Response(body, { headers: { "content-type": "text/html" } });
+    });
+    try {
+      const result = await deployHostedDemo({ target, environment: ENVIRONMENT, runner: fake.runner, retryDelaysMs: [], delayImpl: async () => {} });
+      expect(result.deployedVersionId).toBe(NEW_VERSION);
+      expect(result.proof.routes.map(({ path }) => path)).toEqual(["/", "/docs/a/"]);
+      expect(result.proof.assets.map(({ path }) => path)).toEqual(["index.html", "404.html"]);
+      expect(routeFile.mock.calls).toEqual([["/", manifest], ["/docs/a/", manifest]]);
+      expect(assetUrl.mock.calls).toEqual([["index.html"], ["docs/a/index.html"], ["404.html"]]);
+      expect(requests).toEqual(["/test-multi-page-manifest.json", "/", "/docs/a/", "/", "/404"]);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it.each(TARGET_KEYS)("creates a never-deployed %s target with wrangler deploy, binding its custom domain", async (key) => {
+    const target = TARGETS[key];
+    const fake = firstDeployRunner();
+    const liveVerifier = vi.fn(async () => ({ manifest: {}, routes: ["/"], assets: [] }));
+    const result = await deployHostedDemo({
+      target,
+      expectedSourceRevision: SOURCE_REVISION,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier,
+      retryDelaysMs: [],
+      delayImpl: async () => {},
+    });
+    expect(result.deployedVersionId).toBe(NEW_VERSION);
+    expect(result.preflight.state).toEqual({ firstDeploy: true });
+    // A brand-new hostname gets a longer live-check budget than a rollout onto an
+    // existing domain, whose DNS is already in place.
+    expect(liveVerifier).toHaveBeenCalledWith({
+      baseUrl: `https://${target.domain}`,
+      artifactDirectory: target.artifactDirectory,
+      expectedSourceRevision: SOURCE_REVISION,
+      retryDelaysMs: FIRST_DEPLOY_LIVE_RETRY_DELAYS_MS,
+      overallTimeoutMs: FIRST_DEPLOY_LIVE_TIMEOUT_MS,
+    });
+    // `versions upload` never applies a config's routes, so the bootstrap must be
+    // a plain `deploy` — and there is nothing to roll back from "no Worker".
+    const create = fake.calls.find((args) => args[0] === "deploy" && !args.includes("--dry-run"));
+    expect(create).toEqual(expect.arrayContaining(["--config", target.configPath, "--name", target.workerName, "--assets", target.artifactDirectory]));
+    expect(fake.calls.some((args) => args[0] === "versions" && args[1] === "upload")).toBe(false);
+    expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
+  });
+
+  it.each(TARGET_KEYS)("leaves a failed first %s deployment in place and says why no rollback happened", async (key) => {
+    const target = TARGETS[key];
+    const fake = firstDeployRunner();
+    await expect(deployHostedDemo({
+      target,
+      expectedSourceRevision: SOURCE_REVISION,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier: async () => { throw new Error("live route mismatch"); },
+      retryDelaysMs: [],
+    })).rejects.toThrow(new RegExp(`live route mismatch; first ${target.workerName} deployment ${NEW_VERSION} stays active`));
+    expect(fake.calls.some((args) => args[0] === "rollback")).toBe(false);
+  });
+
+  it("refuses to treat a half-missing Worker as a first deployment", async () => {
+    const fake = firstDeployRunner({ versionsListExists: true });
+    await expect(deployHostedDemo({
+      target: TARGETS.shop,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      retryDelaysMs: [],
+    })).rejects.toThrow(/code: 10007/);
+    expect(fake.calls.some((args) => args[0] === "deploy" && !args.includes("--dry-run"))).toBe(false);
+  });
+
+  it("routes a partial first-deploy Worker to the cleanup runbook", async () => {
+    const fake = firstDeployRunner({ partial: true });
+    await expect(deployHostedDemo({
+      target: TARGETS.shop,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      retryDelaysMs: [],
+    })).rejects.toThrow(/delete the partial Worker, then rerun target shop/i);
+    expect(fake.calls.some((args) => args[0] === "deploy" && !args.includes("--dry-run"))).toBe(false);
+  });
+
+  it("keeps an existing partial Worker on the ordinary path and adds the cleanup runbook to live failures", async () => {
+    const fake = fakeRunner();
+    await expect(deployHostedDemo({
+      target: TARGETS.shop,
+      environment: ENVIRONMENT,
+      runner: fake.runner,
+      artifactVerifier: siteArtifactVerifier,
+      liveVerifier: async () => { throw new Error("custom domain is unbound"); },
+      retryDelaysMs: [],
+    })).rejects.toThrow(/Runbook: delete the partial Worker, then rerun target shop/);
+    expect(fake.calls.some((args) => args[0] === "versions" && args[1] === "upload")).toBe(true);
+    expect(fake.calls.some((args) => args[0] === "deploy" && !args.includes("--dry-run"))).toBe(false);
+  });
+
+  it("rejects a shop artifact directory that differs from its Wrangler config", async () => {
+    await expect(preflightDeployment({
+      target: TARGETS.shop,
+      artifactDirectory: join(TARGETS.shop.artifactDirectory, "other"),
+      environment: ENVIRONMENT,
+      runner: vi.fn(),
+      artifactVerifier: async ({ directory }: { directory: string }) => ({ root: directory, manifest: {}, files: [] }),
+    })).rejects.toThrow(/zc-demo-shop deployment must verify and upload/);
   });
 });

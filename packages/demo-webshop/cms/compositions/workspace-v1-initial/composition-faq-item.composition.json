@@ -1,0 +1,19 @@
+{
+  "id": "faq-item",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "faq-item",
+    "name": "FAQ item",
+    "root": [
+      {
+        "componentId": "shop.faq-item",
+        "componentVersion": 1,
+        "id": "faq-item",
+        "props": {},
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

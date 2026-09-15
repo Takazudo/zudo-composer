@@ -1,0 +1,34 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "tier-org",
+  "lifecycle": "published",
+  "modelId": "tiers",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "tiers-cta-href": "/about",
+    "tiers-cta-label": "Talk to us",
+    "tiers-currency": "USD",
+    "tiers-feature1": "Everything in Studio",
+    "tiers-feature2": "Cross-team availability",
+    "tiers-feature3": "Single sign-on and SCIM",
+    "tiers-feature4": "Audit log with one-year history",
+    "tiers-feature5": "A named onboarding contact",
+    "tiers-feature6": "",
+    "tiers-features": [
+      "Everything in Studio",
+      "Cross-team availability",
+      "Single sign-on and SCIM",
+      "Audit log with one-year history",
+      "A named onboarding contact"
+    ],
+    "tiers-name": "Org",
+    "tiers-order": 3,
+    "tiers-popular": false,
+    "tiers-price-monthly": 29,
+    "tiers-price-yearly": 24,
+    "tiers-slug": "org",
+    "tiers-tagline": "For companies running many teams on one calendar."
+  }
+}

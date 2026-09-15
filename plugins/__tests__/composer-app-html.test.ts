@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import composerAppHtmlPlugin, { APP_ENTRY_HTML_SRC, APP_ENTRY_MODULE, APP_HTML_PATH, rewriteAppEntry } from "../composer-app-html.mjs";
-import { appModuleId } from "../roots.mjs";
+import { SITE_BUILD_ENTRY, appModuleId } from "../roots.mjs";
 
 function middlewareOf(plugin: ReturnType<typeof composerAppHtmlPlugin>) {
   const stack: ((req: unknown, res: unknown, next: (error?: unknown) => void) => Promise<void>)[] = [];
@@ -27,6 +27,14 @@ describe("rewriteAppEntry", () => {
 
   it("fails loudly rather than serving a shell whose entry resolves against the host root", () => {
     expect(() => rewriteAppEntry("<html></html>")).toThrow(/no longer references/);
+    expect(() => rewriteAppEntry(`<script src=${APP_ENTRY_HTML_SRC}></script><script src=${APP_ENTRY_HTML_SRC}></script>`)).toThrow(/exactly once/);
+    expect(() => rewriteAppEntry(`<div data-entry=${APP_ENTRY_HTML_SRC}></div>`)).toThrow(/exactly once/);
+  });
+
+  it("can select the package-owned static visitor while preserving the single shell input", () => {
+    expect(rewriteAppEntry(`<script type="module" src=${APP_ENTRY_HTML_SRC}></script>`, SITE_BUILD_ENTRY)).toBe(
+      `<script type="module" src=${JSON.stringify(appModuleId(SITE_BUILD_ENTRY))}></script>`,
+    );
   });
 
   it("matches the shipped index.html, so the rewrite cannot silently drift", async () => {

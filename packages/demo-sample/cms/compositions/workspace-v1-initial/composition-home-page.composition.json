@@ -1,0 +1,276 @@
+{
+  "id": "home-page",
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "updatedAt": "2026-08-31T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "main-content",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "home-page",
+    "name": "Home page",
+    "root": [
+      {
+        "componentId": "ui.hero",
+        "componentVersion": 1,
+        "id": "home-hero",
+        "props": {
+          "actions": [
+            {
+              "href": "/services",
+              "label": "See our services",
+              "variant": "primary"
+            },
+            {
+              "href": "/journal",
+              "label": "Read the journal",
+              "variant": "secondary"
+            }
+          ],
+          "eyebrow": "Sample Studio",
+          "heading": "Clear ideas, carefully shaped",
+          "lead": "We are a four-person studio that helps small teams shape websites, tools and content. We work in short, visible cycles so every decision is easy to follow.",
+          "variant": "primary"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "ui.split-layout",
+        "componentVersion": 1,
+        "id": "home-split",
+        "props": {
+          "gap": "lg",
+          "ratio": "40/60"
+        },
+        "slots": {
+          "left": [
+            {
+              "componentId": "ui.placeholder-box",
+              "componentVersion": 1,
+              "id": "home-placeholder",
+              "props": {
+                "aspect": "4/3",
+                "label": "Studio worktable",
+                "size": "lg"
+              },
+              "slots": {}
+            }
+          ],
+          "right": [
+            {
+              "componentId": "ui.stack",
+              "componentVersion": 1,
+              "id": "home-copy-stack",
+              "props": {
+                "align": "start",
+                "direction": "vertical",
+                "gap": "sm",
+                "justify": "start"
+              },
+              "slots": {
+                "content": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "home-intro",
+                    "props": {
+                      "children": "We turn open questions into useful systems. Most of our work is for teams of five to fifty people who need a clear next step."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "home-method",
+                    "props": {
+                      "children": "Every project runs in weekly cycles with something concrete to review. You see drafts early, and nothing ships without a shared decision."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.cta-button",
+                    "componentVersion": 1,
+                    "id": "home-cta",
+                    "props": {
+                      "arrow": true,
+                      "children": "How we work",
+                      "href": "/about",
+                      "variant": "secondary"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "ui.section-heading",
+        "componentVersion": 1,
+        "id": "home-journal-heading",
+        "props": {
+          "as": "h2",
+          "eyebrow": "Recent notes",
+          "heading": "From the journal",
+          "intro": "Short essays on the habits that keep our projects calm."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "ui.auto-grid",
+        "componentVersion": 1,
+        "id": "home-journal-grid",
+        "props": {
+          "fill": false,
+          "gap": "md",
+          "min": "18rem"
+        },
+        "slots": {
+          "items": [
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "home-journal-card-question",
+              "props": {
+                "padding": "md",
+                "title": "Start with the question",
+                "variant": "accent"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "home-journal-card-question-copy",
+                    "props": {
+                      "children": "Before choosing a format or feature, name the question the work must answer."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.cta-button",
+                    "componentVersion": 1,
+                    "id": "home-journal-card-question-link",
+                    "props": {
+                      "arrow": true,
+                      "children": "Read about questions",
+                      "href": "/journal/start-with-the-question",
+                      "variant": "secondary"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            },
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "home-journal-card-parts",
+              "props": {
+                "padding": "md",
+                "title": "Map the moving parts",
+                "variant": "default"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "home-journal-card-parts-copy",
+                    "props": {
+                      "children": "A lightweight map can reveal where timing, ownership, and information need attention."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.cta-button",
+                    "componentVersion": 1,
+                    "id": "home-journal-card-parts-link",
+                    "props": {
+                      "arrow": true,
+                      "children": "Read about mapping",
+                      "href": "/journal/map-the-moving-parts",
+                      "variant": "secondary"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            },
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "home-journal-card-loops",
+              "props": {
+                "padding": "md",
+                "title": "Review in small loops",
+                "variant": "default"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "home-journal-card-loops-copy",
+                    "props": {
+                      "children": "Small reviews turn abstract agreement into specific, timely feedback."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.cta-button",
+                    "componentVersion": 1,
+                    "id": "home-journal-card-loops-link",
+                    "props": {
+                      "arrow": true,
+                      "children": "Read about reviews",
+                      "href": "/journal/review-in-small-loops",
+                      "variant": "secondary"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "ui.callout",
+        "componentVersion": 1,
+        "id": "home-callout",
+        "props": {
+          "title": "Working with us",
+          "tone": "muted"
+        },
+        "slots": {
+          "body": [
+            {
+              "componentId": "ui.prose-p",
+              "componentVersion": 1,
+              "id": "home-callout-copy",
+              "props": {
+                "children": "Most engagements begin with a one-hour call about the decision you are facing."
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "ui.cta-button",
+              "componentVersion": 1,
+              "id": "home-callout-link",
+              "props": {
+                "arrow": false,
+                "children": "Start a conversation",
+                "href": "/about",
+                "variant": "secondary"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

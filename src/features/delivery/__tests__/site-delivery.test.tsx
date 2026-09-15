@@ -104,6 +104,30 @@ describe("SiteDelivery", () => {
     expect(screen.getByText("Activated local release — not deployed")).toBeInTheDocument();
   });
 
+  it("shows the hosted demo notice on /site", async () => {
+    render(<SiteDelivery source={activated()} pathname="/site" hostedDemo />);
+    await screen.findByRole("heading", { name: "Clear ideas, carefully shaped" });
+    expect(screen.getByText("Public demo of zudo-composer")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/nothing is published/i);
+  });
+
+  it("shows the hosted demo notice separately on /website-preview", async () => {
+    render(<SiteDelivery source={working(fixture())} pathname="/website-preview/about" hostedDemo />);
+    await screen.findByRole("heading", { name: "A studio built around useful clarity" });
+    expect(screen.getByText("Public demo of zudo-composer")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/real authoring runs locally with pnpm dev/i);
+  });
+
+  it("does not show the hosted demo notice when hosted mode is false", async () => {
+    render(<SiteDelivery source={activated()} pathname="/site" />);
+    await screen.findByRole("heading", { name: "Clear ideas, carefully shaped" });
+    expect(screen.queryByText("Public demo of zudo-composer")).not.toBeInTheDocument();
+    cleanup();
+    render(<SiteDelivery source={working(fixture())} pathname="/website-preview/about" />);
+    await screen.findByRole("heading", { name: "A studio built around useful clarity" });
+    expect(screen.queryByText("Public demo of zudo-composer")).not.toBeInTheDocument();
+  });
+
   it("renders Sitemap navigation, collection breadcrumbs, footer, and not-found", async () => {
     render(<SiteDelivery source={activated()} pathname="/site/journal/start-with-the-question" />);
     await screen.findByRole("heading", { name: "Start with the question" });

@@ -1,0 +1,153 @@
+{
+  "id": "site-frame",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "site-frame",
+    "name": "Site frame",
+    "publication": {
+      "kind": "global-template",
+      "outlet": {
+        "id": "site-frame-outlet",
+        "label": "Main content",
+        "target": {
+          "parentId": "frame-main",
+          "slotId": "content"
+        }
+      }
+    },
+    "root": [
+      {
+        "componentId": "land.header",
+        "componentVersion": 1,
+        "id": "site-frame-land-header-1",
+        "props": {
+          "brand": "Orrery",
+          "brandHref": "/"
+        },
+        "slots": {
+          "action": [
+            {
+              "componentId": "land.button",
+              "componentVersion": 1,
+              "id": "site-frame-land-button-5",
+              "props": {
+                "href": "/#signup",
+                "label": "Start free",
+                "size": "md",
+                "variant": "secondary"
+              },
+              "slots": {}
+            }
+          ],
+          "nav": [
+            {
+              "componentId": "land.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-land-nav-link-2",
+              "props": {
+                "href": "/features",
+                "label": "Features"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-land-nav-link-3",
+              "props": {
+                "href": "/pricing",
+                "label": "Pricing"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-land-nav-link-4",
+              "props": {
+                "href": "/about",
+                "label": "About"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "land.container",
+        "componentVersion": 1,
+        "id": "frame-main",
+        "props": {
+          "width": "page"
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "land.footer",
+        "componentVersion": 1,
+        "id": "site-frame-land-footer-6",
+        "props": {
+          "creditHref": "https://zudo-composer.zudolab.dev",
+          "creditLabel": "Built with zudo-composer",
+          "smallPrint": "© 2026 Orrery. A fictional product for a demo site."
+        },
+        "slots": {
+          "nav": [
+            {
+              "componentId": "land.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-land-nav-link-7",
+              "props": {
+                "href": "/features",
+                "label": "Features"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-land-nav-link-8",
+              "props": {
+                "href": "/pricing",
+                "label": "Pricing"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-land-nav-link-9",
+              "props": {
+                "href": "/about",
+                "label": "About"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-land-nav-link-10",
+              "props": {
+                "href": "/privacy",
+                "label": "Privacy"
+              },
+              "slots": {}
+            },
+            {
+              "componentId": "land.nav-link",
+              "componentVersion": 1,
+              "id": "site-frame-land-nav-link-11",
+              "props": {
+                "href": "/terms",
+                "label": "Terms"
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

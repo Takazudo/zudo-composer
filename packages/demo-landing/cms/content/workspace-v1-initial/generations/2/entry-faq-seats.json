@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-seats",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "Seats are counted on the first of each month. Add people whenever you like; we charge the difference on the next invoice.",
+    "faq-order": 6,
+    "faq-question": "What happens when someone joins or leaves?",
+    "faq-topic": "billing"
+  }
+}

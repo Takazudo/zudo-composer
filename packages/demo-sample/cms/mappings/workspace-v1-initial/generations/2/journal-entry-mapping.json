@@ -1,0 +1,91 @@
+{
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "document": {
+    "bindings": [
+      {
+        "id": "article-heading-binding",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "article-heading-field",
+        "target": {
+          "nodeId": "journal-entry-heading",
+          "prop": "heading"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      },
+      {
+        "id": "article-intro-binding",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "article-intro-field",
+        "target": {
+          "nodeId": "journal-entry-heading",
+          "prop": "intro"
+        },
+        "transform": {
+          "kind": "truncate-160"
+        }
+      },
+      {
+        "id": "article-date-binding",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "article-date-field",
+        "target": {
+          "nodeId": "journal-entry-date",
+          "prop": "children"
+        },
+        "transform": {
+          "kind": "date-medium"
+        }
+      },
+      {
+        "id": "article-body-binding",
+        "projection": {
+          "kind": "value"
+        },
+        "sourceFieldId": "article-body-field",
+        "target": {
+          "nodeId": "journal-entry-body",
+          "prop": "markdown"
+        },
+        "transform": {
+          "kind": "identity"
+        }
+      }
+    ],
+    "composition": {
+      "providerId": "files",
+      "recordId": "journal-entry-page"
+    },
+    "contentModel": {
+      "providerId": "content-filesystem",
+      "recordId": "journal-articles"
+    },
+    "id": "journal-entry-mapping",
+    "mode": {
+      "kind": "collection",
+      "query": {
+        "conditions": [],
+        "limit": 100,
+        "pins": [],
+        "publication": "published-only",
+        "sort": [
+          {
+            "direction": "desc",
+            "fieldId": "article-date-field"
+          }
+        ]
+      }
+    },
+    "name": "Journal entry mapping",
+    "schemaVersion": 2
+  },
+  "id": "journal-entry-mapping",
+  "updatedAt": "2026-08-31T00:00:00.000Z"
+}

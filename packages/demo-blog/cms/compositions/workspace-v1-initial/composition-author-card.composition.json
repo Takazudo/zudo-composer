@@ -1,0 +1,21 @@
+{
+  "id": "author-card",
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "id": "author-card",
+    "name": "Author card",
+    "root": [
+      {
+        "componentId": "blog.author-card",
+        "componentVersion": 1,
+        "id": "author-card",
+        "props": {
+          "variant": "inline"
+        },
+        "slots": {}
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

@@ -33,3 +33,4 @@ export const ASSET_NOSNIFF: string;
 export function assetKindForMime(mimeType: string): AssetKindDescriptor | undefined;
 export function assetMimeTypeForExtension(extension: string): string | undefined;
 export function assetContentDisposition(mimeType: string, checksum: string): string | undefined;
+export function hostedAssetHeaders(files: Array<{ path: string; byteLength: number }>): string;

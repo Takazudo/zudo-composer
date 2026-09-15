@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "faq-data",
+  "lifecycle": "published",
+  "modelId": "faq",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "faq-answer": "In the EU or the US — you choose when you create the workspace. Event details are encrypted at rest, and Org adds SSO and an audit log.",
+    "faq-order": 8,
+    "faq-question": "Where is our data stored?",
+    "faq-topic": "security"
+  }
+}

@@ -20,7 +20,7 @@ describe("Asset styling contract", () => {
     expect(classNames.length).toBeGreaterThan(0);
     // `cms-` names appear only as descendant hooks into the shared controls.
     expect(classNames.every((name) => name.startsWith("sg-assets") || name.startsWith("cms-"))).toBe(true);
-    expect([...new Set(classNames.filter((name) => name.startsWith("cms-")))].sort()).toEqual(["cms-btn", "cms-check"]);
+    expect([...new Set(classNames.filter((name) => name.startsWith("cms-")))].sort()).toEqual(["cms-btn", "cms-check", "cms-dialog__body", "cms-dialog__panel"]);
   });
 
   it("keeps the drop strip a control-height row rather than a hero box", () => {

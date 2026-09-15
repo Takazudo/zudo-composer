@@ -28,6 +28,7 @@ vi.mock("../../features/assets", async () => {
   return {
     AssetRouteContent: vi.fn(() => <h1>Asset editor</h1>),
     AssetFieldPicker: vi.fn(() => <div>Asset field picker</div>),
+    versionedAssetStore: (provider: { store?: { capabilities?: { snapshot?: boolean }; snapshot?: unknown } }) => provider.store?.capabilities?.snapshot && typeof provider.store.snapshot === "function" ? provider.store : undefined,
     createAssetContentServices: vi.fn(createAssetContentServices),
   };
 });
@@ -47,6 +48,21 @@ function workspace(id = "one") {
 }
 afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, "", "/"); vi.clearAllMocks(); });
 describe("application workspace lifetime", () => {
+  it("shows the hosted demo notice on authoring routes and leaves local mode unchanged", async () => {
+    render(<App integration={workspace() as unknown as ProductionProviderIntegration} hostedDemo />);
+    await screen.findByRole("heading", { name: "Workspace one" });
+    expect(screen.getByText("Public demo of zudo-composer")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/edits and uploads stay in this browser tab and reset on reload/i);
+    expect(screen.getByRole("status")).toHaveTextContent(/nothing is published/i);
+    expect(screen.getByRole("status")).toHaveTextContent(/real authoring runs locally with pnpm dev/i);
+    expect(screen.getByRole("status")).toHaveTextContent("Export JSON to keep your project.");
+
+    cleanup();
+    render(<App integration={workspace() as unknown as ProductionProviderIntegration} />);
+    await screen.findByRole("heading", { name: "Workspace one" });
+    expect(screen.queryByText("Public demo of zudo-composer")).not.toBeInTheDocument();
+  });
+
   it("warns on closing throughout a workspace replacement and stops warning after the committed swap", async () => {
     let finish!: (value: ProductionProviderIntegration) => void;
     const integration = { ...workspace(), assetProvider: { descriptor: { id: "asset-files" } } };
@@ -78,15 +94,16 @@ describe("application workspace lifetime", () => {
     } finally { spy.mockRestore(); }
   });
   it("adapts Content field picking and exact Asset usage locations without feature globals", async () => {
-    const assetProvider = { descriptor: { id: "asset-files" } };
+    const assetProvider = { descriptor: { id: "asset-files" }, store: { capabilities: { replace: true, snapshot: true }, snapshot: vi.fn(), upload: vi.fn() } };
     const integration = { ...workspace(), assetProvider };
     window.history.replaceState(null, "", "/content?provider=content-filesystem&model=articles");
     render(<App integration={integration as unknown as ProductionProviderIntegration} />);
     await screen.findByRole("heading", { name: "Content editor" });
     const contentProps = vi.mocked(ContentRouteContent).mock.lastCall![0];
-    const picker = contentProps.renderAssetPicker!({ kind: "card", onSelect: vi.fn(), onClose: vi.fn() }) as { type: unknown; props: { provider?: unknown; kind: string } };
+    const picker = contentProps.renderAssetPicker!({ kind: "card", current: { providerId: "asset-files", assetId: "hero" }, intent: "upload", onSelect: vi.fn(), onClose: vi.fn() }) as { type: unknown; props: { provider?: unknown; kind: string; current?: unknown; intent?: unknown } };
     expect(picker.type).toBe(AssetFieldPicker);
-    expect(picker.props).toMatchObject({ provider: assetProvider, kind: "card" });
+    expect(picker.props).toMatchObject({ provider: assetProvider, kind: "card", current: { providerId: "asset-files", assetId: "hero" }, intent: "upload" });
+    expect(contentProps.assetPickerCapabilities).toEqual({ upload: true });
 
     fireEvent.click(screen.getByRole("link", { name: "Assets" }));
     await screen.findByRole("heading", { name: "Asset editor" });
@@ -95,6 +112,12 @@ describe("application workspace lifetime", () => {
       .toBe("/content?provider=content-filesystem&model=articles&entry=entry-1&field=body&path=%2Ff%3Acards%2Fi%3A2");
     expect(assetProps.usageHref!({ providerId: "content-filesystem", modelId: "articles", entryId: "entry-1", fieldId: "hero", valuePath: [] }))
       .toBe("/content?provider=content-filesystem&model=articles&entry=entry-1&field=hero");
+  });
+  it("disables picker uploads when the workspace has no Asset provider", async () => {
+    window.history.replaceState(null, "", "/content?provider=content-filesystem&model=articles");
+    render(<App integration={workspace() as unknown as ProductionProviderIntegration} />);
+    await screen.findByRole("heading", { name: "Content editor" });
+    expect(vi.mocked(ContentRouteContent).mock.lastCall![0].assetPickerCapabilities).toEqual({ upload: false });
   });
   it("invalidates Asset usage on every authoring channel and on nothing else", async () => {
     const integration = workspace();

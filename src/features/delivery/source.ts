@@ -24,7 +24,9 @@ export type ActivatedDeliverySource =
 
 export type DeliverySourceContract =
   | { kind: "activated"; componentProvider: typeof import("../composer/active-pack").activeComponentProvider; read(): ActivatedDeliverySource; subscribe?(listener: () => void): () => void }
-  | { kind: "working-preview"; basePath?: "/site" | "/website-preview"; providers: import("../../app/provider-integration").ProductionProviderIntegration };
+  | { kind: "working-preview"; basePath?: "/site" | "/website-preview"; providers: import("../../app/provider-integration").ProductionProviderIntegration }
+  /** A project compiled at build time and delivered at its own origin root (`vite.site-static.config.ts`). */
+  | { kind: "static"; componentProvider: typeof import("../composer/active-pack").activeComponentProvider; project: SiteProject; build: SiteBuildPlan };
 
 export function parseActivatedDeliverySource(value: unknown): ActivatedDeliverySource | undefined {
   if (!value || typeof value !== "object" || !("status" in value)) return undefined;

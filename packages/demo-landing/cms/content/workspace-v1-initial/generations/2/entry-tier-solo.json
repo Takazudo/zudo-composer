@@ -1,0 +1,33 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "generation": 1,
+  "id": "tier-solo",
+  "lifecycle": "published",
+  "modelId": "tiers",
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-12T00:00:00.000Z",
+  "values": {
+    "tiers-cta-href": "/#signup",
+    "tiers-cta-label": "Start free",
+    "tiers-currency": "USD",
+    "tiers-feature1": "Day, week and month views",
+    "tiers-feature2": "Sync two calendars",
+    "tiers-feature3": "Focus blocks you set once",
+    "tiers-feature4": "Weekly plan email on Sunday",
+    "tiers-feature5": "",
+    "tiers-feature6": "",
+    "tiers-features": [
+      "Day, week and month views",
+      "Sync two calendars",
+      "Focus blocks you set once",
+      "Weekly plan email on Sunday"
+    ],
+    "tiers-name": "Solo",
+    "tiers-order": 1,
+    "tiers-popular": false,
+    "tiers-price-monthly": 0,
+    "tiers-price-yearly": 0,
+    "tiers-slug": "solo",
+    "tiers-tagline": "For one person planning their own week."
+  }
+}

@@ -63,7 +63,7 @@ export interface PreviewClient {
   /** Announce readiness. Called on every load — including after a reload. */
   emitReady(): void;
   emitSelect(nodeId: string | null): void;
-  emitRequestAdd(target: InsertionTarget): void;
+  emitRequestAdd(target: InsertionTarget, rect?: SerializedRect): void;
   /** Navigate to the linked source; this never selects or mutates source nodes. */
   emitOpenSource(sourceRecordId: string): void;
   /** The selected node's chrome "⋯" was activated (issue Takazudo/zudo-sg#256). */
@@ -153,8 +153,8 @@ export function createPreviewClient(options: PreviewClientOptions): PreviewClien
     emitSelect(nodeId) {
       post(selectMessage(pack, outboundRevision(), nodeId));
     },
-    emitRequestAdd(target) {
-      post(requestAddMessage(pack, outboundRevision(), target));
+    emitRequestAdd(target, rect) {
+      post(requestAddMessage(pack, outboundRevision(), target, rect));
     },
     emitOpenSource(sourceRecordId) {
       post(openSourceMessage(pack, sourceRecordId));

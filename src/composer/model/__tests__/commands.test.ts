@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   addNode,
+  insertForest,
+  insertSubtree,
+  moveSubtree,
   removeNode,
   reorderNode,
   repairSelection,
@@ -9,12 +12,14 @@ import {
 import { createSequentialIdFactory } from "../../../shared/id-factory";
 import { indexDocument } from "../index-model";
 import { RESERVED_PERSISTED_KEYS } from "@zudo-composer/component-contract";
-import { VIRTUAL_ROOT_SLOT_ID } from "../types";
-import type { InsertionTarget, JsonObject } from "../types";
+import { VIRTUAL_ROOT_SLOT_ID, createComponentCatalog } from "../types";
+import type { InsertionTarget, JsonObject, RootPolicy } from "../types";
 import { COMPONENT_IDS as C, SLOT_IDS as S } from "../../__tests__/fixtures";
 import {
   FIXTURE_COMPONENT_IDS as X,
+  createFixturePackManifest,
   doc,
+  fixtureEntries,
   fixtureManifest as M,
   node,
 } from "../../__tests__/fixtures";
@@ -150,6 +155,68 @@ describe("addNode", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatch(/opaque/i);
+  });
+});
+
+describe("slot max bound", () => {
+  const BOUNDED = "fixture.bounded";
+  const bounded = createComponentCatalog(createFixturePackManifest([
+    ...fixtureEntries,
+    {
+      ...fixtureEntries.find((entry) => entry.id === C.stack)!,
+      id: BOUNDED,
+      title: "Bounded",
+      source: { module: "@fixtures/bounded", exportName: "Bounded", exportKind: "named" },
+      slots: [{ id: "items", prop: "children", label: "Items", cardinality: "many", min: 1, max: 2 }],
+    },
+  ]));
+  const full = () => doc([
+    node(BOUNDED, { gap: "md" }, { items: [node(X.box, {}, {}, "a"), node(X.box, {}, {}, "b")] }, "bounded"),
+    node(C.stack, { gap: "md" }, { [S.stackChildren]: [node(X.box, {}, {}, "loose")] }, "stack"),
+  ]);
+  const into = (index: number): InsertionTarget => ({ parentId: "bounded", slotId: "items", index });
+  const maxRoot: RootPolicy = { kind: "resolved", cardinality: "many", max: 1 };
+  const bound = (root = [node(X.box, {}, {}, "r1")]) => {
+    const value = doc(root);
+    value.binding = { sourceRecordId: "source-record", outletId: "outlet-main" };
+    return value;
+  };
+
+  it("rejects adding into a nested slot already at max with slot-full", () => {
+    const result = addNode(full(), bounded, into(2), X.box, ids());
+    expect(result).toMatchObject({ ok: false, code: "slot-full", error: expect.stringContaining("at most 2") });
+    const roomy = full();
+    roomy.root[0]!.slots.items!.pop();
+    expect(addNode(roomy, bounded, into(1), X.box, ids()).ok).toBe(true);
+  });
+
+  it("rejects pasting a subtree into a full slot", () => {
+    const result = insertSubtree(full(), bounded, into(0), node(X.box, {}, {}, "paste"));
+    expect(result).toMatchObject({ ok: false, code: "slot-full" });
+  });
+
+  it("rejects a root insertion beyond the resolved policy max", () => {
+    const result = addNode(bound(), bounded, rootTarget(1), X.box, ids(), maxRoot);
+    expect(result).toMatchObject({ ok: false, code: "slot-full", error: expect.stringContaining("at most 1 root") });
+    expect(addNode(bound([]), bounded, rootTarget(0), X.box, ids(), maxRoot).ok).toBe(true);
+  });
+
+  it("rejects a cross-slot move into a full slot but still allows a same-slot reorder", () => {
+    expect(moveSubtree(full(), bounded, "loose", into(0))).toMatchObject({ ok: false, code: "slot-full" });
+    expect(moveSubtree(full(), bounded, "a", into(2)).ok).toBe(true);
+    const rootMove = bound([node(X.box, {}, {}, "r1"), node(C.stack, {}, { [S.stackChildren]: [node(X.box, {}, {}, "inner")] }, "s")]);
+    expect(moveSubtree(rootMove, bounded, "inner", rootTarget(0), { kind: "resolved", cardinality: "many", max: 2 }))
+      .toMatchObject({ ok: false, code: "slot-full" });
+  });
+
+  it("makes insertForest respect max for nested slots and the virtual root", () => {
+    const roomy = full();
+    roomy.root[0]!.slots.items!.pop();
+    const forest = [node(X.box, {}, {}, "p1"), node(X.box, {}, {}, "p2")];
+    expect(insertForest(roomy, bounded, into(1), forest, ids())).toMatchObject({ ok: false, code: "slot-full" });
+    expect(insertForest(roomy, bounded, into(1), forest.slice(0, 1), ids()).ok).toBe(true);
+    expect(insertForest(bound([]), bounded, rootTarget(0), forest, ids(), maxRoot))
+      .toMatchObject({ ok: false, code: "slot-full" });
   });
 });
 

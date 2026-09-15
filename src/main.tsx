@@ -1,3 +1,4 @@
+/// <reference path="./features/composer/pack-config.d.ts" />
 import { render } from "preact";
 import { bootstrapTheme, createThemeController } from "./theme/theme";
 

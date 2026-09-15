@@ -1,0 +1,262 @@
+{
+  "id": "services-page",
+  "createdAt": "2026-08-31T00:00:00.000Z",
+  "updatedAt": "2026-08-31T00:00:00.000Z",
+  "document": {
+    "binding": {
+      "outletId": "main-content",
+      "sourceRecordId": "site-frame"
+    },
+    "id": "services-page",
+    "name": "Services page",
+    "root": [
+      {
+        "componentId": "ui.section-heading",
+        "componentVersion": 1,
+        "id": "services-heading",
+        "props": {
+          "as": "h1",
+          "eyebrow": "Services",
+          "heading": "Ways to work together",
+          "intro": "Three fixed-shape offers, from a two-week framing sprint to a steady delivery rhythm."
+        },
+        "slots": {}
+      },
+      {
+        "componentId": "ui.split-layout",
+        "componentVersion": 1,
+        "id": "services-split",
+        "props": {
+          "gap": "lg",
+          "ratio": "60/40"
+        },
+        "slots": {
+          "left": [
+            {
+              "componentId": "ui.prose-md",
+              "componentVersion": 1,
+              "id": "services-engagement",
+              "props": {
+                "markdown": "## What an engagement looks like\n\nEvery engagement starts with a short call and a written note about the decision you are facing. We reply with a proposal that names one outcome, one team and one first cycle.\n\nFrom there we work in weekly loops. Each week ends with something you can open, read or click, and a short list of open questions. You decide what moves forward.\n\nWe keep all drafts, notes and decisions in one shared place. When the engagement ends, your team keeps everything, and nobody needs us to find their way around it."
+              },
+              "slots": {}
+            }
+          ],
+          "right": [
+            {
+              "componentId": "ui.stack",
+              "componentVersion": 1,
+              "id": "services-facts",
+              "props": {
+                "align": "start",
+                "direction": "vertical",
+                "gap": "md",
+                "justify": "start"
+              },
+              "slots": {
+                "content": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "services-fact-team",
+                    "props": {
+                      "children": "Four people: a strategist, a designer, a writer and a developer."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "services-fact-length",
+                    "props": {
+                      "children": "Most engagements last between two and twelve weeks."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "services-fact-billing",
+                    "props": {
+                      "children": "We bill a fixed fee per cycle, agreed before each cycle starts."
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "ui.auto-grid",
+        "componentVersion": 1,
+        "id": "services-grid",
+        "props": {
+          "fill": true,
+          "gap": "split",
+          "min": "16rem"
+        },
+        "slots": {
+          "items": [
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "services-card-direction",
+              "props": {
+                "padding": "lg",
+                "title": "Direction",
+                "variant": "accent"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "services-card-direction-copy",
+                    "props": {
+                      "children": "A two-week framing sprint that ends in a written brief your team can act on."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "services-card-direction-price",
+                    "props": {
+                      "children": "Starts from two weeks, one fixed fee."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.cta-button",
+                    "componentVersion": 1,
+                    "id": "services-card-direction-link",
+                    "props": {
+                      "arrow": true,
+                      "children": "Ask about Direction",
+                      "href": "/about",
+                      "variant": "secondary"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            },
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "services-card-design",
+              "props": {
+                "padding": "md",
+                "title": "Design",
+                "variant": "default"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "services-card-design-copy",
+                    "props": {
+                      "children": "Interface and content design in weekly visible cycles, reviewed with the people who will use it."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "services-card-design-price",
+                    "props": {
+                      "children": "Starts from four weekly cycles."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.cta-button",
+                    "componentVersion": 1,
+                    "id": "services-card-design-link",
+                    "props": {
+                      "arrow": true,
+                      "children": "Ask about Design",
+                      "href": "/about",
+                      "variant": "secondary"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            },
+            {
+              "componentId": "ui.card",
+              "componentVersion": 1,
+              "id": "services-card-delivery",
+              "props": {
+                "padding": "md",
+                "title": "Delivery",
+                "variant": "muted"
+              },
+              "slots": {
+                "body": [
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "services-card-delivery-copy",
+                    "props": {
+                      "children": "Build, handoff and review points on a fixed rhythm, so your team can maintain the result."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.prose-p",
+                    "componentVersion": 1,
+                    "id": "services-card-delivery-price",
+                    "props": {
+                      "children": "Starts from six weekly cycles."
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.cta-button",
+                    "componentVersion": 1,
+                    "id": "services-card-delivery-link",
+                    "props": {
+                      "arrow": true,
+                      "children": "Ask about Delivery",
+                      "href": "/about",
+                      "variant": "secondary"
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "componentId": "ui.callout",
+        "componentVersion": 1,
+        "id": "services-callout",
+        "props": {
+          "title": "A flexible starting point",
+          "tone": "note"
+        },
+        "slots": {
+          "body": [
+            {
+              "componentId": "ui.prose-p",
+              "componentVersion": 1,
+              "id": "services-callout-copy",
+              "props": {
+                "children": "Not sure which offer fits? Start with a single Direction sprint. It stands on its own, and nothing after it is assumed."
+              },
+              "slots": {}
+            }
+          ]
+        }
+      }
+    ],
+    "schemaVersion": 2
+  }
+}

@@ -1,0 +1,98 @@
+[
+  {
+    "file": "shop-hero.webp",
+    "alt": "A dark workbench at night with a small lit brass lamp, a closed notebook and a pen",
+    "use": "home hero, about image",
+    "aspect": "16:9"
+  },
+  {
+    "file": "p-ledger-notebook.webp",
+    "alt": "Charcoal linen A5 notebook with a black elastic band",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-ledger-notebook-2.webp",
+    "alt": "The notebook open to blank dotted pages",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-brass-rule.webp",
+    "alt": "Solid brass 30 cm ruler with engraved marks",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-field-pen.webp",
+    "alt": "Matte black aluminium fountain pen, capped",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-field-pen-2.webp",
+    "alt": "The pen uncapped, showing its steel nib",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-slate-tray.webp",
+    "alt": "Shallow dark slate desk tray holding two paper clips",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-sling-pouch.webp",
+    "alt": "Small black waxed-canvas sling pouch",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-card-wallet.webp",
+    "alt": "Slim black leather card wallet",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-key-loop.webp",
+    "alt": "Black leather key loop with a dark steel ring",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-rain-cape.webp",
+    "alt": "Folded charcoal rain cape beside its stuff sack",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-wick-lamp.webp",
+    "alt": "Small lit brass oil lamp with a glass chimney",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-wick-lamp-2.webp",
+    "alt": "The brass lamp unlit with its chimney set beside it",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-pocket-torch.webp",
+    "alt": "Short black aluminium pocket flashlight",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-candle-set.webp",
+    "alt": "Three ivory pillar candles of different heights",
+    "use": "product image",
+    "aspect": "1:1"
+  },
+  {
+    "file": "p-clip-light.webp",
+    "alt": "Small black clip-on reading light",
+    "use": "product image",
+    "aspect": "1:1"
+  }
+]

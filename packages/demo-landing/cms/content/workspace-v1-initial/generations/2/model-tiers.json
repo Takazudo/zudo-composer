@@ -1,0 +1,136 @@
+{
+  "createdAt": "2026-09-12T00:00:00.000Z",
+  "document": {
+    "description": "Pricing tiers. `features` is the real list; feature1…6 are its flattened copy for the tier component.",
+    "fields": [
+      {
+        "id": "tiers-name",
+        "key": "name",
+        "kind": "text",
+        "label": "Name",
+        "required": true
+      },
+      {
+        "id": "tiers-slug",
+        "key": "slug",
+        "kind": "slug",
+        "label": "Slug",
+        "required": true
+      },
+      {
+        "id": "tiers-tagline",
+        "key": "tagline",
+        "kind": "text",
+        "label": "Tagline",
+        "required": true
+      },
+      {
+        "id": "tiers-price-monthly",
+        "key": "priceMonthly",
+        "kind": "number",
+        "label": "Price per month",
+        "required": true
+      },
+      {
+        "id": "tiers-price-yearly",
+        "key": "priceYearly",
+        "kind": "number",
+        "label": "Price per month, billed yearly",
+        "required": true
+      },
+      {
+        "id": "tiers-currency",
+        "key": "currency",
+        "kind": "text",
+        "label": "Currency",
+        "required": true
+      },
+      {
+        "id": "tiers-features",
+        "item": {
+          "kind": "text"
+        },
+        "key": "features",
+        "kind": "list",
+        "label": "Features",
+        "required": true
+      },
+      {
+        "id": "tiers-feature1",
+        "key": "feature1",
+        "kind": "text",
+        "label": "Feature1",
+        "required": false
+      },
+      {
+        "id": "tiers-feature2",
+        "key": "feature2",
+        "kind": "text",
+        "label": "Feature2",
+        "required": false
+      },
+      {
+        "id": "tiers-feature3",
+        "key": "feature3",
+        "kind": "text",
+        "label": "Feature3",
+        "required": false
+      },
+      {
+        "id": "tiers-feature4",
+        "key": "feature4",
+        "kind": "text",
+        "label": "Feature4",
+        "required": false
+      },
+      {
+        "id": "tiers-feature5",
+        "key": "feature5",
+        "kind": "text",
+        "label": "Feature5",
+        "required": false
+      },
+      {
+        "id": "tiers-feature6",
+        "key": "feature6",
+        "kind": "text",
+        "label": "Feature6",
+        "required": false
+      },
+      {
+        "id": "tiers-cta-label",
+        "key": "ctaLabel",
+        "kind": "text",
+        "label": "Button label",
+        "required": true
+      },
+      {
+        "id": "tiers-cta-href",
+        "key": "ctaHref",
+        "kind": "text",
+        "label": "Button link",
+        "required": true
+      },
+      {
+        "id": "tiers-popular",
+        "key": "popular",
+        "kind": "boolean",
+        "label": "Popular",
+        "required": true
+      },
+      {
+        "id": "tiers-order",
+        "key": "order",
+        "kind": "number",
+        "label": "Order",
+        "required": true
+      }
+    ],
+    "id": "tiers",
+    "kind": "collection",
+    "name": "Tiers",
+    "schemaVersion": 1
+  },
+  "id": "tiers",
+  "updatedAt": "2026-09-12T00:00:00.000Z"
+}

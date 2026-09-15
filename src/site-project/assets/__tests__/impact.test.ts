@@ -12,11 +12,23 @@ const checksum = "a".repeat(64);
 const catalog = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "test", packVersion: "1", components: [{ ...componentCatalog.get("leaf")!, fields: [
   { prop: "title", label: "Title", schema: { type: "string" }, editor: { kind: "text" } },
   { prop: "href", label: "Link", schema: { type: "string" }, editor: { kind: "text" } },
+  { prop: "src", label: "Source", schema: { type: "string" }, editor: { kind: "text" } },
   { prop: "body", label: "Markdown", schema: { type: "string" }, editor: { kind: "text", mode: "markdown-source" } },
   { prop: "cards", label: "Cards", schema: { type: "array", items: { schema: { type: "object", fields: [{ key: "src", label: "Image", schema: { type: "string" }, editor: { kind: "text" } }] }, editor: { kind: "group" } } }, editor: { kind: "list" } },
 ] }] });
 const lock: AssetReferenceLock = { schemaVersion: 1, providerId: "asset-files", mutationToken: "b".repeat(64), pins: [{ providerId: "asset-files", assetId: "asset", versionId: checksum, checksum, mimeType: "image/png", byteLength: 12, url: assetVersionUrl(checksum, "image/png"), metadataRevision: 1, headVersionId: checksum }] };
 describe("provider-qualified assets impact", () => {
+  it("rewrites a composition src authoring URL with its lock and indexes the reference", () => {
+    const value = project();
+    value.providers.compositions[0]!.records[0]!.document.root[0]!.props.src = "/uploaded-assets/asset-asset";
+    const result = resolveSiteProjectAsset(value, catalog, { lock });
+    expect(result.project.providers.compositions[0]!.records[0]!.document.root[0]!.props.src).toBe(lock.pins[0]!.url);
+    expect(result.index.references).toContainEqual(expect.objectContaining({
+      ref: { providerId: "asset-files", assetId: "asset" },
+      location: expect.objectContaining({ domain: "compositions", property: "src" }),
+    }));
+  });
+
   it("captures and compiles identityless URLs with the actual provider and guards boundary changes", async () => {
     const value = project(); value.providers.compositions[0]!.records[0]!.document.root[0]!.props.href = "/uploaded-assets/asset-asset";
     const record = createAssetRecord({ fileName: "image.png", checksum, byteLength: 12, mimeType: "image/png" }, { id: "asset" });
