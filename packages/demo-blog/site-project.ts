@@ -1,23 +1,32 @@
 // The authored Margin Notes site (docs/demo-sites/blog.md). `zudo-composer generate`
 // turns this into `site-project.json`; `zudo-composer generate --check` reports
 // when the committed output disagrees.
-// Article bodies live in content/articles/<slug>.md; images are looked up by
-// file name in the configured Assets store (`pnpm seed` fills it).
+// Article bodies live in content/articles/<slug>.md.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { defineSite, entryRef, node, readAssetUrls } from "zudo-composer/authoring";
+import { assetAuthoringUrl, defineSite, entryRef, imageUse, node } from "zudo-composer/authoring";
 import type { CollectionModeInput, Entry, Page } from "zudo-composer/site-project";
-import { loadHostContext } from "zudo-composer/vite";
 import { componentPack } from "./components/pack";
 
 const packageRoot = import.meta.dirname;
-const { composerConfig } = await loadHostContext({ workspaceRoot: packageRoot });
-const assetUrls = readAssetUrls(composerConfig);
-const assetUrl = (file: string): string => {
-  const url = assetUrls[file];
-  if (!url) throw new Error(`${composerConfig.paths.assets} has no active asset named ${file}; run \`pnpm seed\`.`);
-  return url;
-};
+
+// Asset record ids in the committed cms/assets store (seeded from images-src/manifest.json).
+const ASSET_IDS = {
+  "avatar-mina-okafor.webp": "assets-525defc4-6eb4-42da-8e0f-31276503cc9a",
+  "avatar-teodor-lindqvist.webp": "assets-b36741ff-7dd4-4c15-9135-25c274e61e39",
+  "cover-half-finished-list.webp": "assets-70f66e49-6960-4c05-a6c9-6574cd0f6b9b",
+  "cover-sharpen.webp": "assets-7db0ed41-a622-4acf-ac08-e8b1a888d9a4",
+  "cover-one-thing.webp": "assets-8eb1c7be-6575-4ab5-9570-387c3c496145",
+  "cover-notes-survive.webp": "assets-df4f36c8-c6d6-4477-9857-9e113f977559",
+  "cover-unfinished-drafts.webp": "assets-cb66ffdb-9e19-4b89-97c0-7ec9c0857bf1",
+  "cover-quiet-hour.webp": "assets-ec164add-dbb0-47ae-b50f-e54f783f1a2e",
+  "cover-repairable-tools.webp": "assets-ef74294b-4999-49e7-b44f-72c9fcec23a8",
+  "cover-reading-slowly.webp": "assets-e788cb9d-a98f-4818-be0e-993300c6a1f9",
+} as const;
+
+type ImageName = keyof typeof ASSET_IDS;
+// The about page's cover appears in Markdown body text, which has no asset-use destination.
+const assetUrl = (file: ImageName): string => assetAuthoringUrl(ASSET_IDS[file]);
 const articleBody = (slug: string): string => readFileSync(resolve(packageRoot, "content/articles", `${slug}.md`), "utf8").trim();
 
 const site = defineSite({ id: "demo-blog", name: "Margin Notes", componentPack });
@@ -53,8 +62,6 @@ const newsletterForm = (id: string) => node("blog.newsletter", {
 
 // ── Content models ──────────────────────────────────────────────────────────
 
-const imageFields = [{ key: "src", kind: "url" as const }, { key: "alt", kind: "text" as const }];
-
 const authors = site.model({
   name: "Authors",
   kind: "collection",
@@ -63,7 +70,7 @@ const authors = site.model({
     { key: "name", kind: "text" },
     { key: "slug", kind: "slug" },
     { key: "bio", kind: "long-text" },
-    { key: "avatar", kind: "object", fields: imageFields },
+    { key: "avatar", kind: "asset-use", use: "image", label: "Avatar", required: true },
   ],
 });
 
@@ -78,7 +85,7 @@ const articles = site.model({
     { key: "title", kind: "text" },
     { key: "slug", kind: "slug" },
     { key: "intro", kind: "long-text" },
-    { key: "cover", kind: "object", fields: [...imageFields, { key: "caption", kind: "text" }] },
+    { key: "cover", kind: "asset-use", use: "image", label: "Cover", required: true },
     { key: "body", kind: "markdown" },
     { key: "bodyLength", kind: "number", label: "Body length (characters)" },
     { key: "date", kind: "date" },
@@ -89,7 +96,7 @@ const articles = site.model({
     { key: "tag3", kind: "text", label: "Tag 3", required: false },
     { key: "authorName", kind: "text" },
     { key: "authorBio", kind: "long-text" },
-    { key: "authorAvatar", kind: "object", fields: imageFields },
+    { key: "authorAvatar", kind: "asset-use", use: "image", label: "Author avatar", required: true },
     { key: "authorSlug", kind: "slug" },
   ],
 });
@@ -120,7 +127,7 @@ const about = site.model({
 
 // ── Entries ─────────────────────────────────────────────────────────────────
 
-interface AuthorInput { name: string; slug: string; bio: string; avatar: string; avatarAlt: string }
+interface AuthorInput { name: string; slug: string; bio: string; avatar: ImageName; avatarAlt: string }
 
 const authorInputs = {
   mina: {
@@ -141,7 +148,7 @@ const authorInputs = {
 
 const authorEntries = Object.fromEntries(Object.entries(authorInputs).map(([key, author]) => [key, site.entry(authors, {
   id: `author-${author.slug}`,
-  values: { name: author.name, slug: author.slug, bio: author.bio, avatar: { src: assetUrl(author.avatar), alt: author.avatarAlt } },
+  values: { name: author.name, slug: author.slug, bio: author.bio, avatar: imageUse(ASSET_IDS[author.avatar], author.avatarAlt) },
 })])) as Record<keyof typeof authorInputs, Entry>;
 
 interface ArticleInput {
@@ -151,7 +158,7 @@ interface ArticleInput {
   author: keyof typeof authorInputs;
   tags: [Tag, ...Tag[]];
   date: string;
-  cover: string;
+  cover: ImageName;
   alt: string;
   caption: string;
 }
@@ -216,7 +223,7 @@ const articleEntries = new Map<string, Entry>(articleInputs.map((article) => {
       title: article.title,
       slug: article.slug,
       intro: article.intro,
-      cover: { src: assetUrl(article.cover), alt: article.alt, caption: article.caption },
+      cover: imageUse(ASSET_IDS[article.cover], article.alt, { caption: article.caption }),
       body,
       bodyLength: body.length,
       date: article.date,
@@ -227,7 +234,7 @@ const articleEntries = new Map<string, Entry>(articleInputs.map((article) => {
       tag3: article.tags[2] ?? "",
       authorName: author.name,
       authorBio: author.bio,
-      authorAvatar: { src: assetUrl(author.avatar), alt: author.avatarAlt },
+      authorAvatar: imageUse(ASSET_IDS[author.avatar], author.avatarAlt),
       authorSlug: author.slug,
     },
   })];
@@ -294,8 +301,8 @@ const cardMapping = (name: string, mode: Omit<CollectionModeInput, "kind">) => s
     { field: "slug", nodeId: "article-card", prop: "slug" },
     { field: "intro", nodeId: "article-card", prop: "intro" },
     { field: "date", nodeId: "article-card", prop: "date", transform: { kind: "date-medium" } },
-    { field: "cover", nodeId: "article-card", prop: "src", projection: { kind: "object-field", fieldIds: [articles.fieldId("cover") + "-src"] } },
-    { field: "cover", nodeId: "article-card", prop: "alt", projection: { kind: "object-field", fieldIds: [articles.fieldId("cover") + "-alt"] } },
+    { field: "cover", nodeId: "article-card", prop: "src", projection: { kind: "asset-url" } },
+    { field: "cover", nodeId: "article-card", prop: "alt", projection: { kind: "asset-text", field: "alt" } },
     { field: "tag1", nodeId: "article-card", prop: "tag1" },
     { field: "tag2", nodeId: "article-card", prop: "tag2" },
     { field: "tag3", nodeId: "article-card", prop: "tag3" },
@@ -316,8 +323,8 @@ const authorCards = site.mapping({
     { field: "name", nodeId: "author-card", prop: "name" },
     { field: "slug", nodeId: "author-card", prop: "href", transform: { kind: "prefix", prefix: "/authors/" } },
     { field: "bio", nodeId: "author-card", prop: "bio" },
-    { field: "avatar", nodeId: "author-card", prop: "src", projection: { kind: "object-field", fieldIds: [authors.fieldId("avatar") + "-src"] } },
-    { field: "avatar", nodeId: "author-card", prop: "alt", projection: { kind: "object-field", fieldIds: [authors.fieldId("avatar") + "-alt"] } },
+    { field: "avatar", nodeId: "author-card", prop: "src", projection: { kind: "asset-url" } },
+    { field: "avatar", nodeId: "author-card", prop: "alt", projection: { kind: "asset-text", field: "alt" } },
   ],
 });
 
@@ -448,9 +455,6 @@ const articlePage = site.page({
 site.attach(relatedCards, { nodeId: "article-related", slotId: "articles" });
 site.attach(commentMapping, { nodeId: "article-comments", slotId: "comments" });
 
-const articleAvatar = (prop: "src" | "alt") => ({ kind: "object-field" as const, fieldIds: [`${articles.fieldId("authorAvatar")}-${prop}`] });
-const articleCover = (prop: "src" | "alt" | "caption") => ({ kind: "object-field" as const, fieldIds: [`${articles.fieldId("cover")}-${prop}`] });
-
 const articlePageMapping = site.mapping({
   name: "Article page",
   model: articles,
@@ -462,13 +466,13 @@ const articlePageMapping = site.mapping({
     { field: "intro", nodeId: "article-header", prop: "intro" },
     { field: "authorName", nodeId: "article-header", prop: "authorName" },
     { field: "author", nodeId: "article-header", prop: "authorHref", projection: { kind: "route-link" } },
-    { field: "authorAvatar", nodeId: "article-avatar", prop: "src", projection: articleAvatar("src") },
-    { field: "authorAvatar", nodeId: "article-avatar", prop: "alt", projection: articleAvatar("alt") },
+    { field: "authorAvatar", nodeId: "article-avatar", prop: "src", projection: { kind: "asset-url" } },
+    { field: "authorAvatar", nodeId: "article-avatar", prop: "alt", projection: { kind: "asset-text", field: "alt" } },
     { field: "date", nodeId: "article-header", prop: "date", transform: { kind: "date-medium" } },
     { field: "bodyLength", nodeId: "article-header", prop: "bodyLength" },
-    { field: "cover", nodeId: "article-header", prop: "src", projection: articleCover("src") },
-    { field: "cover", nodeId: "article-header", prop: "alt", projection: articleCover("alt") },
-    { field: "cover", nodeId: "article-header", prop: "caption", projection: articleCover("caption") },
+    { field: "cover", nodeId: "article-header", prop: "src", projection: { kind: "asset-url" } },
+    { field: "cover", nodeId: "article-header", prop: "alt", projection: { kind: "asset-text", field: "alt" } },
+    { field: "cover", nodeId: "article-header", prop: "caption", projection: { kind: "asset-text", field: "caption" } },
     { field: "body", nodeId: "article-body", prop: "markdown" },
     { field: "tag1", nodeId: "article-tags", prop: "tag1" },
     { field: "tag2", nodeId: "article-tags", prop: "tag2" },
@@ -476,8 +480,8 @@ const articlePageMapping = site.mapping({
     { field: "authorName", nodeId: "article-author", prop: "name" },
     { field: "author", nodeId: "article-author", prop: "href", projection: { kind: "route-link" } },
     { field: "authorBio", nodeId: "article-author", prop: "bio" },
-    { field: "authorAvatar", nodeId: "article-author", prop: "src", projection: articleAvatar("src"), id: "article-page-author-card-src" },
-    { field: "authorAvatar", nodeId: "article-author", prop: "alt", projection: articleAvatar("alt"), id: "article-page-author-card-alt" },
+    { field: "authorAvatar", nodeId: "article-author", prop: "src", projection: { kind: "asset-url" }, id: "article-page-author-card-src" },
+    { field: "authorAvatar", nodeId: "article-author", prop: "alt", projection: { kind: "asset-text", field: "alt" }, id: "article-page-author-card-alt" },
   ],
 });
 
@@ -504,8 +508,8 @@ const authorPageMapping = site.mapping({
   bindings: [
     { field: "name", nodeId: "author-hero", prop: "name" },
     { field: "bio", nodeId: "author-hero", prop: "bio" },
-    { field: "avatar", nodeId: "author-hero", prop: "src", projection: { kind: "object-field", fieldIds: [authors.fieldId("avatar") + "-src"] } },
-    { field: "avatar", nodeId: "author-hero", prop: "alt", projection: { kind: "object-field", fieldIds: [authors.fieldId("avatar") + "-alt"] } },
+    { field: "avatar", nodeId: "author-hero", prop: "src", projection: { kind: "asset-url" } },
+    { field: "avatar", nodeId: "author-hero", prop: "alt", projection: { kind: "asset-text", field: "alt" } },
   ],
 });
 

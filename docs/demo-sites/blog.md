@@ -241,16 +241,16 @@ Kinds as in the other docs. Image props are `text` named `src`.
 | `title` | text | required |
 | `slug` | slug | required |
 | `intro` | long-text | 1–2 sentences |
-| `cover` | object { `src`: url, `alt`: text, `caption`: text } | required |
+| `cover` | `asset-use` (`use: "image"`) | required |
 | `body` | markdown | 400–800 words |
 | `bodyLength` | number | character count, written by the `site-project.ts` authoring source for reading time |
 | `date` | date | `YYYY-MM-DD`; `date-medium` for display |
 | `author` | reference → authors | required |
 | `tags` | list<text> | 1–3 of `craft` / `attention` / `tools`; flattened to `tag1…3` |
-| `authorName`, `authorBio`, `authorAvatar` (object { src, alt }), `authorSlug` | text / long-text / object / slug | denormalised copies written by the `site-project.ts` authoring source from the referenced author so the article page can render `blog.author-card` and the card can filter by author (see § 7) |
+| `authorName`, `authorBio`, `authorAvatar` (`asset-use`, `use: "image"`), `authorSlug` | text / long-text / asset-use / slug | denormalised copies written by the `site-project.ts` authoring source from the referenced author so the article page can render `blog.author-card` and the card can filter by author (see § 7) |
 
 **authors** (collection) — 2 entries: `name` text, `slug` slug, `bio`
-long-text, `avatar` object { `src` url, `alt` text }.
+long-text, `avatar: asset-use` (`use: "image"`).
 Mina Okafor (`mina-okafor`) and Teodor Lindqvist (`teodor-lindqvist`).
 
 **comments** (collection) — 12 prefilled entries: `name` text, `date` date,
@@ -281,12 +281,12 @@ Articles (slug · title · author · tags · date):
 | `about-page` | about | single | `about-page` | node `about`, route `single` |
 
 Bindings: `title`, `intro value→identity`; `slug value→prefix "/articles/"→href`;
-`date value→date-medium→date`; `cover object-field[src]→src`, `[alt]→alt`,
-`[caption]→caption`; `body value→identity→markdown`; `bodyLength
+`date value→date-medium→date`; `cover` asset-url → src, `asset-text alt → alt`,
+`asset-text caption → caption`; `body value→identity→markdown`; `bodyLength
 value→number`; `author route-link→identity→authorHref` (resolves to the
 author's `entry-field` route — this is why `/authors/<slug>` exists);
 `authorName`, `authorBio`, `authorSlug` → denormalised text props;
-`authorAvatar[src|alt]` → the byline `blog.avatar` and the author card's `src`/`alt`; `tags` flattened to `tag1…3`; `articleSlug` on
+`authorAvatar` asset-url → src, `asset-text alt → alt` for the byline `blog.avatar` and the author card's `src`/`alt`; `tags` flattened to `tag1…3`; `articleSlug` on
 comments → `blog.comment.articleSlug`.
 
 Per-route comment filtering: a collection query's conditions are static per
