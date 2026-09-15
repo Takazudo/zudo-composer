@@ -162,7 +162,11 @@ export async function collectPackSourceGraph(options: CollectPackSourceGraphOpti
     } else if (extension === ".css") {
       const { imports, urls, plugins } = cssSpecifiers(await readFile(file, "utf8"));
       for (const specifier of imports) await admitSpecifier(specifier, file, resolveCss);
-      for (const specifier of urls) await admitSpecifier(specifier, file, resolveCss);
+      for (const specifier of urls) {
+        // Vite leaves an unresolvable root-absolute url() (a publicDir file) untouched.
+        if (specifier.startsWith("/") && await resolveCss(specifier, file) === undefined) continue;
+        await admitSpecifier(specifier, file, resolveCss);
+      }
       for (const specifier of plugins) await admitSpecifier(specifier, file, resolveScript);
     }
   }
