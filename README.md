@@ -306,6 +306,34 @@ missing file is a loud config error. Every custom property the editor chrome
 consumes is declared in the tool's own `src/styles/app-tokens.css`, so a themeset
 that ships none of them still leaves a working editor.
 
+### Release identity for a host-self pack
+
+A release's `installedPackDigest` attests an installed themeset by hashing its
+resolved package directory. A host-self pack's resolved package root *is* the
+host project root, so that would also hash `cms/`, disposable
+`.zudo-site-project/` release state and `dist-site/` — none of it the pack.
+Instead the digest attests exactly the **resolved source graph**:
+
+- Every module reached by a static walk starting from the pack entry, plus
+  every component's `source.module` and the host's configured `styles` entry
+  (added explicitly, since a pack never imports its own Tailwind entry — see
+  [Styles ownership](#styles-ownership) above).
+- The host `package.json`, projected to `name`, `type`, `exports`, and
+  `dependencies`/`peerDependencies`/`optionalDependencies` ranges — the fields
+  that decide how that graph resolves. Other fields (`description`, `scripts`,
+  …) are not part of the pack's identity.
+- Every bare (`node_modules`) package the graph reaches, by resolved
+  `name`+`version`, not bytes.
+
+The walk fails closed on anything it cannot prove statically — a computed
+dynamic `import()`, `import.meta.glob`, a computed `new URL(…,
+import.meta.url)`, an unsupported import query, an unresolvable specifier, or
+a resolution escaping the host root all refuse the digest rather than quietly
+leaving source out of it. This applies to both self-reference shapes above,
+including a pack module living at the package root itself —
+`fixtures/self-host-root` proves that shape, where the whole-directory
+approach a themeset uses would otherwise hash the whole host root.
+
 The package publishes five entry points. Everything else is internal:
 
 | Specifier | What it is |

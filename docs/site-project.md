@@ -164,15 +164,45 @@ files or fetch latest. Each build's `asset-sha256-…` file maps to its pin's
 `/uploaded-assets/sha256-…` URL for a later explicit artifact exporter.
 
 The local toolchain records the component pack as a package, because that is
-what it is: `packSpecifier` is the configured `pack` value, `packSource` is the
-host's dependency spec for it (or `self` for a host self-reference), and
-`installedPackDigest` is a SHA-256 attestation of the actual resolved package's
-stable relative paths, permission modes and file bytes. A nested `node_modules`
-is skipped — it is never part of a package's published bytes — while the
-traversal otherwise rejects internal symlinks/special files and detects
-entry/root changes. Altering installed runtime bytes changes the build identity,
-regardless of package URL. The toolchain also binds component-pack identity, the
-contract package digest, and a fingerprint of production headless
+what it is: `packSpecifier` is the configured `pack` value, and `packSource` is
+the host's dependency spec for it (or `self` for a host self-reference).
+`installedPackDigest` attests it one of two ways, chosen by whether the pack's
+resolved package root is a separately installed package or the host project
+itself:
+
+- **Installed pack** (a themeset, resolved into `node_modules`):
+  `installedPackDigest` is a SHA-256 attestation of the actual resolved
+  package's stable relative paths, permission modes and file bytes. A nested
+  `node_modules` is skipped — it is never part of a package's published bytes
+  — while the traversal otherwise rejects internal symlinks/special files and
+  detects entry/root changes.
+- **Host-self pack** (`pack` is the host's own `exports` self-reference, so its
+  resolved package root *is* the host project root): hashing the whole host
+  root would also hash unrelated CMS/release state — `cms/`, disposable
+  `.zudo-site-project/` state, `dist-site/` — that has nothing to do with the
+  pack, and would make ordinary authoring or a build change the build
+  identity. Instead `installedPackDigest` attests exactly the **resolved
+  source graph**: every module reached, starting from the pack entry, every
+  component's `source.module`, and the host's configured `styles` entry (added
+  explicitly — a pack does not import its own Tailwind entry, the generated
+  composition modules do); the host `package.json` projected to the fields
+  that decide how that graph resolves (`name`, `type`, `exports`,
+  `dependencies`/`peerDependencies`/`optionalDependencies` ranges — everything
+  else, like `description` or `scripts`, is not part of the pack's identity);
+  and every bare (`node_modules`) package the graph reaches, attested by
+  resolved `name`+`version`, not bytes. The walk fails closed rather than
+  silently omitting anything it cannot prove statically: a computed dynamic
+  import, an `import.meta.glob`, a computed `new URL(…, import.meta.url)`, an
+  unsupported import query, an unresolvable specifier, or any resolution that
+  escapes the host root all refuse the digest instead of leaving source out of
+  it. `fixtures/self-host-root` proves this for a pack module at the package
+  root itself — the shape where the old whole-directory hash would have been
+  the whole host root.
+
+Altering installed runtime bytes, an installed dependency's version, or any
+file in a host-self pack's resolved source graph changes the build identity,
+regardless of package URL. The toolchain also binds component-pack identity,
+the contract package digest, and a fingerprint of production headless
 compiler/domain source. An incomplete stage cannot be compiled using a
 different toolchain. Already completed artifacts remain readable/activatable
 without recompiling them through newer tools.

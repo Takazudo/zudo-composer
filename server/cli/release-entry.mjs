@@ -25,6 +25,7 @@ try {
       pack,
       packIdentity,
       workspaceRoot: composerConfig.workspaceRoot,
+      stylesPath: composerConfig.paths.styles,
       assetsStoreRoot: validateAssetStoreRoot(process.env.ZUDO_ASSETS_STORE_ROOT) ?? composerConfig.paths.assets,
     }),
     { stdin: process.stdin, stdout: process.stdout, stderr: process.stderr },

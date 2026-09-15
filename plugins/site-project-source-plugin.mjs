@@ -26,7 +26,7 @@ function readySource(loaded) {
 /**
  * Read-only release source. It resolves only the single verified active release
  * pointer, in every command.
- * @param {{readDevRelease?: () => Promise<any>, readDevAsset?: (pathname: string) => Promise<any>, workspaceRoot?: string, packIdentity?: import("./component-pack.d.mts").ResolvedComponentPack}} [options]
+ * @param {{readDevRelease?: () => Promise<any>, readDevAsset?: (pathname: string) => Promise<any>, workspaceRoot?: string, packIdentity?: import("./component-pack.d.mts").ResolvedComponentPack, stylesPath?: string}} [options]
  */
 export function siteProjectSourcePlugin(options = {}) {
   /** @type {any} */ let server;
@@ -34,7 +34,7 @@ export function siteProjectSourcePlugin(options = {}) {
   const devReaderId = appModuleId("server/site-project-local/dev-reader.ts");
   // The reader re-derives the current toolchain to compare it against the
   // activated release's, so it needs the same pack the service stamped with.
-  const readerOptions = async () => ({ workspaceRoot, packIdentity: options.packIdentity, pack: (await server.ssrLoadModule(COMPONENT_PACK_ID)).componentPack });
+  const readerOptions = async () => ({ workspaceRoot, packIdentity: options.packIdentity, stylesPath: options.stylesPath, pack: (await server.ssrLoadModule(COMPONENT_PACK_ID)).componentPack });
   const readRelease = async () => options.readDevRelease ? options.readDevRelease() : server.ssrLoadModule(devReaderId).then(async (module) => module.readActivatedSiteRelease(await readerOptions()));
   const delivery = async () => {
     try { const loaded = await readRelease(); return loaded ? readySource(loaded) : { status: "no-active", message: "No completed local release is activated." }; }

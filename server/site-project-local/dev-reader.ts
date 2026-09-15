@@ -13,7 +13,7 @@ type DeliveryReaderOptions = LocalSiteProjectStoreOptions & LocalReleaseToolchai
 
 /** Read-only development seam. No path, mutation, or filesystem capability crosses it. */
 export interface ActivatedSiteReleaseData { project: SiteProject; release: CompletedRelease }
-export async function readActivatedSiteRelease(options?: DeliveryReaderOptions): Promise<ActivatedSiteReleaseData | null> {
+export async function readActivatedSiteRelease(options: DeliveryReaderOptions): Promise<ActivatedSiteReleaseData | null> {
   const store = createLocalSiteProjectStore(options);
   // A read-only dev source must not initialize disposable release storage on a
   // host that has only committed authoring CMS. Existing roots still go through
@@ -28,7 +28,7 @@ export async function readActivatedSiteRelease(options?: DeliveryReaderOptions):
 }
 
 export interface ActivatedSiteAssetData { bytes: Uint8Array; mimeType: AssetType; identity: SiteProjectActiveSelection }
-export async function readActivatedSiteAssets(pathname: string, options?: DeliveryReaderOptions): Promise<ActivatedSiteAssetData | null> {
+export async function readActivatedSiteAssets(pathname: string, options: DeliveryReaderOptions): Promise<ActivatedSiteAssetData | null> {
   const release = await readActivatedSiteRelease(options);
   if (!release) return null;
   const result = await createLocalSiteProjectStore(options).readActiveAsset(pathname);

@@ -1,0 +1,13 @@
+{
+  "name": "self-host-root",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The root-entry admitted pack shape: the pack module is the package root's own `exports` self-reference, so `dirname(entryPath)` is the host root itself.",
+  "exports": {
+    "./pack": "./pack.mjs"
+  },
+  "dependencies": {
+    "preact": "^10.29.8"
+  }
+}
