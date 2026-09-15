@@ -149,7 +149,7 @@ export async function produceReadyWorkspace(input: unknown, options: ReadyWorksp
   const temporary = await realpath(await mkdtemp(join(tmpdir(), "zudo-ready-workspace-")));
   try {
     const releaseOptions = {
-      workspaceRoot: config.workspaceRoot, testRoot: join(temporary, "release"),
+      workspaceRoot: config.workspaceRoot, stylesPath: config.paths.styles, testRoot: join(temporary, "release"),
       assetsStoreRoot: config.paths.assets, pack, packIdentity: options.packIdentity, toolchain: options.toolchain,
     };
     // This is the same publish/plan/apply/build/activate mechanism as plain

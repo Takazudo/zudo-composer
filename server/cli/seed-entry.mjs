@@ -24,7 +24,7 @@ if ("error" in parsed) {
         .produceReadyWorkspace(project, { config: composerConfig, pack, packIdentity, outputRoot: parsed.options.outputRoot })
       : await (/** @type {typeof import("../site-project-local/seed.js")} */ (await evaluate(resolve(APP_ROOT, "server/site-project-local/seed.ts"))))
         .seedSiteProject(project, {
-          pack, packIdentity, workspaceRoot: composerConfig.workspaceRoot,
+          pack, packIdentity, workspaceRoot: composerConfig.workspaceRoot, stylesPath: composerConfig.paths.styles,
           assetsStoreRoot: validateAssetStoreRoot(process.env.ZUDO_ASSETS_STORE_ROOT) ?? composerConfig.paths.assets,
         });
     process.stdout.write(`${JSON.stringify(result)}\n`);

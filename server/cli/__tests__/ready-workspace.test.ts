@@ -151,15 +151,15 @@ describe("canonical ready workspace producer", () => {
   it("keeps malformed and symlinked existing release roots as dev-source failures", async () => {
     const { root } = await fixture();
     const releaseRoot = join(root, ".zudo-site-project");
-    expect(await readActivatedSiteRelease({ workspaceRoot: root })).toBeNull();
+    expect(await readActivatedSiteRelease({ workspaceRoot: root, stylesPath: join(root, "styles/base.css") })).toBeNull();
     await expect(lstat(releaseRoot)).rejects.toMatchObject({ code: "ENOENT" });
     await mkdir(releaseRoot);
     await writeFile(join(releaseRoot, "foreign.txt"), "preserve");
-    await expect(readActivatedSiteRelease({ workspaceRoot: root })).rejects.toThrow("Unsupported release layout");
+    await expect(readActivatedSiteRelease({ workspaceRoot: root, stylesPath: join(root, "styles/base.css") })).rejects.toThrow("Unsupported release layout");
     expect(await readFile(join(releaseRoot, "foreign.txt"), "utf8")).toBe("preserve");
     const linked = join(root, "linked-host");
     await mkdir(linked);
     await symlink(releaseRoot, join(linked, ".zudo-site-project"), "dir");
-    await expect(readActivatedSiteRelease({ workspaceRoot: linked })).rejects.toThrow("Unsafe release directory");
+    await expect(readActivatedSiteRelease({ workspaceRoot: linked, stylesPath: join(linked, "styles/base.css") })).rejects.toThrow("Unsafe release directory");
   });
 });

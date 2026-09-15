@@ -52,10 +52,10 @@ export async function verifyReleasePortability({ checkoutRoot, hostRoot }) {
       const [toolRoot, operation] = process.argv.slice(1);
       const { loadHostContext } = await import(pathToFileURL(join(toolRoot, "server/host-context.mjs")));
       const { createModuleEvaluator } = await import(pathToFileURL(join(toolRoot, "server/module-evaluator.mjs")));
-      const { pack, packIdentity, workspaceRoot } = await loadHostContext();
+      const { composerConfig, pack, packIdentity, workspaceRoot } = await loadHostContext();
       if (operation === "read") {
         const { readActivatedSiteRelease } = await createModuleEvaluator(toolRoot)(join(toolRoot, "server/site-project-local/dev-reader.ts"));
-        const active = await readActivatedSiteRelease({ pack, packIdentity, workspaceRoot });
+        const active = await readActivatedSiteRelease({ pack, packIdentity, workspaceRoot, stylesPath: composerConfig.paths.styles });
         assert.ok(active, "The release proof must validate an activated release");
         console.log(JSON.stringify({ identity: active.release.identity, toolchain: active.release.stage.toolchain, projectId: active.project.id }));
       } else {
