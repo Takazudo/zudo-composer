@@ -142,50 +142,20 @@
         "required": true
       },
       {
-        "fields": [
-          {
-            "id": "products-image1-src",
-            "key": "src",
-            "kind": "url",
-            "label": "Src",
-            "required": true
-          },
-          {
-            "id": "products-image1-alt",
-            "key": "alt",
-            "kind": "text",
-            "label": "Alt",
-            "required": true
-          }
-        ],
         "id": "products-image1",
         "key": "image1",
-        "kind": "object",
+        "kind": "asset-use",
         "label": "Image1",
-        "required": true
+        "required": true,
+        "use": "image"
       },
       {
-        "fields": [
-          {
-            "id": "products-image2-src",
-            "key": "src",
-            "kind": "url",
-            "label": "Src",
-            "required": true
-          },
-          {
-            "id": "products-image2-alt",
-            "key": "alt",
-            "kind": "text",
-            "label": "Alt",
-            "required": true
-          }
-        ],
         "id": "products-image2",
         "key": "image2",
-        "kind": "object",
+        "kind": "asset-use",
         "label": "Image2",
-        "required": false
+        "required": false,
+        "use": "image"
       },
       {
         "id": "products-featured",

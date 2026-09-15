@@ -48,10 +48,7 @@
       {
         "id": "author-cards-avatar-src",
         "projection": {
-          "fieldIds": [
-            "authors-avatar-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "authors-avatar",
         "target": {
@@ -65,10 +62,8 @@
       {
         "id": "author-cards-avatar-alt",
         "projection": {
-          "fieldIds": [
-            "authors-avatar-alt"
-          ],
-          "kind": "object-field"
+          "field": "alt",
+          "kind": "asset-text"
         },
         "sourceFieldId": "authors-avatar",
         "target": {

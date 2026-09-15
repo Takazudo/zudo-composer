@@ -76,10 +76,7 @@
       {
         "id": "article-cards-related-cover-src",
         "projection": {
-          "fieldIds": [
-            "articles-cover-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "articles-cover",
         "target": {
@@ -93,10 +90,8 @@
       {
         "id": "article-cards-related-cover-alt",
         "projection": {
-          "fieldIds": [
-            "articles-cover-alt"
-          ],
-          "kind": "object-field"
+          "field": "alt",
+          "kind": "asset-text"
         },
         "sourceFieldId": "articles-cover",
         "target": {

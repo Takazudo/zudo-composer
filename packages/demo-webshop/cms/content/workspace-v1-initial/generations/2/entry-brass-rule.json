@@ -17,8 +17,14 @@
     "products-description": "A 30 cm straightedge milled from a single bar of solid brass, with millimetre and centimetre marks cut into the face rather than printed on it. The marks will outlast the desk.\n\nAt nearly 200 g the rule stays put when you draw against it and holds a book open at the page you are copying from. The edges are broken by hand so it is kind to fingers and paper.\n\nLeft alone, the brass darkens to a soft brown within a season. Rub it with a cloth and a little polish if you prefer it bright.",
     "products-featured": false,
     "products-image1": {
-      "products-image1-alt": "Solid brass 30 cm ruler with engraved marks",
-      "products-image1-src": "/uploaded-assets/asset-assets-6282f007-ca3b-4fb4-bfe8-589e6524b099"
+      "alt": "Solid brass 30 cm ruler with engraved marks",
+      "asset": {
+        "assetId": "assets-6282f007-ca3b-4fb4-bfe8-589e6524b099",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-name": "Brass Rule 30 cm",
     "products-price": 38,

@@ -17,8 +17,14 @@
     "products-description": "A lightweight cape in charcoal ripstop nylon with a 10,000 mm waterproof coating and taped seams. It is cut long and wide enough to cover you and a bag on your back, and it vents at the sides so you do not boil in it.\n\nPacked, it rolls into a stuff sack the size of a coffee cup. A hood with a stiffened brim keeps rain off glasses.\n\nThe first run sold through in a week. The next arrives in the autumn.",
     "products-featured": false,
     "products-image1": {
-      "products-image1-alt": "Folded charcoal rain cape beside its stuff sack",
-      "products-image1-src": "/uploaded-assets/asset-assets-e6a710b3-480d-4b62-8e8b-da45c4f29cd7"
+      "alt": "Folded charcoal rain cape beside its stuff sack",
+      "asset": {
+        "assetId": "assets-e6a710b3-480d-4b62-8e8b-da45c4f29cd7",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-name": "Packable Rain Cape",
     "products-price": 96,
