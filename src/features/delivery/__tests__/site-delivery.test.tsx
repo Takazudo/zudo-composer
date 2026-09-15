@@ -5,7 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "../../../app/provider-integration";
 import { activeComponentProvider } from "../../composer/active-pack";
 import { loadSampleSiteProject } from "../../../test/site-project-fixture";
-import { captureSampleAssetLock } from "../../../test/sample-asset-lock";
+import { captureSampleAssetLock, SAMPLE_ASSETS_STORE_ROOT } from "../../../test/sample-asset-lock";
 import { serializeSiteProject } from "../../../site-project/model/canonical";
 import { SiteDelivery, loadWorkingPreviewSnapshot } from "../site-delivery";
 import { compileSiteProject } from "../../../site-project/compiler";
@@ -27,6 +27,16 @@ function fixture(project = sample()): ProductionProviderIntegration {
   return { componentProvider: activeComponentProvider, getCurrentSiteProject: vi.fn(async () => ({ status: "ready" as const, project: structuredClone(project) })) } as unknown as ProductionProviderIntegration;
 }
 const working = (providers: ProductionProviderIntegration): DeliverySourceContract => ({ kind: "working-preview", providers });
+/** A real, initialized working-preview integration seeded with Sample
+ * Studio's own committed images, so its own pinned references (#695) resolve
+ * through the real `captureWorkspace` aggregate path `fixture()` doesn't
+ * implement. */
+async function workingIntegration(project = sample()): Promise<ProductionProviderIntegration> {
+  const { provider } = await providerFixture({ seedFrom: SAMPLE_ASSETS_STORE_ROOT });
+  const providers = createProductionProviderIntegration({ project, sourceRevision: revision(project), assetProvider: provider, createProviders: (await host()).createProviders });
+  await providers.initialization.initialize();
+  return providers;
+}
 
 /** Compile the checked-in fixture into the exact activated artifact shape delivery consumes. */
 async function activatedArtifact(project = sample()): Promise<ActivatedDeliveryArtifact> {
@@ -60,7 +70,9 @@ describe("SiteDelivery", () => {
     expect(Object.keys(artifact.files).filter((name) => name.startsWith("module-"))).toHaveLength(artifact.build.modules.length);
   });
   it("captures exact managed Asset for visitor output and blocks missing provider or corrupt bytes", async () => {
-    const { provider, filesystem } = await providerFixture();
+    // Sample Studio's own composition pins its real seeded images (#695), so
+    // this store must carry them too, on top of the test's own new asset.
+    const { provider, filesystem } = await providerFixture({ seedFrom: SAMPLE_ASSETS_STORE_ROOT });
     const asset = await filesystem.upload({ fileName: "download.png", declaredMimeType: "image/png", bytes: PNG });
     const project = sample();
     project.providers.compositions[0]!.records.find(({ id }) => id === "home-page")!.document.root.push({ id: "download", componentId: "ui.cta-button", componentVersion: 1, props: { href: `/uploaded-assets/asset-${asset.id}`, children: "Download" }, slots: {} });
@@ -77,7 +89,7 @@ describe("SiteDelivery", () => {
     expect((await loadWorkingPreviewSnapshot(providers)).status).toBe("compiler-error");
   });
   it.each(["assets", "project"])("rejects a changed %s aggregate token rather than recapturing latest", async (domain) => {
-    const { provider, filesystem } = await providerFixture();
+    const { provider, filesystem } = await providerFixture({ seedFrom: SAMPLE_ASSETS_STORE_ROOT });
     const project = sample();
     const base = createProductionProviderIntegration({ project, sourceRevision: revision(project), assetProvider: provider, createProviders: (await host()).createProviders });
     const capture = vi.fn(() => base.captureWorkspace());
@@ -114,7 +126,7 @@ describe("SiteDelivery", () => {
   });
 
   it("shows the hosted demo notice separately on /website-preview", async () => {
-    render(<SiteDelivery source={working(fixture())} pathname="/website-preview/about" hostedDemo />);
+    render(<SiteDelivery source={working(await workingIntegration())} pathname="/website-preview/about" hostedDemo />);
     await screen.findByRole("heading", { name: "A studio built around useful clarity" });
     expect(screen.getByText("Public demo of zudo-composer")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(/real authoring runs locally with pnpm dev/i);
@@ -125,7 +137,7 @@ describe("SiteDelivery", () => {
     await screen.findByRole("heading", { name: "Clear ideas, carefully shaped" });
     expect(screen.queryByText("Public demo of zudo-composer")).not.toBeInTheDocument();
     cleanup();
-    render(<SiteDelivery source={working(fixture())} pathname="/website-preview/about" />);
+    render(<SiteDelivery source={working(await workingIntegration())} pathname="/website-preview/about" />);
     await screen.findByRole("heading", { name: "A studio built around useful clarity" });
     expect(screen.queryByText("Public demo of zudo-composer")).not.toBeInTheDocument();
   });
@@ -196,7 +208,10 @@ describe("SiteDelivery", () => {
 
   it("reads a new provider snapshot after remount and shows a persisted Content edit", async () => {
     const project = sample();
-    const providers = createProductionProviderIntegration({ project, sourceRevision: revision(project), createProviders: (await host()).createProviders });
+    // Sample Studio's own project pins its real seeded images (#695), so the
+    // aggregate capture path needs a real, seeded Assets provider too.
+    const { provider } = await providerFixture({ seedFrom: SAMPLE_ASSETS_STORE_ROOT });
+    const providers = createProductionProviderIntegration({ project, sourceRevision: revision(project), assetProvider: provider, createProviders: (await host()).createProviders });
     // Seeding writes real files; readiness is a precondition here, not the assertion.
     await providers.initialization.initialize();
     render(<SiteDelivery source={working(providers)} pathname="/website-preview/about" />);

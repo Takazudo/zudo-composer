@@ -9,7 +9,7 @@ import { loadSampleSiteProject } from "./site-project-fixture";
 
 /** Sample Studio's own committed Assets store: real catalog plus the pinned
  * `sha256-*` bytes at `packages/demo-sample/cms/assets`. */
-const SAMPLE_ASSETS_STORE_ROOT = resolve(import.meta.dirname, "../../packages/demo-sample/cms/assets");
+export const SAMPLE_ASSETS_STORE_ROOT = resolve(import.meta.dirname, "../../packages/demo-sample/cms/assets");
 
 export interface SampleSiteProjectWithAssetLock {
   project: SiteProject;

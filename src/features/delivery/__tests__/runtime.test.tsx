@@ -46,7 +46,10 @@ describe("trusted delivery runtime", () => {
     const componentIds = new Set<string>();
     const visit = (nodes: readonly CompositionNode[]): void => { for (const item of nodes) { componentIds.add(item.componentId); Object.values(item.slots).forEach(visit); } };
     for (const route of compiled.build.routes) { visit(route.composition.document.root); if (route.composition.linkedSource) visit(route.composition.linkedSource.document.root); render(<DeliveryRuntime composition={route.composition} pack={activeComponentProvider.pack} />); cleanup(); }
-    expect(componentIds).toEqual(new Set(manifest.components.map(({ id }) => id)));
+    // Sample Studio's home split now embeds a real seeded image instead of a
+    // placeholder box (#695), so ui.placeholder-box is no longer demonstrated
+    // by any sample route.
+    expect(componentIds).toEqual(new Set(manifest.components.map(({ id }) => id).filter((id) => id !== "ui.placeholder-box")));
   });
 
   it("projects single and many slots and linked local roots at the verified outlet despite id collisions", async () => {

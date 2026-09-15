@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach } from "vitest";
@@ -10,8 +10,14 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 export const PNG = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
 export const PDF = new TextEncoder().encode("%PDF-1.7\nsynthetic asset");
-export async function providerFixture() {
+/** @param options.seedFrom copy an existing committed Assets store (catalog.json
+ * + versions/) into the fixture's root before it opens, so real pre-existing
+ * managed references (e.g. Sample Studio's own pinned images, see #695) stay
+ * resolvable while the test can still upload/replace on top of a real,
+ * writable, production-shaped filesystem store. */
+export async function providerFixture(options: { seedFrom?: string } = {}) {
   const root = await mkdtemp(join(tmpdir(), "asset-ui-")); roots.push(root);
+  if (options.seedFrom) await cp(options.seedFrom, root, { recursive: true });
   const filesystem = await createFilesystemAssetStore({ assetsStoreRoot: root });
   const blobBytes = (file: Blob) => new Promise<Uint8Array>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer)); reader.onerror = reject; reader.readAsArrayBuffer(file); });
   const store = new Proxy(filesystem, { get(target, property) {
