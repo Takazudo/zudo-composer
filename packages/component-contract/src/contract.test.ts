@@ -342,6 +342,106 @@ describe('serializable component-pack contract v2', () => {
     expectCode(() => componentPackManifestSchema.parse(deep), 'INVALID_VALUE_SCHEMA');
   });
 
+  it('round-trips url-format text strings at the top level and through objects, arrays, and tuples', () => {
+    const nestedHref = fixtureComponentPack.manifest.components[0]?.fields.find((field) => field.prop === 'actions');
+    const nestedFields = nestedHref?.schema.type === 'array' && nestedHref.schema.items.schema.type === 'object' ? nestedHref.schema.items.schema.fields : [];
+    expect(nestedFields.find((field) => field.key === 'href')?.schema).toEqual({ type: 'string', format: 'url' });
+
+    const shorthand = defineComponent<{ href: string }>()((props: { href: string }) => props.href, {
+      id: 'link',
+      schemaVersion: 1,
+      title: 'Link',
+      category: 'Content',
+      description: '',
+      source: { module: '@fixture/link', exportKind: 'named', exportName: 'Link' },
+      defaults: { href: '/start' },
+      fields: [{ kind: 'text', prop: 'href', label: 'URL', format: 'url', inlineEdit: { multiline: false } }],
+      adapters: { inlineEditor: { field: 'href', resolveElement: (root: unknown) => root } },
+    });
+    const pack = defineComponentPack({ packId: 'url-pack', packVersion: '1', components: [shorthand] });
+    expect(pack.manifest.components[0]?.fields[0]).toEqual({
+      prop: 'href', label: 'URL', inlineEdit: true,
+      schema: { type: 'string', format: 'url' }, editor: { kind: 'text', multiline: false, mode: 'plain' },
+    });
+
+    const value = manifest();
+    const target = container(value);
+    (target.fields as unknown[]).push(
+      { prop: 'links', label: 'Links', schema: { type: 'array', items: { schema: { type: 'string', format: 'url' }, editor: { kind: 'text' } } }, editor: { kind: 'list' } },
+      { prop: 'pair', label: 'Pair', schema: { type: 'tuple', items: [
+        { label: 'Target', schema: { type: 'string', format: 'url' }, editor: { kind: 'text', mode: 'plain' } },
+      ] }, editor: { kind: 'tuple' } },
+    );
+    const parsed = componentPackManifestSchema.parse(value);
+    expect(parsed.components[0]?.fields.slice(-2)).toMatchObject([
+      { schema: { items: { schema: { type: 'string', format: 'url' } } } },
+      { schema: { items: [{ schema: { type: 'string', format: 'url' }, editor: { kind: 'text', mode: 'plain' } }] } },
+    ]);
+    expect(componentPackManifestSchema.parse(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed);
+  });
+
+  it.each([
+    ['unknown format', (field: Record<string, unknown>) => { field.schema = { type: 'string', format: 'email' }; }, 'INVALID_VALUE_SCHEMA', '.schema.format'],
+    ['markdown-source url', (field: Record<string, unknown>) => {
+      field.schema = { type: 'string', format: 'url' };
+      field.editor = { kind: 'text', multiline: true, mode: 'markdown-source' };
+    }, 'INVALID_VALUE_SCHEMA', '.editor.mode'],
+    ['color url', (field: Record<string, unknown>) => {
+      field.schema = { type: 'string', format: 'url' };
+      field.editor = { kind: 'color' };
+    }, 'INVALID_VALUE_SCHEMA', '.schema.format'],
+    ['select url', (field: Record<string, unknown>) => {
+      field.schema = { type: 'string', enum: ['/a'], format: 'url' };
+      field.editor = { kind: 'select' };
+    }, 'UNKNOWN_KEY', '.schema.format'],
+    ['number url', (field: Record<string, unknown>) => {
+      field.schema = { type: 'number', format: 'url' };
+      field.editor = { kind: 'number' };
+    }, 'UNKNOWN_KEY', '.schema.format'],
+  ] as const)('rejects string format misuse on a nested object field: %s', (_label, mutate, code, suffix) => {
+    const value = manifest();
+    const actionField = (container(value).fields as Record<string, unknown>[]).find((field) => field.prop === 'actions');
+    const actionObject = (((actionField?.schema as Record<string, unknown>).items as Record<string, unknown>).schema as Record<string, unknown>);
+    const href = (actionObject.fields as Record<string, unknown>[])[1];
+    mutate(href);
+    delete (container(value).defaults as Record<string, unknown>).actions;
+    expectIssue(() => componentPackManifestSchema.parse(value), code, `$.components[0].fields[5].schema.items.schema.fields[1]${suffix}`);
+  });
+
+  it('rejects url-format strings with markdown-source in array items, tuple items, and author shorthand', () => {
+    const arrayItem = manifest();
+    (container(arrayItem).fields as unknown[]).push({
+      prop: 'links', label: 'Links',
+      schema: { type: 'array', items: { schema: { type: 'string', format: 'url' }, editor: { kind: 'text', mode: 'markdown-source' } } },
+      editor: { kind: 'list' },
+    });
+    expectIssue(() => componentPackManifestSchema.parse(arrayItem), 'INVALID_VALUE_SCHEMA', '$.components[0].fields[6].schema.items.editor.mode');
+
+    const tupleItem = manifest();
+    (container(tupleItem).fields as unknown[]).push({
+      prop: 'pair', label: 'Pair',
+      schema: { type: 'tuple', items: [{ label: 'Target', schema: { type: 'string', format: 'ftp' }, editor: { kind: 'text' } }] },
+      editor: { kind: 'tuple' },
+    });
+    expectIssue(() => componentPackManifestSchema.parse(tupleItem), 'INVALID_VALUE_SCHEMA', '$.components[0].fields[6].schema.items[0].schema.format');
+
+    const markdownUrl = defineComponent<{ body: string }>()((props: { body: string }) => props.body, {
+      id: 'markdown-url',
+      schemaVersion: 1,
+      title: 'Markdown URL',
+      category: 'Content',
+      description: '',
+      source: { module: '@fixture/markdown-url', exportKind: 'named', exportName: 'MarkdownUrl' },
+      fields: [{ kind: 'text', prop: 'body', label: 'Body', format: 'url', inlineEdit: { mode: 'markdown-source' } }],
+      adapters: { inlineEditor: { field: 'body', resolveElement: (root: unknown) => root } },
+    });
+    expectIssue(
+      () => defineComponentPack({ packId: 'bad-url-pack', packVersion: '1', components: [markdownUrl] }),
+      'INVALID_VALUE_SCHEMA',
+      '$.components[0].fields[0].editor.mode',
+    );
+  });
+
   it('rejects cyclic and over-depth values while validateFieldValue shares domain rules', () => {
     const actionField = fixtureComponentPack.manifest.components[0]?.fields.find((field) => field.prop === 'actions');
     if (actionField === undefined) throw new Error('fixture action field missing');
