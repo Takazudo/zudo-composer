@@ -34,10 +34,7 @@
       {
         "id": "category-tile-image-src",
         "projection": {
-          "fieldIds": [
-            "categories-image-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "categories-image",
         "target": {
@@ -51,10 +48,8 @@
       {
         "id": "category-tile-image-alt",
         "projection": {
-          "fieldIds": [
-            "categories-image-alt"
-          ],
-          "kind": "object-field"
+          "field": "alt",
+          "kind": "asset-text"
         },
         "sourceFieldId": "categories-image",
         "target": {

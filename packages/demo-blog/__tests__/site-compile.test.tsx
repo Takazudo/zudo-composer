@@ -116,6 +116,10 @@ describe("demo-blog compiled site", () => {
     expect(html).toContain('href="/tools"');
     expect(html).not.toContain("/uploaded-assets/asset-");
     expect(count(html, /src="\/uploaded-assets\/sha256-[0-9a-f]{64}\.webp"/g)).toBeGreaterThanOrEqual(3);
+    const articlesModel = compiled.project.providers.content[0]?.models.find(({ id }) => id === "articles");
+    expect(articlesModel?.document.fields.find(({ key }) => key === "cover")).toMatchObject({ kind: "asset-use", use: "image" });
+    const authorsModel = compiled.project.providers.content[0]?.models.find(({ id }) => id === "authors");
+    expect(authorsModel?.document.fields.find(({ key }) => key === "avatar")).toMatchObject({ kind: "asset-use", use: "image" });
     // "Keep reading" is a limit-4 attachment; the card for this page hides itself in the browser.
     expect(count(html, /<article\b/g)).toBe(4);
     // All 12 comments are materialised; each hides itself unless its articleSlug matches the route.

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generation": 2,
-  "mutationToken": "7c7e3c2fbb7bcd179473d6543e0d116aa33e7d847ce3b3bcd263d64e4c9c614c",
+  "mutationToken": "fd1f5c121a261ac50dac029a0a26e2c246b946887f102eaa18c8ae0ded261a97",
   "entries": [
     {
       "id": "about-page",
@@ -9,35 +9,35 @@
     },
     {
       "id": "article-cards-all",
-      "digest": "aed97c54b7ff85696cc4ee85e379c821d51a7a34e4713b661321341ba1a284f9"
+      "digest": "a617524b4a8083ec229c64ff299ae8e56dbd8197f7aa6093cf6312c0abe92003"
     },
     {
       "id": "article-cards-attention",
-      "digest": "f4ccd7cc8be227331c0251adfb15b67a366df46c2681f7012a406467845903fa"
+      "digest": "e524099928d18bdfba63d21f4d613b410e6c4f39692fe945422e850c37789157"
     },
     {
       "id": "article-cards-craft",
-      "digest": "8dbe6f50d1705f120bbde9beae1f82d344e7f6bcd922947fd83207f4d600c26a"
+      "digest": "34b4dab31e267d57ace34ac7bfd53c649ba964c37a8e1b880d2d185563562f0c"
     },
     {
       "id": "article-cards-related",
-      "digest": "c3ded39238d9c1db01446e9415ab7a7c41c9bd3470b26df8404ecc6aa59fa97f"
+      "digest": "fa3c7164aed17af504299094e421051236abc52a8c5f0356436c73c444e47fd7"
     },
     {
       "id": "article-cards-tools",
-      "digest": "c8e5f4bd628bf3655a643e93a65a258db7bcc8e7a4ec9ce382b91deb80b3b957"
+      "digest": "de27f88d305a03c39c300b434ed2894c76f1e98919655152460bea3fc1b7cecf"
     },
     {
       "id": "article-page",
-      "digest": "b9a4eea6253309ff7f4d23e7c439ea56552ca69aabe4e7823e8bf897f0c65804"
+      "digest": "2c9f43f5174150a7eb0591b4d92c1bd5b674f5aa4ebdafe75d3006399892be3c"
     },
     {
       "id": "author-cards",
-      "digest": "af20e12322984da3692ffbfc91f714b7c6e282c02e589bd04d1476b0336215d1"
+      "digest": "628a53d810c5b53fe4b34bcb4f641e13d342f8845def435ac16c4a745122cb65"
     },
     {
       "id": "author-page",
-      "digest": "d2b349b4be24dc7e81a08bf72ba768771c64a12fae81af3eefeb8acac85d7c9b"
+      "digest": "0d033f2acb38d2ead4c4d9bba84522377cf34b597231b2be0afafcd9d207f1a5"
     },
     {
       "id": "comments",

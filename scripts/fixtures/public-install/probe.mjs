@@ -6,7 +6,7 @@ import * as authoring from "zudo-composer/authoring";
 import * as siteBuild from "zudo-composer/site-build";
 import { loadHostContext } from "zudo-composer/vite";
 
-assert.deepEqual(Object.keys(authoring).sort(), ["ASSET_PROVIDER_ID", "COMPOSITION_PROVIDER_ID", "CONTENT_PROVIDER_ID", "DEFAULT_TIMESTAMP", "MAPPING_PROVIDER_ID", "SITEMAP_PROVIDER_ID", "assetAuthoringUrl", "assetMimeTypeForExtension", "canonicalStringifyJson", "createFilesystemAssetStore", "defineSite", "entryRef", "imageUse", "node", "readAssetUrls", "slugify", "validateSiteProject"]);
+assert.deepEqual(Object.keys(authoring).sort(), ["ASSET_PROVIDER_ID", "COMPOSITION_PROVIDER_ID", "CONTENT_PROVIDER_ID", "DEFAULT_TIMESTAMP", "MAPPING_PROVIDER_ID", "SITEMAP_PROVIDER_ID", "assetAuthoringUrl", "assetMimeTypeForExtension", "canonicalStringifyJson", "createFilesystemAssetStore", "defineSite", "entryRef", "imageUse", "node", "slugify", "validateSiteProject"]);
 assert.deepEqual(Object.keys(siteBuild).sort(), ["SITE_HEADERS", "SITE_MANIFEST", "compileStaticSite", "createSiteManifest", "siteHeaders", "verifySiteStaticArtifact"]);
 assert.equal(authoring.assetAuthoringUrl("proof"), "/uploaded-assets/asset-proof");
 assert.equal(authoring.assetMimeTypeForExtension("PDF"), "application/pdf");
@@ -23,7 +23,8 @@ const record = await store.upload({ fileName: "proof.txt", declaredMimeType: "te
 assert.equal((await store.snapshot()).records[0].id, record.id);
 assert.equal((await (await authoring.createFilesystemAssetStore({ assetsStoreRoot })).snapshot()).records[0].id, record.id);
 
-assert.deepEqual(authoring.readAssetUrls(composerConfig), { "proof.txt": authoring.assetAuthoringUrl(record.id) });
+const catalog = JSON.parse(await readFile(join(composerConfig.paths.assets, "catalog.json"), "utf8"));
+assert.deepEqual(catalog.records.map((r) => ({ fileName: r.document.fileName, url: authoring.assetAuthoringUrl(r.id) })), [{ fileName: "proof.txt", url: authoring.assetAuthoringUrl(record.id) }]);
 assert.equal(authoring.slugify("Packed site"), "packed-site");
 const site = authoring.defineSite({ id: "installed-proof", name: "Installed proof", componentPack: pack });
 const home = site.page({ id: "home", name: "Home", root: [authoring.node("proof.banner", { headline: "Packed site" }, {}, "banner")] });

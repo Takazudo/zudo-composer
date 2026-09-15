@@ -75,10 +75,7 @@
       {
         "id": "article-page-authoravatar-src",
         "projection": {
-          "fieldIds": [
-            "articles-author-avatar-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "articles-author-avatar",
         "target": {
@@ -92,10 +89,8 @@
       {
         "id": "article-page-authoravatar-alt",
         "projection": {
-          "fieldIds": [
-            "articles-author-avatar-alt"
-          ],
-          "kind": "object-field"
+          "field": "alt",
+          "kind": "asset-text"
         },
         "sourceFieldId": "articles-author-avatar",
         "target": {
@@ -137,10 +132,7 @@
       {
         "id": "article-page-cover-src",
         "projection": {
-          "fieldIds": [
-            "articles-cover-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "articles-cover",
         "target": {
@@ -154,10 +146,8 @@
       {
         "id": "article-page-cover-alt",
         "projection": {
-          "fieldIds": [
-            "articles-cover-alt"
-          ],
-          "kind": "object-field"
+          "field": "alt",
+          "kind": "asset-text"
         },
         "sourceFieldId": "articles-cover",
         "target": {
@@ -171,10 +161,8 @@
       {
         "id": "article-page-cover-caption",
         "projection": {
-          "fieldIds": [
-            "articles-cover-caption"
-          ],
-          "kind": "object-field"
+          "field": "caption",
+          "kind": "asset-text"
         },
         "sourceFieldId": "articles-cover",
         "target": {
@@ -286,10 +274,7 @@
       {
         "id": "article-page-author-card-src",
         "projection": {
-          "fieldIds": [
-            "articles-author-avatar-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "articles-author-avatar",
         "target": {
@@ -303,10 +288,8 @@
       {
         "id": "article-page-author-card-alt",
         "projection": {
-          "fieldIds": [
-            "articles-author-avatar-alt"
-          ],
-          "kind": "object-field"
+          "field": "alt",
+          "kind": "asset-text"
         },
         "sourceFieldId": "articles-author-avatar",
         "target": {

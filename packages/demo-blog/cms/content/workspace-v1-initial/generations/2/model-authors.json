@@ -25,27 +25,12 @@
         "required": true
       },
       {
-        "fields": [
-          {
-            "id": "authors-avatar-src",
-            "key": "src",
-            "kind": "url",
-            "label": "Src",
-            "required": true
-          },
-          {
-            "id": "authors-avatar-alt",
-            "key": "alt",
-            "kind": "text",
-            "label": "Alt",
-            "required": true
-          }
-        ],
         "id": "authors-avatar",
         "key": "avatar",
-        "kind": "object",
+        "kind": "asset-use",
         "label": "Avatar",
-        "required": true
+        "required": true,
+        "use": "image"
       }
     ],
     "id": "authors",

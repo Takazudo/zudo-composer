@@ -290,8 +290,8 @@ Field kinds are `src/content/model/types.ts` kinds.
 | `stockLabel` | text `In stock` / `Only a few left` / `Sold out` / `Ships in 2 weeks` | display text (text for the same reason) |
 | `tags` | list<text> | 1–3 tags; `contains` queries |
 | `spec` | object { `material`, `dimensions`, `weight`, `origin`, `care`, `warranty` } each text | rendered by `shop.spec-table` |
-| `image1` | object { `src`: url, `alt`: text } | required; `/uploaded-assets/asset-<id>` |
-| `image2` | object { `src`: url, `alt`: text } | optional (3 products) |
+| `image1` | asset-use (`use: "image"`) | required; `/uploaded-assets/asset-<id>` |
+| `image2` | asset-use (`use: "image"`) | optional (3 products) |
 | `featured` | boolean | home grid + related strip |
 | `category` | reference → categories | required |
 | `related` | reference-list → products (ordered) | authored data; not bound (README § Lists) |
@@ -303,7 +303,7 @@ Field kinds are `src/content/model/types.ts` kinds.
 | `name` | text |
 | `slug` | slug |
 | `intro` | long-text |
-| `image` | object { `src`: url, `alt`: text } (reuses the first product's `image1` asset) |
+| `image` | asset-use (`use: "image"`) (reuses the first product's `image1` asset) |
 
 **faq** (collection) — 8 entries: `question` text, `answer` markdown, `order`
 number.
@@ -336,7 +336,7 @@ Products (id · name · category · price · availability · featured):
 
 Bindings on `product-card` and `product-page` (projection → transform → prop):
 `name value→identity→name` / `heading`; `slug value→prefix "/products/"→href`;
-`image1 object-field[src]→identity→src` and `[alt]→alt` (gallery: one
+`image1 asset-url→src` and `asset-text alt→alt` (gallery: one
 `shop.gallery-image` child per image field); `price value→number`; `currency value→text`;
 `availability value→select`; `stockLabel value→text`; `category
 reference-id→select category` (options are the category record ids);

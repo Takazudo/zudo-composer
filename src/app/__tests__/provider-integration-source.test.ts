@@ -79,7 +79,7 @@ it("opens generated committed CMS ready and populated when the real dev source i
   const generated = await produceReadyWorkspace(input, { config, pack: componentPack, toolchain: { ...toolchain, componentPack: input.componentPack } });
   const sourcePlugin = siteProjectSourcePlugin({
     workspaceRoot: currentHost.root,
-    readDevRelease: () => readActivatedSiteRelease({ workspaceRoot: currentHost.root }),
+    readDevRelease: () => readActivatedSiteRelease({ workspaceRoot: currentHost.root, stylesPath: config.paths.styles }),
   });
   const serialized = await hookHandler(sourcePlugin.load).call(strictFixture({}), RESOLVED_SITE_PROJECT_SOURCE_ID);
   if (typeof serialized !== "string") throw new Error("Expected the real dev-source module text.");

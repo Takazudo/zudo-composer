@@ -22,10 +22,9 @@ package-owned Assets store. Webshop, Landing and Blog assert their 16, 6 and 10
 images in their own `pnpm test` suites, including metadata, encoding and the 250
 KiB file limit. The central imagery test retains those Studio seed rows and the
 8 MiB combined source budget, discovering every host's manifest automatically.
-Landing now uses an image `asset-use`; Webshop and Blog retain their URL-shaped
-image fields, while Sample's Markdown image destinations remain URL-based. The
-follow-up [#657](https://github.com/Takazudo/zudo-composer/issues/657) tracks
-migrating those remaining demo image paths to `asset-use`.
+Webshop, Landing and Blog use image `asset-use` fields; Sample's Markdown
+image destinations remain URL-based, since `asset-use` does not apply to
+Markdown image/link destinations.
 
 Generation, asset import, and release commands are provided directly by the
 installed `zudo-composer` tool in each host.
@@ -461,9 +460,9 @@ asset pass rewrites it to the immutable `/uploaded-assets/sha256-….webp` URL a
 release. The asset pass still only pins URL-valued props named `src` / `href` /
 `poster` / `url`; a mapped asset URL on any other prop name makes impact
 inspection incomplete and blocks release with `asset-impact-incomplete`.
-Webshop and Blog still use the `object { src: url, alt: text }` pattern, and
-Sample's Markdown image destinations remain URL-based; Landing uses
-`asset-use` with `asset-url` / `asset-text`. `asset-ref` remains object-only and
+Webshop, Landing and Blog use `asset-use` with `asset-url` / `asset-text`;
+Sample's Markdown image destinations remain URL-based, since `asset-use` does
+not apply to Markdown destinations. `asset-ref` remains object-only and
 `reference-list-ids` projects an id array; neither is accepted by any scalar
 target (`incompatible-binding`), so related items stay on a second attachment
 rather than a `reference-list` binding (tool gap tracked in #506; the demos do

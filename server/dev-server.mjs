@@ -86,8 +86,8 @@ export async function resolveComposerDevConfig(options = {}) {
       plugins: [
         componentPack,
         hostStylesPlugin({ stylesPath: paths.styles, styles: settings.styles, configPath: composerConfig.configPath }),
-        releaseApiPlugin({ assetsStoreRoot: paths.assets, workspaceRoot, packIdentity: componentPack.identity }),
-        siteProjectSourcePlugin({ workspaceRoot, packIdentity: componentPack.identity }),
+        releaseApiPlugin({ assetsStoreRoot: paths.assets, workspaceRoot, packIdentity: componentPack.identity, stylesPath: paths.styles }),
+        siteProjectSourcePlugin({ workspaceRoot, packIdentity: componentPack.identity, stylesPath: paths.styles }),
         composerFileProviderPlugin({ workspaceRoot, compositionsRoot: paths.compositions, assetsStoreRoot: paths.assets }),
         domainFileProviderPlugin({
           workspaceRoot,

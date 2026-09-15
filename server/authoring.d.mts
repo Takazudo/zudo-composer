@@ -749,17 +749,6 @@ declare function imageUse(assetId: string, alt: string, options?: {
     kind: "image";
 }>;
 
-/**
- * File name → canonical authoring URL for the active assets in a resolved host
- * config. Use `loadHostContext()` from `zudo-composer/vite` to resolve that config.
- * Asset ids are minted at upload, so authored sites look them up by file name.
- */
-declare function readAssetUrls(config: {
-    paths: {
-        assets: string;
-    };
-}): Record<string, string>;
-
 declare const ASSET_TYPES: readonly ["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/zip", "text/plain", "text/csv", "application/json"];
 declare function assetMimeTypeForExtension(extension: string): string | undefined;
 
@@ -1113,4 +1102,4 @@ declare function canonicalStringifyJson(value: JsonValue): string;
 /** Strictly validates a SiteProject and every cross-domain graph edge. */
 declare function validateSiteProject(value: unknown, context: SiteProjectValidationContext): SiteProjectValidation;
 
-export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, createFilesystemAssetStore, defineSite, entryRef, imageUse, node, readAssetUrls, slugify, validateSiteProject };
+export { ASSET_PROVIDER_ID, COMPOSITION_PROVIDER_ID, CONTENT_PROVIDER_ID, DEFAULT_TIMESTAMP, MAPPING_PROVIDER_ID, SITEMAP_PROVIDER_ID, assetAuthoringUrl, assetMimeTypeForExtension, canonicalStringifyJson, createFilesystemAssetStore, defineSite, entryRef, imageUse, node, slugify, validateSiteProject };

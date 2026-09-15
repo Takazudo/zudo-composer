@@ -701,6 +701,8 @@ interface SiteProjectSourcePluginOptions {
   readDevAsset?: (pathname: string) => Promise<{ bytes: Uint8Array; mimeType: AssetType; identity: CompletedRelease["identity"] } | null>;
   workspaceRoot?: string;
   packIdentity?: ResolvedComponentPack;
+  /** The host's configured `styles` path, attested by a host-self pack's release toolchain. */
+  stylesPath?: string;
 }
 declare function siteProjectSourcePlugin(options?: SiteProjectSourcePluginOptions): Plugin;
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generation": 2,
-  "mutationToken": "dce10f4eec1249f5f490b3f0ba70367155bf35df9afb0096cafe414a924d0d46",
+  "mutationToken": "6401cac50a6c770472be1a07a8f207bac40cc1a1ab4c4a5277e3db0edfa2b133",
   "entries": [
     {
       "id": "about-page",
@@ -9,15 +9,15 @@
     },
     {
       "id": "carry-product-cards",
-      "digest": "a8ec03e4713fef9c26278ad1e717afc30e915f60ee96b6ec0ac514dedb266905"
+      "digest": "c1a0fd7e6f81ea2d62df00a1df72edf11021e0452bede948b42840c7f10c738c"
     },
     {
       "id": "category-tile",
-      "digest": "c0daac30f82d99b9f8150ad3984d69464e45eab184e10a2603521359511d2951"
+      "digest": "e733e8faae5f15606401f7d3cc02612323616148a68ac6310290a25041dc6f48"
     },
     {
       "id": "desk-product-cards",
-      "digest": "b6e6c26d0dabcb8caba49e2ee6af4b02807b35fa5af36311b0261f85fe1b3cd9"
+      "digest": "858273643c18b700cdd1ace40b9cb31ded5bd90ba0b0c74850c81827dc06f418"
     },
     {
       "id": "faq-item",
@@ -25,11 +25,11 @@
     },
     {
       "id": "featured-product-cards",
-      "digest": "d44bfe85b77f4ab85369dd82576899ba80fb93a7d9c9c33bd8aa762bf231b0d0"
+      "digest": "c4221a825b823fa968aa04a700526fdfa4613284a1746b83f42c5dbda5705396"
     },
     {
       "id": "light-product-cards",
-      "digest": "49798665854fa589d83ec248ae7b13e7d37c678a395e7a6c52b5ccdd588ec85d"
+      "digest": "e1b19ea74edba927f8a2aeb5b1b88f7e3c1efc1cd096a111c5797d65960a8751"
     },
     {
       "id": "meta",
@@ -37,15 +37,15 @@
     },
     {
       "id": "product-card",
-      "digest": "57513424b4c33a625833c84f2450d2b48bf329b2ecaa2f2903214f5e5ebefbe9"
+      "digest": "1ff331c1fa081e7df7a2c1c9ffe00077dcbe86e57d7d0302e12ad9b862dc9464"
     },
     {
       "id": "product-page",
-      "digest": "6c8ae5fdaace593e08093ef99ae4a99e1e6f3b430673d0cf48f3bfdd774a407f"
+      "digest": "30b8892a1211e360bf7329b945fa2ad8cffced53cd16eaf594ffef490048ea58"
     },
     {
       "id": "related-product-cards",
-      "digest": "c39cb25e8a7a325a8d0cef269ef50102d8718aa47ff54cc9a3662e27d4af6f84"
+      "digest": "39cd814ca4d103f662d42d000de1f0bb3a89df5fd2ce9140b745f58b4ccd28e0"
     }
   ]
 }

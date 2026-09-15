@@ -9,8 +9,14 @@
   "values": {
     "categories-caption": "Four objects for the surface you work on",
     "categories-image": {
-      "categories-image-alt": "Charcoal linen A5 notebook with a black elastic band",
-      "categories-image-src": "/uploaded-assets/asset-assets-449340b8-78fd-4646-97e1-20cbb6949a87"
+      "alt": "Charcoal linen A5 notebook with a black elastic band",
+      "asset": {
+        "assetId": "assets-449340b8-78fd-4646-97e1-20cbb6949a87",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "categories-intro": "Paper, brass and stone for the surface you work on. Tools that stay where you put them and get better with handling.",
     "categories-name": "Desk",

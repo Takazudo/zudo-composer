@@ -17,8 +17,14 @@
     "products-description": "A pocket torch turned from black anodised aluminium, no longer than a key. One click gives a soft 30 lumen light for reading a map; a second gives 300 lumens for finding the path.\n\nIt charges over USB-C in an hour and runs for a week of evening walks on one charge. The lens is frosted, so the beam is even rather than a hot spot.\n\nThe tail stands flat, so it can point at the ceiling and light a small room.",
     "products-featured": false,
     "products-image1": {
-      "products-image1-alt": "Short black aluminium pocket flashlight",
-      "products-image1-src": "/uploaded-assets/asset-assets-30c8b3fb-2b3e-4d39-94df-5f2616f4882d"
+      "alt": "Short black aluminium pocket flashlight",
+      "asset": {
+        "assetId": "assets-30c8b3fb-2b3e-4d39-94df-5f2616f4882d",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-name": "Pocket Torch",
     "products-price": 46,

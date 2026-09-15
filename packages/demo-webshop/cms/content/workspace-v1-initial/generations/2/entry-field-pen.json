@@ -17,12 +17,24 @@
     "products-description": "A short fountain pen turned from aircraft aluminium and finished in a matte black anodise that will not show fingerprints. Capped, it fits a shirt pocket; posted, it balances like a full-size pen.\n\nThe steel nib is a medium-fine that writes wet enough for good paper and dry enough for cheap paper. It takes standard international cartridges or the included converter, so you are never far from ink.\n\nThe cap threads on in one and a half turns and seals well enough to leave in a bag for a month without drying out.",
     "products-featured": true,
     "products-image1": {
-      "products-image1-alt": "Matte black aluminium fountain pen, capped",
-      "products-image1-src": "/uploaded-assets/asset-assets-58a10ab3-1341-4693-bd6a-ca94c766fd4f"
+      "alt": "Matte black aluminium fountain pen, capped",
+      "asset": {
+        "assetId": "assets-58a10ab3-1341-4693-bd6a-ca94c766fd4f",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-image2": {
-      "products-image2-alt": "The pen uncapped, showing its steel nib",
-      "products-image2-src": "/uploaded-assets/asset-assets-3e8d2ee4-42db-4b78-9374-3c715606f1e6"
+      "alt": "The pen uncapped, showing its steel nib",
+      "asset": {
+        "assetId": "assets-3e8d2ee4-42db-4b78-9374-3c715606f1e6",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-name": "Field Pen",
     "products-price": 42,

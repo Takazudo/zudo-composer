@@ -17,12 +17,24 @@
     "products-description": "A hardcover A5 notebook bound in charcoal book linen, with 192 pages of 90 gsm ivory paper printed with a faint 5 mm dot grid. The paper takes fountain pen ink without feathering and shows only a ghost of it on the reverse.\n\nThe spine is sewn in signatures, so the book opens flat from the first page to the last. A black elastic band keeps it shut in a bag, and a rear pocket holds loose receipts and the odd pressed leaf.\n\nWe number every page and leave two blank for an index, because the notes you need most are the ones you wrote three months ago.",
     "products-featured": true,
     "products-image1": {
-      "products-image1-alt": "Charcoal linen A5 notebook with a black elastic band",
-      "products-image1-src": "/uploaded-assets/asset-assets-449340b8-78fd-4646-97e1-20cbb6949a87"
+      "alt": "Charcoal linen A5 notebook with a black elastic band",
+      "asset": {
+        "assetId": "assets-449340b8-78fd-4646-97e1-20cbb6949a87",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-image2": {
-      "products-image2-alt": "The notebook open to blank dotted pages",
-      "products-image2-src": "/uploaded-assets/asset-assets-ab894c50-574e-4341-b5a8-709e8e9a68f7"
+      "alt": "The notebook open to blank dotted pages",
+      "asset": {
+        "assetId": "assets-ab894c50-574e-4341-b5a8-709e8e9a68f7",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-name": "Ledger Notebook A5",
     "products-price": 24,

@@ -47,10 +47,7 @@
       {
         "id": "product-page-image1-src",
         "projection": {
-          "fieldIds": [
-            "products-image1-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "products-image1",
         "target": {
@@ -64,10 +61,8 @@
       {
         "id": "product-page-image1-alt",
         "projection": {
-          "fieldIds": [
-            "products-image1-alt"
-          ],
-          "kind": "object-field"
+          "field": "alt",
+          "kind": "asset-text"
         },
         "sourceFieldId": "products-image1",
         "target": {
@@ -81,10 +76,7 @@
       {
         "id": "product-page-image2-src",
         "projection": {
-          "fieldIds": [
-            "products-image2-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "products-image2",
         "target": {
@@ -98,10 +90,8 @@
       {
         "id": "product-page-image2-alt",
         "projection": {
-          "fieldIds": [
-            "products-image2-alt"
-          ],
-          "kind": "object-field"
+          "field": "alt",
+          "kind": "asset-text"
         },
         "sourceFieldId": "products-image2",
         "target": {
@@ -241,10 +231,7 @@
       {
         "id": "product-page-cart-src",
         "projection": {
-          "fieldIds": [
-            "products-image1-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "products-image1",
         "target": {

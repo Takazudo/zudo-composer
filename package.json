@@ -89,7 +89,7 @@
     "demo:images": "node scripts/demo/optimise-images.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "typecheck": "tsc -b --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false && pnpm typecheck:public",
+    "typecheck": "tsc -b --verbose --pretty false && tsc -p packages/component-contract/tsconfig.type-tests.json --pretty false && pnpm typecheck:public",
     "typecheck:public": "tsc -p tsconfig.public-types.json --pretty false && node scripts/check-public-types.mjs",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json --pretty false",
     "test": "vitest run",
