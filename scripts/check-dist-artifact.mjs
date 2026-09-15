@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
+import { UI_PACK } from "./ui-pack-identity.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const dist = join(root, "dist");
@@ -172,7 +173,7 @@ assert.ok(/--sg-header-h:\s*var\(\s*--zc-topbar-h\s*\)/.test(combinedCss), "edit
 // whether local source is scanned.
 assert.ok(readFileSync(join(root, "src/features/composer/library/new-composition-dialog.tsx"), "utf8").includes("min-h-0"), "local Tailwind source proof drifted");
 assert.ok(css.some((source) => source.includes(".min-h-0{")), "local-source Tailwind utility was not emitted");
-assert.ok(readFileSync(join(root, "node_modules/@zudo-sg/ui/src/cards/callout/callout.tsx"), "utf8").includes("border-l-4"), "provider Tailwind source proof drifted");
+assert.ok(readFileSync(join(root, `node_modules/${UI_PACK.packageName}/src/cards/callout/callout.tsx`), "utf8").includes("border-l-4"), "provider Tailwind source proof drifted");
 assert.ok(css.some((source) => source.includes(".border-l-4{")), "installed-provider Tailwind utility was not emitted");
 for (const [size, value] of Object.entries({ xs: ".75rem", sm: "1rem", md: "1.25rem", lg: "1.5rem" })) {
   assert.ok(combinedCss.includes(`--spacing-icon-${size}:${value}`), `built CSS is missing local icon token ${size}`);

@@ -1,6 +1,7 @@
 import { test } from "./host-test";
 import { expect, type Locator, type Page, type Response } from "@playwright/test";
 import { watchRuntimeFailures } from "../runtime-failures";
+import { UI_PACK } from "../../scripts/ui-pack-identity.mjs";
 
 /**
  * `.cms-tree-acts` is `width: 0; opacity: 0` until its row is hovered or
@@ -117,7 +118,7 @@ test("real provider composes, highlights, persists, exports, and stays responsiv
 
   await toolbar.getByRole("button", { name: "Export JSX" }).click();
   const exportDialog = page.getByRole("dialog", { name: /Export — About page/i });
-  await expect(exportDialog).toContainText('from "@zudo-sg/ui"');
+  await expect(exportDialog).toContainText(`from "${UI_PACK.packageName}"`);
   await exportDialog.getByRole("button", { name: "Close" }).click();
 
   await documentReady({

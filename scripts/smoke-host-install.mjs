@@ -44,6 +44,7 @@ import {
 import { MISSING_RUNTIME, packMissingRuntime, plantHoistedDependency } from "./packed-host-negatives.mjs";
 import { createPackedGeneratedHost, snapshotPackedFiles } from "./packed-generated-host.mjs";
 import { checkNoDeploy } from "./check-no-deploy.mjs";
+import { UI_PACK } from "./ui-pack-identity.mjs";
 
 /** @typedef {import("@playwright/test").Page} Page */
 /** @typedef {import("./packed-host-helpers.mjs").HostManifest} HostManifest */
@@ -350,7 +351,7 @@ async function proveDiskHost(sourceHost, workspace, tarballs, toolPackage, negat
     await copyPackedHost(sourceHost, hostRoot);
     const manifest = await configurePackedHost(hostRoot, tarballs, toolPackage.packageManager);
     for (const section of [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies, manifest.optionalDependencies]) {
-      if (section?.["@zudo-sg/ui"]) assert.equal(section["@zudo-sg/ui"], toolPackage.devDependencies["@zudo-sg/ui"], "The provider must retain its exact Git pin");
+      if (section?.[UI_PACK.packageName]) assert.equal(section[UI_PACK.packageName], toolPackage.devDependencies[UI_PACK.packageName], "The provider must retain its exact Git pin");
     }
     if (negative === "hoisted-dependency") {
       planted = await plantHoistedDependency({ root, sourceHost, hostRoot, env: environment });
