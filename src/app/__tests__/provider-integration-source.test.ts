@@ -76,7 +76,7 @@ it("honors an explicit project despite an injected source error", async () => {
 it("opens generated committed CMS ready and populated when the real dev source is no-active", async () => {
   const currentHost = await host();
   const input = loadSampleSiteProject(activeSiteProjectValidationContext);
-  const config = composer({ workspaceRoot: currentHost.root, pack: "@zudo-sg/ui/composer-pack" }, { env: {} });
+  const config = composer({ workspaceRoot: currentHost.root, pack: "@zudo-composer/ui/composer-pack" }, { env: {} });
   // Sample Studio's project pins its own real seeded images (#695); seeding
   // reads assets from the host's configured assetsDir, so this fresh
   // temporary host needs its own copy before produceReadyWorkspace compiles it.

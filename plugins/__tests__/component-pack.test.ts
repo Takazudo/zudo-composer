@@ -113,7 +113,7 @@ describe("generated source for a themeset", () => {
     const result = generateJsx(document, catalog);
     expect(result.ok).toBe(true);
     expect(result.code).toContain('from "@zudo-composer/fixture-themeset"');
-    expect(result.code).not.toContain("@zudo-sg/ui");
+    expect(result.code).not.toContain("@zudo-composer/ui");
     expect(result.imports.every(({ module }) => module === "@zudo-composer/fixture-themeset")).toBe(true);
     // The same manifest survives a round trip through the contract's own
     // validator, so `source.module` really is a public bare-package import.

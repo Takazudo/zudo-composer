@@ -12,6 +12,6 @@ export const containerComposer = defineComponent<ContainerProps>()(Container, {
   id: "ui.container",
   schemaVersion: 1,
   ...containerDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "Container" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "Container" },
   slots: [{ id: "content", prop: "children", label: "Content", cardinality: "many" }],
 });

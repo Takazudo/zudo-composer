@@ -7,7 +7,7 @@ const read = (path: string): string => readFileSync(resolve(path), "utf8");
 describe("application theme CSS contract", () => {
   it("loads the app override after the provider stylesheet", () => {
     const base = read("src/base.css");
-    expect(base.indexOf('@import "@zudo-sg/ui/styles/composer.css"')).toBeLessThan(
+    expect(base.indexOf('@import "@zudo-composer/ui/styles/composer.css"')).toBeLessThan(
       base.indexOf('@import "./styles/app-tokens.css"'),
     );
   });

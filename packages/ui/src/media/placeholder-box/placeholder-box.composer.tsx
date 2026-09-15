@@ -19,7 +19,7 @@ export const placeholderBoxComposer = defineComponent<PlaceholderBoxComposerProp
   id: "ui.placeholder-box",
   schemaVersion: 1,
   ...placeholderBoxDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "PlaceholderBox" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "PlaceholderBox" },
   defaults: { label: "hero-image.png", aspect: "16/9", size: "md" },
   fields: [
     { prop: "label", label: "Label", schema: { type: "string" }, editor: { kind: "text" } },

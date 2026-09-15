@@ -40,7 +40,7 @@ import { renderMarkdown, type MarkdownDiagnostic } from "./markdown-runtime";
 
 // Typography for `.zc-prose-md` lives in `./prose-md.css`, wired into the
 // single bundled stylesheet via `src/styles/global.css` — NOT imported here.
-// @zudo-sg/ui has no build step and no CSS bundling of its own (see
+// @zudo-composer/ui has no build step and no CSS bundling of its own (see
 // STORIES.md §1's "Component-scoped CSS" note); the consumer's own `@import`
 // graph is what actually ships CSS to the page, and a consumer other than
 // this repo's root app must wire `./prose-md.css` in itself.

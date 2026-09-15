@@ -29,7 +29,7 @@ export const proseMdComposer = defineComponent<ProseMdProps>()(ProseMd, {
   id: "ui.prose-md",
   schemaVersion: 1,
   ...proseMdDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "ProseMd" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "ProseMd" },
   defaults: { markdown: SAMPLE_MARKDOWN },
   fields: [
     {

@@ -12,7 +12,7 @@ export const stackComposer = defineComponent<StackProps>()(Stack, {
   id: "ui.stack",
   schemaVersion: 1,
   ...stackDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "Stack" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "Stack" },
   defaults: { direction: "vertical", gap: "md", align: "stretch", justify: "start" },
   fields: [
     {

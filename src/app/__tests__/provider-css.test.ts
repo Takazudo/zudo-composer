@@ -9,7 +9,7 @@ describe("host and tool CSS ownership", () => {
     // entry. The tool sheet is Tailwind utilities over its own tokens, so a
     // themeset that ships neither cannot break the editor chrome.
     const base = readFileSync(resolve("src/base.css"), "utf8");
-    expect(base).not.toContain("@zudo-sg/ui");
+    expect(base).not.toContain("@zudo-composer/ui");
     const positions = [
       base.indexOf('@import "tailwindcss/utilities";'),
       base.indexOf('@import "./styles/app-tokens.css";'),
@@ -35,12 +35,12 @@ describe("host and tool CSS ownership", () => {
     const hostStyles = readFileSync(resolve("styles/base.css"), "utf8");
     expect(hostStyles.match(/@zudo-sg\/ui\/styles\/composer\.css/g)).toHaveLength(1);
     const config = readFileSync(resolve("zudo-composer.config.ts"), "utf8");
-    expect(config).toContain('pack: "@zudo-sg/ui/composer-pack"');
+    expect(config).toContain('pack: "@zudo-composer/ui/composer-pack"');
     expect(config).toContain('styles: "styles/base.css"');
   });
 
   it("preserves the installed provider import and package-source order", () => {
-    const cssPath = fileURLToPath(import.meta.resolve("@zudo-sg/ui/styles/composer.css"));
+    const cssPath = fileURLToPath(import.meta.resolve("@zudo-composer/ui/styles/composer.css"));
     const css = readFileSync(cssPath, "utf8");
     const markers = [
       '@import "tailwindcss/preflight";',

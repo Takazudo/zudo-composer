@@ -15,7 +15,7 @@ import { splitLayoutComposer as sharedSplitLayoutSplitLayout } from "./shared/sp
 import { stackComposer as sharedStackStack } from "./shared/stack/stack.composer";
 
 export const componentPack = defineComponentPack({
-  packId: "@zudo-sg/ui",
+  packId: "@zudo-composer/ui",
   packVersion: "1.0.0",
   components: [
     cardsCalloutCallout,

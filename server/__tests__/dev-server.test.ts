@@ -137,7 +137,7 @@ describe("resolveComposerDevConfig", () => {
     // Vite's own html middlewares would look for a `<host>/index.html`.
     expect(inlineConfig.appType).toBe("custom");
     expect(inlineConfig.publicDir).toBe(join(FIXTURE_HOST, "public"));
-    const pack = resolveComponentPack(FIXTURE_HOST, "@zudo-sg/ui/composer-pack");
+    const pack = resolveComponentPack(FIXTURE_HOST, "@zudo-composer/ui/composer-pack");
     expect(inlineConfig.optimizeDeps?.exclude).toEqual([pack.packageName, ...OPTIMIZE_DEPS_EXCLUDE]);
     expect(inlineConfig.optimizeDeps?.entries).toEqual([resolve(APP_ROOT, APP_ENTRY_MODULE)]);
     // The pack's own directory is allowed too: it is outside the host root.

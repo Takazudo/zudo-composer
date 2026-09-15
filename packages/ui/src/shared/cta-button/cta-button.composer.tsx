@@ -15,7 +15,7 @@ export const ctaButtonComposer = defineComponent<CtaButtonComposerProps>()(CtaBu
   id: "ui.cta-button",
   schemaVersion: 1,
   ...ctaButtonDisplay,
-  source: { module: "@zudo-sg/ui", exportKind: "named", exportName: "CtaButton" },
+  source: { module: "@zudo-composer/ui", exportKind: "named", exportName: "CtaButton" },
   defaults: { href: "/products", variant: "primary", arrow: true, children: "Browse products" },
   fields: [
     { prop: "href", label: "Link", required: true, schema: { type: "string" }, editor: { kind: "text" } },

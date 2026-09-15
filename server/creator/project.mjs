@@ -43,7 +43,7 @@ export function creatorPackageManager(tool) {
 /** @param {string} name */
 export function validateHostName(name) {
   if (name.length > 214 || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(name)
-    || ["node_modules", "favicon.ico", "zudo-composer", contractName, "preact", "preact-render-to-string", "@types/node", "vitest", "typescript"].includes(name)
+    || ["node_modules", "favicon.ico", "zudo-composer", contractName, "@zudo-composer/ui", "preact", "preact-render-to-string", "@types/node", "vitest", "typescript"].includes(name)
     || name.split("/").some((part) => part === "src")) {
     throw new Error(`Invalid host package name "${name}". Use a lowercase npm name, distinct from its dependencies.`);
   }
