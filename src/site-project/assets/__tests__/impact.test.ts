@@ -85,3 +85,56 @@ describe("provider-qualified assets impact", () => {
     expect(mapped.location).toMatchObject({ recordId: "card-source", nodeId: "original-link", attachmentId: "cards", entries: [{ recordId: "one" }] });
   });
 });
+describe("schema.format url declarations", () => {
+  const urlFormatCatalog = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "test", packVersion: "1", components: [{ ...componentCatalog.get("leaf")!, fields: [
+    { prop: "title", label: "Title", schema: { type: "string" }, editor: { kind: "text" } },
+    { prop: "src1", label: "Source", schema: { type: "string", format: "url" }, editor: { kind: "text" } },
+    { prop: "link", label: "Link", schema: { type: "object", fields: [{ key: "target", label: "Target", schema: { type: "string", format: "url" }, editor: { kind: "text" } }] }, editor: { kind: "group" } },
+    { prop: "gallery", label: "Gallery", schema: { type: "array", items: { schema: { type: "string", format: "url" }, editor: { kind: "text" } } }, editor: { kind: "list" } },
+    { prop: "pins", label: "Pins", schema: { type: "tuple", items: [{ label: "Primary", schema: { type: "string", format: "url" }, editor: { kind: "text" } }, { label: "Note", schema: { type: "string" }, editor: { kind: "text" } }] }, editor: { kind: "tuple" } },
+  ] }] });
+  const plainCatalog = createComponentCatalog({ kind: "zudo-composer/component-pack", contractVersion: 2, packId: "test", packVersion: "1", components: [{ ...componentCatalog.get("leaf")!, fields: [
+    { prop: "title", label: "Title", schema: { type: "string" }, editor: { kind: "text" } },
+    { prop: "src1", label: "Source", schema: { type: "string" }, editor: { kind: "text" } },
+  ] }] });
+  it("pins a declared top-level prop whose schema declares format url", () => {
+    const value = project();
+    value.providers.compositions[0]!.records[0]!.document.root[0]!.props.src1 = "/uploaded-assets/asset-asset";
+    const result = resolveSiteProjectAsset(value, urlFormatCatalog, { lock });
+    expect(result.project.providers.compositions[0]!.records[0]!.document.root[0]!.props.src1).toBe(lock.pins[0]!.url);
+    expect(result.index.complete).toBe(true);
+  });
+  it("pins a declared object sub-field whose schema declares format url", () => {
+    const value = project();
+    value.providers.compositions[0]!.records[0]!.document.root[0]!.props.link = { target: "/uploaded-assets/asset-asset" };
+    const result = resolveSiteProjectAsset(value, urlFormatCatalog, { lock });
+    const link = result.project.providers.compositions[0]!.records[0]!.document.root[0]!.props.link as { target: string };
+    expect(link.target).toBe(lock.pins[0]!.url);
+    expect(result.index.complete).toBe(true);
+  });
+  it("pins a declared array item whose schema declares format url", () => {
+    const value = project();
+    value.providers.compositions[0]!.records[0]!.document.root[0]!.props.gallery = ["/uploaded-assets/asset-asset"];
+    const result = resolveSiteProjectAsset(value, urlFormatCatalog, { lock });
+    const gallery = result.project.providers.compositions[0]!.records[0]!.document.root[0]!.props.gallery as string[];
+    expect(gallery[0]).toBe(lock.pins[0]!.url);
+    expect(result.index.complete).toBe(true);
+  });
+  it("pins a declared tuple item whose schema declares format url", () => {
+    const value = project();
+    value.providers.compositions[0]!.records[0]!.document.root[0]!.props.pins = ["/uploaded-assets/asset-asset", "plain note"];
+    const result = resolveSiteProjectAsset(value, urlFormatCatalog, { lock });
+    const pins = result.project.providers.compositions[0]!.records[0]!.document.root[0]!.props.pins as string[];
+    expect(pins[0]).toBe(lock.pins[0]!.url);
+    expect(pins[1]).toBe("plain note");
+    expect(result.index.complete).toBe(true);
+  });
+  it("leaves an undeclared src1 advisory and incomplete", () => {
+    const value = project();
+    value.providers.compositions[0]!.records[0]!.document.root[0]!.props.src1 = "/uploaded-assets/asset-asset";
+    const result = resolveSiteProjectAsset(value, plainCatalog, { lock });
+    expect(result.project.providers.compositions[0]!.records[0]!.document.root[0]!.props.src1).toBe("/uploaded-assets/asset-asset");
+    expect(result.index.complete).toBe(false);
+    expect(result.index.advisory).toContainEqual(expect.objectContaining({ value: "/uploaded-assets/asset-asset" }));
+  });
+});
