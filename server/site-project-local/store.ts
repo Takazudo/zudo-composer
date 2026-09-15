@@ -295,20 +295,42 @@ export class LocalSiteProjectStore implements SiteProjectStoreAdapter, SiteProje
       return { status: "ok" as const, value: { project: stored.project, release } };
     }); } catch (error) { return unavailable(error); }
   }
-  async readActiveAsset(pathname: string): Promise<SiteProjectAdapterReadResult<{ bytes: Uint8Array; mimeType: AssetVersionPin["mimeType"]; identity: SiteProjectActiveSelection }>> {
-    try { return await this.lock(async () => {
-      if (!ASSET_CHECKSUM_URL_PATTERN.test(pathname)) return { status: "not-found" as const };
-      const active = await this.active(); if (!active) return { status: "not-found" as const };
-      const release = await this.completed(active.projectId, active.buildId);
-      if (!release || !sameRelease(active, release.identity)) throw new Error("Active completed build is missing or inconsistent.");
-      const pins = release.stage.assetLock?.pins.filter((candidate) => candidate.url === pathname) ?? [];
-      if (pins.length !== 1) return { status: "not-found" as const };
-      const pin = pins[0]!, name = `asset-${basename(pin.url)}`;
-      if (release.files[name] !== pin.checksum) throw new Error("Active pinned Assets manifest is inconsistent.");
-      const bytes = await this.read(join(this.root, "builds", active.buildId, name));
-      if (bytes.byteLength !== pin.byteLength || hash(bytes) !== pin.checksum || sniffAsset(bytes.subarray(0, 16), pin.mimeType)?.mimeType !== pin.mimeType) throw new Error("Active pinned Assets bytes failed integrity verification.");
-      return { status: "ok" as const, value: { bytes: new Uint8Array(bytes), mimeType: pin.mimeType, identity: { ...active } } };
-    }); } catch (error) { return unavailable(error); }
+  // Lock-free: builds are immutable and every mutable file is replaced by an
+  // atomic rename, so each file read is whole. A concurrent writer can still skew
+  // active.json against heads.json, so the resolution retries and re-reads the
+  // pointer to prove every byte belongs to one active release. Never touches locks.
+  async readActiveAsset(pathname: string): Promise<SiteProjectAdapterReadResult<{ bytes: Uint8Array; mimeType: AssetVersionPin["mimeType"]; identity: SiteProjectActiveSelection; toolchain: StagedRelease["toolchain"] }>> {
+    if (!ASSET_CHECKSUM_URL_PATTERN.test(pathname)) return { status: "not-found" as const };
+    let failure: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+      try {
+        const active = await this.pinExistingRoot() ? await this.active() : null; if (!active) return { status: "not-found" as const };
+        const result = await this.resolveActiveAsset(pathname, active);
+        const current = await this.active();
+        if (current && sameRelease(active, current)) return result;
+        failure = new Error("Active release changed during Assets read.");
+      } catch (error) { failure = error; }
+    }
+    return unavailable(failure);
+  }
+  private async pinExistingRoot() {
+    if (!await exists(this.root)) return false;
+    const expected = join(await realpath(dirname(this.root)), basename(this.root)), info = await lstat(this.root);
+    if (!info.isDirectory() || info.isSymbolicLink() || await realpath(this.root) !== expected || (this.pinnedRoot && this.pinnedRoot !== expected)) throw new Error("Unsafe release root.");
+    this.pinnedRoot = expected; return true;
+  }
+  private async resolveActiveAsset(pathname: string, active: SiteProjectActiveSelection) {
+    await this.verifyLayout();
+    const release = await this.completed(active.projectId, active.buildId);
+    if (!release || !sameRelease(active, release.identity)) throw new Error("Active completed build is missing or inconsistent.");
+    const pins = release.stage.assetLock?.pins.filter((candidate) => candidate.url === pathname) ?? [];
+    if (pins.length !== 1) return { status: "not-found" as const };
+    const pin = pins[0]!, name = `asset-${basename(pin.url)}`;
+    if (release.files[name] !== pin.checksum) throw new Error("Active pinned Assets manifest is inconsistent.");
+    const bytes = await this.read(join(this.root, "builds", active.buildId, name));
+    if (bytes.byteLength !== pin.byteLength || hash(bytes) !== pin.checksum || sniffAsset(bytes.subarray(0, 16), pin.mimeType)?.mimeType !== pin.mimeType) throw new Error("Active pinned Assets bytes failed integrity verification.");
+    return { status: "ok" as const, value: { bytes: new Uint8Array(bytes), mimeType: pin.mimeType, identity: { ...active }, toolchain: release.stage.toolchain } };
   }
   async apply(input: Parameters<SiteProjectStoreAdapter["apply"]>[0]): ReturnType<SiteProjectStoreAdapter["apply"]> {
     try { return await this.lock(async () => {

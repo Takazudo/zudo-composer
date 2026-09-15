@@ -29,11 +29,13 @@ export async function readActivatedSiteRelease(options: DeliveryReaderOptions): 
 
 export interface ActivatedSiteAssetData { bytes: Uint8Array; mimeType: AssetType; identity: SiteProjectActiveSelection }
 export async function readActivatedSiteAssets(pathname: string, options: DeliveryReaderOptions): Promise<ActivatedSiteAssetData | null> {
-  const release = await readActivatedSiteRelease(options);
-  if (!release) return null;
-  const result = await createLocalSiteProjectStore(options).readActiveAsset(pathname);
+  const store = createLocalSiteProjectStore(options);
+  try { await lstat(store.root); }
+  catch (cause) { if ((cause as NodeJS.ErrnoException).code === "ENOENT") return null; throw cause; }
+  const result = await store.readActiveAsset(pathname);
   if (result.status === "unavailable") throw new Error(`Activated Assets is unavailable: ${result.message}`);
   if (result.status === "not-found") return null;
-  if (releaseJson(result.value.identity) !== releaseJson(release.release.identity)) throw new Error("Activated release changed during Assets verification.");
-  return result.value;
+  const { toolchain, ...value } = result.value;
+  if (releaseJson(toolchain) !== releaseJson(await resolveLocalReleaseToolchain(options))) throw new Error("Activated release toolchain does not match the current installed runtime.");
+  return value;
 }
