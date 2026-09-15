@@ -19,10 +19,13 @@ function acceptedKindLine(kind: GrammarAcceptedKind, idWidth: number): string {
 }
 
 function renderRegion(region: GrammarRegion): string[] {
+  const header = [`Region "${region.outletLabel}" = ${region.componentId} › ${region.slotId}`, `- ${acceptsHeader(region)}`];
+  if (region.accepts === "any") {
+    return [...header, "- accepts any component in the pack."];
+  }
   const idWidth = region.accepts.reduce((width, kind) => Math.max(width, kind.id.length), 0);
   return [
-    `Region "${region.outletLabel}" = ${region.componentId} › ${region.slotId}`,
-    `- ${acceptsHeader(region)}`,
+    ...header,
     ...region.accepts.map((kind) => acceptedKindLine(kind, idWidth)),
     "- everything else in the pack is rejected by the model.",
   ];

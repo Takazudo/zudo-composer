@@ -30,7 +30,7 @@ export interface GrammarRegion {
   cardinality: SlotCardinality;
   min?: number;
   max?: number;
-  accepts: GrammarAcceptedKind[];
+  accepts: GrammarAcceptedKind[] | "any";
 }
 
 /** One page kind: a Global template whose outlet targets a container slot. */
@@ -103,8 +103,30 @@ function buildTemplateEntry(document: CompositionDocument, manifest: ComponentCa
   const slot = containerEntry.slots.find((candidate) => candidate.id === slotId);
   if (!slot) return { unavailable: `outlet slot "${slotId}" is not declared on "${parent.componentId}".` };
 
+  const bounds = {
+    cardinality: slot.cardinality,
+    ...(slot.min !== undefined ? { min: slot.min } : {}),
+    ...(slot.max !== undefined ? { max: slot.max } : {}),
+  };
+
   if (!slot.accepts) {
-    return { entry: { id: document.id, name: document.name, region: null, open: true } };
+    // Cardinality `single`, `min`, or `max` on an accepts-free slot is still a
+    // real constraint an agent must respect, so it is reported as bounds on
+    // an `accepts: "any"` region rather than discarded as a plain open slot.
+    const isBounded = slot.cardinality === "single" || slot.min !== undefined || slot.max !== undefined;
+    if (!isBounded) {
+      return { entry: { id: document.id, name: document.name, region: null, open: true } };
+    }
+    const region: GrammarRegion = {
+      outletLabel: publication.outlet.label,
+      componentId: parent.componentId,
+      componentTitle: containerEntry.title,
+      slotId,
+      slotLabel: slot.label,
+      ...bounds,
+      accepts: "any",
+    };
+    return { entry: { id: document.id, name: document.name, region, open: true } };
   }
 
   const accepts: GrammarAcceptedKind[] = slot.accepts.map((kindId) => {
@@ -123,9 +145,7 @@ function buildTemplateEntry(document: CompositionDocument, manifest: ComponentCa
     componentTitle: containerEntry.title,
     slotId,
     slotLabel: slot.label,
-    cardinality: slot.cardinality,
-    ...(slot.min !== undefined ? { min: slot.min } : {}),
-    ...(slot.max !== undefined ? { max: slot.max } : {}),
+    ...bounds,
     accepts,
   };
 
