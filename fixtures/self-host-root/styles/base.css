@@ -1,0 +1,8 @@
+/* The host's Tailwind entry point, at the default `styles` setting path. The
+   pack itself never imports this — it only imports its own component CSS —
+   so the release toolchain must add it as an extra root, or host CSS changes
+   would go unattested. */
+@import "tailwindcss/preflight";
+@import "tailwindcss/utilities";
+
+@source "../lib";
