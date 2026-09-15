@@ -13,7 +13,6 @@ export {
   node,
   slugify,
 } from "../../src/site-project/authoring.js";
-export { readAssetUrls } from "../authoring/assets.js";
 export { assetAuthoringUrl } from "../../src/assets/model/types.js";
 export { assetMimeTypeForExtension } from "../../src/assets/model/asset-kinds.mjs";
 export { createFilesystemAssetStore } from "../../src/assets/storage/filesystem/store.js";

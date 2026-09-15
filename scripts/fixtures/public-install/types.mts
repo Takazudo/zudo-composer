@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import * as rootPublic from "zudo-composer";
 import type { ComposerDevServerOptions } from "zudo-composer";
 import * as configPublic from "zudo-composer/config";
@@ -21,7 +23,7 @@ import type { InlineConfig, Plugin, ViteDevServer } from "vite";
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
 type Assert<T extends true> = T;
-export type AuthoringExports = Assert<Equal<keyof typeof authoring, "ASSET_PROVIDER_ID" | "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "defineSite" | "entryRef" | "imageUse" | "node" | "readAssetUrls" | "slugify" | "validateSiteProject">>;
+export type AuthoringExports = Assert<Equal<keyof typeof authoring, "ASSET_PROVIDER_ID" | "COMPOSITION_PROVIDER_ID" | "CONTENT_PROVIDER_ID" | "DEFAULT_TIMESTAMP" | "MAPPING_PROVIDER_ID" | "SITEMAP_PROVIDER_ID" | "assetAuthoringUrl" | "assetMimeTypeForExtension" | "createFilesystemAssetStore" | "canonicalStringifyJson" | "defineSite" | "entryRef" | "imageUse" | "node" | "slugify" | "validateSiteProject">>;
 export type RootExports = Assert<Equal<keyof typeof rootPublic, "OPTIMIZE_DEPS_EXCLUDE" | "loadHostConfig" | "resolveComposerDevConfig" | "startComposerDevServer">>;
 export type ConfigExports = Assert<Equal<keyof typeof configPublic, "defineComposerConfig">>;
 export type ViteExports = Assert<Equal<keyof typeof vitePublic,
@@ -68,6 +70,12 @@ export const input: ComposerConfigInput = {};
 export const overrides: ComposerConfigOverrides = { workspaceRoot: "/tmp/host" };
 export const runtime: ComposerRuntime = { env: { HOST_SETTING: "typed" } };
 
+async function readCatalogUrls(config: ResolvedComposerConfig): Promise<Record<string, string>> {
+  const catalogPath = join(config.paths.assets, "catalog.json");
+  const catalog = JSON.parse(await readFile(catalogPath, "utf8")) as { records: { id: string; document: { fileName: string; state: "active" | "trash" } }[] };
+  return Object.fromEntries(catalog.records.filter((record) => record.document.state === "active").map((record) => [record.document.fileName, authoring.assetAuthoringUrl(record.id)]));
+}
+
 export async function readHostAssets(root: string): Promise<Record<string, string>> {
   const fromRoot: ResolvedComposerConfig = await rootPublic.loadHostConfig(root);
   const context = await loadHostContext({ workspaceRoot: root });
@@ -75,7 +83,7 @@ export async function readHostAssets(root: string): Promise<Record<string, strin
   const options: ComposerDevServerOptions = { workspaceRoot: root, port: 4321, host: true, strictPort: true };
   const resolved = await rootPublic.resolveComposerDevConfig(options);
   const fromServer: ResolvedComposerConfig = resolved.composerConfig;
-  return { ...authoring.readAssetUrls(fromRoot), ...authoring.readAssetUrls(fromVite), ...authoring.readAssetUrls(fromServer) };
+  return { ...(await readCatalogUrls(fromRoot)), ...(await readCatalogUrls(fromVite)), ...(await readCatalogUrls(fromServer)) };
 }
 
 export async function consumer(root: string): Promise<SiteManifest["routes"]> {

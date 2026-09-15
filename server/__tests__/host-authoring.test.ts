@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { readAssetUrls } from "zudo-composer/authoring";
+import { assetAuthoringUrl } from "zudo-composer/authoring";
 import { loadHostContext } from "zudo-composer/vite";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -75,22 +75,27 @@ describe("host authoring through public entries", () => {
     expect(await readFile(catalogPath, "utf8")).toBe(before);
     const { composerConfig } = await loadHostContext({ workspaceRoot: host });
     expect(composerConfig.paths.assets).toBe(join(host, assetsDirectory));
-    const urls = readAssetUrls(composerConfig);
-    expect(Object.keys(urls)).toEqual(["example.txt"]);
-    expect(urls["example.txt"]).toMatch(/^\/uploaded-assets\/asset-/u);
+    const catalog = JSON.parse(before) as { records: { id: string; document: { fileName: string; state: "active" | "trash" } }[] };
+    const active = catalog.records.filter((record) => record.document.state === "active");
+    expect(active.map((record) => record.document.fileName)).toEqual(["example.txt"]);
+    expect(assetAuthoringUrl(active[0]!.id)).toMatch(/^\/uploaded-assets\/asset-/u);
     for (const directory of ["cms", "published", ...(settings.assetsDir ? ["content-store/assets"] : [])]) {
       await expect(readdir(join(host, directory))).rejects.toMatchObject({ code: "ENOENT" });
     }
     if (defaultManifest !== undefined) await expect(readdir(join(host, "images-src"))).rejects.toMatchObject({ code: "ENOENT" });
 
-    await writeFile(join(host, "site-project.ts"), `import { defineSite, node, readAssetUrls } from "zudo-composer/authoring";
+    await writeFile(join(host, "site-project.ts"), `import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { assetAuthoringUrl, defineSite, node } from "zudo-composer/authoring";
 import type { Site } from "zudo-composer/site-project";
 import { loadHostContext } from "zudo-composer/vite";
 import { componentPack } from "./components";
 const { composerConfig } = await loadHostContext({ workspaceRoot: import.meta.dirname });
-const urls = readAssetUrls(composerConfig);
+const catalog = JSON.parse(await readFile(join(composerConfig.paths.assets, "catalog.json"), "utf8"));
+const record = catalog.records.find((candidate) => candidate.document.fileName === "example.txt");
+const url = assetAuthoringUrl(record.id);
 const site: Site = defineSite({ id: "public-host", name: "Public host", componentPack });
-const home = site.page({ name: "Home", root: [node("host.title", { title: urls["example.txt"] })] });
+const home = site.page({ name: "Home", root: [node("host.title", { title: url })] });
 site.sitemap({ name: "Routes", root: { title: "Home", page: home } });
 export default site;
 `);
