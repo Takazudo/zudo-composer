@@ -83,6 +83,20 @@ corepack pnpm cms:regenerate
 corepack pnpm cms:check
 ```
 
+Both commands hash the local `packages/component-contract/dist` into every
+host's build identity. That `dist` is gitignored and only rebuilt by the
+package's own `prepare` script (`tsc -b`), which `pnpm install --frozen-lockfile`
+skips when the lockfile is unchanged — so after pulling a contract source
+change, rebuild it first:
+
+```sh
+corepack pnpm -C packages/component-contract run build
+```
+
+`cms:check`/`cms:regenerate` detect a stale local build before hashing it and
+fail with that same instruction instead of misreporting every committed host
+as stale; do not run `cms:regenerate` in response to that message.
+
 The check is also part of `corepack pnpm check`. It discovers source-bearing
 hosts under `packages/` and `fixtures/`, including a future `demo-sample`, and
 requires previously registered hosts to remain present. It runs the installed

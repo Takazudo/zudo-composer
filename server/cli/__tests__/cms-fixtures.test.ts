@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -11,7 +12,7 @@ import { composer, type ResolvedComposerConfig } from "../../config/config";
 import { entry, project } from "../../../src/site-project/compiler/__tests__/fixtures";
 import { pack, toolchain } from "../../site-project-local/__tests__/release-fixture";
 import { produceReadyWorkspace } from "../ready-workspace";
-import { checkCmsFixture, discoverFixtureHosts, fixtureRoots, inventory, OWNERSHIP_FILE, runCmsFixtures, runInstalledComposer } from "../../../scripts/cms-fixtures";
+import { checkCmsFixture, contractDryRunIsFresh, discoverFixtureHosts, fixtureRoots, inventory, OWNERSHIP_FILE, runCmsFixtures, runInstalledComposer } from "../../../scripts/cms-fixtures";
 
 const run = promisify(execFile);
 const roots: string[] = [];
@@ -106,7 +107,7 @@ async function git(root: string, ...args: string[]) {
   return run("git", ["-C", root, ...args], { encoding: "utf8" });
 }
 
-async function hostRepository() {
+async function hostRepository(options: { contractRoot?: string } = {}) {
   const root = await temporary(), hostName = "packages/demo-sample", host = join(root, hostName);
   await mkdir(host, { recursive: true });
   await mkdir(join(root, "scripts"));
@@ -114,7 +115,7 @@ async function hostRepository() {
   await writeFile(join(root, ".gitignore"), "node_modules/\nignored.txt\n");
   await mkdir(join(host, "node_modules/@zudo-composer"), { recursive: true });
   await symlink(APP_ROOT, join(host, "node_modules/zudo-composer"), "dir");
-  await symlink(join(APP_ROOT, "node_modules/@zudo-composer/component-contract"), join(host, "node_modules/@zudo-composer/component-contract"), "dir");
+  await symlink(options.contractRoot ?? join(APP_ROOT, "node_modules/@zudo-composer/component-contract"), join(host, "node_modules/@zudo-composer/component-contract"), "dir");
   await symlink(join(APP_ROOT, "node_modules/preact"), join(host, "node_modules/preact"), "dir");
   await writeFile(join(host, "package.json"), json({ name: "fixture-host", type: "module", exports: { "./pack": "./components/pack.ts" }, devDependencies: { "zudo-composer": "0.0.0", "@zudo-composer/component-contract": "1.0.0", preact: "^10.29.8" } }));
   await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "fixture-host/pack" });\n');
@@ -230,5 +231,121 @@ describe("installed fixture regeneration", () => {
       await expect(current.invoke(true)).rejects.toThrow(/Invalid generated path|Overlapping CMS fixture roots/);
     }
     await expect(lstat(join(current.host, "cms"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+/**
+ * An isolated copy of the real, checked-out `@zudo-composer/component-contract`:
+ * its own `src`, `tsconfig.json` and a real `dist` built by a real `tsc -b`
+ * run against that copy. Only `node_modules/typescript` is shared (a symlink
+ * to the real installed package) so the copy's own `tsc -b` invocation writes
+ * its build-info cache inside the copy, never into the real package's
+ * `node_modules` or `dist` — nothing here can leak into the checked-out repo.
+ */
+async function freshContractCopy(): Promise<string> {
+  const root = await temporary();
+  const source = join(APP_ROOT, "node_modules/@zudo-composer/component-contract");
+  for (const name of ["package.json", "tsconfig.json", "src"]) await cp(join(source, name), join(root, name), { recursive: true });
+  const typescriptManifestPath = createRequire(join(source, "package.json")).resolve("typescript/package.json");
+  const typescriptManifest = JSON.parse(await readFile(typescriptManifestPath, "utf8")) as { bin: Record<string, string> };
+  await mkdir(join(root, "node_modules"));
+  await symlink(dirname(typescriptManifestPath), join(root, "node_modules/typescript"), "dir");
+  await run(process.execPath, [join(dirname(typescriptManifestPath), typescriptManifest.bin.tsc!), "-b"], { cwd: root });
+  return root;
+}
+
+describe("component-contract dist freshness", () => {
+  it("blames a stale local component-contract build instead of the committed hosts, for both check and regenerate", async () => {
+    const contractRoot = await freshContractCopy();
+    const current = await hostRepository({ contractRoot });
+    await runInstalledComposer(current.host, ["generate"]);
+    await runInstalledComposer(current.host, ["seed", "--ready-workspace"]);
+    await current.invoke();
+    await current.commit();
+    const metadata = JSON.parse(await readFile(join(current.root, OWNERSHIP_FILE), "utf8"));
+    const managed = [...metadata.hosts[current.hostName], "site-project.json"];
+    const before = await inventory(current.host, managed);
+    // Simulate a checkout that pulled a real contract source change without
+    // rerunning the package's `prepare` (`tsc -b`): different bytes, so `tsc`
+    // reports "would build project" (a mtime-only rewrite is NOT this case —
+    // see the timestamps-only test below).
+    const indexPath = join(contractRoot, "src/index.ts");
+    await writeFile(indexPath, `${await readFile(indexPath, "utf8")}\n`);
+    await expect(current.invoke(true)).rejects.toThrow(/local component-contract build is stale/);
+    await expect(current.invoke()).rejects.toThrow(/local component-contract build is stale/);
+    expect(await inventory(current.host, managed)).toEqual(before);
+  }, 120_000);
+
+  it("passes a fresh local component-contract build through unchanged", async () => {
+    const contractRoot = await freshContractCopy();
+    const current = await hostRepository({ contractRoot });
+    await runInstalledComposer(current.host, ["generate"]);
+    await runInstalledComposer(current.host, ["seed", "--ready-workspace"]);
+    const distNames = (await readdir(join(contractRoot, "dist"))).sort();
+    const before = await Promise.all(distNames.map(async (name) => (await lstat(join(contractRoot, "dist", name))).mtimeMs));
+    await current.invoke();
+    await current.invoke(true);
+    expect((await readdir(join(contractRoot, "dist"))).sort()).toEqual(distNames);
+    expect(await Promise.all(distNames.map(async (name) => (await lstat(join(contractRoot, "dist", name))).mtimeMs))).toEqual(before);
+  }, 120_000);
+
+  it("passes a source rewritten with identical bytes and a newer mtime through as fresh, for both check and regenerate", async () => {
+    const contractRoot = await freshContractCopy();
+    const current = await hostRepository({ contractRoot });
+    await runInstalledComposer(current.host, ["generate"]);
+    await runInstalledComposer(current.host, ["seed", "--ready-workspace"]);
+    // Regenerate first to register ownership against a fresh contract, the
+    // same way every other test in this file establishes a checkable host.
+    await current.invoke();
+    // A checkout or merge that rewrites a file to the same content still
+    // gives it a new mtime; the previously built `dist` is still correct.
+    const indexPath = join(contractRoot, "src/index.ts");
+    await writeFile(indexPath, await readFile(indexPath));
+    await expect(current.invoke(true)).resolves.toBeUndefined();
+    await expect(current.invoke()).resolves.toBeUndefined();
+  }, 120_000);
+});
+
+describe("contractDryRunIsFresh", () => {
+  it("is fresh for a bare up-to-date report", () => {
+    expect(contractDryRunIsFresh("19:07:34 - Project '/a/tsconfig.json' is up to date")).toBe(true);
+  });
+
+  it("is fresh for a worded up-to-date variant", () => {
+    expect(contractDryRunIsFresh("19:07:34 - Project '/a/tsconfig.json' is up to date because newest input 'src/index.ts' is older than output 'node_modules/.tmp/tsconfig.tsbuildinfo'")).toBe(true);
+  });
+
+  it("is fresh for a timestamps-only report", () => {
+    expect(contractDryRunIsFresh("19:07:34 - A non-dry build would update timestamps for output of project '/a/tsconfig.json'")).toBe(true);
+  });
+
+  it("is stale for a would-build report", () => {
+    expect(contractDryRunIsFresh("19:07:34 - A non-dry build would build project '/a/tsconfig.json'")).toBe(false);
+  });
+
+  it("is stale for an unrecognized report", () => {
+    expect(contractDryRunIsFresh("19:07:34 - A non-dry build would delete the following files: /a/dist/index.js")).toBe(false);
+  });
+
+  it("is stale for empty output", () => {
+    expect(contractDryRunIsFresh("")).toBe(false);
+    expect(contractDryRunIsFresh("\n\n")).toBe(false);
+  });
+
+  it("is stale when any one of several project lines would build, even with others up to date", () => {
+    const output = [
+      "19:07:34 - Project '/a/tsconfig.json' is up to date",
+      "19:07:34 - A non-dry build would build project '/b/tsconfig.json'",
+      "19:07:34 - A non-dry build would update timestamps for output of project '/c/tsconfig.json'",
+    ].join("\n\n");
+    expect(contractDryRunIsFresh(output)).toBe(false);
+  });
+
+  it("is fresh when several project lines are all up to date or timestamps-only", () => {
+    const output = [
+      "19:07:34 - Project '/a/tsconfig.json' is up to date",
+      "19:07:34 - A non-dry build would update timestamps for output of project '/b/tsconfig.json'",
+    ].join("\n\n");
+    expect(contractDryRunIsFresh(output)).toBe(true);
   });
 });
