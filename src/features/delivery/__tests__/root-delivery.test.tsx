@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { activeComponentProvider } from "../../composer/active-pack";
-import { loadSampleSiteProject } from "../../../test/site-project-fixture";
+import { loadSampleSiteProjectWithAssetLock } from "../../../test/sample-asset-lock";
 import { compileSiteProject, type SiteBuildPlan } from "../../../site-project/compiler";
 import type { SiteProject } from "../../../site-project/model";
 import { breadcrumbs, footerNavigation, primaryNavigation } from "../chrome";
@@ -13,8 +13,9 @@ afterEach(cleanup);
 let project: SiteProject;
 let build: SiteBuildPlan;
 beforeAll(async () => {
-  project = loadSampleSiteProject({ componentPack: activeComponentProvider.manifest });
-  const compilation = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog });
+  const loaded = await loadSampleSiteProjectWithAssetLock(activeComponentProvider.catalog);
+  project = loaded.project;
+  const compilation = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog, assetLock: loaded.lock });
   if (compilation.status !== "ready") throw new Error(compilation.diagnostics.map(({ message }) => message).join(" "));
   build = compilation.build;
 });

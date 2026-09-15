@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -26,6 +26,7 @@ async function fixture() {
   const project = JSON.parse(await readFile(join(root, "packages/demo-sample/site-project.json"), "utf8")) as SiteProject;
   const source = () => writeFile(join(host, "site-project.json"), JSON.stringify(project));
   await source();
+  await cp(join(root, "packages/demo-sample/cms/assets"), join(host, "cms/assets"), { recursive: true });
   const directory = join(host, "dist-site");
   await mkdir(directory);
   await writeFile(join(directory, "index.html"), '<!doctype html><div id="app"></div>');

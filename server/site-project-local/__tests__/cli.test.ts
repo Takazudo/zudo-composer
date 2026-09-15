@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { join, resolve } from "node:path";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ReleasePlan, CompletedRelease } from "../../../src/site-project/api/types";
@@ -35,8 +35,10 @@ describe("SiteProject CLI framing", () => {
   it("executes the real protocol-2 plan/stage/build/activate CLI without implicit activation", async () => {
     const parent = await mkdtemp(join(tmpdir(), "release-cli-")); roots.push(parent);
     const project = JSON.parse(await readFile(resolve(process.cwd(), "packages/demo-sample/site-project.json"), "utf8")) as SiteProject;
+    const assetsStoreRoot = join(parent, "cms/assets");
+    await cp(resolve(process.cwd(), "packages/demo-sample/cms/assets"), assetsStoreRoot, { recursive: true });
     const invoke = (request: object) => new Promise<{ code: number | null; response: { ok: boolean; result: unknown } }>((done, fail) => {
-      const child = spawn(process.execPath, ["--import", "tsx", resolve(process.cwd(), "server/site-project-local/cli.ts")], { env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: join(parent, "release") }, stdio: ["pipe", "pipe", "pipe"] }); let stdout = "", stderr = "";
+      const child = spawn(process.execPath, ["--import", "tsx", resolve(process.cwd(), "server/site-project-local/cli.ts")], { env: { ...process.env, ZUDO_SITE_PROJECT_ROOT: join(parent, "release"), ZUDO_ASSETS_STORE_ROOT: assetsStoreRoot }, stdio: ["pipe", "pipe", "pipe"] }); let stdout = "", stderr = "";
       child.stdout.on("data", (chunk) => { stdout += String(chunk); }); child.stderr.on("data", (chunk) => { stderr += String(chunk); }); child.on("error", fail); child.on("close", (code) => { if (stderr) return fail(new Error(stderr)); done({ code, response: JSON.parse(stdout) }); }); child.stdin.end(JSON.stringify({ protocolVersion: 2, ...request }));
     });
     const planned = await invoke({ operation: "plan", project, workingPrecondition: null, selection: project.providers.content.flatMap((provider) => provider.entries.map((entry) => ({ ref: { providerId: provider.id, modelId: entry.modelId, recordId: entry.id }, action: "publish" }))), expectedRevision: null, expectedActive: null });

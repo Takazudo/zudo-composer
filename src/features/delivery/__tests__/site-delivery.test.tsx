@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createProductionProviderIntegration, type ProductionProviderIntegration } from "../../../app/provider-integration";
 import { activeComponentProvider } from "../../composer/active-pack";
 import { loadSampleSiteProject } from "../../../test/site-project-fixture";
+import { captureSampleAssetLock } from "../../../test/sample-asset-lock";
 import { serializeSiteProject } from "../../../site-project/model/canonical";
 import { SiteDelivery, loadWorkingPreviewSnapshot } from "../site-delivery";
 import { compileSiteProject } from "../../../site-project/compiler";
@@ -29,7 +30,8 @@ const working = (providers: ProductionProviderIntegration): DeliverySourceContra
 
 /** Compile the checked-in fixture into the exact activated artifact shape delivery consumes. */
 async function activatedArtifact(project = sample()): Promise<ActivatedDeliveryArtifact> {
-  const compilation = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog });
+  const { lock } = await captureSampleAssetLock(project, activeComponentProvider.catalog);
+  const compilation = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog, assetLock: lock });
   if (compilation.status !== "ready") throw new Error(`fixture compilation blocked: ${compilation.diagnostics.map(({ message }) => message).join(" ")}`);
   const sha = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
   const files: Record<string, string> = { "build.json": sha(JSON.stringify(compilation.build)), "stage.json": sha("stage") };
