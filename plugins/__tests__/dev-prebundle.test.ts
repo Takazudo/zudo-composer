@@ -1,4 +1,6 @@
-import { resolve } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { UI_PACK } from "../../scripts/ui-pack-identity.mjs";
 import { PREACT_DEV_ENTRIES, componentPackNestedIncludes, devPrebundleIncludes } from "../dev-prebundle.mjs";
@@ -31,6 +33,28 @@ describe("devPrebundleIncludes", () => {
 
   it("yields no nested entries for a pack with no runtime dependencies", () => {
     expect(componentPackNestedIncludes({ workspaceRoot: themesetHost, pack: "@zudo-composer/fixture-themeset/composer-pack" })).toEqual([]);
+  });
+
+  it("never nests what the tool itself provides, for a pack that is the host itself", () => {
+    // The creator's output: the pack is the host's own `./components` export,
+    // and the host lists the tool, the contract and preact as dependencies.
+    const host = mkdtempSync(join(tmpdir(), "zc-prebundle-host-"));
+    try {
+      mkdirSync(join(host, "components"));
+      writeFileSync(join(host, "components", "pack.ts"), "export {};\n");
+      writeFileSync(
+        join(host, "package.json"),
+        JSON.stringify({
+          name: "generated-host",
+          type: "module",
+          exports: { "./components": "./components/pack.ts" },
+          dependencies: { "zudo-composer": "0.0.0", "@zudo-composer/component-contract": "1.0.0", preact: "10.0.0", "left-pad": "1.3.0" },
+        }),
+      );
+      expect(componentPackNestedIncludes({ workspaceRoot: host, pack: "generated-host/components" })).toEqual(["generated-host > left-pad"]);
+    } finally {
+      rmSync(host, { recursive: true, force: true });
+    }
   });
 
   it("yields no nested entries when the pack cannot be resolved", () => {
