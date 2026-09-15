@@ -1,7 +1,7 @@
 // The authored site. `zudo-composer generate` turns this into `site-project.json`;
 // `zudo-composer generate --check` reports when the committed output disagrees.
-import { defineSite, entryRef, node } from "zudo-composer/authoring";
-import type { BindingInput, Entry, JsonObject, Model, RouteInput } from "zudo-composer/site-project";
+import { defineSite, entryRef, imageUse, node } from "zudo-composer/authoring";
+import type { BindingInput, Entry, RouteInput } from "zudo-composer/site-project";
 import { componentPack } from "./components/pack";
 
 const site = defineSite({ id: "demo-webshop", name: "Nightjar Supply", componentPack });
@@ -33,12 +33,7 @@ const HERO_ALT = "A dark workbench at night with a small lit brass lamp, a close
 
 // ---------------------------------------------------------------- models
 
-const image = (key: string, required = true) => ({
-  key,
-  kind: "object" as const,
-  required,
-  fields: [{ key: "src", kind: "url" as const }, { key: "alt", kind: "text" as const }],
-});
+const image = (key: string, required = true) => ({ key, kind: "asset-use" as const, use: "image" as const, required });
 
 const categories = site.model({
   name: "Categories",
@@ -108,12 +103,9 @@ const about = site.model({
   ],
 });
 
-const imageValue = (name: ImageName, alt: string): JsonObject => ({ src: assetUrl(name), alt });
-
 // ---------------------------------------------------------------- categories
 
-const categoryEntries: Record<string, Entry> = {};
-for (const category of [
+const CATEGORIES = [
   {
     id: "desk",
     name: "Desk",
@@ -138,7 +130,10 @@ for (const category of [
     caption: "Four lights for late work",
     image: ["p-wick-lamp", "Small lit brass oil lamp with a glass chimney"],
   },
-] as const) {
+] as const satisfies readonly { id: string; name: string; order: number; intro: string; caption: string; image: readonly [ImageName, string] }[];
+
+const categoryEntries: Record<string, Entry> = {};
+for (const category of CATEGORIES) {
   categoryEntries[category.id] = site.entry(categories, {
     id: category.id,
     values: {
@@ -147,7 +142,7 @@ for (const category of [
       order: category.order,
       intro: category.intro,
       caption: category.caption,
-      image: imageValue(category.image[0], category.image[1]),
+      image: imageUse(ASSET_IDS[category.image[0]], category.image[1]),
     },
   });
 }
@@ -458,8 +453,8 @@ for (const product of PRODUCTS) {
       tag2,
       tag3,
       spec: { ...product.spec },
-      image1: imageValue(...product.image1),
-      ...(product.image2 ? { image2: imageValue(...product.image2) } : {}),
+      image1: imageUse(ASSET_IDS[product.image1[0]], product.image1[1]),
+      ...(product.image2 ? { image2: imageUse(ASSET_IDS[product.image2[0]], product.image2[1]) } : {}),
       featured: product.featured,
       category: entryRef(categoryEntries[product.category]!),
     },
@@ -548,8 +543,8 @@ const categoryTemplate = site.template({
 // ---------------------------------------------------------------- list items
 
 const card = (field: string, prop: string, extra: Partial<BindingInput> = {}): BindingInput => ({ field, nodeId: "card", prop, ...extra });
-const srcOf = (model: Model, key: string) => ({ kind: "object-field" as const, fieldIds: [`${model.fieldId(key)}-src`] });
-const altOf = (model: Model, key: string) => ({ kind: "object-field" as const, fieldIds: [`${model.fieldId(key)}-alt`] });
+const assetUrlProjection = { kind: "asset-url" as const };
+const assetAltProjection = { kind: "asset-text" as const, field: "alt" as const };
 
 const productCard = site.page({ name: "Product card", root: [node("shop.product-card", {}, {}, "card")] });
 const productCards = site.mapping({
@@ -561,8 +556,8 @@ const productCards = site.mapping({
     card("name", "name"),
     card("slug", "href", { transform: { kind: "prefix", prefix: "/products/" } }),
     card("slug", "slug"),
-    card("image1", "src", { projection: srcOf(products, "image1"), id: "product-card-image1-src" }),
-    card("image1", "alt", { projection: altOf(products, "image1"), id: "product-card-image1-alt" }),
+    card("image1", "src", { projection: assetUrlProjection, id: "product-card-image1-src" }),
+    card("image1", "alt", { projection: assetAltProjection, id: "product-card-image1-alt" }),
     card("price", "price"),
     card("currency", "currency"),
     card("category", "category", { projection: { kind: "reference-id" } }),
@@ -610,8 +605,8 @@ const categoryTiles = site.mapping({
   bindings: [
     { field: "name", nodeId: "tile", prop: "label" },
     { field: "slug", nodeId: "tile", prop: "href", transform: { kind: "prefix", prefix: "/" } },
-    { field: "image", nodeId: "tile", prop: "src", projection: srcOf(categories, "image"), id: "category-tile-image-src" },
-    { field: "image", nodeId: "tile", prop: "alt", projection: altOf(categories, "image"), id: "category-tile-image-alt" },
+    { field: "image", nodeId: "tile", prop: "src", projection: assetUrlProjection, id: "category-tile-image-src" },
+    { field: "image", nodeId: "tile", prop: "alt", projection: assetAltProjection, id: "category-tile-image-alt" },
     { field: "caption", nodeId: "tile", prop: "caption" },
   ],
 });
@@ -678,15 +673,15 @@ site.attach(productCards, { nodeId: "catalog", slotId: "items" }, "catalog-cards
 const categoryPages = (["desk", "carry", "light"] as const).map((id) => {
   const entry = categoryEntries[id]!.record.values;
   const name = entry[categories.fieldId("name")] as string;
-  const imageObject = entry[categories.fieldId("image")] as Record<string, string>;
+  const [imageName, imageAlt] = CATEGORIES.find((category) => category.id === id)!.image;
   const page = site.page({
     name: `${name} shelf`,
     id: `cat-${id}`,
     template: categoryTemplate,
     root: [
       node("shop.hero", {
-        src: imageObject[`${categories.fieldId("image")}-src`]!,
-        alt: imageObject[`${categories.fieldId("image")}-alt`]!,
+        src: assetUrl(imageName),
+        alt: imageAlt,
         eyebrow: "Shelf",
         heading: name,
         lead: entry[categories.fieldId("intro")] as string,
@@ -746,16 +741,16 @@ const productPages = site.mapping({
     { field: "name", nodeId: "product-heading", prop: "heading" },
     { field: "category", nodeId: "product-heading", prop: "eyebrow", projection: { kind: "reference-id" } },
     { field: "subtitle", nodeId: "product-heading", prop: "intro" },
-    { field: "image1", nodeId: "product-image-1", prop: "src", projection: srcOf(products, "image1"), id: "product-page-image1-src" },
-    { field: "image1", nodeId: "product-image-1", prop: "alt", projection: altOf(products, "image1"), id: "product-page-image1-alt" },
-    { field: "image2", nodeId: "product-image-2", prop: "src", projection: srcOf(products, "image2"), id: "product-page-image2-src" },
-    { field: "image2", nodeId: "product-image-2", prop: "alt", projection: altOf(products, "image2"), id: "product-page-image2-alt" },
+    { field: "image1", nodeId: "product-image-1", prop: "src", projection: assetUrlProjection, id: "product-page-image1-src" },
+    { field: "image1", nodeId: "product-image-1", prop: "alt", projection: assetAltProjection, id: "product-page-image1-alt" },
+    { field: "image2", nodeId: "product-image-2", prop: "src", projection: assetUrlProjection, id: "product-page-image2-src" },
+    { field: "image2", nodeId: "product-image-2", prop: "alt", projection: assetAltProjection, id: "product-page-image2-alt" },
     { field: "price", nodeId: "product-price", prop: "price" },
     { field: "currency", nodeId: "product-price", prop: "currency" },
     { field: "availability", nodeId: "product-status", prop: "availability" },
     { field: "stockLabel", nodeId: "product-status", prop: "label" },
     ...(["slug", "name", "price", "currency", "availability"] as const).map((field) => ({ field, nodeId: "product-cart", prop: field, id: `product-page-cart-${field}` })),
-    { field: "image1", nodeId: "product-cart", prop: "src", projection: srcOf(products, "image1"), id: "product-page-cart-src" },
+    { field: "image1", nodeId: "product-cart", prop: "src", projection: assetUrlProjection, id: "product-page-cart-src" },
     { field: "description", nodeId: "product-description", prop: "markdown" },
     ...["material", "dimensions", "weight", "origin", "care", "warranty"].map(specBinding),
   ],

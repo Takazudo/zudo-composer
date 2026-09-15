@@ -25,34 +25,12 @@
         "required": true
       },
       {
-        "fields": [
-          {
-            "id": "articles-cover-src",
-            "key": "src",
-            "kind": "url",
-            "label": "Src",
-            "required": true
-          },
-          {
-            "id": "articles-cover-alt",
-            "key": "alt",
-            "kind": "text",
-            "label": "Alt",
-            "required": true
-          },
-          {
-            "id": "articles-cover-caption",
-            "key": "caption",
-            "kind": "text",
-            "label": "Caption",
-            "required": true
-          }
-        ],
         "id": "articles-cover",
         "key": "cover",
-        "kind": "object",
+        "kind": "asset-use",
         "label": "Cover",
-        "required": true
+        "required": true,
+        "use": "image"
       },
       {
         "id": "articles-body",
@@ -146,27 +124,12 @@
         "required": true
       },
       {
-        "fields": [
-          {
-            "id": "articles-author-avatar-src",
-            "key": "src",
-            "kind": "url",
-            "label": "Src",
-            "required": true
-          },
-          {
-            "id": "articles-author-avatar-alt",
-            "key": "alt",
-            "kind": "text",
-            "label": "Alt",
-            "required": true
-          }
-        ],
         "id": "articles-author-avatar",
         "key": "authorAvatar",
-        "kind": "object",
+        "kind": "asset-use",
         "label": "Author avatar",
-        "required": true
+        "required": true,
+        "use": "image"
       },
       {
         "id": "articles-author-slug",

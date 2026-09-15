@@ -124,6 +124,15 @@ describe("demo-webshop compiled site", () => {
     expect(compiled.build.navigation.primary.map((item) => item.label)).toEqual(["Desk", "Carry", "Light", "All products", "About"]);
   });
 
+  it("declares the image fields as asset-use rather than raw url/object fields", () => {
+    const contentProvider = compiled.project.providers.content[0];
+    const categoriesModel = contentProvider?.models.find(({ id }) => id === "categories");
+    const productsModel = contentProvider?.models.find(({ id }) => id === "products");
+    expect(categoriesModel?.document.fields.find(({ key }) => key === "image")).toMatchObject({ kind: "asset-use", use: "image", required: true });
+    expect(productsModel?.document.fields.find(({ key }) => key === "image1")).toMatchObject({ kind: "asset-use", use: "image", required: true });
+    expect(productsModel?.document.fields.find(({ key }) => key === "image2")).toMatchObject({ kind: "asset-use", use: "image", required: false });
+  });
+
   it("declares product routes without adding unknown or synthetic not-found routes", () => {
     for (const pathname of ["/products/nope", "/sale", "/404"]) expect(compiled.build.routes.find((candidate) => candidate.pathname === pathname), pathname).toBeUndefined();
     expect(route("/products/field-pen").pathname).toBe("/products/field-pen");

@@ -145,6 +145,23 @@ describe("collectPackSourceGraph", () => {
     expect((await collect(root)).files).toEqual(["font.eot", "icons.css", "pack.ts", "sprite.svg"]);
   });
 
+  it("skips an unresolvable root-absolute CSS url() but records one that resolves", async () => {
+    const root = await host({
+      "pack.ts": 'import "./fonts.css";\n',
+      "fonts.css": "@font-face { src: url(/fonts/public.woff2); }\n.logo { background: url(/logo.svg); }\n",
+      "logo.svg": "<svg/>",
+    });
+    expect((await collect(root)).files).toEqual(["fonts.css", "logo.svg", "pack.ts"]);
+  });
+
+  it("still fails closed on an unresolvable relative CSS url()", async () => {
+    const root = await host({
+      "pack.ts": 'import "./broken.css";\n',
+      "broken.css": ".x { background: url(missing.png); }\n",
+    });
+    await expect(collect(root)).rejects.toThrow(/does not resolve/);
+  });
+
   it.each([
     ["a computed dynamic import", "const name = './x'; export const load = () => import(name);", /dynamic import\(\)/],
     ["an interpolated template import", "const n = 'x'; export const load = () => import(`./${n}`);", /dynamic import\(\)/],

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generation": 2,
-  "mutationToken": "b56a101ab605fae700ed8425f57928058c64bd54576b724f5ac6f8c291d22e6a",
+  "mutationToken": "d6307ba77cc9cbdc0ed5f926731695ea136c530979e4fcae33c13bd7c0debfa9",
   "entries": [
     {
       "id": "entry-about-margin-notes",
@@ -9,43 +9,43 @@
     },
     {
       "id": "entry-article-a-desk-with-one-thing-on-it",
-      "digest": "703bdb7a0f8df53947069dd7cf12264e4485521c15edc50db0df64aeea9bd64c"
+      "digest": "0b3e5c521fa4bff44cec1ee81a1fb96b900303c8086bd539a59c9c7e68bdec75"
     },
     {
       "id": "entry-article-choosing-tools-you-can-repair",
-      "digest": "81b573af3b918859a325d8ba81de9d26c49ac9b888d48260d655ef2d014715d3"
+      "digest": "145033c86dccf4bba436546ca50807b1e68313ab7ccdb172b6c9e6927a2f602c"
     },
     {
       "id": "entry-article-notes-that-survive-the-week",
-      "digest": "765afd9e3fcb5e65d14be3d7fb9a58a80739052010a7002dbd2186e1276a7c83"
+      "digest": "011c9b8e2f9d8d5d7a15048c8f6968d565f726dba6f3ae2c29bb7b2f47f3a46c"
     },
     {
       "id": "entry-article-reading-slowly-on-purpose",
-      "digest": "661c9c47d009b38eaafec2b1bf3fbeda18d94d0dd8701ba2447cdb5020b0871b"
+      "digest": "d8e94a48a88d686f067cdcc0a8c70a6b1c18ff2653572b6ac51d6b111017c933"
     },
     {
       "id": "entry-article-sharpen-before-you-cut",
-      "digest": "f84ed2c85e2abff8b95f521d9a2a72c6903ae25adcf920783d10ed165a4b0b76"
+      "digest": "6f771abdf50a90fa3b1c5aa02d8d222235884d09ff8536153eb7d75d48342dc2"
     },
     {
       "id": "entry-article-the-half-finished-list",
-      "digest": "d932b408563f7ae3b2eaedd98f0faede7426b04e2087ddb3fc2cfc5a8999b0ea"
+      "digest": "9d6f379a318c78ebcede227336d953922bd89751c48a4d5597f9646050f35deb"
     },
     {
       "id": "entry-article-the-quiet-hour",
-      "digest": "7a41619e2b887c5f7fb851b5c140748d156669a776516f5d0acaf0d694d0ef41"
+      "digest": "cca047fbc17f3be79fac5be3a3a2dd29e4085e31542ed2a7481479b3d674f13a"
     },
     {
       "id": "entry-article-why-drafts-should-look-unfinished",
-      "digest": "2c3cb53f0a8d6fd9eb3ff9cb4255614fc8287448e5ae50c68b380cdf2b3b4662"
+      "digest": "f93e6e3057d7d3b6d403e4f6947ac0f76b00627ac232cb87764ba97a9c531ee6"
     },
     {
       "id": "entry-author-mina-okafor",
-      "digest": "bba955c74cfcaac7b32875756c3a67e82bc08f12c7d309b302463af93a5fadb6"
+      "digest": "5c7d0771f30209ea5362d19b6ffc142ea75782c3f47f3c0dc01155557142fa1f"
     },
     {
       "id": "entry-author-teodor-lindqvist",
-      "digest": "f8968986edb7fc6f12f7c179d43f3818a5cc6e59168ade2cef181be6a3a457df"
+      "digest": "016fb1958681f7e10797a7ccbd579c9f6cd61c38f7638054a2f2e8f817bc8839"
     },
     {
       "id": "entry-comment-01",
@@ -105,11 +105,11 @@
     },
     {
       "id": "model-articles",
-      "digest": "df959b5ddfb0c3d56ac358e2706e2d8cd56a06a147d5e6ea1fcfdd3b5d17ad26"
+      "digest": "1b7c90d996dfe4d738e474cb4d62cfb814484446f73bd3ed7023a4763ec69f2a"
     },
     {
       "id": "model-authors",
-      "digest": "75048d1b360e2e3c279b50d0417c506277cda43dad1b03de1c31dc0aad641def"
+      "digest": "f65e28b6ec74155381743297f9b4d054108a4c9dd785122f6997ad1c1a025bc1"
     },
     {
       "id": "model-comments",

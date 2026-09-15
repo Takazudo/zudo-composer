@@ -40,7 +40,7 @@ export const galleryImageComponent = defineComponent<GalleryImageProps>()(Galler
   source: { module: "demo-webshop/components", exportKind: "named", exportName: "GalleryImage" },
   defaults: { src: "", alt: "" },
   fields: [
-    { kind: "text", prop: "src", label: "Image URL" },
+    { kind: "text", prop: "src", label: "Image" },
     { kind: "text", prop: "alt", label: "Alt text" },
   ],
 });

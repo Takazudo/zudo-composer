@@ -65,7 +65,7 @@ export const addToCartComponent = defineComponent<AddToCartProps>()(AddToCart, {
     { kind: "text", prop: "name", label: "Name" },
     { kind: "number", prop: "price", label: "Price", min: 0, step: 0.01 },
     { kind: "text", prop: "currency", label: "Currency" },
-    { kind: "text", prop: "src", label: "Image URL" },
+    { kind: "text", prop: "src", label: "Image" },
     { kind: "select", prop: "availability", label: "Availability", options: ["in-stock", "low-stock", "sold-out"] },
     { kind: "number", prop: "maxQuantity", label: "Max quantity", min: 1, max: 99, step: 1 },
   ],

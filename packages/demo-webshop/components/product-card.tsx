@@ -89,7 +89,7 @@ export const productCardComponent = defineComponent<ProductCardProps>()(ProductC
   fields: [
     { kind: "text", prop: "name", label: "Name" },
     { kind: "text", prop: "href", label: "URL" },
-    { kind: "text", prop: "src", label: "Image URL" },
+    { kind: "text", prop: "src", label: "Image" },
     { kind: "text", prop: "alt", label: "Image alt" },
     { kind: "number", prop: "price", label: "Price", min: 0, step: 0.01 },
     { kind: "text", prop: "currency", label: "Currency" },

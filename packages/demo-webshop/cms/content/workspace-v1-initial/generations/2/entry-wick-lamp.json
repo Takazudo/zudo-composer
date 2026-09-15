@@ -17,12 +17,24 @@
     "products-description": "A small table lamp spun from brass with a hand-blown glass chimney. It burns lamp oil through a flat cotton wick and gives about the light of two candles, steady and warm, for eight hours on one filling.\n\nA thumbwheel raises and lowers the wick, so you can turn it down to a glow at the end of the evening. The wide base will not tip on a desk.\n\nIt is the lamp in the photograph at the top of this shop, and the one we work by after dark.",
     "products-featured": true,
     "products-image1": {
-      "products-image1-alt": "Small lit brass oil lamp with a glass chimney",
-      "products-image1-src": "/uploaded-assets/asset-assets-7e6a524b-3b9a-4f89-a763-6949cd5c84bc"
+      "alt": "Small lit brass oil lamp with a glass chimney",
+      "asset": {
+        "assetId": "assets-7e6a524b-3b9a-4f89-a763-6949cd5c84bc",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-image2": {
-      "products-image2-alt": "The brass lamp unlit with its chimney set beside it",
-      "products-image2-src": "/uploaded-assets/asset-assets-14a1881b-90d9-4abc-9589-e887be624154"
+      "alt": "The brass lamp unlit with its chimney set beside it",
+      "asset": {
+        "assetId": "assets-14a1881b-90d9-4abc-9589-e887be624154",
+        "providerId": "asset-files"
+      },
+      "caption": "",
+      "decorative": false,
+      "kind": "image"
     },
     "products-name": "Wick Lamp",
     "products-price": 148,

@@ -48,10 +48,7 @@
       {
         "id": "related-product-cards-image1-src",
         "projection": {
-          "fieldIds": [
-            "products-image1-src"
-          ],
-          "kind": "object-field"
+          "kind": "asset-url"
         },
         "sourceFieldId": "products-image1",
         "target": {
@@ -65,10 +62,8 @@
       {
         "id": "related-product-cards-image1-alt",
         "projection": {
-          "fieldIds": [
-            "products-image1-alt"
-          ],
-          "kind": "object-field"
+          "field": "alt",
+          "kind": "asset-text"
         },
         "sourceFieldId": "products-image1",
         "target": {
