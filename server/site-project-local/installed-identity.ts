@@ -8,15 +8,16 @@ import { CONTRACT_IDENTITY_ENTRIES } from "./contract-entries.mjs";
 /** pnpm 11.5.2's createExportableManifest removes these unpublished fields and
  * lifecycle scripts. Normalize JSON formatting and top-level property order;
  * nested order (notably export conditions) can change resolution and is kept.
- * Every remaining manifest value is still attested. This projection
- * applies only to the contract; component pack manifests retain their bytes. */
-function publishedContractManifest(text: string): string {
+ * Every remaining manifest value is still attested. `pnpm pack` writes this
+ * projection while a workspace link or Git install keeps the raw bytes, so both
+ * the contract and a directory-mode package hash their root manifest through it. */
+function exportableManifest(text: string): string {
   const manifest = JSON.parse(text) as Record<string, unknown>;
-  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error("Contract package manifest must be an object.");
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error("Package manifest must be an object.");
   delete manifest.packageManager;
   delete manifest.pnpm;
   if (manifest.scripts !== undefined) {
-    if (!manifest.scripts || typeof manifest.scripts !== "object" || Array.isArray(manifest.scripts)) throw new Error("Contract package scripts must be an object.");
+    if (!manifest.scripts || typeof manifest.scripts !== "object" || Array.isArray(manifest.scripts)) throw new Error("Package scripts must be an object.");
     const scripts = manifest.scripts as Record<string, unknown>;
     for (const name of ["prepublishOnly", "prepack", "prepare", "postpack", "publish", "postpublish"]) delete scripts[name];
   }
@@ -99,7 +100,7 @@ async function packageDigest(directory: string, mode: DigestMode): Promise<strin
       try {
         const opened = await handle.stat(); if (opened.ino !== before.ino || opened.dev !== before.dev || opened.mode !== before.mode) throw new Error("Installed package file changed before hashing.");
         const hash = createHash("sha256");
-        if (contractOnly && relative === "package.json") hash.update(publishedContractManifest(await handle.readFile("utf8")));
+        if (!graphOnly && relative === "package.json") hash.update(exportableManifest(await handle.readFile("utf8")));
         else if (manifest) hash.update(hostManifestProjection(await handle.readFile("utf8")));
         else for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk);
         const after = await handle.stat(); if (after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs) throw new Error("Installed package file changed during hashing.");
