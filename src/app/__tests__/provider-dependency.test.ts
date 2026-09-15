@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { UI_PACK } from "../../../scripts/ui-pack-identity.mjs";
 
+const SHA = UI_PACK.provenanceCommit;
+const TREE = UI_PACK.provenanceTree;
 const SPEC = UI_PACK.dependencySpec;
 const TARBALL = UI_PACK.lock.tarballUrl;
 
@@ -67,5 +69,15 @@ describe("immutable UI provider dependency", () => {
       expect(block).not.toMatch(/(?:workspace|file|path|sibling):|\.\.\/|packages\/ui/);
     }
     expect(snapshot.match(/link:packages\/component-contract/g)).toHaveLength(1);
+  });
+
+  it("records the independently verified immutable provider tree", () => {
+    // The commit -> tree mapping was verified against the zudo-sg checkout
+    // (`6b0826c` verifies as tree `1c3cbfd…`, see epic #686); this locks the
+    // central module's pair against silent drift.
+    expect({ commit: SHA, tree: TREE }).toEqual({
+      commit: UI_PACK.provenanceCommit,
+      tree: UI_PACK.provenanceTree,
+    });
   });
 });
