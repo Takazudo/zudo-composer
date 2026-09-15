@@ -208,6 +208,31 @@ async function resolveContractRoot(from: string): Promise<string> {
   }
 }
 
+const CONTRACT_DRY_RUN_TIMESTAMP_PREFIX = /^\d{1,2}:\d{2}:\d{2}(?:\s?[AP]M)?\s-\s/;
+// Without `--verbose`, `tsc -b --dry` prints exactly one status line per
+// referenced project. `is up to date` (in any of its worded variants) and
+// the timestamps-only report are both "content is current"; a checkout or
+// merge that rewrites a source file with identical bytes still gets a newer
+// mtime, and produces exactly the timestamps-only report, not a rebuild.
+const CONTRACT_DRY_RUN_STATUS_LINE = /^(?:Project '.+' is up to date|A non-dry build would )/;
+const CONTRACT_DRY_RUN_FRESH_LINE = /^(?:Project '.+' is up to date\b|A non-dry build would update timestamps for output of project '.+'$)/;
+
+/**
+ * Fresh only when every recognized per-project status line reports current
+ * content (`CONTRACT_DRY_RUN_FRESH_LINE`); any other status line (a real
+ * "would build", "would delete", or unrecognized wording) fails closed as
+ * stale, and so does finding no status line at all. A future reference from
+ * the contract's own `tsconfig.json` can print several project lines in one
+ * run — one up-to-date project must never mask another that needs to build.
+ */
+export function contractDryRunIsFresh(output: string): boolean {
+  const statusLines = output
+    .split(/\r?\n/)
+    .map((line) => line.replace(CONTRACT_DRY_RUN_TIMESTAMP_PREFIX, "").trim())
+    .filter((line) => CONTRACT_DRY_RUN_STATUS_LINE.test(line));
+  return statusLines.length > 0 && statusLines.every((line) => CONTRACT_DRY_RUN_FRESH_LINE.test(line));
+}
+
 /**
  * `cms:check`/`cms:regenerate` hash `packages/component-contract/dist` into
  * every host's build identity. That `dist` is gitignored and only rebuilt by
@@ -229,7 +254,7 @@ async function assertContractDistFresh(hostRoot: string): Promise<void> {
     // tsc trusts its own build-info cache over walking declared outputs, which
     // is the same signal the package's `prepare`/`build` script acts on.
     const { stdout } = await exec(process.execPath, [resolve(dirname(tscManifestPath), bin.tsc), "-b", "--dry", "--locale", "en"], { cwd: contractRoot, maxBuffer: 1024 * 1024 });
-    if (!/ is up to date\b/.test(stdout)) throw new Error(CONTRACT_STALE_MESSAGE);
+    if (!contractDryRunIsFresh(stdout)) throw new Error(CONTRACT_STALE_MESSAGE);
   } catch (cause) {
     if (cause instanceof Error && cause.message === CONTRACT_STALE_MESSAGE) throw cause;
     throw new Error(CONTRACT_STALE_MESSAGE, { cause });
