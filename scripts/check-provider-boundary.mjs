@@ -8,15 +8,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { UI_PACK } from "./ui-pack-identity.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-const providerPackage = JSON.parse(readFileSync(join(root, "node_modules/@zudo-sg/ui/package.json"), "utf8"));
+const providerPackage = JSON.parse(readFileSync(join(root, `node_modules/${UI_PACK.packageName}/package.json`), "utf8"));
 const lock = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
-const packSource = readFileSync(join(root, "node_modules/@zudo-sg/ui/src/composer-pack.ts"), "utf8");
+const packSource = readFileSync(join(root, `node_modules/${UI_PACK.packageName}/src/composer-pack.ts`), "utf8");
 
-const providerSha = "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf";
-const providerSpec = `git+https://github.com/Takazudo/zudo-sg.git#${providerSha}`;
+const providerSpec = UI_PACK.dependencySpec;
 
 /** @param {string} haystack @param {string} needle @returns {number} */
 function count(haystack, needle) {
@@ -41,31 +41,31 @@ function indentedBlock(source, key, indent) {
   return source.slice(start, next < 0 ? source.length : start + prefix.length + next);
 }
 
-assert.equal(packageJson.devDependencies["@zudo-sg/ui"], providerSpec, "provider dependency must use the exact Git SHA");
-assert.equal(packageJson.dependencies["@zudo-sg/ui"], undefined, "the demo provider must not be a runtime dependency");
-const tarball = `https://codeload.github.com/Takazudo/zudo-sg/tar.gz/${providerSha}`;
+assert.equal(packageJson.devDependencies[UI_PACK.packageName], providerSpec, "provider dependency must use the exact Git SHA");
+assert.equal(packageJson.dependencies[UI_PACK.packageName], undefined, "the demo provider must not be a runtime dependency");
+const tarball = UI_PACK.lock.tarballUrl;
 const rootImporter = indentedBlock(section(lock, "importers", "packages"), ".", 2);
-const importer = indentedBlock(rootImporter, "'@zudo-sg/ui'", 6);
-const packageBlock = indentedBlock(section(lock, "packages", "snapshots"), `'@zudo-sg/ui@${tarball}'`, 2);
+const importer = indentedBlock(rootImporter, `'${UI_PACK.packageName}'`, 6);
+const packageBlock = indentedBlock(section(lock, "packages", "snapshots"), `'${UI_PACK.packageName}@${tarball}'`, 2);
 const snapshotSection = section(lock, "snapshots");
 const escapedTarball = tarball.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const snapshotKey = snapshotSection.match(new RegExp(`^  ('@zudo-sg/ui@${escapedTarball}[^']*'):\\n`, "m"))?.[1];
+const snapshotKey = snapshotSection.match(new RegExp(`^  ('${UI_PACK.packageName}@${escapedTarball}[^']*'):\\n`, "m"))?.[1];
 assert.ok(snapshotKey, "missing exact provider snapshot");
 const snapshot = indentedBlock(snapshotSection, snapshotKey, 2);
 assert.ok(importer.includes(`specifier: ${providerSpec}`), "importer spec must retain exact provider Git SHA");
-assert.ok(importer.includes(`version: ${tarball}(@zudo-composer/component-contract@packages+component-contract)(preact@10.29.8)(tailwindcss@4.3.3)`), "importer resolution drifted");
+assert.ok(importer.includes(`version: ${tarball}${UI_PACK.lock.peerResolutionSuffix}`), "importer resolution drifted");
 // pnpm records an `integrity:` field between `gitHosted:` and `tarball:` when it
 // re-resolves a Git dependency, so assert the two load-bearing parts separately.
 assert.match(packageBlock, /resolution: \{gitHosted: true,/, "provider must resolve as a git-hosted tarball");
 assert.ok(packageBlock.includes(`tarball: ${tarball}}`), "provider codeload package resolution drifted");
-assert.ok(packageBlock.includes("version: 0.1.0"), "provider lock metadata version drifted");
+assert.ok(packageBlock.includes(`version: ${UI_PACK.installedVersion}`), "provider lock metadata version drifted");
 assert.ok(snapshot.includes("'@zudo-composer/component-contract': link:packages/component-contract"), "provider must use the intentional local contract peer");
 assert.equal(count(snapshot, "link:packages/component-contract"), 1, "only the intentional component-contract peer may link locally");
 for (const block of [importer, packageBlock, snapshot]) {
   assert.doesNotMatch(block, /(?:workspace|file|path|sibling):|\.\.\/|packages\/ui|\/Users\/|[A-Za-z]:\\\\/, "provider provenance must not use a local/sibling resolution");
 }
-assert.equal(providerPackage.version, "0.1.0", "installed package metadata version drifted");
-assert.match(packSource, /packId:\s*["']@zudo-sg\/ui["']/);
+assert.equal(providerPackage.version, UI_PACK.installedVersion, "installed package metadata version drifted");
+assert.match(packSource, new RegExp(`packId:\\s*["']${UI_PACK.packId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']`));
 const packVersion = packSource.match(/\bpackVersion:\s*["']([^"']+)["']/)?.[1];
 assert.ok(packVersion, "provider pack must declare a non-empty pack version");
 
@@ -73,7 +73,7 @@ const sidecarImports = [...packSource.matchAll(
   /import\s+\{\s*\w+\s+as\s+(\w+)\s*\}\s+from\s+["'](\.\/[^"']+\.composer)["']/g,
 )].map((match) => ({
   localName: match[1],
-  path: join(root, "node_modules/@zudo-sg/ui/src", `${match[2]}.tsx`),
+  path: join(root, `node_modules/${UI_PACK.packageName}/src`, `${match[2]}.tsx`),
 }));
 assert.ok(sidecarImports.length > 0, "provider pack must import at least one component sidecar");
 const componentList = packSource.match(/\bcomponents:\s*\[([\s\S]*?)\]\s*,\s*\}\);/)?.[1];
@@ -94,7 +94,7 @@ const identities = sidecarImports.map(({ path }) => {
   assert.ok(id, `${path} must declare a component id`);
   assert.ok(Number.isInteger(schemaVersion) && schemaVersion > 0, `${id} must declare a positive schema version`);
   assert.ok(sourceModule, `${id} must declare a public source module`);
-  assert.equal(sourceModule, "@zudo-sg/ui", `${id} source.module must identify the installed provider package`);
+  assert.equal(sourceModule, UI_PACK.sourceModule, `${id} source.module must identify the installed provider package`);
   assert.doesNotMatch(sourceModule, /(?:^|\/)src(?:\/|$)/, `${id} source.module must not expose a private /src/ import`);
   return { id, schemaVersion };
 });

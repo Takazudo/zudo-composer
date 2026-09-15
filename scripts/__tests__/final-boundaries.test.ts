@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
 import { assertHandoffHashes } from "../handoff-identities.mjs";
 import { assertPackedConsumerBoundary } from "../package-host-boundary.mjs";
+import { PERMANENT_HANDOFF_HASHES, UI_PACK } from "../ui-pack-identity.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const temporary: string[] = [];
@@ -31,7 +32,7 @@ it("rejects planted reach-back, provider CSS and protocols in the real creator t
   expect((await check()).stdout).toContain("strict consumer boundary");
   for (const [path, source] of [
     ["injected.ts", "import '../../src/private';"],
-    ["injected.css", "@import '@zudo-sg/ui/styles/composer.css';"],
+    ["injected.css", `@import '${UI_PACK.packageName}/styles/composer.css';`],
     ["injected.json", '{"dependencies":{"hidden":"workspace:*"}}'],
   ]) {
     const file = join(copy, "templates/host", path);
@@ -58,7 +59,7 @@ it("excludes all discovered consumer trees from the tarball while preserving cre
 it("separates full consumer tool install refs from the exact permanent identity set", async () => {
   const readme = await readFile(join(root, "README.md"), "utf8");
   const guidance = await readFile(join(root, "CLAUDE.md"), "utf8");
-  const permanent = ["f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2", "6b0826cdaa14d9888e58c795ee015f70e2c5cbdf", "1c3cbfd3a25d1425f447cdadd5ba538916394309", "c0b452da075b66757c60bd0d721a47062d4354d0"];
+  const permanent = [...PERMANENT_HANDOFF_HASHES];
   const check = (text: string, guide = guidance) => assertHandoffHashes({ readme: text, guidance: guide, permanent });
   expect(() => check(readme)).not.toThrow();
   const consumer = "a".repeat(40);

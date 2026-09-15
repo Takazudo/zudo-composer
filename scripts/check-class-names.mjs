@@ -26,6 +26,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { UI_PACK } from "./ui-pack-identity.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 /** @param {string} path @returns {string} */
@@ -55,7 +56,7 @@ function code(line) {
 const styleSheets = [
   ...find("src", "-name", "*.css"),
   ...find("server/site-build/client", "-name", "*.css"),
-  ...find("node_modules/@zudo-sg/ui/styles", "-name", "*.css"),
+  ...find(`node_modules/${UI_PACK.packageName}/styles`, "-name", "*.css"),
 ];
 const scriptFiles = ["src", "server/site-build/client"].flatMap((directory) => find(directory, "-type", "f", "(", "-name", "*.ts", "-o", "-name", "*.tsx", ")"));
 const sourceFiles = scriptFiles.filter((path) => !isTest(path));

@@ -10,6 +10,7 @@ import {
   createComposerComponentProvider,
 } from "../active-pack";
 import { fixtureComponentPack } from "../test-support/fixture-pack";
+import { UI_PACK } from "../../../../scripts/ui-pack-identity.mjs";
 
 const EXPECTED_IDS = [
   "ui.callout", "ui.card", "ui.prose-md", "ui.prose-p",
@@ -34,19 +35,19 @@ const EXPECTED_BINDINGS = [
   { id: "ui.stack", schemaVersion: 1, slots: [{ id: "content", prop: "children", label: "Content", cardinality: "many" }], source: { exportKind: "named", exportName: "Stack" } },
 ] as const;
 
-describe("active @zudo-sg/ui component provider", () => {
+describe(`active ${UI_PACK.packageName} component provider`, () => {
   it("uses the exact public v1 pack and twelve schema-v1 component IDs", () => {
-    expect(activeComponentProvider.manifest).toMatchObject({ packId: "@zudo-sg/ui", packVersion: "1.0.0" });
+    expect(activeComponentProvider.manifest).toMatchObject({ packId: UI_PACK.packId, packVersion: UI_PACK.packVersion });
     expect(activeComponentProvider.manifest.components.map(({ id }) => id)).toEqual(EXPECTED_IDS);
     expect(activeComponentProvider.manifest.components.every(({ schemaVersion }) => schemaVersion === 1)).toBe(true);
     expect(activeComponentProvider.runtimeEntries).toHaveLength(EXPECTED_IDS.length);
   });
 
-  it("keeps the manifest JSON-only and every public source on @zudo-sg/ui", () => {
+  it(`keeps the manifest JSON-only and every public source on ${UI_PACK.packageName}`, () => {
     const json = JSON.stringify(activeComponentProvider.manifest);
     expect(JSON.parse(json)).toEqual(activeComponentProvider.manifest);
     expect(json).not.toMatch(/fixture\.|adapter/i);
-    expect(activeComponentProvider.manifest.components.every(({ source }) => source.module === "@zudo-sg/ui")).toBe(true);
+    expect(activeComponentProvider.manifest.components.every(({ source }) => source.module === UI_PACK.sourceModule)).toBe(true);
     expect(activeComponentProvider.runtimeEntries.every(({ manifest, runtime }) =>
       runtime.schemaVersion === manifest.schemaVersion && typeof runtime.component === "function"
     )).toBe(true);
@@ -68,10 +69,10 @@ describe("active @zudo-sg/ui component provider", () => {
   });
 
   it("distinguishes installed package semver from component-pack protocol version", () => {
-    const packagePath = fileURLToPath(new URL("../package.json", import.meta.resolve("@zudo-sg/ui/composer-pack")));
+    const packagePath = fileURLToPath(new URL("../package.json", import.meta.resolve(`${UI_PACK.packageName}/composer-pack`)));
     const metadata = JSON.parse(readFileSync(packagePath, "utf8")) as { name: string; version: string };
-    expect(metadata).toEqual(expect.objectContaining({ name: "@zudo-sg/ui", version: "0.1.0" }));
-    expect(activeComponentPack.manifest.packVersion).toBe("1.0.0");
+    expect(metadata).toEqual(expect.objectContaining({ name: UI_PACK.packageName, version: UI_PACK.installedVersion }));
+    expect(activeComponentPack.manifest.packVersion).toBe(UI_PACK.packVersion);
   });
 
   it("fails the provider join for missing and mismatched runtime entries", () => {

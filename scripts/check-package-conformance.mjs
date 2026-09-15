@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertPackedConsumerBoundary } from './package-host-boundary.mjs';
 import { CONTRACT_IDENTITY_ENTRIES } from '../server/site-project-local/contract-entries.mjs';
+import { UI_PACK } from './ui-pack-identity.mjs';
 
 const execFile = promisify(execFileCallback);
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -128,8 +129,8 @@ assert(
   rootPackageJson.peerDependencies?.['@zudo-composer/component-contract'] === '^1.0.0',
   'the contract must be a 1.x peer, supplied by the host from the exact handoff or a packed artifact',
 );
-assert(rootPackageJson.dependencies?.['@zudo-sg/ui'] === undefined, 'the demo provider must not be a runtime dependency');
-assert(rootPackageJson.devDependencies?.['@zudo-sg/ui'] !== undefined, 'the demo provider must remain a development dependency');
+assert(rootPackageJson.dependencies?.[UI_PACK.packageName] === undefined, 'the demo provider must not be a runtime dependency');
+assert(rootPackageJson.devDependencies?.[UI_PACK.packageName] !== undefined, 'the demo provider must remain a development dependency');
 
 // Dev-only for this repository, runtime-required for a host: the installed
 // launcher imports all four.

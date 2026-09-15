@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { verifyReleasePortability } from "./verify-release-portability.mjs";
+import { UI_PACK } from "./ui-pack-identity.mjs";
 
 const execFile = promisify(execFileCallback);
 const root = resolve(import.meta.dirname, "..");
@@ -68,7 +69,7 @@ export const componentPack = defineComponentPack({ packId: "public-entry-host", 
   await pnpm(["install"], host);
   await pnpm(["install", "--frozen-lockfile"], host);
   const lock = await readFile(join(host, "pnpm-lock.yaml"), "utf8");
-  assert.ok(!lock.includes("@zudo-sg/ui"), "An installed host must not receive the repository's demo provider");
+  assert.ok(!lock.includes(UI_PACK.packageName), "An installed host must not receive the repository's demo provider");
   const probe = await execFile(process.execPath, [join(host, "probe.mjs")], { cwd: host, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
   console.log(probe.stdout.trim());
   await pnpm(["exec", "tsc", "--ignoreConfig", "--noEmit", "--strict", "--verbatimModuleSyntax", "--module", "ESNext", "--moduleResolution", "Bundler", "--target", "ES2023", "types.mts", "site-project.ts"], host);
