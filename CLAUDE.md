@@ -37,8 +37,8 @@ The tool's authoring routes are `/`, `/composer`, same-origin
 `/composer/preview`, `/content`, `/mapping`, `/sitemapper`, and `/assets`.
 An activated host site is delivered under `/site`; each static site's own routes
 come from its verified `dist-site/site-manifest.json`. The SiteProject acceptance
-lane uses Sample Studio's frozen route data in
-`packages/demo-sample/hosted-routes.mjs`, checked against the Studio artifact.
+lane derives Sample Studio's route data from `scripts/host-site-routes.mjs`'s
+`readVerifiedHostManifest`, which verifies it against that artifact.
 Emitted files live under `/assets/`, and committed images and PDFs from the
 host's `publicAssetsDir` are delivered under `/uploaded-assets/`. Upload
 authoring remains dev-only. Keep Vite base `/` and the preview graph isolated

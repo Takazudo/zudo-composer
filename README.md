@@ -75,8 +75,9 @@ The authoring tool has Vite base `/` and these exact routes:
 A host's activated SiteProject is delivered under `/site`; its static website
 uses the same routes at `/`. Route assertions come from the host's verified
 `dist-site/site-manifest.json`, including pages emitted from collection entries.
-The SiteProject acceptance lane uses Sample Studio's frozen route data from
-`packages/demo-sample/hosted-routes.mjs` and checks it against the artifact.
+The SiteProject acceptance lane derives Sample Studio's route data from
+`scripts/host-site-routes.mjs`'s `readVerifiedHostManifest`, which verifies it
+against that artifact.
 
 The preview route is an implementation boundary, not an independent public
 product. Build-emitted assets remain rooted at `/assets/`, while committed assets
