@@ -295,7 +295,7 @@ Mapping, so one attachment cannot select "comments for *this* article". The
 article page and each `blog.comment` hides itself unless its `articleSlug`
 equals the current route's last segment (1–3 comments remain visible per
 article). The same self-hide rule powers the author page's article list and the
-"Keep reading" strip. No `asset-ref` or `reference-list-ids` bindings exist.
+"Keep reading" strip.
 
 ## 8. Mock interaction list
 
