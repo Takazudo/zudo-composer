@@ -228,7 +228,7 @@ describe("Asset workspace", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Inspect animated.gif" }));
     inspector = screen.getByRole("complementary", { name: "Asset details" });
     expect(within(inspector).getByRole("button", { name: "Edit image…", exact: true })).toBeDisabled();
-    expect(within(inspector).getByText("GIF editing is not supported yet")).toBeTruthy();
+    expect(within(inspector).getByText("GIF editing is not supported")).toBeTruthy();
     fireEvent.click(within(inspector).getByRole("button", { name: "Close", exact: true }));
 
     fireEvent.input(screen.getByRole("searchbox", { name: "Search assets" }), { target: { value: "guide" } });

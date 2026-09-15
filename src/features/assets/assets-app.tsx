@@ -134,7 +134,7 @@ function ConnectedAsset({ provider, controller: supplied, controllerOptions, con
   const recordMenu = (record: AssetSummary) => {
     const imageAction = record.mimeType.startsWith("image/") ? {
       id: "edit-image",
-      label: record.mimeType === "image/gif" ? "Edit image… (GIF editing is not supported yet)" : "Edit image…",
+      label: record.mimeType === "image/gif" ? "Edit image… (GIF editing is not supported)" : "Edit image…",
       disabled: record.mimeType === "image/gif" || !isEditableImage(record) || !controller.capability("replace") || state.phase !== "ready" || state.uncertain || state.busy,
       onSelect: () => openEditor(record),
     } : null;
@@ -213,8 +213,8 @@ function AssetInspector({ previewUrl, record, controller, dimensions, usageHref,
   const editorDisabled = record.state !== "active" || !isEditableImage(record) || !controller.capability("replace") || controller.state.phase !== "ready" || controller.state.uncertain || controller.state.busy;
   const gifHelpId = "sg-assets-gif-edit-help-" + record.id;
   const editAction = record.mimeType.startsWith("image/") ? <>
-    <Button disabled={editorDisabled} title={record.mimeType === "image/gif" ? "GIF editing is not supported yet" : undefined} aria-describedby={record.mimeType === "image/gif" ? gifHelpId : undefined} onClick={() => onEdit(record)}>Edit image…</Button>
-    {record.mimeType === "image/gif" ? <span id={gifHelpId} class="sg-assets-visually-hidden">GIF editing is not supported yet</span> : null}
+    <Button disabled={editorDisabled} title={record.mimeType === "image/gif" ? "GIF editing is not supported" : undefined} aria-describedby={record.mimeType === "image/gif" ? gifHelpId : undefined} onClick={() => onEdit(record)}>Edit image…</Button>
+    {record.mimeType === "image/gif" ? <span id={gifHelpId} class="sg-assets-visually-hidden">GIF editing is not supported</span> : null}
   </> : null;
   return <aside class="sg-assets-inspector" aria-label="Asset details">
     <header><strong>Asset details</strong><Button size="sm" onClick={onClose}>Close</Button></header>

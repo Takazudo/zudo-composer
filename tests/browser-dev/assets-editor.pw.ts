@@ -119,5 +119,5 @@ test("JPEG and WebP editing retains MIME and GIF editing is disabled", async ({ 
   await upload(page, `editor-${Date.now()}.gif`, "image/gif", gif);
   const gifEdit = page.getByRole("complementary", { name: "Asset details" }).getByRole("button", { name: /Edit image/ });
   await expect(gifEdit).toBeDisabled();
-  await expect(gifEdit).toHaveAccessibleDescription("GIF editing is not supported yet");
+  await expect(gifEdit).toHaveAccessibleDescription("GIF editing is not supported");
 });
