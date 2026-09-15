@@ -59,7 +59,7 @@ const container = defineComponent<ContainerProps>()((props: ContainerProps) => {
             type: 'object',
             fields: [
               { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
-              { key: 'href', label: 'URL', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+              { key: 'href', label: 'URL', required: true, schema: { type: 'string', format: 'url' }, editor: { kind: 'text' } },
               {
                 key: 'variant',
                 label: 'Variant',

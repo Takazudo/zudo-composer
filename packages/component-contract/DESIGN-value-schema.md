@@ -27,8 +27,10 @@ export interface ObjectFieldBase<TKey extends string = string> {
   readonly required?: boolean;
 }
 
+export type StringFormat = 'url';
+
 export interface StringTextValueDefinition {
-  readonly schema: { readonly type: 'string' };
+  readonly schema: { readonly type: 'string'; readonly format?: StringFormat };
   readonly editor: {
     readonly kind: 'text';
     readonly multiline?: boolean;
@@ -110,6 +112,16 @@ shape and an editor. Object fields use `key`; only top-level component fields us
 Objects are closed: a value may contain only declared keys. Duplicate and reserved object keys
 are authoring errors. Tuple `items` may be empty and fixes both length and per-position schemas;
 arrays are homogeneous and unbounded in length.
+
+A text-editor string schema may declare `format: "url"` to mark the value as a URL. URL-ness is
+a schema property, not an editor property: it drives compilation and asset pinning, while
+`editor.mode` keeps its single meaning as the inline-edit session type. `format` is accepted only
+on non-enum string schemas edited by a `text` editor; `color`, `select`, and non-string schemas
+reject it, any value other than `url` is an `INVALID_VALUE_SCHEMA` error, and `format: "url"`
+combined with `editor.mode: "markdown-source"` is rejected at `editor.mode`. The rule applies
+identically to top-level fields, nested object fields, array items, and tuple items, and the
+author `text` shorthand accepts the same optional `format`. The key is additive, so
+`CONTRACT_VERSION` stays 2 and manifests without it validate unchanged.
 
 The five current `kind`s are retained as editor kinds, not value kinds. `text`, `select`, and
 `color` all edit strings; `select` moves its non-empty option domain to `schema.enum`.

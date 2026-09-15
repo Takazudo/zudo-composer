@@ -248,6 +248,29 @@ defineComponent<{ actions: readonly HeroAction[] }>()((props: { actions: readonl
   } }, editor: { kind: 'list' } }],
 });
 
+defineComponent<{ href: string; links: readonly HeroAction[] }>()((props: { href: string; links: readonly HeroAction[] }) => {
+  void props;
+  return null;
+}, {
+  ...recursiveBase,
+  defaults: { href: '/start', links: [] },
+  fields: [
+    { kind: 'text', prop: 'href', label: 'URL', format: 'url' },
+    { prop: 'links', label: 'Links', schema: { type: 'array', items: {
+      schema: { type: 'object', fields: [
+        { key: 'label', label: 'Label', required: true, schema: { type: 'string' }, editor: { kind: 'text' } },
+        { key: 'href', label: 'URL', required: true, schema: { type: 'string', format: 'url' }, editor: { kind: 'text' } },
+      ] }, editor: { kind: 'group' },
+    } }, editor: { kind: 'list' } },
+  ],
+});
+
+// @ts-expect-error Unknown string formats are rejected.
+defineComponent<{ href: string }>()((props: { href: string }) => props.href, {
+  ...recursiveBase,
+  fields: [{ prop: 'href', label: 'URL', schema: { type: 'string', format: 'email' }, editor: { kind: 'text' } }],
+});
+
 defineComponent<{ pair: readonly [string, number] }>()((props: { pair: readonly [string, number] }) => {
   void props;
   return null;

@@ -44,6 +44,7 @@ export type {
   SlotDefinition,
   StaticPropDefinition,
   TrustedComponentPack,
+  StringFormat,
   StringTextValueDefinition,
   TupleItemDefinition,
   TupleValueDefinition,
