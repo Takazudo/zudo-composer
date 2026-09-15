@@ -135,8 +135,7 @@ export function createHostConfigFiles(name, metadata) {
     }),
     "vitest.config.ts": `import { defineConfig } from "vitest/config";\n\nexport default defineConfig({\n  oxc: { jsx: { runtime: "automatic", importSource: "preact" } },\n  resolve: { dedupe: ["preact"] },\n  test: {\n    include: ["tests/**/*.spec.tsx"],\n    environment: "node",\n    testTimeout: 60_000,\n  },\n});\n`,
     ".gitignore": HOST_GITIGNORE,
-    ".npmrc": "block-exotic-subdeps=false\n",
-    "pnpm-workspace.yaml": "packages:\n  - .\n\n# Required while an installed provider uses its exact Git pin.\nblockExoticSubdeps: false\n\nallowBuilds:\n  esbuild: true\n",
+    "pnpm-workspace.yaml": "packages:\n  - .\n\nallowBuilds:\n  esbuild: true\n",
   };
 }
 

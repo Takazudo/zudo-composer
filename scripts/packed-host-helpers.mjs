@@ -20,9 +20,6 @@ export const FIRST_PARTY = ["zudo-composer", "@zudo-composer/component-contract"
 // Every host installs the tool and its contract peer; the owned pack only where the host declares it.
 export const MANDATORY_FIRST_PARTY = ["zudo-composer", "@zudo-composer/component-contract"];
 export const WRITABLE = ["node_modules", "cms", "public", ".zudo-site-project"];
-// This exact creator setting permits the reviewed provider's pinned Git
-// dependency. No other consumer package-manager settings may change isolation.
-export const PACKED_NPMRC = "block-exotic-subdeps=false\n";
 const dependencySections = /** @type {const} */ (["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]);
 const omittedDirectories = new Set(["node_modules", ".git", "dist", "dist-site", "dist-editor", ".zudo-site-project", ".vite", "coverage", "test-results", "playwright-report", DEMOS_LANE_DIRECTORY]);
 
@@ -178,18 +175,11 @@ export function packedHostManifest(input, tarballs, packageManager) {
 
 /** @param {string} hostRoot @param {Tarballs} tarballs @param {string} packageManager */
 export async function configurePackedHost(hostRoot, tarballs, packageManager) {
-  const npmrc = join(hostRoot, ".npmrc");
-  if (await lstat(npmrc).catch(() => undefined)) {
-    if (!(await lstat(npmrc)).isFile() || await readFile(npmrc, "utf8") !== PACKED_NPMRC) {
-      throw new Error(`${hostRoot}: a consumer .npmrc needs explicit packed-lane review`);
-    }
-  }
   const manifest = packedHostManifest(JSON.parse(await readFile(join(hostRoot, "package.json"), "utf8")), tarballs, packageManager);
   await writeFile(join(hostRoot, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   // pnpm 11 reads these settings from the workspace file. Mirror the two exact
   // package.json pnpm.overrides here, without inheriting repository settings.
   await writeFile(join(hostRoot, "pnpm-workspace.yaml"), `packages: []
-blockExoticSubdeps: false
 nodeLinker: isolated
 hoist: false
 shamefullyHoist: false
