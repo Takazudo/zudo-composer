@@ -9,9 +9,14 @@ const UI_SRC = resolve(ROOT, "packages/ui/src");
 const OUTPUT = resolve(UI_SRC, "composer-pack.ts");
 const SUFFIX = ".composer.tsx";
 
+// Locale-independent, so every machine regenerates the committed pack in the same order.
+function byCodePoint(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function walk(dir) {
   const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-    a.name.localeCompare(b.name),
+    byCodePoint(a.name, b.name),
   );
   const found = [];
   for (const entry of entries) {
@@ -54,7 +59,7 @@ function discover() {
       }
       return { relPath, exportName: exports[0], importName: importIdentifier(relPath) };
     })
-    .sort((a, b) => a.relPath.localeCompare(b.relPath));
+    .sort((a, b) => byCodePoint(a.relPath, b.relPath));
 
   if (entries.length === 0) {
     throw new Error(`gen-composer-pack: no *${SUFFIX} files found under packages/ui/src`);

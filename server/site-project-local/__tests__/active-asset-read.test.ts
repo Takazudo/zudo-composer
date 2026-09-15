@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { project } from "../../../src/site-project/compiler/__tests__/fixtures";
@@ -59,6 +59,15 @@ describe("lock-free activated Assets reads", () => {
     const settling = Array.from({ length: 12 }, () => reader.readActiveAsset(context.pin.url));
     release(); await applying;
     for (const result of [...during, ...await Promise.all(settling)]) expect(result).toMatchObject({ status: "ok", value: { bytes: PNG, identity: context.completed.identity } });
+  });
+  it("refuses Assets when the active revision's project record is gone, exactly as the page read does", async () => {
+    const { testRoot, completed, pin } = await releasedAsset();
+    await rm(join(testRoot, "projects", completed.identity.projectId, `${completed.identity.revision}.json`));
+    const reader = createLocalSiteProjectStore({ testRoot });
+    expect(await reader.readActiveRelease()).toMatchObject({ status: "unavailable" });
+    // Layout verification requires every visible stage's project record, on the lock-free and locked paths alike.
+    expect(await reader.readActiveAsset(pin.url)).toMatchObject({ status: "unavailable", message: expect.stringMatching(/Visible stage inputs are missing or corrupt/) });
+    await expect(readActivatedSiteAssets(pin.url, { testRoot, toolchain })).rejects.toThrow(/Activated Assets is unavailable/);
   });
   it("keeps the delivery seam's toolchain and missing-root checks", async () => {
     const { testRoot, parent, pin } = await releasedAsset();
