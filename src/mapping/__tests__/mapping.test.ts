@@ -8,7 +8,7 @@ import { createContentCatalog } from "../../content/catalog";
 import type { ContentEntryRecord, ContentFieldKind, ContentModelRecord } from "../../content/model";
 import { CONTENT_ENTRY_SCHEMA_VERSION, CONTENT_FIELD_KINDS, CONTENT_MODEL_SCHEMA_VERSION } from "../../content/model";
 import { MAPPING_PROVIDERS, createCompositionCatalog, createMappingCatalog, createMappingRecord, discoverMappingTargets, evaluateCollectionQuery, evaluateMapping, evaluateResolvedMapping, isMappingCompatible, projectContentValue, resolveMappingDefinition, resolveMappingProjectionDefinition, validateMappingRecord, validateMappingSourceProjection } from "..";
-import type { MappingSeedOptions, MappingTransform, ScalarMappingTargetField } from "..";
+import type { MappingSeedOptions, MappingSourceProjection, MappingTransform, ScalarMappingTargetField } from "..";
 import { createFilesystemMappingStore } from "../storage/filesystem";
 
 const stamp = "2026-08-29T00:00:00.000Z";
@@ -117,18 +117,26 @@ describe("Mapping model and resolver", () => {
     expect(projectContentValue({ field: richField, entry: richEntry, projection: { kind: "value" }, providerId: "content" })).toEqual({ status: "projected", value: { label: "Exact" } });
     const assetField = { id: "image", key: "image", label: "Image", required: false, kind: "asset-use" as const, use: "image" as const };
     const assetEntry = { ...entry({}), values: { image: { kind: "image", asset: { providerId: "asset-files", assetId: "hero" }, alt: "Hero", decorative: false, caption: "Caption" } } };
-    expect(projectContentValue({ field: assetField, entry: assetEntry, projection: { kind: "asset-ref" }, providerId: "content" })).toEqual({ status: "projected", value: { providerId: "asset-files", assetId: "hero" } });
     expect(projectContentValue({ field: assetField, entry: assetEntry, projection: { kind: "asset-url" }, providerId: "content" })).toEqual({ status: "projected", value: "/uploaded-assets/asset-hero" });
     expect(projectContentValue({ field: assetField, entry: assetEntry, projection: { kind: "asset-text", field: "alt" }, providerId: "content" })).toEqual({ status: "projected", value: "Hero" });
     const referenceField = { id: "related", key: "related", label: "Related", required: false, kind: "reference" as const, target: { providerId: "content", recordId: "articles" } };
     const referenceEntry = { ...entry({}), values: { related: { providerId: "content", modelId: "articles", recordId: "next" } } };
     expect(projectContentValue({ field: referenceField, entry: referenceEntry, projection: { kind: "route-link" }, providerId: "content" }).status).toBe("route-context-unavailable");
     expect(projectContentValue({ field: referenceField, entry: referenceEntry, projection: { kind: "route-link" }, providerId: "content", routeResolver: { resolve: () => ({ status: "resolved", href: "/next" }) } })).toEqual({ status: "projected", value: "/next" });
-    expect(projectContentValue({ field: referenceField, entry: referenceEntry, projection: { kind: "reference-list-ids" }, providerId: "content" }).status).toBe("invalid");
     expect(validateMappingSourceProjection({ kind: "object-field", fieldIds: [] })).toBe(false);
     expect(validateMappingSourceProjection({ kind: "asset-url" })).toBe(true);
     expect(validateMappingSourceProjection({ kind: "asset-url", extra: 1 })).toBe(false);
     expect(validateMappingSourceProjection({ kind: "route-link", fallback: "/fake" })).toBe(false);
+  });
+  it("rejects a stored record carrying either withdrawn asset-ref or reference-list-ids projection with source-projection-invalid", async () => {
+    for (const kind of ["asset-ref", "reference-list-ids"] as const) {
+      expect(validateMappingSourceProjection({ kind })).toBe(false);
+      const base = mapping();
+      const record = { ...base, document: { ...base.document, bindings: [{ id: "legacy", sourceFieldId: "title", target: { nodeId: "hero", prop: "title" }, transform: { kind: "identity" as const }, projection: { kind } as unknown as MappingSourceProjection }] } };
+      const result = await resolveMappingDefinition(record, catalogs(), manifest);
+      expect(result.status).toBe("blocked");
+      expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: "source-projection-invalid", bindingId: "legacy" }));
+    }
   });
   it("resolves asset-url as a URL for every asset use and rejects non-asset fields", () => {
     const uses = ["image", "link", "download", "card"] as const;

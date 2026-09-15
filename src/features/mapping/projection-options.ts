@@ -13,7 +13,6 @@ export function sourceProjectionOptions(field: ContentFieldDefinition): readonly
   if (field.kind === "object") collectObjectProjections(field, [], options, field);
   if (field.kind === "asset-use") {
     if (field.use === "download") options.push({ projection: { kind: "asset-download" }, label: "Download block", kind: "markdown" });
-    options.push({ projection: { kind: "asset-ref" }, label: "Asset reference", kind: "object" });
     options.push({ projection: { kind: "asset-url" }, label: "Asset URL", kind: "url" });
     const fields = field.use === "image" ? ["alt", "caption"] : (field.use === "link" || field.use === "download") ? ["label"] : ["title", "description"];
     for (const candidate of fields) options.push({ projection: { kind: "asset-text", field: candidate as "alt" | "caption" | "label" | "title" | "description" }, label: `Asset ${candidate}`, kind: "text" });
@@ -22,7 +21,6 @@ export function sourceProjectionOptions(field: ContentFieldDefinition): readonly
     options.push({ projection: { kind: "reference-id" }, label: "Referenced record ID", kind: "text" });
     options.push({ projection: { kind: "route-link" }, label: "Resolved route link", kind: "text" });
   }
-  if (field.kind === "reference-list") options.push({ projection: { kind: "reference-list-ids" }, label: "Referenced record IDs", kind: "list" });
   return options;
 }
 
@@ -64,12 +62,10 @@ export function projectionLabel(projection: MappingSourceProjection, source?: Co
     }
     return labels.join(" › ");
   }
-  if (projection.kind === "asset-ref") return "Asset reference";
   if (projection.kind === "asset-url") return "Asset URL";
   if (projection.kind === "asset-text") return `Asset ${projection.field}`;
   if (projection.kind === "reference-id") return "Referenced record ID";
   if (projection.kind === "asset-download") return "Download block";
-  if (projection.kind === "reference-list-ids") return "Referenced record IDs";
   return "Resolved route link";
 }
 

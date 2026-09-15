@@ -343,8 +343,7 @@ reference-id→select category` (options are the category record ids);
 `featured value→boolean`; `subtitle`, `description value→markdown`; spec
 `object-field[material]→spec1Value` … with static `spec1Label` props;
 `tags` is flattened by the `site-project.ts` authoring source into `tag1`–`tag3` text fields on the same
-entry (the `list` field stays for `contains` queries). No `asset-ref` and no
-`reference-list-ids` bindings exist (README § Lists).
+entry (the `list` field stays for `contains` queries; see README § Lists).
 
 ## 8. Mock interaction list
 
