@@ -11,7 +11,7 @@
     "collectionAttachments": [],
     "componentPack": {
       "contractVersion": 2,
-      "packId": "@zudo-sg/ui",
+      "packId": "@zudo-composer/ui",
       "packVersion": "1.0.0"
     },
     "id": "sample-studio-site",
@@ -40,5 +40,5 @@
     },
     "schemaVersion": 2
   },
-  "baselineRevision": "595ac0a346bc2fdb9300968bcab1e2d5c007ce32753be21e763908c0f532ebba"
+  "baselineRevision": "81442f21be3213cdfcd794aa7684c61481cc9c561906495d15624f07b13a5861"
 }

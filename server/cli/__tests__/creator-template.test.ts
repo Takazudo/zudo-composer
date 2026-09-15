@@ -130,7 +130,7 @@ it("produces a complete portable starter through canonical writers and reopens i
     // dependency rewrite. Plant violations in that actual canonical tree.
     for (const [file, source] of [
       ["injected.ts", "import '../../src/private';"],
-      ["injected.css", "@import '@zudo-sg/ui/styles/composer.css';"],
+      ["injected.css", "@import '@zudo-composer/ui/styles/composer.css';"],
       ["injected.json", '{"dependencies":{"hidden":"file:../tool"}}'],
     ]) {
       await writeFile(join(target, file), source);

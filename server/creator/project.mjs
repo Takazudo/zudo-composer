@@ -43,7 +43,7 @@ export function creatorPackageManager(tool) {
 /** @param {string} name */
 export function validateHostName(name) {
   if (name.length > 214 || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(name)
-    || ["node_modules", "favicon.ico", "zudo-composer", contractName, "preact", "preact-render-to-string", "@types/node", "vitest", "typescript"].includes(name)
+    || ["node_modules", "favicon.ico", "zudo-composer", contractName, "@zudo-composer/ui", "preact", "preact-render-to-string", "@types/node", "vitest", "typescript"].includes(name)
     || name.split("/").some((part) => part === "src")) {
     throw new Error(`Invalid host package name "${name}". Use a lowercase npm name, distinct from its dependencies.`);
   }
@@ -135,8 +135,7 @@ export function createHostConfigFiles(name, metadata) {
     }),
     "vitest.config.ts": `import { defineConfig } from "vitest/config";\n\nexport default defineConfig({\n  oxc: { jsx: { runtime: "automatic", importSource: "preact" } },\n  resolve: { dedupe: ["preact"] },\n  test: {\n    include: ["tests/**/*.spec.tsx"],\n    environment: "node",\n    testTimeout: 60_000,\n  },\n});\n`,
     ".gitignore": HOST_GITIGNORE,
-    ".npmrc": "block-exotic-subdeps=false\n",
-    "pnpm-workspace.yaml": "packages:\n  - .\n\n# Required while an installed provider uses its exact Git pin.\nblockExoticSubdeps: false\n\nallowBuilds:\n  esbuild: true\n",
+    "pnpm-workspace.yaml": "packages:\n  - .\n\nallowBuilds:\n  esbuild: true\n",
   };
 }
 

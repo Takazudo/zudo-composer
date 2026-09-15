@@ -447,6 +447,7 @@ export async function deployHostedDemo(options = {}) {
   const liveVerifier = options.liveVerifier ?? ((liveOptions) => verifyLiveWithRetries({
     ...liveOptions,
     target,
+    onRetry: ({ attempt, delayMs, error }) => console.warn(`${target.workerName} live check attempt ${attempt} failed (${error.message}); retrying in ${delayMs}ms.`),
   }));
   const retryDelaysMs = options.retryDelaysMs ?? DEPLOYMENT_RETRY_DELAYS_MS;
   const delayImpl = options.delayImpl ?? ((milliseconds) => new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds)));

@@ -16,11 +16,10 @@ import { DEMOS_LANE_DIRECTORY } from "./demos-lane-paths.mjs";
 /** @typedef {{name: string, packageManager?: string, pnpm?: Record<string, unknown>, dependencies?: Record<string, string>, devDependencies?: Record<string, string>, optionalDependencies?: Record<string, string>, peerDependencies?: Record<string, string>}} HostManifest */
 const execFile = promisify(execFileCallback);
 export const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-export const FIRST_PARTY = ["zudo-composer", "@zudo-composer/component-contract"];
+export const FIRST_PARTY = ["zudo-composer", "@zudo-composer/component-contract", "@zudo-composer/ui"];
+// Every host installs the tool and its contract peer; the owned pack only where the host declares it.
+export const MANDATORY_FIRST_PARTY = ["zudo-composer", "@zudo-composer/component-contract"];
 export const WRITABLE = ["node_modules", "cms", "public", ".zudo-site-project"];
-// This exact creator setting permits the reviewed provider's pinned Git
-// dependency. No other consumer package-manager settings may change isolation.
-export const PACKED_NPMRC = "block-exotic-subdeps=false\n";
 const dependencySections = /** @type {const} */ (["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]);
 const omittedDirectories = new Set(["node_modules", ".git", "dist", "dist-site", "dist-editor", ".zudo-site-project", ".vite", "coverage", "test-results", "playwright-report", DEMOS_LANE_DIRECTORY]);
 
@@ -156,6 +155,8 @@ export function packedHostManifest(input, tarballs, packageManager) {
   if (manifest.pnpm && Object.keys(manifest.pnpm).length) throw new Error(`${manifest.name}: host pnpm settings must not override the packed proof`);
   for (const name of FIRST_PARTY) {
     if (!tarballs[name]?.startsWith("file:") || !isAbsolute(tarballs[name].slice(5)) || !tarballs[name].endsWith(".tgz")) throw new Error(`Missing absolute packed tarball for ${name}`);
+  }
+  for (const name of MANDATORY_FIRST_PARTY) {
     if (!dependencySections.some((section) => Object.hasOwn(manifest[section] ?? {}, name))) throw new Error(`${manifest.name} must declare ${name}`);
   }
   for (const section of dependencySections) {
@@ -174,18 +175,11 @@ export function packedHostManifest(input, tarballs, packageManager) {
 
 /** @param {string} hostRoot @param {Tarballs} tarballs @param {string} packageManager */
 export async function configurePackedHost(hostRoot, tarballs, packageManager) {
-  const npmrc = join(hostRoot, ".npmrc");
-  if (await lstat(npmrc).catch(() => undefined)) {
-    if (!(await lstat(npmrc)).isFile() || await readFile(npmrc, "utf8") !== PACKED_NPMRC) {
-      throw new Error(`${hostRoot}: a consumer .npmrc needs explicit packed-lane review`);
-    }
-  }
   const manifest = packedHostManifest(JSON.parse(await readFile(join(hostRoot, "package.json"), "utf8")), tarballs, packageManager);
   await writeFile(join(hostRoot, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   // pnpm 11 reads these settings from the workspace file. Mirror the two exact
   // package.json pnpm.overrides here, without inheriting repository settings.
   await writeFile(join(hostRoot, "pnpm-workspace.yaml"), `packages: []
-blockExoticSubdeps: false
 nodeLinker: isolated
 hoist: false
 shamefullyHoist: false
@@ -218,14 +212,16 @@ export async function assertInstalledHost(hostRoot, env, roots) {
   const { stdout } = await run(process.execPath, ["--input-type=module", "-e", `
     import assert from 'node:assert/strict';
     import { createRequire } from 'node:module';
-    import { realpath } from 'node:fs/promises';
+    import { readFile, realpath } from 'node:fs/promises';
     import { resolve, relative, isAbsolute, sep } from 'node:path';
     import { fileURLToPath } from 'node:url';
     const require = createRequire(resolve('package.json'));
     const inside = (root, path) => { const part = relative(root, path); return part !== '..' && !part.startsWith('..' + sep) && !isAbsolute(part); };
     const roots = JSON.parse(process.argv[1]);
     const installed = {};
-    for (const name of ${JSON.stringify(FIRST_PARTY)}) {
+    const manifest = JSON.parse(await readFile(resolve('package.json'), 'utf8'));
+    const declared = new Set(${JSON.stringify(dependencySections)}.flatMap(section => Object.keys(manifest[section] ?? {})));
+    for (const name of ${JSON.stringify(FIRST_PARTY)}.filter(name => declared.has(name))) {
       // Follow the public ESM entry: the contract exposes only import-conditioned
       // entries and intentionally does not export its package.json.
       const path = await realpath(fileURLToPath(import.meta.resolve(name)));

@@ -7,7 +7,7 @@ The pack is a real installed package — `@zudo-composer/fixture-themeset`,
 resolved out of `node_modules/` — not a relative path, because
 `parseSource` in `@zudo-composer/component-contract` admits only public
 bare-package imports. Its component set (`themeset.panel`, `themeset.note`)
-deliberately shares no id with `@zudo-sg/ui`, so a project authored against one
+deliberately shares no id with `@zudo-composer/ui`, so a project authored against one
 pack is rejected by a server validating against the other.
 
 Run it the same way:

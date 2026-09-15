@@ -9,6 +9,7 @@ import { createProductionProviderIntegration } from "../provider-integration";
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../test/workspace-providers";
 import { createHash } from "node:crypto";
 import { serializeSiteProject } from "../../site-project/model/canonical";
+import { sampleAssetStore, SAMPLE_ASSETS_STORE_ROOT } from "../../test/sample-asset-lock";
 
 const hosts: TemporaryWorkspaceProviders[] = [];
 afterEach(async () => { await Promise.all(hosts.splice(0).map((value) => value.dispose())); });
@@ -20,7 +21,10 @@ async function host(): Promise<TemporaryWorkspaceProviders> {
 
 describe("mapping attachment aggregate service", () => {
   it("attaches an unpersisted candidate with the real production Asset store and metadata CAS", async () => {
-    const { provider, filesystem } = await providerFixture();
+    // Sample Studio's own composition pins its real seeded images (#695), so
+    // this fixture's store must also carry them for the whole project to
+    // still compile once the test's own candidate asset is added on top.
+    const { provider, filesystem } = await providerFixture({ seedFrom: SAMPLE_ASSETS_STORE_ROOT });
     const asset = await filesystem.upload({ fileName: "link.png", declaredMimeType: "image/png", bytes: PNG });
     const project = loadSampleSiteProject(activeSiteProjectValidationContext);
     const source = project.providers.compositions[0]!.records.find(({ id }) => id === "journal-entry-page")!;
@@ -35,7 +39,7 @@ describe("mapping attachment aggregate service", () => {
     expect(after.metadata.collectionAttachments).toHaveLength(1);
   });
   it("pins managed Asset in attachment previews and reports missing provider as blocking", async () => {
-    const { provider, filesystem } = await providerFixture();
+    const { provider, filesystem } = await providerFixture({ seedFrom: SAMPLE_ASSETS_STORE_ROOT });
     const asset = await filesystem.upload({ fileName: "link.png", declaredMimeType: "image/png", bytes: PNG });
     const project = loadSampleSiteProject(activeSiteProjectValidationContext);
     const source = project.providers.compositions[0]!.records.find(({ id }) => id === "journal-entry-page")!;
@@ -73,6 +77,10 @@ describe("mapping attachment aggregate service", () => {
         },
       },
       componentCatalog: activeComponentProvider.catalog,
+      // Sample Studio's project pins its own real seeded images (#695); without
+      // a real store here `attach` blocks before ever calling updateMetadata,
+      // which starves `updateStartedGate` and hangs the test.
+      assetStore: await sampleAssetStore(),
       subscribe: () => () => undefined,
     });
 

@@ -69,7 +69,11 @@ verifies this once at runtime:
 Images are seeded with `pnpm assets:seed-demo` from `scripts/demo-assets/`
 (registered in `scripts/seed-demo-assets.ts`) for the repository demo store and
 mirrored into `packages/demo-sample/images-src/` for the package-owned store.
-The five rows are allowlisted for the hosted build in `src/hosted-demo/assets.ts`.
+The hosted editor build bundles every `active` row from the host's committed
+`cms/assets/catalog.json`: `scripts/hosted-demo/prepare.ts` verifies the bytes
+against `scripts/hosted-demo/asset-snapshot.ts`'s active snapshot, and
+`vite.demo-editor.config.ts` embeds the result. `src/hosted-demo/assets.ts`
+only implements the disposable in-browser asset store the bundled seed feeds.
 
 ## Page-by-page plan
 

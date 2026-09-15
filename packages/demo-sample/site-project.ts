@@ -3,11 +3,26 @@
 // Run `pnpm generate` after editing; the JSON and ready CMS are generated.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { componentPack } from "@zudo-sg/ui/composer-pack";
-import { defineSite, node } from "zudo-composer/authoring";
+import { componentPack } from "@zudo-composer/ui/composer-pack";
+import { assetAuthoringUrl, defineSite, node } from "zudo-composer/authoring";
 import type { RouteInput } from "zudo-composer/site-project";
 
 const readContent = (file: string): string => readFileSync(resolve(import.meta.dirname, "content", file), "utf8").trim();
+
+// Asset record ids in this package's committed cms/assets store (`pnpm seed`).
+const ASSET_IDS = {
+  workbench: "assets-d69f531b-c600-45c5-a6bf-13d40a19b734",
+  wall: "assets-23e178e6-6e99-4985-ace6-66b31fc5a2f6",
+  question: "assets-2a0d4438-ed77-4f52-8c3b-1a79e0a49af2",
+  map: "assets-73126e8e-0797-47b4-b609-d260e231f234",
+};
+
+const imageMarkdown = (alt: string, assetKey: keyof typeof ASSET_IDS): string => `![${alt}](${assetAuthoringUrl(ASSET_IDS[assetKey])})`;
+
+const withImageAfterFirstSection = (markdown: string, image: string): string => {
+  const [firstSection, ...rest] = markdown.split(/\n\n(?=## )/);
+  return [firstSection, image, ...rest].join("\n\n");
+};
 
 const site = defineSite({
   id: "sample-studio-site",
@@ -73,7 +88,7 @@ const homePage = site.page({
     node("ui.hero", { actions: [{ href: "/services", label: "See our services", variant: "primary" }, { href: "/journal", label: "Read the journal", variant: "secondary" }], eyebrow: "Sample Studio", heading: "Clear ideas, carefully shaped", lead: "We are a four-person studio that helps small teams shape websites, tools and content. We work in short, visible cycles so every decision is easy to follow.", variant: "primary" }, {}, "home-hero"),
     node("ui.split-layout", { gap: "lg", ratio: "40/60" }, {
       left: [
-        node("ui.placeholder-box", { aspect: "4/3", label: "Studio worktable", size: "lg" }, {}, "home-placeholder"),
+        node("ui.prose-md", { markdown: imageMarkdown("A bright studio worktable with paper sketches, a closed laptop and a pot of pencils", "workbench") }, {}, "home-studio-image"),
       ],
       right: [
         node("ui.stack", { align: "start", direction: "vertical", gap: "sm", justify: "start" }, {
@@ -174,7 +189,14 @@ const servicesPage = site.page({
     node("ui.section-heading", { as: "h1", eyebrow: "Services", heading: "Ways to work together", intro: "Three fixed-shape offers, from a two-week framing sprint to a steady delivery rhythm." }, {}, "services-heading"),
     node("ui.split-layout", { gap: "lg", ratio: "60/40" }, {
       left: [
-        node("ui.prose-md", { markdown: readContent("services-engagement.md") }, {}, "services-engagement"),
+        node("ui.stack", { align: "start", direction: "vertical", gap: "md", justify: "start" }, {
+          content: [
+            // studio-review.webp is reserved for this spot (see docs/demo-sites/sample.md)
+            // but out of scope; ui.placeholder-box keeps it a real demonstrated component.
+            node("ui.placeholder-box", { aspect: "16/9", label: "Interface review sketches", size: "lg" }, {}, "services-lead-placeholder"),
+            node("ui.prose-md", { markdown: readContent("services-engagement.md") }, {}, "services-engagement"),
+          ],
+        }, "services-engagement-stack"),
       ],
       right: [
         node("ui.stack", { align: "start", direction: "vertical", gap: "md", justify: "start" }, {
@@ -248,14 +270,14 @@ site.entry(aboutContent, {
   values: {
     heading: "A studio built around useful clarity",
     intro: "Sample Studio helps small teams make steady progress when the shape of the work is still emerging.",
-    markdown: readContent("about.md"),
+    markdown: withImageAfterFirstSection(readContent("about.md"), imageMarkdown("A white wall covered in index cards connected by pencil lines", "wall")),
   },
 });
 
 site.entry(journalArticles, {
   id: "article-first-question",
   values: {
-    body: readContent("journal/start-with-the-question.md"),
+    body: withImageAfterFirstSection(readContent("journal/start-with-the-question.md"), imageMarkdown("A sheet of paper with a single handwritten question mark on a pale desk", "question")),
     publishedOn: "2026-08-05",
     heading: "Start with the question",
     intro: "Before choosing a format or feature, name the question the work must answer.",
@@ -263,10 +285,14 @@ site.entry(journalArticles, {
   },
 });
 
+// journal-map.webp illustrates both the article it was drawn for and the
+// closely related "Review in small loops", which has no dedicated image.
+const mapImage = imageMarkdown("A hand-drawn diagram of boxes and arrows with a few boxes circled", "map");
+
 site.entry(journalArticles, {
   id: "article-moving-parts",
   values: {
-    body: readContent("journal/map-the-moving-parts.md"),
+    body: withImageAfterFirstSection(readContent("journal/map-the-moving-parts.md"), mapImage),
     publishedOn: "2026-08-12",
     heading: "Map the moving parts",
     intro: "A lightweight map can reveal where timing, ownership, and information need attention.",
@@ -277,7 +303,7 @@ site.entry(journalArticles, {
 site.entry(journalArticles, {
   id: "article-small-loops",
   values: {
-    body: readContent("journal/review-in-small-loops.md"),
+    body: withImageAfterFirstSection(readContent("journal/review-in-small-loops.md"), mapImage),
     publishedOn: "2026-08-19",
     heading: "Review in small loops",
     intro: "Small reviews turn abstract agreement into specific, timely feedback.",

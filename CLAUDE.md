@@ -25,20 +25,25 @@ there is no templates directory or template file format), and its **CMS data**
 (the four JSON domains plus assets, rooted at `dataDir`/`assetsDir`). See the
 settings table in [`README.md`](./README.md) for the full default layout.
 
-zudo-sg owns only the installed `@zudo-sg/ui` provider: typed component
-sidecars, runtime pack, and canonical Composer CSS. Its transitive focused
-`@takazudo/zfb-md-wasm` dependency is allowed for `ProseMd`; no zudo-doc, zfb
-application runtime/config, virtual-zfb, or styleguide registry may enter this
-tool. Never copy provider components or add a fallback registry. `@zudo-sg/ui`
-is otherwise an ordinary component pack — any themeset that satisfies the same
-contract is interchangeable with it.
+This repository also owns its dogfood component set in `packages/ui`
+(`@zudo-composer/ui`): typed component sidecars, the runtime pack, and
+canonical Composer CSS. Its package metadata is `@zudo-composer/ui@0.1.0`
+and its component-pack protocol identity is `@zudo-composer/ui@1.0.0`. The
+pack's focused `@takazudo/zfb-md-wasm` dependency, exactly `2.10.1`, is allowed
+for `ProseMd` as a dependency of `packages/ui`, never of the tool; no zudo-doc,
+zfb application runtime/config, virtual-zfb, or styleguide registry may enter
+this tool. The tool never lists the pack under `dependencies` or
+`peerDependencies`, never bundles it, and never falls back to it: there is no
+dual provider and no fallback registry. `@zudo-composer/ui` is otherwise an
+ordinary component pack — any themeset that satisfies the same contract is
+interchangeable with it.
 
 The tool's authoring routes are `/`, `/composer`, same-origin
 `/composer/preview`, `/content`, `/mapping`, `/sitemapper`, and `/assets`.
 An activated host site is delivered under `/site`; each static site's own routes
 come from its verified `dist-site/site-manifest.json`. The SiteProject acceptance
-lane uses Sample Studio's frozen route data in
-`packages/demo-sample/hosted-routes.mjs`, checked against the Studio artifact.
+lane derives Sample Studio's route data from `scripts/host-site-routes.mjs`'s
+`readVerifiedHostManifest`, which verifies it against that artifact.
 Emitted files live under `/assets/`, and committed images and PDFs from the
 host's `publicAssetsDir` are delivered under `/uploaded-assets/`. Upload
 authoring remains dev-only. Keep Vite base `/` and the preview graph isolated
@@ -90,30 +95,33 @@ domains, credentials, or other infrastructure. Deleting or unbinding this
 project's own live Cloudflare Workers and domains is still a user-performed or
 user-approved step, never an automatic side effect of a workflow.
 
-## Provider and contract handoffs
+## Package handoffs
 
-Keep these domains distinct:
+Two package-only handoffs leave this repository, each on its own
+fast-forward branch whose root tree equals the package directory:
 
-- provider Git commit/tree:
-  `6b0826cdaa14d9888e58c795ee015f70e2c5cbdf` /
-  `1c3cbfd3a25d1425f447cdadd5ba538916394309`
-- exact provider spec:
-  `git+https://github.com/Takazudo/zudo-sg.git#6b0826cdaa14d9888e58c795ee015f70e2c5cbdf`
-- installed provider metadata: `@zudo-sg/ui@0.1.0`
-- component-pack protocol identity: `@zudo-sg/ui@1.0.0`
-- component-contract API/package version:
-  `@zudo-composer/component-contract@1.0.0`
+| Package | Source | Handoff file | Branch | Package commit |
+| --- | --- | --- | --- | --- |
+| `@zudo-composer/component-contract@1.0.0` | `packages/component-contract` | `contract-handoff.json` | `package/component-contract-v1` | `c0b452da075b66757c60bd0d721a47062d4354d0` |
+| `@zudo-composer/ui@0.1.0` (pack `@zudo-composer/ui@1.0.0`) | `packages/ui` | `ui-handoff.json` | `package/ui-v1` | `847b582c911a3c2e5461ed89caf2b78a874331d7` |
 
-Provider updates require a permanent full Git SHA, verified tree, regenerated
-lockfile, clean frozen install, and full unit/artifact/browser gates.
-Never resolve the provider through a branch/tag, sibling checkout,
-`workspace:`, `file:`, `link:`, `path:`, copied source, or pnpm Git subdirectory
-selector.
+External hosts install each through its exact root Git spec,
+`git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
+for the contract and
+`git+https://github.com/Takazudo/zudo-composer.git#847b582c911a3c2e5461ed89caf2b78a874331d7`
+for the UI pack — never through a branch/tag, sibling checkout, `workspace:`,
+`file:`, `link:`, `path:`, copied source, or a pnpm Git subdirectory selector.
+Inside this monorepo both relationships are `workspace:*` development
+dependencies; do not substitute either for the external Git spec. The
+component-contract handoff and the UI-pack handoff are separate: each has its
+own handoff file, branch and gate (`contract:external-install`,
+`ui:external-install`).
 
-The component-contract handoff is separate. Its external package-only commit
-and root Git spec live in `contract-handoff.json`; this monorepo intentionally
-uses `workspace:*` for its own contract source. Do not substitute that workspace
-relationship for the external UI-provider dependency.
+A byte change under `packages/ui` needs a new package commit, parented on the
+previous one so `package/ui-v1` fast-forwards, recorded in `ui-handoff.json`,
+README and here. Then run a clean frozen install and the full
+unit/artifact/browser gates, which still prove the 12-component
+runtime/CSS/WASM set.
 
 ## Commands and completion gates
 
@@ -122,9 +130,9 @@ relationship for the external UI-provider dependency.
 - Aggregate gate: `corepack pnpm check`, including the complete packed-install
   proof. It needs network access, Playwright Chromium and exclusive browser
   port 4175; run it with the other browser lanes stopped.
-- Contract handoff: `corepack pnpm contract:conformance`, `corepack pnpm
-  contract:negative-scan`, and `corepack pnpm contract:external-install --
-  --exact`.
+- Package handoffs: `corepack pnpm contract:conformance`, `corepack pnpm
+  contract:negative-scan`, `corepack pnpm contract:external-install --
+  --exact`, and `corepack pnpm ui:external-install -- --exact`.
 - Browser preparation: `corepack pnpm demo:build-sites` discovers and builds
   all host artifacts before the SiteProject and demos browser lanes; stale
   artifacts fail their read-only verification.
@@ -142,8 +150,8 @@ relationship for the external UI-provider dependency.
   matrix job per host. `corepack pnpm no-deploy:check` guards these validation
   commands, including aliases and local wrappers; Cloudflare dry-runs only.
 
-Do not weaken frozen install, negative dependency scans, exact provider pin, or
-the 12-component runtime/CSS/WASM proof to make a gate pass.
+Do not weaken frozen install, negative dependency scans, the exact package
+handoffs, or the 12-component runtime/CSS/WASM proof to make a gate pass.
 
 ## Scoped hosted demo exception
 
@@ -212,5 +220,7 @@ canonical evidence on both Phase 3 and Phase 4 epics.
 
 The application was ported from
 `Takazudo/zudo-sg@f1206f3b82bdbfff791dcaf5d9918c2afdda0ae2` without history
-grafting. That reference is provenance, not continuing application ownership or
-permission to reuse source-project infrastructure.
+grafting. The UI component set in `packages/ui` was ported from the zudo-sg
+package commit `6b0826cdaa14d9888e58c795ee015f70e2c5cbdf`. Both references are
+provenance, not continuing ownership or permission to reuse source-project
+infrastructure.

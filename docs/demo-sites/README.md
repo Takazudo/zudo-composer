@@ -15,7 +15,7 @@ published package.
 | `packages/demo-blog` | `zc-demo-blog.zudolab.dev` | `zc-demo-blog-editor.zudolab.dev` | `blog-` | 4183 |
 
 Sample Studio is the symmetric fourth host, `packages/demo-sample`. It uses
-the exact installed `@zudo-sg/ui` provider and preserves the original project
+the repository-owned `@zudo-composer/ui` pack and preserves the original project
 JSON. The original project contains no uploaded-image URLs: its provider
 placeholder is separate from the five optional Studio image rows in the
 package-owned Assets store. Webshop, Landing and Blog assert their 16, 6 and 10
@@ -59,7 +59,7 @@ Rules that fall out of the tool's contract, and that the package tests assert:
 - `pack` and every `source.module` are exactly `demo-<name>/components`; no
   exported subpath contains a `src` segment; `exports` targets are plain strings
   because the pack is resolved with `createRequire`.
-- The pack imports nothing from `@zudo-sg/ui`. A demo owns its whole themeset.
+- The pack imports nothing from `@zudo-composer/ui`. A demo owns its whole themeset.
 - Tailwind v4 runs with **no default theme**: only `tailwindcss/preflight` and
   `tailwindcss/utilities` are imported, so every utility a component uses must
   come from a token in the package's own `@theme` block. Tokens live in one
@@ -462,11 +462,9 @@ release. The asset pass still only pins URL-valued props named `src` / `href` /
 inspection incomplete and blocks release with `asset-impact-incomplete`.
 Webshop, Landing and Blog use `asset-use` with `asset-url` / `asset-text`;
 Sample's Markdown image destinations remain URL-based, since `asset-use` does
-not apply to Markdown destinations. `asset-ref` remains object-only and
-`reference-list-ids` projects an id array; neither is accepted by any scalar
-target (`incompatible-binding`), so related items stay on a second attachment
-rather than a `reference-list` binding (tool gap tracked in #506; the demos do
-not wait for it).
+not apply to Markdown destinations. Mapping only binds onto scalar targets, and
+no projection turns a structured `reference-list` value into one, so related
+items stay on a second attachment rather than a `reference-list` binding.
 
 Lists inside an entry (tags, spec rows, feature bullets) that must reach a
 component are flattened at authoring time into fixed scalar fields (`tag1`,

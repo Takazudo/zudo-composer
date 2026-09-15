@@ -154,13 +154,18 @@ zudo-composer grammar
 The command resolves the host's component pack and reads every Composition in
 its active workspace (a host with no selected workspace yet contributes no
 templates). It builds one `Grammar` entry per published Global template whose
-outlet targets a container slot: an `open` entry when that slot declares no
-`accepts`, otherwise a `region` naming the container, the slot, its
-cardinality/`min`/`max`, and the accepted component kinds (each with its own
-nested `accepts`, if any). Pages bound to no template always accept any
-component in the pack (`openRoot`). Markdown output closes every restricted
-region with "everything else in the pack is rejected by the model." so an
-agent reads a hard boundary, not a suggestion.
+outlet targets a container slot: an `open` entry with no `region` when that
+slot declares no `accepts` and no cardinality/`min`/`max` bound either;
+otherwise a `region` naming the container, the slot, and its
+cardinality/`min`/`max`, with `accepts` either the accepted component kinds
+(each with its own nested `accepts`, if any) or, for a slot that bounds its
+cardinality/`min`/`max` but declares no `accepts`, the literal `"any"`. Pages
+bound to no template always accept any component in the pack (`openRoot`).
+Markdown output closes a region with a fixed `accepts` list with "everything
+else in the pack is rejected by the model." so an agent reads a hard
+boundary, not a suggestion; a region whose `accepts` is `"any"` instead prints
+"accepts any component in the pack." under its bounds, with no rejection
+line.
 
 A published Global template whose outlet no longer resolves (a missing target
 node, an owner component absent from the pack, or an undeclared slot) is

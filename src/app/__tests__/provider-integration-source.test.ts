@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile } from "node:fs/promises";
+import { cp, lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { SITE_PROJECT_LOCAL_ROOT_NAME } from "../../../plugins/roots.mjs";
@@ -14,6 +14,7 @@ import { createProductionProviderIntegration } from "../provider-integration";
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../test/workspace-providers";
 import { loadSampleSiteProject } from "../../test/site-project-fixture";
 import { activeSiteProjectValidationContext } from "../site-project-manifest";
+import { SAMPLE_ASSETS_STORE_ROOT } from "../../test/sample-asset-lock";
 
 const source = vi.hoisted(() => ({ status: "error", message: "Activated release toolchain does not match the current installed runtime." }));
 const originalSource = { ...source };
@@ -75,7 +76,11 @@ it("honors an explicit project despite an injected source error", async () => {
 it("opens generated committed CMS ready and populated when the real dev source is no-active", async () => {
   const currentHost = await host();
   const input = loadSampleSiteProject(activeSiteProjectValidationContext);
-  const config = composer({ workspaceRoot: currentHost.root, pack: "@zudo-sg/ui/composer-pack" }, { env: {} });
+  const config = composer({ workspaceRoot: currentHost.root, pack: "@zudo-composer/ui/composer-pack" }, { env: {} });
+  // Sample Studio's project pins its own real seeded images (#695); seeding
+  // reads assets from the host's configured assetsDir, so this fresh
+  // temporary host needs its own copy before produceReadyWorkspace compiles it.
+  await cp(SAMPLE_ASSETS_STORE_ROOT, config.paths.assets, { recursive: true });
   const generated = await produceReadyWorkspace(input, { config, pack: componentPack, toolchain: { ...toolchain, componentPack: input.componentPack } });
   const sourcePlugin = siteProjectSourcePlugin({
     workspaceRoot: currentHost.root,

@@ -31,7 +31,7 @@ describe("Mapping route styling contract", () => {
     expect(css).not.toContain("sg-mapping");
     expect(sources).not.toContain("sg-mapping");
     // The old sheet reached past the app tokens into the provider's own.
-    expect(css).not.toContain("@zudo-sg/ui/styles");
+    expect(css).not.toContain("@zudo-composer/ui/styles");
   });
 
   it("reads colour and spacing from the app tokens rather than literals", () => {

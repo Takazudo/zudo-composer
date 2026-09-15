@@ -19,6 +19,7 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSyn
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { UI_PACK } from "./ui-pack-identity.mjs";
 
 /** @typedef {import("node:child_process").SpawnOptions} SpawnOptions */
 /** @typedef {{status: number | null, signal: NodeJS.Signals | null, stdout: string, stderr: string}} RunResult */
@@ -64,19 +65,23 @@ function createHostFixture(parent) {
     "cms/compositions", "cms/content", "cms/mappings", "cms/sitemaps", "cms/assets"]) {
     mkdirSync(join(hostRoot, directory), { recursive: true });
   }
+  mkdirSync(join(hostRoot, "node_modules", UI_PACK.packageName, ".."), { recursive: true });
   symlinkSync(root, join(hostRoot, "node_modules/zudo-composer"), "dir");
-  symlinkSync(join(root, "node_modules/@zudo-sg"), join(hostRoot, "node_modules/@zudo-sg"), "dir");
+  symlinkSync(join(root, "node_modules", UI_PACK.packageName), join(hostRoot, "node_modules", UI_PACK.packageName), "dir");
   symlinkSync(join(root, "node_modules/preact"), join(hostRoot, "node_modules/preact"), "dir");
   for (const file of ["zudo-composer.config.ts", "styles/base.css"]) {
     cpSync(join(root, "fixtures/host", file), join(hostRoot, file));
   }
   cpSync(join(root, "packages/demo-sample/site-project.json"), join(hostRoot, "site-project.json"));
+  // The host's own Assets store, so `seed` resolves the sample's pinned
+  // managed URLs against real committed bytes instead of an empty store.
+  cpSync(join(root, "packages/demo-sample/cms/assets"), join(hostRoot, "cms/assets"), { recursive: true });
   // The manifest is generated rather than copied, because a release attests how
   // its pack was installed and therefore reads the pack's dependency spec out of
   // the HOST manifest. The spec is taken from this package's own manifest so the
   // two cannot drift.
   const manifest = /** @type {PackageManifest} */ (JSON.parse(readFileSync(join(root, "package.json"), "utf8")));
-  const packPackage = "@zudo-sg/ui";
+  const packPackage = UI_PACK.packageName;
   writeFileSync(join(hostRoot, "package.json"), `${JSON.stringify({
     name: "zudo-composer-host-browser-fixture",
     version: "0.0.0",

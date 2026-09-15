@@ -31,13 +31,11 @@ export function resolveMappingProjectionDefinition(field: ContentFieldDefinition
     return current ? { status: "ready", kind: current.kind } : { status: "invalid", message: `Structured source projection ${JSON.stringify(projection.fieldIds)} is stale.` };
   }
   if (projection.kind === "asset-download") return field.kind === "asset-use" && field.use === "download" ? { status: "ready", kind: "markdown" } : { status: "invalid", message: "asset-download requires a download use." };
-  if (projection.kind === "asset-ref") return field.kind === "asset-use" ? { status: "ready", kind: "object" } : { status: "invalid", message: "asset-ref requires an asset-use field." };
   if (projection.kind === "asset-url") return field.kind === "asset-use" ? { status: "ready", kind: "url" } : { status: "invalid", message: "asset-url requires an asset-use field." };
   if (projection.kind === "asset-text") {
     const supported = field.kind === "asset-use" && ({ image: ["alt", "caption"], link: ["label"], download: ["label"], card: ["title", "description"] } as const)[field.use].includes(projection.field as never);
     return supported ? { status: "ready", kind: "text" } : { status: "invalid", message: `asset-text ${projection.field} is unavailable for this field.` };
   }
-  if (projection.kind === "reference-list-ids") return field.kind === "reference-list" ? { status: "ready", kind: "list" } : { status: "invalid", message: "reference-list-ids requires a reference-list field." };
   return field.kind === "reference" ? { status: "ready", kind: "text" } : { status: "invalid", message: `${projection.kind} requires a reference field.` };
 }
 
@@ -70,22 +68,18 @@ export function projectContentValue(options: {
     }
     return current === undefined ? { status: "invalid", message: "Structured field projection has no value." } : { status: "projected", value: current };
   }
-  if (projection.kind === "asset-ref" || projection.kind === "asset-url" || projection.kind === "asset-text") {
+  if (projection.kind === "asset-url" || projection.kind === "asset-text") {
     if (options.field.kind !== "asset-use" || value === null || Array.isArray(value) || typeof value !== "object") return { status: "invalid", message: "Asset projection requires an asset-use value." };
     const asset = value as unknown as ContentAssetUse;
-    if (projection.kind === "asset-ref") return { status: "projected", value: asset.asset as unknown as JsonValue };
     if (projection.kind === "asset-url") return { status: "projected", value: assetAuthoringUrl(asset.asset.assetId) };
     const text = projection.field in asset ? (asset as unknown as Record<string, JsonValue>)[projection.field] : undefined;
     return typeof text === "string" ? { status: "projected", value: text } : { status: "invalid", message: `Asset ${projection.field} is unavailable for this use.` };
   }
-  if (projection.kind === "reference-id" || projection.kind === "route-link") {
-    if (options.field.kind !== "reference") return { status: "invalid", message: `${projection.kind} requires a reference field.` };
-  } else if (options.field.kind !== "reference-list") return { status: "invalid", message: "reference-list-ids requires a reference-list field." };
+  if (options.field.kind !== "reference") return { status: "invalid", message: `${projection.kind} requires a reference field.` };
   const refs = Array.isArray(value) ? value : [value];
   const parsed = refs.filter((item): item is { providerId: string; modelId: string; recordId: string } => item !== null && !Array.isArray(item) && typeof item === "object" && typeof item.providerId === "string" && typeof item.modelId === "string" && typeof item.recordId === "string");
   if (parsed.length !== refs.length) return { status: "invalid", message: "Reference projection requires provider-qualified reference values." };
   if (projection.kind === "reference-id") return parsed.length === 1 ? { status: "projected", value: parsed[0]!.recordId } : { status: "invalid", message: "reference-id requires one reference." };
-  if (projection.kind === "reference-list-ids") return { status: "projected", value: parsed.map((ref) => ref.recordId) };
   if (!options.routeResolver) return { status: "route-context-unavailable", message: "Route-link projection requires a route resolver." };
   if (parsed.length !== 1) return { status: "route-context-ambiguous", message: "Route-link projection requires exactly one reference." };
   const resolved = options.routeResolver.resolve(parsed[0]!);

@@ -153,7 +153,6 @@ describe("isolated creation failures", () => {
       expect(staged).not.toContain(resolve(import.meta.dirname, "../../.."));
       const workspace = await readFile(join(staged, "pnpm-workspace.yaml"), "utf8");
       expect(workspace).toContain("overrides:");
-      expect(workspace).toContain("blockExoticSubdeps: false");
       expect(workspace).not.toContain(toolTarball);
       const manifest = JSON.parse(await readFile(join(staged, "package.json"), "utf8"));
       expect(manifest.dependencies["zudo-composer"]).toBe(metadata.tool.version);

@@ -40,6 +40,7 @@
     "scripts/demo-editor-hosts.mjs",
     "scripts/build-doc-site.mjs",
     "scripts/handoff-identities.mjs",
+    "scripts/ui-pack-identity.mjs",
     "scripts/package-host-boundary.mjs",
     "scripts/seed-demo-assets.ts",
     "scripts/run-dev-browser.mjs",

@@ -1,0 +1,28 @@
+{
+  "name": "@zudo-composer/ui",
+  "version": "0.1.0",
+  "description": "Repo-owned Composer UI component pack for zudo-composer.",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "src",
+    "styles"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./composer-pack": "./src/composer-pack.ts",
+    "./styles/composer.css": "./styles/composer.css",
+    "./styles/tokens.css": "./styles/tokens.css",
+    "./styles/colors.css": "./styles/colors.css",
+    "./src/*": "./src/*"
+  },
+  "dependencies": {
+    "@takazudo/zfb-md-wasm": "2.10.1",
+    "dompurify": "^3.4.11"
+  },
+  "peerDependencies": {
+    "@zudo-composer/component-contract": "^1.0.0",
+    "preact": "^10.29.8",
+    "tailwindcss": "^4.0.0"
+  }
+}

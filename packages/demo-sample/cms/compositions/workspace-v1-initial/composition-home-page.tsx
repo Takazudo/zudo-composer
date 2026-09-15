@@ -1,6 +1,6 @@
 import LinkedTemplate from "./composition-site-frame";
 
-import { AutoGrid, Callout, Card, CtaButton, Hero, PlaceholderBox, ProseP, SectionHeading, SplitLayout, Stack } from "@zudo-sg/ui";
+import { AutoGrid, Callout, Card, CtaButton, Hero, ProseMd, ProseP, SectionHeading, SplitLayout, Stack } from "@zudo-composer/ui";
 
 function LocalCompositionContent() {
   return (
@@ -9,7 +9,7 @@ function LocalCompositionContent() {
       <SplitLayout
         ratio="40/60"
         gap="lg"
-        left={<PlaceholderBox label="Studio worktable" aspect="4/3" size="lg" />}
+        left={<ProseMd markdown="![A bright studio worktable with paper sketches, a closed laptop and a pot of pencils](/uploaded-assets/asset-assets-d69f531b-c600-45c5-a6bf-13d40a19b734)" />}
         right={
           <Stack direction="vertical" gap="sm" align="start" justify="start">
             <ProseP>{"We turn open questions into useful systems. Most of our work is for teams of five to fifty people who need a clear next step."}</ProseP>

@@ -12,4 +12,4 @@
  *      Tailwind scans them.
  * The provider's own sheet already does (2) with an `@source` of its own.
  */
-@import "@zudo-sg/ui/styles/composer.css";
+@import "@zudo-composer/ui/styles/composer.css";

@@ -32,7 +32,7 @@ files.push(path.join(repositoryRoot, 'package.json'), path.join(repositoryRoot, 
 
 /** @type {Array<[string, RegExp]>} */
 const forbidden = [
-  ['provider application coupling', /@zudo-sg\/ui|zudo-doc|@takazudo\/zfb|\bzfb\b/i],
+  ['provider application coupling', /@zudo-composer\/ui|zudo-doc|@takazudo\/zfb|\bzfb\b/i],
   ['application alias', /(?:from|import\()\s*["']@\//],
   ['removed source adapter', /sourceAdapters?|JsxSourceAdapter/],
   ['removed schema compatibility', /COMPOSITION_SCHEMA_V1|decodedFromSchemaVersion|MigrationMeta|CleanupMeta|\blocalStorage\b/i],

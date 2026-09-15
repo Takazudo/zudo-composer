@@ -163,6 +163,53 @@ describe("hosted demo live verification", () => {
     expect(() => verifyNavigationHtml(inject(BEACON.replace('"version":"2024.11.0"', '"version":null')), checksum)).toThrow(/unexpected configuration/);
   });
 
+  it("names the offset, both context windows and headers for an extra injected script", () => {
+    const html = "<html><body>tested application</body></html>";
+    const checksum = createHash("sha256").update(html).digest("hex");
+    const extraScript = "<script>trackExtra()</script>";
+    const modified = html.replace("<body>", `<body>${extraScript}`);
+    const bytes = Buffer.from(modified.replace("</body>", `${BEACON}</body>`));
+    const headers = new Headers({ "cf-cache-status": "HIT", age: "12", etag: '"abc123"', "cf-ray": "def456-SJC", "content-length": String(bytes.byteLength) });
+    let thrown: Error | undefined;
+    try {
+      verifyNavigationHtml(bytes, checksum, "index.html", { expectedBytes: Buffer.from(html), headers, attempt: 2 });
+    } catch (error) {
+      thrown = error as Error;
+    }
+    expect(thrown?.message).toMatch(/changes beyond/);
+    expect(thrown?.message).toMatch(/first differing byte offset \d+/);
+    expect(thrown?.message).toContain(extraScript);
+    expect(thrown?.message).toContain("tested application");
+    expect(thrown?.message).toContain("content-length");
+    expect(thrown?.message).toContain("cf-cache-status HIT");
+    expect(thrown?.message).toContain("age 12");
+    expect(thrown?.message).toContain('etag "abc123"');
+    expect(thrown?.message).toContain("cf-ray def456-SJC");
+    expect(thrown?.message).toContain("attempt 2");
+  });
+
+  it("names the offset and context for a same-length stale variant", () => {
+    const html = "<html><body>tested application</body></html>";
+    const checksum = createHash("sha256").update(html).digest("hex");
+    const stale = html.replace("tested application", "staled application");
+    expect(stale.length).toBe(html.length);
+    const bytes = Buffer.from(stale.replace("</body>", `${BEACON}</body>`));
+    const headers = new Headers({ "cf-cache-status": "STALE" });
+    let thrown: Error | undefined;
+    try {
+      verifyNavigationHtml(bytes, checksum, "index.html", { expectedBytes: Buffer.from(html), headers, attempt: 1 });
+    } catch (error) {
+      thrown = error as Error;
+    }
+    expect(thrown?.message).toMatch(/changes beyond/);
+    expect(thrown?.message).toMatch(/first differing byte offset \d+/);
+    expect(thrown?.message).toContain("staled application");
+    expect(thrown?.message).toContain("tested application");
+    expect(thrown?.message).toContain(`response length ${html.length} bytes, expected length ${html.length} bytes`);
+    expect(thrown?.message).toContain("cf-cache-status STALE");
+    expect(thrown?.message).toContain("attempt 1");
+  });
+
   it("rejects stale manifests and changed asset bytes", async () => {
     const fixture = await writeArtifact();
     fixtures.push(fixture.root);

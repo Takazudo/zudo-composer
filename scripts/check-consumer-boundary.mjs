@@ -34,6 +34,7 @@ const authoringPackages = new Map([
   ['zudo-composer', 'package.json'],
   ['@zudo-composer/component-contract', 'packages/component-contract/package.json'],
   ['@zudo-composer/fixture-themeset', 'packages/fixture-themeset/package.json'],
+  ['@zudo-composer/ui', 'packages/ui/package.json'],
 ]);
 /** @typedef {{host: string, file: string, rule: string, detail: string, count: number}} Violation */
 /** @param {unknown} value @returns {Record<string, unknown>} */

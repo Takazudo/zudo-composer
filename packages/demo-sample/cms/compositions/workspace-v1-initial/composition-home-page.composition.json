@@ -45,13 +45,11 @@
         "slots": {
           "left": [
             {
-              "componentId": "ui.placeholder-box",
+              "componentId": "ui.prose-md",
               "componentVersion": 1,
-              "id": "home-placeholder",
+              "id": "home-studio-image",
               "props": {
-                "aspect": "4/3",
-                "label": "Studio worktable",
-                "size": "lg"
+                "markdown": "![A bright studio worktable with paper sketches, a closed laptop and a pot of pencils](/uploaded-assets/asset-assets-d69f531b-c600-45c5-a6bf-13d40a19b734)"
               },
               "slots": {}
             }

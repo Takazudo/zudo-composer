@@ -1,6 +1,6 @@
 import LinkedTemplate from "./composition-site-frame";
 
-import { AutoGrid, Callout, Card, CtaButton, ProseMd, ProseP, SectionHeading, SplitLayout, Stack } from "@zudo-sg/ui";
+import { AutoGrid, Callout, Card, CtaButton, PlaceholderBox, ProseMd, ProseP, SectionHeading, SplitLayout, Stack } from "@zudo-composer/ui";
 
 function LocalCompositionContent() {
   return (
@@ -9,7 +9,12 @@ function LocalCompositionContent() {
       <SplitLayout
         ratio="60/40"
         gap="lg"
-        left={<ProseMd markdown={"## What an engagement looks like\n\nEvery engagement starts with a short call and a written note about the decision you are facing. We reply with a proposal that names one outcome, one team and one first cycle.\n\nFrom there we work in weekly loops. Each week ends with something you can open, read or click, and a short list of open questions. You decide what moves forward.\n\nWe keep all drafts, notes and decisions in one shared place. When the engagement ends, your team keeps everything, and nobody needs us to find their way around it."} />}
+        left={
+          <Stack direction="vertical" gap="md" align="start" justify="start">
+            <PlaceholderBox label="Interface review sketches" aspect="16/9" size="lg" />
+            <ProseMd markdown={"## What an engagement looks like\n\nEvery engagement starts with a short call and a written note about the decision you are facing. We reply with a proposal that names one outcome, one team and one first cycle.\n\nFrom there we work in weekly loops. Each week ends with something you can open, read or click, and a short list of open questions. You decide what moves forward.\n\nWe keep all drafts, notes and decisions in one shared place. When the engagement ends, your team keeps everything, and nobody needs us to find their way around it."} />
+          </Stack>
+        }
         right={
           <Stack direction="vertical" gap="md" align="start" justify="start">
             <ProseP>{"Four people: a strategist, a designer, a writer and a developer."}</ProseP>

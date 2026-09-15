@@ -10,14 +10,38 @@ import type { DemoEditorSeed } from "../seed";
 const repository = resolve(import.meta.dirname, "../../..");
 let context: ReturnType<typeof loadHostContext> | undefined;
 
-export async function writeEditorArtifact(options: { emptyAssets?: boolean; sourceRevision?: string } = {}) {
+type PreparedDemoAsset = Awaited<ReturnType<typeof prepareDemoAsset>>;
+
+/** Add `extra`'s records/files on top of `base`, skipping anything `extra`
+ * already shares a version URL with (the two fixture catalogs both happen
+ * to carry Sample Studio's own webp bytes). */
+function mergeDemoAssets(base: PreparedDemoAsset, extra: PreparedDemoAsset): PreparedDemoAsset {
+  const usedUrls = new Set(base.snapshot.records.flatMap(({ document }) => document.versions.map(({ url }) => url)));
+  const usedFileNames = new Set(base.files.map(({ fileName }) => fileName));
+  return {
+    snapshot: {
+      ...base.snapshot,
+      records: [...base.snapshot.records, ...extra.snapshot.records.filter(({ document }) => !document.versions.some(({ url }) => usedUrls.has(url)))],
+      folders: [...base.snapshot.folders, ...extra.snapshot.folders],
+    },
+    files: [...base.files, ...extra.files.filter(({ fileName }) => !usedFileNames.has(fileName))],
+  };
+}
+
+export async function writeEditorArtifact(options: { minimalAssets?: boolean; sourceRevision?: string } = {}) {
   const root = await mkdtemp(join(tmpdir(), "demo-editor-artifact-"));
   context ??= loadHostContext({ workspaceRoot: join(repository, "packages/demo-sample"), env: {} });
   const host = await context;
-  // The synthetic host uses the mixed image/document/archive catalog to cover
-  // the whole delivery contract; real editor builds select their host catalog.
-  const assets = await prepareDemoAsset(join(repository, "cms/assets"));
-  if (options.emptyAssets) { assets.snapshot.records = []; assets.files = []; }
+  // Sample Studio's own committed project pins its five real seeded images
+  // (see #695), so every variant must bundle them from the same host Assets
+  // store the project was validated against, exactly like a real editor
+  // build (vite.demo-editor.config.ts uses `paths.assets`). The default
+  // variant also merges in the repo's generic image/document/archive fixture
+  // catalog so this artifact-packaging test still covers non-webp MIME kinds
+  // and Content-Disposition/attachment behavior that Sample Studio's own
+  // images alone don't exercise.
+  const required = await prepareDemoAsset(host.composerConfig.paths.assets);
+  const assets = options.minimalAssets ? required : mergeDemoAssets(required, await prepareDemoAsset(join(repository, "cms/assets")));
   const seed: DemoEditorSeed = {
     hostId: "artifact-fixture",
     project: JSON.parse(await readFile(join(host.workspaceRoot, "site-project.json"), "utf8")),

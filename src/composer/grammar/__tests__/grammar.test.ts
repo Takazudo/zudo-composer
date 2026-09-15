@@ -17,6 +17,8 @@ const IDS = {
   productCard: "demo.product-card",
   demoNote: "demo.demo-note",
   openWrapper: "demo.open-wrapper",
+  boundedSingleWrapper: "demo.bounded-single-wrapper",
+  boundedRangeWrapper: "demo.bounded-range-wrapper",
 } as const;
 
 function component(
@@ -66,6 +68,12 @@ const manifest = createComponentCatalog({
     component(IDS.openWrapper, {
       slots: [{ id: "content", prop: "children", label: "Body", cardinality: "many" }],
     }),
+    component(IDS.boundedSingleWrapper, {
+      slots: [{ id: "content", prop: "children", label: "Body", cardinality: "single" }],
+    }),
+    component(IDS.boundedRangeWrapper, {
+      slots: [{ id: "content", prop: "children", label: "Body", cardinality: "many", min: 1, max: 3 }],
+    }),
   ],
 } satisfies ComponentPackManifest);
 
@@ -91,6 +99,36 @@ function openPageTemplate(): CompositionDocument {
     name: "Open page",
     root: [
       { id: "wrapper-1", componentId: IDS.openWrapper, componentVersion: 1, props: {}, slots: { content: [] } },
+    ],
+    publication: {
+      kind: "global-template",
+      outlet: { id: "main", label: "Body", target: { parentId: "wrapper-1", slotId: "content" } },
+    },
+  };
+}
+
+function boundedSinglePageTemplate(): CompositionDocument {
+  return {
+    schemaVersion: 2,
+    id: "bounded-single-page",
+    name: "Bounded single page",
+    root: [
+      { id: "wrapper-1", componentId: IDS.boundedSingleWrapper, componentVersion: 1, props: {}, slots: { content: [] } },
+    ],
+    publication: {
+      kind: "global-template",
+      outlet: { id: "main", label: "Body", target: { parentId: "wrapper-1", slotId: "content" } },
+    },
+  };
+}
+
+function boundedRangePageTemplate(): CompositionDocument {
+  return {
+    schemaVersion: 2,
+    id: "bounded-range-page",
+    name: "Bounded range page",
+    root: [
+      { id: "wrapper-1", componentId: IDS.boundedRangeWrapper, componentVersion: 1, props: {}, slots: { content: [] } },
     ],
     publication: {
       kind: "global-template",
@@ -157,6 +195,44 @@ describe("buildGrammar", () => {
     expect(grammar.templates[0]).toEqual({ id: "open-page", name: "Open page", region: null, open: true });
   });
 
+  it("reports a bounded open slot (cardinality single, no accepts) as accepts: any plus its bounds", () => {
+    const grammar = buildGrammar({ manifest, templates: [boundedSinglePageTemplate()] });
+    expect(grammar.templates[0]).toEqual({
+      id: "bounded-single-page",
+      name: "Bounded single page",
+      open: true,
+      region: {
+        outletLabel: "Body",
+        componentId: IDS.boundedSingleWrapper,
+        componentTitle: IDS.boundedSingleWrapper,
+        slotId: "content",
+        slotLabel: "Body",
+        cardinality: "single",
+        accepts: "any",
+      },
+    });
+  });
+
+  it("reports a bounded open slot (min/max, no accepts) as accepts: any plus its bounds", () => {
+    const grammar = buildGrammar({ manifest, templates: [boundedRangePageTemplate()] });
+    expect(grammar.templates[0]).toEqual({
+      id: "bounded-range-page",
+      name: "Bounded range page",
+      open: true,
+      region: {
+        outletLabel: "Body",
+        componentId: IDS.boundedRangeWrapper,
+        componentTitle: IDS.boundedRangeWrapper,
+        slotId: "content",
+        slotLabel: "Body",
+        cardinality: "many",
+        min: 1,
+        max: 3,
+        accepts: "any",
+      },
+    });
+  });
+
   it("skips a template whose outlet target does not resolve and reports it as unavailable", () => {
     const grammar = buildGrammar({ manifest, templates: [staleTemplate(), openPageTemplate()] });
     expect(grammar.templates.map((template) => template.id)).toEqual(["open-page"]);
@@ -183,6 +259,26 @@ describe("renderGrammarMarkdown", () => {
     const markdown = renderGrammarMarkdown(grammar);
     expect(markdown).toContain("# Open page (template open-page)");
     expect(markdown).toContain("- open: this template's root accepts any component in the pack.");
+    expect(markdown).not.toContain("rejected by the model");
+  });
+
+  it("renders a bounded open slot (single) as accepts any with its bounds and no rejection line", () => {
+    const grammar = buildGrammar({ manifest, templates: [boundedSinglePageTemplate()] });
+    const markdown = renderGrammarMarkdown(grammar);
+    expect(markdown).toContain("# Bounded single page (template bounded-single-page)");
+    expect(markdown).toContain(`Region "Body" = ${IDS.boundedSingleWrapper} › content`);
+    expect(markdown).toContain("accepts (exactly one):");
+    expect(markdown).toContain("- accepts any component in the pack.");
+    expect(markdown).not.toContain("rejected by the model");
+  });
+
+  it("renders a bounded open slot (min/max) as accepts any with its bounds and no rejection line", () => {
+    const grammar = buildGrammar({ manifest, templates: [boundedRangePageTemplate()] });
+    const markdown = renderGrammarMarkdown(grammar);
+    expect(markdown).toContain("# Bounded range page (template bounded-range-page)");
+    expect(markdown).toContain(`Region "Body" = ${IDS.boundedRangeWrapper} › content`);
+    expect(markdown).toContain("accepts (any order, at least 1, at most 3):");
+    expect(markdown).toContain("- accepts any component in the pack.");
     expect(markdown).not.toContain("rejected by the model");
   });
 

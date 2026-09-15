@@ -24,11 +24,16 @@ async function installedHost() {
     });
   }
   await symlink(join(APP_ROOT, "node_modules"), join(tool, "node_modules"), "dir");
-  for (const name of ["@zudo-sg", "preact"]) await symlink(join(APP_ROOT, "node_modules", name), join(host, "node_modules", name), "dir");
+  await mkdir(join(host, "node_modules/@zudo-composer"), { recursive: true });
+  for (const name of ["@zudo-composer/ui", "preact"]) await symlink(join(APP_ROOT, "node_modules", name), join(host, "node_modules", name), "dir");
   const manifest = JSON.parse(await readFile(join(APP_ROOT, "package.json"), "utf8"));
-  await writeFile(join(host, "package.json"), JSON.stringify({ name: "ready-workspace-host", type: "module", devDependencies: { "@zudo-sg/ui": manifest.devDependencies["@zudo-sg/ui"], preact: manifest.peerDependencies.preact } }));
-  await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "@zudo-sg/ui/composer-pack", dataDir: "data/cms", contentDir: "editor/content", assetsDir: "library/assets" });\n');
+  await writeFile(join(host, "package.json"), JSON.stringify({ name: "ready-workspace-host", type: "module", devDependencies: { "@zudo-composer/ui": manifest.devDependencies["@zudo-composer/ui"], preact: manifest.peerDependencies.preact } }));
+  await writeFile(join(host, "zudo-composer.config.ts"), 'import { defineComposerConfig } from "zudo-composer/config";\nexport default defineComposerConfig({ pack: "@zudo-composer/ui/composer-pack", dataDir: "data/cms", contentDir: "editor/content", assetsDir: "library/assets" });\n');
   const source = await readFile(join(APP_ROOT, "packages/demo-sample/site-project.json"), "utf8");
+  // `ready-workspace` reuses the real seed release pipeline (asset-impact-incomplete
+  // gated), and reads `config.paths.assets` directly rather than the disposable
+  // ZUDO_ASSETS_STORE_ROOT override below — the host's own configured `assetsDir`.
+  await cp(join(APP_ROOT, "packages/demo-sample/cms/assets"), join(host, "library/assets"), { recursive: true });
   const env = { ...process.env, ZUDO_SITE_PROJECT_ROOT: join(root, "unused-release-override"), ZUDO_ASSETS_STORE_ROOT: join(root, "unused-assets-override") };
   for (const key of Object.keys(env)) if (key.startsWith("ZUDO_COMPOSER_")) delete env[key as keyof typeof env];
   const invoke = (cwd: string, args: string[]) => run(process.execPath, [join(tool, "bin/zudo-composer.mjs"), "seed", "--ready-workspace", ...args], { cwd, env, encoding: "utf8", timeout: 25_000 });

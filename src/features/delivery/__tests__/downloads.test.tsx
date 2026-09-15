@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, describe, expect, it } from "vitest";
 import ts from "typescript";
-import { ProseMd } from "@zudo-sg/ui";
+import { ProseMd } from "@zudo-composer/ui";
 import { h, Fragment } from "preact";
 import { render as renderToString } from "preact-render-to-string";
 import { activeComponentProvider } from "../../composer/active-pack";
