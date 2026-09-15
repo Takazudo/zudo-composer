@@ -113,6 +113,28 @@ describe("collectPackSourceGraph", () => {
     expect((await collect(root, { extraRoots: [join(root, "styles/base.css")] })).files).toEqual(["pack.ts", "styles/base.css", "styles/more.css"]);
   });
 
+  it("resolves tailwindcss CSS subpaths from the tool root when the host installs no tailwindcss", async () => {
+    const root = await host({ "pack.ts": "export {};\n", "styles/base.css": '@import "tailwindcss/theme" layer(theme);\n@import "tailwindcss/preflight";\n' });
+    const graph = await collect(root, { extraRoots: [join(root, "styles/base.css")] });
+    expect(graph.files).toEqual(["pack.ts", "styles/base.css"]);
+    expect(graph.dependencies.map((entry) => entry.name)).toEqual(["tailwindcss"]);
+  });
+
+  it("records a bare CSS @import through an exports style/.css mapping in an isolated pnpm layout", async () => {
+    const store = "node_modules/.pnpm/kit@2.0.0/node_modules/kit";
+    const root = await host({
+      "pack.ts": "export {};\n",
+      "styles/base.css": '@import "kit/theme";\n@import "kit/base.css";\n',
+      [`${store}/package.json`]: JSON.stringify({ name: "kit", version: "2.0.0", exports: { "./theme": { style: "./dist/theme.css" }, "./base.css": "./dist/base.css" } }),
+      [`${store}/dist/theme.css`]: ".theme {}\n",
+      [`${store}/dist/base.css`]: ".base {}\n",
+    });
+    await symlink(join(root, store), join(root, "node_modules/kit"), "dir");
+    const graph = await collect(root, { extraRoots: [join(root, "styles/base.css")] });
+    expect(graph.files).toEqual(["pack.ts", "styles/base.css"]);
+    expect(graph.dependencies).toEqual([{ name: "kit", version: "2.0.0" }]);
+  });
+
   it("resolves CSS url() fragments and cache-busting queries to the file", async () => {
     const root = await host({
       "pack.ts": 'import "./icons.css";\n',

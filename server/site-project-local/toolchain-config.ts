@@ -114,6 +114,11 @@ function sourceModulesOf(manifest: TrustedComponentPack["manifest"]): string[] {
  * the boundary, and it carries no host CMS state to leak into the hash.
  */
 async function hostSelfPackDigest(workspaceRoot: string, pack: TrustedComponentPack, packIdentity: ResolvedComponentPack, stylesPath: string): Promise<string> {
+  // The dev server and site build refuse to start without it (host-styles
+  // plugin), so a release never attests a host that could not be built.
+  if (!existsSync(stylesPath)) {
+    throw new Error(`The host's configured \`styles\` stylesheet does not exist at ${stylesPath}. It is the host's base stylesheet — the only importer of the component pack's CSS. Create it, or set \`styles\` in zudo-composer.config.ts.`);
+  }
   const graph = await collectPackSourceGraph({
     hostRoot: workspaceRoot,
     entryPath: packIdentity.entryPath,

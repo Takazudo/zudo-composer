@@ -59,6 +59,10 @@ export const componentPack = defineComponentPack({ packId: "public-entry-host", 
   source: { module: "public-entry-host/components", exportKind: "named", exportName: "Banner" },
   defaults: { headline: "Banner" }, fields: [{ prop: "headline", label: "Headline", schema: { type: "string" }, editor: { kind: "text" } }],
 })] });\n`);
+  // The configured (default) `styles` file every host must own; its Tailwind
+  // imports resolve from the installed tool, as in a real isolated host.
+  await mkdir(join(host, "styles"));
+  await copyFile(join(root, "templates/host/styles/base.css"), join(host, "styles/base.css"));
   for (const file of ["probe.mjs", "types.mts"]) await copyFile(join(root, "scripts/fixtures/public-install", file), join(host, file));
   await copyFile(join(root, "type-tests/site-project.ts"), join(host, "site-project.ts"));
   await pnpm(["install"], host);
