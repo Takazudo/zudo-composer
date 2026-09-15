@@ -65,25 +65,21 @@ alongside `zudo-composer`, rather than relying on a transitive copy.
 version required by the tool and its component pack, while Tailwind remains
 tool-supplied; the host owns its CSS entry and Tailwind `@source` declaration.
 
-## Configure pnpm for the Git provider
+## Permit build scripts for first-party packages
 
-The provider used by a component pack can itself be Git-hosted. With pnpm
-11.5.2, the host must explicitly permit transitive Git sources and name the
-allowed build packages. Put these keys in the host project's
+pnpm 11 blocks package postinstall/build scripts by default. Name the packages
+a host install must permit to build in the host project's
 `pnpm-workspace.yaml`; keep any existing `packages` declaration:
 
 ```yaml
-blockExoticSubdeps: false
 allowBuilds:
   "@zudo-composer/component-contract": true
   esbuild: true
 ```
 
-`blockExoticSubdeps: false` permits transitive Git sources for this host. Review
-the host's other dependencies before adopting it; do not change global pnpm
-settings. `allowBuilds` keeps build permission limited to the named packages.
-The generated host from `init` writes the same `blockExoticSubdeps` policy and
-allows `esbuild`; add the contract entry when the host's install requires it.
+`allowBuilds` keeps build permission limited to the named packages. The
+generated host from `init` writes the same policy and allows `esbuild`; add
+the contract entry when the host's install requires it.
 
 ## Create a populated host
 
@@ -134,7 +130,7 @@ configuration files around it. The retained starter contains:
 
 The creator additionally generates `package.json`,
 `zudo-composer.config.ts`, `tsconfig.json`, `vitest.config.ts`, `.gitignore`,
-`.npmrc`, and `pnpm-workspace.yaml`. It runs `generate`,
+and `pnpm-workspace.yaml`. It runs `generate`,
 `assets import images-src/manifest.json`, and `seed --ready-workspace` in the
 temporary host before publication. Normal creation retains its registry
 lockfile; `node_modules`, `.zudo-site-project`, and other scratch output are

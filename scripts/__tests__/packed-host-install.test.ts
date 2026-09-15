@@ -6,7 +6,7 @@ import { basename, delimiter, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  FIRST_PARTY, MANDATORY_FIRST_PARTY, PACKED_NPMRC, assertConfinedWrites, assertExternalWorkspace, assertInstalledHost,
+  FIRST_PARTY, MANDATORY_FIRST_PARTY, assertConfinedWrites, assertExternalWorkspace, assertInstalledHost,
   configurePackedHost, copyPackedHost, discoverPackedHosts, isolatedEnvironment,
   packedHostManifest, packedHostMatrix, packPackage, pnpm, repositoryRoots, run, selectPackedHosts,
   startHostServer, tree,
@@ -170,24 +170,12 @@ describe("packed host discovery and manifest isolation", () => {
     await expect(copyPackedHost(source, join(await temporary(), "unsafe"))).rejects.toThrow("filesystem link");
   });
 
-  it("allows only the exact reviewed creator npmrc and keeps every isolation setting", async () => {
+  it("keeps every isolation setting", async () => {
     const host = await temporary();
     await put(host, "package.json", JSON.stringify(declared()));
-    await put(host, ".npmrc", PACKED_NPMRC);
     await configurePackedHost(host, archiveSpecs, packageManager);
-    expect(await readFile(join(host, ".npmrc"), "utf8")).toBe(PACKED_NPMRC);
     const workspace = await readFile(join(host, "pnpm-workspace.yaml"), "utf8");
-    for (const setting of ["blockExoticSubdeps: false", "nodeLinker: isolated", "hoist: false", "shamefullyHoist: false", "strictPeerDependencies: true", "linkWorkspacePackages: false", "preferWorkspacePackages: false", "resolvePeersFromWorkspaceRoot: false"]) expect(workspace).toContain(setting);
-  });
-
-  it.each(["hoist=true\n", `${PACKED_NPMRC}shamefully-hoist=true\n`, `${PACKED_NPMRC}node-linker=hoisted\n`, "block-exotic-subdeps=true\n", ""])("rejects unreviewed npmrc settings before rewriting the host: %j", async (npmrc) => {
-    const host = await temporary();
-    const manifest = JSON.stringify(declared());
-    await put(host, "package.json", manifest);
-    await put(host, ".npmrc", npmrc);
-    await expect(configurePackedHost(host, archiveSpecs, packageManager)).rejects.toThrow("explicit packed-lane review");
-    expect(await readFile(join(host, "package.json"), "utf8")).toBe(manifest);
-    expect(await readdir(host)).not.toContain("pnpm-workspace.yaml");
+    for (const setting of ["nodeLinker: isolated", "hoist: false", "shamefullyHoist: false", "strictPeerDependencies: true", "linkWorkspacePackages: false", "preferWorkspacePackages: false", "resolvePeersFromWorkspaceRoot: false"]) expect(workspace).toContain(setting);
   });
 });
 

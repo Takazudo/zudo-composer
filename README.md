@@ -360,16 +360,13 @@ toolchain reads to compute release identity; those sources are named one file at
 a time in `files`, because the nested `package.json` under `packages/` stops the
 root allowlist's exclusions from applying to that subtree.
 
-With pnpm 11.5.2, a host installing these Git-hosted packages must explicitly
-accept Git sources, pinned to full commit SHAs. pnpm blocks transitive Git
-sources by default and this version has no per-package exception.
-Use the following in the **host project's** `pnpm-workspace.yaml`; do not change
-global pnpm settings. `blockExoticSubdeps: false` permits transitive Git sources
-for this host, so review other dependencies before adopting it. Build permission
-remains limited to the named packages:
+With pnpm 11.5.2, install these Git-hosted packages as ordinary direct
+dependencies, pinned to full commit SHAs. None declares a Git-hosted
+first-party dependency of its own, so a host needs no transitive-source
+exception. Use the following in the **host project's** `pnpm-workspace.yaml` to
+keep build permission limited to the named packages:
 
 ```yaml
-blockExoticSubdeps: false
 allowBuilds:
   "@zudo-composer/component-contract": true
   esbuild: true

@@ -43,7 +43,7 @@ The tree above is copied verbatim from the repository's README. The
 | Path | Ownership and contents |
 | --- | --- |
 | `package.json` | The host package name, `exports` map, package-manager pin, scripts, and installed tool, contract, Preact, and pack dependencies. |
-| `pnpm-workspace.yaml` | The host's workspace membership, `blockExoticSubdeps: false` policy when the provider is Git-hosted, and its restricted `allowBuilds` list. |
+| `pnpm-workspace.yaml` | The host's workspace membership and its restricted `allowBuilds` list. |
 | `zudo-composer.config.ts` | The `pack` module specifier and any non-default data, public-asset, or style paths. |
 | `components/` | Host-owned Preact components and the `componentPack` registry when `pack` uses a self-reference. |
 | `styles/` | The host's CSS entry. `styles/base.css` is the sole importer of pack CSS and the Tailwind `@source` declaration point. |

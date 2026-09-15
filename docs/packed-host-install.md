@@ -7,9 +7,10 @@ stopped:
 corepack pnpm smoke:host-install
 ```
 
-The lane owns port **4175** and runs hosts serially. It packs the actual tool
-and component-contract with `pnpm pack` once, then installs those archives into
-disposable projects outside both this checkout and any containing checkout.
+The lane owns port **4175** and runs hosts serially. It packs the actual tool,
+component-contract and UI pack with `pnpm pack` once each, then installs the
+declared archives into disposable projects outside both this checkout and any
+containing checkout.
 Its temporary parent must also have no ambient `node_modules` or pnpm workspace.
 The complete command is also part of `corepack pnpm check`; that aggregate
 therefore requires network access, installed Playwright Chromium and exclusive
@@ -30,18 +31,17 @@ links in source fail the copy instead of reaching back into a checkout.
 
 For each host, the runner:
 
-1. Rewrites only `zudo-composer` and `@zudo-composer/component-contract` to the
-   two absolute `file:` tarballs, with exact `pnpm.overrides` also expressed in
-   pnpm 11's `pnpm-workspace.yaml`. Other workspace/file/link dependencies or
-   consumer overrides fail. The external provider retains its exact Git pin.
+1. Rewrites `zudo-composer` and `@zudo-composer/component-contract`, plus
+   `@zudo-composer/ui` where a host declares it, to their absolute `file:`
+   tarballs, with exact `pnpm.overrides` also expressed in pnpm 11's
+   `pnpm-workspace.yaml`. Other workspace/file/link dependencies or consumer
+   overrides fail.
 2. Generates a fresh local lockfile, then repeats the install with
    `--frozen-lockfile`. This only affects the temporary copy; the repository's
-   frozen-install policy is unchanged. Module lookup must resolve both packages
-   inside that host's own `node_modules`, with no repository path in the lookup
-   list. The local install disables hoisting and workspace linking.
-   A consumer `.npmrc` is accepted only when its exact bytes are
-   `block-exotic-subdeps=false\n`, the reviewed creator setting for the exact
-   provider Git pin. Every additional or altered setting fails before rewriting.
+   frozen-install policy is unchanged. Module lookup must resolve every
+   rewritten package inside that host's own `node_modules`, with no repository
+   path in the lookup list. The local install disables hoisting and workspace
+   linking.
 3. Boots the installed `zudo-composer dev` and fetches every canonical
    `AUTHORING_ROUTES` entry, including `/composer/preview`, as HTML.
 4. Stops the server, runs installed `generate --check`, the host's `seed`
