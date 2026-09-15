@@ -46,6 +46,7 @@ jobs:
       - run: pnpm handoff:boundary
       - run: pnpm styles:class-names
       - run: pnpm provider:boundary
+      - run: pnpm ui:pack-check
       - run: pnpm test
       - run: pnpm build
       - run: pnpm dist:boundary
