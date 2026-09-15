@@ -273,8 +273,6 @@ type MappingSourceProjection = {
     kind: "object-field";
     fieldIds: readonly RecordId[];
 } | {
-    kind: "asset-ref";
-} | {
     kind: "asset-url";
 } | {
     kind: "asset-download";
@@ -283,8 +281,6 @@ type MappingSourceProjection = {
     field: "alt" | "caption" | "label" | "title" | "description";
 } | {
     kind: "reference-id";
-} | {
-    kind: "reference-list-ids";
 } | {
     kind: "route-link";
 };

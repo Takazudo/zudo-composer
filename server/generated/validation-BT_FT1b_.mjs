@@ -2789,11 +2789,9 @@ function validateMappingSourceProjection(value) {
 	if (!isPlainObject(value) || typeof value.kind !== "string") return false;
 	if ([
 		"value",
-		"asset-ref",
 		"asset-url",
 		"asset-download",
 		"reference-id",
-		"reference-list-ids",
 		"route-link"
 	].includes(value.kind)) return exact(value, ["kind"]);
 	if (value.kind === "asset-text") return exact(value, ["kind", "field"]) && [

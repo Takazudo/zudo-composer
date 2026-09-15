@@ -462,11 +462,9 @@ release. The asset pass still only pins URL-valued props named `src` / `href` /
 inspection incomplete and blocks release with `asset-impact-incomplete`.
 Webshop, Landing and Blog use `asset-use` with `asset-url` / `asset-text`;
 Sample's Markdown image destinations remain URL-based, since `asset-use` does
-not apply to Markdown destinations. `asset-ref` remains object-only and
-`reference-list-ids` projects an id array; neither is accepted by any scalar
-target (`incompatible-binding`), so related items stay on a second attachment
-rather than a `reference-list` binding (tool gap tracked in #506; the demos do
-not wait for it).
+not apply to Markdown destinations. Mapping only binds onto scalar targets, and
+no projection turns a structured `reference-list` value into one, so related
+items stay on a second attachment rather than a `reference-list` binding.
 
 Lists inside an entry (tags, spec rows, feature bullets) that must reach a
 component are flattened at authoring time into fixed scalar fields (`tag1`,
