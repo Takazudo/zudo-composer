@@ -33,13 +33,39 @@
         "slots": {
           "left": [
             {
-              "componentId": "ui.prose-md",
+              "componentId": "ui.stack",
               "componentVersion": 1,
-              "id": "services-engagement",
+              "id": "services-engagement-stack",
               "props": {
-                "markdown": "## What an engagement looks like\n\nEvery engagement starts with a short call and a written note about the decision you are facing. We reply with a proposal that names one outcome, one team and one first cycle.\n\nFrom there we work in weekly loops. Each week ends with something you can open, read or click, and a short list of open questions. You decide what moves forward.\n\nWe keep all drafts, notes and decisions in one shared place. When the engagement ends, your team keeps everything, and nobody needs us to find their way around it."
+                "align": "start",
+                "direction": "vertical",
+                "gap": "md",
+                "justify": "start"
               },
-              "slots": {}
+              "slots": {
+                "content": [
+                  {
+                    "componentId": "ui.placeholder-box",
+                    "componentVersion": 1,
+                    "id": "services-lead-placeholder",
+                    "props": {
+                      "aspect": "16/9",
+                      "label": "Interface review sketches",
+                      "size": "lg"
+                    },
+                    "slots": {}
+                  },
+                  {
+                    "componentId": "ui.prose-md",
+                    "componentVersion": 1,
+                    "id": "services-engagement",
+                    "props": {
+                      "markdown": "## What an engagement looks like\n\nEvery engagement starts with a short call and a written note about the decision you are facing. We reply with a proposal that names one outcome, one team and one first cycle.\n\nFrom there we work in weekly loops. Each week ends with something you can open, read or click, and a short list of open questions. You decide what moves forward.\n\nWe keep all drafts, notes and decisions in one shared place. When the engagement ends, your team keeps everything, and nobody needs us to find their way around it."
+                    },
+                    "slots": {}
+                  }
+                ]
+              }
             }
           ],
           "right": [

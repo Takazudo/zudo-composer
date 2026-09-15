@@ -41,6 +41,7 @@ describe("final browser acceptance source contract", () => {
     expect(runner).toContain('join(temporaryRoot, "release")');
     expect(runner).toContain('join(temporaryRoot, "assets")');
     expect(runner).toContain('join(temporaryRoot, "data")');
+    expect(runner).toContain('cp(join(root, "packages/demo-sample/cms/assets"), assetsRoot, { recursive: true })');
     expect(runner).toContain("ZUDO_SITE_PROJECT_ROOT: releaseRoot");
     expect(runner).toContain("ZUDO_ASSETS_STORE_ROOT: assetsRoot");
     expect(runner).toContain("ZUDO_DATA_ROOT: dataRoot");
@@ -84,6 +85,7 @@ describe("final browser acceptance source contract", () => {
       // The installed seed command owns the release protocol; this fixture
       // supplies committed input and invokes it in its disposable host.
       expect(runner).toContain('cpSync(join(root, "packages/demo-sample/site-project.json"), join(hostRoot, "site-project.json"))');
+      expect(runner).toContain('cpSync(join(root, "packages/demo-sample/cms/assets"), join(hostRoot, "cms/assets"), { recursive: true })');
       expect(runner).toContain('[join(root, "bin/zudo-composer.mjs"), "seed"], { cwd: hostRoot }');
       for (const operation of ["plan", "apply", "build", "activate"]) expect(runner).not.toContain(`operation: "${operation}"`);
     } finally { rmSync(parent, { recursive: true, force: true }); }

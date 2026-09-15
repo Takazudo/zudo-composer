@@ -75,8 +75,9 @@ The authoring tool has Vite base `/` and these exact routes:
 A host's activated SiteProject is delivered under `/site`; its static website
 uses the same routes at `/`. Route assertions come from the host's verified
 `dist-site/site-manifest.json`, including pages emitted from collection entries.
-The SiteProject acceptance lane uses Sample Studio's frozen route data from
-`packages/demo-sample/hosted-routes.mjs` and checks it against the artifact.
+The SiteProject acceptance lane derives Sample Studio's route data from
+`scripts/host-site-routes.mjs`'s `readVerifiedHostManifest`, which verifies it
+against that artifact.
 
 The preview route is an implementation boundary, not an independent public
 product. Build-emitted assets remain rooted at `/assets/`, while committed assets
@@ -150,7 +151,7 @@ contract, which the package declares as a **peer dependency** so the host's own
 ```sh
 pnpm add -D \
   "zudo-composer@git+https://github.com/Takazudo/zudo-composer.git#<commit>" \
-  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#2abd65184102f332dc97b5768f4adcb1edf4104c"
+  "@zudo-composer/component-contract@git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0"
 ```
 
 Replace `<commit>` with a full 40-character tool commit. This consumer install
@@ -519,9 +520,9 @@ consumers use the package-only commit recorded by
 [`contract-handoff.json`](./contract-handoff.json):
 
 - API/package version: `@zudo-composer/component-contract@1.0.0`
-- package commit: `2abd65184102f332dc97b5768f4adcb1edf4104c`
+- package commit: `c0b452da075b66757c60bd0d721a47062d4354d0`
 - exact external Git spec:
-  `git+https://github.com/Takazudo/zudo-composer.git#2abd65184102f332dc97b5768f4adcb1edf4104c`
+  `git+https://github.com/Takazudo/zudo-composer.git#c0b452da075b66757c60bd0d721a47062d4354d0`
 
 The monorepo itself intentionally resolves this contract with `workspace:*`, as
 a dev dependency; the published manifest declares it as a peer dependency so a

@@ -229,8 +229,17 @@ function parseValueDefinition(
           unique(options, 'DUPLICATE_SELECT_OPTION', `${path}.schema.enum`, 'select option');
           return { schema: { type: 'string', enum: options as [string, ...string[]] }, editor: { kind: 'select' } };
         }
-        exactKeys(schema, ['type'], `${path}.schema`);
-        if (editor.kind === 'text') return { schema: { type: 'string' }, editor: parseTextEditor(editor, `${path}.editor`) };
+        exactKeys(schema, ['type', 'format'], `${path}.schema`);
+        if (schema.format !== undefined && schema.format !== 'url') schemaFail(`${path}.schema.format`, 'expected url when present');
+        if (editor.kind === 'text') {
+          const textEditor = parseTextEditor(editor, `${path}.editor`);
+          if (schema.format === undefined) return { schema: { type: 'string' }, editor: textEditor };
+          if (textEditor.mode === 'markdown-source') {
+            schemaFail(`${path}.editor.mode`, 'url-format strings cannot use the markdown-source editor mode');
+          }
+          return { schema: { type: 'string', format: 'url' }, editor: textEditor };
+        }
+        if (schema.format !== undefined) schemaFail(`${path}.schema.format`, 'url format requires a text editor');
         exactKeys(editor, ['kind'], `${path}.editor`);
         if (editor.kind === 'color') return { schema: { type: 'string' }, editor: { kind: 'color' } };
         return schemaFail(`${path}.editor.kind`, 'string schema requires a text or color editor');
@@ -669,12 +678,12 @@ function normalizeAuthorField(input: unknown, path: string): unknown {
   const common = { prop: field.prop, label: field.label, ...(field.required === undefined ? {} : { required: field.required }) };
   switch (field.kind) {
     case 'text': {
-      exactKeys(field, ['kind', 'prop', 'label', 'required', 'inlineEdit'], path);
+      exactKeys(field, ['kind', 'prop', 'label', 'required', 'format', 'inlineEdit'], path);
       const inline = field.inlineEdit === undefined ? undefined : objectAt(field.inlineEdit, `${path}.inlineEdit`);
       if (inline !== undefined) exactKeys(inline, ['multiline', 'mode'], `${path}.inlineEdit`);
       return {
         ...common,
-        schema: { type: 'string' },
+        schema: { type: 'string', ...(field.format === undefined ? {} : { format: field.format }) },
         editor: {
           kind: 'text',
           ...(inline === undefined ? {} : { multiline: inline.multiline ?? false, mode: inline.mode ?? 'plain' }),

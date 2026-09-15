@@ -40,6 +40,7 @@ async function installedHost() {
     devDependencies: { "zudo-composer": manifest.version, "@zudo-sg/ui": manifest.devDependencies["@zudo-sg/ui"], preact: manifest.peerDependencies.preact },
   }));
   const source = await readFile(join(APP_ROOT, "packages/demo-sample/site-project.json"), "utf8");
+  await cp(join(APP_ROOT, "packages/demo-sample/cms/assets"), join(host, "cms/assets"), { recursive: true });
   const env = { ...process.env };
   for (const name of ["ZUDO_SITE_PROJECT_ROOT", "ZUDO_ASSETS_STORE_ROOT", "ZUDO_DATA_ROOT"]) delete env[name];
   const bin = join(tool, "bin/zudo-composer.mjs");
@@ -101,9 +102,11 @@ describe("installed seed command", () => {
 
     const from = join(temporary, "fixture.json");
     const disposableRoot = join(temporary, "browser-release");
+    const disposableAssets = join(temporary, "browser-assets");
     await writeFile(from, source);
+    await cp(join(APP_ROOT, "packages/demo-sample/cms/assets"), disposableAssets, { recursive: true });
     const seeded = await cli(host, ["seed", "--from", from], {
-      ...env, ZUDO_SITE_PROJECT_ROOT: disposableRoot, ZUDO_ASSETS_STORE_ROOT: join(temporary, "browser-assets"), ZUDO_DATA_ROOT: join(temporary, "browser-data"),
+      ...env, ZUDO_SITE_PROJECT_ROOT: disposableRoot, ZUDO_ASSETS_STORE_ROOT: disposableAssets, ZUDO_DATA_ROOT: join(temporary, "browser-data"),
     });
     expect(JSON.parse(seeded.stdout).status).toBe("activated");
     expect(await readdir(disposableRoot)).toContain("heads.json");

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { activeComponentProvider } from "../../composer/active-pack";
 import type { CompositionNode } from "../../../composer/model/types";
 import { compileSiteProject } from "../../../site-project/compiler";
-import { loadSampleSiteProject } from "../../../test/site-project-fixture";
+import { loadSampleSiteProjectWithAssetLock } from "../../../test/sample-asset-lock";
 import { DeliveryRuntime, projectTrustedProps } from "../runtime";
 
 afterEach(cleanup);
@@ -40,8 +40,8 @@ describe("trusted delivery props", () => {
 
 describe("trusted delivery runtime", () => {
   it("renders all active runtime components and every sample route from evaluated documents", async () => {
-    const project = loadSampleSiteProject({ componentPack: manifest });
-    const compiled = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog });
+    const { project, lock } = await loadSampleSiteProjectWithAssetLock(activeComponentProvider.catalog);
+    const compiled = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog, assetLock: lock });
     expect(compiled.status).toBe("ready"); if (compiled.status !== "ready") return;
     const componentIds = new Set<string>();
     const visit = (nodes: readonly CompositionNode[]): void => { for (const item of nodes) { componentIds.add(item.componentId); Object.values(item.slots).forEach(visit); } };
@@ -50,8 +50,8 @@ describe("trusted delivery runtime", () => {
   });
 
   it("projects single and many slots and linked local roots at the verified outlet despite id collisions", async () => {
-    const project = loadSampleSiteProject({ componentPack: manifest });
-    const compiled = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog });
+    const { project, lock } = await loadSampleSiteProjectWithAssetLock(activeComponentProvider.catalog);
+    const compiled = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog, assetLock: lock });
     if (compiled.status !== "ready") throw new Error("fixture blocked");
     const route = compiled.build.routes.find(({ pathname }) => pathname === "/about")!;
     route.composition.document.root[0]!.id = "site-frame-stack";
@@ -61,8 +61,8 @@ describe("trusted delivery runtime", () => {
   });
 
   it("isolates adapter and component throws and blocks opaque/invalid nodes", async () => {
-    const project = loadSampleSiteProject({ componentPack: manifest });
-    const compiled = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog });
+    const { project, lock } = await loadSampleSiteProjectWithAssetLock(activeComponentProvider.catalog);
+    const compiled = await compileSiteProject(project, { componentCatalog: activeComponentProvider.catalog, assetLock: lock });
     if (compiled.status !== "ready") throw new Error("fixture blocked");
     const route = compiled.build.routes.find(({ pathname }) => pathname === "/services")!;
     const first = route.composition.document.root[0]!;

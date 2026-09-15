@@ -93,7 +93,7 @@ function collector(options: AssetImpactOptions = {}) {
   const property = (schema: ValueDefinition, value: JsonValue | undefined, location: AssetImpactLocation, key: string): JsonValue | undefined => {
     if (typeof value === "string" && schema.schema.type === "string") {
       if (schema.editor.kind === "text" && schema.editor.mode === "markdown-source") return markdown(value, location);
-      if (URL_PROPERTIES.has(key)) return url(value, location);
+      if (URL_PROPERTIES.has(key) || ("format" in schema.schema && schema.schema.format === "url")) return url(value, location);
     }
     if (schema.schema.type === "object" && value && typeof value === "object" && !Array.isArray(value)) {
       if (validateAssetAssetRef(value)) index.references.push({ ref: value, location });

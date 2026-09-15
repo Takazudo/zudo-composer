@@ -9,6 +9,9 @@ import { activeSiteProjectValidationContext } from "../site-project-manifest";
 import { createProductionProviderIntegration, type WorkspaceProviderSet } from "../provider-integration";
 import { createWorkspaceSummary } from "../workspace-summary";
 import { createTemporaryWorkspaceProviders, type TemporaryWorkspaceProviders } from "../../test/workspace-providers";
+import { providerFixture } from "../../features/assets/__tests__/versioned-fixture";
+import { captureSampleAssetLock, SAMPLE_ASSETS_STORE_ROOT } from "../../test/sample-asset-lock";
+import type { AssetFileProvider } from "../../assets";
 
 const sample = () => loadSampleSiteProject(activeSiteProjectValidationContext);
 const revision = (project: ReturnType<typeof sample>) => createHash("sha256").update(serializeSiteProject(project), "utf8").digest("hex");
@@ -23,11 +26,18 @@ async function host(): Promise<TemporaryWorkspaceProviders> {
   return value;
 }
 
-async function integration(project = sample(), current?: TemporaryWorkspaceProviders) {
+/** A real, writable Assets provider seeded with Sample Studio's own committed
+ * images, so its own pinned references (#695) stay resolvable. */
+async function sampleAssetProvider(): Promise<AssetFileProvider> {
+  return (await providerFixture({ seedFrom: SAMPLE_ASSETS_STORE_ROOT })).provider;
+}
+
+async function integration(project = sample(), current?: TemporaryWorkspaceProviders, assetProvider?: AssetFileProvider) {
   return createProductionProviderIntegration({
     project,
     sourceRevision: revision(project),
     createProviders: (current ?? await host()).createProviders,
+    ...(assetProvider ? { assetProvider } : {}),
   });
 }
 
@@ -77,7 +87,11 @@ describe("SiteProject provider integration", () => {
     expect(snapshot.project.providers.content[0]!.entries).toHaveLength(4);
     expect(snapshot.project.providers.mappings[0]!.records).toHaveLength(2);
     expect(snapshot.project.providers.sitemaps[0]!.records).toHaveLength(1);
-    const compiled = await compileSiteProject(snapshot.project, { componentCatalog: activeComponentProvider.catalog });
+    // Sample Studio's own project pins its real seeded images (#695); the
+    // default "release" compile policy requires a captured exact-version
+    // lock before it will resolve them.
+    const { lock } = await captureSampleAssetLock(snapshot.project, activeComponentProvider.catalog);
+    const compiled = await compileSiteProject(snapshot.project, { componentCatalog: activeComponentProvider.catalog, assetLock: lock });
     expect(compiled.status).toBe("ready");
     if (compiled.status === "ready") expect(compiled.build.routes).toHaveLength(7);
   });
@@ -97,7 +111,7 @@ describe("SiteProject provider integration", () => {
   });
 
   it("provides a real provider-qualified attachment aggregate with CAS persistence and materialized preview", async () => {
-    const current = await integration();
+    const current = await integration(sample(), undefined, await sampleAssetProvider());
     expect(await current.initialization.initialize()).toEqual({ status: "ready" });
     const linked = await current.compositionProviders[0]!.store.get("journal-entry-page");
     if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
@@ -163,14 +177,17 @@ describe("SiteProject provider integration", () => {
 
   it("serializes attachment writes from two integrations sharing one workspace", async () => {
     const project = await host();
-    const first = await integration(sample(), project);
+    // Both clients of the shared workspace resolve managed Assets through
+    // the same seeded store, like they already share compositions/content.
+    const assetProvider = await sampleAssetProvider();
+    const first = await integration(sample(), project, assetProvider);
     await first.initialization.initialize();
     const linked = await first.compositionProviders[0]!.store.get("journal-entry-page");
     if (linked.status !== "loaded") throw new Error("Expected the sample journal Composition.");
     const detachedDocument = structuredClone(linked.record.document);
     delete detachedDocument.binding;
     await first.compositionProviders[0]!.store.put({ ...linked.record, document: detachedDocument });
-    const second = await integration(sample(), project);
+    const second = await integration(sample(), project, assetProvider);
     await second.initialization.initialize();
     const target = (await first.mappingAttachmentService.list()).targets.find((candidate) => candidate.composition.recordId === "home-page" && candidate.nodeId === "home-copy-stack" && candidate.slotId === "content");
     if (!target) throw new Error("Expected the sample home stack named slot.");

@@ -13,10 +13,10 @@ import config from "../zudo-composer.config";
 
 const packageRoot = resolve(import.meta.dirname, "..");
 const projectPath = resolve(packageRoot, "site-project.json");
-// SHA-256 of the original Sample Studio fixture at conversion. This exact-byte
-// assertion keeps the host self-contained, without a second JSON input or a
-// dependency on the tool repository's test files.
-const originalDigest = "595ac0a346bc2fdb9300968bcab1e2d5c007ce32753be21e763908c0f532ebba";
+// SHA-256 of the committed Sample Studio fixture. This exact-byte assertion
+// keeps the host self-contained, without a second JSON input or a dependency
+// on the tool repository's test files.
+const projectDigest = "263f682f0e9fe8d2c1b7ae8690550979bff7d874da042efae2c6082f61c7cf32";
 const headings: Record<string, string> = {
   "/": "Clear ideas, carefully shaped",
   "/about": "A studio built around useful clarity",
@@ -61,7 +61,7 @@ describe("Sample Studio host", () => {
     expect(validation.ok, JSON.stringify(validation.diagnostics)).toBe(true);
     if (!validation.ok) return;
     expect(canonicalStringifyJson(validation.project as never)).toBe(bytes.toString("utf8"));
-    expect(createHash("sha256").update(bytes).digest("hex")).toBe(originalDigest);
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(projectDigest);
     expect(config.pack).toBe("@zudo-sg/ui/composer-pack");
     expect(compiled.project.componentPack).toEqual({ contractVersion: 2, packId: "@zudo-sg/ui", packVersion: "1.0.0" });
     expect(compiled.project.id).toBe("sample-studio-site");
@@ -95,7 +95,10 @@ describe("Sample Studio host", () => {
       expect(page.composition.linkedSource?.ref.recordId, pathname).toBe("site-frame");
     }
     expect(compiled.build.routes.map(({ pathname }) => `/site${pathname === "/" ? "" : pathname}`)).not.toContain("/site/does-not-exist");
-    expect(compiled.assetFiles).toEqual([]);
+    // Four distinct images: the home split, the about story and one per journal
+    // article, with "map-the-moving-parts" and "review-in-small-loops" sharing one.
+    expect(compiled.assetFiles).toHaveLength(4);
+    expect(compiled.assetFiles.every(({ fileName }) => /^uploaded-assets\/sha256-[a-f0-9]{64}\.webp$/.test(fileName))).toBe(true);
   });
 
   it("resolves both mappings with their published content and journal dates", () => {

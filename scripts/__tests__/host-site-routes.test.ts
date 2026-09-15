@@ -1,6 +1,6 @@
 // @vitest-environment node
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { parse } from "yaml";
 import type { SiteProject } from "zudo-composer/site-project";
@@ -26,6 +26,7 @@ async function fixture() {
   const project = JSON.parse(await readFile(join(root, "packages/demo-sample/site-project.json"), "utf8")) as SiteProject;
   const source = () => writeFile(join(host, "site-project.json"), JSON.stringify(project));
   await source();
+  await cp(join(root, "packages/demo-sample/cms/assets"), join(host, "cms/assets"), { recursive: true });
   const directory = join(host, "dist-site");
   await mkdir(directory);
   await writeFile(join(directory, "index.html"), '<!doctype html><div id="app"></div>');
@@ -33,6 +34,15 @@ async function fixture() {
   const build = async () => {
     const { pack } = await loadHostContext({ workspaceRoot: host, env: {} });
     const current = await compileStaticSite({ projectPath: join(host, "site-project.json"), pack, assetsStoreRoot: join(host, "cms/assets") });
+    // Sample Studio's project now pins its own real images (#695); write the
+    // exact compiled bytes into dist-site the way a real static build does,
+    // so readVerifiedHostManifest's per-asset byte check has something to
+    // compare against, and re-derive `_headers` to match those pinned files.
+    for (const { fileName, source } of current.assetFiles) {
+      await mkdir(join(directory, dirname(fileName)), { recursive: true });
+      await writeFile(join(directory, fileName), source);
+    }
+    await writeFile(join(directory, SITE_HEADERS), siteHeaders(current.assetFiles.map(({ fileName, source }) => ({ path: fileName, byteLength: source.byteLength }))));
     const manifest = await createSiteManifest({ directory, projectId: current.project.id, projectSourceRevision: current.projectSourceRevision, routes: current.build.routes.map(({ pathname }) => pathname) });
     await writeFile(join(directory, SITE_MANIFEST), JSON.stringify(manifest));
     return manifest;

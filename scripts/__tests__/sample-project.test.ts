@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkSampleProject, SAMPLE_PROJECT_PATH, SAMPLE_PROJECT_MODULES } from "../check-sample-project.mjs";
+import { checkSampleProject, SAMPLE_PROJECT_PATH, SAMPLE_PROJECT_MODULES, SAMPLE_PROJECT_ASSET_LOCK_HELPER } from "../check-sample-project.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const temporary: string[] = [];
@@ -99,5 +99,37 @@ describe("shared sample project guard", () => {
     await mkdir(join(directory, "packages/demo-sample/dist-editor"));
     await cp(join(directory, SAMPLE_PROJECT_PATH), join(directory, "packages/demo-sample/dist-editor/site-project.json"));
     await checkSampleProject(directory);
+  });
+
+  it("rejects a new unguarded import of the bundled fixture", async () => {
+    const directory = await fixture();
+    await writeFile(join(directory, "planted-consumer.ts"), 'import { loadSampleSiteProject } from "./src/test/site-project-fixture";\nexport default loadSampleSiteProject;\n');
+    await expect(checkSampleProject(directory)).rejects.toThrow(/Unguarded consumer\(s\).*planted-consumer\.ts/s);
+  });
+
+  it("rejects a new unguarded fs read of the committed sample project JSON", async () => {
+    const directory = await fixture();
+    await writeFile(join(directory, "planted-reader.mjs"), 'import { readFile } from "node:fs/promises";\nexport const source = await readFile("packages/demo-sample/site-project.json", "utf8");\n');
+    await expect(checkSampleProject(directory)).rejects.toThrow(/Unguarded consumer\(s\).*planted-reader\.mjs/s);
+  });
+
+  it("ignores a bare mention of the sample project path outside an import or a real fs read", async () => {
+    const directory = await fixture();
+    await writeFile(join(directory, "planted-assertion.test.ts"), 'import { expect, it } from "vitest";\nit("checks a script string", () => { expect("cp(\\"packages/demo-sample/site-project.json\\")").toContain("site-project.json"); });\n');
+    await checkSampleProject(directory);
+  });
+
+  it("rejects a release-policy compile site that stops importing the Assets-lock helper", async () => {
+    const directory = await fixture();
+    const file = "src/features/delivery/__tests__/root-delivery.test.tsx";
+    await mkdir(dirname(join(directory, file)), { recursive: true });
+    await mkdir(dirname(join(directory, SAMPLE_PROJECT_ASSET_LOCK_HELPER)), { recursive: true });
+    await cp(join(root, SAMPLE_PROJECT_ASSET_LOCK_HELPER), join(directory, SAMPLE_PROJECT_ASSET_LOCK_HELPER));
+    const source = await readFile(join(root, file), "utf8");
+    await writeFile(join(directory, file), source.replace(
+      'import { loadSampleSiteProjectWithAssetLock } from "../../../test/sample-asset-lock";',
+      'import { loadSampleSiteProject as loadSampleSiteProjectWithAssetLock } from "../../../test/site-project-fixture";',
+    ));
+    await expect(checkSampleProject(directory)).rejects.toThrow(new RegExp(`${file}.*must statically import the Assets-lock helper`));
   });
 });

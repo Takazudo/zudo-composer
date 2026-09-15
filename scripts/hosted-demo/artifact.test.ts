@@ -15,15 +15,18 @@ async function fixture(options: Parameters<typeof writeEditorArtifact>[0] = {}) 
 }
 
 describe("demo editor artifact contract", () => {
-  it.each([false, true])("verifies the exact asset inventory without a fixed count (empty=%s)", async (emptyAssets) => {
-    const value = await fixture({ emptyAssets });
+  it.each([true, false])("verifies the exact asset inventory without a fixed count (minimal=%s)", async (minimalAssets) => {
+    const value = await fixture({ minimalAssets });
     const artifact = await verifyDemoEditorArtifact({ directory: value.root });
     expect(artifact.manifest.mode).toBe("disposable-demo-editor");
     expect(artifact.manifest.hostId).toBe(value.seed.hostId);
     expect(artifact.manifest.projectId).toBe(value.seed.project.id);
     const expectedVersions = new Set(value.seed.assets.records.flatMap(({ document }) => document.versions.map(({ url }) => url.slice(1))));
     expect(new Set(Object.keys(artifact.manifest.assets))).toEqual(expectedVersions);
-    expect(expectedVersions.size === 0).toBe(emptyAssets);
+    // Sample Studio's own five real seeded images are always required
+    // (#695); the non-minimal variant also merges in the repo's generic
+    // PNG/PDF/ZIP fixture catalog for non-webp MIME coverage.
+    expect(expectedVersions.size).toBe(minimalAssets ? 5 : 11);
     expect(artifact.files.filter(({ path }) => path.startsWith("uploaded-assets/")).map(({ path }) => path)).toEqual(Object.keys(artifact.manifest.assets));
     expect(artifact.files.find(({ path }) => path === DEMO_EDITOR_SEED)?.mime).toBe("application/json");
   });
