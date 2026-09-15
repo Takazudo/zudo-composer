@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
 import { sha256 } from "./artifact.mjs";
 import { resolveTarget } from "./targets.mjs";
 import { ASSET_CHECKSUM_URL_PATTERN, ASSET_IMMUTABLE_CACHE_CONTROL, ASSET_NOSNIFF, assetContentDisposition } from "../../src/assets/model/asset-kinds.mjs";
@@ -55,6 +56,57 @@ function cacheBusted(url, sourceRevision) {
 }
 
 /**
+ * The failing target moves between runs, so a bare byte-equality failure
+ * gives no lead on which transformation happened. This locates the first
+ * differing byte and slices bounded context around it from both sides.
+ * @param {Buffer} actual
+ * @param {Buffer} expected
+ * @param {number} [radius]
+ * @returns {{ offset: number, actualContext: string, expectedContext: string } | undefined}
+ */
+function firstByteDifference(actual, expected, radius = 120) {
+  const compareLength = Math.min(actual.length, expected.length);
+  let offset = 0;
+  while (offset < compareLength && actual[offset] === expected[offset]) offset += 1;
+  if (offset === compareLength && actual.length === expected.length) return undefined;
+  const start = Math.max(0, offset - radius);
+  return {
+    offset,
+    actualContext: actual.subarray(start, Math.min(actual.length, offset + radius)).toString("utf8"),
+    expectedContext: expected.subarray(start, Math.min(expected.length, offset + radius)).toString("utf8"),
+  };
+}
+
+/**
+ * Bounded, failure-only diagnostics naming which transformation broke the
+ * comparison, so a failing live check points at a cause instead of a bare
+ * mismatch. Never included on success, and never dumps whole documents.
+ * @param {Buffer} actualBytes
+ * @param {{ expectedBytes?: Buffer, headers?: Headers, attempt?: number }} [diagnostics]
+ */
+function describeMismatch(actualBytes, diagnostics) {
+  if (!diagnostics) return "";
+  const { expectedBytes, headers, attempt } = diagnostics;
+  /** @type {string[]} */
+  const parts = [];
+  if (attempt !== undefined) parts.push(`attempt ${attempt}`);
+  if (expectedBytes) {
+    parts.push(`response length ${actualBytes.length} bytes, expected length ${expectedBytes.length} bytes`);
+    const difference = firstByteDifference(actualBytes, expectedBytes);
+    if (difference) {
+      parts.push(`first differing byte offset ${difference.offset}`);
+      parts.push(`response context ${JSON.stringify(difference.actualContext)}`);
+      parts.push(`expected context ${JSON.stringify(difference.expectedContext)}`);
+    }
+  }
+  if (headers) {
+    parts.push(`content-length ${headers.get("content-length") ?? "(none)"}, content-encoding ${headers.get("content-encoding") ?? "(none)"}`);
+    for (const name of ["cf-cache-status", "age", "etag", "cf-ray"]) parts.push(`${name} ${headers.get(name) ?? "(none)"}`);
+  }
+  return parts.length === 0 ? "" : ` [${parts.join("; ")}]`;
+}
+
+/**
  * Cloudflare injects its documented RUM beacon into navigation HTML. Permit
  * only that exact empty external script immediately before the closing body;
  * every other byte must still match the tested HTML file. Targets may also
@@ -62,22 +114,24 @@ function cacheBusted(url, sourceRevision) {
  * @param {Buffer} bytes
  * @param {string} expectedSha256
  * @param {string} [expectedFile]
+ * @param {{ expectedBytes?: Buffer, headers?: Headers, attempt?: number }} [diagnostics]
  */
-export function verifyNavigationHtml(bytes, expectedSha256, expectedFile = "index.html") {
+export function verifyNavigationHtml(bytes, expectedSha256, expectedFile = "index.html", diagnostics) {
   const responseSha256 = sha256(bytes);
   if (responseSha256 === expectedSha256) return { responseSha256, cloudflareAnalyticsInjected: false };
   const beacon = /<script type="module" src="https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js\/v[0-9a-f]+" integrity="sha512-[A-Za-z0-9+/=]+" data-cf-beacon='([^'<>\r\n]+)' crossorigin="anonymous"><\/script>\n(?=<\/body>)/gu;
   const html = bytes.toString("utf8");
   const matches = [...html.matchAll(beacon)];
-  assert.equal(matches.length, 1, `Navigation HTML differs from ${expectedFile} without exactly one recognized Cloudflare analytics injection`);
+  assert.equal(matches.length, 1, `Navigation HTML differs from ${expectedFile} without exactly one recognized Cloudflare analytics injection${describeMismatch(bytes, diagnostics)}`);
   const config = JSON.parse(matches[0][1]);
   assert.ok(config && typeof config === "object" && typeof config.version === "string" && /^[a-f0-9]{32}$/.test(config.token), "Cloudflare analytics injection has an unexpected configuration");
-  assert.equal(sha256(Buffer.from(html.replace(beacon, ""))), expectedSha256, "Navigation HTML contains changes beyond Cloudflare analytics injection");
+  const stripped = Buffer.from(html.replace(beacon, ""));
+  assert.equal(sha256(stripped), expectedSha256, `Navigation HTML contains changes beyond Cloudflare analytics injection${describeMismatch(stripped, diagnostics)}`);
   return { responseSha256, cloudflareAnalyticsInjected: true };
 }
 
 /**
- * @param {{ target?: DeployTarget, baseUrl: string, artifactDirectory: string, expectedSourceRevision?: string, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response>, requestTimeoutMs?: number, overallTimeoutMs?: number, manifestFileName?: string, artifactVerifier?: import("./targets.mjs").ArtifactVerifier, liveRoutes?: (manifest: Record<string, unknown>) => string[], routeFile?: DeployTarget["routeFile"], assetUrl?: DeployTarget["assetUrl"] }} options
+ * @param {{ target?: DeployTarget, baseUrl: string, artifactDirectory: string, expectedSourceRevision?: string, fetchImpl?: (input: URL | string, init?: RequestInit) => Promise<Response>, requestTimeoutMs?: number, overallTimeoutMs?: number, manifestFileName?: string, artifactVerifier?: import("./targets.mjs").ArtifactVerifier, liveRoutes?: (manifest: Record<string, unknown>) => string[], routeFile?: DeployTarget["routeFile"], assetUrl?: DeployTarget["assetUrl"], attempt?: number }} options
  */
 export async function verifyLiveDeployment(options) {
   const target = requireTarget(options.target);
@@ -88,6 +142,7 @@ export async function verifyLiveDeployment(options) {
     fetchImpl = globalThis.fetch,
     requestTimeoutMs = HTTP_TIMEOUT_MS,
     overallTimeoutMs = LIVE_CHECK_TIMEOUT_MS,
+    attempt,
   } = options;
   const manifestFileName = options.manifestFileName ?? target.manifestFileName;
   const artifactVerifier = options.artifactVerifier ?? target.verifyArtifact;
@@ -133,7 +188,17 @@ export async function verifyLiveDeployment(options) {
     try {
       navigationProof = verifyNavigationHtml(bytes, file.sha256, file.path);
     } catch (error) {
-      throw new Error(`${route}: navigation HTML does not match ${file.path}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+      // Only reached on an actual mismatch (the common Cloudflare-analytics-
+      // injected pass never gets here), so the extra disk read for evidence
+      // happens only on the failure path it explains.
+      const expectedBytes = await readFile(resolve(artifactDirectory, file.path)).catch(() => undefined);
+      let diagnosedMessage = error instanceof Error ? error.message : String(error);
+      try {
+        verifyNavigationHtml(bytes, file.sha256, file.path, { expectedBytes, headers: response.headers, attempt });
+      } catch (diagnosed) {
+        diagnosedMessage = diagnosed instanceof Error ? diagnosed.message : String(diagnosed);
+      }
+      throw new Error(`${route}: navigation HTML does not match ${file.path}: ${diagnosedMessage}`, { cause: error });
     }
     assertMime(file, route, response);
     verifiedRouteFiles.add(file.path);
@@ -191,7 +256,7 @@ export async function verifyLiveWithRetries({
     const remainingMs = overallDeadlineAt - Date.now();
     if (remainingMs <= 0) break;
     try {
-      return await verifyLiveDeployment({ ...options, overallTimeoutMs: remainingMs });
+      return await verifyLiveDeployment({ ...options, overallTimeoutMs: remainingMs, attempt: attempt + 1 });
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       if (attempt === retryDelaysMs.length) break;
